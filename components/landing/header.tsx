@@ -35,8 +35,10 @@ export function Header() {
         </div>
 
         <div className="hidden md:block">
-          <Button variant="outline" className="border-border text-foreground hover:bg-secondary bg-transparent">
-            Request Invite
+          <Button asChild variant="outline" className="border-border text-foreground hover:bg-secondary bg-transparent">
+            <Link href="/#newsletter">
+              Subscribe for updates
+            </Link>
           </Button>
         </div>
 
@@ -88,8 +90,10 @@ export function Header() {
             >
               FAQ
             </Link>
-            <Button variant="outline" className="mt-4 w-full border-border text-foreground hover:bg-secondary bg-transparent">
-              Request Invite
+            <Button asChild variant="outline" className="mt-4 w-full border-border text-foreground hover:bg-secondary bg-transparent">
+              <Link href="/#newsletter">
+                Subscribe for updates
+              </Link>
             </Button>
           </div>
         </div>

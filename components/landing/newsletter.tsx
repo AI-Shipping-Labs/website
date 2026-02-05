@@ -26,8 +26,10 @@ export function Newsletter() {
               src="https://alexeyondata.substack.com/embed" 
               width="480" 
               height="150" 
-              className="max-w-full rounded-lg border border-border"
-              style={{ background: 'transparent' }}
+              className="max-w-full rounded-lg"
+              style={{ border: "1px solid #EEE", background: "white" }}
+              frameBorder="0"
+              scrolling="no"
               title="Alexey on Data Newsletter Signup"
             />
           </div>

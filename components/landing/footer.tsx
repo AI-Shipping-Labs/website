@@ -1,6 +1,4 @@
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
 
 export function Footer() {
   return (
@@ -8,15 +6,25 @@ export function Footer() {
       <div className="mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-24">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-            Ready to join the conversation?
+            Want to know when we launch?
           </h2>
           <p className="mt-4 text-muted-foreground">
-            This community is invite-only. Request access and tell us about what you're building.
+            Subscribe to the free newsletter and get the first ping when the community opens.
           </p>
-          <Button size="lg" className="mt-8 bg-accent text-accent-foreground hover:bg-accent/90">
-            Request Invite
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+          <div className="mt-8 flex justify-center">
+            <div className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-background">
+              <iframe
+                src="https://alexeyondata.substack.com/embed"
+                width="100%"
+                height="150"
+                className="block"
+                style={{ border: 0 }}
+                frameBorder="0"
+                scrolling="no"
+                title="Newsletter sign up"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="mt-16 grid gap-8 border-t border-border pt-8 sm:grid-cols-2 lg:grid-cols-4">

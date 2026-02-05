@@ -53,4 +53,54 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Basic typography for blog content without relying on the Tailwind typography plugin */
+  .prose {
+    @apply max-w-none;
+  }
+
+  .prose h1 {
+    @apply text-3xl font-semibold tracking-tight mt-8 mb-4;
+  }
+
+  .prose h2 {
+    @apply text-2xl font-semibold tracking-tight mt-8 mb-4;
+  }
+
+  .prose h3 {
+    @apply text-xl font-semibold tracking-tight mt-6 mb-3;
+  }
+
+  .prose p {
+    @apply mt-4 text-base leading-relaxed text-muted-foreground;
+  }
+
+  .prose a {
+    @apply text-accent underline underline-offset-4;
+  }
+
+  .prose blockquote {
+    @apply border-l-2 border-accent pl-4 italic text-muted-foreground mt-4;
+  }
+
+  .prose ul,
+  .prose ol {
+    @apply mt-4 ml-6 text-muted-foreground list-disc;
+  }
+
+  .prose ol {
+    @apply list-decimal;
+  }
+
+  .prose li {
+    @apply my-1;
+  }
+
+  .prose code {
+    @apply rounded bg-secondary px-1.5 py-0.5 text-sm font-mono text-accent;
+  }
+
+  .prose pre {
+    @apply mt-4 rounded-lg border border-border bg-card p-4 font-mono text-sm overflow-x-auto;
+  }
 }

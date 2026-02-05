@@ -183,6 +183,7 @@ export function Pricing() {
               <div className="mt-auto space-y-4">
                 <p className="text-xs text-muted-foreground">{tier.positioning}</p>
                 <Button
+                  asChild
                   className={cn(
                     "w-full",
                     tier.highlighted
@@ -190,7 +191,9 @@ export function Pricing() {
                       : "bg-secondary text-foreground hover:bg-secondary/80"
                   )}
                 >
-                  {tier.capped ? "Apply for Inner Circle" : "Request Invite"}
+                  <a href="/#newsletter">
+                    Subscribe for updates
+                  </a>
                 </Button>
               </div>
             </div>

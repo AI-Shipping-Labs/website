@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: PageProps) {
   }
   
   return {
-    title: `${post.title} | The Signal`,
+    title: `${post.title} | AI Engineering Lab`,
     description: post.description,
   }
 }

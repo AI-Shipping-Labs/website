@@ -8,6 +8,7 @@ const sections = [
   { id: "activities", label: "Activities" },
   { id: "tiers", label: "Membership" },
   { id: "testimonials", label: "Testimonials" },
+  { id: "blog", label: "Blog" },
   { id: "newsletter", label: "Newsletter" },
   { id: "faq", label: "FAQ" },
 ]

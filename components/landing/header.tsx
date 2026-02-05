@@ -18,13 +18,16 @@ export function Header() {
 
         <div className="hidden md:flex md:items-center md:gap-8">
           <Link href="/about" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            About Alexey Grigorev
+            About Alexey
           </Link>
           <Link href="/topics" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             Topics
           </Link>
           <Link href="/#tiers" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             Membership
+          </Link>
+          <Link href="/blog" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Blog
           </Link>
           <Link href="/#faq" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             FAQ
@@ -55,7 +58,7 @@ export function Header() {
               className="block py-2 text-muted-foreground transition-colors hover:text-foreground"
               onClick={() => setMobileMenuOpen(false)}
             >
-              About Alexey Grigorev
+              About Alexey
             </Link>
             <Link
               href="/topics"
@@ -70,6 +73,13 @@ export function Header() {
               onClick={() => setMobileMenuOpen(false)}
             >
               Membership
+            </Link>
+            <Link
+              href="/blog"
+              className="block py-2 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Blog
             </Link>
             <Link
               href="/#faq"

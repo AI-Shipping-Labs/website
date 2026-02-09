@@ -29,6 +29,18 @@ export function Header() {
           <Link href="/blog" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             Blog
           </Link>
+          <Link href="/tutorials" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Tutorials
+          </Link>
+          <Link href="/projects" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Project Ideas
+          </Link>
+          <Link href="/resources" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Resources
+          </Link>
+          <Link href="/collection" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Collection
+          </Link>
           <Link href="/#faq" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             FAQ
           </Link>
@@ -82,6 +94,34 @@ export function Header() {
               onClick={() => setMobileMenuOpen(false)}
             >
               Blog
+            </Link>
+            <Link
+              href="/tutorials"
+              className="block py-2 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Tutorials
+            </Link>
+            <Link
+              href="/projects"
+              className="block py-2 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Project Ideas
+            </Link>
+            <Link
+              href="/resources"
+              className="block py-2 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Resources
+            </Link>
+            <Link
+              href="/collection"
+              className="block py-2 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Collection
             </Link>
             <Link
               href="/#faq"

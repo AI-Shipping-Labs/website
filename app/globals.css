@@ -22,7 +22,7 @@
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 15%;
     --muted-foreground: 0 0% 60%;
-    --accent: 45 100% 51%;
+    --accent: 75 100% 50%;
     --accent-foreground: 0 0% 4%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
@@ -52,6 +52,12 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Script font for elegant name styling */
+  .font-script {
+    font-family: var(--font-script), 'Brush Script MT', cursive;
+    font-weight: 400;
   }
 
   /* Basic typography for blog content without relying on the Tailwind typography plugin */
@@ -102,5 +108,17 @@
 
   .prose pre {
     @apply mt-4 rounded-lg border border-border bg-card p-4 font-mono text-sm overflow-x-auto;
+  }
+
+  .prose figure {
+    @apply my-12 border border-border/50 rounded-lg p-4 bg-card/30;
+  }
+
+  .prose figure img {
+    @apply my-0 rounded-lg border border-border w-full;
+  }
+
+  .prose figcaption {
+    @apply text-center text-sm italic text-muted-foreground/80 mt-4 leading-relaxed;
   }
 }

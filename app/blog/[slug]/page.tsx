@@ -105,7 +105,9 @@ export default async function BlogPostPage({ params }: PageProps) {
                 prose-blockquote:border-l-accent prose-blockquote:text-muted-foreground prose-blockquote:italic
                 prose-ul:text-muted-foreground prose-ol:text-muted-foreground
                 prose-li:marker:text-accent
-                prose-img:rounded-lg prose-img:border prose-img:border-border"
+                prose-img:rounded-lg prose-img:border prose-img:border-border prose-img:my-0 prose-img:w-full
+                prose-figcaption:text-center prose-figcaption:text-sm prose-figcaption:italic prose-figcaption:text-muted-foreground/80 prose-figcaption:mt-4 prose-figcaption:leading-relaxed
+                [&_figure]:my-12 [&_figure]:border [&_figure]:border-border/50 [&_figure]:rounded-lg [&_figure]:p-4 [&_figure]:bg-card/30"
               dangerouslySetInnerHTML={{ __html: post.contentHtml }}
             />
           </div>

@@ -1,0 +1,7 @@
+1:"$Sreact.fragment"
+2:I[9660,["/_next/static/chunks/311667441357723c.js","/_next/static/chunks/f7b9bcb00bd350fc.js"],"ViewportBoundary"]
+4:I[9660,["/_next/static/chunks/311667441357723c.js","/_next/static/chunks/f7b9bcb00bd350fc.js"],"MetadataBoundary"]
+5:"$Sreact.suspense"
+0:{"buildId":"M2Vxtw2CsOzZnWTLT6GmE","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
+3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+6:[["$","title","0",{"children":"How I Built a Fully Automated Image-to-Podcast Pipeline for Kids Horror Stories | AI Engineering Lab"}],["$","meta","1",{"name":"description","content":"I built a fully automated system that takes photos of everyday objects and turns them into illustrated horror stories, complete with audio narration and Spotify podcast episodes. Here's how I did it."}]]

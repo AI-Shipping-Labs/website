@@ -93,7 +93,9 @@ export default async function ProjectPage({ params }: PageProps) {
               <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
                 {project.title}
               </h1>
-              
+              {project.author && (
+                <p className="mt-2 text-lg text-muted-foreground">by {project.author}</p>
+              )}
               {project.description && (
                 <p className="mt-4 text-xl text-muted-foreground">
                   {project.description}

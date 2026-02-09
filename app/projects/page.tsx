@@ -6,7 +6,7 @@ import { getAllProjects } from "@/lib/projects"
 
 export const metadata = {
   title: "Project Ideas | AI Engineering Lab",
-  description: "Pet and portfolio project ideas to build. From small side projects to portfolio-worthy systems, expanded from Alexey's newsletter.",
+  description: "Real projects from the first cohort of the AI Engineering Bootcamp—end-to-end AI applications and agentic workflows you can learn from.",
 }
 
 export default async function ProjectsPage() {
@@ -37,8 +37,7 @@ export default async function ProjectsPage() {
                 Pet & Portfolio Project Ideas
               </h1>
               <p className="mt-4 text-lg text-muted-foreground">
-                Ideas for things to build—from small pet projects to portfolio-worthy systems. 
-                Expanded from Alexey's newsletter; each idea is a complete system you can build and learn from.
+                Real projects from the first cohort of the AI Engineering Bootcamp—robust, end-to-end AI applications and agentic workflows you can learn from and build on.
               </p>
             </div>
 
@@ -63,6 +62,9 @@ export default async function ProjectsPage() {
                             <h2 className="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                               {project.title}
                             </h2>
+                            {project.author && (
+                              <span className="text-sm text-muted-foreground">by {project.author}</span>
+                            )}
                             {project.difficulty && (
                               <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${getDifficultyColor(project.difficulty)}`}>
                                 {project.difficulty}

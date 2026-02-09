@@ -11,6 +11,7 @@ export interface Project {
   title: string
   description: string
   date: string
+  author?: string
   tags?: string[]
   readingTime?: string
   contentHtml: string
@@ -23,6 +24,7 @@ export interface ProjectMeta {
   title: string
   description: string
   date: string
+  author?: string
   tags?: string[]
   readingTime?: string
   difficulty?: "beginner" | "intermediate" | "advanced"
@@ -55,6 +57,7 @@ export async function getAllProjects(): Promise<ProjectMeta[]> {
         title: data.title || slug,
         description: data.description || "",
         date: data.date || new Date().toISOString(),
+        author: data.author,
         tags: data.tags || [],
         readingTime: calculateReadingTime(content),
         difficulty: data.difficulty,
@@ -87,6 +90,7 @@ export async function getProjectBySlug(slug: string): Promise<Project | null> {
     title: data.title || slug,
     description: data.description || "",
     date: data.date || new Date().toISOString(),
+    author: data.author,
     tags: data.tags || [],
     readingTime: calculateReadingTime(content),
     contentHtml,

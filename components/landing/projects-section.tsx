@@ -32,8 +32,7 @@ export async function ProjectsSection() {
               Pet & Portfolio Project Ideas
             </h2>
             <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-              Ideas for things to build—from small pet projects to portfolio-worthy systems. 
-              Expanded from Alexey's newsletter; each idea is a complete system you can build and learn from.
+              Real projects from the first cohort of the AI Engineering Bootcamp—robust, end-to-end AI applications and agentic workflows you can learn from and build on.
             </p>
           </div>
           <Link
@@ -63,6 +62,9 @@ export async function ProjectsSection() {
                     <h3 className="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
                       {project.title}
                     </h3>
+                    {project.author && (
+                      <span className="text-xs text-muted-foreground">by {project.author}</span>
+                    )}
                     {project.difficulty && (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getDifficultyColor(project.difficulty)}`}>
                         {project.difficulty}

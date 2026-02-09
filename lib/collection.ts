@@ -230,6 +230,14 @@ export const COLLECTION_ITEMS: CollectionItem[] = [
     category: "tools",
     source: "GitHub",
   },
+  {
+    id: "500-ai-agents-projects",
+    title: "500+ AI Agent Projects",
+    description: "Curated collection of AI agent use cases across healthcare, finance, education, retail, and more. Maps practical applications to open-source implementations and frameworks (CrewAI, AutoGen, Agno, LangGraph). Hands-on inspiration hub for builders and practitioners.",
+    url: "https://github.com/ashishpatel26/500-AI-Agents-Projects",
+    category: "other",
+    source: "GitHub",
+  },
 ]
 
 export function getCollectionByCategory(

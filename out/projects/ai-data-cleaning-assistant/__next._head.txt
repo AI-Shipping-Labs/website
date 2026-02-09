@@ -1,0 +1,7 @@
+1:"$Sreact.fragment"
+2:I[9660,["/_next/static/chunks/311667441357723c.js","/_next/static/chunks/f7b9bcb00bd350fc.js"],"ViewportBoundary"]
+4:I[9660,["/_next/static/chunks/311667441357723c.js","/_next/static/chunks/f7b9bcb00bd350fc.js"],"MetadataBoundary"]
+5:"$Sreact.suspense"
+0:{"buildId":"TJlvx0-THJMa2i_qu9SF5","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
+3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+6:[["$","title","0",{"children":"AI Data Cleaning Assistant | AI Engineering Lab"}],["$","meta","1",{"name":"description","content":"A production-style app that automates messy CSV cleanup: upload a file, profile it, generate AI-backed cleaning steps, apply deterministic transformations, and download a cleaned dataset with a human-readable report. Turns a repetitive, error-prone task into a repeatable pipeline with tests, an API, and Cloud Run deployment—LLM as planner, cleaning engine deterministic for reliability."}]]

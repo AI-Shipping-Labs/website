@@ -1,0 +1,7 @@
+1:"$Sreact.fragment"
+2:I[9660,["/_next/static/chunks/311667441357723c.js","/_next/static/chunks/f7b9bcb00bd350fc.js"],"ViewportBoundary"]
+4:I[9660,["/_next/static/chunks/311667441357723c.js","/_next/static/chunks/f7b9bcb00bd350fc.js"],"MetadataBoundary"]
+5:"$Sreact.suspense"
+0:{"buildId":"TJlvx0-THJMa2i_qu9SF5","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
+3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+6:[["$","title","0",{"children":"Cybersecurity Disclosure Agent | AI Engineering Lab"}],["$","meta","1",{"name":"description","content":"An agent that tracks cybersecurity incidents reported to the SEC, built by Scott DeGeest. Helps supply chain professionals quickly find out if a company has disclosed a data breach or ransomware attack. Handles raw XML/PDF from the SEC, invalid XML, subsidiary relationships (e.g. Change Healthcare ↔ United Health Group), and token monitoring for cost and context limits."}]]

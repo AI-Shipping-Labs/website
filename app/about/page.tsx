@@ -5,7 +5,7 @@ import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
 
 export const metadata = {
-  title: "About Alexey Grigorev | AI Engineering Lab",
+  title: "About Alexey Grigorev | AI Shipping Labs",
   description: "Meet Alexey Grigorev Grigorev - Software engineer and ML practitioner with 15+ years of experience. Founder of DataTalks.Club and creator of the Zoomcamp series.",
 }
 
@@ -189,7 +189,7 @@ export default function AboutPage() {
           </div>
 
           <div className="mt-16 rounded-2xl border border-accent/30 bg-accent/5 p-8 text-center">
-            <h2 className="text-xl font-semibold">Why AI Engineering Lab?</h2>
+            <h2 className="text-xl font-semibold">Why AI Shipping Labs?</h2>
             <p className="mt-4 text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               After years of building communities and teaching at scale, I wanted to create something more focused.
               A smaller group where the conversations go deeper, where I can provide real feedback on your work,

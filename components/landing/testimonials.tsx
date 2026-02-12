@@ -49,7 +49,7 @@ export function Testimonials() {
             From Alexey Grigorev's AI Engineering courses
           </h2>
           <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-            AI Engineering Lab community is new, but here's what practitioners say about learning with Alexey Grigorev.
+            AI Shipping Labs community is new, but here's what practitioners say about learning with Alexey Grigorev.
           </p>
         </div>
 

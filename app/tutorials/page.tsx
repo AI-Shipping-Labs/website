@@ -5,7 +5,7 @@ import { Footer } from "@/components/landing/footer"
 import { getAllTutorials } from "@/lib/tutorials"
 
 export const metadata = {
-  title: "Tutorials | AI Engineering Lab",
+  title: "Tutorials | AI Shipping Labs",
   description: "Easy to read tutorials on narrow topics. Learn how to do this and that.",
 }
 

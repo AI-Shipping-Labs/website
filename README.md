@@ -1,10 +1,10 @@
-# AI Engineering Lab Landing Page
+# AI Shipping Labs Landing Page
 
-A Next.js static website for the AI Engineering Lab community - an invite-oriented community for AI, data, and engineering practitioners.
+A Next.js static website for the AI Shipping Labs community - an invite-oriented community for AI, data, and engineering practitioners.
 
 ## Overview
 
-This is a static Next.js application that serves as a landing page and content hub for the AI Engineering Lab community. The site features blog posts, projects, resources, tutorials, and community information.
+This is a static Next.js application that serves as a landing page and content hub for the AI Shipping Labs community. The site features blog posts, projects, resources, tutorials, and community information.
 
 ## Tech Stack
 

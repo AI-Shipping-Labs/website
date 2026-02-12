@@ -31,7 +31,7 @@ export function Footer() {
           <div>
             <div className="flex items-center gap-2">
               <div className="h-6 w-6 rounded bg-accent" />
-              <span className="font-semibold">AI Engineering Lab</span>
+              <span className="font-semibold">AI Shipping Labs</span>
             </div>
             <p className="mt-4 text-sm text-muted-foreground">
               A technical community for AI, data, and engineering practitioners.
@@ -109,7 +109,7 @@ export function Footer() {
 
         <div className="mt-8 border-t border-border pt-8 text-center">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} AI Engineering Lab by Alexey Grigorev. All rights reserved.
+            © {new Date().getFullYear()} AI Shipping Labs by Alexey Grigorev. All rights reserved.
           </p>
         </div>
       </div>

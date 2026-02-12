@@ -20,7 +20,7 @@ const dancingScript = Dancing_Script({
 })
 
 export const metadata: Metadata = {
-  title: 'AI Engineering Lab | A Technical Community by Alexey Grigorev',
+  title: 'AI Shipping Labs | A Technical Community by Alexey Grigorev',
   description: 'An invite-oriented community for AI, data, and engineering practitioners. Signal over noise. Judgment over content.',
 }
 

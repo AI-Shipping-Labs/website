@@ -5,7 +5,7 @@ import { Footer } from "@/components/landing/footer"
 import { getAllProjects } from "@/lib/projects"
 
 export const metadata = {
-  title: "Project Ideas | AI Engineering Lab",
+  title: "Project Ideas | AI Shipping Labs",
   description: "Real projects from the first cohort of the AI Engineering Bootcamp—end-to-end AI applications and agentic workflows you can learn from.",
 }
 

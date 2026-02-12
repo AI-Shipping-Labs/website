@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: PageProps) {
   }
   
   return {
-    title: `${tutorial.title} | AI Engineering Lab`,
+    title: `${tutorial.title} | AI Shipping Labs`,
     description: tutorial.description,
   }
 }

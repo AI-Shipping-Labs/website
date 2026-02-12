@@ -4,7 +4,7 @@ import { Footer } from "@/components/landing/footer"
 import { CollectionGrid } from "@/components/landing/collection-grid"
 
 export const metadata = {
-  title: "Collection | AI Engineering Lab",
+  title: "Collection | AI Shipping Labs",
   description:
     "Curated GitHub tools, model hubs, courses, and learning resources. Dev tools, local LLMs, and courses.",
 }

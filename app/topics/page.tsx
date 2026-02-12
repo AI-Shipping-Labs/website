@@ -5,8 +5,8 @@ import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
 
 export const metadata = {
-  title: "Topics & Content | AI Engineering Lab",
-  description: "Explore the workshops, live streams, and projects covered in AI Engineering Lab community. From AI agents to MLOps, production ML to deployment.",
+  title: "Topics & Content | AI Shipping Labs",
+  description: "Explore the workshops, live streams, and projects covered in AI Shipping Labs community. From AI agents to MLOps, production ML to deployment.",
 }
 
 const workshops = [
@@ -133,7 +133,7 @@ export default function TopicsPage() {
           <div className="max-w-3xl">
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Topics & Content</h1>
             <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
-              A preview of the workshops, live streams, and hands-on projects covered in AI Engineering Lab.
+              A preview of the workshops, live streams, and hands-on projects covered in AI Shipping Labs.
               Content focuses on practical, production-grade AI and ML systems — not theory for theory's sake.
             </p>
           </div>

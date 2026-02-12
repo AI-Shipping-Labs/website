@@ -5,7 +5,7 @@ import { Footer } from "@/components/landing/footer"
 import { getAllPosts } from "@/lib/blog"
 
 export const metadata = {
-  title: "Blog | AI Engineering Lab",
+  title: "Blog | AI Shipping Labs",
   description: "Articles on AI engineering, MLOps, production systems, and building with data.",
 }
 

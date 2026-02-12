@@ -1,42 +1,42 @@
 "use client"
 
-import { Mail } from "lucide-react"
+import Link from "next/link"
+import { Mail, ArrowRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export function Newsletter() {
   return (
     <section id="newsletter" className="border-t border-border bg-card py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <Mail className="h-4 w-4" />
-            Free Newsletter
+        <div className="mx-auto max-w-2xl">
+          <div className="rounded-2xl border border-border bg-background p-8 sm:p-10">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+              <Mail className="h-4 w-4" />
+              Free Newsletter
+            </div>
+            <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+              Want to know when we launch?
+            </h2>
+            <p className="mt-4 text-pretty text-muted-foreground leading-relaxed">
+              Subscribe to the free newsletter and get the first ping when the community opens.
+            </p>
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+              <Button asChild size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90 shrink-0">
+                <a
+                  href="https://alexeyondata.substack.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2"
+                >
+                  Subscribe
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                No spam. Unsubscribe anytime.
+              </p>
+            </div>
           </div>
-          
-          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-            Stay in the loop
-          </h2>
-          
-          <p className="mt-6 text-pretty text-lg leading-relaxed text-muted-foreground">
-            The community is launching soon. Subscribe to Alexey's free newsletter to get updates, 
-            early access announcements, and quality content on AI engineering, MLOps, and production systems.
-          </p>
-          
-          <div className="mt-10 flex justify-center">
-            <iframe 
-              src="https://alexeyondata.substack.com/embed" 
-              width="480" 
-              height="150" 
-              className="max-w-full rounded-lg"
-              style={{ border: "1px solid #EEE", background: "white" }}
-              frameBorder="0"
-              scrolling="no"
-              title="Alexey on Data Newsletter Signup"
-            />
-          </div>
-          
-          <p className="mt-8 text-sm text-muted-foreground">
-            Join thousands of practitioners already reading. No spam, unsubscribe anytime.
-          </p>
         </div>
       </div>
     </section>

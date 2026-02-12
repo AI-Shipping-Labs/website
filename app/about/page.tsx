@@ -95,7 +95,7 @@ export default function AboutPage() {
                   <Linkedin className="h-5 w-5" />
                 </a>
                 <a
-                  href="https://Alexey Grigorevondata.substack.com"
+                  href="https://alexeyondata.substack.com"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"

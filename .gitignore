@@ -11,3 +11,6 @@ node_modules/
 .env*.local
 .DS_Store
 .vercel
+
+# Next.js RSC payload files (not needed for static export)
+out/**/__next.*.txt

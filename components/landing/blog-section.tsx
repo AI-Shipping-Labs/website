@@ -38,18 +38,14 @@ export async function BlogSection() {
               We&apos;re drafting the first articles now. Sign up below to get them in your inbox the moment they drop.
             </p>
             <div className="mt-6 flex justify-center">
-              <div className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-background">
-                <iframe
-                  src="https://alexeyondata.substack.com/embed"
-                  width="100%"
-                  height="150"
-                  className="block"
-                  style={{ border: 0 }}
-                  frameBorder="0"
-                  scrolling="no"
-                  title="Newsletter sign up"
-                />
-              </div>
+              <a
+                href="https://alexeyondata.substack.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
+              >
+                Subscribe to the newsletter
+              </a>
             </div>
           </div>
         ) : (

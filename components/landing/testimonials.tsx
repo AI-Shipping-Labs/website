@@ -46,7 +46,7 @@ export function Testimonials() {
         <div className="text-center">
           <p className="text-sm font-medium uppercase tracking-wider text-accent">What learners say</p>
           <h2 className="mt-4 text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-            From the founder's AI Engineering courses
+            From the students of our AI Engineering course
           </h2>
           <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
             AI Shipping Labs community is new, but here's what practitioners say about the courses that inspired it.

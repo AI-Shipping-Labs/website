@@ -20,7 +20,7 @@ export async function BlogSection() {
               Publish and share our thinking
             </h2>
             <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-              Long-form notes, walkthroughs, and experiments in markdown. Stay close to how we build and reason.
+              Long-form notes, walkthroughs, and experiments. Stay close to how we build and reason.
             </p>
           </div>
           <Link
@@ -56,8 +56,7 @@ export async function BlogSection() {
                 className="group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50"
               >
                 <div className="flex-1">
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Markdown</p>
-                  <h3 className="mt-3 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
+                  <h3 className="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
                     {post.title}
                   </h3>
                   <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">

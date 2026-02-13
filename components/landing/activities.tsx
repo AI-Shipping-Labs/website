@@ -150,7 +150,7 @@ export function Activities() {
     : activities.filter(a => a.tiers.includes(selectedTier))
 
   return (
-    <section id="activities" className="border-t border-border bg-background py-24 lg:py-32">
+    <section className="border-t border-border bg-background py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-medium uppercase tracking-widest text-accent">What You Get</p>

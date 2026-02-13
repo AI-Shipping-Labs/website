@@ -26,6 +26,9 @@ export function Header() {
           <Link href="/about" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             About
           </Link>
+          <Link href="/activities" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            Activities
+          </Link>
           <Link href="/#tiers" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             Membership
           </Link>
@@ -89,6 +92,13 @@ export function Header() {
               onClick={() => setMobileMenuOpen(false)}
             >
               About
+            </Link>
+            <Link
+              href="/activities"
+              className="block py-2 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Activities
             </Link>
             <Link
               href="/#tiers"

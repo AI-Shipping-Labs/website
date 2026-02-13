@@ -7,6 +7,21 @@ export function Hero() {
     <section className="relative min-h-screen overflow-hidden pt-24">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-secondary via-background to-background" />
       
+      {/* Hero Image - Add your hero image to /public/images/hero-image.png or update the path */}
+      {/* Uncomment and update path when you have a hero image */}
+      {/* 
+      <div className="absolute inset-0 opacity-10 lg:opacity-20">
+        <Image
+          src="/images/hero-image.png"
+          alt="AI Shipping Labs - A community for action-oriented builders turning AI ideas into real projects"
+          fill
+          className="object-cover object-center"
+          priority
+          quality={90}
+        />
+      </div>
+      */}
+      
       <div className="relative mx-auto max-w-7xl px-6 py-24 lg:px-8 lg:py-32">
         <div className="mx-auto max-w-3xl text-center">
           <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-sm text-muted-foreground">

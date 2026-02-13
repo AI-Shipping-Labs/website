@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils"
 
 const sections = [
   { id: "about", label: "Philosophy" },
-  { id: "activities", label: "Activities" },
   { id: "tiers", label: "Membership" },
   { id: "testimonials", label: "Testimonials" },
+  { id: "resources", label: "Workshops" },
   { id: "blog", label: "Blog" },
   { id: "collection", label: "Curated Links" },
   { id: "newsletter", label: "Newsletter" },

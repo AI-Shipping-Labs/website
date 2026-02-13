@@ -94,5 +94,5 @@ This approach appears to be becoming standard, with Anthropic’s skills now sup
 
 > We now support Agent Skills - the open standard created by @AnthropicAI for extending AI agents with specialized capabilities. Create skills once, use them everywhere. [aka.ms/vscode-agent-skills](http://aka.ms/vscode-agent-skills)
 
-I plan to learn more about agent skills and host a workshop. If you want to go deeper into building skill-driven coding agents, check out: [Skills.md from Scratch: Build a Skill-Driven Coding Agent](/resources/coding-agent-skills-commands).
+I plan to learn more about agent skills and host a workshop. If you want to go deeper into building skill-driven coding agents, check out: [Skills.md from Scratch: Build a Skill-Driven Coding Agent](/event-recordings/coding-agent-skills-commands).
 

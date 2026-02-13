@@ -57,11 +57,11 @@ export default async function ResourcePage({ params }: PageProps) {
         <article className="py-16 lg:py-24">
           <div className="mx-auto max-w-4xl px-6 lg:px-8">
             <Link
-              href="/resources"
+              href="/event-recordings"
               className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Resources
+              Back to Event Recordings
             </Link>
 
             <header className="mb-12">

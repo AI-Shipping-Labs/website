@@ -23,7 +23,7 @@ export async function ResourcesSection() {
             </p>
           </div>
           <Link
-            href="/resources"
+            href="/event-recordings"
             className="inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80"
           >
             View all recordings
@@ -80,7 +80,7 @@ export async function ResourcesSection() {
                 </div>
 
                 <Link
-                  href={`/resources/${resource.slug}`}
+                  href={`/event-recordings/${resource.slug}`}
                   className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80"
                 >
                   View resource

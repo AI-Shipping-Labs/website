@@ -77,7 +77,7 @@ timestamps:
     description: "Overview of the AI Engineering Buildcamp course and learning journey"
 materials:
   - title: "Related: AI Coding Tools Compared Workshop"
-    url: "/resources/ai-coding-tools-compared"
+    url: "/event-recordings/ai-coding-tools-compared"
     type: "article"
   - title: "Related Course: AI Engineering Buildcamp"
     url: "https://maven.com/alexey-grigorev/from-rag-to-agents"
@@ -108,7 +108,7 @@ outcome: "A fully functional project bootstrapper: a coding agent that can build
 relatedCourse: "AI Engineering Buildcamp: From RAG to Agents"
 ---
 
-In the [AI Coding Tools Compared](/resources/ai-coding-tools-compared) workshop, we explored different categories of AI-assisted development tools, including "Project Bootstrappers" like Lovable and claude-code CLI. Now, we're building one ourselves.
+In the [AI Coding Tools Compared](/event-recordings/ai-coding-tools-compared) workshop, we explored different categories of AI-assisted development tools, including "Project Bootstrappers" like Lovable and claude-code CLI. Now, we're building one ourselves.
 
 This workshop guides you through building your own project bootstrapper: a coding agent similar to Lovable, but specifically designed for Python/Django projects. You'll learn how to transform a basic chatbot into a powerful tool-using agent that can read files, write code, search codebases, and build complete Django applications based on natural language instructions.
 

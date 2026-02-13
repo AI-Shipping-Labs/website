@@ -53,7 +53,7 @@ timestamps:
     description: "Overview of the AI Engineering Buildcamp course and workshop summary"
 materials:
   - title: "Prerequisite: Building a Coding Agent (Python/Django)"
-    url: "/resources/building-coding-agent-python-django"
+    url: "/event-recordings/building-coding-agent-python-django"
     type: "article"
   - title: "Related Course: AI Engineering Buildcamp"
     url: "https://maven.com/alexey-grigorev/from-rag-to-agents"
@@ -82,7 +82,7 @@ outcome: "A working FAQ assistant agent that can search and update a knowledge b
 relatedCourse: "AI Engineering Buildcamp: From RAG to Agents"
 ---
 
-This workshop builds on the [Building a Coding Agent: Python/Django Edition](/resources/building-coding-agent-python-django) workshop. Previously, we created a coding agent that could create a Django application from a single prompt. In this workshop, we deep dive into agents.
+This workshop builds on the [Building a Coding Agent: Python/Django Edition](/event-recordings/building-coding-agent-python-django) workshop. Previously, we created a coding agent that could create a Django application from a single prompt. In this workshop, we deep dive into agents.
 
 We build an AI agent step by step, starting from a minimal chatbot and evolving it into a system that can use tools, maintain state through chat history, and run an explicit control loop for multi-step actions. Using a course FAQ dataset, we add retrieval and write capabilities as tools, show how function calling works in real code, and explain why agent "memory" is just structured messages plus control logic. The same agent is then reimplemented with higher-level frameworks like the OpenAI Agents SDK and PydanticAI to clarify what abstractions they provide, before concluding with MCP (Model Context Protocol), where the tools are packaged behind an MCP server so they can be reused by multiple agents and clients, including IDEs, through a standard interface.
 

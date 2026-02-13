@@ -59,7 +59,7 @@ materials:
     url: "https://github.com/alexeygrigorev/workshops/tree/main/agent-skills"
     type: "code"
   - title: "Prerequisite: Building a Coding Agent (Python/Django)"
-    url: "/resources/building-coding-agent-python-django"
+    url: "/event-recordings/building-coding-agent-python-django"
     type: "article"
   - title: "Prerequisite: Create a Coding Agent Workshop (GitHub)"
     url: "https://github.com/alexeygrigorev/workshops/tree/main/coding-agent"
@@ -94,7 +94,7 @@ outcome: "A general-purpose coding agent that supports skills and commands, load
 relatedCourse: "AI Engineering Buildcamp: From RAG to Agents"
 ---
 
-This workshop builds on the [Building a Coding Agent: Python/Django Edition](/resources/building-coding-agent-python-django) workshop and the [Create a Coding Agent workshop](https://github.com/alexeygrigorev/workshops/tree/main/coding-agent) (GitHub). It extends the agent with skills and commands. It shows how modular capabilities are discovered and loaded automatically, demonstrates how user-facing commands are translated into agent instructions, analyzes OpenCode as a real-world reference, and incrementally builds a skill-driven coding agent that mirrors modern AI coding tools while remaining fully inspectable and framework-agnostic.
+This workshop builds on the [Building a Coding Agent: Python/Django Edition](/event-recordings/building-coding-agent-python-django) workshop and the [Create a Coding Agent workshop](https://github.com/alexeygrigorev/workshops/tree/main/coding-agent) (GitHub). It extends the agent with skills and commands. It shows how modular capabilities are discovered and loaded automatically, demonstrates how user-facing commands are translated into agent instructions, analyzes OpenCode as a real-world reference, and incrementally builds a skill-driven coding agent that mirrors modern AI coding tools while remaining fully inspectable and framework-agnostic.
 
 ## Workshop Overview
 

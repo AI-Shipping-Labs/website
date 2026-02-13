@@ -42,7 +42,7 @@ export default async function ResourcesPage() {
                     key={resource.slug}
                     className="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
                   >
-                    <Link href={`/resources/${resource.slug}`}>
+                    <Link href={`/event-recordings/${resource.slug}`}>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">

@@ -46,7 +46,7 @@ export function Header() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/resources" className="cursor-pointer">
+                <Link href="/event-recordings" className="cursor-pointer">
                   Event Recordings
                 </Link>
               </DropdownMenuItem>
@@ -115,7 +115,7 @@ export function Header() {
                   Project Ideas
                 </Link>
                 <Link
-                  href="/resources"
+                  href="/event-recordings"
                   className="block py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                   onClick={() => setMobileMenuOpen(false)}
                 >

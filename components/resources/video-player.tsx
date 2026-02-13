@@ -25,13 +25,13 @@ export function VideoPlayer({ googleEmbedUrl, youtubeUrl, title, videoId, curren
           .replace("watch?v=", "embed/")
           .replace("youtu.be/", "youtube.com/embed/")
         
-        // Remove existing time parameters
-        url = url.split("&t=")[0].split("?t=")[0].split("&start=")[0]
+        // Remove existing time and autoplay parameters
+        url = url.split("&t=")[0].split("?t=")[0].split("&start=")[0].split("&autoplay=")[0]
         
-        // Add time parameter if provided
+        // Add time and autoplay parameters if provided
         if (timeInSeconds !== undefined && timeInSeconds > 0) {
           const separator = url.includes("?") ? "&" : "?"
-          url = `${url}${separator}start=${timeInSeconds}`
+          url = `${url}${separator}start=${timeInSeconds}&autoplay=1`
         }
         
         return url

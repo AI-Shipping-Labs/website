@@ -19,7 +19,7 @@ export async function ResourcesSection() {
               Workshops & Learning Materials
             </h2>
             <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-              Links to Alexey's workshops with embedded content, timestamps, descriptions, and materials.
+              Workshop recordings with embedded content, timestamps, descriptions, and materials. Learn from hands-on sessions on building AI agents and practical systems.
             </p>
           </div>
           <Link

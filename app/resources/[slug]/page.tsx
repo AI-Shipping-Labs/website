@@ -1,9 +1,10 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeft, Calendar, Video, Clock, ExternalLink, FileText, Code, Link as LinkIcon, Target, CheckCircle2, BookOpen, Wrench } from "lucide-react"
+import { ArrowLeft, Calendar, Video, Clock, ExternalLink, FileText, Code, Link as LinkIcon, Target, CheckCircle2, Wrench } from "lucide-react"
 import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
 import { getResourceBySlug, getAllResources } from "@/lib/resources"
+import { ResourceVideoSection } from "@/components/resources/resource-video-section"
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -108,61 +109,14 @@ export default async function ResourcePage({ params }: PageProps) {
               )}
             </header>
 
-            {/* Google Embed or YouTube Embed */}
-            {(resource.googleEmbedUrl || resource.youtubeUrl) && (
-              <div className="mb-12 rounded-lg border border-border bg-card p-4">
-                <div className="aspect-video w-full overflow-hidden rounded-lg">
-                  {resource.googleEmbedUrl ? (
-                    <iframe
-                      src={resource.googleEmbedUrl}
-                      className="h-full w-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      title={resource.title}
-                    />
-                  ) : resource.youtubeUrl ? (
-                    <iframe
-                      src={resource.youtubeUrl.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")}
-                      className="h-full w-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      title={resource.title}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            )}
-
-            {/* Timestamps */}
-            {resource.timestamps && resource.timestamps.length > 0 && (
-              <div className="mb-12">
-                <h2 className="mb-4 text-2xl font-semibold tracking-tight">Timestamps</h2>
-                <div className="space-y-3">
-                  {resource.timestamps.map((timestamp, index) => (
-                    <div
-                      key={index}
-                      className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="flex-shrink-0 rounded-full bg-accent/20 px-3 py-1">
-                          <span className="font-mono text-sm font-medium text-accent">
-                            {timestamp.time}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-foreground">{timestamp.title}</h3>
-                          {timestamp.description && (
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {timestamp.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Video Player and Timestamps */}
+            <ResourceVideoSection
+              googleEmbedUrl={resource.googleEmbedUrl}
+              youtubeUrl={resource.youtubeUrl}
+              title={resource.title}
+              videoId={resource.slug}
+              timestamps={resource.timestamps}
+            />
 
             {/* Core Tools */}
             {resource.coreTools && resource.coreTools.length > 0 && (
@@ -213,18 +167,6 @@ export default async function ResourcePage({ params }: PageProps) {
               </div>
             )}
 
-            {/* Related Course */}
-            {resource.relatedCourse && (
-              <div className="mb-12">
-                <h2 className="mb-4 flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                  <BookOpen className="h-6 w-6 text-accent" />
-                  Related Course
-                </h2>
-                <div className="rounded-lg border border-border bg-card p-4">
-                  <p className="font-medium text-foreground">{resource.relatedCourse}</p>
-                </div>
-              </div>
-            )}
 
             {/* Materials */}
             {resource.materials && resource.materials.length > 0 && (

@@ -32,7 +32,7 @@ export async function ProjectsSection() {
               Pet & Portfolio Project Ideas
             </h2>
             <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-              Real projects from the first cohort of the AI Engineering Buildcamp—robust, end-to-end AI applications and agentic workflows you can learn from and build on.
+              Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from and build on.
             </p>
           </div>
           <Link

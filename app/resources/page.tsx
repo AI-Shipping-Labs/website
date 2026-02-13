@@ -6,7 +6,7 @@ import { getAllResources } from "@/lib/resources"
 
 export const metadata = {
   title: "Event Recordings | AI Shipping Labs",
-  description: "Workshops, videos, and learning materials from Alexey's workshops.",
+  description: "Workshop recordings, videos, and learning materials on building AI agents and practical systems.",
 }
 
 export default async function ResourcesPage() {
@@ -24,7 +24,7 @@ export default async function ResourcesPage() {
                 Workshops & Learning Materials
               </h1>
               <p className="mt-4 text-lg text-muted-foreground">
-                Links to Alexey's workshops with embedded content, timestamps, descriptions, and materials.
+                Workshop recordings with embedded content, timestamps, descriptions, and materials. Learn from hands-on sessions on building AI agents and practical systems.
               </p>
             </div>
 

@@ -58,6 +58,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'weekly',
       priority: 0.8,
     },
+    {
+      url: `${siteUrl}/checkout/success`,
+      lastModified: new Date(),
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
   ]
 
   // Add blog posts

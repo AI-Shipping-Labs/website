@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { CUSTOMER_PORTAL_URL } from "@/lib/stripe-links"
 
 export function Footer() {
   return (
@@ -55,6 +56,11 @@ export function Footer() {
                 <Link href="/#faq" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                   FAQ
                 </Link>
+              </li>
+              <li>
+                <a href={CUSTOMER_PORTAL_URL} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                  Manage Subscription
+                </a>
               </li>
             </ul>
           </div>

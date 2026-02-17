@@ -4,10 +4,12 @@ import { useState } from "react"
 import { Check, X, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { getPaymentLink, type StripeTier } from "@/lib/stripe-links"
 
 const tiers = [
   {
     name: "Basic",
+    stripeKey: "basic" as StripeTier,
     tagline: "Content only",
     description: "Access curated educational content, tutorials, and research. Perfect for self-directed builders who learn at their own pace.",
     priceMonthly: 20,
@@ -25,6 +27,7 @@ const tiers = [
   },
   {
     name: "Main",
+    stripeKey: "main" as StripeTier,
     tagline: "Live learning + community",
     description: "Everything in Basic, plus the structure, accountability, and peer support to ship your AI projects consistently.",
     priceMonthly: 50,
@@ -47,6 +50,7 @@ const tiers = [
   },
   {
     name: "Premium",
+    stripeKey: "premium" as StripeTier,
     tagline: "Courses + personalized feedback",
     description: "Everything in Main, plus structured learning paths through mini-courses and personalized career guidance to accelerate your growth.",
     priceMonthly: 100,
@@ -177,8 +181,8 @@ export function Pricing() {
                       : "bg-secondary text-foreground hover:bg-secondary/80"
                   )}
                 >
-                  <a href="/#newsletter">
-                    {tier.highlighted ? "Get Started" : "Subscribe for updates"}
+                  <a href={getPaymentLink(tier.stripeKey, annual)} target="_blank" rel="noopener noreferrer">
+                    {tier.highlighted ? "Get Started" : `Choose ${tier.name}`}
                   </a>
                 </Button>
               </div>

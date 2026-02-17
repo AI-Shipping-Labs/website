@@ -33,8 +33,16 @@ const faqs = [
     answer: "Premium tier accelerates your growth with structured learning paths through mini-courses and personalized career guidance. Includes everything in Main, plus access to all mini-courses on specialized topics, the ability to vote on course topics, and professional profile teardowns (resume, LinkedIn, GitHub).",
   },
   {
-    question: "When will the community launch?",
-    answer: "We'll announce the launch date publicly. Subscribe to the newsletter to get notified when we open and be among the first to join.",
+    question: "How do I get started?",
+    answer: "Pick the tier that fits your needs, click the button to check out securely via Stripe, and you'll receive access details by email within 24 hours. You can start with any tier and upgrade or downgrade at any time.",
+  },
+  {
+    question: "How does billing work?",
+    answer: "All payments are processed securely through Stripe. You can choose monthly or annual billing (annual saves ~17%). Stripe handles tax calculation automatically based on your location. You'll receive invoices and receipts by email after each payment.",
+  },
+  {
+    question: "Can I cancel or change my subscription?",
+    answer: "Yes, you're in full control. You can cancel, upgrade, downgrade, or update your payment method at any time through the Stripe Customer Portal. If you cancel, you'll retain access until the end of your current billing period.",
   },
 ]
 

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load video_tags %}
+
+{% block title %}{{ recording.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ recording.description }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <article class="py-16 lg:py-24">
+    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+      <a href="/event-recordings" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Event Recordings
+      </a>
+
+      <header class="mb-12">
+        <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+          <i data-lucide="video" class="h-4 w-4"></i>
+          Workshop Resource
+        </div>
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          {{ recording.title }}
+        </h1>
+
+        {% if recording.description %}
+        <p class="mt-4 text-xl text-muted-foreground">{{ recording.description }}</p>
+        {% endif %}
+
+        <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {{ recording.formatted_date }}
+          </span>
+          {% if recording.level %}
+          <span class="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">{{ recording.level }}</span>
+          {% endif %}
+        </div>
+
+        {% if recording.tags %}
+        <div class="mt-4 flex flex-wrap gap-2">
+          {% for tag in recording.tags %}
+          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </header>
+
+      <!-- Video Player -->
+      {% if recording.youtube_url %}
+        {% video_player video_url=recording.youtube_url timestamps=recording.timestamps %}
+      {% elif recording.google_embed_url %}
+      <div class="mb-12 aspect-video rounded-lg overflow-hidden border border-border">
+        <iframe src="{{ recording.google_embed_url }}" class="w-full h-full" allowfullscreen></iframe>
+      </div>
+      {% endif %}
+
+      <!-- Core Tools -->
+      {% if recording.core_tools %}
+      <div class="mb-12">
+        <h2 class="mb-4 flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <i data-lucide="wrench" class="h-6 w-6 text-accent"></i>
+          Core Tools
+        </h2>
+        <div class="flex flex-wrap gap-2">
+          {% for tool in recording.core_tools %}
+          <span class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground">{{ tool }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Learning Objectives -->
+      {% if recording.learning_objectives %}
+      <div class="mb-12">
+        <h2 class="mb-4 flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <i data-lucide="target" class="h-6 w-6 text-accent"></i>
+          What You'll Learn
+        </h2>
+        <ul class="space-y-2">
+          {% for objective in recording.learning_objectives %}
+          <li class="flex items-start gap-3">
+            <i data-lucide="circle-check-big" class="mt-0.5 h-5 w-5 flex-shrink-0 text-accent"></i>
+            <span class="text-muted-foreground">{{ objective }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <!-- Outcome -->
+      {% if recording.outcome %}
+      <div class="mb-12 rounded-lg border border-accent/20 bg-accent/5 p-6">
+        <h2 class="mb-3 flex items-center gap-2 text-xl font-semibold tracking-tight">
+          <i data-lucide="circle-check-big" class="h-5 w-5 text-accent"></i>
+          Expected Outcome
+        </h2>
+        <p class="text-muted-foreground leading-relaxed">{{ recording.outcome }}</p>
+      </div>
+      {% endif %}
+
+      <!-- Materials -->
+      {% if recording.materials %}
+      <div class="mb-12">
+        <h2 class="mb-4 text-2xl font-semibold tracking-tight">Materials</h2>
+        <div class="space-y-3">
+          {% for material in recording.materials %}
+          <a href="{{ material.url }}" target="_blank" rel="noopener noreferrer"
+             class="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-card/80">
+            <div class="flex-shrink-0 rounded-lg bg-accent/20 p-2">
+              <i data-lucide="external-link" class="h-5 w-5 text-accent"></i>
+            </div>
+            <div class="flex-1">
+              <h3 class="font-semibold text-foreground group-hover:text-accent transition-colors">{{ material.title }}</h3>
+              {% if material.type %}
+              <p class="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{{ material.type }}</p>
+              {% endif %}
+            </div>
+            <i data-lucide="external-link" class="h-5 w-5 text-muted-foreground group-hover:text-accent transition-colors"></i>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </article>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

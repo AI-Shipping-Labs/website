@@ -1,16 +1,22 @@
-# v0 runtime files (should only exist in preview, not in git)
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-instrumentation-client.js
-instrumentation-client.ts
+# Python
+__pycache__/
+*.pyc
+*.pyo
 
-# Common ignores
-node_modules/
-.next/
-.env*.local
+# Django
+*.sqlite3
+staticfiles/
+
+# Environment
+.env
+.venv/
+
+# Coverage
+.coverage
+htmlcov/
+
+# OS files
 .DS_Store
-.vercel
 
-# Next.js build output (not needed for static export - generated automatically)
-out/
+# Playwright
+playwright_tests/screenshots/

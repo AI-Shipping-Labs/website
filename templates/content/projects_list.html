@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Project Ideas | AI Shipping Labs{% endblock %}
+{% block meta_description %}Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+      <div class="mb-12">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Project Ideas</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Pet & Portfolio Project Ideas
+        </h1>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from and build on.
+        </p>
+      </div>
+
+      {% if projects %}
+      <div class="space-y-8">
+        {% for project in projects %}
+        <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+          <a href="/projects/{{ project.slug }}">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-2">
+                  <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">{{ project.title }}</h2>
+                  {% if project.author %}
+                  <span class="text-sm text-muted-foreground">by {{ project.author }}</span>
+                  {% endif %}
+                  {% if project.difficulty %}
+                  <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ project.difficulty_color }}">{{ project.difficulty }}</span>
+                  {% endif %}
+                </div>
+                <p class="mt-2 text-muted-foreground line-clamp-2">{{ project.description }}</p>
+                <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="calendar" class="h-4 w-4"></i>
+                    {{ project.formatted_date }}
+                  </span>
+                  {% if project.reading_time %}
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="clock" class="h-4 w-4"></i>
+                    {{ project.reading_time }}
+                  </span>
+                  {% endif %}
+                  {% if project.estimated_time %}
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="code" class="h-4 w-4"></i>
+                    {{ project.estimated_time }}
+                  </span>
+                  {% endif %}
+                </div>
+                {% if project.tags %}
+                <div class="mt-3 flex flex-wrap gap-2">
+                  {% for tag in project.tags %}
+                  <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </div>
+              <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+            </div>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="rounded-lg border border-border bg-card p-12 text-center">
+        <i data-lucide="rocket" class="mx-auto h-12 w-12 text-muted-foreground"></i>
+        <p class="mt-4 text-lg text-muted-foreground">
+          No project ideas yet. Check back soon for pet and portfolio project ideas.
+        </p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

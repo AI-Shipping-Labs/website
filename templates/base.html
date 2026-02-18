@@ -1,0 +1,141 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
+  <meta name="description" content="{% block meta_description %}{{ site_description }}{% endblock %}">
+  <meta name="keywords" content="AI community, AI engineering, machine learning, data engineering, AI tools, technical community, Alexey Grigorev">
+  <meta name="author" content="Alexey Grigorev">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="{{ site_url }}">
+  <meta property="og:site_name" content="{{ site_name }}">
+  <meta property="og:title" content="{% block og_title %}{{ site_name }} | A Technical Community{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ site_description }}{% endblock %}">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ site_name }} | A Technical Community">
+  <meta name="twitter:description" content="{{ site_description }}">
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-HXSHF376NY"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-HXSHF376NY');
+  </script>
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "AI Shipping Labs",
+    "description": "{{ site_description }}",
+    "url": "{{ site_url }}",
+    "founder": {
+      "@type": "Person",
+      "name": "Alexey Grigorev"
+    }
+  }
+  </script>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: 'hsl(0 0% 4%)',
+            foreground: 'hsl(0 0% 98%)',
+            card: 'hsl(0 0% 7%)',
+            'card-foreground': 'hsl(0 0% 98%)',
+            popover: 'hsl(0 0% 7%)',
+            'popover-foreground': 'hsl(0 0% 98%)',
+            primary: 'hsl(0 0% 98%)',
+            'primary-foreground': 'hsl(0 0% 4%)',
+            secondary: 'hsl(0 0% 12%)',
+            'secondary-foreground': 'hsl(0 0% 98%)',
+            muted: 'hsl(0 0% 15%)',
+            'muted-foreground': 'hsl(0 0% 60%)',
+            accent: 'hsl(75 100% 50%)',
+            'accent-foreground': 'hsl(0 0% 4%)',
+            destructive: 'hsl(0 84.2% 60.2%)',
+            border: 'hsl(0 0% 18%)',
+            input: 'hsl(0 0% 18%)',
+            ring: 'hsl(45 100% 51%)',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: hsl(0 0% 4%);
+      color: hsl(0 0% 98%);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Prose styles for markdown content */
+    .prose h1 { font-size: 1.875rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
+    .prose h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
+    .prose h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+    .prose p { margin-top: 1rem; font-size: 1rem; line-height: 1.75; color: hsl(0 0% 60%); }
+    .prose a { color: hsl(75 100% 50%); text-decoration: underline; text-underline-offset: 4px; }
+    .prose blockquote { border-left: 2px solid hsl(75 100% 50%); padding-left: 1rem; font-style: italic; color: hsl(0 0% 60%); margin-top: 1rem; }
+    .prose ul, .prose ol { margin-top: 1rem; margin-left: 1.5rem; color: hsl(0 0% 60%); list-style: disc; }
+    .prose ol { list-style: decimal; }
+    .prose li { margin: 0.25rem 0; }
+    .prose code { border-radius: 0.25rem; background: hsl(0 0% 12%); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(75 100% 50%); }
+    .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(0 0% 18%); background: hsl(0 0% 7%); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; }
+    .prose pre code { background: transparent; padding: 0; color: hsl(0 0% 80%); }
+    .prose img { border-radius: 0.5rem; border: 1px solid hsl(0 0% 18%); width: 100%; margin: 1rem 0; }
+    .prose figure { margin: 3rem 0; border: 1px solid hsl(0 0% 18% / 0.5); border-radius: 0.5rem; padding: 1rem; background: hsl(0 0% 7% / 0.3); }
+    .prose figure img { margin: 0; }
+    .prose figcaption { text-align: center; font-size: 0.875rem; font-style: italic; color: hsl(0 0% 60% / 0.8); margin-top: 1rem; }
+    .prose strong { color: hsl(0 0% 98%); font-weight: 600; }
+
+    /* Accordion styles */
+    .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+    .accordion-content.open { max-height: 500px; }
+
+    /* Smooth scroll */
+    html { scroll-behavior: smooth; }
+
+    /* Line clamp utility */
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="font-sans antialiased">
+  {% block body %}{% endblock %}
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+  </script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

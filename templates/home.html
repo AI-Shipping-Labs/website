@@ -1,0 +1,579 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}AI Shipping Labs | A Technical Community{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <!-- Section Nav (right side dots) -->
+  <nav class="fixed right-6 top-1/2 z-40 hidden -translate-y-1/2 xl:block" id="section-nav">
+    <ul class="flex flex-col gap-3">
+      {% for section in section_nav %}
+      <li>
+        <button onclick="document.getElementById('{{ section.id }}').scrollIntoView({behavior:'smooth'})"
+                class="group flex items-center gap-3 text-sm transition-all text-muted-foreground hover:text-foreground"
+                data-section="{{ section.id }}">
+          <span class="h-2 w-2 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60 transition-all"></span>
+          <span class="opacity-0 transition-opacity group-hover:opacity-100">{{ section.label }}</span>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0" style="background: radial-gradient(ellipse at top, hsl(0 0% 12%), hsl(0 0% 4%), hsl(0 0% 4%))"></div>
+    <div class="relative mx-auto max-w-7xl px-6 py-24 lg:px-8 lg:py-32">
+      <div class="mx-auto max-w-3xl text-center">
+        <p class="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-sm text-muted-foreground">
+          <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+          Invite-only community
+        </p>
+
+        <h1 class="text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl" style="text-wrap: balance;">
+          Turn AI ideas into
+          <span class="mt-2 block text-accent">real projects</span>
+        </h1>
+
+        <p class="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+          A community for action-oriented builders interested in AI engineering and AI tools.
+          Get the structure, focus, and accountability you need to ship practical AI products.
+        </p>
+
+        <div class="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          <a href="/#newsletter" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto">
+            Subscribe for updates
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+          <a href="/#tiers" class="inline-flex w-full items-center justify-center rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary sm:w-auto">
+            View Membership Tiers
+          </a>
+        </div>
+
+        <div class="mt-16 grid grid-cols-3 gap-8 border-t border-border pt-8">
+          <div>
+            <p class="text-2xl font-semibold text-foreground">Build</p>
+            <p class="mt-1 text-sm text-muted-foreground">Practical AI projects</p>
+          </div>
+          <div>
+            <p class="text-2xl font-semibold text-foreground">Ship</p>
+            <p class="mt-1 text-sm text-muted-foreground">With structure & accountability</p>
+          </div>
+          <div>
+            <p class="text-2xl font-semibold text-foreground">Grow</p>
+            <p class="mt-1 text-sm text-muted-foreground">Through peer collaboration</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- About / Philosophy Section -->
+  <section id="about" class="border-t border-border bg-background py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Philosophy</p>
+        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Learn by building, together
+        </h2>
+        <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
+          Designed for motivated learners who prefer learning by doing. Get clear frameworks, direction, and community support to make consistent progress on your projects.
+        </p>
+      </div>
+
+      <div class="mx-auto mt-16 grid max-w-5xl gap-8 sm:grid-cols-2">
+        {% for feature in features %}
+        <div class="group rounded-lg border border-border bg-card p-8 transition-colors hover:border-accent/50">
+          <div class="mb-4 inline-flex rounded-lg bg-secondary p-3">
+            <i data-lucide="{{ feature.icon }}" class="h-6 w-6 text-accent"></i>
+          </div>
+          <h3 class="text-lg font-semibold text-foreground">{{ feature.title }}</h3>
+          <p class="mt-2 text-muted-foreground">{{ feature.description }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing / Tiers Section -->
+  <section id="tiers" class="border-t border-border bg-card py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
+        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Choose your level of engagement
+        </h2>
+        <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
+          Each tier is designed for a different type of builder. More investment means more structure, accountability,
+          and support to help you ship your AI projects consistently.
+        </p>
+
+        <div class="mt-8 flex items-center justify-center gap-4">
+          <span class="text-sm text-muted-foreground" id="monthly-label">Monthly</span>
+          <button type="button" id="billing-toggle"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors"
+                  aria-label="Toggle annual pricing">
+            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
+          </button>
+          <span class="text-sm text-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
+        </div>
+      </div>
+
+      <div class="mx-auto mt-16 grid max-w-7xl gap-6 lg:grid-cols-3">
+        {% for tier in tiers %}
+        <div class="relative flex flex-col rounded-xl border p-8 transition-all {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 lg:scale-105{% else %}border-border bg-background{% endif %}" style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">
+          {% if tier.highlighted %}
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2">
+            <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+              <i data-lucide="star" class="h-3 w-3"></i>
+              Most Popular
+            </span>
+          </div>
+          {% endif %}
+
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold text-foreground">{{ tier.name }}</h3>
+            <p class="mt-1 text-sm text-accent">{{ tier.tagline }}</p>
+          </div>
+
+          <div class="mb-6">
+            <div class="flex items-baseline">
+              <span class="text-4xl font-semibold text-foreground tier-price" data-annual="{{ tier.price_annual }}" data-monthly="{{ tier.price_monthly }}">&euro;{{ tier.price_annual }}</span>
+              <span class="ml-2 text-muted-foreground tier-period">/year</span>
+            </div>
+            <p class="mt-2 text-sm text-muted-foreground">{{ tier.hook }}</p>
+          </div>
+
+          <p class="mb-6 text-sm text-muted-foreground">{{ tier.description }}</p>
+
+          <ul class="mb-8 flex-1 space-y-3">
+            {% for feature in tier.features %}
+            <li class="flex items-start gap-3">
+              {% if feature.included %}
+              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
+              {% else %}
+              <i data-lucide="x" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/50"></i>
+              {% endif %}
+              <span class="text-sm {% if feature.included %}text-foreground{% else %}text-muted-foreground/50{% endif %}">{{ feature.text }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+
+          <div class="mt-auto space-y-4">
+            <p class="text-xs text-muted-foreground">{{ tier.positioning }}</p>
+            <a href="{{ tier.payment_link_annual }}" target="_blank" rel="noopener noreferrer"
+               class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               data-link-annual="{{ tier.payment_link_annual }}" data-link-monthly="{{ tier.payment_link_monthly }}"
+               style="{% if tier.highlighted %}box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);{% endif %}">
+              {% if tier.highlighted %}Get Started{% else %}Choose {{ tier.name }}{% endif %}
+            </a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials Section -->
+  <section id="testimonials" class="border-t border-border bg-card px-6 py-24 lg:px-8 lg:py-32">
+    <div class="mx-auto max-w-7xl">
+      <div class="text-center">
+        <p class="text-sm font-medium uppercase tracking-wider text-accent">What learners say</p>
+        <h2 class="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl" style="text-wrap: balance;">
+          From the students of our AI Engineering course
+        </h2>
+        <p class="mt-4 text-muted-foreground max-w-2xl mx-auto">
+          AI Shipping Labs community is new, but here's what practitioners say about the courses that inspired it.
+        </p>
+      </div>
+
+      <div class="mt-16 columns-1 gap-6 sm:columns-2 lg:columns-3">
+        {% for t in testimonials %}
+        <div class="mb-6 break-inside-avoid rounded-xl border border-border bg-background p-6">
+          <i data-lucide="quote" class="h-6 w-6 text-accent/50"></i>
+          <blockquote class="mt-4 text-sm leading-relaxed text-muted-foreground">
+            "{{ t.quote }}"
+          </blockquote>
+          <div class="mt-6 flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-medium">
+              {{ t.name|first }}
+            </div>
+            <div>
+              <p class="font-medium text-sm">{{ t.name }}</p>
+              <p class="text-xs text-muted-foreground">
+                {{ t.role }}{% if t.company %} &middot; {{ t.company }}{% endif %}
+              </p>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Event Recordings / Resources Section -->
+  <section id="resources" class="border-t border-border bg-background py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="video" class="h-4 w-4"></i>
+            Event Recordings
+          </p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+            Workshops & Learning Materials
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+            Workshop recordings with embedded content, timestamps, descriptions, and materials. Learn from hands-on sessions on building AI agents and practical systems.
+          </p>
+        </div>
+        <a href="/event-recordings" class="inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+          View all recordings
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      {% if recordings %}
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {% for recording in recordings %}
+        <article class="group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-2">
+              <i data-lucide="video" class="h-5 w-5 text-accent"></i>
+              <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ recording.title }}</h3>
+            </div>
+            <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ recording.description }}</p>
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span class="inline-flex items-center gap-1.5">
+                <i data-lucide="calendar" class="h-4 w-4"></i>
+                {{ recording.short_date }}
+              </span>
+            </div>
+            {% if recording.tags %}
+            <div class="mt-3 flex flex-wrap gap-2">
+              {% for tag in recording.tags|slice:":2" %}
+              <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          <a href="/event-recordings/{{ recording.slug }}" class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+            View resource
+            <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1"></i>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mt-12 rounded-lg border border-border bg-card p-8 text-center">
+        <p class="text-muted-foreground">Event recordings coming soon. Check back for workshops and learning materials.</p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Blog Section -->
+  <section id="blog" class="border-t border-border bg-background py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="pen-line" class="h-4 w-4"></i>
+            From the blog
+          </p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+            Publish and share our thinking
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+            Long-form notes, walkthroughs, and experiments. Stay close to how we build and reason.
+          </p>
+        </div>
+        <a href="/blog" class="inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+          View all posts
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      {% if articles %}
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {% for article in articles %}
+        <article class="group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50">
+          <div class="flex-1">
+            <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ article.title }}</h3>
+            <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ article.description }}</p>
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span class="inline-flex items-center gap-1.5">
+                <i data-lucide="calendar" class="h-4 w-4"></i>
+                {{ article.short_date }}
+              </span>
+              {% if article.reading_time %}
+              <span class="inline-flex items-center gap-1.5">
+                <i data-lucide="clock" class="h-4 w-4"></i>
+                {{ article.reading_time }}
+              </span>
+              {% endif %}
+            </div>
+            {% if article.tags %}
+            <div class="mt-3 flex flex-wrap gap-2">
+              {% for tag in article.tags %}
+              <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          <a href="/blog/{{ article.slug }}" class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+            Read article
+            <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1"></i>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mt-12 rounded-lg border border-border bg-card p-8 text-center">
+        <p class="text-muted-foreground">We're drafting the first articles now. Sign up below to get them in your inbox the moment they drop.</p>
+        <div class="mt-6 flex justify-center">
+          <a href="https://alexeyondata.substack.com/subscribe" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20">
+            Subscribe to the newsletter
+          </a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Projects Section -->
+  <section id="projects" class="border-t border-border bg-card py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="rocket" class="h-4 w-4"></i>
+            Project Ideas
+          </p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+            Pet & Portfolio Project Ideas
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+            Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from and build on.
+          </p>
+        </div>
+        <a href="/projects" class="inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+          View all project ideas
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      {% if projects %}
+      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {% for project in projects %}
+        <article class="group flex flex-col rounded-xl border border-border bg-background p-6 transition-colors hover:border-accent/50">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-2">
+              <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ project.title }}</h3>
+              {% if project.author %}
+              <span class="text-xs text-muted-foreground">by {{ project.author }}</span>
+              {% endif %}
+              {% if project.difficulty %}
+              <span class="rounded-full px-2 py-0.5 text-xs font-medium {{ project.difficulty_color }}">{{ project.difficulty }}</span>
+              {% endif %}
+            </div>
+            <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ project.description }}</p>
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {% if project.reading_time %}
+              <span class="inline-flex items-center gap-1.5">
+                <i data-lucide="clock" class="h-4 w-4"></i>
+                {{ project.reading_time }}
+              </span>
+              {% endif %}
+              {% if project.estimated_time %}
+              <span class="inline-flex items-center gap-1.5">
+                <i data-lucide="code" class="h-4 w-4"></i>
+                {{ project.estimated_time }}
+              </span>
+              {% endif %}
+            </div>
+            {% if project.tags %}
+            <div class="mt-3 flex flex-wrap gap-2">
+              {% for tag in project.tags|slice:":2" %}
+              <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          <a href="/projects/{{ project.slug }}" class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+            View idea
+            <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1"></i>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mt-12 rounded-lg border border-border bg-background p-8 text-center">
+        <p class="text-muted-foreground">Project ideas coming soon. Check back for pet and portfolio project ideas.</p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Collection / Curated Links Section -->
+  <section id="collection" class="border-t border-border bg-background py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="folder-open" class="h-4 w-4"></i>
+            Curated Links
+          </p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+            Tools, Models & Courses
+          </h2>
+          <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+            Curated GitHub repos, model hubs, and learning resources.
+            Dev tools, local LLMs, and courses to level up.
+          </p>
+        </div>
+        <a href="/collection" class="inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+          View all curated links
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {% for link in curated_links %}
+        <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
+           class="group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50">
+          <div class="flex flex-1 flex-col">
+            <div class="mb-2 flex items-start justify-between gap-2">
+              <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                <i data-lucide="{{ link.category_icon_name }}" class="h-3.5 w-3.5"></i>
+                {{ link.category_label }}
+              </span>
+              {% if link.is_external %}
+              <i data-lucide="external-link" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i>
+              {% endif %}
+            </div>
+            <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ link.title }}</h3>
+            <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ link.description }}</p>
+            {% if link.source %}
+            <p class="mt-3 text-xs text-muted-foreground">{{ link.source }}</p>
+            {% endif %}
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter Section -->
+  <section id="newsletter" class="border-t border-border bg-card py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="mx-auto max-w-2xl">
+        <div class="rounded-2xl border border-border bg-background p-8 sm:p-10">
+          <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="mail" class="h-4 w-4"></i>
+            Free Newsletter
+          </div>
+          <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl" style="text-wrap: balance;">
+            Ready to turn your AI ideas into real projects?
+          </h2>
+          <p class="mt-4 text-muted-foreground leading-relaxed">
+            Subscribe to the free newsletter and get notified when the community opens.
+            Join action-oriented builders who are shipping practical AI products.
+          </p>
+          <div class="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+            <a href="https://alexeyondata.substack.com/subscribe" target="_blank" rel="noopener noreferrer"
+               class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+              Subscribe
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            <p class="text-sm text-muted-foreground">No spam. Unsubscribe anytime.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section id="faq" class="border-t border-border bg-background py-24 lg:py-32">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <div class="text-center">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">FAQ</p>
+        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Common questions
+        </h2>
+      </div>
+
+      <div class="mt-12 divide-y divide-border">
+        {% for faq in faq_items %}
+        <div class="faq-item">
+          <button type="button" class="flex w-full items-center justify-between py-4 text-left text-foreground hover:text-accent transition-colors" onclick="toggleFaq(this)">
+            <span class="pr-4">{{ faq.question }}</span>
+            <i data-lucide="chevron-down" class="h-4 w-4 shrink-0 transition-transform"></i>
+          </button>
+          <div class="accordion-content">
+            <p class="pb-4 text-muted-foreground">{{ faq.answer }}</p>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+
+<script>
+function toggleFaq(btn) {
+  var content = btn.nextElementSibling;
+  var icon = btn.querySelector('[data-lucide]');
+  content.classList.toggle('open');
+  if (content.classList.contains('open')) {
+    icon.style.transform = 'rotate(180deg)';
+  } else {
+    icon.style.transform = 'rotate(0deg)';
+  }
+}
+
+// Billing toggle (annual/monthly)
+var isAnnual = true;
+document.getElementById('billing-toggle').addEventListener('click', function() {
+  isAnnual = !isAnnual;
+  var dot = document.getElementById('billing-toggle-dot');
+  var toggleBtn = document.getElementById('billing-toggle');
+  var monthlyLabel = document.getElementById('monthly-label');
+  var annualLabel = document.getElementById('annual-label');
+
+  if (isAnnual) {
+    dot.classList.add('translate-x-5');
+    dot.classList.remove('translate-x-0');
+    toggleBtn.classList.add('bg-accent');
+    toggleBtn.classList.remove('bg-secondary');
+    monthlyLabel.className = 'text-sm text-muted-foreground';
+    annualLabel.className = 'text-sm text-foreground';
+  } else {
+    dot.classList.remove('translate-x-5');
+    dot.classList.add('translate-x-0');
+    toggleBtn.classList.remove('bg-accent');
+    toggleBtn.classList.add('bg-secondary');
+    monthlyLabel.className = 'text-sm text-foreground';
+    annualLabel.className = 'text-sm text-muted-foreground';
+  }
+
+  // Update prices
+  document.querySelectorAll('.tier-price').forEach(function(el) {
+    el.textContent = '\u20AC' + (isAnnual ? el.dataset.annual : el.dataset.monthly);
+  });
+  document.querySelectorAll('.tier-period').forEach(function(el) {
+    el.textContent = isAnnual ? '/year' : '/month';
+  });
+  // Update CTA links
+  document.querySelectorAll('.tier-cta-link').forEach(function(el) {
+    el.href = isAnnual ? el.dataset.linkAnnual : el.dataset.linkMonthly;
+  });
+});
+</script>
+{% endblock %}

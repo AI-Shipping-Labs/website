@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ article.description }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <article class="py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="/blog" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Blog
+      </a>
+
+      <header class="mb-12">
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          {{ article.title }}
+        </h1>
+
+        {% if article.description %}
+        <p class="mt-4 text-xl text-muted-foreground">{{ article.description }}</p>
+        {% endif %}
+
+        <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {{ article.formatted_date }}
+          </span>
+          {% if article.reading_time %}
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="clock" class="h-4 w-4"></i>
+            {{ article.reading_time }}
+          </span>
+          {% endif %}
+        </div>
+
+        {% if article.tags %}
+        <div class="mt-4 flex flex-wrap gap-2">
+          {% for tag in article.tags %}
+          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </header>
+
+      <div class="prose">
+        {{ article.content_html|safe }}
+      </div>
+    </div>
+  </article>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

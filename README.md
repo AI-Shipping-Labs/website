@@ -50,7 +50,6 @@ integrations/         # Slack, Telegram, Zoom, external service hooks
 email_app/            # SES, campaigns, newsletter
 templates/            # Django templates
 static/               # Static files (CSS, images)
-reference/            # Original Next.js site (for reference only)
 specs/                # Requirement specs and task definitions
 playwright_tests/     # E2E visual regression tests
 ```
@@ -58,5 +57,5 @@ playwright_tests/     # E2E visual regression tests
 ## Docs
 
 - [Specs](specs/README.md) — requirement specifications
-- [Tasks](specs/tasks/tasks.md) — task index with dependency graph
+- [Issues](https://github.com/AI-Shipping-Labs/website/issues) — task tracking
 - [Process](PROCESS.md) — development workflow

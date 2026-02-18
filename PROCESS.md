@@ -9,7 +9,7 @@ We use GitHub Issues to track development of the AI Shipping Labs platform. All 
 - Repo: https://github.com/AI-Shipping-Labs/website
 - Issues: https://github.com/AI-Shipping-Labs/website/issues
 - Specs: [`specs/`](specs/) folder in this repo
-- Issue backlog: [`specs/issues.md`](specs/issues.md)
+- Issue backlog: https://github.com/AI-Shipping-Labs/website/issues
 
 ## Specs → Issues → Code
 

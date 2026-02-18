@@ -18,7 +18,7 @@ from datetime import date
 from django.template import Context, Template
 from django.test import TestCase, Client
 
-from content.models import Recording
+from content.models import Article, Recording
 from content.templatetags.video_utils import (
     detect_video_source,
     format_timestamp,
@@ -593,3 +593,98 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.assertIn('[00:00]', content)
         self.assertIn('[1:00:00]', content)
         self.assertIn('[1:13:00]', content)
+
+
+# --- Content Pipeline Integration Tests ---
+
+class ContentPipelineVideoEmbedTest(TestCase):
+    """Test that video URLs in markdown content are replaced with embeds
+    when processed through the md_to_html + replace_video_urls_in_html pipeline."""
+
+    def test_markdown_youtube_url_becomes_embed_in_article(self):
+        """Standalone YouTube URL in markdown body produces a video embed
+        in the stored content_html after the full rendering pipeline."""
+        from content.management.commands.load_content import md_to_html
+
+        markdown_body = (
+            "Some intro text.\n"
+            "\n"
+            "https://www.youtube.com/watch?v=pipeTest1\n"
+            "\n"
+            "Some closing text."
+        )
+        html = md_to_html(markdown_body)
+        html = replace_video_urls_in_html(html)
+
+        # The YouTube URL should be replaced with a video player embed
+        self.assertIn('data-source="youtube"', html)
+        self.assertIn('data-video-id="pipeTest1"', html)
+        self.assertIn('youtube.com/embed/pipeTest1', html)
+        # The surrounding text should be preserved
+        self.assertIn('Some intro text.', html)
+        self.assertIn('Some closing text.', html)
+        # The raw URL paragraph should be gone
+        self.assertNotIn('<p>https://www.youtube.com/watch?v=pipeTest1</p>', html)
+
+    def test_article_with_video_url_renders_embed_in_view(self):
+        """An Article whose content_html contains an embedded video player
+        is served correctly in the blog detail view."""
+        from content.management.commands.load_content import md_to_html
+
+        markdown_body = (
+            "# Article with Video\n"
+            "\n"
+            "https://www.youtube.com/watch?v=viewTest1\n"
+            "\n"
+            "Read more below."
+        )
+        content_html = md_to_html(markdown_body)
+        content_html = replace_video_urls_in_html(content_html)
+
+        article = Article.objects.create(
+            title='Video Article',
+            slug='video-article',
+            description='Article with embedded video',
+            content_markdown=markdown_body,
+            content_html=content_html,
+            date='2025-07-20',
+            author='Test Author',
+            reading_time='1 min read',
+            published=True,
+        )
+
+        response = self.client.get('/blog/video-article')
+        page = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-source="youtube"', page)
+        self.assertIn('data-video-id="viewTest1"', page)
+        self.assertIn('youtube.com/embed/viewTest1', page)
+
+    def test_markdown_loom_url_becomes_embed(self):
+        """Standalone Loom URL in markdown is replaced with a Loom embed."""
+        from content.management.commands.load_content import md_to_html
+
+        markdown_body = (
+            "Watch the demo:\n"
+            "\n"
+            "https://www.loom.com/share/abc123pipetest\n"
+            "\n"
+            "End of post."
+        )
+        html = md_to_html(markdown_body)
+        html = replace_video_urls_in_html(html)
+
+        self.assertIn('data-source="loom"', html)
+        self.assertIn('data-video-id="abc123pipetest"', html)
+        self.assertIn('loom.com/embed/abc123pipetest', html)
+
+    def test_inline_youtube_url_not_replaced_in_pipeline(self):
+        """A YouTube URL within a sentence should NOT be replaced."""
+        from content.management.commands.load_content import md_to_html
+
+        markdown_body = "Check out https://www.youtube.com/watch?v=inline1 for details."
+        html = md_to_html(markdown_body)
+        html = replace_video_urls_in_html(html)
+
+        self.assertNotIn('data-source', html)
+        self.assertIn('Check out', html)

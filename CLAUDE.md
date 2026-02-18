@@ -75,16 +75,38 @@ Orchestrator assigns issue
 3. Check the issue's **Depends on** field — don't start an issue until its dependencies are done
 4. Dependency chain for the first batch: #1 (scaffold) → #68 (tiers) → #67 (auth) → #69 (payments), #71 (access control) → #72 (blog), #70 (account page)
 5. Content issues (#73-#77) can often be worked in parallel once the scaffold is done
+6. Pick 2 issues at a time and run them in parallel when they are independent
+
+### Continuous Issue Pipeline
+
+**Always keep the pipeline full.** When starting a batch of issues, immediately add a "Pick next two issues from GitHub" task blocked by the current batch's QA tasks. This ensures work never stops — as soon as the current batch is committed, the orchestrator checks GitHub for the next unblocked issues and starts a new batch. Repeat until all open issues are done.
+
+```
+Batch N: implement + QA → commit + push
+    └── triggers: "Pick next two issues" → Batch N+1: implement + QA → commit + push
+                                               └── triggers: "Pick next two issues" → ...
+```
 
 ### Orchestrator responsibilities
 
-- Pick the next issue using the process above
+- Pick the next issues using the process above (2 at a time, in parallel when independent)
 - Launch implementer with the issue number
 - When implementer reports done, launch QA with the issue number + summary
 - If QA fails: relay specific feedback to implementer, re-launch implementer to fix, then re-launch QA
 - If QA passes: tell implementer to commit and push
+- After committing, pick the next two issues (never stop until all issues are done)
 - QA must actually run all tests — not just review code. Test report must include counts by type (unit, integration, Playwright E2E)
 - QA must run Playwright visual regression tests, not just verify they exist
+
+### Human Verification
+
+Some acceptance criteria are marked `[HUMAN]` in issues (e.g. OAuth flows, Stripe redirects, visual checks). These cannot be verified by automated tests or QA agents. When an issue passes QA but has `[HUMAN]` criteria remaining:
+
+1. Commit and push the code (don't block on human verification)
+2. Add the `human` label to the issue: `gh issue edit N --repo AI-Shipping-Labs/website --add-label human`
+3. Leave a comment listing the criteria that need manual verification: `gh issue comment N --repo AI-Shipping-Labs/website --body "..."`
+4. Do NOT close the issue — leave it open for the human to verify and close
+5. Continue with the next issues (don't wait)
 
 ## Technology Stack
 

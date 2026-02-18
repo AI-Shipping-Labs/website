@@ -32,11 +32,8 @@ make test
 # Tests with coverage report
 make coverage
 
-# Playwright visual regression (baselines already checked in)
+# Playwright visual regression tests
 make playwright
-
-# Re-capture baselines from live site (one-off, only if site changes)
-make playwright-baselines
 
 # All tests (Django + Playwright)
 make test-all

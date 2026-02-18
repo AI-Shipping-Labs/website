@@ -11,6 +11,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from content.models import Article, Recording, Project, Tutorial, CuratedLink
+from content.templatetags.video_utils import replace_video_urls_in_html
 
 
 def calculate_reading_time(text):
@@ -83,6 +84,7 @@ class Command(BaseCommand):
             post = frontmatter.load(str(md_file))
             slug = md_file.stem
             content_html = md_to_html(post.content)
+            content_html = replace_video_urls_in_html(content_html)
             reading_time = calculate_reading_time(post.content)
 
             Article.objects.update_or_create(
@@ -144,6 +146,7 @@ class Command(BaseCommand):
             post = frontmatter.load(str(md_file))
             slug = md_file.stem
             content_html = md_to_html(post.content)
+            content_html = replace_video_urls_in_html(content_html)
             reading_time = calculate_reading_time(post.content)
 
             Project.objects.update_or_create(

@@ -1,5 +1,7 @@
 from django.db import models
 
+from content.access import VISIBILITY_CHOICES
+
 
 class Tutorial(models.Model):
     """Step-by-step tutorial."""
@@ -11,6 +13,11 @@ class Tutorial(models.Model):
     date = models.DateField()
     tags = models.JSONField(default=list, blank=True)
     reading_time = models.CharField(max_length=50, blank=True, default='')
+    required_level = models.IntegerField(
+        default=0,
+        choices=VISIBILITY_CHOICES,
+        help_text="Minimum tier level required to view full content.",
+    )
     published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

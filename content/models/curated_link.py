@@ -1,5 +1,7 @@
 from django.db import models
 
+from content.access import VISIBILITY_CHOICES
+
 
 class CuratedLink(models.Model):
     """Curated link in the collection."""
@@ -31,6 +33,11 @@ class CuratedLink(models.Model):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     source = models.CharField(max_length=200, blank=True, default='')
     sort_order = models.IntegerField(default=0)
+    required_level = models.IntegerField(
+        default=0,
+        choices=VISIBILITY_CHOICES,
+        help_text="Minimum tier level required to view full content.",
+    )
     published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

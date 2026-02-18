@@ -1,5 +1,7 @@
 from django.db import models
 
+from content.access import VISIBILITY_CHOICES
+
 
 class Recording(models.Model):
     """Event recording / workshop resource."""
@@ -17,6 +19,11 @@ class Recording(models.Model):
     learning_objectives = models.JSONField(default=list, blank=True)
     outcome = models.TextField(blank=True, default='')
     related_course = models.CharField(max_length=300, blank=True, default='')
+    required_level = models.IntegerField(
+        default=0,
+        choices=VISIBILITY_CHOICES,
+        help_text="Minimum tier level required to view full content.",
+    )
     published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

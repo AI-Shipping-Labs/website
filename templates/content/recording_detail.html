@@ -46,6 +46,9 @@
         {% endif %}
       </header>
 
+      {% if is_gated %}
+        {% include "includes/content_gated.html" %}
+      {% else %}
       <!-- Video Player -->
       {% if recording.youtube_url %}
         {% video_player video_url=recording.youtube_url timestamps=recording.timestamps %}
@@ -121,6 +124,7 @@
           {% endfor %}
         </div>
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </article>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load access_tags %}
 
 {% block title %}Event Recordings | AI Shipping Labs{% endblock %}
 {% block meta_description %}Workshop recordings, videos, and learning materials on building AI agents and practical systems.{% endblock %}
@@ -27,7 +28,9 @@
               <div class="flex-1">
                 <div class="flex items-center gap-2 mb-2">
                   <i data-lucide="video" class="h-5 w-5 text-accent"></i>
-                  <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">{{ recording.title }}</h2>
+                  <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                    {% if recording.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ recording.title }}
+                  </h2>
                 </div>
                 <p class="mt-2 text-muted-foreground line-clamp-2">{{ recording.description }}</p>
                 <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">

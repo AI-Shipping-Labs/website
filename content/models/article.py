@@ -1,5 +1,7 @@
 from django.db import models
 
+from content.access import VISIBILITY_CHOICES
+
 
 class Article(models.Model):
     """Blog article / post."""
@@ -12,6 +14,11 @@ class Article(models.Model):
     author = models.CharField(max_length=200, blank=True, default='')
     reading_time = models.CharField(max_length=50, blank=True, default='')
     tags = models.JSONField(default=list, blank=True)
+    required_level = models.IntegerField(
+        default=0,
+        choices=VISIBILITY_CHOICES,
+        help_text="Minimum tier level required to view full content.",
+    )
     published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

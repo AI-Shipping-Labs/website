@@ -48,9 +48,13 @@
         {% endif %}
       </header>
 
+      {% if is_gated %}
+        {% include "includes/content_gated.html" %}
+      {% else %}
       <div class="prose">
         {{ tutorial.content_html|safe }}
       </div>
+      {% endif %}
     </div>
   </article>
 </main>

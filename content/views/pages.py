@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 
+from content.access import build_gating_context
 from content.models import Article, Recording, Project, Tutorial, CuratedLink
 
 
@@ -130,7 +131,9 @@ def blog_list(request):
 def blog_detail(request, slug):
     """Blog post detail page."""
     article = get_object_or_404(Article, slug=slug, published=True)
-    return render(request, 'content/blog_detail.html', {'article': article})
+    context = {'article': article}
+    context.update(build_gating_context(request.user, article, 'article'))
+    return render(request, 'content/blog_detail.html', context)
 
 
 def recordings_list(request):
@@ -142,7 +145,9 @@ def recordings_list(request):
 def recording_detail(request, slug):
     """Event recording detail page."""
     recording = get_object_or_404(Recording, slug=slug, published=True)
-    return render(request, 'content/recording_detail.html', {'recording': recording})
+    context = {'recording': recording}
+    context.update(build_gating_context(request.user, recording, 'recording'))
+    return render(request, 'content/recording_detail.html', context)
 
 
 def projects_list(request):
@@ -154,7 +159,9 @@ def projects_list(request):
 def project_detail(request, slug):
     """Project detail page."""
     project = get_object_or_404(Project, slug=slug, published=True)
-    return render(request, 'content/project_detail.html', {'project': project})
+    context = {'project': project}
+    context.update(build_gating_context(request.user, project, 'project'))
+    return render(request, 'content/project_detail.html', context)
 
 
 def collection_list(request):
@@ -181,4 +188,6 @@ def tutorials_list(request):
 def tutorial_detail(request, slug):
     """Tutorial detail page."""
     tutorial = get_object_or_404(Tutorial, slug=slug, published=True)
-    return render(request, 'content/tutorial_detail.html', {'tutorial': tutorial})
+    context = {'tutorial': tutorial}
+    context.update(build_gating_context(request.user, tutorial, 'tutorial'))
+    return render(request, 'content/tutorial_detail.html', context)

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load access_tags %}
 
 {% block title %}Blog | AI Shipping Labs{% endblock %}
 {% block meta_description %}Articles on AI engineering, MLOps, production systems, and building with data.{% endblock %}
@@ -25,7 +26,9 @@
           <a href="/blog/{{ article.slug }}">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex-1">
-                <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">{{ article.title }}</h2>
+                <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                  {% if article.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ article.title }}
+                </h2>
                 <p class="mt-2 text-muted-foreground line-clamp-2">{{ article.description }}</p>
                 <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                   <span class="flex items-center gap-1.5">

@@ -17,6 +17,7 @@ dependencies = [
     { name = "pytest-django" },
     { name = "pytest-playwright" },
     { name = "python-frontmatter" },
+    { name = "stripe" },
 ]
 
 [package.metadata]
@@ -31,6 +32,7 @@ requires-dist = [
     { name = "pytest-django", specifier = ">=4.12.0" },
     { name = "pytest-playwright", specifier = ">=0.7.2" },
     { name = "python-frontmatter", specifier = ">=1.1.0" },
+    { name = "stripe", specifier = ">=14.3.0" },
 ]
 
 [[package]]
@@ -633,6 +635,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/90/76/437d71068094df0726366574cf3432a4ed754217b436eb7429415cf2d480/sqlparse-0.5.5.tar.gz", hash = "sha256:e20d4a9b0b8585fdf63b10d30066c7c94c5d7a7ec47c889a2d83a3caa93ff28e", size = 120815, upload-time = "2025-12-19T07:17:45.073Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/49/4b/359f28a903c13438ef59ebeee215fb25da53066db67b305c125f1c6d2a25/sqlparse-0.5.5-py3-none-any.whl", hash = "sha256:12a08b3bf3eec877c519589833aed092e2444e68240a3577e8e26148acc7b1ba", size = 46138, upload-time = "2025-12-19T07:17:46.573Z" },
+]
+
+[[package]]
+name = "stripe"
+version = "14.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/49/67/8a38222a57fc2ba359c4dcb66528d94c00d803c7fde8f8d8470ad6bdccbb/stripe-14.3.0.tar.gz", hash = "sha256:4c76137d741bd43e8bb433a596c198ca20f4cdf17a8fe04604faf37c74b01978", size = 1463618, upload-time = "2026-01-28T21:20:29.856Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/4b/0b7d5920f2be5e42d72bdfc44a9fae57b422668bfc8dacdf2f74886f6daa/stripe-14.3.0-py3-none-any.whl", hash = "sha256:3e36b68b256c8970e99b703e195d947e2a2919095758788c7074ac4485ac255e", size = 2106980, upload-time = "2026-01-28T21:20:27.566Z" },
 ]
 
 [[package]]

@@ -59,7 +59,8 @@ Orchestrator assigns issue
     → QA: reviews uncommitted code, runs ALL tests (unit + integration + Playwright E2E), reports pass/fail
     → if fail: Orchestrator sends QA feedback to Implementer → Implementer fixes → QA re-reviews
     → repeat until QA passes
-    → Implementer commits and pushes with "Closes #N"
+    → Implementer commits and pushes with "Closes #N" (or "Refs #N" for human-verified issues)
+    → Pipeline Fixer: checks CI/CD, fixes if broken, reopens/closes related issue
     → done, next issue
 ```
 
@@ -67,15 +68,16 @@ Orchestrator assigns issue
 
 - **Implementer** (`.claude/agents/implementer.md`) — receives issue number, reads spec, writes code + tests, does NOT commit until QA approves
 - **QA** (`.claude/agents/qa.md`) — reviews uncommitted code against spec + acceptance criteria, runs all tests, reports pass/fail with specifics
+- **Pipeline Fixer** (`.claude/agents/pipeline-fixer.md`) — runs after push, checks CI/CD status, identifies related issue from commit messages, reopens issue if broken, fixes code, pushes fix, closes issue
 
 ### How to Pick Issues
 
-1. List open issues: `gh issue list --repo AI-Shipping-Labs/website --state open --limit 50`
+1. List open issues sorted by ID ascending: `gh issue list --repo AI-Shipping-Labs/website --state open --limit 50 --json number,title,labels --jq 'sort_by(.number) | .[] | "#\(.number) \(.title) [\(.labels | map(.name) | join(", "))]"'`
 2. Pick the lowest-numbered open issues first (lower number = earlier/more foundational)
-3. Check the issue's **Depends on** field — don't start an issue until its dependencies are done
-4. Dependency chain for the first batch: #1 (scaffold) → #68 (tiers) → #67 (auth) → #69 (payments), #71 (access control) → #72 (blog), #70 (account page)
-5. Content issues (#73-#77) can often be worked in parallel once the scaffold is done
-6. Pick 2 issues at a time and run them in parallel when they are independent
+3. Check the issue's **Depends on** field — don't start an issue until its dependencies are closed
+4. Skip issues whose dependencies are still open — move to the next lowest available
+5. Pick 2 independent issues at a time and run them in parallel
+6. Dependency chain: #1 (scaffold) → #68 (tiers) → #67 (auth) → #69 (payments), #71 (access control) → #72 (blog), #70 (account page)
 
 ### Continuous Issue Pipeline
 
@@ -94,6 +96,7 @@ Batch N: implement + QA → commit + push
 - When implementer reports done, launch QA with the issue number + summary
 - If QA fails: relay specific feedback to implementer, re-launch implementer to fix, then re-launch QA
 - If QA passes: tell implementer to commit and push
+- After pushing, run pipeline-fixer to check CI/CD — if it fails, check whether an implementer is currently working on related code. If so, defer the fix until the implementer finishes (the in-progress work may resolve the issue). Only run the pipeline fixer immediately if no relevant work is in progress.
 - After committing, pick the next two issues (never stop until all issues are done)
 - QA must actually run all tests — not just review code. Test report must include counts by type (unit, integration, Playwright E2E)
 - QA must run Playwright visual regression tests, not just verify they exist

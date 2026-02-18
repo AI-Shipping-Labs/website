@@ -6,9 +6,11 @@ requires-python = ">=3.13"
 dependencies = [
     "coverage>=7.13.4",
     "django>=6.0.2",
+    "django-allauth>=65.14.3",
     "markdown>=3.10.2",
     "pillow>=12.1.1",
     "playwright>=1.58.0",
+    "pyjwt[crypto]>=2.11.0",
     "pytest-django>=4.12.0",
     "pytest-playwright>=0.7.2",
     "python-frontmatter>=1.1.0",

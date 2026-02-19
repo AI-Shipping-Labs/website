@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
+    'django.forms',
     # Third-party
     'allauth',
     'allauth.account',
@@ -72,6 +73,10 @@ TEMPLATES = [
         },
     },
 ]
+
+# Use the project's TEMPLATES setting for form widget rendering so that
+# custom widget templates in templates/ are found by the form renderer.
+FORM_RENDERER = 'django.forms.renderers.TemplatesSetting'
 
 WSGI_APPLICATION = 'website.wsgi.application'
 

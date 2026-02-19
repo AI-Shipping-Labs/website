@@ -19,69 +19,135 @@
         </h1>
         <p class="mt-4 max-w-2xl text-lg text-muted-foreground">
           Curated links to GitHub repos, model hubs, and learning resources.
-          Filter by category or browse all.
+          Filter by tag or browse all.
         </p>
       </div>
 
-      <!-- Category filter -->
-      <div class="space-y-8">
-        <div class="flex flex-wrap gap-2">
-          <button type="button" onclick="filterCollection('all')" class="collection-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground" data-category="all">All</button>
-          {% for cat in categories %}
-          <button type="button" onclick="filterCollection('{{ cat.key }}')" class="collection-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground" data-category="{{ cat.key }}">{{ cat.label }}</button>
-          {% endfor %}
-        </div>
+      <!-- Tag filter -->
+      {% if all_tags %}
+      <div class="mb-8 flex flex-wrap items-center gap-2">
+        <span class="text-sm text-muted-foreground mr-2">Filter by tag:</span>
+        <a href="/resources"
+           class="rounded-full px-3 py-1 text-xs transition-colors {% if not current_tag %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+          All
+        </a>
+        {% for tag in all_tags %}
+        <a href="/resources?tag={{ tag }}"
+           class="rounded-full px-3 py-1 text-xs transition-colors {% if current_tag == tag %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+          {{ tag }}
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
 
-        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" id="collection-grid">
-          {% for link in links %}
-          <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
-             class="collection-card group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50"
-             data-category="{{ link.category }}">
-            <div class="flex flex-1 flex-col">
-              <div class="mb-2 flex items-start justify-between gap-2">
-                <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                  <i data-lucide="{{ link.category_icon_name }}" class="h-3.5 w-3.5"></i>
-                  {{ link.category_label }}
-                </span>
-                {% if link.is_external %}
-                <i data-lucide="external-link" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i>
+      {% if current_tag %}
+      <div class="mb-6">
+        <p class="text-sm text-muted-foreground">
+          Showing links tagged with <span class="font-medium text-foreground">"{{ current_tag }}"</span>
+          <a href="/resources" class="ml-2 text-accent hover:underline">Clear filter</a>
+        </p>
+      </div>
+      {% endif %}
+
+      <!-- Links grouped by category -->
+      {% if grouped_categories %}
+      <div class="space-y-12">
+        {% for category in grouped_categories %}
+        <div>
+          <div class="mb-6 flex items-center gap-3">
+            <i data-lucide="{{ category.icon }}" class="h-5 w-5 text-accent"></i>
+            <h2 class="text-xl font-semibold text-foreground">{{ category.label }}</h2>
+          </div>
+          {% if category.description %}
+          <p class="mb-4 text-sm text-muted-foreground">{{ category.description }}</p>
+          {% endif %}
+
+          <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {% for item in category.links %}
+            {% if item.has_access %}
+            {# Accessible link: opens in new tab #}
+            <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer"
+               class="group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50">
+              <div class="flex flex-1 flex-col">
+                <div class="mb-2 flex items-start justify-between gap-2">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    <i data-lucide="{{ category.icon }}" class="h-3.5 w-3.5"></i>
+                    {{ category.label }}
+                  </span>
+                  <i data-lucide="external-link" class="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
+                  {{ item.link.title }}
+                </h3>
+                <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ item.link.description }}</p>
+                {% if item.link.tags %}
+                <div class="mt-3 flex flex-wrap gap-1.5">
+                  {% for tag in item.link.tags %}
+                  <span class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                  {% endfor %}
+                </div>
+                {% endif %}
+                {% if item.link.source %}
+                <p class="mt-3 text-xs text-muted-foreground">{{ item.link.source }}</p>
                 {% endif %}
               </div>
-              <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
-                {% if link.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ link.title }}
-              </h3>
-              <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ link.description }}</p>
-              {% if link.source %}
-              <p class="mt-3 text-xs text-muted-foreground">{{ link.source }}</p>
-              {% endif %}
+            </a>
+            {% else %}
+            {# Gated link: no URL exposed, shows lock icon and CTA #}
+            <div class="gated-link group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50 cursor-pointer"
+                 onclick="this.querySelector('.gated-cta').classList.toggle('hidden')">
+              <div class="flex flex-1 flex-col">
+                <div class="mb-2 flex items-start justify-between gap-2">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    <i data-lucide="{{ category.icon }}" class="h-3.5 w-3.5"></i>
+                    {{ category.label }}
+                  </span>
+                  <i data-lucide="lock" class="h-4 w-4 shrink-0 text-muted-foreground"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-foreground">
+                  <i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{{ item.link.title }}
+                </h3>
+                <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ item.link.description }}</p>
+                {% if item.link.tags %}
+                <div class="mt-3 flex flex-wrap gap-1.5">
+                  {% for tag in item.link.tags %}
+                  <span class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                  {% endfor %}
+                </div>
+                {% endif %}
+                {% if item.link.source %}
+                <p class="mt-3 text-xs text-muted-foreground">{{ item.link.source }}</p>
+                {% endif %}
+              </div>
+              <div class="gated-cta mt-4 hidden rounded-lg border border-accent/30 bg-accent/5 p-4 text-center">
+                <p class="text-sm font-medium text-foreground">{{ item.cta_message }}</p>
+                <a href="/pricing" class="mt-2 inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent/90 transition-colors">
+                  View Plans
+                  <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                </a>
+              </div>
             </div>
-          </a>
-          {% endfor %}
+            {% endif %}
+            {% endfor %}
+          </div>
         </div>
+        {% endfor %}
       </div>
+      {% else %}
+      <div class="rounded-lg border border-border bg-card p-12 text-center">
+        <i data-lucide="folder-open" class="mx-auto h-12 w-12 text-muted-foreground"></i>
+        <p class="mt-4 text-lg text-muted-foreground">
+          {% if current_tag %}
+          No links found with tag "{{ current_tag }}".
+          <a href="/resources" class="text-accent hover:underline">View all links</a>
+          {% else %}
+          No curated links yet. Check back soon.
+          {% endif %}
+        </p>
+      </div>
+      {% endif %}
     </div>
   </section>
 </main>
 {% include "includes/footer.html" %}
-
-<script>
-function filterCollection(category) {
-  // Update buttons
-  document.querySelectorAll('.collection-filter-btn').forEach(function(btn) {
-    if (btn.dataset.category === category) {
-      btn.className = 'collection-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground';
-    } else {
-      btn.className = 'collection-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground';
-    }
-  });
-  // Filter cards
-  document.querySelectorAll('.collection-card').forEach(function(card) {
-    if (category === 'all' || card.dataset.category === category) {
-      card.style.display = '';
-    } else {
-      card.style.display = 'none';
-    }
-  });
-}
-</script>
 {% endblock %}

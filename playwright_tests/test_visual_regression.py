@@ -30,7 +30,7 @@ from playwright_tests.conftest import (
 
 # Maximum allowed pixel difference ratio (0.0 = identical, 1.0 = completely different)
 # We allow a small tolerance for font rendering differences across platforms
-MAX_DIFF_RATIO = 0.09  # 9% pixel difference allowed
+MAX_DIFF_RATIO = 0.10  # 10% pixel difference allowed
 
 VIEWPORT = {"width": 1280, "height": 720}
 

@@ -58,8 +58,11 @@ class URLResolutionTest(TestCase):
 
     def test_collection_list_url_resolves(self):
         url = reverse('collection_list')
-        self.assertEqual(url, '/collection')
+        self.assertEqual(url, '/resources')
         self.assertEqual(resolve(url).func, collection_list)
+
+    def test_collection_backward_compat_url_resolves(self):
+        self.assertEqual(resolve('/collection').func, collection_list)
 
     def test_tutorials_list_url_resolves(self):
         url = reverse('tutorials_list')

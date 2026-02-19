@@ -1,6 +1,6 @@
 from django.db import models
 
-from content.access import VISIBILITY_CHOICES
+from content.access import VISIBILITY_CHOICES, get_required_tier_name
 
 
 class CuratedLink(models.Model):
@@ -31,6 +31,7 @@ class CuratedLink(models.Model):
     description = models.TextField(blank=True, default='')
     url = models.URLField(max_length=500)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    tags = models.JSONField(default=list, blank=True)
     source = models.CharField(max_length=200, blank=True, default='')
     sort_order = models.IntegerField(default=0)
     required_level = models.IntegerField(
@@ -55,6 +56,11 @@ class CuratedLink(models.Model):
     @property
     def is_external(self):
         return self.url.startswith('http')
+
+    @property
+    def required_level_tier_name(self):
+        """Return the human-readable tier name for this link's required_level."""
+        return get_required_tier_name(self.required_level)
 
     @property
     def category_icon_name(self):

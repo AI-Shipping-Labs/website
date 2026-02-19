@@ -6,8 +6,9 @@ from content.views.pages import (
     projects_list, project_detail,
     collection_list,
     tutorials_list, tutorial_detail,
+    downloads_list,
 )
-from content.views.api import submit_project
+from content.views.api import submit_project, download_file
 
 urlpatterns = [
     path('', home, name='home'),
@@ -19,9 +20,12 @@ urlpatterns = [
     path('event-recordings/<slug:slug>', recording_detail, name='recording_detail'),
     path('projects', projects_list, name='projects_list'),
     path('projects/<slug:slug>', project_detail, name='project_detail'),
-    path('collection', collection_list, name='collection_list'),
+    path('resources', collection_list, name='collection_list'),
+    path('collection', collection_list),  # backward compat redirect
     path('tutorials', tutorials_list, name='tutorials_list'),
     path('tutorials/<slug:slug>', tutorial_detail, name='tutorial_detail'),
+    path('downloads', downloads_list, name='downloads_list'),
     # API endpoints
     path('api/projects/submit', submit_project, name='submit_project'),
+    path('api/downloads/<slug:slug>/file', download_file, name='download_file'),
 ]

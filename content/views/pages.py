@@ -1,8 +1,8 @@
 from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 
-from content.access import build_gating_context
-from content.models import Article, Recording, Project, Tutorial, CuratedLink
+from content.access import build_gating_context, can_access, get_required_tier_name
+from content.models import Article, Recording, Project, Tutorial, CuratedLink, Download
 
 
 ACTIVITIES = [
@@ -250,18 +250,69 @@ def project_detail(request, slug):
 
 
 def collection_list(request):
-    """Curated links listing page."""
+    """Curated links listing page with tag filtering and category grouping.
+
+    Links are grouped by category and sorted by sort_order within each group.
+    Gated links have their URL hidden from anonymous/insufficient-tier users.
+    """
     links = CuratedLink.objects.filter(published=True)
-    categories = [
-        {'key': 'tools', 'label': 'Tools'},
-        {'key': 'models', 'label': 'Models'},
-        {'key': 'courses', 'label': 'Courses'},
-        {'key': 'other', 'label': 'Other'},
-    ]
-    return render(request, 'content/collection_list.html', {
-        'links': links,
-        'categories': categories,
-    })
+    tag = request.GET.get('tag', '').strip()
+
+    # Collect all tags from published links for the tag filter UI
+    all_tags = set()
+    for link in links:
+        if link.tags:
+            all_tags.update(link.tags)
+    all_tags = sorted(all_tags)
+
+    # Filter by tag if provided
+    if tag:
+        filtered = [lnk for lnk in links if tag in (lnk.tags or [])]
+        link_ids = [lnk.pk for lnk in filtered]
+        links = links.filter(pk__in=link_ids)
+
+    # Build per-link access info and strip URLs from gated links
+    annotated_links = []
+    for link in links:
+        has_access = can_access(request.user, link)
+        annotated_links.append({
+            'link': link,
+            'has_access': has_access,
+            'url': link.url if has_access else None,
+            'cta_message': (
+                f'Upgrade to {link.required_level_tier_name} to access this resource'
+                if not has_access else ''
+            ),
+        })
+
+    # Map category keys to icon names (mirrors CuratedLink.category_icon_name)
+    category_icons = {
+        'tools': 'wrench',
+        'models': 'cpu',
+        'courses': 'graduation-cap',
+        'other': 'folder-open',
+    }
+
+    # Group by category, preserving the canonical category order
+    category_order = ['tools', 'models', 'courses', 'other']
+    grouped = []
+    for cat_key in category_order:
+        cat_links = [a for a in annotated_links if a['link'].category == cat_key]
+        if cat_links:
+            grouped.append({
+                'key': cat_key,
+                'label': CuratedLink.CATEGORY_LABELS.get(cat_key, cat_key),
+                'description': CuratedLink.CATEGORY_DESCRIPTIONS.get(cat_key, ''),
+                'icon': category_icons.get(cat_key, 'folder-open'),
+                'links': cat_links,
+            })
+
+    context = {
+        'grouped_categories': grouped,
+        'all_tags': all_tags,
+        'current_tag': tag,
+    }
+    return render(request, 'content/collection_list.html', context)
 
 
 def tutorials_list(request):
@@ -276,3 +327,47 @@ def tutorial_detail(request, slug):
     context = {'tutorial': tutorial}
     context.update(build_gating_context(request.user, tutorial, 'tutorial'))
     return render(request, 'content/tutorial_detail.html', context)
+
+
+def downloads_list(request):
+    """Downloadable resources listing page with optional tag filtering."""
+    downloads = Download.objects.filter(published=True)
+    tag = request.GET.get('tag', '').strip()
+
+    # Collect all tags from published downloads for the tag filter UI
+    all_tags = set()
+    for download in downloads:
+        if download.tags:
+            all_tags.update(download.tags)
+    all_tags = sorted(all_tags)
+
+    # Filter by tag if provided
+    if tag:
+        filtered = [d for d in downloads if tag in (d.tags or [])]
+        download_ids = [d.pk for d in filtered]
+        downloads = downloads.filter(pk__in=download_ids)
+
+    # Annotate each download with access info for the template
+    annotated_downloads = []
+    for download in downloads:
+        has_access = can_access(request.user, download)
+        is_lead_magnet = download.required_level == 0
+        is_anonymous = not request.user.is_authenticated
+
+        annotated_downloads.append({
+            'download': download,
+            'has_access': has_access,
+            'is_lead_magnet': is_lead_magnet,
+            'show_email_form': is_lead_magnet and is_anonymous,
+            'cta_message': (
+                f'Upgrade to {get_required_tier_name(download.required_level)} to download'
+                if not has_access and not is_lead_magnet else ''
+            ),
+        })
+
+    context = {
+        'downloads': annotated_downloads,
+        'all_tags': all_tags,
+        'current_tag': tag,
+    }
+    return render(request, 'content/downloads_list.html', context)

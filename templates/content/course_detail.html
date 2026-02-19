@@ -84,6 +84,56 @@
       </div>
       {% endif %}
 
+      <!-- Active Cohorts -->
+      {% if active_cohorts %}
+      <div class="mb-8">
+        {% for cohort in active_cohorts %}
+        <div class="rounded-lg border border-border bg-card p-6 {% if not forloop.last %}mb-4{% endif %}">
+          <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <p class="text-sm text-muted-foreground">Next cohort</p>
+              <p class="text-lg font-semibold text-foreground">{{ cohort.name }}</p>
+              <p class="text-sm text-muted-foreground mt-1">
+                Starts {{ cohort.start_date|date:"F j, Y" }}
+                {% if cohort.max_participants %}
+                <span class="ml-2">{{ cohort.spots_remaining }} of {{ cohort.max_participants }} spots remaining</span>
+                {% endif %}
+              </p>
+            </div>
+            {% if has_access and user_authenticated %}
+              {% if cohort.pk in user_enrolled_cohort_ids %}
+              <button
+                type="button"
+                class="cohort-action-btn inline-flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-5 py-2.5 text-sm font-medium text-green-400 transition-colors hover:bg-green-500/20"
+                data-cohort-id="{{ cohort.pk }}"
+                data-course-slug="{{ course.slug }}"
+                data-action="unenroll"
+              >
+                <i data-lucide="check-circle-2" class="h-4 w-4"></i>
+                Enrolled
+              </button>
+              {% elif cohort.is_full %}
+              <span class="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-5 py-2.5 text-sm font-medium text-muted-foreground">
+                Cohort is full
+              </span>
+              {% else %}
+              <button
+                type="button"
+                class="cohort-action-btn inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                data-cohort-id="{{ cohort.pk }}"
+                data-course-slug="{{ course.slug }}"
+                data-action="enroll"
+              >
+                Enroll
+              </button>
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       <!-- Syllabus -->
       <div class="mb-12">
         <h2 class="text-2xl font-semibold tracking-tight mb-6">Syllabus</h2>
@@ -151,4 +201,49 @@
   </article>
 </main>
 {% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function() {
+    var buttons = document.querySelectorAll('.cohort-action-btn');
+    buttons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cohortId = btn.dataset.cohortId;
+        var courseSlug = btn.dataset.courseSlug;
+        var action = btn.dataset.action;
+        var url = '/api/courses/' + courseSlug + '/cohorts/' + cohortId + '/' + action;
+
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json',
+          },
+          credentials: 'same-origin',
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+          if (data.enrolled !== undefined) {
+            // Reload to reflect new state
+            window.location.reload();
+          } else if (data.error) {
+            alert(data.error);
+          }
+        });
+      });
+    });
+
+    function getCsrfToken() {
+      var cookies = document.cookie.split(';');
+      for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i].trim();
+        if (cookie.startsWith('csrftoken=')) {
+          return cookie.substring('csrftoken='.length);
+        }
+      }
+      return '';
+    }
+  })();
+</script>
 {% endblock %}

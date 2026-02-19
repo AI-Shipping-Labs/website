@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin
 
 from content.admin.widgets import TimestampEditorWidget
-from content.models import Course, Module, Unit, UserCourseProgress
+from content.models import Course, Module, Unit, UserCourseProgress, Cohort
 
 
 # ---------------------------------------------------------------------------
@@ -37,9 +37,16 @@ class UnitInline(admin.StackedInline):
     ordering = ['sort_order']
     fields = [
         'title', 'sort_order', 'video_url', 'is_preview',
-        'body', 'homework', 'timestamps',
+        'available_after_days', 'body', 'homework', 'timestamps',
     ]
     classes = ['collapse']
+
+
+class CohortInline(admin.TabularInline):
+    """Inline editor for cohorts within a course."""
+    model = Cohort
+    extra = 0
+    fields = ['name', 'start_date', 'end_date', 'is_active', 'max_participants']
 
 
 class ModuleInline(admin.TabularInline):
@@ -93,7 +100,7 @@ class CourseAdmin(admin.ModelAdmin):
     search_fields = ['title', 'description', 'instructor_name']
     prepopulated_fields = {'slug': ('title',)}
     actions = [publish_courses, unpublish_courses]
-    inlines = [ModuleInline]
+    inlines = [ModuleInline, CohortInline]
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
     readonly_fields = ['created_at', 'updated_at']
@@ -146,7 +153,7 @@ class UnitAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('module', 'title', 'sort_order', 'is_preview'),
+            'fields': ('module', 'title', 'sort_order', 'is_preview', 'available_after_days'),
         }),
         ('Video', {
             'fields': ('video_url', 'timestamps'),

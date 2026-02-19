@@ -1,3 +1,4 @@
+import datetime
 import json
 
 from django.http import JsonResponse
@@ -8,7 +9,9 @@ from django.views.decorators.http import require_POST
 from content.access import (
     can_access, get_required_tier_name, get_user_level, LEVEL_TO_TIER_NAME,
 )
-from content.models import Course, Module, Unit, UserCourseProgress
+from content.models import (
+    Course, Module, Unit, UserCourseProgress, Cohort, CohortEnrollment,
+)
 
 
 def courses_list(request):
@@ -75,6 +78,18 @@ def course_detail(request, slug):
     if total > 0 and has_access:
         progress_pct = int((completed / total) * 100)
 
+    # Active cohorts
+    active_cohorts = course.cohorts.filter(is_active=True).order_by('start_date')
+    user_enrolled_cohort_ids = set()
+    if user.is_authenticated:
+        user_enrolled_cohort_ids = set(
+            CohortEnrollment.objects.filter(
+                user=user,
+                cohort__course=course,
+                cohort__is_active=True,
+            ).values_list('cohort_id', flat=True)
+        )
+
     context = {
         'course': course,
         'modules': modules,
@@ -87,6 +102,8 @@ def course_detail(request, slug):
         'cta_url': cta_url,
         'is_free_course': course.is_free,
         'user_authenticated': user.is_authenticated,
+        'active_cohorts': active_cohorts,
+        'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
     }
     return render(request, 'content/course_detail.html', context)
 
@@ -226,6 +243,36 @@ def course_unit_detail(request, slug, module_sort, unit_sort):
         }
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
+    # Drip schedule check: if user is enrolled in a cohort and unit has
+    # available_after_days, check if the unit is available yet.
+    drip_locked = False
+    drip_available_date = None
+    if user.is_authenticated and unit.available_after_days is not None:
+        enrollment = CohortEnrollment.objects.filter(
+            user=user,
+            cohort__course=course,
+            cohort__is_active=True,
+        ).select_related('cohort').first()
+        if enrollment:
+            available_date = enrollment.cohort.start_date + datetime.timedelta(
+                days=unit.available_after_days,
+            )
+            if timezone.now().date() < available_date:
+                drip_locked = True
+                drip_available_date = available_date
+
+    if drip_locked:
+        context = {
+            'course': course,
+            'unit': unit,
+            'is_gated': True,
+            'is_drip_locked': True,
+            'drip_available_date': drip_available_date,
+            'cta_message': f'This lesson will be available on {drip_available_date.strftime("%B %d, %Y")}',
+            'pricing_url': f'/courses/{course.slug}',
+        }
+        return render(request, 'content/course_unit_detail.html', context, status=403)
+
     # Build sidebar navigation data
     modules = course.get_syllabus()
 
@@ -336,3 +383,63 @@ def api_course_unit_complete(request, slug, unit_id):
         # Uncomplete - delete the record
         progress.delete()
         return JsonResponse({'completed': False})
+
+
+# --- Cohort enrollment endpoints ---
+
+
+@require_POST
+def api_cohort_enroll(request, slug, cohort_id):
+    """POST /api/courses/{slug}/cohorts/{cohort_id}/enroll - enroll in a cohort."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+    course = get_object_or_404(Course, slug=slug, status='published')
+    cohort = get_object_or_404(Cohort, pk=cohort_id, course=course, is_active=True)
+    user = request.user
+
+    # Must have required tier to enroll
+    if not can_access(user, course):
+        tier_name = get_required_tier_name(course.required_level)
+        return JsonResponse(
+            {'error': f'{tier_name} membership required to enroll'},
+            status=403,
+        )
+
+    # Check capacity
+    if cohort.is_full:
+        return JsonResponse(
+            {'error': 'Cohort is full'},
+            status=409,
+        )
+
+    # Check if already enrolled
+    if CohortEnrollment.objects.filter(cohort=cohort, user=user).exists():
+        return JsonResponse(
+            {'error': 'Already enrolled in this cohort'},
+            status=409,
+        )
+
+    CohortEnrollment.objects.create(cohort=cohort, user=user)
+    return JsonResponse({'enrolled': True, 'cohort_id': cohort.pk})
+
+
+@require_POST
+def api_cohort_unenroll(request, slug, cohort_id):
+    """POST /api/courses/{slug}/cohorts/{cohort_id}/unenroll - leave a cohort."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+    course = get_object_or_404(Course, slug=slug, status='published')
+    cohort = get_object_or_404(Cohort, pk=cohort_id, course=course)
+    user = request.user
+
+    enrollment = CohortEnrollment.objects.filter(cohort=cohort, user=user).first()
+    if not enrollment:
+        return JsonResponse(
+            {'error': 'Not enrolled in this cohort'},
+            status=404,
+        )
+
+    enrollment.delete()
+    return JsonResponse({'enrolled': False, 'cohort_id': cohort.pk})

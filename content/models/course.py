@@ -159,6 +159,10 @@ class Unit(models.Model):
         default=False,
         help_text="If true, visible to everyone regardless of course access.",
     )
+    available_after_days = models.IntegerField(
+        null=True, blank=True,
+        help_text="For cohort drip schedule: unit becomes available this many days after cohort start_date. Null = available immediately.",
+    )
 
     class Meta:
         ordering = ['sort_order']

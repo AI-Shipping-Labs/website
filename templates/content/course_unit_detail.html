@@ -20,14 +20,27 @@
 
       <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
         <div class="mb-4">
+          {% if is_drip_locked %}
+          <i data-lucide="clock" class="mx-auto h-10 w-10 text-accent"></i>
+          {% else %}
           <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+          {% endif %}
         </div>
         <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+        {% if is_drip_locked %}
+        <p class="mt-2 text-sm text-muted-foreground">This lesson will unlock based on your cohort schedule.</p>
+        {% else %}
         <p class="mt-2 text-sm text-muted-foreground">Get full access to this course and more with a membership.</p>
+        {% endif %}
         <a href="{{ pricing_url }}"
            class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          {% if is_drip_locked %}
+          <i data-lucide="arrow-left" class="h-4 w-4"></i>
+          Back to Course
+          {% else %}
           <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
           View Pricing
+          {% endif %}
         </a>
       </div>
     </div>

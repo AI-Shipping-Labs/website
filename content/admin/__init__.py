@@ -5,3 +5,4 @@ from .tutorial import *
 from .curated_link import *
 from .download import *
 from .course import *
+from .cohort import *

@@ -272,6 +272,11 @@ class CourseAdminCRUDTest(TestCase):
             'modules-INITIAL_FORMS': '0',
             'modules-MIN_NUM_FORMS': '0',
             'modules-MAX_NUM_FORMS': '1000',
+            # Cohort inline management form
+            'cohorts-TOTAL_FORMS': '0',
+            'cohorts-INITIAL_FORMS': '0',
+            'cohorts-MIN_NUM_FORMS': '0',
+            'cohorts-MAX_NUM_FORMS': '1000',
         })
         # Should redirect after successful creation
         self.assertEqual(response.status_code, 302)

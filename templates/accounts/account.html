@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Account | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0" style="background: radial-gradient(ellipse at top, hsl(0 0% 12%), hsl(0 0% 4%), hsl(0 0% 4%))"></div>
+    <div class="relative mx-auto max-w-3xl px-6 py-24 lg:px-8 lg:py-32">
+
+      <h1 class="text-3xl font-semibold tracking-tight mb-2">Account</h1>
+      <p class="text-muted-foreground mb-10">Manage your membership and preferences</p>
+
+      <!-- Membership Section -->
+      <div class="rounded-2xl border border-border bg-card p-8 mb-8">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+          <i data-lucide="crown" class="h-5 w-5 text-accent"></i>
+          Membership
+        </h2>
+
+        <!-- Current Tier -->
+        <div class="flex items-center gap-4 mb-6">
+          <div>
+            <p class="text-sm text-muted-foreground">Current Plan</p>
+            <div class="flex items-center gap-3 mt-1">
+              <span class="text-2xl font-semibold" id="tier-name">
+                {% if tier %}{{ tier.name }}{% else %}Free{% endif %}
+              </span>
+              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+                {% if tier and tier.slug == 'premium' %}bg-amber-500/20 text-amber-400
+                {% elif tier and tier.slug == 'main' %}bg-accent/20 text-accent
+                {% elif tier and tier.slug == 'basic' %}bg-blue-500/20 text-blue-400
+                {% else %}bg-secondary text-muted-foreground{% endif %}" id="tier-badge">
+                {% if tier %}Level {{ tier.level }}{% else %}Level 0{% endif %}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Billing Period End -->
+        {% if billing_period_end %}
+        <div class="mb-6">
+          <p class="text-sm text-muted-foreground">Billing Period Ends</p>
+          <p class="text-foreground mt-1" id="billing-period-end">{{ billing_period_end|date:"F j, Y" }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Pending Downgrade Notice -->
+        {% if is_pending_downgrade %}
+        <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 mb-6" id="pending-downgrade-notice">
+          <div class="flex items-start gap-3">
+            <i data-lucide="info" class="h-5 w-5 text-amber-400 mt-0.5 shrink-0"></i>
+            <p class="text-sm text-amber-200">
+              Your plan will change to <strong>{{ pending_tier.name }}</strong> on <strong>{{ billing_period_end|date:"F j, Y" }}</strong>.
+            </p>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Pending Cancellation Notice -->
+        {% if is_pending_cancellation %}
+        <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 mb-6" id="pending-cancellation-notice">
+          <div class="flex items-start gap-3">
+            <i data-lucide="alert-circle" class="h-5 w-5 text-red-400 mt-0.5 shrink-0"></i>
+            <p class="text-sm text-red-200">
+              Your <strong>{{ tier.name }}</strong> access ends on <strong>{{ billing_period_end|date:"F j, Y" }}</strong>.
+            </p>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-3 mt-6">
+          {% if is_free %}
+            <!-- Free users: Upgrade button links to /pricing -->
+            <a href="/pricing" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" id="upgrade-btn">
+              <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
+              Upgrade
+            </a>
+          {% else %}
+            {% if not is_premium and not is_pending_cancellation %}
+              <!-- Paid users (not premium): Upgrade button -->
+              <button type="button"
+                      class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                      id="upgrade-btn"
+                      onclick="showUpgradeModal()">
+                <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
+                Upgrade
+              </button>
+            {% endif %}
+
+            {% if not is_basic and not is_pending_downgrade and not is_pending_cancellation and downgrade_tiers %}
+              <!-- Paid users (not basic): Downgrade button -->
+              <button type="button"
+                      class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                      id="downgrade-btn"
+                      onclick="showDowngradeModal()">
+                <i data-lucide="arrow-down-circle" class="h-4 w-4"></i>
+                Downgrade
+              </button>
+            {% endif %}
+
+            {% if not is_pending_cancellation %}
+              <!-- Cancel button -->
+              <button type="button"
+                      class="inline-flex items-center gap-2 rounded-md border border-red-500/30 bg-transparent px-4 py-2.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                      id="cancel-btn"
+                      onclick="showCancelConfirm()">
+                <i data-lucide="x-circle" class="h-4 w-4"></i>
+                Cancel Subscription
+              </button>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Email Preferences Section -->
+      <div class="rounded-2xl border border-border bg-card p-8" id="email-preferences-section">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+          <i data-lucide="mail" class="h-5 w-5 text-accent"></i>
+          Email Preferences
+        </h2>
+
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-foreground font-medium">Newsletter</p>
+            <p class="text-sm text-muted-foreground mt-1">Receive email updates about new content and community events</p>
+          </div>
+          <button type="button"
+                  id="newsletter-toggle"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if newsletter_subscribed %}bg-accent{% else %}bg-secondary{% endif %}"
+                  onclick="toggleNewsletter()"
+                  aria-label="Toggle newsletter subscription">
+            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform {% if newsletter_subscribed %}translate-x-5{% else %}translate-x-0{% endif %}" id="newsletter-toggle-dot"></span>
+          </button>
+        </div>
+
+        <p class="text-xs text-muted-foreground mt-4" id="newsletter-status">
+          {% if newsletter_subscribed %}You are subscribed to newsletters.{% else %}You are unsubscribed from newsletters.{% endif %}
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Upgrade Modal -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="upgrade-modal">
+    <div class="rounded-2xl border border-border bg-card p-8 max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold mb-4">Upgrade Your Plan</h3>
+      <p class="text-sm text-muted-foreground mb-6">Choose a tier to upgrade to. You will be redirected to Stripe Checkout.</p>
+      <div class="space-y-3" id="upgrade-tiers">
+        {% for t in upgrade_tiers %}
+        <button type="button"
+                class="w-full flex items-center justify-between rounded-lg border border-border p-4 text-left transition-colors hover:bg-secondary"
+                onclick="doUpgrade('{{ t.slug }}')">
+          <div>
+            <span class="font-medium text-foreground">{{ t.name }}</span>
+            <span class="text-sm text-muted-foreground ml-2">&euro;{{ t.price_eur_month }}/mo</span>
+          </div>
+          <i data-lucide="arrow-right" class="h-4 w-4 text-accent"></i>
+        </button>
+        {% endfor %}
+      </div>
+      <button type="button" class="mt-4 w-full rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-secondary" onclick="hideUpgradeModal()">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Downgrade Modal -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="downgrade-modal">
+    <div class="rounded-2xl border border-border bg-card p-8 max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold mb-4">Downgrade Your Plan</h3>
+      <p class="text-sm text-muted-foreground mb-6">
+        Select a lower tier. The change will take effect at the end of your current billing period.
+      </p>
+      <div class="space-y-3" id="downgrade-tiers">
+        {% for t in downgrade_tiers %}
+        <button type="button"
+                class="w-full flex items-center justify-between rounded-lg border border-border p-4 text-left transition-colors hover:bg-secondary"
+                onclick="doDowngrade('{{ t.slug }}')">
+          <div>
+            <span class="font-medium text-foreground">{{ t.name }}</span>
+            <span class="text-sm text-muted-foreground ml-2">&euro;{{ t.price_eur_month }}/mo</span>
+          </div>
+          <i data-lucide="arrow-right" class="h-4 w-4 text-muted-foreground"></i>
+        </button>
+        {% endfor %}
+      </div>
+      <button type="button" class="mt-4 w-full rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-secondary" onclick="hideDowngradeModal()">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Cancel Confirmation Modal -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="cancel-modal">
+    <div class="rounded-2xl border border-border bg-card p-8 max-w-md w-full mx-4">
+      <div class="flex items-center gap-3 mb-4">
+        <i data-lucide="alert-triangle" class="h-6 w-6 text-red-400"></i>
+        <h3 class="text-xl font-semibold">Cancel Subscription</h3>
+      </div>
+      <p class="text-sm text-muted-foreground mb-6">
+        Are you sure you want to cancel? You will keep access to your current plan until the end of your billing period{% if billing_period_end %} ({{ billing_period_end|date:"F j, Y" }}){% endif %}.
+      </p>
+      <div class="flex gap-3">
+        <button type="button"
+                class="flex-1 rounded-md bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
+                id="confirm-cancel-btn"
+                onclick="doCancel()">
+          Yes, Cancel
+        </button>
+        <button type="button"
+                class="flex-1 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                onclick="hideCancelConfirm()">
+          Keep Plan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function getCsrfToken() {
+  var cookies = document.cookie.split(';');
+  for (var i = 0; i < cookies.length; i++) {
+    var cookie = cookies[i].trim();
+    if (cookie.startsWith('csrftoken=')) {
+      return cookie.substring('csrftoken='.length);
+    }
+  }
+  return '';
+}
+
+// Upgrade modal
+function showUpgradeModal() {
+  document.getElementById('upgrade-modal').classList.remove('hidden');
+}
+function hideUpgradeModal() {
+  document.getElementById('upgrade-modal').classList.add('hidden');
+}
+
+// Downgrade modal
+function showDowngradeModal() {
+  document.getElementById('downgrade-modal').classList.remove('hidden');
+}
+function hideDowngradeModal() {
+  document.getElementById('downgrade-modal').classList.add('hidden');
+}
+
+// Cancel confirm
+function showCancelConfirm() {
+  document.getElementById('cancel-modal').classList.remove('hidden');
+}
+function hideCancelConfirm() {
+  document.getElementById('cancel-modal').classList.add('hidden');
+}
+
+// Upgrade action: create a checkout session via the existing API
+function doUpgrade(tierSlug) {
+  fetch('/api/checkout/create', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({ tier_slug: tierSlug, billing_period: 'monthly' }),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.checkout_url) {
+      window.location.href = data.checkout_url;
+    } else {
+      alert(data.error || 'Failed to create checkout session');
+    }
+  })
+  .catch(function() {
+    alert('An error occurred. Please try again.');
+  });
+}
+
+// Downgrade action: call the existing downgrade API
+function doDowngrade(tierSlug) {
+  fetch('/api/subscription/downgrade', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({ tier_slug: tierSlug, billing_period: 'monthly' }),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      window.location.reload();
+    } else {
+      alert(data.error || 'Failed to schedule downgrade');
+    }
+  })
+  .catch(function() {
+    alert('An error occurred. Please try again.');
+  });
+}
+
+// Cancel action: call the account cancel API (which also sets pending_tier to free)
+function doCancel() {
+  fetch('/account/api/cancel', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: '{}',
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      window.location.reload();
+    } else {
+      alert(data.error || 'Failed to cancel subscription');
+    }
+  })
+  .catch(function() {
+    alert('An error occurred. Please try again.');
+  });
+}
+
+// Newsletter toggle
+function toggleNewsletter() {
+  var toggle = document.getElementById('newsletter-toggle');
+  var dot = document.getElementById('newsletter-toggle-dot');
+  var status = document.getElementById('newsletter-status');
+  var isCurrentlySubscribed = dot.classList.contains('translate-x-5');
+  var newValue = !isCurrentlySubscribed;
+
+  fetch('/account/api/email-preferences', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({ newsletter: newValue }),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      if (data.newsletter) {
+        dot.classList.add('translate-x-5');
+        dot.classList.remove('translate-x-0');
+        toggle.classList.add('bg-accent');
+        toggle.classList.remove('bg-secondary');
+        status.textContent = 'You are subscribed to newsletters.';
+      } else {
+        dot.classList.remove('translate-x-5');
+        dot.classList.add('translate-x-0');
+        toggle.classList.remove('bg-accent');
+        toggle.classList.add('bg-secondary');
+        status.textContent = 'You are unsubscribed from newsletters.';
+      }
+    } else {
+      alert(data.error || 'Failed to update preferences');
+    }
+  })
+  .catch(function() {
+    alert('An error occurred. Please try again.');
+  });
+}
+
+// Close modals when clicking backdrop
+document.querySelectorAll('#upgrade-modal, #downgrade-modal, #cancel-modal').forEach(function(modal) {
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) {
+      modal.classList.add('hidden');
+    }
+  });
+});
+</script>
+{% endblock %}

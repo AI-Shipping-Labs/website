@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% load video_tags %}
+
+{% block title %}{{ unit.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ unit.body|truncatechars:160 }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  {% if is_gated %}
+  <!-- Gated: user does not have access -->
+  <div class="py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="/courses/{{ course.slug }}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to {{ course.title }}
+      </a>
+
+      <h1 class="mt-8 text-3xl font-semibold tracking-tight">{{ unit.title }}</h1>
+
+      <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
+        <div class="mb-4">
+          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+        <p class="mt-2 text-sm text-muted-foreground">Get full access to this course and more with a membership.</p>
+        <a href="{{ pricing_url }}"
+           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+          View Pricing
+        </a>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <!-- Accessible unit -->
+  <div class="py-8 lg:py-12">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="flex flex-col lg:flex-row gap-8">
+
+        <!-- Sidebar: module/unit navigation -->
+        <aside class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
+          <div class="lg:sticky lg:top-28">
+            <a href="/courses/{{ course.slug }}" class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <i data-lucide="arrow-left" class="h-4 w-4"></i>
+              {{ course.title }}
+            </a>
+
+            <nav class="mt-4 rounded-lg border border-border bg-card p-4" aria-label="Course navigation">
+              <h2 class="sr-only">Course Navigation</h2>
+              {% for nav_module in modules %}
+              <div class="{% if not forloop.first %}mt-4{% endif %}">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  {{ nav_module.title }}
+                </h3>
+                <ul class="space-y-1">
+                  {% for nav_unit in nav_module.units.all %}
+                  <li>
+                    <a href="{{ nav_unit.get_absolute_url }}"
+                       class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors
+                              {% if nav_unit.pk == unit.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}">
+                      {% if nav_unit.pk in completed_unit_ids %}
+                      <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+                      {% else %}
+                      <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 opacity-40"></i>
+                      {% endif %}
+                      <span class="truncate">{{ nav_unit.title }}</span>
+                    </a>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endfor %}
+            </nav>
+          </div>
+        </aside>
+
+        <!-- Main content -->
+        <div class="flex-1 min-w-0 order-1 lg:order-2">
+          <!-- Breadcrumb -->
+          <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+            <a href="/courses" class="hover:text-foreground transition-colors">Courses</a>
+            <i data-lucide="chevron-right" class="h-3 w-3"></i>
+            <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors">{{ course.title }}</a>
+            <i data-lucide="chevron-right" class="h-3 w-3"></i>
+            <span class="text-foreground">{{ unit.title }}</span>
+          </div>
+
+          <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl mb-8">{{ unit.title }}</h1>
+
+          <!-- Video Player -->
+          {% if unit.video_url %}
+          <div class="mb-8">
+            {% video_player video_url=unit.video_url timestamps=unit.timestamps %}
+          </div>
+          {% endif %}
+
+          <!-- Lesson Text -->
+          {% if unit.body_html %}
+          <div class="prose mb-12">
+            {{ unit.body_html|safe }}
+          </div>
+          {% endif %}
+
+          <!-- Homework Section -->
+          {% if unit.homework_html %}
+          <div class="mb-12 rounded-lg border border-border bg-card p-6">
+            <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight">
+              <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
+              Homework
+            </h2>
+            <div class="prose">
+              {{ unit.homework_html|safe }}
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- Mark as completed + Next unit -->
+          <div class="flex flex-col sm:flex-row items-center gap-4 border-t border-border pt-8 mt-8">
+            {% if user_authenticated %}
+            <button
+              type="button"
+              id="mark-complete-btn"
+              data-unit-id="{{ unit.pk }}"
+              data-course-slug="{{ course.slug }}"
+              class="inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors
+                     {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20{% else %}border-border bg-card text-foreground hover:bg-muted{% endif %}"
+            >
+              {% if is_completed %}
+              <i data-lucide="check-circle-2" class="h-4 w-4"></i>
+              Completed
+              {% else %}
+              <i data-lucide="circle" class="h-4 w-4"></i>
+              Mark as completed
+              {% endif %}
+            </button>
+            {% endif %}
+
+            {% if next_unit %}
+            <a href="{{ next_unit.get_absolute_url }}"
+               class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto">
+              Next: {{ next_unit.title }}
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Mark as completed toggle
+  (function() {
+    var btn = document.getElementById('mark-complete-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', function() {
+      var unitId = btn.dataset.unitId;
+      var courseSlug = btn.dataset.courseSlug;
+      var url = '/api/courses/' + courseSlug + '/units/' + unitId + '/complete';
+
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCsrfToken(),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.completed) {
+          btn.classList.remove('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+          btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+          btn.innerHTML = '<i data-lucide="check-circle-2" class="h-4 w-4"></i> Completed';
+        } else {
+          btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+          btn.classList.add('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+          btn.innerHTML = '<i data-lucide="circle" class="h-4 w-4"></i> Mark as completed';
+        }
+        // Re-initialize Lucide icons for the new HTML
+        lucide.createIcons();
+      });
+    });
+
+    function getCsrfToken() {
+      var cookies = document.cookie.split(';');
+      for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i].trim();
+        if (cookie.startsWith('csrftoken=')) {
+          return cookie.substring('csrftoken='.length);
+        }
+      }
+      return '';
+    }
+  })();
+</script>
+{% endblock %}

@@ -9,9 +9,11 @@ from content.views.pages import (
     downloads_list,
 )
 from content.views.api import submit_project, download_file
+from content.views.admin_api import reorder_modules, reorder_units
 from content.views.courses import (
-    courses_list, course_detail,
+    courses_list, course_detail, course_unit_detail,
     api_courses_list, api_course_detail,
+    api_course_unit_detail, api_course_unit_complete,
 )
 
 urlpatterns = [
@@ -32,9 +34,15 @@ urlpatterns = [
     # Courses
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),
+    path('courses/<slug:slug>/<int:module_sort>/<int:unit_sort>', course_unit_detail, name='course_unit_detail'),
     # API endpoints
     path('api/projects/submit', submit_project, name='submit_project'),
     path('api/downloads/<slug:slug>/file', download_file, name='download_file'),
     path('api/courses', api_courses_list, name='api_courses_list'),
     path('api/courses/<slug:slug>', api_course_detail, name='api_course_detail'),
+    path('api/courses/<slug:slug>/units/<int:unit_id>', api_course_unit_detail, name='api_course_unit_detail'),
+    path('api/courses/<slug:slug>/units/<int:unit_id>/complete', api_course_unit_complete, name='api_course_unit_complete'),
+    # Admin API endpoints
+    path('api/admin/modules/reorder', reorder_modules, name='reorder_modules'),
+    path('api/admin/units/reorder', reorder_units, name='reorder_units'),
 ]

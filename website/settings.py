@@ -141,6 +141,12 @@ STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
 
+# Zoom API credentials (set via environment variables in production)
+ZOOM_CLIENT_ID = os.environ.get('ZOOM_CLIENT_ID', '')
+ZOOM_CLIENT_SECRET = os.environ.get('ZOOM_CLIENT_SECRET', '')
+ZOOM_ACCOUNT_ID = os.environ.get('ZOOM_ACCOUNT_ID', '')
+ZOOM_WEBHOOK_SECRET_TOKEN = os.environ.get('ZOOM_WEBHOOK_SECRET_TOKEN', '')
+
 # Content directory (markdown files from reference)
 CONTENT_DIR = BASE_DIR / 'reference' / 'content'
 

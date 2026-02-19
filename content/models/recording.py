@@ -9,6 +9,13 @@ class Recording(models.Model):
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, unique=True)
     description = models.TextField(blank=True, default='')
+    event = models.ForeignKey(
+        'events.Event',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='recordings',
+        help_text='Link to the originating event, if any.',
+    )
     date = models.DateField()
     tags = models.JSONField(default=list, blank=True)
     level = models.CharField(max_length=100, blank=True, default='')

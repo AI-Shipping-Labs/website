@@ -1,3 +1,7 @@
 from django.urls import path
 
-urlpatterns = []
+from integrations.views.zoom_webhook import zoom_webhook
+
+urlpatterns = [
+    path('api/webhooks/zoom', zoom_webhook, name='zoom_webhook'),
+]

@@ -12,6 +12,7 @@ urlpatterns = [
     path('', include('payments.urls')),
     path('', include('content.urls')),
     path('', include('events.urls')),
+    path('', include('integrations.urls')),
 ]
 
 if settings.DEBUG:

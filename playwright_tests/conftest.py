@@ -31,7 +31,8 @@ PAGES = [
     ("blog", "/blog"),
     ("projects", "/projects"),
     ("event_recordings", "/event-recordings"),
-    ("collection", "/collection"),
+    ("resources", "/resources"),
+    ("downloads", "/downloads"),
     ("tutorials", "/tutorials"),
 ]
 

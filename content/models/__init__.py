@@ -3,3 +3,4 @@ from .recording import *
 from .project import *
 from .tutorial import *
 from .curated_link import *
+from .download import *

@@ -1,10 +1,12 @@
 import json
 
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.utils.text import slugify
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 
-from content.models import Project
+from content.access import can_access, get_user_level
+from content.models import Project, Download
 
 
 @require_POST
@@ -91,3 +93,38 @@ def submit_project(request):
         'status': project.status,
         'message': 'Project submitted for review',
     }, status=201)
+
+
+@require_GET
+def download_file(request, slug):
+    """File download endpoint.
+
+    Streams the file if the user has access. Returns 403 otherwise.
+    For lead magnet downloads (required_level=0), anonymous users get 401
+    with requires_email=true so the frontend can show an email signup form.
+
+    On success, increments download_count and redirects to the file_url.
+    """
+    download = get_object_or_404(Download, slug=slug, published=True)
+
+    # Lead magnet flow: required_level 0 but user is anonymous
+    if download.required_level == 0 and not request.user.is_authenticated:
+        return JsonResponse(
+            {
+                'error': 'Email signup required',
+                'requires_email': True,
+                'download_slug': slug,
+            },
+            status=401,
+        )
+
+    # Gated download: user does not have sufficient access level
+    if not can_access(request.user, download):
+        return JsonResponse(
+            {'error': 'Insufficient access level'},
+            status=403,
+        )
+
+    # User is authorized: increment download count and redirect to file
+    download.increment_download_count()
+    return HttpResponseRedirect(download.file_url)

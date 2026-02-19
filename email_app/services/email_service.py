@@ -34,6 +34,8 @@ TRANSACTIONAL_TYPES = {
     'community_invite',
     'lead_magnet_delivery',
     'event_reminder',
+    'email_verification',
+    'password_reset',
 }
 
 

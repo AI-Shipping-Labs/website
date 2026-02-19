@@ -13,6 +13,19 @@
       <h1 class="text-3xl font-semibold tracking-tight mb-2">Account</h1>
       <p class="text-muted-foreground mb-10">Manage your membership and preferences</p>
 
+      {% if not user.email_verified %}
+      <!-- Email Verification Banner -->
+      <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 mb-8" id="email-verification-banner">
+        <div class="flex items-start gap-3">
+          <i data-lucide="mail-warning" class="h-5 w-5 text-amber-400 mt-0.5 shrink-0"></i>
+          <div>
+            <p class="text-sm text-amber-200 font-medium">Verify your email</p>
+            <p class="text-sm text-amber-200/80 mt-1">Please check your inbox and verify your email address to get the most out of your account.</p>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Membership Section -->
       <div class="rounded-2xl border border-border bg-card p-8 mb-8">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
@@ -140,6 +153,41 @@
         <p class="text-xs text-muted-foreground mt-4" id="newsletter-status">
           {% if newsletter_subscribed %}You are subscribed to newsletters.{% else %}You are unsubscribed from newsletters.{% endif %}
         </p>
+      </div>
+
+      <!-- Change Password Section -->
+      <div class="rounded-2xl border border-border bg-card p-8 mt-8" id="change-password-section">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+          <i data-lucide="lock" class="h-5 w-5 text-accent"></i>
+          Change Password
+        </h2>
+
+        <form id="change-password-form" class="space-y-4" onsubmit="return handleChangePassword(event)">
+          <div>
+            <label for="current-password" class="block text-sm font-medium text-foreground mb-1">Current Password</label>
+            <input type="password" id="current-password" name="current_password"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   placeholder="Enter current password">
+          </div>
+          <div>
+            <label for="new-password" class="block text-sm font-medium text-foreground mb-1">New Password</label>
+            <input type="password" id="new-password" name="new_password" required minlength="8"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   placeholder="At least 8 characters">
+          </div>
+          <div>
+            <label for="confirm-new-password" class="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
+            <input type="password" id="confirm-new-password" name="confirm_new_password" required minlength="8"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   placeholder="Confirm new password">
+          </div>
+          <div id="password-error" class="text-sm text-red-400 hidden"></div>
+          <div id="password-success" class="text-sm text-green-400 hidden"></div>
+          <button type="submit"
+                  class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            Update Password
+          </button>
+        </form>
       </div>
 
     </div>
@@ -380,5 +428,53 @@ document.querySelectorAll('#upgrade-modal, #downgrade-modal, #cancel-modal').for
     }
   });
 });
+
+// Change password
+function handleChangePassword(event) {
+  event.preventDefault();
+  var currentPassword = document.getElementById('current-password').value;
+  var newPassword = document.getElementById('new-password').value;
+  var confirmPassword = document.getElementById('confirm-new-password').value;
+  var errorDiv = document.getElementById('password-error');
+  var successDiv = document.getElementById('password-success');
+
+  errorDiv.classList.add('hidden');
+  successDiv.classList.add('hidden');
+
+  if (newPassword !== confirmPassword) {
+    errorDiv.textContent = 'New passwords do not match';
+    errorDiv.classList.remove('hidden');
+    return false;
+  }
+
+  fetch('/account/api/change-password', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  })
+  .then(function(resp) { return resp.json().then(function(data) { return { status: resp.status, data: data }; }); })
+  .then(function(result) {
+    if (result.data.status === 'ok') {
+      successDiv.textContent = result.data.message || 'Password updated successfully';
+      successDiv.classList.remove('hidden');
+      document.getElementById('change-password-form').reset();
+    } else {
+      errorDiv.textContent = result.data.error || 'Failed to change password';
+      errorDiv.classList.remove('hidden');
+    }
+  })
+  .catch(function() {
+    errorDiv.textContent = 'An error occurred. Please try again.';
+    errorDiv.classList.remove('hidden');
+  });
+
+  return false;
+}
 </script>
 {% endblock %}

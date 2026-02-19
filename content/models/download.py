@@ -50,6 +50,11 @@ class Download(models.Model):
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        from content.utils.tags import normalize_tags
+        self.tags = normalize_tags(self.tags)
+        super().save(*args, **kwargs)
+
     def get_absolute_url(self):
         return f'/downloads/{self.slug}'
 

@@ -44,7 +44,10 @@ class Recording(models.Model):
         return self.title
 
     def save(self, *args, **kwargs):
-        """Sync published_at with published flag."""
+        """Normalize tags and sync published_at with published flag."""
+        from content.utils.tags import normalize_tags
+        self.tags = normalize_tags(self.tags)
+
         if self.published and not self.published_at:
             self.published_at = timezone.now()
         elif not self.published:

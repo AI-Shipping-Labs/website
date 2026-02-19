@@ -356,7 +356,7 @@ class DownloadsListTagFilterTest(TestCase):
     def test_clear_filter_link(self):
         response = self.client.get('/downloads?tag=ai')
         content = response.content.decode()
-        self.assertIn('Clear filter', content)
+        self.assertIn('Clear all', content)
 
     def test_empty_tag_ignored(self):
         response = self.client.get('/downloads?tag=')

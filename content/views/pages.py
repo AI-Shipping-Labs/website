@@ -2,7 +2,64 @@ from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 
 from content.access import build_gating_context, can_access, get_required_tier_name
-from content.models import Article, Recording, Project, Tutorial, CuratedLink, Download
+from content.models import Article, Recording, Project, Tutorial, CuratedLink, Download, TagRule
+
+
+def _get_selected_tags(request):
+    """Extract selected tags from query params. Supports ?tag=X&tag=Y."""
+    return [t.strip() for t in request.GET.getlist('tag') if t.strip()]
+
+
+def _filter_by_tags(queryset, selected_tags):
+    """Filter a queryset by multiple tags with AND logic.
+
+    Returns a filtered queryset containing only items that have ALL selected tags.
+    """
+    if not selected_tags:
+        return queryset
+    # Filter items whose tags list contains all selected tags (AND logic)
+    matching_ids = []
+    for obj in queryset:
+        obj_tags = set(obj.tags or [])
+        if all(tag in obj_tags for tag in selected_tags):
+            matching_ids.append(obj.pk)
+    return queryset.filter(pk__in=matching_ids)
+
+
+def _build_tag_filter_url(base_path, selected_tags, tag_to_add=None, tag_to_remove=None, extra_params=None):
+    """Build a URL with tag query params.
+
+    Used by templates to generate links for adding/removing tag filters.
+    """
+    tags = list(selected_tags)
+    if tag_to_add and tag_to_add not in tags:
+        tags.append(tag_to_add)
+    if tag_to_remove and tag_to_remove in tags:
+        tags.remove(tag_to_remove)
+    params = []
+    if extra_params:
+        for key, val in extra_params.items():
+            if val:
+                params.append(f'{key}={val}')
+    for tag in tags:
+        params.append(f'tag={tag}')
+    if params:
+        return f'{base_path}?{"&".join(params)}'
+    return base_path
+
+
+def _get_tag_rules_for_tags(tags):
+    """Return TagRule objects that match any of the given tags.
+
+    Returns dict with 'after_content' and 'sidebar' lists.
+    """
+    if not tags:
+        return {'after_content': [], 'sidebar': []}
+    rules = TagRule.objects.filter(tag__in=tags)
+    result = {'after_content': [], 'sidebar': []}
+    for rule in rules:
+        result[rule.position].append(rule)
+    return result
 
 
 ACTIVITIES = [
@@ -126,7 +183,7 @@ def activities(request):
 def blog_list(request):
     """Blog listing page with optional tag filtering."""
     articles = Article.objects.filter(published=True)
-    tag = request.GET.get('tag', '').strip()
+    selected_tags = _get_selected_tags(request)
 
     # Collect all tags from published articles for the tag filter UI
     all_tags = set()
@@ -135,17 +192,15 @@ def blog_list(request):
             all_tags.update(article.tags)
     all_tags = sorted(all_tags)
 
-    # Filter by tag if provided
-    if tag:
-        # Filter articles whose tags JSONField contains the given tag
-        filtered = [a for a in articles if tag in (a.tags or [])]
-        article_ids = [a.pk for a in filtered]
-        articles = articles.filter(pk__in=article_ids)
+    # Filter by tags if provided (AND logic)
+    articles = _filter_by_tags(articles, selected_tags)
 
     context = {
         'articles': articles,
         'all_tags': all_tags,
-        'current_tag': tag,
+        'selected_tags': selected_tags,
+        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'base_path': '/blog',
     }
     return render(request, 'content/blog_list.html', context)
 
@@ -154,9 +209,11 @@ def blog_detail(request, slug):
     """Blog post detail page with related articles."""
     article = get_object_or_404(Article, slug=slug, published=True)
     related_articles = article.get_related_articles(limit=3)
+    tag_rules = _get_tag_rules_for_tags(article.tags)
     context = {
         'article': article,
         'related_articles': related_articles,
+        'tag_rules': tag_rules,
     }
     context.update(build_gating_context(request.user, article, 'article'))
     return render(request, 'content/blog_detail.html', context)
@@ -165,7 +222,7 @@ def blog_detail(request, slug):
 def recordings_list(request):
     """Event recordings listing page with tag filtering and pagination."""
     recordings = Recording.objects.filter(published=True)
-    tag = request.GET.get('tag', '').strip()
+    selected_tags = _get_selected_tags(request)
 
     # Collect all tags from published recordings for the tag filter UI
     all_tags = set()
@@ -174,11 +231,8 @@ def recordings_list(request):
             all_tags.update(recording.tags)
     all_tags = sorted(all_tags)
 
-    # Filter by tag if provided
-    if tag:
-        filtered = [r for r in recordings if tag in (r.tags or [])]
-        recording_ids = [r.pk for r in filtered]
-        recordings = recordings.filter(pk__in=recording_ids)
+    # Filter by tags if provided (AND logic)
+    recordings = _filter_by_tags(recordings, selected_tags)
 
     # Pagination: 20 recordings per page
     paginator = Paginator(recordings, 20)
@@ -189,8 +243,10 @@ def recordings_list(request):
         'recordings': page_obj,
         'page_obj': page_obj,
         'all_tags': all_tags,
-        'current_tag': tag,
+        'selected_tags': selected_tags,
+        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'is_paginated': page_obj.has_other_pages(),
+        'base_path': '/event-recordings',
     }
     return render(request, 'content/recordings_list.html', context)
 
@@ -198,7 +254,8 @@ def recordings_list(request):
 def recording_detail(request, slug):
     """Event recording detail page."""
     recording = get_object_or_404(Recording, slug=slug, published=True)
-    context = {'recording': recording}
+    tag_rules = _get_tag_rules_for_tags(recording.tags)
+    context = {'recording': recording, 'tag_rules': tag_rules}
     context.update(build_gating_context(request.user, recording, 'recording'))
     return render(request, 'content/recording_detail.html', context)
 
@@ -208,7 +265,7 @@ def projects_list(request):
     projects = Project.objects.filter(published=True)
 
     difficulty = request.GET.get('difficulty', '').strip()
-    tag = request.GET.get('tag', '').strip()
+    selected_tags = _get_selected_tags(request)
 
     # Collect all tags and difficulties from published projects for the filter UI
     all_tags = set()
@@ -225,18 +282,17 @@ def projects_list(request):
     if difficulty:
         projects = projects.filter(difficulty=difficulty)
 
-    # Filter by tag if provided
-    if tag:
-        filtered = [p for p in projects if tag in (p.tags or [])]
-        project_ids = [p.pk for p in filtered]
-        projects = projects.filter(pk__in=project_ids)
+    # Filter by tags if provided (AND logic)
+    projects = _filter_by_tags(projects, selected_tags)
 
     context = {
         'projects': projects,
         'all_tags': all_tags,
         'all_difficulties': all_difficulties,
         'current_difficulty': difficulty,
-        'current_tag': tag,
+        'selected_tags': selected_tags,
+        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'base_path': '/projects',
     }
     return render(request, 'content/projects_list.html', context)
 
@@ -244,7 +300,8 @@ def projects_list(request):
 def project_detail(request, slug):
     """Project detail page."""
     project = get_object_or_404(Project, slug=slug, published=True)
-    context = {'project': project}
+    tag_rules = _get_tag_rules_for_tags(project.tags)
+    context = {'project': project, 'tag_rules': tag_rules}
     context.update(build_gating_context(request.user, project, 'project'))
     return render(request, 'content/project_detail.html', context)
 
@@ -256,7 +313,7 @@ def collection_list(request):
     Gated links have their URL hidden from anonymous/insufficient-tier users.
     """
     links = CuratedLink.objects.filter(published=True)
-    tag = request.GET.get('tag', '').strip()
+    selected_tags = _get_selected_tags(request)
 
     # Collect all tags from published links for the tag filter UI
     all_tags = set()
@@ -265,11 +322,8 @@ def collection_list(request):
             all_tags.update(link.tags)
     all_tags = sorted(all_tags)
 
-    # Filter by tag if provided
-    if tag:
-        filtered = [lnk for lnk in links if tag in (lnk.tags or [])]
-        link_ids = [lnk.pk for lnk in filtered]
-        links = links.filter(pk__in=link_ids)
+    # Filter by tags if provided (AND logic)
+    links = _filter_by_tags(links, selected_tags)
 
     # Build per-link access info and strip URLs from gated links
     annotated_links = []
@@ -310,7 +364,9 @@ def collection_list(request):
     context = {
         'grouped_categories': grouped,
         'all_tags': all_tags,
-        'current_tag': tag,
+        'selected_tags': selected_tags,
+        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'base_path': '/resources',
     }
     return render(request, 'content/collection_list.html', context)
 
@@ -324,7 +380,8 @@ def tutorials_list(request):
 def tutorial_detail(request, slug):
     """Tutorial detail page."""
     tutorial = get_object_or_404(Tutorial, slug=slug, published=True)
-    context = {'tutorial': tutorial}
+    tag_rules = _get_tag_rules_for_tags(tutorial.tags)
+    context = {'tutorial': tutorial, 'tag_rules': tag_rules}
     context.update(build_gating_context(request.user, tutorial, 'tutorial'))
     return render(request, 'content/tutorial_detail.html', context)
 
@@ -332,7 +389,7 @@ def tutorial_detail(request, slug):
 def downloads_list(request):
     """Downloadable resources listing page with optional tag filtering."""
     downloads = Download.objects.filter(published=True)
-    tag = request.GET.get('tag', '').strip()
+    selected_tags = _get_selected_tags(request)
 
     # Collect all tags from published downloads for the tag filter UI
     all_tags = set()
@@ -341,11 +398,8 @@ def downloads_list(request):
             all_tags.update(download.tags)
     all_tags = sorted(all_tags)
 
-    # Filter by tag if provided
-    if tag:
-        filtered = [d for d in downloads if tag in (d.tags or [])]
-        download_ids = [d.pk for d in filtered]
-        downloads = downloads.filter(pk__in=download_ids)
+    # Filter by tags if provided (AND logic)
+    downloads = _filter_by_tags(downloads, selected_tags)
 
     # Annotate each download with access info for the template
     annotated_downloads = []
@@ -368,6 +422,8 @@ def downloads_list(request):
     context = {
         'downloads': annotated_downloads,
         'all_tags': all_tags,
-        'current_tag': tag,
+        'selected_tags': selected_tags,
+        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'base_path': '/downloads',
     }
     return render(request, 'content/downloads_list.html', context)

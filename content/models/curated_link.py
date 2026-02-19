@@ -49,6 +49,11 @@ class CuratedLink(models.Model):
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        from content.utils.tags import normalize_tags
+        self.tags = normalize_tags(self.tags)
+        super().save(*args, **kwargs)
+
     @property
     def category_label(self):
         return self.CATEGORY_LABELS.get(self.category, self.category)

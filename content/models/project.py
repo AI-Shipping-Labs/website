@@ -80,6 +80,10 @@ class Project(models.Model):
         return colors.get(self.difficulty, 'bg-secondary text-muted-foreground')
 
     def save(self, *args, **kwargs):
+        # Normalize tags on save
+        from content.utils.tags import normalize_tags
+        self.tags = normalize_tags(self.tags)
+
         # Keep status in sync with published flag.
         if self.published:
             self.status = 'published'

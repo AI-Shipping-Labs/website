@@ -31,6 +31,11 @@ class Tutorial(models.Model):
     def get_absolute_url(self):
         return f'/tutorials/{self.slug}'
 
+    def save(self, *args, **kwargs):
+        from content.utils.tags import normalize_tags
+        self.tags = normalize_tags(self.tags)
+        super().save(*args, **kwargs)
+
     def formatted_date(self):
         return self.date.strftime('%B %d, %Y')
 

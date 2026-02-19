@@ -117,6 +117,9 @@ class Event(models.Model):
         return f'/events/{self.slug}'
 
     def save(self, *args, **kwargs):
+        from content.utils.tags import normalize_tags
+        self.tags = normalize_tags(self.tags)
+
         if self.description:
             self.description_html = render_markdown(self.description)
         super().save(*args, **kwargs)

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load tag_filters %}
 
 {% block title %}Project Showcase | AI Shipping Labs{% endblock %}
 {% block meta_description %}Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from.{% endblock %}
@@ -20,51 +21,27 @@
       </div>
 
       <!-- Filter controls -->
-      {% if all_difficulties or all_tags %}
-      <div class="mb-8 space-y-4">
-        <!-- Difficulty filter -->
-        {% if all_difficulties %}
-        <div>
-          <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by difficulty</p>
-          <div class="flex flex-wrap gap-2">
-            {% if current_difficulty %}
-            <a href="/projects{% if current_tag %}?tag={{ current_tag }}{% endif %}"
-               class="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground transition-colors">
-              Clear filter
-            </a>
-            {% endif %}
-            {% for diff in all_difficulties %}
-            <a href="/projects?difficulty={{ diff }}{% if current_tag %}&tag={{ current_tag }}{% endif %}"
-               class="rounded-full px-3 py-1 text-xs font-medium transition-colors {% if current_difficulty == diff %}bg-accent text-accent-foreground{% else %}border border-border bg-card text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}">
-              {{ diff }}
-            </a>
-            {% endfor %}
-          </div>
+      {% if all_difficulties %}
+      <div class="mb-4">
+        <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by difficulty</p>
+        <div class="flex flex-wrap gap-2">
+          {% if current_difficulty %}
+          <a href="/projects{% if selected_tags %}?{% for tag in selected_tags %}tag={{ tag }}{% if not forloop.last %}&{% endif %}{% endfor %}{% endif %}"
+             class="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground transition-colors">
+            Clear filter
+          </a>
+          {% endif %}
+          {% for diff in all_difficulties %}
+          <a href="/projects?difficulty={{ diff }}{% for tag in selected_tags %}&tag={{ tag }}{% endfor %}"
+             class="rounded-full px-3 py-1 text-xs font-medium transition-colors {% if current_difficulty == diff %}bg-accent text-accent-foreground{% else %}border border-border bg-card text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}">
+            {{ diff }}
+          </a>
+          {% endfor %}
         </div>
-        {% endif %}
-
-        <!-- Tag filter -->
-        {% if all_tags %}
-        <div>
-          <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by tag</p>
-          <div class="flex flex-wrap gap-2">
-            {% if current_tag %}
-            <a href="/projects{% if current_difficulty %}?difficulty={{ current_difficulty }}{% endif %}"
-               class="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground transition-colors">
-              Clear filter
-            </a>
-            {% endif %}
-            {% for tag in all_tags %}
-            <a href="/projects?tag={{ tag }}{% if current_difficulty %}&difficulty={{ current_difficulty }}{% endif %}"
-               class="rounded-full px-3 py-1 text-xs font-medium transition-colors {% if current_tag == tag %}bg-accent text-accent-foreground{% else %}border border-border bg-card text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}">
-              {{ tag }}
-            </a>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
       </div>
       {% endif %}
+
+      {% include "includes/tag_filter_chips.html" %}
 
       {% if projects %}
       <div class="grid gap-6 sm:grid-cols-2">
@@ -106,7 +83,12 @@
       <div class="rounded-lg border border-border bg-card p-12 text-center">
         <i data-lucide="rocket" class="mx-auto h-12 w-12 text-muted-foreground"></i>
         <p class="mt-4 text-lg text-muted-foreground">
+          {% if selected_tags %}
+          No projects found with the selected tags.
+          <a href="/projects" class="text-accent hover:underline">View all projects</a>
+          {% else %}
           No project ideas yet. Check back soon for pet and portfolio project ideas.
+          {% endif %}
         </p>
       </div>
       {% endif %}

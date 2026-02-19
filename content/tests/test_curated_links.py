@@ -403,12 +403,12 @@ class ResourcesTagFilteringTest(TestCase):
     def test_clear_filter_link(self):
         response = self.client.get('/resources?tag=python')
         content = response.content.decode()
-        self.assertIn('Clear filter', content)
+        self.assertIn('Clear all', content)
 
     def test_filter_by_tag_label_shown(self):
         response = self.client.get('/resources?tag=python')
         content = response.content.decode()
-        self.assertIn('Showing links tagged with', content)
+        self.assertIn('Active filters', content)
 
 
 # --- View: gating / access control ---
@@ -689,4 +689,4 @@ class ResourcesEmptyStateTest(TestCase):
             tags=['python'], published=True,
         )
         response = self.client.get('/resources?tag=nonexistent')
-        self.assertContains(response, 'No links found with tag')
+        self.assertContains(response, 'No links found with the selected tags')

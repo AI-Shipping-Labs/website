@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load tag_filters %}
 
 {% block title %}Courses | AI Shipping Labs{% endblock %}
 {% block meta_description %}Structured courses on AI engineering, machine learning, and data engineering. Learn from hands-on projects and guided lessons.{% endblock %}
@@ -18,6 +19,8 @@
           Dive deep into AI engineering with guided courses. Each course includes video lessons, hands-on exercises, and homework assignments.
         </p>
       </div>
+
+      {% include "includes/tag_filter_chips.html" %}
 
       {% if courses %}
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -66,7 +69,12 @@
       <div class="rounded-lg border border-border bg-card p-12 text-center">
         <i data-lucide="book-open" class="mx-auto h-12 w-12 text-muted-foreground"></i>
         <p class="mt-4 text-lg text-muted-foreground">
+          {% if selected_tags %}
+          No courses found with the selected tags.
+          <a href="/courses" class="text-accent hover:underline">View all courses</a>
+          {% else %}
           No courses available yet. Check back soon for structured learning paths.
+          {% endif %}
         </p>
       </div>
       {% endif %}

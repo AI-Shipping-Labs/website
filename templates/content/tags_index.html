@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Tags | AI Shipping Labs{% endblock %}
+{% block meta_description %}Browse all tags across articles, courses, recordings, projects, and resources.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+      <div class="mb-12">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Tags</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Browse by Tag
+        </h1>
+        <p class="mt-4 text-lg text-muted-foreground">
+          {{ total_tags }} tag{{ total_tags|pluralize }} across all content types.
+        </p>
+      </div>
+
+      {% if tag_counts %}
+      <div class="flex flex-wrap gap-3">
+        {% for tag, count in tag_counts %}
+        <a href="/tags/{{ tag }}"
+           class="group inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 transition-colors hover:border-accent/50 hover:bg-card/80">
+          <span class="font-medium text-foreground group-hover:text-accent transition-colors">{{ tag }}</span>
+          <span class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ count }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="rounded-lg border border-border bg-card p-12 text-center">
+        <p class="text-lg text-muted-foreground">
+          No tags yet. Content will be tagged as it's published.
+        </p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

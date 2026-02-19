@@ -10,16 +10,32 @@ from content.access import (
     can_access, get_required_tier_name, get_user_level, LEVEL_TO_TIER_NAME,
 )
 from content.models import (
-    Course, Module, Unit, UserCourseProgress, Cohort, CohortEnrollment,
+    Course, Module, Unit, UserCourseProgress, Cohort, CohortEnrollment, TagRule,
 )
+from content.views.pages import _get_selected_tags, _filter_by_tags, _get_tag_rules_for_tags
 
 
 def courses_list(request):
     """Course catalog page: grid of all published courses."""
     courses = Course.objects.filter(status='published')
+    selected_tags = _get_selected_tags(request)
+
+    # Collect all tags from published courses for the tag filter UI
+    all_tags = set()
+    for course in courses:
+        if course.tags:
+            all_tags.update(course.tags)
+    all_tags = sorted(all_tags)
+
+    # Filter by tags if provided (AND logic)
+    courses = _filter_by_tags(courses, selected_tags)
 
     context = {
         'courses': courses,
+        'all_tags': all_tags,
+        'selected_tags': selected_tags,
+        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'base_path': '/courses',
     }
     return render(request, 'content/courses_list.html', context)
 

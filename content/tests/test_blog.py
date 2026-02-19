@@ -307,11 +307,12 @@ class BlogListTagFilteringTest(TestCase):
     def test_current_tag_in_context(self):
         response = self.client.get('/blog?tag=python')
         self.assertEqual(response.context['current_tag'], 'python')
+        self.assertEqual(response.context['selected_tags'], ['python'])
 
     def test_clear_filter_link(self):
         response = self.client.get('/blog?tag=python')
         content = response.content.decode()
-        self.assertIn('Clear filter', content)
+        self.assertIn('Clear all', content)
 
 
 # --- Related articles tests ---

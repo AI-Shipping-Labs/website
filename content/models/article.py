@@ -75,6 +75,10 @@ class Article(models.Model):
         return self.date.strftime('%b %d, %Y')
 
     def save(self, *args, **kwargs):
+        # Normalize tags on save
+        from content.utils.tags import normalize_tags
+        self.tags = normalize_tags(self.tags)
+
         # Auto-render markdown to HTML on save
         if self.content_markdown:
             from content.templatetags.video_utils import replace_video_urls_in_html

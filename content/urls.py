@@ -10,6 +10,7 @@ from content.views.pages import (
 )
 from content.views.api import submit_project, download_file
 from content.views.admin_api import reorder_modules, reorder_units
+from content.views.tags import tags_index, tags_detail
 from content.views.courses import (
     courses_list, course_detail, course_unit_detail,
     api_courses_list, api_course_detail,
@@ -32,6 +33,9 @@ urlpatterns = [
     path('tutorials', tutorials_list, name='tutorials_list'),
     path('tutorials/<slug:slug>', tutorial_detail, name='tutorial_detail'),
     path('downloads', downloads_list, name='downloads_list'),
+    # Tags
+    path('tags', tags_index, name='tags_index'),
+    path('tags/<slug:tag>', tags_detail, name='tags_detail'),
     # Courses
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),

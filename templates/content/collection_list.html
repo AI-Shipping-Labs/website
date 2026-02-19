@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load tag_filters %}
 
 {% block title %}Curated Links | AI Shipping Labs{% endblock %}
 {% block meta_description %}Curated GitHub tools, model hubs, courses, and learning resources. Dev tools, local LLMs, and courses.{% endblock %}
@@ -23,31 +24,7 @@
         </p>
       </div>
 
-      <!-- Tag filter -->
-      {% if all_tags %}
-      <div class="mb-8 flex flex-wrap items-center gap-2">
-        <span class="text-sm text-muted-foreground mr-2">Filter by tag:</span>
-        <a href="/resources"
-           class="rounded-full px-3 py-1 text-xs transition-colors {% if not current_tag %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
-          All
-        </a>
-        {% for tag in all_tags %}
-        <a href="/resources?tag={{ tag }}"
-           class="rounded-full px-3 py-1 text-xs transition-colors {% if current_tag == tag %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
-          {{ tag }}
-        </a>
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      {% if current_tag %}
-      <div class="mb-6">
-        <p class="text-sm text-muted-foreground">
-          Showing links tagged with <span class="font-medium text-foreground">"{{ current_tag }}"</span>
-          <a href="/resources" class="ml-2 text-accent hover:underline">Clear filter</a>
-        </p>
-      </div>
-      {% endif %}
+      {% include "includes/tag_filter_chips.html" %}
 
       <!-- Links grouped by category -->
       {% if grouped_categories %}
@@ -137,8 +114,8 @@
       <div class="rounded-lg border border-border bg-card p-12 text-center">
         <i data-lucide="folder-open" class="mx-auto h-12 w-12 text-muted-foreground"></i>
         <p class="mt-4 text-lg text-muted-foreground">
-          {% if current_tag %}
-          No links found with tag "{{ current_tag }}".
+          {% if selected_tags %}
+          No links found with the selected tags.
           <a href="/resources" class="text-accent hover:underline">View all links</a>
           {% else %}
           No curated links yet. Check back soon.

@@ -5,12 +5,18 @@ from content.models import Article
 
 
 def publish_articles(modeladmin, request, queryset):
-    """Publish selected articles."""
+    """Publish selected articles and send notifications."""
     queryset.update(
         status='published',
         published=True,
         published_at=timezone.now(),
     )
+    for article in queryset:
+        try:
+            from notifications.services import NotificationService
+            NotificationService.notify('article', article.pk)
+        except Exception:
+            pass
 
 
 publish_articles.short_description = 'Publish selected articles'

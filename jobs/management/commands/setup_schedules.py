@@ -31,4 +31,12 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: cleanup-webhook-logs (daily at 3 AM)'))
 
+        # Event reminders every 15 minutes
+        schedule(
+            'notifications.services.event_reminders.check_event_reminders',
+            cron='*/15 * * * *',
+            name='event-reminders',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: event-reminders (every 15 min)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

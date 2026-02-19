@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'voting',
     'jobs',
     'community',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -216,6 +217,7 @@ SLACK_COMMUNITY_CHANNEL_IDS = [
     if cid.strip()
 ]
 SLACK_INVITE_URL = os.environ.get('SLACK_INVITE_URL', '')
+SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID', '')
 
 # Django-Q2 task queue configuration
 Q_CLUSTER = {

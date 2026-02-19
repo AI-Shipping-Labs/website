@@ -8,6 +8,8 @@ from django.conf.urls.static import static
 from accounts.urls import account_urlpatterns, auth_api_urlpatterns
 from content.sitemaps import sitemaps
 from email_app.urls import api_urlpatterns as email_api_urlpatterns
+from notifications.urls import api_urlpatterns as notification_api_urlpatterns
+from notifications.urls import page_urlpatterns as notification_page_urlpatterns
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -15,6 +17,8 @@ urlpatterns = [
     path('account/', include(account_urlpatterns)),
     path('api/', include(auth_api_urlpatterns)),
     path('api/', include(email_api_urlpatterns)),
+    path('api/', include(notification_api_urlpatterns)),
+    path('', include(notification_page_urlpatterns)),
     path('register', RedirectView.as_view(url='/accounts/register/', permanent=False), name='register_shortcut'),
     path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
     path('', include('payments.urls')),

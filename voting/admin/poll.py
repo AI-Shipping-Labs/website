@@ -20,8 +20,14 @@ close_polls.short_description = 'Close selected polls'
 
 
 def reopen_polls(modeladmin, request, queryset):
-    """Reopen selected polls."""
+    """Reopen selected polls and send notifications."""
     queryset.update(status='open')
+    for poll in queryset:
+        try:
+            from notifications.services import NotificationService
+            NotificationService.notify('poll', poll.pk)
+        except Exception:
+            pass
 
 
 reopen_polls.short_description = 'Reopen selected polls'
@@ -52,6 +58,17 @@ class PollAdmin(admin.ModelAdmin):
     )
 
     readonly_fields = ['required_level']
+
+    def save_model(self, request, obj, form, change):
+        """Save the poll and send notifications for newly created open polls."""
+        is_new = not change
+        super().save_model(request, obj, form, change)
+        if is_new and obj.status == 'open':
+            try:
+                from notifications.services import NotificationService
+                NotificationService.notify('poll', obj.pk)
+            except Exception:
+                pass
 
 
 @admin.register(PollOption)

@@ -14,12 +14,14 @@
           Resources
           <i data-lucide="chevron-down" class="h-4 w-4"></i>
         </button>
-        <div class="absolute left-0 top-full mt-2 w-48 rounded-md border border-border bg-popover p-1 shadow-lg hidden group-hover:block" id="resources-dropdown">
+        <div class="absolute left-0 top-full w-48 pt-2 hidden group-hover:block" id="resources-dropdown">
+        <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
           <a href="/blog" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Blog</a>
           <a href="/projects" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Project Ideas</a>
           <a href="/event-recordings" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Event Recordings</a>
           <a href="/tutorials" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Tutorials</a>
           <a href="/collection" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Curated Links</a>
+        </div>
         </div>
       </div>
       <a href="/#faq" class="text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
@@ -27,6 +29,26 @@
 
     <div class="hidden md:flex md:items-center md:gap-4">
       {% if user.is_authenticated %}
+      <!-- Notification Bell -->
+      <div class="relative" id="notification-bell-container">
+        <button type="button" class="relative p-1 text-muted-foreground transition-colors hover:text-foreground" id="notification-bell-btn" aria-label="Notifications">
+          <i data-lucide="bell" class="h-5 w-5"></i>
+          <span id="notification-badge" class="absolute -right-1 -top-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
+        </button>
+        <!-- Notification Dropdown -->
+        <div id="notification-dropdown" class="absolute right-0 top-full mt-2 w-80 rounded-md border border-border bg-popover shadow-lg hidden z-50">
+          <div class="flex items-center justify-between border-b border-border px-4 py-3">
+            <span class="text-sm font-medium text-foreground">Notifications</span>
+            <button type="button" onclick="notifMarkAllRead()" class="text-xs text-muted-foreground hover:text-foreground transition-colors">Mark all as read</button>
+          </div>
+          <div id="notification-list" class="max-h-96 overflow-y-auto">
+            <div class="px-4 py-8 text-center text-sm text-muted-foreground">Loading...</div>
+          </div>
+          <div class="border-t border-border px-4 py-2">
+            <a href="/notifications" class="block text-center text-xs text-muted-foreground hover:text-foreground transition-colors">View all</a>
+          </div>
+        </div>
+      </div>
       <a href="{% url 'account' %}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">{{ user.email }}</a>
       <a href="{% url 'account_logout' %}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Log out
@@ -62,6 +84,9 @@
       {% if user.is_authenticated %}
       <div class="mt-4 border-t border-border pt-4">
         <a href="{% url 'account' %}" class="text-sm text-muted-foreground hover:text-foreground mb-2 block">{{ user.email }}</a>
+        <a href="/notifications" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
+          Notifications <span id="mobile-notification-badge" class="hidden ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
+        </a>
         <a href="{% url 'account' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>
@@ -91,4 +116,129 @@
       document.getElementById('mobile-menu').classList.add('hidden');
     });
   });
+
+  // --- Notification Bell ---
+  (function() {
+    var bellBtn = document.getElementById('notification-bell-btn');
+    var dropdown = document.getElementById('notification-dropdown');
+    var badge = document.getElementById('notification-badge');
+    var mobileBadge = document.getElementById('mobile-notification-badge');
+    var listEl = document.getElementById('notification-list');
+
+    if (!bellBtn) return; // Not authenticated
+
+    function getCsrfToken() {
+      var cookie = document.cookie.split(';').find(function(c) { return c.trim().startsWith('csrftoken='); });
+      return cookie ? cookie.split('=')[1] : '';
+    }
+
+    function updateBadge(count) {
+      var text = count > 9 ? '9+' : String(count);
+      if (count > 0) {
+        badge.textContent = text;
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+        if (mobileBadge) {
+          mobileBadge.textContent = text;
+          mobileBadge.classList.remove('hidden');
+        }
+      } else {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+        if (mobileBadge) {
+          mobileBadge.classList.add('hidden');
+        }
+      }
+    }
+
+    function fetchUnreadCount() {
+      fetch('/api/notifications/unread-count')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { updateBadge(data.count); })
+        .catch(function() {});
+    }
+
+    function timeAgo(isoString) {
+      var diff = (Date.now() - new Date(isoString).getTime()) / 1000;
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function loadNotifications() {
+      fetch('/api/notifications?page=1')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var notifs = data.notifications;
+          if (notifs.length === 0) {
+            listEl.innerHTML = '<div class="px-4 py-8 text-center text-sm text-muted-foreground">No notifications yet.</div>';
+            return;
+          }
+          var html = '';
+          notifs.forEach(function(n) {
+            var unreadDot = n.read ? '<span class="mt-1.5 h-2 w-2 flex-shrink-0"></span>' :
+              '<span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"></span>';
+            var titleClass = n.read ? 'text-muted-foreground' : 'font-medium text-foreground';
+            html += '<a href="' + n.url + '" onclick="notifMarkRead(event, ' + n.id + ', \'' + n.url + '\')" ' +
+              'class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-secondary/50 border-b border-border/50">' +
+              unreadDot +
+              '<div class="min-w-0 flex-1">' +
+              '<p class="text-sm ' + titleClass + '">' + n.title + '</p>' +
+              (n.body ? '<p class="mt-0.5 text-xs text-muted-foreground line-clamp-2">' + n.body + '</p>' : '') +
+              '<p class="mt-0.5 text-xs text-muted-foreground/60">' + timeAgo(n.created_at) + '</p>' +
+              '</div></a>';
+          });
+          listEl.innerHTML = html;
+        })
+        .catch(function() {
+          listEl.innerHTML = '<div class="px-4 py-8 text-center text-sm text-muted-foreground">Failed to load.</div>';
+        });
+    }
+
+    // Toggle dropdown
+    bellBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var isHidden = dropdown.classList.contains('hidden');
+      dropdown.classList.toggle('hidden');
+      if (isHidden) {
+        loadNotifications();
+      }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!dropdown.contains(e.target) && !bellBtn.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // Mark single notification as read
+    window.notifMarkRead = function(e, id, url) {
+      e.preventDefault();
+      fetch('/api/notifications/' + id + '/read', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+      }).then(function() {
+        window.location.href = url;
+      }).catch(function() {
+        window.location.href = url;
+      });
+    };
+
+    // Mark all as read
+    window.notifMarkAllRead = function() {
+      fetch('/api/notifications/read-all', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+      }).then(function() {
+        updateBadge(0);
+        loadNotifications();
+      });
+    };
+
+    // Initial fetch + poll every 60 seconds
+    fetchUnreadCount();
+    setInterval(fetchUnreadCount, 60000);
+  })();
 </script>

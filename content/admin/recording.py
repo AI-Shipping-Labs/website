@@ -3,8 +3,32 @@ import json
 from django import forms
 from django.contrib import admin
 
+from django.utils import timezone
+
 from content.admin.widgets import TimestampEditorWidget
 from content.models import Recording
+
+
+def publish_recordings(modeladmin, request, queryset):
+    """Publish selected recordings and send notifications."""
+    queryset.update(published=True, published_at=timezone.now())
+    for recording in queryset:
+        try:
+            from notifications.services import NotificationService
+            NotificationService.notify('recording', recording.pk)
+        except Exception:
+            pass
+
+
+publish_recordings.short_description = 'Publish selected recordings'
+
+
+def unpublish_recordings(modeladmin, request, queryset):
+    """Unpublish selected recordings."""
+    queryset.update(published=False, published_at=None)
+
+
+unpublish_recordings.short_description = 'Unpublish selected recordings'
 
 
 class RecordingAdminForm(forms.ModelForm):
@@ -40,3 +64,4 @@ class RecordingAdmin(admin.ModelAdmin):
     search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
     readonly_fields = ['published_at']
+    actions = [publish_recordings, unpublish_recordings]

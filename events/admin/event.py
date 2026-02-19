@@ -9,8 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 def make_upcoming(modeladmin, request, queryset):
-    """Transition selected events to upcoming status."""
+    """Transition selected events to upcoming status and send notifications."""
+    draft_events = list(queryset.filter(status='draft'))
     queryset.filter(status='draft').update(status='upcoming')
+    for event in draft_events:
+        try:
+            from notifications.services import NotificationService
+            NotificationService.notify('event', event.pk)
+        except Exception:
+            pass
 
 
 make_upcoming.short_description = 'Set status to Upcoming'

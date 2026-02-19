@@ -67,8 +67,14 @@ class ModuleInline(admin.TabularInline):
 # ---------------------------------------------------------------------------
 
 def publish_courses(modeladmin, request, queryset):
-    """Publish selected courses."""
+    """Publish selected courses and send notifications."""
     queryset.update(status='published')
+    for course in queryset:
+        try:
+            from notifications.services import NotificationService
+            NotificationService.notify('course', course.pk)
+        except Exception:
+            pass
 
 
 publish_courses.short_description = 'Publish selected courses'

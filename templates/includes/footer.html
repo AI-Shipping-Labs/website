@@ -10,7 +10,7 @@
         </p>
         <div class="mt-6">
           <div class="subscribe-form-container" data-redirect-to="">
-            <form class="subscribe-form flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center" onsubmit="return handleFooterSubscribe(event, this)">
+            <form class="subscribe-form flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center" novalidate onsubmit="return handleFooterSubscribe(event, this)">
               <input type="email" name="email" required
                      placeholder="Enter your email"
                      class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-auto sm:flex-1 sm:max-w-xs">
@@ -74,6 +74,20 @@
 
     messageEl.classList.add('hidden');
     errorEl.classList.add('hidden');
+
+    if (!emailInput.value.trim()) {
+      errorEl.textContent = 'Please enter your email address.';
+      errorEl.classList.remove('hidden');
+      emailInput.focus();
+      return false;
+    }
+    if (!emailInput.validity.valid) {
+      errorEl.textContent = 'Please enter a valid email address.';
+      errorEl.classList.remove('hidden');
+      emailInput.focus();
+      return false;
+    }
+
     submitBtn.disabled = true;
     var originalText = submitBtn.textContent;
     submitBtn.textContent = 'Subscribing...';

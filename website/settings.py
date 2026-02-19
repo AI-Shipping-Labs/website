@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'events',
     'integrations',
     'email_app',
+    'voting',
 ]
 
 MIDDLEWARE = [
@@ -146,6 +147,13 @@ ZOOM_CLIENT_ID = os.environ.get('ZOOM_CLIENT_ID', '')
 ZOOM_CLIENT_SECRET = os.environ.get('ZOOM_CLIENT_SECRET', '')
 ZOOM_ACCOUNT_ID = os.environ.get('ZOOM_ACCOUNT_ID', '')
 ZOOM_WEBHOOK_SECRET_TOKEN = os.environ.get('ZOOM_WEBHOOK_SECRET_TOKEN', '')
+
+# Amazon SES configuration (set via environment variables in production)
+AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')
+AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
+AWS_SES_REGION = os.environ.get('AWS_SES_REGION', 'us-east-1')
+SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', 'community@aishippinglabs.com')
+SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
 
 # Content directory (markdown files from reference)
 CONTENT_DIR = BASE_DIR / 'reference' / 'content'

@@ -1,4 +1,4 @@
-{% load static %}<!DOCTYPE html>
+{% load static %}{% load seo_tags %}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -7,19 +7,19 @@
   <meta name="description" content="{% block meta_description %}{{ site_description }}{% endblock %}">
   <meta name="keywords" content="AI community, AI engineering, machine learning, data engineering, AI tools, technical community, Alexey Grigorev">
   <meta name="author" content="Alexey Grigorev">
+  {% block canonical %}<link rel="canonical" href="{{ site_url }}">{% endblock %}
 
-  <!-- Open Graph -->
-  <meta property="og:type" content="website">
-  <meta property="og:locale" content="en_US">
+  <!-- Open Graph & Twitter Card -->
+  {% block og_tags %}
+  <meta property="og:title" content="{{ site_name }} | A Technical Community">
+  <meta property="og:description" content="{{ site_description }}">
   <meta property="og:url" content="{{ site_url }}">
+  <meta property="og:type" content="website">
   <meta property="og:site_name" content="{{ site_name }}">
-  <meta property="og:title" content="{% block og_title %}{{ site_name }} | A Technical Community{% endblock %}">
-  <meta property="og:description" content="{% block og_description %}{{ site_description }}{% endblock %}">
-
-  <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{ site_name }} | A Technical Community">
   <meta name="twitter:description" content="{{ site_description }}">
+  {% endblock %}
 
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-HXSHF376NY"></script>
@@ -31,19 +31,7 @@
   </script>
 
   <!-- Structured Data -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "name": "AI Shipping Labs",
-    "description": "{{ site_description }}",
-    "url": "{{ site_url }}",
-    "founder": {
-      "@type": "Person",
-      "name": "Alexey Grigorev"
-    }
-  }
-  </script>
+  {% block structured_data %}{% structured_data %}{% endblock %}
 
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>

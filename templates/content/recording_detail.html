@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% load video_tags %}
+{% load seo_tags %}
 
 {% block title %}{{ recording.title }} | AI Shipping Labs{% endblock %}
-{% block meta_description %}{{ recording.description }}{% endblock %}
+{% block meta_description %}{{ recording.description|truncatechars:160 }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ recording.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags recording %}{% endblock %}
+{% block structured_data %}{% structured_data recording %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -124,6 +128,11 @@
           {% endfor %}
         </div>
       </div>
+      {% endif %}
+      {% if tag_rules.after_content %}
+      {% with rules=tag_rules.after_content %}
+      {% include "includes/tag_rule_components.html" %}
+      {% endwith %}
       {% endif %}
       {% endif %}
     </div>

@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load seo_tags %}
 
 {% block title %}{{ event.title }} | AI Shipping Labs{% endblock %}
-{% block meta_description %}{{ event.description|truncatewords:30 }}{% endblock %}
+{% block meta_description %}{{ event.description|truncatechars:160 }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ event.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags event %}{% endblock %}
+{% block structured_data %}{% structured_data event %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

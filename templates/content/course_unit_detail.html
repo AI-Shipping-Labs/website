@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% load video_tags %}
+{% load seo_tags %}
 
 {% block title %}{{ unit.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ unit.body|truncatechars:160 }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ unit.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags unit %}{% endblock %}
+{% block structured_data %}{% structured_data unit %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

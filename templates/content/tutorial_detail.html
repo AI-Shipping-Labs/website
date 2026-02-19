@@ -1,7 +1,11 @@
 {% extends "base.html" %}
+{% load seo_tags %}
 
 {% block title %}{{ tutorial.title }} | AI Shipping Labs{% endblock %}
-{% block meta_description %}{{ tutorial.description }}{% endblock %}
+{% block meta_description %}{{ tutorial.description|truncatechars:160 }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ tutorial.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags tutorial %}{% endblock %}
+{% block structured_data %}{% structured_data tutorial %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

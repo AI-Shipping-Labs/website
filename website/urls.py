@@ -11,6 +11,7 @@ urlpatterns = [
     path('account/', include(account_urlpatterns)),
     path('', include('payments.urls')),
     path('', include('content.urls')),
+    path('', include('events.urls')),
 ]
 
 if settings.DEBUG:

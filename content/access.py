@@ -113,6 +113,7 @@ def build_gating_context(user, content, content_type='article'):
         'tutorial': 'read this tutorial',
         'curated_link': 'access this resource',
         'download': 'download this resource',
+        'event': 'join this event',
     }
     action = action_verbs.get(content_type, 'access this content')
     cta_message = f'Upgrade to {tier_name} to {action}'

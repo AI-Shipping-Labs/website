@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'accounts',
     'payments',
     'content',
+    'events',
     'integrations',
     'email_app',
 ]

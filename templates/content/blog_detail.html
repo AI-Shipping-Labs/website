@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load access_tags %}
 
 {% block title %}{{ article.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ article.description }}{% endblock %}
@@ -13,6 +14,13 @@
         Back to Blog
       </a>
 
+      {% if article.cover_image_url %}
+      <div class="mb-8">
+        <img src="{{ article.cover_image_url }}" alt="{{ article.title }}"
+             class="w-full rounded-lg border border-border object-cover" style="max-height: 400px;">
+      </div>
+      {% endif %}
+
       <header class="mb-12">
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
           {{ article.title }}
@@ -23,6 +31,12 @@
         {% endif %}
 
         <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          {% if article.author %}
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="user" class="h-4 w-4"></i>
+            {{ article.author }}
+          </span>
+          {% endif %}
           <span class="flex items-center gap-1.5">
             <i data-lucide="calendar" class="h-4 w-4"></i>
             {{ article.formatted_date }}
@@ -38,7 +52,7 @@
         {% if article.tags %}
         <div class="mt-4 flex flex-wrap gap-2">
           {% for tag in article.tags %}
-          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          <a href="/blog?tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
           {% endfor %}
         </div>
         {% endif %}
@@ -53,6 +67,30 @@
       {% endif %}
     </div>
   </article>
+
+  {% if related_articles %}
+  <section class="border-t border-border py-16">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <h2 class="text-2xl font-semibold tracking-tight mb-8">Related Articles</h2>
+      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {% for related in related_articles %}
+        <a href="/blog/{{ related.slug }}" class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+          {% if related.cover_image_url %}
+          <img src="{{ related.cover_image_url }}" alt="{{ related.title }}"
+               class="w-full h-24 object-cover rounded mb-3 border border-border">
+          {% endif %}
+          <h3 class="font-semibold text-foreground group-hover:text-accent transition-colors line-clamp-2">
+            {% if related.required_level > 0 %}<i data-lucide="lock" class="inline h-3 w-3 text-muted-foreground mr-1"></i>{% endif %}
+            {{ related.title }}
+          </h3>
+          <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ related.description }}</p>
+          <span class="mt-3 inline-block text-xs text-muted-foreground">{{ related.formatted_date }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
 </main>
 {% include "includes/footer.html" %}
 {% endblock %}

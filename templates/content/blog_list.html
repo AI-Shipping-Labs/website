@@ -19,18 +19,58 @@
         </p>
       </div>
 
+      {% if all_tags %}
+      <div class="mb-8 flex flex-wrap items-center gap-2">
+        <span class="text-sm text-muted-foreground mr-2">Filter by tag:</span>
+        <a href="/blog"
+           class="rounded-full px-3 py-1 text-xs transition-colors {% if not current_tag %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+          All
+        </a>
+        {% for tag in all_tags %}
+        <a href="/blog?tag={{ tag }}"
+           class="rounded-full px-3 py-1 text-xs transition-colors {% if current_tag == tag %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+          {{ tag }}
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if current_tag %}
+      <div class="mb-6">
+        <p class="text-sm text-muted-foreground">
+          Showing articles tagged with <span class="font-medium text-foreground">"{{ current_tag }}"</span>
+          <a href="/blog" class="ml-2 text-accent hover:underline">Clear filter</a>
+        </p>
+      </div>
+      {% endif %}
+
       {% if articles %}
       <div class="space-y-8">
         {% for article in articles %}
         <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
           <a href="/blog/{{ article.slug }}">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              {% if article.cover_image_url %}
+              <div class="sm:w-48 sm:flex-shrink-0">
+                <img src="{{ article.cover_image_url }}" alt="{{ article.title }}"
+                     class="w-full h-32 object-cover rounded-lg border border-border">
+              </div>
+              {% endif %}
               <div class="flex-1">
                 <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                   {% if article.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ article.title }}
+                  {% if article.required_level > 0 %}
+                  <span class="ml-2 inline-block rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground align-middle">{{ article.required_level|required_tier_name }}+</span>
+                  {% endif %}
                 </h2>
                 <p class="mt-2 text-muted-foreground line-clamp-2">{{ article.description }}</p>
                 <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                  {% if article.author %}
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="user" class="h-4 w-4"></i>
+                    {{ article.author }}
+                  </span>
+                  {% endif %}
                   <span class="flex items-center gap-1.5">
                     <i data-lucide="calendar" class="h-4 w-4"></i>
                     {{ article.formatted_date }}
@@ -45,7 +85,7 @@
                 {% if article.tags %}
                 <div class="mt-3 flex flex-wrap gap-2">
                   {% for tag in article.tags %}
-                  <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                  <a href="/blog?tag={{ tag }}" class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors" onclick="event.stopPropagation();">{{ tag }}</a>
                   {% endfor %}
                 </div>
                 {% endif %}
@@ -59,12 +99,19 @@
       {% else %}
       <div class="rounded-lg border border-border bg-card p-12 text-center">
         <p class="text-lg text-muted-foreground">
+          {% if current_tag %}
+          No articles found with tag "{{ current_tag }}".
+          <a href="/blog" class="text-accent hover:underline">View all articles</a>
+          {% else %}
           No posts yet. Check back soon for articles on AI engineering, MLOps, and production systems.
+          {% endif %}
         </p>
+        {% if not current_tag %}
         <a href="/#newsletter" class="mt-4 inline-flex items-center gap-2 text-accent hover:underline">
           Subscribe to get notified
           <i data-lucide="arrow-right" class="h-4 w-4"></i>
         </a>
+        {% endif %}
       </div>
       {% endif %}
     </div>

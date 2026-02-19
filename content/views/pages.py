@@ -123,15 +123,40 @@ def activities(request):
 
 
 def blog_list(request):
-    """Blog listing page."""
+    """Blog listing page with optional tag filtering."""
     articles = Article.objects.filter(published=True)
-    return render(request, 'content/blog_list.html', {'articles': articles})
+    tag = request.GET.get('tag', '').strip()
+
+    # Collect all tags from published articles for the tag filter UI
+    all_tags = set()
+    for article in articles:
+        if article.tags:
+            all_tags.update(article.tags)
+    all_tags = sorted(all_tags)
+
+    # Filter by tag if provided
+    if tag:
+        # Filter articles whose tags JSONField contains the given tag
+        filtered = [a for a in articles if tag in (a.tags or [])]
+        article_ids = [a.pk for a in filtered]
+        articles = articles.filter(pk__in=article_ids)
+
+    context = {
+        'articles': articles,
+        'all_tags': all_tags,
+        'current_tag': tag,
+    }
+    return render(request, 'content/blog_list.html', context)
 
 
 def blog_detail(request, slug):
-    """Blog post detail page."""
+    """Blog post detail page with related articles."""
     article = get_object_or_404(Article, slug=slug, published=True)
-    context = {'article': article}
+    related_articles = article.get_related_articles(limit=3)
+    context = {
+        'article': article,
+        'related_articles': related_articles,
+    }
     context.update(build_gating_context(request.user, article, 'article'))
     return render(request, 'content/blog_detail.html', context)
 

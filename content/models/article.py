@@ -1,6 +1,37 @@
+import math
+
+import markdown
+
 from django.db import models
+from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
+
+
+def render_markdown(text):
+    """Convert markdown to HTML with syntax highlighting."""
+    return markdown.markdown(
+        text,
+        extensions=[
+            'fenced_code',
+            'codehilite',
+            'tables',
+            'attr_list',
+            'md_in_html',
+        ],
+        extension_configs={
+            'codehilite': {
+                'css_class': 'codehilite',
+                'guess_lang': False,
+            },
+        },
+    )
+
+
+STATUS_CHOICES = [
+    ('draft', 'Draft'),
+    ('published', 'Published'),
+]
 
 
 class Article(models.Model):
@@ -10,6 +41,7 @@ class Article(models.Model):
     description = models.TextField(blank=True, default='')
     content_markdown = models.TextField(blank=True, default='')
     content_html = models.TextField(blank=True, default='')
+    cover_image_url = models.URLField(max_length=500, blank=True, default='')
     date = models.DateField()
     author = models.CharField(max_length=200, blank=True, default='')
     reading_time = models.CharField(max_length=50, blank=True, default='')
@@ -19,7 +51,11 @@ class Article(models.Model):
         choices=VISIBILITY_CHOICES,
         help_text="Minimum tier level required to view full content.",
     )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='draft',
+    )
     published = models.BooleanField(default=True)
+    published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -37,3 +73,61 @@ class Article(models.Model):
 
     def short_date(self):
         return self.date.strftime('%b %d, %Y')
+
+    def save(self, *args, **kwargs):
+        # Auto-render markdown to HTML on save
+        if self.content_markdown:
+            from content.templatetags.video_utils import replace_video_urls_in_html
+            html = render_markdown(self.content_markdown)
+            self.content_html = replace_video_urls_in_html(html)
+
+        # Calculate reading time if not set
+        if self.content_markdown and not self.reading_time:
+            words = len(self.content_markdown.split())
+            minutes = math.ceil(words / 200)
+            self.reading_time = f'{minutes} min read'
+
+        # Auto-generate excerpt from markdown if description is empty
+        if not self.description and self.content_markdown:
+            self.description = self.content_markdown[:200]
+
+        # Keep status in sync with published flag.
+        # The `published` boolean is the source of truth for views.
+        # The `status` field provides a human-readable label.
+        if self.published:
+            self.status = 'published'
+            if not self.published_at:
+                self.published_at = timezone.now()
+        else:
+            self.status = 'draft'
+
+        super().save(*args, **kwargs)
+
+    def publish(self):
+        """Publish this article, setting published_at to now."""
+        self.published = True
+        self.status = 'published'
+        self.published_at = timezone.now()
+        self.save()
+
+    def unpublish(self):
+        """Unpublish this article (set to draft)."""
+        self.published = False
+        self.status = 'draft'
+        self.save()
+
+    def get_related_articles(self, limit=3):
+        """Return published articles that share at least one tag."""
+        if not self.tags:
+            return Article.objects.none()
+        # Find articles with overlapping tags
+        related = Article.objects.filter(
+            published=True,
+        ).exclude(pk=self.pk)
+        # Filter by shared tags using JSON containment
+        # Since tags is a JSONField list, we filter manually
+        matching = []
+        for article in related:
+            if article.tags and set(article.tags) & set(self.tags):
+                matching.append(article.pk)
+        return Article.objects.filter(pk__in=matching[:limit]).order_by('-date')

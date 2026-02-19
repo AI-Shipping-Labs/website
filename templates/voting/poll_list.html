@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Vote | AI Shipping Labs{% endblock %}
+{% block meta_description %}Vote on upcoming topics and mini-courses for the AI Shipping Labs community.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+      <div class="mb-12">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Vote</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Shape What We Build Next
+        </h1>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Vote on upcoming topics and mini-courses. Your voice helps decide what the community focuses on.
+        </p>
+      </div>
+
+      {% if polls %}
+      <div class="space-y-6">
+        {% for item in polls %}
+        <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+          <a href="/vote/{{ item.poll.id }}">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                  <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if item.poll.poll_type == 'topic' %}bg-blue-500/20 text-blue-400{% else %}bg-purple-500/20 text-purple-400{% endif %}">
+                    {% if item.poll.poll_type == 'topic' %}
+                    <i data-lucide="message-circle" class="h-3 w-3"></i>
+                    Topic Poll
+                    {% else %}
+                    <i data-lucide="graduation-cap" class="h-3 w-3"></i>
+                    Course Poll
+                    {% endif %}
+                  </span>
+                  {% if item.poll.allow_proposals %}
+                  <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
+                    <i data-lucide="plus" class="h-3 w-3"></i>
+                    Proposals Open
+                  </span>
+                  {% endif %}
+                </div>
+                <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                  {{ item.poll.title }}
+                </h2>
+                {% if item.poll.description %}
+                <p class="mt-2 text-muted-foreground line-clamp-2">{{ item.poll.description }}</p>
+                {% endif %}
+                <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="list" class="h-4 w-4"></i>
+                    {{ item.options_count }} option{{ item.options_count|pluralize }}
+                  </span>
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="bar-chart-3" class="h-4 w-4"></i>
+                    {{ item.total_votes }} vote{{ item.total_votes|pluralize }}
+                  </span>
+                  {% if item.poll.closes_at %}
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="clock" class="h-4 w-4"></i>
+                    Closes {{ item.poll.closes_at|date:"M d, Y" }}
+                  </span>
+                  {% endif %}
+                </div>
+              </div>
+              <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+            </div>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="rounded-lg border border-border bg-card p-12 text-center">
+        <i data-lucide="vote" class="mx-auto h-10 w-10 text-muted-foreground mb-4"></i>
+        <p class="text-lg text-muted-foreground">
+          No active polls right now. Check back soon!
+        </p>
+        {% if not user.is_authenticated %}
+        <p class="mt-4 text-sm text-muted-foreground">
+          <a href="{% url 'account_login' %}" class="text-accent hover:underline">Sign in</a>
+          to see polls available for your membership level.
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

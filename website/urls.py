@@ -13,6 +13,7 @@ urlpatterns = [
     path('', include('content.urls')),
     path('', include('events.urls')),
     path('', include('integrations.urls')),
+    path('', include('voting.urls')),
 ]
 
 if settings.DEBUG:

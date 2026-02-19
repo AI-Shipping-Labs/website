@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}{{ poll.title }} | Vote | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ poll.description|default:"Vote on this poll" }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+
+      <!-- Back link -->
+      <a href="/vote" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-accent transition-colors mb-8">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to polls
+      </a>
+
+      <!-- Poll header -->
+      <div class="mb-8">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if poll.poll_type == 'topic' %}bg-blue-500/20 text-blue-400{% else %}bg-purple-500/20 text-purple-400{% endif %}">
+            {% if poll.poll_type == 'topic' %}
+            <i data-lucide="message-circle" class="h-3 w-3"></i>
+            Topic Poll
+            {% else %}
+            <i data-lucide="graduation-cap" class="h-3 w-3"></i>
+            Course Poll
+            {% endif %}
+          </span>
+          {% if is_closed %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-400">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            Closed
+          </span>
+          {% else %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
+            <i data-lucide="check-circle" class="h-3 w-3"></i>
+            Open
+          </span>
+          {% endif %}
+        </div>
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          {{ poll.title }}
+        </h1>
+        {% if poll.description %}
+        <p class="mt-4 text-lg text-muted-foreground">{{ poll.description }}</p>
+        {% endif %}
+      </div>
+
+      {% if is_gated %}
+      <!-- Access gated -->
+      <div class="rounded-lg border border-border bg-card p-8 text-center">
+        <i data-lucide="lock" class="mx-auto h-10 w-10 text-muted-foreground mb-4"></i>
+        <p class="text-lg font-medium text-foreground mb-2">{{ cta_message }}</p>
+        <a href="{{ pricing_url }}" class="mt-4 inline-flex items-center gap-2 rounded-md bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          View Pricing
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+      {% else %}
+
+      <!-- Vote info bar -->
+      {% if can_vote %}
+      <div class="mb-6 rounded-lg border border-border bg-card p-4 flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-4 text-sm text-muted-foreground">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="bar-chart-3" class="h-4 w-4"></i>
+            You can vote for up to <strong class="text-foreground">{{ max_votes }}</strong> option{{ max_votes|pluralize }}
+          </span>
+          <span id="votes-remaining" class="flex items-center gap-1.5">
+            <i data-lucide="check-circle" class="h-4 w-4"></i>
+            <strong class="text-foreground" id="votes-remaining-count">{{ votes_remaining }}</strong> vote{{ votes_remaining|pluralize }} remaining
+          </span>
+        </div>
+      </div>
+      {% elif not user.is_authenticated and not is_closed %}
+      <div class="mb-6 rounded-lg border border-border bg-card p-4 text-center">
+        <p class="text-sm text-muted-foreground">
+          <a href="{% url 'account_login' %}" class="text-accent hover:underline">Sign in</a> to vote on this poll.
+        </p>
+      </div>
+      {% endif %}
+
+      <!-- Options list -->
+      <div class="space-y-4" id="options-list">
+        {% for item in options %}
+        <div class="rounded-lg border {% if item.user_voted %}border-accent/50 bg-accent/5{% else %}border-border bg-card{% endif %} p-5 transition-all" id="option-{{ item.option.id }}">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex-1">
+              <h3 class="text-lg font-semibold text-foreground">{{ item.option.title }}</h3>
+              {% if item.option.description %}
+              <p class="mt-1 text-sm text-muted-foreground">{{ item.option.description }}</p>
+              {% endif %}
+              <div class="mt-3 flex items-center gap-3 text-sm text-muted-foreground">
+                <span class="flex items-center gap-1.5">
+                  <i data-lucide="bar-chart-3" class="h-4 w-4"></i>
+                  <span class="vote-count" data-option-id="{{ item.option.id }}">{{ item.vote_count }}</span> vote{{ item.vote_count|pluralize }}
+                </span>
+                {% if item.option.proposed_by %}
+                <span class="flex items-center gap-1.5">
+                  <i data-lucide="user" class="h-4 w-4"></i>
+                  Proposed by {{ item.option.proposed_by.email }}
+                </span>
+                {% endif %}
+              </div>
+            </div>
+            {% if can_vote %}
+            <button type="button"
+                    class="vote-btn flex-shrink-0 inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors {% if item.user_voted %}bg-accent text-accent-foreground hover:bg-accent/80{% else %}border border-border bg-transparent text-foreground hover:bg-secondary{% endif %}"
+                    data-option-id="{{ item.option.id }}"
+                    data-voted="{{ item.user_voted|yesno:'true,false' }}">
+              {% if item.user_voted %}
+              <i data-lucide="check" class="h-4 w-4"></i>
+              Voted
+              {% else %}
+              Vote
+              {% endif %}
+            </button>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if not options %}
+      <div class="rounded-lg border border-border bg-card p-8 text-center">
+        <p class="text-muted-foreground">No options yet. {% if allow_proposals %}Be the first to propose one below!{% endif %}</p>
+      </div>
+      {% endif %}
+
+      <!-- Proposal form -->
+      {% if allow_proposals and user.is_authenticated %}
+      <div class="mt-8 rounded-lg border border-border bg-card p-6">
+        <h3 class="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+          <i data-lucide="plus-circle" class="h-5 w-5 text-accent"></i>
+          Propose a New Option
+        </h3>
+        <form id="propose-form">
+          <div class="space-y-4">
+            <div>
+              <label for="proposal-title" class="block text-sm font-medium text-foreground mb-1.5">Title</label>
+              <input type="text" id="proposal-title" name="title" required
+                     class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                     placeholder="e.g. Building RAG pipelines with LangChain">
+            </div>
+            <div>
+              <label for="proposal-description" class="block text-sm font-medium text-foreground mb-1.5">Description (optional)</label>
+              <textarea id="proposal-description" name="description" rows="3"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        placeholder="Brief description of what this topic would cover..."></textarea>
+            </div>
+            <div class="flex items-center gap-3">
+              <button type="submit"
+                      class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                <i data-lucide="plus" class="h-4 w-4"></i>
+                Submit Proposal
+              </button>
+              <span id="propose-message" class="text-sm text-muted-foreground"></span>
+            </div>
+          </div>
+        </form>
+      </div>
+      {% endif %}
+
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if can_vote %}
+<script>
+  // CSRF token helper
+  function getCookie(name) {
+    let value = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          value = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return value;
+  }
+
+  const csrftoken = getCookie('csrftoken');
+  const pollId = '{{ poll.id }}';
+  let votesRemaining = {{ votes_remaining }};
+  const maxVotes = {{ max_votes }};
+
+  // Vote toggle
+  document.querySelectorAll('.vote-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const optionId = this.getAttribute('data-option-id');
+      const isVoted = this.getAttribute('data-voted') === 'true';
+
+      fetch('/api/vote/' + pollId + '/vote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify({option_id: optionId}),
+      })
+      .then(function(response) { return response.json().then(function(data) { return {status: response.status, data: data}; }); })
+      .then(function(result) {
+        if (result.status === 200) {
+          const action = result.data.action;
+          const voteCount = result.data.vote_count;
+          const optionEl = document.getElementById('option-' + optionId);
+          const countEl = optionEl.querySelector('.vote-count');
+          countEl.textContent = voteCount;
+
+          if (action === 'voted') {
+            btn.setAttribute('data-voted', 'true');
+            btn.className = btn.className.replace('border border-border bg-transparent text-foreground hover:bg-secondary', 'bg-accent text-accent-foreground hover:bg-accent/80');
+            btn.innerHTML = '<i data-lucide="check" class="h-4 w-4"></i> Voted';
+            optionEl.className = optionEl.className.replace('border-border bg-card', 'border-accent/50 bg-accent/5');
+            votesRemaining--;
+          } else {
+            btn.setAttribute('data-voted', 'false');
+            btn.className = btn.className.replace('bg-accent text-accent-foreground hover:bg-accent/80', 'border border-border bg-transparent text-foreground hover:bg-secondary');
+            btn.innerHTML = 'Vote';
+            optionEl.className = optionEl.className.replace('border-accent/50 bg-accent/5', 'border-border bg-card');
+            votesRemaining++;
+          }
+
+          document.getElementById('votes-remaining-count').textContent = votesRemaining;
+          lucide.createIcons();
+        } else {
+          alert(result.data.error || 'Error voting');
+        }
+      })
+      .catch(function(err) { alert('Error: ' + err.message); });
+    });
+  });
+
+  // Proposal form
+  var proposeForm = document.getElementById('propose-form');
+  if (proposeForm) {
+    proposeForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var title = document.getElementById('proposal-title').value.trim();
+      var description = document.getElementById('proposal-description').value.trim();
+      var messageEl = document.getElementById('propose-message');
+
+      if (!title) {
+        messageEl.textContent = 'Title is required';
+        messageEl.className = 'text-sm text-red-400';
+        return;
+      }
+
+      fetch('/api/vote/' + pollId + '/propose', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify({title: title, description: description}),
+      })
+      .then(function(response) { return response.json().then(function(data) { return {status: response.status, data: data}; }); })
+      .then(function(result) {
+        if (result.status === 201) {
+          messageEl.textContent = 'Proposal submitted! Refreshing...';
+          messageEl.className = 'text-sm text-green-400';
+          setTimeout(function() { window.location.reload(); }, 1000);
+        } else {
+          messageEl.textContent = result.data.error || 'Error submitting proposal';
+          messageEl.className = 'text-sm text-red-400';
+        }
+      })
+      .catch(function(err) {
+        messageEl.textContent = 'Error: ' + err.message;
+        messageEl.className = 'text-sm text-red-400';
+      });
+    });
+  }
+</script>
+{% endif %}
+{% endblock %}

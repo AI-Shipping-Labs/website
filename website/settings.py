@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'email_app',
     'voting',
     'jobs',
+    'community',
 ]
 
 MIDDLEWARE = [
@@ -206,6 +207,15 @@ SOCIALACCOUNT_PROVIDERS = {
         },
     },
 }
+
+# Slack community integration (set via environment variables in production)
+SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
+SLACK_COMMUNITY_CHANNEL_IDS = [
+    cid.strip()
+    for cid in os.environ.get('SLACK_COMMUNITY_CHANNEL_IDS', '').split(',')
+    if cid.strip()
+]
+SLACK_INVITE_URL = os.environ.get('SLACK_INVITE_URL', '')
 
 # Django-Q2 task queue configuration
 Q_CLUSTER = {

@@ -164,6 +164,10 @@ def handle_checkout_completed(session_data):
         "checkout.session.completed: user=%s tier=%s", user.email, tier.slug
     )
 
+    # Community integration: invite user if tier qualifies (Main+ = level >= 20)
+    if tier.level >= 20:
+        _community_invite(user)
+
 
 def handle_subscription_updated(subscription_data):
     """Process a customer.subscription.updated event.
@@ -212,9 +216,13 @@ def handle_subscription_updated(subscription_data):
             "customer.subscription.updated: cancel_at_period_end for user=%s",
             user.email,
         )
+        # Schedule community removal at billing period end
+        if user.tier and user.tier.level >= 20 and user.billing_period_end:
+            _community_schedule_removal(user)
         return
 
     # Look up the new tier from price_id
+    old_tier_level = user.tier.level if user.tier else 0
     if price_id:
         new_tier = _tier_for_price_id(price_id)
         if new_tier and new_tier != user.tier:
@@ -238,6 +246,15 @@ def handle_subscription_updated(subscription_data):
         ]
     )
 
+    # Community integration: handle tier changes
+    new_tier_level = user.tier.level if user.tier else 0
+    if new_tier_level >= 20 and old_tier_level < 20:
+        # Re-subscribe: user upgraded back to community-eligible tier
+        _community_reactivate(user)
+    elif new_tier_level < 20 and old_tier_level >= 20:
+        # Immediate downgrade below Main: remove from community now
+        _community_remove(user)
+
 
 def handle_subscription_deleted(subscription_data):
     """Process a customer.subscription.deleted event.
@@ -259,6 +276,9 @@ def handle_subscription_deleted(subscription_data):
         )
         return
 
+    # Check if user had community access before downgrade
+    had_community = user.tier and user.tier.level >= 20
+
     free_tier = Tier.objects.filter(slug="free").first()
     user.tier = free_tier
     user.subscription_id = ""
@@ -275,6 +295,10 @@ def handle_subscription_deleted(subscription_data):
     logger.info(
         "customer.subscription.deleted: user=%s reverted to free", user.email
     )
+
+    # Community integration: remove if they had community access
+    if had_community:
+        _community_remove(user)
 
 
 def handle_invoice_payment_failed(invoice_data):
@@ -532,3 +556,57 @@ def _get_subscription_period_end(subscription_id):
             "Failed to get period end for subscription %s", subscription_id
         )
     return None
+
+
+# ---------------------------------------------------------------------------
+# Community integration helpers
+# ---------------------------------------------------------------------------
+
+def _community_invite(user):
+    """Invite a user to the community via a background task."""
+    try:
+        from jobs.tasks import async_task
+        async_task(
+            "community.tasks.hooks.community_invite_task",
+            user_id=user.pk,
+        )
+    except Exception:
+        logger.exception("Failed to enqueue community invite for user=%s", user.email)
+
+
+def _community_reactivate(user):
+    """Reactivate a user in the community via a background task."""
+    try:
+        from jobs.tasks import async_task
+        async_task(
+            "community.tasks.hooks.community_reactivate_task",
+            user_id=user.pk,
+        )
+    except Exception:
+        logger.exception("Failed to enqueue community reactivate for user=%s", user.email)
+
+
+def _community_remove(user):
+    """Remove a user from the community via a background task."""
+    try:
+        from jobs.tasks import async_task
+        async_task(
+            "community.tasks.hooks.community_remove_task",
+            user_id=user.pk,
+        )
+    except Exception:
+        logger.exception("Failed to enqueue community remove for user=%s", user.email)
+
+
+def _community_schedule_removal(user):
+    """Schedule community removal at billing_period_end via a background task."""
+    try:
+        from jobs.tasks import async_task
+        async_task(
+            "community.tasks.removal.scheduled_community_removal",
+            user_id=user.pk,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to schedule community removal for user=%s", user.email
+        )

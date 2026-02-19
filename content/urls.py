@@ -9,6 +9,10 @@ from content.views.pages import (
     downloads_list,
 )
 from content.views.api import submit_project, download_file
+from content.views.courses import (
+    courses_list, course_detail,
+    api_courses_list, api_course_detail,
+)
 
 urlpatterns = [
     path('', home, name='home'),
@@ -25,7 +29,12 @@ urlpatterns = [
     path('tutorials', tutorials_list, name='tutorials_list'),
     path('tutorials/<slug:slug>', tutorial_detail, name='tutorial_detail'),
     path('downloads', downloads_list, name='downloads_list'),
+    # Courses
+    path('courses', courses_list, name='courses_list'),
+    path('courses/<slug:slug>', course_detail, name='course_detail'),
     # API endpoints
     path('api/projects/submit', submit_project, name='submit_project'),
     path('api/downloads/<slug:slug>/file', download_file, name='download_file'),
+    path('api/courses', api_courses_list, name='api_courses_list'),
+    path('api/courses/<slug:slug>', api_course_detail, name='api_course_detail'),
 ]

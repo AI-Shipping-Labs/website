@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% load access_tags %}
+
+{% block title %}{{ course.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ course.description|truncatechars:160 }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <article class="py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="/courses" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Courses
+      </a>
+
+      {% if course.cover_image_url %}
+      <div class="mb-8 overflow-hidden rounded-lg">
+        <img src="{{ course.cover_image_url }}" alt="{{ course.title }}" class="w-full object-cover">
+      </div>
+      {% endif %}
+
+      <header class="mb-12">
+        <div class="mb-4 flex items-center gap-2">
+          <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="book-open" class="h-4 w-4"></i>
+            Course
+          </span>
+          {% if course.is_free %}
+          <span class="rounded-full bg-green-500/20 px-3 py-1.5 text-sm font-medium text-green-400">Free</span>
+          {% endif %}
+        </div>
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          {{ course.title }}
+        </h1>
+
+        {% if course.instructor_name %}
+        <div class="mt-4 flex items-center gap-3">
+          <div>
+            <p class="font-medium text-foreground">{{ course.instructor_name }}</p>
+            {% if course.instructor_bio %}
+            <p class="text-sm text-muted-foreground">{{ course.instructor_bio }}</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if course.tags %}
+        <div class="mt-4 flex flex-wrap gap-2">
+          {% for tag in course.tags %}
+          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if course.discussion_url %}
+        <div class="mt-4">
+          <a href="{{ course.discussion_url }}" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 text-sm text-accent hover:underline">
+            <i data-lucide="message-circle" class="h-4 w-4"></i>
+            Join the discussion
+          </a>
+        </div>
+        {% endif %}
+      </header>
+
+      <!-- Description -->
+      {% if course.description_html %}
+      <div class="prose mb-12">
+        {{ course.description_html|safe }}
+      </div>
+      {% endif %}
+
+      <!-- Progress bar (authorized users only) -->
+      {% if has_access and user_authenticated and total_units > 0 %}
+      <div class="mb-8 rounded-lg border border-border bg-card p-6">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-foreground">Your Progress</span>
+          <span class="text-sm text-muted-foreground">{{ completed_units }} of {{ total_units }} completed</span>
+        </div>
+        <div class="w-full bg-muted rounded-full h-2.5">
+          <div class="bg-accent h-2.5 rounded-full transition-all" style="width: {{ progress_pct }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Syllabus -->
+      <div class="mb-12">
+        <h2 class="text-2xl font-semibold tracking-tight mb-6">Syllabus</h2>
+        {% for module in modules %}
+        <div class="mb-6">
+          <h3 class="text-lg font-medium text-foreground mb-3 flex items-center gap-2">
+            <span class="flex h-7 w-7 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">{{ forloop.counter }}</span>
+            {{ module.title }}
+          </h3>
+          <div class="ml-9 space-y-1">
+            {% for unit in module.units.all %}
+            <div class="flex items-center gap-3 rounded-lg px-3 py-2 {% if has_access %}hover:bg-muted/50{% endif %} transition-colors">
+              {% if unit.pk in completed_unit_ids %}
+              <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+              {% elif unit.is_preview %}
+              <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+              {% else %}
+              <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+              {% endif %}
+              {% if has_access %}
+              <a href="{{ unit.get_absolute_url }}" class="text-sm text-foreground hover:text-accent transition-colors">
+                {{ unit.title }}
+              </a>
+              {% else %}
+              <span class="text-sm text-muted-foreground">{{ unit.title }}</span>
+              {% endif %}
+              {% if unit.is_preview and not has_access %}
+              <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- CTA for unauthorized users -->
+      {% if cta_message %}
+      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
+        <div class="mb-4">
+          {% if is_free_course and not user_authenticated %}
+          <i data-lucide="user-plus" class="mx-auto h-10 w-10 text-accent"></i>
+          {% else %}
+          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+          {% endif %}
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+        {% if is_free_course and not user_authenticated %}
+        <p class="mt-2 text-sm text-muted-foreground">Create a free account to access all lessons in this course.</p>
+        {% else %}
+        <p class="mt-2 text-sm text-muted-foreground">Get full access to this course and more with a membership.</p>
+        {% endif %}
+        <a href="{{ cta_url }}"
+           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+          {% if is_free_course and not user_authenticated %}
+          Sign Up Free
+          {% else %}
+          View Pricing
+          {% endif %}
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </article>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

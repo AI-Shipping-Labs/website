@@ -35,7 +35,8 @@ class RecordingAdminForm(forms.ModelForm):
 @admin.register(Recording)
 class RecordingAdmin(admin.ModelAdmin):
     form = RecordingAdminForm
-    list_display = ['title', 'date', 'required_level', 'published']
+    list_display = ['title', 'date', 'required_level', 'published', 'published_at']
     list_filter = ['published', 'required_level', 'date']
     search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
+    readonly_fields = ['published_at']

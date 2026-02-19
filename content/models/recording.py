@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
 
@@ -25,6 +26,7 @@ class Recording(models.Model):
         help_text="Minimum tier level required to view full content.",
     )
     published = models.BooleanField(default=True)
+    published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -33,6 +35,19 @@ class Recording(models.Model):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        """Sync published_at with published flag."""
+        if self.published and not self.published_at:
+            self.published_at = timezone.now()
+        elif not self.published:
+            self.published_at = None
+        super().save(*args, **kwargs)
+
+    @property
+    def video_url(self):
+        """Return the primary video URL (youtube_url or google_embed_url)."""
+        return self.youtube_url or self.google_embed_url
 
     def get_absolute_url(self):
         return f'/event-recordings/{self.slug}'

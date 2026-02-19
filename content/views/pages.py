@@ -1,3 +1,4 @@
+from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 
 from content.access import build_gating_context
@@ -162,9 +163,36 @@ def blog_detail(request, slug):
 
 
 def recordings_list(request):
-    """Event recordings listing page."""
+    """Event recordings listing page with tag filtering and pagination."""
     recordings = Recording.objects.filter(published=True)
-    return render(request, 'content/recordings_list.html', {'recordings': recordings})
+    tag = request.GET.get('tag', '').strip()
+
+    # Collect all tags from published recordings for the tag filter UI
+    all_tags = set()
+    for recording in recordings:
+        if recording.tags:
+            all_tags.update(recording.tags)
+    all_tags = sorted(all_tags)
+
+    # Filter by tag if provided
+    if tag:
+        filtered = [r for r in recordings if tag in (r.tags or [])]
+        recording_ids = [r.pk for r in filtered]
+        recordings = recordings.filter(pk__in=recording_ids)
+
+    # Pagination: 20 recordings per page
+    paginator = Paginator(recordings, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'recordings': page_obj,
+        'page_obj': page_obj,
+        'all_tags': all_tags,
+        'current_tag': tag,
+        'is_paginated': page_obj.has_other_pages(),
+    }
+    return render(request, 'content/recordings_list.html', context)
 
 
 def recording_detail(request, slug):
@@ -176,9 +204,41 @@ def recording_detail(request, slug):
 
 
 def projects_list(request):
-    """Projects listing page."""
+    """Projects listing page with optional difficulty and tag filtering."""
     projects = Project.objects.filter(published=True)
-    return render(request, 'content/projects_list.html', {'projects': projects})
+
+    difficulty = request.GET.get('difficulty', '').strip()
+    tag = request.GET.get('tag', '').strip()
+
+    # Collect all tags and difficulties from published projects for the filter UI
+    all_tags = set()
+    all_difficulties = set()
+    for project in projects:
+        if project.tags:
+            all_tags.update(project.tags)
+        if project.difficulty:
+            all_difficulties.add(project.difficulty)
+    all_tags = sorted(all_tags)
+    all_difficulties = sorted(all_difficulties)
+
+    # Filter by difficulty if provided
+    if difficulty:
+        projects = projects.filter(difficulty=difficulty)
+
+    # Filter by tag if provided
+    if tag:
+        filtered = [p for p in projects if tag in (p.tags or [])]
+        project_ids = [p.pk for p in filtered]
+        projects = projects.filter(pk__in=project_ids)
+
+    context = {
+        'projects': projects,
+        'all_tags': all_tags,
+        'all_difficulties': all_difficulties,
+        'current_difficulty': difficulty,
+        'current_tag': tag,
+    }
+    return render(request, 'content/projects_list.html', context)
 
 
 def project_detail(request, slug):

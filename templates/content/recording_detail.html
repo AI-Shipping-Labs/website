@@ -40,7 +40,7 @@
         {% if recording.tags %}
         <div class="mt-4 flex flex-wrap gap-2">
           {% for tag in recording.tags %}
-          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          <a href="/event-recordings?tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
           {% endfor %}
         </div>
         {% endif %}

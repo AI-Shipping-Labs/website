@@ -175,6 +175,8 @@ def verify_email_api(request):
 
     GET /api/verify-email?token={jwt}
     Sets email_verified=True if the token is valid.
+    If the token contains a redirect_to URL (lead magnet flow),
+    redirects to that URL after verification.
     """
     token = request.GET.get("token", "")
     if not token:
@@ -199,6 +201,11 @@ def verify_email_api(request):
     if not user.email_verified:
         user.email_verified = True
         user.save(update_fields=["email_verified"])
+
+    # Check for redirect_to (lead magnet flow from newsletter subscribe)
+    redirect_to = payload.get("redirect_to")
+    if redirect_to:
+        return redirect(redirect_to)
 
     return JsonResponse(
         {"status": "ok", "message": "Email verified successfully."}

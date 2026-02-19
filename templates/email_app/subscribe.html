@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Subscribe | {{ site_name }}{% endblock %}
+{% block meta_description %}Subscribe to the AI Shipping Labs newsletter for free updates on AI engineering, tutorials, and community events.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-2xl px-6 lg:px-8">
+      {% include "includes/subscribe_form.html" only %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

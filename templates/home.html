@@ -472,27 +472,7 @@
   <section id="newsletter" class="border-t border-border bg-card py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="mx-auto max-w-2xl">
-        <div class="rounded-2xl border border-border bg-background p-8 sm:p-10">
-          <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <i data-lucide="mail" class="h-4 w-4"></i>
-            Free Newsletter
-          </div>
-          <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl" style="text-wrap: balance;">
-            Ready to turn your AI ideas into real projects?
-          </h2>
-          <p class="mt-4 text-muted-foreground leading-relaxed">
-            Subscribe to the free newsletter and get notified when the community opens.
-            Join action-oriented builders who are shipping practical AI products.
-          </p>
-          <div class="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-            <a href="https://alexeyondata.substack.com/subscribe" target="_blank" rel="noopener noreferrer"
-               class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-              Subscribe
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-            <p class="text-sm text-muted-foreground">No spam. Unsubscribe anytime.</p>
-          </div>
-        </div>
+        {% include "includes/subscribe_form.html" with heading="Ready to turn your AI ideas into real projects?" description="Subscribe to the free newsletter and get notified when the community opens. Join action-oriented builders who are shipping practical AI products." only %}
       </div>
     </div>
   </section>

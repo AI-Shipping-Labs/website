@@ -8,11 +8,20 @@
         <p class="mt-3 text-sm text-muted-foreground">
           Subscribe to the free newsletter and get the first ping when the community opens.
         </p>
-        <div class="mt-6 flex justify-center">
-          <a href="https://alexeyondata.substack.com/subscribe" target="_blank" rel="noopener noreferrer"
-             class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-            Subscribe to newsletter
-          </a>
+        <div class="mt-6">
+          <div class="subscribe-form-container" data-redirect-to="">
+            <form class="subscribe-form flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center" onsubmit="return handleFooterSubscribe(event, this)">
+              <input type="email" name="email" required
+                     placeholder="Enter your email"
+                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-auto sm:flex-1 sm:max-w-xs">
+              <button type="submit"
+                      class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                Subscribe
+              </button>
+            </form>
+            <p class="footer-subscribe-message mt-2 text-sm hidden"></p>
+            <p class="footer-subscribe-error mt-2 text-sm text-red-400 hidden"></p>
+          </div>
         </div>
       </div>
     </div>
@@ -53,4 +62,62 @@
       </p>
     </div>
   </div>
+
+  <script>
+  function handleFooterSubscribe(event, form) {
+    event.preventDefault();
+    var container = form.closest('.subscribe-form-container');
+    var emailInput = form.querySelector('input[name="email"]');
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var messageEl = container.querySelector('.footer-subscribe-message');
+    var errorEl = container.querySelector('.footer-subscribe-error');
+
+    messageEl.classList.add('hidden');
+    errorEl.classList.add('hidden');
+    submitBtn.disabled = true;
+    var originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Subscribing...';
+
+    var csrfToken = '';
+    var cookies = document.cookie.split(';');
+    for (var i = 0; i < cookies.length; i++) {
+      var cookie = cookies[i].trim();
+      if (cookie.startsWith('csrftoken=')) {
+        csrfToken = cookie.substring('csrftoken='.length);
+        break;
+      }
+    }
+
+    fetch('/api/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+      },
+      body: JSON.stringify({ email: emailInput.value }),
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (data.status === 'ok') {
+        messageEl.textContent = data.message;
+        messageEl.className = 'footer-subscribe-message mt-2 text-sm text-green-400';
+        messageEl.classList.remove('hidden');
+        emailInput.value = '';
+      } else {
+        errorEl.textContent = data.error || 'Something went wrong.';
+        errorEl.classList.remove('hidden');
+      }
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    })
+    .catch(function() {
+      errorEl.textContent = 'An error occurred. Please try again.';
+      errorEl.classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    });
+
+    return false;
+  }
+  </script>
 </footer>

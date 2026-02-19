@@ -7,6 +7,7 @@ from content.views.pages import (
     collection_list,
     tutorials_list, tutorial_detail,
 )
+from content.views.api import submit_project
 
 urlpatterns = [
     path('', home, name='home'),
@@ -21,4 +22,6 @@ urlpatterns = [
     path('collection', collection_list, name='collection_list'),
     path('tutorials', tutorials_list, name='tutorials_list'),
     path('tutorials/<slug:slug>', tutorial_detail, name='tutorial_detail'),
+    # API endpoints
+    path('api/projects/submit', submit_project, name='submit_project'),
 ]

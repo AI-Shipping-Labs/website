@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load access_tags %}
 
-{% block title %}Project Ideas | AI Shipping Labs{% endblock %}
+{% block title %}Project Showcase | AI Shipping Labs{% endblock %}
 {% block meta_description %}Project ideas and real projects from people who've taken courses. End-to-end AI applications and agentic workflows you can learn from.{% endblock %}
 
 {% block body %}
@@ -10,7 +10,7 @@
   <section class="py-16 lg:py-24">
     <div class="mx-auto max-w-4xl px-6 lg:px-8">
       <div class="mb-12">
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">Project Ideas</p>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Project Showcase</p>
         <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
           Pet & Portfolio Project Ideas
         </h1>
@@ -19,52 +19,84 @@
         </p>
       </div>
 
+      <!-- Filter controls -->
+      {% if all_difficulties or all_tags %}
+      <div class="mb-8 space-y-4">
+        <!-- Difficulty filter -->
+        {% if all_difficulties %}
+        <div>
+          <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by difficulty</p>
+          <div class="flex flex-wrap gap-2">
+            {% if current_difficulty %}
+            <a href="/projects{% if current_tag %}?tag={{ current_tag }}{% endif %}"
+               class="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground transition-colors">
+              Clear filter
+            </a>
+            {% endif %}
+            {% for diff in all_difficulties %}
+            <a href="/projects?difficulty={{ diff }}{% if current_tag %}&tag={{ current_tag }}{% endif %}"
+               class="rounded-full px-3 py-1 text-xs font-medium transition-colors {% if current_difficulty == diff %}bg-accent text-accent-foreground{% else %}border border-border bg-card text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}">
+              {{ diff }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Tag filter -->
+        {% if all_tags %}
+        <div>
+          <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by tag</p>
+          <div class="flex flex-wrap gap-2">
+            {% if current_tag %}
+            <a href="/projects{% if current_difficulty %}?difficulty={{ current_difficulty }}{% endif %}"
+               class="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground transition-colors">
+              Clear filter
+            </a>
+            {% endif %}
+            {% for tag in all_tags %}
+            <a href="/projects?tag={{ tag }}{% if current_difficulty %}&difficulty={{ current_difficulty }}{% endif %}"
+               class="rounded-full px-3 py-1 text-xs font-medium transition-colors {% if current_tag == tag %}bg-accent text-accent-foreground{% else %}border border-border bg-card text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}">
+              {{ tag }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
       {% if projects %}
-      <div class="space-y-8">
+      <div class="grid gap-6 sm:grid-cols-2">
         {% for project in projects %}
-        <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50">
           <a href="/projects/{{ project.slug }}">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div class="flex-1">
-                <div class="flex items-center gap-3 mb-2">
-                  <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
-                    {% if project.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ project.title }}
-                  </h2>
-                  {% if project.author %}
-                  <span class="text-sm text-muted-foreground">by {{ project.author }}</span>
-                  {% endif %}
-                  {% if project.difficulty %}
-                  <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ project.difficulty_color }}">{{ project.difficulty }}</span>
-                  {% endif %}
-                </div>
-                <p class="mt-2 text-muted-foreground line-clamp-2">{{ project.description }}</p>
-                <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="calendar" class="h-4 w-4"></i>
-                    {{ project.formatted_date }}
-                  </span>
-                  {% if project.reading_time %}
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="clock" class="h-4 w-4"></i>
-                    {{ project.reading_time }}
-                  </span>
-                  {% endif %}
-                  {% if project.estimated_time %}
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="code" class="h-4 w-4"></i>
-                    {{ project.estimated_time }}
-                  </span>
-                  {% endif %}
-                </div>
-                {% if project.tags %}
-                <div class="mt-3 flex flex-wrap gap-2">
-                  {% for tag in project.tags %}
-                  <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
-                  {% endfor %}
-                </div>
+            {% if project.cover_image_url %}
+            <div class="aspect-video w-full overflow-hidden bg-muted">
+              <img src="{{ project.cover_image_url }}" alt="{{ project.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
+            </div>
+            {% endif %}
+            <div class="p-6">
+              <div class="flex items-center gap-2 mb-2">
+                {% if project.difficulty %}
+                <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ project.difficulty_color }}">{{ project.difficulty }}</span>
                 {% endif %}
+                {% if project.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground"></i>{% endif %}
               </div>
-              <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+              <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+                {{ project.title }}
+              </h2>
+              {% if project.author %}
+              <p class="mt-1 text-sm text-muted-foreground">by {{ project.author }}</p>
+              {% endif %}
+              <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ project.description }}</p>
+              {% if project.tags %}
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                {% for tag in project.tags %}
+                <span class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
             </div>
           </a>
         </article>

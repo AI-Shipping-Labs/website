@@ -10,13 +10,19 @@
     <div class="mx-auto max-w-3xl px-6 lg:px-8">
       <a href="/projects" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
-        Back to Project Ideas
+        Back to Projects
       </a>
+
+      {% if project.cover_image_url %}
+      <div class="mb-8 overflow-hidden rounded-lg">
+        <img src="{{ project.cover_image_url }}" alt="{{ project.title }}" class="w-full object-cover">
+      </div>
+      {% endif %}
 
       <header class="mb-12">
         <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
           <i data-lucide="rocket" class="h-4 w-4"></i>
-          Project Idea
+          Project
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
           {{ project.title }}
@@ -53,8 +59,28 @@
         {% if project.tags %}
         <div class="mt-4 flex flex-wrap gap-2">
           {% for tag in project.tags %}
-          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          <a href="/projects?tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors">{{ tag }}</a>
           {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Source code and demo links -->
+        {% if project.source_code_url or project.demo_url %}
+        <div class="mt-6 flex flex-wrap gap-3">
+          {% if project.source_code_url %}
+          <a href="{{ project.source_code_url }}" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent">
+            <i data-lucide="github" class="h-4 w-4"></i>
+            Source Code
+          </a>
+          {% endif %}
+          {% if project.demo_url %}
+          <a href="{{ project.demo_url }}" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent">
+            <i data-lucide="external-link" class="h-4 w-4"></i>
+            Live Demo
+          </a>
+          {% endif %}
         </div>
         {% endif %}
       </header>

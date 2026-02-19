@@ -6,8 +6,10 @@ requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.42.52",
     "coverage>=7.13.4",
+    "croniter>=6.0.0",
     "django>=6.0.2",
     "django-allauth>=65.14.3",
+    "django-q2>=1.9.0",
     "markdown>=3.10.2",
     "pillow>=12.1.1",
     "playwright>=1.58.0",

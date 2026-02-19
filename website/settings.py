@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.github',
+    'django_q',
     # Project apps
     'accounts',
     'payments',
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
     'integrations',
     'email_app',
     'voting',
+    'jobs',
 ]
 
 MIDDLEWARE = [
@@ -203,4 +205,21 @@ SOCIALACCOUNT_PROVIDERS = {
             'secret': '',
         },
     },
+}
+
+# Django-Q2 task queue configuration
+Q_CLUSTER = {
+    'name': 'ai-shipping-labs',
+    'workers': int(os.environ.get('Q_WORKERS', 2)),
+    'timeout': 300,           # Task timeout in seconds (5 min)
+    'retry': 360,             # Retry timeout in seconds (6 min, must be > timeout)
+    'max_attempts': 3,        # Default max attempts (1 initial + 2 retries)
+    'queue_limit': 50,
+    'bulk': 10,
+    'orm': 'default',         # Use the default database as broker
+    'save_limit': 250,        # Keep last 250 task results
+    'guard_cycle': 5,         # Guard checks every 5 seconds
+    'poll': 5,                # Worker polls every 5 seconds
+    'catch_up': False,        # Don't catch up on missed schedules
+    'sync': os.environ.get('Q_SYNC', '') == 'true',  # Sync mode for testing
 }

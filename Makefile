@@ -40,4 +40,4 @@ clean:
 	rm -f db.sqlite3
 	rm -rf __pycache__ */__pycache__ */*/__pycache__
 	rm -rf .coverage htmlcov
-	rm -rf playwright_tests/screenshots
+	rm -rf /tmp/screenshots_*

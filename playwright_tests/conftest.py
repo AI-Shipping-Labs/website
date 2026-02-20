@@ -1,46 +1,20 @@
 """
-Playwright visual regression test configuration.
+Playwright E2E test configuration.
 
-Provides fixtures to:
-- Start the Django dev server in a background thread
-- Capture baseline screenshots from the live site (aishippinglabs.com)
-- Compare Django site screenshots against the baselines
+Provides fixtures to start the Django dev server in a background thread
+for Playwright tests to run against.
 """
 
-import os
 import threading
 import time
 
 import pytest
 from django.core.management import call_command
-from playwright.sync_api import sync_playwright
 
 
 DJANGO_HOST = "127.0.0.1"
 DJANGO_PORT = 8765
 DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
-LIVE_BASE_URL = "https://aishippinglabs.com"
-
-SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
-
-# Pages to test: (name, path)
-PAGES = [
-    ("home", "/"),
-    ("about", "/about"),
-    ("activities", "/activities"),
-    ("blog", "/blog"),
-    ("projects", "/projects"),
-    ("event_recordings", "/event-recordings"),
-    ("resources", "/resources"),
-    ("downloads", "/downloads"),
-    ("tutorials", "/tutorials"),
-]
-
-
-def _ensure_screenshot_dir():
-    """Create screenshot directories if they don't exist."""
-    for subdir in ("baseline", "django", "diff"):
-        os.makedirs(os.path.join(SCREENSHOT_DIR, subdir), exist_ok=True)
 
 
 def _start_django_server():
@@ -90,14 +64,3 @@ def django_server(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock():
         thread = _start_django_server()
         yield DJANGO_BASE_URL
-
-
-@pytest.fixture(scope="session")
-def screenshot_dirs():
-    """Ensure screenshot directories exist and return their paths."""
-    _ensure_screenshot_dir()
-    return {
-        "baseline": os.path.join(SCREENSHOT_DIR, "baseline"),
-        "django": os.path.join(SCREENSHOT_DIR, "django"),
-        "diff": os.path.join(SCREENSHOT_DIR, "diff"),
-    }

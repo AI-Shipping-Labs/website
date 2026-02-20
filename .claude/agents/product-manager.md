@@ -94,6 +94,7 @@ Blocks: #{blocked1} (or "—")
 - [ ] {Criterion 2}
 - [ ] ...
 - [ ] [HUMAN] {Criteria that require manual verification — OAuth flows, visual inspection, external service calls}
+- [ ] Screenshots of core functionality attached to the issue
 
 ## Playwright Test Scenarios
 
@@ -259,6 +260,7 @@ Blocks: —
 - [ ] Featured articles show "Featured" badge on /blog listing
 - [ ] If no articles are featured, hero section is hidden (not empty/broken)
 - [ ] Migration included
+- [ ] Screenshots of core functionality attached to the issue
 
 ## Playwright Test Scenarios
 

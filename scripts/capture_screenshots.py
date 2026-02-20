@@ -122,65 +122,26 @@ def capture_screenshots(urls, output_dir, login_as=None):
     return results
 
 
-def _ensure_screenshots_release(repo):
-    """Create the 'screenshots' release if it doesn't exist."""
-    result = subprocess.run(
-        ["gh", "release", "view", "screenshots", "--repo", repo],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        subprocess.run(
-            ["gh", "release", "create", "screenshots",
-             "--repo", repo,
-             "--title", "Issue Screenshots",
-             "--notes", "Auto-generated screenshots for issue documentation.",
-             "--latest=false"],
-            check=True, capture_output=True, text=True,
-        )
-        print("Created 'screenshots' release")
-
-
 def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website"):
-    """Upload screenshots to a GitHub issue as a comment.
+    """Post a comment listing captured screenshots.
 
-    Uploads images as release assets under the 'screenshots' tag,
-    then posts a comment with embedded image markdown.
+    Screenshots are saved locally. The comment lists the paths so a human
+    can attach them to the issue via the GitHub web UI (drag and drop).
     """
     if not screenshots:
         return
 
-    _ensure_screenshots_release(repo)
-
     body_lines = ["## Screenshots\n"]
+    body_lines.append("Captured locally. Attach via GitHub web UI (drag and drop).\n")
     for url_path, filepath in screenshots:
-        safe_name = url_path.strip("/").replace("/", "_") or "home"
-        asset_name = f"issue-{issue_number}-{safe_name}.png"
-
-        # Upload as release asset (--clobber overwrites if exists)
-        upload_result = subprocess.run(
-            ["gh", "release", "upload", "screenshots", filepath,
-             "--repo", repo, "--clobber"],
-            capture_output=True, text=True,
-        )
-
-        if upload_result.returncode == 0:
-            asset_url = (
-                f"https://github.com/{repo}/releases/download/screenshots/"
-                f"{os.path.basename(filepath)}"
-            )
-            body_lines.append(f"### `{url_path}`\n![{url_path}]({asset_url})\n")
-            print(f"  Uploaded: {asset_name}")
-        else:
-            print(f"  Warning: Failed to upload {filepath}: {upload_result.stderr}")
-            body_lines.append(f"- `{url_path}`: upload failed ({filepath})")
+        body_lines.append(f"- `{url_path}` -- `{filepath}`")
 
     body = "\n".join(body_lines)
 
-    # Post comment to issue
     comment_cmd = ["gh", "issue", "comment", str(issue_number),
                    "--repo", repo, "--body", body]
     subprocess.run(comment_cmd, check=True)
-    print(f"Screenshots posted to issue #{issue_number}")
+    print(f"Screenshot paths posted to issue #{issue_number}")
 
 
 def main():

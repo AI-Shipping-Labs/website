@@ -213,7 +213,7 @@ Rules:
 - 8-12 scenarios per issue, each meaningful (fewer good scenarios > many shallow ones)
 - Include the user's INTENT in the scenario name — why they're here, what they want
 - No CSS/layout/responsiveness tests — those belong in visual regression
-- Reference PRODUCT.md for user personas and terminology
+- Reference `_docs/PRODUCT.md` for user personas, feature inventory, and terminology
 
 ### Scope
 - Don't over-specify implementation details (let the software engineer decide class names, helper functions)

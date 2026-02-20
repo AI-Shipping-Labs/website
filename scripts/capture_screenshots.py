@@ -122,36 +122,59 @@ def capture_screenshots(urls, output_dir, login_as=None):
     return results
 
 
+def _ensure_screenshots_release(repo):
+    """Create the 'screenshots' release if it doesn't exist."""
+    result = subprocess.run(
+        ["gh", "release", "view", "screenshots", "--repo", repo],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        subprocess.run(
+            ["gh", "release", "create", "screenshots",
+             "--repo", repo,
+             "--title", "Issue Screenshots",
+             "--notes", "Auto-generated screenshots for issue documentation.",
+             "--latest=false"],
+            check=True, capture_output=True, text=True,
+        )
+        print("Created 'screenshots' release")
+
+
 def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website"):
     """Upload screenshots to a GitHub issue as a comment.
 
-    Uses gh gist to host images and references them in the issue comment.
+    Uploads images as release assets under the 'screenshots' tag,
+    then posts a comment with embedded image markdown.
     """
     if not screenshots:
         return
 
-    # Upload all screenshots as a gist
-    files = [filepath for _, filepath in screenshots]
-    gist_cmd = ["gh", "gist", "create", "--public", "-d",
-                f"Screenshots for issue #{issue_number}"] + files
-    result = subprocess.run(gist_cmd, capture_output=True, text=True)
+    _ensure_screenshots_release(repo)
 
-    if result.returncode != 0:
-        print(f"Warning: Failed to create gist: {result.stderr}")
-        # Fall back to listing local file paths
-        body_lines = [f"## Screenshots\n"]
-        for url_path, filepath in screenshots:
-            body_lines.append(f"- `{url_path}`: {filepath}")
-        body = "\n".join(body_lines)
-    else:
-        gist_url = result.stdout.strip()
-        # Build comment with image references
-        body_lines = ["## Screenshots\n"]
-        for url_path, filepath in screenshots:
-            filename = os.path.basename(filepath)
-            raw_url = f"{gist_url}/raw/{filename}"
-            body_lines.append(f"### `{url_path}`\n![{url_path}]({raw_url})\n")
-        body = "\n".join(body_lines)
+    body_lines = ["## Screenshots\n"]
+    for url_path, filepath in screenshots:
+        safe_name = url_path.strip("/").replace("/", "_") or "home"
+        asset_name = f"issue-{issue_number}-{safe_name}.png"
+
+        # Upload as release asset (--clobber overwrites if exists)
+        upload_result = subprocess.run(
+            ["gh", "release", "upload", "screenshots", filepath,
+             "--repo", repo, "--clobber"],
+            capture_output=True, text=True,
+        )
+
+        if upload_result.returncode == 0:
+            asset_url = (
+                f"https://github.com/{repo}/releases/download/screenshots/"
+                f"{os.path.basename(filepath)}"
+            )
+            body_lines.append(f"### `{url_path}`\n![{url_path}]({asset_url})\n")
+            print(f"  Uploaded: {asset_name}")
+        else:
+            print(f"  Warning: Failed to upload {filepath}: {upload_result.stderr}")
+            body_lines.append(f"- `{url_path}`: upload failed ({filepath})")
+
+    body = "\n".join(body_lines)
 
     # Post comment to issue
     comment_cmd = ["gh", "issue", "comment", str(issue_number),

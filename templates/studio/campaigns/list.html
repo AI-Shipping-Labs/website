@@ -1,0 +1,74 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Campaigns{% endblock %}
+
+{% block studio_content %}
+<div class="flex items-center justify-between mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Email Campaigns</h1>
+    <p class="text-muted-foreground mt-1">Manage email campaigns and newsletters.</p>
+  </div>
+  <a href="{% url 'studio_campaign_create' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    New Campaign
+  </a>
+</div>
+
+<!-- Filters -->
+<div class="flex items-center space-x-4 mb-6">
+  <form method="get" class="flex items-center space-x-4 flex-1">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search campaigns..."
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+    <select name="status" onchange="this.form.submit()"
+            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="">All statuses</option>
+      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+      <option value="sending" {% if status_filter == 'sending' %}selected{% endif %}>Sending</option>
+      <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Sent</option>
+    </select>
+    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
+  </form>
+</div>
+
+<!-- Campaign List -->
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Subject</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Audience</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Sent</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for campaign in campaigns %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4">
+          <a href="{% url 'studio_campaign_detail' campaign_id=campaign.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ campaign.subject }}</a>
+        </td>
+        <td class="px-6 py-4">
+          <span class="text-xs px-2 py-1 rounded-full
+            {% if campaign.status == 'sent' %}bg-green-500/20 text-green-400
+            {% elif campaign.status == 'sending' %}bg-blue-500/20 text-blue-400
+            {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+            {{ campaign.get_status_display }}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.get_target_min_level_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.sent_count }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-right">
+          <a href="{% url 'studio_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-accent hover:underline">View</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">No campaigns found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

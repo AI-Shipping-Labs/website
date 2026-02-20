@@ -1,0 +1,113 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if event %}Edit Event{% else %}New Event{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_event_list' %}" class="hover:text-foreground">Events</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{% if event %}{{ event.title }}{% else %}New Event{% endif %}</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">{% if event %}Edit Event{% else %}New Event{% endif %}</h1>
+</div>
+
+<form method="post" class="space-y-6 max-w-3xl">
+  {% csrf_token %}
+
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
+      <input type="text" name="title" value="{{ event.title|default:'' }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ event.slug|default:'' }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Description (Markdown)</label>
+      <textarea name="description" rows="6"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ event.description|default:'' }}</textarea>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Event Type</label>
+        <select name="event_type" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="live" {% if event.event_type == 'live' %}selected{% endif %}>Live</option>
+          <option value="async" {% if event.event_type == 'async' %}selected{% endif %}>Async</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+        <select name="status" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="draft" {% if event.status == 'draft' %}selected{% endif %}>Draft</option>
+          <option value="upcoming" {% if event.status == 'upcoming' %}selected{% endif %}>Upcoming</option>
+          <option value="live" {% if event.status == 'live' %}selected{% endif %}>Live</option>
+          <option value="completed" {% if event.status == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="cancelled" {% if event.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Start Date/Time</label>
+        <input type="datetime-local" name="start_datetime" value="{% if event %}{{ event.start_datetime|date:'Y-m-d\TH:i' }}{% endif %}" required
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">End Date/Time (optional)</label>
+        <input type="datetime-local" name="end_datetime" value="{% if event.end_datetime %}{{ event.end_datetime|date:'Y-m-d\TH:i' }}{% endif %}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Timezone</label>
+        <input type="text" name="timezone" value="{{ event.timezone|default:'Europe/Berlin' }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Max Participants (blank = unlimited)</label>
+        <input type="number" name="max_participants" value="{% if event.max_participants %}{{ event.max_participants }}{% endif %}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Location</label>
+      <input type="text" name="location" value="{{ event.location|default:'' }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Required Level</label>
+      <select name="required_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="0" {% if event.required_level == 0 %}selected{% endif %}>Free (0)</option>
+        <option value="10" {% if event.required_level == 10 %}selected{% endif %}>Basic (10)</option>
+        <option value="20" {% if event.required_level == 20 %}selected{% endif %}>Main (20)</option>
+        <option value="30" {% if event.required_level == 30 %}selected{% endif %}>Premium (30)</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
+      <input type="text" name="tags" value="{% if event %}{% for tag in event.tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+  </div>
+
+  <div class="flex items-center space-x-4">
+    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      {% if event %}Save Changes{% else %}Create Event{% endif %}
+    </button>
+    <a href="{% url 'studio_event_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if course %}Edit Course{% else %}New Course{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_course_list' %}" class="hover:text-foreground">Courses</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{% if course %}{{ course.title }}{% else %}New Course{% endif %}</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">{% if course %}Edit Course{% else %}New Course{% endif %}</h1>
+</div>
+
+<form method="post" class="space-y-6 max-w-3xl">
+  {% csrf_token %}
+
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Course Details</h2>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
+      <input type="text" name="title" value="{{ course.title|default:'' }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ course.slug|default:'' }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Description (Markdown)</label>
+      <textarea name="description" rows="6"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ course.description|default:'' }}</textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Cover Image URL</label>
+      <input type="url" name="cover_image_url" value="{{ course.cover_image_url|default:'' }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Instructor Name</label>
+        <input type="text" name="instructor_name" value="{{ course.instructor_name|default:'' }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+        <select name="status" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="draft" {% if course.status == 'draft' %}selected{% endif %}>Draft</option>
+          <option value="published" {% if course.status == 'published' %}selected{% endif %}>Published</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Instructor Bio</label>
+      <textarea name="instructor_bio" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ course.instructor_bio|default:'' }}</textarea>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Required Level</label>
+        <select name="required_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="0" {% if course.required_level == 0 %}selected{% endif %}>Free (0)</option>
+          <option value="10" {% if course.required_level == 10 %}selected{% endif %}>Basic (10)</option>
+          <option value="20" {% if course.required_level == 20 %}selected{% endif %}>Main (20)</option>
+          <option value="30" {% if course.required_level == 30 %}selected{% endif %}>Premium (30)</option>
+        </select>
+      </div>
+      <div class="flex items-end">
+        <label class="flex items-center space-x-2 px-4 py-2">
+          <input type="checkbox" name="is_free" {% if course.is_free %}checked{% endif %}
+                 class="rounded border-border text-accent focus:ring-accent">
+          <span class="text-sm text-foreground">Free (lead magnet)</span>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Discussion URL</label>
+      <input type="url" name="discussion_url" value="{{ course.discussion_url|default:'' }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
+      <input type="text" name="tags" value="{% for tag in course.tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+  </div>
+
+  <div class="flex items-center space-x-4">
+    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      {% if course %}Save Changes{% else %}Create Course{% endif %}
+    </button>
+    <a href="{% url 'studio_course_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+  </div>
+</form>
+
+{% if course %}
+<!-- Modules & Units Section -->
+<div class="mt-12 max-w-3xl">
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-semibold text-foreground">Modules &amp; Units</h2>
+    <form method="post" action="{% url 'studio_module_create' course_id=course.pk %}" class="flex items-center space-x-2">
+      {% csrf_token %}
+      <input type="text" name="title" placeholder="New module title..." required
+             class="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <button type="submit" class="bg-secondary border border-border px-3 py-1.5 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
+        Add Module
+      </button>
+    </form>
+  </div>
+
+  {% for module in modules %}
+  <div class="bg-card border border-border rounded-lg mb-4 overflow-hidden" data-module-id="{{ module.pk }}">
+    <div class="flex items-center justify-between px-6 py-4 bg-secondary/50">
+      <div class="flex items-center space-x-3">
+        <i data-lucide="grip-vertical" class="w-4 h-4 text-muted-foreground cursor-grab"></i>
+        <span class="text-sm font-medium text-foreground">{{ module.title }}</span>
+        <span class="text-xs text-muted-foreground">(Order: {{ module.sort_order }})</span>
+      </div>
+      <form method="post" action="{% url 'studio_unit_create' module_id=module.pk %}" class="flex items-center space-x-2">
+        {% csrf_token %}
+        <input type="text" name="title" placeholder="New unit..." required
+               class="bg-secondary border border-border rounded px-2 py-1 text-xs text-foreground w-40 focus:outline-none focus:ring-1 focus:ring-accent">
+        <button type="submit" class="text-xs text-accent hover:underline">Add Unit</button>
+      </form>
+    </div>
+    {% if module.units.all %}
+    <ul class="divide-y divide-border">
+      {% for unit in module.units.all %}
+      <li class="flex items-center justify-between px-6 py-3 hover:bg-secondary/30 transition-colors">
+        <div class="flex items-center space-x-3">
+          <span class="text-xs text-muted-foreground w-8">{{ unit.sort_order }}</span>
+          <span class="text-sm text-foreground">{{ unit.title }}</span>
+          {% if unit.is_preview %}<span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Preview</span>{% endif %}
+          {% if unit.video_url %}<i data-lucide="play-circle" class="w-3 h-3 text-muted-foreground"></i>{% endif %}
+        </div>
+        <a href="{% url 'studio_unit_edit' unit_id=unit.pk %}" class="text-xs text-accent hover:underline">Edit</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% empty %}
+  <p class="text-sm text-muted-foreground">No modules yet. Add one above.</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

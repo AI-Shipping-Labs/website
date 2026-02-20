@@ -1,0 +1,49 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if campaign %}Edit Campaign{% else %}New Campaign{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_campaign_list' %}" class="hover:text-foreground">Campaigns</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{% if campaign %}{{ campaign.subject }}{% else %}New Campaign{% endif %}</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">{% if campaign %}Edit Campaign{% else %}New Campaign{% endif %}</h1>
+</div>
+
+<form method="post" class="space-y-6 max-w-3xl">
+  {% csrf_token %}
+
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Subject</label>
+      <input type="text" name="subject" value="{{ campaign.subject|default:'' }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Body (Markdown)</label>
+      <textarea name="body" rows="16"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ campaign.body|default:'' }}</textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Audience (minimum tier level)</label>
+      <select name="target_min_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="0" {% if campaign.target_min_level == 0 %}selected{% endif %}>Everyone (including free)</option>
+        <option value="10" {% if campaign.target_min_level == 10 %}selected{% endif %}>Basic and above</option>
+        <option value="20" {% if campaign.target_min_level == 20 %}selected{% endif %}>Main and above</option>
+        <option value="30" {% if campaign.target_min_level == 30 %}selected{% endif %}>Premium only</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="flex items-center space-x-4">
+    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      {% if campaign %}Save Changes{% else %}Create Campaign{% endif %}
+    </button>
+    <a href="{% url 'studio_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+  </div>
+</form>
+{% endblock %}

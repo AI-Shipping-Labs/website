@@ -1,0 +1,61 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Campaign: {{ campaign.subject }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_campaign_list' %}" class="hover:text-foreground">Campaigns</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{{ campaign.subject }}</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">{{ campaign.subject }}</h1>
+</div>
+
+<div class="max-w-3xl space-y-6">
+  <!-- Campaign Info -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="grid grid-cols-2 gap-6">
+      <div>
+        <p class="text-sm text-muted-foreground">Status</p>
+        <span class="text-xs px-2 py-1 rounded-full inline-block mt-1
+          {% if campaign.status == 'sent' %}bg-green-500/20 text-green-400
+          {% elif campaign.status == 'sending' %}bg-blue-500/20 text-blue-400
+          {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {{ campaign.get_status_display }}
+        </span>
+      </div>
+      <div>
+        <p class="text-sm text-muted-foreground">Audience</p>
+        <p class="text-sm text-foreground mt-1">{{ campaign.get_target_min_level_display }}</p>
+      </div>
+      <div>
+        <p class="text-sm text-muted-foreground">Eligible Recipients</p>
+        <p class="text-sm text-foreground mt-1">{{ recipient_count }}</p>
+      </div>
+      <div>
+        <p class="text-sm text-muted-foreground">Sent Count</p>
+        <p class="text-sm text-foreground mt-1">{{ campaign.sent_count }}</p>
+      </div>
+      {% if campaign.sent_at %}
+      <div>
+        <p class="text-sm text-muted-foreground">Sent At</p>
+        <p class="text-sm text-foreground mt-1">{{ campaign.sent_at|date:"M d, Y H:i" }}</p>
+      </div>
+      {% endif %}
+      <div>
+        <p class="text-sm text-muted-foreground">Created</p>
+        <p class="text-sm text-foreground mt-1">{{ campaign.created_at|date:"M d, Y H:i" }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Preview</h2>
+    <div class="prose bg-secondary/50 rounded-lg p-6">
+      {{ campaign.body|linebreaksbr }}
+    </div>
+  </div>
+</div>
+{% endblock %}

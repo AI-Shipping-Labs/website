@@ -68,7 +68,7 @@ Wait for all engineers to complete. If an engineer reports a blocker, skip that 
 For each completed implementation, launch a tester agent:
 
 ```
-Task(subagent_type="qa", model="opus", prompt="QA issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. The engineer wrote {description}. Review the code, run ALL tests (uv run python manage.py test AND uv run pytest playwright_tests/ -v). After tests pass, capture screenshots: uv run python scripts/capture_screenshots.py --urls {relevant URLs} --issue N. Report pass/fail with specifics.")
+Task(subagent_type="qa", model="opus", prompt="QA issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. The engineer wrote {description}. Review the code, run ALL tests (uv run python manage.py test AND uv run pytest playwright_tests/ -v). Report pass/fail with specifics.")
 ```
 
 ## Step 4: Handle QA Results

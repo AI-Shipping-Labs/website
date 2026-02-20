@@ -162,25 +162,7 @@ COMMENT
 )"
 ```
 
-### 7. Capture Screenshots (after all tests pass)
-
-After all tests pass, capture screenshots of the key pages related to the issue and upload them as a comment. This documents what the feature looks like.
-
-```bash
-# Capture screenshots of the key URLs for this issue
-uv run python scripts/capture_screenshots.py \
-    --urls /page1/ /page2/ \
-    --issue {NUMBER}
-```
-
-Choose URLs that demonstrate the core functionality of the issue. For example:
-- Account page issue → `/account/` (logged in as free user and paid user)
-- Blog issue → `/blog/` and `/blog/{slug}/` (with a gated article)
-- Pricing issue → `/pricing/`
-
-If the feature requires authentication, use `--login-email` and `--login-password` flags. Capture 2-5 screenshots that tell the story of the feature.
-
-### 8. Give Verdict
+### 7. Give Verdict
 
 Report your findings to the orchestrator:
 
@@ -193,7 +175,7 @@ The implementer will fix and you will re-review.
 
 PASS — approve for commit: Confirm all acceptance criteria met. Tell the orchestrator the feature is approved and the software engineer should commit and push.
 
-### 9. Re-review After Fixes
+### 8. Re-review After Fixes
 
 When the software engineer applies fixes (still uncommitted):
 1. Review the changed files again

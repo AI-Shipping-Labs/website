@@ -1,0 +1,98 @@
+{# Reusable newsletter subscribe form partial.
+     Include with: include "includes/subscribe_form.html"
+     Optional context variables:
+       - heading: Custom heading text
+       - description: Custom description text
+       - redirect_to: URL to redirect after verification (lead magnet flow)
+#}
+
+<div class="subscribe-form-container rounded-2xl border border-border bg-background p-8 sm:p-10" data-redirect-to="{{ redirect_to|default:'' }}">
+  <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+    <i data-lucide="mail" class="h-4 w-4"></i>
+    Free Newsletter
+  </div>
+  <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl" style="text-wrap: balance;">
+    {{ heading|default:"Ready to turn your AI ideas into real projects?" }}
+  </h2>
+  <p class="mt-4 text-muted-foreground leading-relaxed">
+    {{ description|default:"Subscribe to the free newsletter and get notified about new content, events, and community updates." }}
+  </p>
+  <form class="subscribe-form mt-8 flex flex-col gap-4 sm:flex-row sm:items-center" onsubmit="return handleSubscribeForm(event, this)">
+    <input type="email" name="email" required
+           placeholder="Enter your email address"
+           class="w-full rounded-md border border-border bg-background px-4 py-3 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:flex-1">
+    <button type="submit"
+            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+      Subscribe
+      <i data-lucide="arrow-right" class="h-4 w-4"></i>
+    </button>
+  </form>
+  <p class="subscribe-message mt-3 text-sm hidden"></p>
+  <p class="subscribe-error mt-3 text-sm text-red-400 hidden"></p>
+  <p class="mt-4 text-xs text-muted-foreground">No spam. Unsubscribe anytime.</p>
+</div>
+
+<script>
+function handleSubscribeForm(event, form) {
+  event.preventDefault();
+  var container = form.closest('.subscribe-form-container');
+  var emailInput = form.querySelector('input[name="email"]');
+  var submitBtn = form.querySelector('button[type="submit"]');
+  var messageEl = container.querySelector('.subscribe-message');
+  var errorEl = container.querySelector('.subscribe-error');
+  var redirectTo = container.dataset.redirectTo || '';
+
+  messageEl.classList.add('hidden');
+  errorEl.classList.add('hidden');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Subscribing...';
+
+  var csrfToken = '';
+  var cookies = document.cookie.split(';');
+  for (var i = 0; i < cookies.length; i++) {
+    var cookie = cookies[i].trim();
+    if (cookie.startsWith('csrftoken=')) {
+      csrfToken = cookie.substring('csrftoken='.length);
+      break;
+    }
+  }
+
+  var body = { email: emailInput.value };
+  if (redirectTo) {
+    body.redirect_to = redirectTo;
+  }
+
+  fetch('/api/subscribe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken,
+    },
+    body: JSON.stringify(body),
+  })
+  .then(function(resp) { return resp.json(); })
+  .then(function(data) {
+    if (data.status === 'ok') {
+      messageEl.textContent = data.message;
+      messageEl.className = 'subscribe-message mt-3 text-sm text-green-400';
+      messageEl.classList.remove('hidden');
+      emailInput.value = '';
+    } else {
+      errorEl.textContent = data.error || 'Something went wrong. Please try again.';
+      errorEl.classList.remove('hidden');
+    }
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Subscribe <i data-lucide="arrow-right" class="h-4 w-4"></i>';
+    if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+  })
+  .catch(function() {
+    errorEl.textContent = 'An error occurred. Please try again.';
+    errorEl.classList.remove('hidden');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Subscribe <i data-lucide="arrow-right" class="h-4 w-4"></i>';
+    if (typeof lucide !== 'undefined') { lucide.createIcons(); }
+  });
+
+  return false;
+}
+</script>

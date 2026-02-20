@@ -1,0 +1,95 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if article %}Edit Article{% else %}New Article{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_article_list' %}" class="hover:text-foreground">Articles</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{% if article %}{{ article.title }}{% else %}New Article{% endif %}</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">{% if article %}Edit Article{% else %}New Article{% endif %}</h1>
+</div>
+
+<form method="post" class="space-y-6 max-w-3xl">
+  {% csrf_token %}
+
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
+      <input type="text" name="title" value="{{ article.title|default:'' }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ article.slug|default:'' }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Description</label>
+      <textarea name="description" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ article.description|default:'' }}</textarea>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Content (Markdown)</label>
+      <textarea name="content_markdown" rows="16"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ article.content_markdown|default:'' }}</textarea>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Author</label>
+        <input type="text" name="author" value="{{ article.author|default:'' }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Date</label>
+        <input type="date" name="date" value="{% if article %}{{ article.date|date:'Y-m-d' }}{% endif %}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+        <select name="status" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="draft" {% if not article.published %}selected{% endif %}>Draft</option>
+          <option value="published" {% if article.published %}selected{% endif %}>Published</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Required Level</label>
+        <select name="required_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="0" {% if article.required_level == 0 %}selected{% endif %}>Free (0)</option>
+          <option value="10" {% if article.required_level == 10 %}selected{% endif %}>Basic (10)</option>
+          <option value="20" {% if article.required_level == 20 %}selected{% endif %}>Main (20)</option>
+          <option value="30" {% if article.required_level == 30 %}selected{% endif %}>Premium (30)</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Cover Image URL</label>
+      <input type="url" name="cover_image_url" value="{{ article.cover_image_url|default:'' }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
+      <input type="text" name="tags" value="{% if article %}{% for tag in article.tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+  </div>
+
+  <div class="flex items-center space-x-4">
+    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      {% if article %}Save Changes{% else %}Create Article{% endif %}
+    </button>
+    <a href="{% url 'studio_article_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% comment %}
+Gated content overlay.
+
+Expects these context variables:
+  - teaser: The teaser text to show
+  - cta_message: The CTA message (e.g. "Upgrade to Basic to read this article")
+  - pricing_url: URL to the pricing page (defaults to /pricing)
+{% endcomment %}
+
+<div class="relative mt-8">
+  <!-- Teaser text -->
+  {% if teaser %}
+  <div class="prose mb-8">
+    <p class="text-muted-foreground">{{ teaser }}...</p>
+  </div>
+  {% endif %}
+
+  <!-- Blurred placeholder -->
+  <div class="relative overflow-hidden rounded-lg" style="height: 200px;">
+    <div class="absolute inset-0 bg-gradient-to-b from-transparent via-background/80 to-background"></div>
+    <div class="h-full w-full select-none" style="filter: blur(8px); -webkit-filter: blur(8px);">
+      <div class="space-y-4 p-6">
+        <div class="h-4 w-3/4 rounded bg-muted-foreground/20"></div>
+        <div class="h-4 w-full rounded bg-muted-foreground/20"></div>
+        <div class="h-4 w-5/6 rounded bg-muted-foreground/20"></div>
+        <div class="h-4 w-2/3 rounded bg-muted-foreground/20"></div>
+        <div class="h-4 w-full rounded bg-muted-foreground/20"></div>
+        <div class="h-4 w-4/5 rounded bg-muted-foreground/20"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA Banner -->
+  <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
+    <div class="mb-4">
+      <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+    </div>
+    <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+    <p class="mt-2 text-sm text-muted-foreground">Get full access to this content and more with a membership.</p>
+    <a href="{{ pricing_url|default:'/pricing' }}"
+       class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+      <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+      View Pricing
+    </a>
+  </div>
+</div>

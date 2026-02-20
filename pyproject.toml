@@ -1,0 +1,26 @@
+[project]
+name = "ai-shipping-labs"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "boto3>=1.42.52",
+    "coverage>=7.13.4",
+    "croniter>=6.0.0",
+    "django>=6.0.2",
+    "django-allauth>=65.14.3",
+    "django-q2>=1.9.0",
+    "markdown>=3.10.2",
+    "pillow>=12.1.1",
+    "playwright>=1.58.0",
+    "pygments>=2.19.2",
+    "pyjwt[crypto]>=2.11.0",
+    "pytest-django>=4.12.0",
+    "pytest-playwright>=0.7.2",
+    "python-frontmatter>=1.1.0",
+    "stripe>=14.3.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "website.settings"
+pythonpath = ["."]

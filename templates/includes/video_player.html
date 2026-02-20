@@ -1,0 +1,117 @@
+{% if source_type %}
+<div class="video-player mb-8" data-source="{{ source_type }}" {% if video_id %}data-video-id="{{ video_id }}"{% endif %}>
+  <!-- Video Embed -->
+  {% if source_type == "youtube" %}
+  <div class="aspect-video rounded-lg overflow-hidden border border-border">
+    <div id="yt-player-{{ video_id }}" class="w-full h-full"></div>
+  </div>
+  {% elif source_type == "loom" %}
+  <div class="aspect-video rounded-lg overflow-hidden border border-border">
+    <iframe
+      id="loom-player-{{ video_id }}"
+      src="{{ embed_url }}"
+      class="w-full h-full"
+      allowfullscreen
+    ></iframe>
+  </div>
+  {% elif source_type == "self_hosted" %}
+  <div class="rounded-lg overflow-hidden border border-border">
+    <video
+      id="video-player-self-hosted"
+      class="w-full"
+      controls
+      preload="metadata"
+    >
+      <source src="{{ embed_url }}" type="video/{% if embed_url|slice:'-5:' == '.webm' %}webm{% else %}mp4{% endif %}">
+      Your browser does not support the video tag.
+    </video>
+  </div>
+  {% endif %}
+
+  {% if has_timestamps %}
+  <div class="mt-4 rounded-lg border border-border bg-card p-4">
+    <h3 class="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Timestamps</h3>
+    <div class="space-y-1">
+      {% for ts in timestamps %}
+      <button
+        type="button"
+        class="video-timestamp flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-secondary/50"
+        data-time-seconds="{{ ts.time_seconds }}"
+        data-source="{{ source_type }}"
+        {% if source_type == "youtube" %}data-video-id="{{ video_id }}"{% endif %}
+        {% if source_type == "loom" %}data-video-id="{{ video_id }}"{% endif %}
+      >
+        <span class="shrink-0 font-mono text-sm font-medium text-accent">{{ ts.formatted_time }}</span>
+        <span class="text-sm text-foreground">{{ ts.label }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Video Player Scripts -->
+{% if source_type == "youtube" %}
+<script>
+  // Load YouTube IFrame API if not already loaded
+  if (!window.YT) {
+    var tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+  }
+
+  // Store player references globally
+  window._ytPlayers = window._ytPlayers || {};
+
+  function initYTPlayer_{{ video_id|cut:"-" }}() {
+    window._ytPlayers['{{ video_id }}'] = new YT.Player('yt-player-{{ video_id }}', {
+      videoId: '{{ video_id }}',
+      playerVars: {
+        enablejsapi: 1,
+        modestbranding: 1,
+        rel: 0
+      }
+    });
+  }
+
+  if (window.YT && window.YT.Player) {
+    initYTPlayer_{{ video_id|cut:"-" }}();
+  } else {
+    window.onYouTubeIframeAPIReady = (function(prev) {
+      return function() {
+        if (prev) prev();
+        initYTPlayer_{{ video_id|cut:"-" }}();
+      };
+    })(window.onYouTubeIframeAPIReady);
+  }
+</script>
+{% endif %}
+
+<script>
+  // Timestamp click handlers
+  document.querySelectorAll('.video-timestamp').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var timeSeconds = parseInt(this.dataset.timeSeconds, 10);
+      var source = this.dataset.source;
+      var videoId = this.dataset.videoId;
+
+      if (source === 'youtube' && window._ytPlayers && window._ytPlayers[videoId]) {
+        window._ytPlayers[videoId].seekTo(timeSeconds, true);
+      } else if (source === 'loom' && videoId) {
+        var iframe = document.getElementById('loom-player-' + videoId);
+        if (iframe) {
+          var baseUrl = 'https://www.loom.com/embed/' + videoId;
+          iframe.src = baseUrl + '?t=' + timeSeconds;
+        }
+      } else if (source === 'self_hosted') {
+        var video = document.getElementById('video-player-self-hosted');
+        if (video) {
+          video.currentTime = timeSeconds;
+          video.play();
+        }
+      }
+    });
+  });
+</script>
+{% endif %}

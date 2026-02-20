@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% load seo_tags %}
+
+{% block title %}{{ project.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ project.description|truncatechars:160 }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ project.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags project %}{% endblock %}
+{% block structured_data %}{% structured_data project %}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <article class="py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="/projects" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Projects
+      </a>
+
+      {% if project.cover_image_url %}
+      <div class="mb-8 overflow-hidden rounded-lg">
+        <img src="{{ project.cover_image_url }}" alt="{{ project.title }}" class="w-full object-cover">
+      </div>
+      {% endif %}
+
+      <header class="mb-12">
+        <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+          <i data-lucide="rocket" class="h-4 w-4"></i>
+          Project
+        </div>
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          {{ project.title }}
+        </h1>
+        {% if project.author %}
+        <p class="mt-2 text-lg text-muted-foreground">by {{ project.author }}</p>
+        {% endif %}
+        {% if project.description %}
+        <p class="mt-4 text-xl text-muted-foreground">{{ project.description }}</p>
+        {% endif %}
+
+        <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {{ project.formatted_date }}
+          </span>
+          {% if project.reading_time %}
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="clock" class="h-4 w-4"></i>
+            {{ project.reading_time }}
+          </span>
+          {% endif %}
+          {% if project.estimated_time %}
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="code" class="h-4 w-4"></i>
+            {{ project.estimated_time }}
+          </span>
+          {% endif %}
+          {% if project.difficulty %}
+          <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ project.difficulty_color }}">{{ project.difficulty }}</span>
+          {% endif %}
+        </div>
+
+        {% if project.tags %}
+        <div class="mt-4 flex flex-wrap gap-2">
+          {% for tag in project.tags %}
+          <a href="/projects?tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors">{{ tag }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Source code and demo links -->
+        {% if project.source_code_url or project.demo_url %}
+        <div class="mt-6 flex flex-wrap gap-3">
+          {% if project.source_code_url %}
+          <a href="{{ project.source_code_url }}" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent">
+            <i data-lucide="github" class="h-4 w-4"></i>
+            Source Code
+          </a>
+          {% endif %}
+          {% if project.demo_url %}
+          <a href="{{ project.demo_url }}" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent">
+            <i data-lucide="external-link" class="h-4 w-4"></i>
+            Live Demo
+          </a>
+          {% endif %}
+        </div>
+        {% endif %}
+      </header>
+
+      {% if is_gated %}
+        {% include "includes/content_gated.html" %}
+      {% else %}
+      <div class="prose">
+        {{ project.content_html|safe }}
+      </div>
+
+      {% if tag_rules.after_content %}
+      {% with rules=tag_rules.after_content %}
+      {% include "includes/tag_rule_components.html" %}
+      {% endwith %}
+      {% endif %}
+      {% endif %}
+    </div>
+  </article>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

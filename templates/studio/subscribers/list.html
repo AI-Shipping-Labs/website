@@ -1,0 +1,77 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Subscribers{% endblock %}
+
+{% block studio_content %}
+<div class="flex items-center justify-between mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Subscribers</h1>
+    <p class="text-muted-foreground mt-1">Manage newsletter subscribers.</p>
+  </div>
+  <a href="{% url 'studio_subscriber_export' %}{% if status_filter %}?status={{ status_filter }}{% endif %}"
+     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+    Export CSV
+  </a>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-cols-3 gap-4 mb-6">
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Total</p>
+    <p class="text-xl font-semibold text-foreground">{{ total_count }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Active</p>
+    <p class="text-xl font-semibold text-green-400">{{ active_count }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Inactive</p>
+    <p class="text-xl font-semibold text-red-400">{{ inactive_count }}</p>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="flex items-center space-x-4 mb-6">
+  <form method="get" class="flex items-center space-x-4 flex-1">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search by email..."
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+    <select name="status" onchange="this.form.submit()"
+            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="">All</option>
+      <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+      <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+    </select>
+    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
+  </form>
+</div>
+
+<!-- Subscriber List -->
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscribed At</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for sub in subscribers %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm text-foreground">{{ sub.email }}</td>
+        <td class="px-6 py-4">
+          <span class="text-xs px-2 py-1 rounded-full {% if sub.is_active %}bg-green-500/20 text-green-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+            {% if sub.is_active %}Active{% else %}Inactive{% endif %}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ sub.subscribed_at|date:"M d, Y H:i" }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="3" class="px-6 py-8 text-center text-sm text-muted-foreground">No subscribers found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

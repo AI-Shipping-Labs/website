@@ -1,0 +1,54 @@
+{% comment %}
+Inline download CTA card rendered by the {{download:slug}} shortcode.
+
+Expects these context variables:
+  - download: The Download model instance
+  - has_access: Whether the user can download
+  - show_email_form: Whether to show email signup (lead magnet + anonymous)
+  - cta_message: Upgrade CTA message (for gated downloads)
+{% endcomment %}
+
+<div class="my-6 rounded-lg border border-border bg-card p-6 not-prose">
+  <div class="flex items-start gap-4">
+    <div class="flex-shrink-0 rounded-lg bg-accent/20 p-3">
+      <i data-lucide="file-down" class="h-6 w-6 text-accent"></i>
+    </div>
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-1">
+        <h3 class="text-lg font-semibold text-foreground">{{ download.title }}</h3>
+        <span class="rounded-full px-2 py-0.5 text-xs font-medium {{ download.file_type_color }}">
+          {{ download.file_type_label }}
+        </span>
+        {% if download.human_file_size %}
+        <span class="text-xs text-muted-foreground">{{ download.human_file_size }}</span>
+        {% endif %}
+      </div>
+      {% if download.description %}
+      <p class="text-sm text-muted-foreground mb-4">{{ download.description }}</p>
+      {% endif %}
+
+      {% if show_email_form %}
+        <a href="/accounts/signup?next=/api/downloads/{{ download.slug }}/file"
+           class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          <i data-lucide="mail" class="h-4 w-4"></i>
+          Sign Up to Download Free
+        </a>
+      {% elif has_access %}
+        <a href="/api/downloads/{{ download.slug }}/file"
+           class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          <i data-lucide="download" class="h-4 w-4"></i>
+          Download {{ download.file_type_label }}
+        </a>
+      {% else %}
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-muted-foreground">{{ cta_message }}</span>
+          <a href="/pricing"
+             class="inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10">
+            <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+            View Pricing
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>

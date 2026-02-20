@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% load access_tags %}
+
+{% block title %}Events | AI Shipping Labs{% endblock %}
+{% block meta_description %}Upcoming and past events - live workshops, coding sessions, and community activities.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+      <div class="mb-12">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Events</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Community Events & Workshops
+        </h1>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Join live workshops, coding sessions, and community activities. Register for upcoming events or watch recordings of past ones.
+        </p>
+      </div>
+
+      <!-- Upcoming Events -->
+      <div class="mb-16">
+        <h2 class="mb-6 flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <i data-lucide="calendar" class="h-6 w-6 text-accent"></i>
+          Upcoming
+        </h2>
+
+        {% if upcoming_events %}
+        <div class="space-y-6">
+          {% for event in upcoming_events %}
+          <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+            <a href="/events/{{ event.slug }}">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-2 flex-wrap">
+                    <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+                      {% if event.event_type == 'live' %}<i data-lucide="radio" class="h-3 w-3"></i>{% else %}<i data-lucide="clock" class="h-3 w-3"></i>{% endif %}
+                      {{ event.get_event_type_display }}
+                    </span>
+                    {% if event.required_level > 0 %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent">
+                      <i data-lucide="lock" class="h-3 w-3"></i>
+                      {{ event.required_level|required_tier_name }}
+                    </span>
+                    {% endif %}
+                    {% if event.status == 'live' %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-400">
+                      <i data-lucide="radio" class="h-3 w-3"></i>
+                      Live Now
+                    </span>
+                    {% endif %}
+                  </div>
+                  <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                    {{ event.title }}
+                  </h3>
+                  {% if event.description %}
+                  <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description|truncatewords:30 }}</p>
+                  {% endif %}
+                  <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                    <span class="flex items-center gap-1.5">
+                      <i data-lucide="calendar" class="h-4 w-4"></i>
+                      {{ event.formatted_start }}
+                    </span>
+                    {% if event.location %}
+                    <span class="flex items-center gap-1.5">
+                      <i data-lucide="map-pin" class="h-4 w-4"></i>
+                      {{ event.location }}
+                    </span>
+                    {% endif %}
+                    {% if event.spots_remaining is not None %}
+                    <span class="flex items-center gap-1.5">
+                      <i data-lucide="users" class="h-4 w-4"></i>
+                      {% if event.is_full %}
+                      <span class="text-red-400">Event is full</span>
+                      {% else %}
+                      {{ event.spots_remaining }} spot{{ event.spots_remaining|pluralize }} remaining
+                      {% endif %}
+                    </span>
+                    {% endif %}
+                  </div>
+                  {% if event.tags %}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {% for tag in event.tags %}
+                    <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
+                </div>
+                <div class="flex items-center gap-2">
+                  {% if event.id in registered_event_ids %}
+                  <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-3 py-1 text-xs font-medium text-green-400">
+                    <i data-lucide="check" class="h-3 w-3"></i>
+                    Registered
+                  </span>
+                  {% endif %}
+                  <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+                </div>
+              </div>
+            </a>
+          </article>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="rounded-lg border border-border bg-card p-8 text-center">
+          <i data-lucide="calendar" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+          <p class="mt-4 text-muted-foreground">No upcoming events scheduled. Check back soon!</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Past Events -->
+      <div>
+        <h2 class="mb-6 flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <i data-lucide="archive" class="h-6 w-6 text-muted-foreground"></i>
+          Past
+        </h2>
+
+        {% if past_events %}
+        <div class="space-y-4">
+          {% for event in past_events %}
+          <article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+            <a href="/events/{{ event.slug }}">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+                      {{ event.get_event_type_display }}
+                    </span>
+                    {% if event.status == 'cancelled' %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-400">
+                      Cancelled
+                    </span>
+                    {% endif %}
+                  </div>
+                  <h3 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+                    {{ event.title }}
+                  </h3>
+                  <span class="text-sm text-muted-foreground">{{ event.short_date }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  {% if event.recording %}
+                  <a href="/event-recordings/{{ event.recording.slug }}" class="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/30 transition-colors" onclick="event.stopPropagation();">
+                    <i data-lucide="play" class="h-3 w-3"></i>
+                    Watch recording
+                  </a>
+                  {% endif %}
+                  <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+                </div>
+              </div>
+            </a>
+          </article>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="rounded-lg border border-border bg-card p-8 text-center">
+          <p class="text-muted-foreground">No past events yet.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

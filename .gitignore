@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Django
+*.sqlite3
+staticfiles/
+
+# Environment
+.env
+.venv/
+
+# Coverage
+.coverage
+htmlcov/
+
+# OS files
+.DS_Store
+
+# Playwright
+playwright_tests/screenshots/

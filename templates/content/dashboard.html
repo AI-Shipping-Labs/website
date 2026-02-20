@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | AI Shipping Labs{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <div class="mx-auto max-w-7xl px-6 py-12 lg:px-8 lg:py-16">
+
+    <!-- Welcome Banner -->
+    <section class="mb-10">
+      <div class="rounded-2xl border border-border bg-card p-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Welcome back{% if user.first_name %}, {{ user.first_name }}{% endif %}
+            </h1>
+            <div class="mt-2 flex items-center gap-3">
+              {% if tier_name %}
+              <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium
+                {% if tier_name == 'Premium' %}bg-amber-500/20 text-amber-400
+                {% elif tier_name == 'Main' %}bg-accent/20 text-accent
+                {% elif tier_name == 'Basic' %}bg-blue-500/20 text-blue-400
+                {% else %}bg-secondary text-muted-foreground{% endif %}">
+                {{ tier_name }}
+              </span>
+              {% else %}
+              <span class="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
+                Free
+              </span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <a href="{% url 'account' %}" class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              <i data-lucide="settings" class="h-4 w-4"></i>
+              Account
+            </a>
+            <a href="/#tiers" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+              <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
+              Upgrade
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid gap-8 lg:grid-cols-3">
+      <!-- Main content: 2 columns wide -->
+      <div class="lg:col-span-2 space-y-8">
+
+        <!-- Continue Learning -->
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
+              <i data-lucide="book-open" class="h-5 w-5 text-accent"></i>
+              Continue Learning
+            </h2>
+            <a href="/courses" class="text-sm text-accent hover:underline">View all courses</a>
+          </div>
+          {% if in_progress_courses %}
+          <div class="space-y-4">
+            {% for item in in_progress_courses %}
+            <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <h3 class="font-medium text-foreground truncate">{{ item.course.title }}</h3>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    {{ item.completed_count }}/{{ item.total_units }} units completed
+                  </p>
+                  <!-- Progress bar -->
+                  <div class="mt-2 h-2 w-full rounded-full bg-secondary overflow-hidden">
+                    <div class="h-full rounded-full bg-accent transition-all" style="width: {{ item.percentage }}%"></div>
+                  </div>
+                  <p class="mt-1 text-xs text-muted-foreground">
+                    Last: {{ item.last_unit.title }}
+                  </p>
+                </div>
+                <a href="{{ item.course.get_absolute_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  Continue
+                  <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                </a>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="rounded-lg border border-border bg-card p-8 text-center">
+            <i data-lucide="book-open" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+            <p class="mt-3 text-muted-foreground">No courses in progress yet</p>
+            <a href="/courses" class="mt-4 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+              Browse Courses
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+          </div>
+          {% endif %}
+        </section>
+
+        <!-- Upcoming Events -->
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
+              <i data-lucide="calendar" class="h-5 w-5 text-accent"></i>
+              Upcoming Events
+            </h2>
+            <a href="/events" class="text-sm text-accent hover:underline">View all events</a>
+          </div>
+          {% if upcoming_events %}
+          <div class="space-y-4">
+            {% for event in upcoming_events %}
+            <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <h3 class="font-medium text-foreground">{{ event.title }}</h3>
+                  <div class="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                    <span class="flex items-center gap-1">
+                      <i data-lucide="clock" class="h-3.5 w-3.5"></i>
+                      {{ event.formatted_start }}
+                    </span>
+                  </div>
+                </div>
+                <a href="{{ event.get_absolute_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+                  View Event
+                  <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                </a>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="rounded-lg border border-border bg-card p-8 text-center">
+            <i data-lucide="calendar" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+            <p class="mt-3 text-muted-foreground">No upcoming events</p>
+            <a href="/events" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              Browse Events
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+          </div>
+          {% endif %}
+        </section>
+
+        <!-- Recent Content -->
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
+              <i data-lucide="sparkles" class="h-5 w-5 text-accent"></i>
+              Recent Content
+            </h2>
+            <a href="/blog" class="text-sm text-accent hover:underline">View all</a>
+          </div>
+          {% if recent_content %}
+          <div class="space-y-3">
+            {% for item in recent_content %}
+            <a href="{{ item.url }}" class="flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
+                <i data-lucide="{{ item.icon }}" class="h-5 w-5 text-muted-foreground"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="font-medium text-foreground truncate">{{ item.title }}</p>
+                <p class="text-sm text-muted-foreground truncate">{{ item.description|truncatechars:80 }}</p>
+              </div>
+              <span class="hidden sm:block shrink-0 text-xs text-muted-foreground">{{ item.date|date:"M j" }}</span>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="rounded-lg border border-border bg-card p-8 text-center">
+            <i data-lucide="file-text" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+            <p class="mt-3 text-muted-foreground">No content available yet</p>
+            <a href="/blog" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              Browse Blog
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+          </div>
+          {% endif %}
+        </section>
+      </div>
+
+      <!-- Sidebar: 1 column -->
+      <div class="space-y-8">
+
+        <!-- Active Polls -->
+        <section>
+          <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 mb-4">
+            <i data-lucide="bar-chart-3" class="h-5 w-5 text-accent"></i>
+            Active Polls
+          </h2>
+          {% if active_polls %}
+          <div class="space-y-4">
+            {% for poll in active_polls %}
+            <a href="{{ poll.get_absolute_url }}" class="block rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+              <h3 class="font-medium text-foreground">{{ poll.title }}</h3>
+              {% if poll.description %}
+              <p class="mt-1 text-sm text-muted-foreground line-clamp-2">{{ poll.description|truncatechars:100 }}</p>
+              {% endif %}
+              <div class="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{{ poll.total_votes }} vote{{ poll.total_votes|pluralize }}</span>
+                <span>{{ poll.options_count }} option{{ poll.options_count|pluralize }}</span>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="rounded-lg border border-border bg-card p-6 text-center">
+            <i data-lucide="bar-chart-3" class="mx-auto h-8 w-8 text-muted-foreground"></i>
+            <p class="mt-2 text-sm text-muted-foreground">No active polls right now</p>
+            <a href="/vote" class="mt-3 inline-block text-sm text-accent hover:underline">View past polls</a>
+          </div>
+          {% endif %}
+        </section>
+
+        <!-- Quick Actions -->
+        <section>
+          <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 mb-4">
+            <i data-lucide="zap" class="h-5 w-5 text-accent"></i>
+            Quick Actions
+          </h2>
+          <div class="space-y-3">
+            {% for action in quick_actions %}
+            <a href="{{ action.url }}" class="flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
+                <i data-lucide="{{ action.icon }}" class="h-5 w-5 text-accent"></i>
+              </div>
+              <div>
+                <p class="font-medium text-foreground text-sm">{{ action.title }}</p>
+                <p class="text-xs text-muted-foreground">{{ action.description }}</p>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        </section>
+
+        <!-- Notifications -->
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
+              <i data-lucide="bell" class="h-5 w-5 text-accent"></i>
+              Notifications
+            </h2>
+            <a href="/notifications" class="text-sm text-accent hover:underline">View all</a>
+          </div>
+          {% if notifications %}
+          <div class="space-y-3">
+            {% for notif in notifications %}
+            <a href="{{ notif.url }}" class="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50">
+              <div class="flex items-start gap-3">
+                <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent"></span>
+                <div>
+                  <p class="text-sm font-medium text-foreground">{{ notif.title }}</p>
+                  {% if notif.body %}
+                  <p class="mt-0.5 text-xs text-muted-foreground line-clamp-2">{{ notif.body }}</p>
+                  {% endif %}
+                </div>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="rounded-lg border border-border bg-card p-6 text-center">
+            <i data-lucide="bell" class="mx-auto h-8 w-8 text-muted-foreground"></i>
+            <p class="mt-2 text-sm text-muted-foreground">No new notifications</p>
+          </div>
+          {% endif %}
+        </section>
+
+      </div>
+    </div>
+
+  </div>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

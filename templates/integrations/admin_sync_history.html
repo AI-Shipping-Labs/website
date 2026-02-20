@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Sync History: {{ source.repo_name }} | {{ site_name }}{% endblock %}
+
+{% block body %}
+<div class="max-w-6xl mx-auto px-6 py-12">
+  <div class="mb-8">
+    <a href="{% url 'admin_sync_dashboard' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">&larr; Back to Content Sync</a>
+    <h1 class="text-3xl font-bold text-foreground mt-4">{{ source.repo_name }}</h1>
+    <p class="text-muted-foreground mt-1">Sync history and details.</p>
+  </div>
+
+  <!-- Source Info -->
+  <div class="bg-card border border-border rounded-xl p-6 mb-8">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>
+        <p class="text-xs text-muted-foreground uppercase tracking-wider">Content Type</p>
+        <p class="text-foreground font-medium mt-1">{{ source.content_type }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase tracking-wider">Visibility</p>
+        <p class="text-foreground font-medium mt-1">{% if source.is_private %}Private{% else %}Public{% endif %}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase tracking-wider">Last Synced</p>
+        <p class="text-foreground font-medium mt-1">{% if source.last_synced_at %}{{ source.last_synced_at|timesince }} ago{% else %}Never{% endif %}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase tracking-wider">Last Status</p>
+        <p class="font-medium mt-1 {% if source.last_sync_status == 'success' %}text-green-400{% elif source.last_sync_status == 'failed' %}text-red-400{% else %}text-yellow-400{% endif %}">
+          {{ source.last_sync_status|default:"N/A" }}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sync History -->
+  <h2 class="text-xl font-semibold text-foreground mb-4">Sync History</h2>
+  <div class="space-y-3">
+    {% for log in logs %}
+    <div class="bg-card border border-border rounded-xl p-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+          <span class="w-2 h-2 rounded-full {% if log.status == 'success' %}bg-green-400{% elif log.status == 'failed' %}bg-red-400{% elif log.status == 'running' %}bg-blue-400{% else %}bg-yellow-400{% endif %}"></span>
+          <span class="text-sm text-foreground font-medium">{{ log.status }}</span>
+          <span class="text-sm text-muted-foreground">{{ log.started_at }}</span>
+          {% if log.duration_seconds %}
+          <span class="text-xs text-muted-foreground">({{ log.duration_seconds|floatformat:1 }}s)</span>
+          {% endif %}
+        </div>
+        <div class="flex items-center space-x-4 text-sm text-muted-foreground">
+          {% if log.items_created %}
+          <span class="text-green-400">+{{ log.items_created }} created</span>
+          {% endif %}
+          {% if log.items_updated %}
+          <span class="text-blue-400">{{ log.items_updated }} updated</span>
+          {% endif %}
+          {% if log.items_deleted %}
+          <span class="text-red-400">-{{ log.items_deleted }} deleted</span>
+          {% endif %}
+        </div>
+      </div>
+      {% if log.errors %}
+      <div class="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+        <p class="text-xs text-red-400 font-medium mb-1">Errors ({{ log.errors|length }})</p>
+        {% for error in log.errors %}
+        <p class="text-xs text-red-300 font-mono">{{ error.file }}: {{ error.error }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% empty %}
+    <div class="bg-card border border-border rounded-xl p-8 text-center">
+      <p class="text-muted-foreground">No sync history yet.</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

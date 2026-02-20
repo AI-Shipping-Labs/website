@@ -1,0 +1,88 @@
+{# Render tag rule components at a given position. #}
+{# Expects: tag_rules (dict with 'after_content' and 'sidebar' lists), position (string) #}
+
+{% for rule in rules %}
+<div class="tag-rule-component tag-rule-{{ rule.component_type }}" data-tag="{{ rule.tag }}" data-component="{{ rule.component_type }}">
+  {% if rule.component_type == "course_promo" %}
+  <div class="my-8 rounded-lg border border-accent/30 bg-accent/5 p-6">
+    <div class="flex items-start gap-4">
+      <div class="flex-shrink-0 rounded-lg bg-accent/20 p-3">
+        <i data-lucide="book-open" class="h-6 w-6 text-accent"></i>
+      </div>
+      <div class="flex-1">
+        <h3 class="text-lg font-semibold text-foreground">
+          {% if rule.component_config.title %}{{ rule.component_config.title }}{% else %}Recommended Course{% endif %}
+        </h3>
+        {% if rule.component_config.description %}
+        <p class="mt-2 text-sm text-muted-foreground">{{ rule.component_config.description }}</p>
+        {% endif %}
+        <a href="/courses/{% if rule.component_config.course_slug %}{{ rule.component_config.course_slug }}{% endif %}"
+           class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          {% if rule.component_config.cta_text %}{{ rule.component_config.cta_text }}{% else %}Learn More{% endif %}
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+  {% elif rule.component_type == "download_cta" %}
+  <div class="my-8 rounded-lg border border-border bg-card p-6">
+    <div class="flex items-start gap-4">
+      <div class="flex-shrink-0 rounded-lg bg-blue-500/20 p-3">
+        <i data-lucide="download" class="h-6 w-6 text-blue-400"></i>
+      </div>
+      <div class="flex-1">
+        <h3 class="text-lg font-semibold text-foreground">
+          {% if rule.component_config.title %}{{ rule.component_config.title }}{% else %}Free Download{% endif %}
+        </h3>
+        {% if rule.component_config.description %}
+        <p class="mt-2 text-sm text-muted-foreground">{{ rule.component_config.description }}</p>
+        {% endif %}
+        <a href="/downloads/{% if rule.component_config.download_slug %}{{ rule.component_config.download_slug }}{% endif %}"
+           class="mt-4 inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10">
+          {% if rule.component_config.cta_text %}{{ rule.component_config.cta_text }}{% else %}Download Now{% endif %}
+          <i data-lucide="download" class="h-4 w-4"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+  {% elif rule.component_type == "roadmap_signup" %}
+  <div class="my-8 rounded-lg border border-green-500/30 bg-green-500/5 p-6">
+    <div class="flex items-start gap-4">
+      <div class="flex-shrink-0 rounded-lg bg-green-500/20 p-3">
+        <i data-lucide="map" class="h-6 w-6 text-green-400"></i>
+      </div>
+      <div class="flex-1">
+        <h3 class="text-lg font-semibold text-foreground">
+          {% if rule.component_config.title %}{{ rule.component_config.title }}{% else %}Learning Roadmap{% endif %}
+        </h3>
+        {% if rule.component_config.description %}
+        <p class="mt-2 text-sm text-muted-foreground">{{ rule.component_config.description }}</p>
+        {% endif %}
+        <a href="{% if rule.component_config.url %}{{ rule.component_config.url }}{% else %}/{% endif %}"
+           class="mt-4 inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
+          {% if rule.component_config.cta_text %}{{ rule.component_config.cta_text }}{% else %}Get Started{% endif %}
+          <i data-lucide="arrow-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  {# Generic component fallback #}
+  <div class="my-8 rounded-lg border border-border bg-card p-6">
+    {% if rule.component_config.title %}
+    <h3 class="text-lg font-semibold text-foreground">{{ rule.component_config.title }}</h3>
+    {% endif %}
+    {% if rule.component_config.description %}
+    <p class="mt-2 text-sm text-muted-foreground">{{ rule.component_config.description }}</p>
+    {% endif %}
+    {% if rule.component_config.url %}
+    <a href="{{ rule.component_config.url }}"
+       class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+      {% if rule.component_config.cta_text %}{{ rule.component_config.cta_text }}{% else %}Learn More{% endif %}
+      <i data-lucide="arrow-right" class="h-4 w-4"></i>
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}

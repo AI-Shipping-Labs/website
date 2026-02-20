@@ -1,0 +1,44 @@
+{% load tag_filters %}
+{# Tag filter chips for listing pages #}
+{# Expects: all_tags, selected_tags, base_path #}
+
+{% if all_tags %}
+<div class="mb-8 flex flex-wrap items-center gap-2">
+  <span class="text-sm text-muted-foreground mr-2">Filter by tag:</span>
+  <a href="{% tag_clear_url base_path %}"
+     class="rounded-full px-3 py-1 text-xs transition-colors {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+    All
+  </a>
+  {% for tag in all_tags %}
+  {% if tag in selected_tags %}
+  <a href="{% tag_remove_url base_path selected_tags tag %}"
+     class="rounded-full px-3 py-1 text-xs transition-colors bg-accent text-accent-foreground">
+    {{ tag }}
+  </a>
+  {% else %}
+  <a href="{% tag_add_url base_path selected_tags tag %}"
+     class="rounded-full px-3 py-1 text-xs transition-colors bg-secondary text-muted-foreground hover:bg-secondary/80">
+    {{ tag }}
+  </a>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if selected_tags %}
+<div class="mb-6">
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="text-sm text-muted-foreground">Active filters:</span>
+    {% for tag in selected_tags %}
+    <a href="{% tag_remove_url base_path selected_tags tag %}"
+       class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/30 transition-colors">
+      {{ tag }}
+      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </a>
+    {% endfor %}
+    <a href="{% tag_clear_url base_path %}" class="ml-2 text-xs text-accent hover:underline">Clear all</a>
+  </div>
+</div>
+{% endif %}

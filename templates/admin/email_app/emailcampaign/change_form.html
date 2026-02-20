@@ -1,0 +1,117 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block after_related_objects %}
+{{ block.super }}
+
+{% if campaign %}
+<div class="module" id="campaign-actions">
+    <h2>Campaign Actions</h2>
+    <div style="padding: 16px;">
+        <p>
+            <strong>Status:</strong> {{ campaign.get_status_display }}
+            &nbsp;|&nbsp;
+            <strong>Estimated Recipients:</strong>
+            <span id="recipient-count">{{ recipient_count }}</span>
+        </p>
+
+        {% if is_draft %}
+        <div style="margin-top: 12px; display: flex; gap: 12px;">
+            <button type="button" id="btn-send-test" class="button"
+                    onclick="sendTestEmail()"
+                    style="background: #417690; color: white; padding: 8px 16px; border: none; cursor: pointer;">
+                Send Test Email
+            </button>
+            <button type="button" id="btn-send-campaign" class="button"
+                    onclick="sendCampaign()"
+                    style="background: #ba2121; color: white; padding: 8px 16px; border: none; cursor: pointer;">
+                Send Campaign
+            </button>
+        </div>
+        <p id="action-message" style="margin-top: 8px; display: none;"></p>
+        {% else %}
+        <p><em>This campaign has already been {{ campaign.status }}.</em></p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]').value;
+}
+
+function sendTestEmail() {
+    var btn = document.getElementById('btn-send-test');
+    var msg = document.getElementById('action-message');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    msg.style.display = 'none';
+
+    fetch('{{ send_test_url }}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        msg.style.display = 'block';
+        msg.style.color = data.status === 'ok' ? 'green' : 'red';
+        msg.textContent = data.message;
+        btn.disabled = false;
+        btn.textContent = 'Send Test Email';
+    })
+    .catch(function(err) {
+        msg.style.display = 'block';
+        msg.style.color = 'red';
+        msg.textContent = 'Error: ' + err.message;
+        btn.disabled = false;
+        btn.textContent = 'Send Test Email';
+    });
+}
+
+function sendCampaign() {
+    var count = document.getElementById('recipient-count').textContent;
+    if (!confirm('Are you sure you want to send this campaign to ' + count + ' recipients?')) {
+        return;
+    }
+
+    var btn = document.getElementById('btn-send-campaign');
+    var msg = document.getElementById('action-message');
+    btn.disabled = true;
+    btn.textContent = 'Queuing...';
+    msg.style.display = 'none';
+
+    fetch('{{ send_campaign_url }}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        msg.style.display = 'block';
+        msg.style.color = data.status === 'ok' ? 'green' : 'red';
+        msg.textContent = data.message;
+        if (data.status === 'ok') {
+            btn.style.display = 'none';
+            document.getElementById('btn-send-test').style.display = 'none';
+            setTimeout(function() { location.reload(); }, 2000);
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Send Campaign';
+        }
+    })
+    .catch(function(err) {
+        msg.style.display = 'block';
+        msg.style.color = 'red';
+        msg.textContent = 'Error: ' + err.message;
+        btn.disabled = false;
+        btn.textContent = 'Send Campaign';
+    });
+}
+</script>
+{% endif %}
+{% endblock %}

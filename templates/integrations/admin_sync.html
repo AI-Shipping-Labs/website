@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Content Sync | {{ site_name }}{% endblock %}
+
+{% block body %}
+<div class="max-w-6xl mx-auto px-6 py-12">
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-3xl font-bold text-foreground">Content Sync</h1>
+      <p class="text-muted-foreground mt-1">Manage GitHub content sources and sync status.</p>
+    </div>
+    <form method="post" action="{% url 'admin_sync_all' %}">
+      {% csrf_token %}
+      <button type="submit" class="px-4 py-2 bg-accent text-accent-foreground rounded-lg hover:opacity-90 transition-opacity text-sm font-medium">
+        Sync All
+      </button>
+    </form>
+  </div>
+
+  <!-- Content Sources -->
+  <div class="space-y-4">
+    {% for source in sources %}
+    <div class="bg-card border border-border rounded-xl p-6">
+      <div class="flex items-center justify-between">
+        <div class="flex-1">
+          <div class="flex items-center space-x-3">
+            <h2 class="text-lg font-semibold text-foreground">{{ source.repo_name }}</h2>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-secondary text-muted-foreground">{{ source.content_type }}</span>
+            {% if source.is_private %}
+            <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">Private</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center space-x-4 mt-2 text-sm text-muted-foreground">
+            {% if source.last_synced_at %}
+            <span>Last synced: {{ source.last_synced_at|timesince }} ago</span>
+            {% else %}
+            <span>Never synced</span>
+            {% endif %}
+            {% if source.last_sync_status %}
+            <span class="{% if source.last_sync_status == 'success' %}text-green-400{% elif source.last_sync_status == 'failed' %}text-red-400{% elif source.last_sync_status == 'partial' %}text-yellow-400{% else %}text-blue-400{% endif %}">
+              {{ source.last_sync_status }}
+            </span>
+            {% endif %}
+          </div>
+          {% if source.last_sync_log %}
+          <p class="mt-1 text-xs text-muted-foreground">{{ source.last_sync_log|truncatewords:20 }}</p>
+          {% endif %}
+        </div>
+        <div class="flex items-center space-x-3">
+          <a href="{% url 'admin_sync_history' source.pk %}"
+             class="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
+            History
+          </a>
+          <form method="post" action="{% url 'admin_sync_trigger' source.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="px-3 py-1.5 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 transition-opacity">
+              Sync Now
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="bg-card border border-border rounded-xl p-12 text-center">
+      <p class="text-muted-foreground">No content sources configured.</p>
+      <p class="text-sm text-muted-foreground mt-1">Run <code>manage.py seed_content_sources</code> to create the default sources.</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

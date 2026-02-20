@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications | {{ site_name }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+
+<main class="min-h-screen pt-24">
+  <div class="mx-auto max-w-3xl px-6 py-12 lg:px-8">
+    <div class="mb-8 flex items-center justify-between">
+      <h1 class="text-2xl font-semibold tracking-tight">Notifications</h1>
+      <button onclick="markAllRead()" id="mark-all-btn"
+              class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Mark all as read
+      </button>
+    </div>
+
+    {% if notifications %}
+    <div class="space-y-2">
+      {% for notification in notifications %}
+      <a href="{{ notification.url }}"
+         onclick="markRead(event, {{ notification.pk }}, '{{ notification.url }}')"
+         class="block rounded-lg border {% if not notification.read %}border-accent/30 bg-card{% else %}border-border bg-background{% endif %} p-4 transition-colors hover:bg-secondary/50">
+        <div class="flex items-start gap-3">
+          {% if not notification.read %}
+          <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"></span>
+          {% else %}
+          <span class="mt-1.5 h-2 w-2 flex-shrink-0"></span>
+          {% endif %}
+          <div class="min-w-0 flex-1">
+            <p class="text-sm {% if not notification.read %}font-medium text-foreground{% else %}text-muted-foreground{% endif %}">
+              {{ notification.title }}
+            </p>
+            {% if notification.body %}
+            <p class="mt-1 text-sm text-muted-foreground line-clamp-2">{{ notification.body|truncatechars:80 }}</p>
+            {% endif %}
+            <p class="mt-1 text-xs text-muted-foreground/60">{{ notification.created_at|timesince }} ago</p>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav class="mt-8 flex items-center justify-center gap-4">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}"
+         class="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+        Previous
+      </a>
+      {% endif %}
+      <span class="text-sm text-muted-foreground">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}"
+         class="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+        Next
+      </a>
+      {% endif %}
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="rounded-lg border border-border bg-card p-12 text-center">
+      <i data-lucide="bell-off" class="mx-auto h-12 w-12 text-muted-foreground/40"></i>
+      <p class="mt-4 text-muted-foreground">No notifications yet.</p>
+    </div>
+    {% endif %}
+  </div>
+</main>
+
+{% include "includes/footer.html" %}
+
+<script>
+function getCsrfToken() {
+  var cookie = document.cookie.split(';').find(function(c) { return c.trim().startsWith('csrftoken='); });
+  return cookie ? cookie.split('=')[1] : '';
+}
+
+function markRead(e, id, url) {
+  e.preventDefault();
+  fetch('/api/notifications/' + id + '/read', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': getCsrfToken(),
+      'Content-Type': 'application/json',
+    },
+  }).then(function() {
+    window.location.href = url;
+  }).catch(function() {
+    window.location.href = url;
+  });
+}
+
+function markAllRead() {
+  fetch('/api/notifications/read-all', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': getCsrfToken(),
+      'Content-Type': 'application/json',
+    },
+  }).then(function() {
+    window.location.reload();
+  });
+}
+</script>
+{% endblock %}

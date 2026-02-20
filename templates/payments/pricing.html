@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing | {{ site_name }}{% endblock %}
+{% block meta_description %}Choose your membership tier. Free newsletter, or paid access to exclusive content, community, courses, and personalized feedback.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="pt-32 pb-24 lg:pb-32">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <!-- Header -->
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          Choose your level of engagement
+        </h1>
+        <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
+          Each tier is designed for a different type of builder. More investment means more structure,
+          accountability, and support to help you ship your AI projects consistently.
+        </p>
+
+        <!-- Monthly / Yearly Toggle -->
+        <div class="mt-8 flex items-center justify-center gap-4">
+          <span class="text-sm text-foreground" id="monthly-label">Monthly</span>
+          <button type="button" id="billing-toggle"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors"
+                  aria-label="Toggle annual pricing">
+            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-0" id="billing-toggle-dot"></span>
+          </button>
+          <span class="text-sm text-muted-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
+        </div>
+      </div>
+
+      <!-- Tier Grid: 4 columns on desktop, stack on mobile -->
+      <div class="mx-auto mt-16 grid max-w-7xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {% for item in tiers_data %}
+        <div class="relative flex flex-col rounded-xl border p-8 transition-all {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20{% else %}border-border bg-background{% endif %}" {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
+          {% if item.tier.slug == 'main' %}
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2">
+            <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+              <i data-lucide="star" class="h-3 w-3"></i>
+              Most Popular
+            </span>
+          </div>
+          {% endif %}
+
+          <!-- Tier Name -->
+          <div class="mb-6">
+            <h2 class="text-lg font-semibold text-foreground">{{ item.tier.name }}</h2>
+          </div>
+
+          <!-- Price -->
+          <div class="mb-6">
+            {% if item.tier.price_eur_month %}
+            <div class="flex items-baseline">
+              <span class="text-4xl font-semibold text-foreground tier-price"
+                    data-monthly="{{ item.tier.price_eur_month }}"
+                    data-annual="{{ item.tier.price_eur_year }}">&euro;{{ item.tier.price_eur_month }}</span>
+              <span class="ml-2 text-muted-foreground tier-period">/month</span>
+            </div>
+            {% else %}
+            <div class="flex items-baseline">
+              <span class="text-4xl font-semibold text-foreground">&euro;0</span>
+              <span class="ml-2 text-muted-foreground">/forever</span>
+            </div>
+            {% endif %}
+          </div>
+
+          <!-- Description -->
+          <p class="mb-6 text-sm text-muted-foreground">{{ item.tier.description }}</p>
+
+          <!-- Features -->
+          <ul class="mb-8 flex-1 space-y-3">
+            {% for feature in item.tier.features %}
+            <li class="flex items-start gap-3">
+              <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
+              <span class="text-sm text-foreground">{{ feature }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+
+          <!-- CTA Button -->
+          <div class="mt-auto">
+            {% if item.tier.slug == 'free' %}
+            <a href="/#newsletter"
+               class="block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80">
+              Subscribe
+            </a>
+            {% else %}
+            <a href="{{ item.payment_link_monthly }}"
+               target="_blank" rel="noopener noreferrer"
+               class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               data-link-monthly="{{ item.payment_link_monthly }}"
+               data-link-annual="{{ item.payment_link_annual }}"
+               {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
+              Join
+            </a>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Billing toggle (monthly/annual)
+var isAnnual = false;
+document.getElementById('billing-toggle').addEventListener('click', function() {
+  isAnnual = !isAnnual;
+  var dot = document.getElementById('billing-toggle-dot');
+  var toggleBtn = document.getElementById('billing-toggle');
+  var monthlyLabel = document.getElementById('monthly-label');
+  var annualLabel = document.getElementById('annual-label');
+
+  if (isAnnual) {
+    dot.classList.add('translate-x-5');
+    dot.classList.remove('translate-x-0');
+    toggleBtn.classList.add('bg-accent');
+    toggleBtn.classList.remove('bg-secondary');
+    monthlyLabel.className = 'text-sm text-muted-foreground';
+    annualLabel.className = 'text-sm text-foreground';
+  } else {
+    dot.classList.remove('translate-x-5');
+    dot.classList.add('translate-x-0');
+    toggleBtn.classList.remove('bg-accent');
+    toggleBtn.classList.add('bg-secondary');
+    monthlyLabel.className = 'text-sm text-foreground';
+    annualLabel.className = 'text-sm text-muted-foreground';
+  }
+
+  // Update prices
+  document.querySelectorAll('.tier-price').forEach(function(el) {
+    el.textContent = '\u20AC' + (isAnnual ? el.dataset.annual : el.dataset.monthly);
+  });
+  document.querySelectorAll('.tier-period').forEach(function(el) {
+    el.textContent = isAnnual ? '/year' : '/month';
+  });
+  // Update CTA links
+  document.querySelectorAll('.tier-cta-link').forEach(function(el) {
+    el.href = isAnnual ? el.dataset.linkAnnual : el.dataset.linkMonthly;
+  });
+});
+</script>
+{% endblock %}

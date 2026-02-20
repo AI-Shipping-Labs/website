@@ -1,0 +1,147 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Dashboard{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold text-foreground">Dashboard</h1>
+  <p class="text-muted-foreground mt-1">Overview of your content and community.</p>
+</div>
+
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Total Courses</p>
+        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.total_courses }}</p>
+      </div>
+      <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+        <i data-lucide="book-open" class="w-5 h-5 text-blue-400"></i>
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2">{{ stats.published_courses }} published</p>
+  </div>
+
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Published Articles</p>
+        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.published_articles }}</p>
+      </div>
+      <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+        <i data-lucide="file-text" class="w-5 h-5 text-green-400"></i>
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2">{{ stats.total_articles }} total</p>
+  </div>
+
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Active Subscribers</p>
+        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.active_subscribers }}</p>
+      </div>
+      <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+        <i data-lucide="users" class="w-5 h-5 text-purple-400"></i>
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2">{{ stats.total_subscribers }} total</p>
+  </div>
+
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Upcoming Events</p>
+        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.upcoming_events }}</p>
+      </div>
+      <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+        <i data-lucide="calendar" class="w-5 h-5 text-orange-400"></i>
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2">{{ stats.total_events }} total</p>
+  </div>
+</div>
+
+<!-- Second stats row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Recordings</p>
+        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.total_recordings }}</p>
+      </div>
+      <i data-lucide="video" class="w-5 h-5 text-muted-foreground"></i>
+    </div>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Downloads</p>
+        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.total_downloads }}</p>
+      </div>
+      <i data-lucide="download" class="w-5 h-5 text-muted-foreground"></i>
+    </div>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Pending Projects</p>
+        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.pending_projects }}</p>
+      </div>
+      <i data-lucide="folder-kanban" class="w-5 h-5 text-muted-foreground"></i>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Recent Articles -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-foreground">Recent Articles</h2>
+      <a href="{% url 'studio_article_list' %}" class="text-sm text-accent hover:underline">View all</a>
+    </div>
+    {% if recent_articles %}
+    <ul class="space-y-3">
+      {% for article in recent_articles %}
+      <li class="flex items-center justify-between py-2 border-b border-border last:border-0">
+        <div>
+          <a href="{% url 'studio_article_edit' article_id=article.pk %}" class="text-sm text-foreground hover:text-accent">{{ article.title }}</a>
+          <p class="text-xs text-muted-foreground mt-1">{{ article.date }}</p>
+        </div>
+        <span class="text-xs px-2 py-1 rounded-full {% if article.published %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {% if article.published %}Published{% else %}Draft{% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-muted-foreground">No articles yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Pending Projects -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-foreground">Pending Projects</h2>
+      <a href="{% url 'studio_project_list' %}?status=pending_review" class="text-sm text-accent hover:underline">View all</a>
+    </div>
+    {% if pending_projects %}
+    <ul class="space-y-3">
+      {% for project in pending_projects %}
+      <li class="flex items-center justify-between py-2 border-b border-border last:border-0">
+        <div>
+          <a href="{% url 'studio_project_review' project_id=project.pk %}" class="text-sm text-foreground hover:text-accent">{{ project.title }}</a>
+          <p class="text-xs text-muted-foreground mt-1">by {{ project.author }}</p>
+        </div>
+        <span class="text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-400">Pending</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-muted-foreground">No pending projects.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

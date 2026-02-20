@@ -1,0 +1,142 @@
+<div id="timestamp-editor-{{ widget.name }}" class="timestamp-editor">
+  <input type="hidden" name="{{ widget.name }}" id="id_{{ widget.name }}" value="{{ widget.value }}">
+
+  <table id="timestamp-table-{{ widget.name }}" style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+    <thead>
+      <tr>
+        <th style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #ccc; width: 40px;">#</th>
+        <th style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #ccc; width: 120px;">Time (MM:SS)</th>
+        <th style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #ccc;">Label</th>
+        <th style="text-align: left; padding: 6px 8px; border-bottom: 1px solid #ccc; width: 100px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="timestamp-rows-{{ widget.name }}">
+    </tbody>
+  </table>
+
+  <button type="button" id="add-timestamp-{{ widget.name }}"
+    style="padding: 6px 14px; background: #417690; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">
+    + Add Timestamp
+  </button>
+
+  <script>
+    (function() {
+      var fieldName = '{{ widget.name }}';
+      var hiddenInput = document.getElementById('id_' + fieldName);
+      var tbody = document.getElementById('timestamp-rows-' + fieldName);
+      var addBtn = document.getElementById('add-timestamp-' + fieldName);
+
+      function secondsToTimeStr(totalSeconds) {
+        totalSeconds = parseInt(totalSeconds, 10) || 0;
+        var hours = Math.floor(totalSeconds / 3600);
+        var minutes = Math.floor((totalSeconds % 3600) / 60);
+        var seconds = totalSeconds % 60;
+        if (hours > 0) {
+          return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+        }
+        return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+      }
+
+      function timeStrToSeconds(timeStr) {
+        if (!timeStr) return 0;
+        var parts = timeStr.trim().split(':');
+        if (parts.length === 2) {
+          return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+        } else if (parts.length === 3) {
+          return (parseInt(parts[0], 10) || 0) * 3600 + (parseInt(parts[1], 10) || 0) * 60 + (parseInt(parts[2], 10) || 0);
+        }
+        return 0;
+      }
+
+      function updateHiddenInput() {
+        var rows = tbody.querySelectorAll('tr');
+        var timestamps = [];
+        rows.forEach(function(row) {
+          var timeInput = row.querySelector('.ts-time-input');
+          var labelInput = row.querySelector('.ts-label-input');
+          if (timeInput && labelInput) {
+            timestamps.push({
+              time_seconds: timeStrToSeconds(timeInput.value),
+              label: labelInput.value
+            });
+          }
+        });
+        hiddenInput.value = JSON.stringify(timestamps);
+      }
+
+      function renumberRows() {
+        var rows = tbody.querySelectorAll('tr');
+        rows.forEach(function(row, i) {
+          row.querySelector('.ts-row-number').textContent = (i + 1);
+        });
+      }
+
+      function addRow(timeSeconds, label) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td style="padding: 4px 8px; vertical-align: middle;" class="ts-row-number">' + (tbody.querySelectorAll('tr').length + 1) + '</td>' +
+          '<td style="padding: 4px 8px;">' +
+          '<input type="text" class="ts-time-input" value="' + secondsToTimeStr(timeSeconds || 0) + '" ' +
+          'placeholder="00:00" style="width: 100px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">' +
+          '</td>' +
+          '<td style="padding: 4px 8px;">' +
+          '<input type="text" class="ts-label-input" value="' + (label || '').replace(/"/g, '&quot;') + '" ' +
+          'placeholder="Timestamp label" style="width: 100%; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px;">' +
+          '</td>' +
+          '<td style="padding: 4px 8px;">' +
+          '<button type="button" class="ts-move-up" title="Move up" style="cursor: pointer; padding: 2px 6px; margin-right: 2px;">&#9650;</button>' +
+          '<button type="button" class="ts-move-down" title="Move down" style="cursor: pointer; padding: 2px 6px; margin-right: 2px;">&#9660;</button>' +
+          '<button type="button" class="ts-remove" title="Remove" style="cursor: pointer; padding: 2px 6px; color: #ba2121;">&#10005;</button>' +
+          '</td>';
+
+        tbody.appendChild(tr);
+
+        tr.querySelector('.ts-time-input').addEventListener('change', updateHiddenInput);
+        tr.querySelector('.ts-label-input').addEventListener('change', updateHiddenInput);
+        tr.querySelector('.ts-label-input').addEventListener('input', updateHiddenInput);
+        tr.querySelector('.ts-time-input').addEventListener('input', updateHiddenInput);
+
+        tr.querySelector('.ts-remove').addEventListener('click', function() {
+          tr.remove();
+          renumberRows();
+          updateHiddenInput();
+        });
+
+        tr.querySelector('.ts-move-up').addEventListener('click', function() {
+          var prev = tr.previousElementSibling;
+          if (prev) {
+            tbody.insertBefore(tr, prev);
+            renumberRows();
+            updateHiddenInput();
+          }
+        });
+
+        tr.querySelector('.ts-move-down').addEventListener('click', function() {
+          var next = tr.nextElementSibling;
+          if (next) {
+            tbody.insertBefore(next, tr);
+            renumberRows();
+            updateHiddenInput();
+          }
+        });
+      }
+
+      // Initialize from existing data
+      try {
+        var existing = JSON.parse(hiddenInput.value || '[]');
+        if (Array.isArray(existing)) {
+          existing.forEach(function(ts) {
+            addRow(ts.time_seconds, ts.label);
+          });
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+
+      addBtn.addEventListener('click', function() {
+        addRow(0, '');
+        updateHiddenInput();
+      });
+    })();
+  </script>
+</div>

@@ -41,5 +41,13 @@ When using Edit or MultiEdit tools on Windows, use backslashes (`\`) in file pat
 
 If you get "File has been unexpectedly modified" — re-read the file immediately before editing.
 
+### Formatting Rules for Documents and Issues
+
+- No bold formatting (`**text**`) — use plain text, headings, or backticks for emphasis
+- Use `backticks` for code, file paths, commands, field names, and technical terms
+- Use headings (`##`, `###`) for structure, not bold text
+- Use tables for structured data, not bullet lists of key-value pairs
+- Keep lines concise — one idea per bullet point
+
 ## Current Work
 <!-- What are you working on? What's the current context? -->

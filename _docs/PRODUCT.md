@@ -202,11 +202,11 @@ Access control logic: a user can access any content object where `user.tier.leve
 
 ### Header (Global)
 The fixed header appears on every page and contains:
-- **Logo + site name** linking to `/` (home)
-- **Primary nav links** (desktop): About, Activities, Membership (anchor to `/#tiers`), Resources dropdown, FAQ (anchor to `/#faq`)
-- **Resources dropdown**: Blog, Project Ideas, Event Recordings, Tutorials, Curated Links
-- **Auth area** (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
-- **Mobile menu**: Hamburger toggle revealing all nav links plus account/notifications/logout
+- Logo + site name linking to `/` (home)
+- Primary nav links (desktop): About, Activities, Membership (anchor to `/#tiers`), Resources dropdown, FAQ (anchor to `/#faq`)
+- Resources dropdown: Blog, Project Ideas, Event Recordings, Tutorials, Curated Links
+- Auth area (desktop): "Sign in" for anonymous users; for authenticated users: notification bell with unread badge dropdown, email link to account page, "Log out" button
+- Mobile menu: Hamburger toggle revealing all nav links plus account/notifications/logout
 
 ### Footer (Global)
 Appears on every page:
@@ -236,11 +236,11 @@ The dashboard surfaces personalized actions:
 6. Notifications: Click through to notification targets
 
 ### Content-Level Cross-Links
-- **Gated content**: When a user cannot access content, a CTA banner appears with "Upgrade to [Tier] to [action]" linking to `/pricing`
-- **Article detail**: Related articles section; newsletter CTA after content; tag links
-- **Course detail**: "Sign Up Free" CTA for free courses (unauthenticated users); "View Pricing" CTA for paid courses
-- **Event listing**: Past events link to their recordings
-- **Tag system**: Tag chips on listings link to filtered views; global tag index at `/tags`
+- Gated content: When a user cannot access content, a CTA banner appears with "Upgrade to [Tier] to [action]" linking to `/pricing`
+- Article detail: Related articles section; newsletter CTA after content; tag links
+- Course detail: "Sign Up Free" CTA for free courses (unauthenticated users); "View Pricing" CTA for paid courses
+- Event listing: Past events link to their recordings
+- Tag system: Tag chips on listings link to filtered views; global tag index at `/tags`
 
 ## Key User Journeys
 
@@ -272,29 +272,29 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 
 | Term | Meaning | Do NOT Call It |
 |------|---------|----------------|
-| **Tier** | A membership level (Free, Basic, Main, Premium) | Plan, package, subscription level |
-| **Level** | The numeric access level associated with a tier (0, 10, 20, 30) | Rank, grade |
-| **Article** | A blog post on the site | Post, blog entry |
-| **Recording** | A recorded event/workshop video with materials | Video, replay |
-| **Tutorial** | A focused step-by-step guide on a narrow topic | How-to, guide |
-| **Course** | A structured multi-module learning path with units | Class, program |
-| **Module** | A grouping of units within a course | Section, chapter |
-| **Unit** | A single lesson within a module (video + text + homework) | Lesson, lecture |
-| **Cohort** | A time-bound group taking a course together (with drip scheduling) | Batch, class, group |
-| **Project** | A project idea or portfolio project writeup | Showcase, portfolio item |
-| **Curated Link** | An external resource link categorized by type (tool, model, course) | Resource, bookmark, collection item |
-| **Download** | A downloadable file (PDF, slides, notebook) | Asset, attachment |
-| **Event** | A scheduled activity (live or async) with registration | Meeting, session, webinar |
-| **Poll** | A vote on a topic or course idea | Survey, questionnaire |
-| **Option** | A choice within a poll that members can vote on | Answer, item |
-| **Proposal** | A member-submitted option for a poll | Suggestion |
-| **Notification** | An in-app alert shown in the bell dropdown and notifications page | Alert, message |
-| **Newsletter** | The email subscription powered by the email_app | Mailing list |
-| **Subscriber** | Someone who has signed up for the newsletter (may or may not have an account) | Lead, contact |
-| **Campaign** | A single email send to subscribers | Blast, email |
-| **Studio** | The staff-facing content management interface at `/studio/` | CMS, admin panel, back-office |
-| **Content Source** | A GitHub repo configured to sync content into the platform | Integration, feed |
-| **Gated** | Content that requires a specific tier level to access | Locked, restricted, premium |
-| **Lead Magnet** | A download with `required_level = 0` that requires an account but not payment | Freebie, opt-in |
-| **Account** | The user-facing page at `/account/` for managing membership and preferences | Profile, settings |
-| **Billing Period** | The current monthly or annual subscription cycle | Cycle, term |
+| Tier | A membership level (Free, Basic, Main, Premium) | Plan, package, subscription level |
+| Level | The numeric access level associated with a tier (0, 10, 20, 30) | Rank, grade |
+| Article | A blog post on the site | Post, blog entry |
+| Recording | A recorded event/workshop video with materials | Video, replay |
+| Tutorial | A focused step-by-step guide on a narrow topic | How-to, guide |
+| Course | A structured multi-module learning path with units | Class, program |
+| Module | A grouping of units within a course | Section, chapter |
+| Unit | A single lesson within a module (video + text + homework) | Lesson, lecture |
+| Cohort | A time-bound group taking a course together (with drip scheduling) | Batch, class, group |
+| Project | A project idea or portfolio project writeup | Showcase, portfolio item |
+| Curated Link | An external resource link categorized by type (tool, model, course) | Resource, bookmark, collection item |
+| Download | A downloadable file (PDF, slides, notebook) | Asset, attachment |
+| Event | A scheduled activity (live or async) with registration | Meeting, session, webinar |
+| Poll | A vote on a topic or course idea | Survey, questionnaire |
+| Option | A choice within a poll that members can vote on | Answer, item |
+| Proposal | A member-submitted option for a poll | Suggestion |
+| Notification | An in-app alert shown in the bell dropdown and notifications page | Alert, message |
+| Newsletter | The email subscription powered by the email_app | Mailing list |
+| Subscriber | Someone who has signed up for the newsletter (may or may not have an account) | Lead, contact |
+| Campaign | A single email send to subscribers | Blast, email |
+| Studio | The staff-facing content management interface at `/studio/` | CMS, admin panel, back-office |
+| Content Source | A GitHub repo configured to sync content into the platform | Integration, feed |
+| Gated | Content that requires a specific tier level to access | Locked, restricted, premium |
+| Lead Magnet | A download with `required_level = 0` that requires an account but not payment | Freebie, opt-in |
+| Account | The user-facing page at `/account/` for managing membership and preferences | Profile, settings |
+| Billing Period | The current monthly or annual subscription cycle | Cycle, term |

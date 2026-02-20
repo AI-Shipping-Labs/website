@@ -65,6 +65,18 @@ class Course(models.Model):
         help_text="Slack channel URL for paid courses, GitHub URL for free courses.",
     )
     tags = models.JSONField(default=list, blank=True)
+    source_repo = models.CharField(
+        max_length=300, blank=True, null=True, default=None,
+        help_text="GitHub repo this content was synced from.",
+    )
+    source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+        help_text="File path within the source repo.",
+    )
+    source_commit = models.CharField(
+        max_length=40, blank=True, null=True, default=None,
+        help_text="Git commit SHA of the last sync.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -121,6 +133,18 @@ class Module(models.Model):
     )
     title = models.CharField(max_length=300)
     sort_order = models.IntegerField(default=0)
+    source_repo = models.CharField(
+        max_length=300, blank=True, null=True, default=None,
+        help_text="GitHub repo this content was synced from.",
+    )
+    source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+        help_text="File path within the source repo.",
+    )
+    source_commit = models.CharField(
+        max_length=40, blank=True, null=True, default=None,
+        help_text="Git commit SHA of the last sync.",
+    )
 
     class Meta:
         ordering = ['sort_order']
@@ -165,6 +189,18 @@ class Unit(models.Model):
     available_after_days = models.IntegerField(
         null=True, blank=True,
         help_text="For cohort drip schedule: unit becomes available this many days after cohort start_date. Null = available immediately.",
+    )
+    source_repo = models.CharField(
+        max_length=300, blank=True, null=True, default=None,
+        help_text="GitHub repo this content was synced from.",
+    )
+    source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+        help_text="File path within the source repo.",
+    )
+    source_commit = models.CharField(
+        max_length=40, blank=True, null=True, default=None,
+        help_text="Git commit SHA of the last sync.",
     )
 
     class Meta:

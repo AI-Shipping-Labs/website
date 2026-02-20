@@ -41,6 +41,18 @@ class Download(models.Model):
     tags = models.JSONField(default=list, blank=True)
     download_count = models.PositiveIntegerField(default=0)
     published = models.BooleanField(default=True)
+    source_repo = models.CharField(
+        max_length=300, blank=True, null=True, default=None,
+        help_text="GitHub repo this content was synced from.",
+    )
+    source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+        help_text="File path within the source repo.",
+    )
+    source_commit = models.CharField(
+        max_length=40, blank=True, null=True, default=None,
+        help_text="Git commit SHA of the last sync.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

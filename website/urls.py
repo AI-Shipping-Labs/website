@@ -12,6 +12,8 @@ from notifications.urls import api_urlpatterns as notification_api_urlpatterns
 from notifications.urls import page_urlpatterns as notification_page_urlpatterns
 
 urlpatterns = [
+    # Integrations URLs must come before admin/ to allow /admin/sync/ to resolve
+    path('', include('integrations.urls')),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('account/', include(account_urlpatterns)),
@@ -24,9 +26,9 @@ urlpatterns = [
     path('', include('payments.urls')),
     path('', include('content.urls')),
     path('', include('events.urls')),
-    path('', include('integrations.urls')),
     path('', include('voting.urls')),
     path('', include('email_app.urls')),
+    path('studio/', include('studio.urls')),
 ]
 
 if settings.DEBUG:

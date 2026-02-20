@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'jobs',
     'community',
     'notifications',
+    'studio',
 ]
 
 MIDDLEWARE = [
@@ -162,6 +163,14 @@ SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED'
 
 # Content directory (markdown files from reference)
 CONTENT_DIR = BASE_DIR / 'reference' / 'content'
+
+# GitHub App authentication for private repo access (set via environment variables)
+GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
+GITHUB_APP_PRIVATE_KEY = os.environ.get('GITHUB_APP_PRIVATE_KEY', '')
+GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')
+
+# CDN base URL for content images uploaded during sync
+CONTENT_CDN_BASE = os.environ.get('CONTENT_CDN_BASE', '/static/content-images')
 
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'

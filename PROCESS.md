@@ -2,7 +2,7 @@
 
 ## Overview
 
-We use GitHub Issues to track development of the AI Shipping Labs platform. All work is tracked as issues with labels and milestones — no project boards. Two agents (implementer + QA) iterate on each issue until it's done.
+We use GitHub Issues to track development of the AI Shipping Labs platform. All work is tracked as issues with labels and milestones — no project boards. Four agents (product-manager, software-engineer, tester, pipeline-fixer) handle the full lifecycle from raw request to shipped code.
 
 ## Links
 
@@ -11,16 +11,19 @@ We use GitHub Issues to track development of the AI Shipping Labs platform. All 
 - Specs: [`specs/`](specs/) folder in this repo
 - Issue backlog: https://github.com/AI-Shipping-Labs/website/issues
 
-## Specs → Issues → Code
+## Issue Lifecycle
 
 ```
-specs/*.md          →    GitHub Issues        →    Commits to main
-(requirements)           (tracked work)            (implementation)
+User creates issue        →    Product Manager grooms    →    Software Engineer builds    →    Commits to main
+(needs grooming)               (agent-ready spec)             (code + tests)                  (auto-closes issue)
 ```
 
-1. Specs define what to build. Each spec has numbered requirements (R-PAY-1, R-ACL-2, etc.) and acceptance criteria.
-2. Issues are concrete tasks derived from specs. Each issue references its spec and has clear acceptance criteria.
-3. Code is committed directly to `main` with `Closes #N` to auto-close issues.
+1. **User creates an issue** via the GitHub issue template. It gets the `needs grooming` label automatically.
+2. **Product Manager** reads the raw request, researches the codebase, and rewrites the issue with: scope, acceptance criteria, dependencies, and Playwright test scenarios. Removes `needs grooming`, adds proper labels.
+3. **Software Engineer** implements the groomed issue — writes code and tests.
+4. **Tester** reviews the code, runs all tests, verifies acceptance criteria.
+5. **Code is committed** to `main` with `Closes #N` to auto-close the issue.
+6. **Pipeline Fixer** monitors CI/CD and fixes any breakages.
 
 ## Milestones
 
@@ -43,46 +46,65 @@ Complete milestones in order.
 An orchestrator (human or top-level agent) drives the process:
 
 ```
-Orchestrator
+User creates issue (needs grooming)
     │
-    ├── assigns issue ──► Implementer ──► writes code, commits to main
+    ▼
+Product Manager ──► grooms into agent-ready spec
+    │
+    ▼
+Orchestrator picks groomed issue
+    │
+    ├── assigns issue ──► Software Engineer ──► writes code + tests
     │                          │
     │                          ▼
-    ├── sends to review ──► QA ──► reviews code, checks acceptance criteria
+    ├── sends to review ──► Tester ──► reviews code, runs all tests
     │                          │
     │                          ▼
     │                     feedback (pass / fail with specifics)
     │                          │
     │         ┌────────────────┘
     │         ▼
-    ├── if fail ──► Implementer fixes ──► QA re-reviews
+    ├── if fail ──► Software Engineer fixes ──► Tester re-reviews
     │                    (repeat until pass)
     │
-    └── if pass ──► issue is done, pick next issue
+    ├── if pass ──► Software Engineer commits and pushes
+    │
+    └── Pipeline Fixer ──► monitors CI/CD, fixes if broken
 ```
 
 ### Steps
 
-1. Orchestrator picks an issue from the current milestone and assigns it to the implementer
-2. Implementer reads the issue + spec, writes code, commits to main, reports what was done
-3. QA reviews the code against the spec and acceptance criteria, reports pass/fail
-4. If fail: QA gives specific feedback → implementer fixes → QA re-reviews
-5. If pass: issue is done, orchestrator picks the next issue
+1. User creates a raw issue via the GitHub template (auto-labeled `needs grooming`)
+2. Product Manager grooms it into the agent-ready format with scope, acceptance criteria, and Playwright test scenarios
+3. Orchestrator picks a groomed issue and assigns it to the software engineer
+4. Software engineer reads the issue + spec, writes code and tests locally (does NOT commit)
+5. Tester reviews the code, runs all tests (unit + integration + Playwright E2E), reports pass/fail
+6. If fail: Tester gives specific feedback → software engineer fixes → tester re-reviews
+7. If pass: Software engineer commits and pushes with `Closes #N`
+8. Pipeline fixer checks CI/CD and fixes any failures
 
 ### Agents
 
-- Implementer (`.claude/agents/implementer.md`) — receives an issue number, reads spec, writes code, commits to main, handles QA feedback
-- QA (`.claude/agents/qa.md`) — receives an issue number + implementer summary, reviews code against spec, checks acceptance criteria, gives concrete feedback
+- **Product Manager** (`.claude/agents/product-manager.md`) — grooms raw "needs grooming" issues into structured specs with acceptance criteria and Playwright test scenarios
+- **Software Engineer** (`.claude/agents/software-engineer.md`) — receives an issue number, reads spec, writes code + tests, does NOT commit until tester passes
+- **Tester** (`.claude/agents/tester.md`) — receives an issue number + software engineer summary, reviews code against spec, runs all tests, gives concrete feedback
+- **Pipeline Fixer** (`.claude/agents/pipeline-fixer.md`) — runs after push, checks CI/CD status, identifies related issue from commit messages, fixes code if broken
 
 ## Labels
 
-### Spec labels
-`spec:01-tiers`, `spec:02-payments`, ..., `spec:14-github`
+### Workflow labels
+- `needs grooming` — Raw user request, not yet agent-ready
+
+### Area labels
+`auth`, `frontend`, `admin`, `content`, `courses`, `events`, `payments`, `email`, `community`, `seo`, `infra`, `integration`
 
 ### Priority labels
 - `P0` — Must have for launch
 - `P1` — Important
 - `P2` — Nice to have
+
+### Special labels
+- `human` — Code done, needs manual verification (OAuth flows, visual checks, etc.)
 
 ## Content Management
 

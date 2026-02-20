@@ -1,7 +1,10 @@
+from django.db.models import Max, Count, Q
 from django.shortcuts import render
 from django.conf import settings
+from django.utils import timezone
 
-from content.models import Article, Recording, Project, CuratedLink
+from content.access import get_user_level
+from content.models import Article, Recording, Project, CuratedLink, Course, UserCourseProgress, Unit
 
 
 TESTIMONIALS = [
@@ -182,7 +185,18 @@ SECTION_NAV = [
 
 
 def home(request):
-    """Homepage view."""
+    """Homepage view.
+
+    Authenticated users see a personalized dashboard.
+    Anonymous users see the public marketing homepage.
+    """
+    if request.user.is_authenticated:
+        return _dashboard(request)
+    return _public_home(request)
+
+
+def _public_home(request):
+    """Render the public marketing homepage for anonymous users."""
     articles = Article.objects.filter(published=True)[:3]
     recordings = Recording.objects.filter(published=True)[:3]
     projects = Project.objects.filter(published=True)[:3]
@@ -210,3 +224,207 @@ def home(request):
         'section_nav': SECTION_NAV,
     }
     return render(request, 'home.html', context)
+
+
+def _dashboard(request):
+    """Render the personalized dashboard for authenticated users."""
+    user = request.user
+    user_level = get_user_level(user)
+
+    # --- Welcome banner ---
+    tier_name = ''
+    if user.tier_id:
+        tier_name = user.tier.name
+
+    # --- Continue learning ---
+    # Find courses where the user has progress (at least one unit accessed)
+    # and compute completion percentage + last accessed unit.
+    # A course is "in progress" if the user has at least one completed unit
+    # but has not completed all units.
+    in_progress_courses = _get_in_progress_courses(user)
+
+    # --- Upcoming events ---
+    upcoming_events = _get_upcoming_events(user)
+
+    # --- Recent content ---
+    recent_content = _get_recent_content(user_level)
+
+    # --- Active polls ---
+    active_polls = _get_active_polls(user_level)
+
+    # --- Quick actions ---
+    quick_actions = _get_quick_actions(user_level)
+
+    # --- Notifications ---
+    notifications = _get_notifications(user)
+
+    context = {
+        'tier_name': tier_name,
+        'in_progress_courses': in_progress_courses,
+        'upcoming_events': upcoming_events,
+        'recent_content': recent_content,
+        'active_polls': active_polls,
+        'quick_actions': quick_actions,
+        'notifications': notifications,
+    }
+    return render(request, 'content/dashboard.html', context)
+
+
+def _get_in_progress_courses(user):
+    """Return courses the user has started but not finished, most recently accessed first."""
+    # Get all courses where user has at least one completed unit
+    progress_qs = UserCourseProgress.objects.filter(
+        user=user,
+        completed_at__isnull=False,
+    ).select_related('unit__module__course')
+
+    # Group by course: collect course ids and latest completed_at
+    course_data = {}
+    for prog in progress_qs:
+        course = prog.unit.module.course
+        cid = course.id
+        if cid not in course_data:
+            course_data[cid] = {
+                'course': course,
+                'completed_count': 0,
+                'last_completed_at': prog.completed_at,
+                'last_unit': prog.unit,
+            }
+        course_data[cid]['completed_count'] += 1
+        if prog.completed_at > course_data[cid]['last_completed_at']:
+            course_data[cid]['last_completed_at'] = prog.completed_at
+            course_data[cid]['last_unit'] = prog.unit
+
+    # Build result list, filtering out fully completed courses
+    result = []
+    for cid, data in course_data.items():
+        course = data['course']
+        total = course.total_units()
+        completed = data['completed_count']
+        if total == 0 or completed >= total:
+            continue  # Skip fully completed courses
+        percentage = int((completed / total) * 100)
+        result.append({
+            'course': course,
+            'completed_count': completed,
+            'total_units': total,
+            'percentage': percentage,
+            'last_unit': data['last_unit'],
+            'last_completed_at': data['last_completed_at'],
+        })
+
+    # Sort by most recently accessed first
+    result.sort(key=lambda x: x['last_completed_at'], reverse=True)
+    return result
+
+
+def _get_upcoming_events(user):
+    """Return the next 3 events the user is registered for."""
+    from events.models import EventRegistration
+    now = timezone.now()
+    registrations = EventRegistration.objects.filter(
+        user=user,
+        event__start_datetime__gt=now,
+        event__status='upcoming',
+    ).select_related('event').order_by('event__start_datetime')[:3]
+    return [reg.event for reg in registrations]
+
+
+def _get_recent_content(user_level):
+    """Return latest 5 published articles/recordings the user can access."""
+    # Get accessible articles
+    articles = list(
+        Article.objects.filter(
+            published=True,
+            required_level__lte=user_level,
+        ).order_by('-date')[:5]
+    )
+
+    # Get accessible recordings
+    recordings = list(
+        Recording.objects.filter(
+            published=True,
+            required_level__lte=user_level,
+        ).order_by('-date')[:5]
+    )
+
+    # Merge and sort by date, take top 5
+    combined = []
+    for article in articles:
+        combined.append({
+            'type': 'article',
+            'title': article.title,
+            'description': article.description,
+            'url': article.get_absolute_url(),
+            'date': article.date,
+            'icon': 'file-text',
+        })
+    for recording in recordings:
+        combined.append({
+            'type': 'recording',
+            'title': recording.title,
+            'description': recording.description,
+            'url': recording.get_absolute_url(),
+            'date': recording.date,
+            'icon': 'video',
+        })
+
+    combined.sort(key=lambda x: x['date'], reverse=True)
+    return combined[:5]
+
+
+def _get_active_polls(user_level):
+    """Return up to 2 open polls the user can participate in."""
+    from voting.models import Poll
+    now = timezone.now()
+    polls = Poll.objects.filter(
+        status='open',
+        required_level__lte=user_level,
+    ).filter(
+        Q(closes_at__isnull=True) | Q(closes_at__gt=now),
+    ).order_by('-created_at')[:2]
+    return list(polls)
+
+
+def _get_quick_actions(user_level):
+    """Build quick action cards based on user's tier level."""
+    from content.access import LEVEL_MAIN
+    actions = [
+        {
+            'title': 'Browse Courses',
+            'description': 'Explore structured learning paths',
+            'url': '/courses',
+            'icon': 'book-open',
+        },
+        {
+            'title': 'View Recordings',
+            'description': 'Watch event recordings and workshops',
+            'url': '/event-recordings',
+            'icon': 'video',
+        },
+    ]
+    if user_level >= LEVEL_MAIN:
+        actions.append({
+            'title': 'Community',
+            'description': 'Connect with other builders',
+            'url': '/community',
+            'icon': 'users',
+        })
+    actions.append({
+        'title': 'Submit Project',
+        'description': 'Share your work with the community',
+        'url': '/projects',
+        'icon': 'rocket',
+    })
+    return actions
+
+
+def _get_notifications(user):
+    """Return latest 5 unread notifications for the user."""
+    from notifications.models import Notification
+    return list(
+        Notification.objects.filter(
+            user=user,
+            read=False,
+        ).order_by('-created_at')[:5]
+    )

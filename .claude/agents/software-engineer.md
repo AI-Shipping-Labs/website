@@ -144,7 +144,7 @@ git push origin main
 **Commit message rules:**
 - First line: short description of the change (imperative mood)
 - Blank line, then `Closes #N` to auto-close the issue (or `Refs #N` if the issue has `[HUMAN]` criteria and should stay open)
-- The pipeline-fixer agent uses `Closes #N` / `Refs #N` to trace CI failures back to the responsible issue
+- The oncall-engineer agent uses `Closes #N` / `Refs #N` to trace CI failures back to the responsible issue
 - Every commit MUST reference an issue number — this is how we track what broke if CI fails
 
 ## Rules

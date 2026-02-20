@@ -23,7 +23,7 @@ User creates issue     →  PM grooms        →  Engineer builds  →  Tester v
 4. **Tester** reviews the code, runs ALL tests (unit + integration + Playwright E2E), verifies every acceptance criterion. Reports pass/fail.
 5. **Product Manager** does final acceptance review from the user's perspective — checks user flow, copy, empty states, navigation, consistency. Reports accept/reject.
 6. **Software Engineer** commits and pushes with `Closes #N`.
-7. **Pipeline Fixer** monitors CI/CD and fixes any breakages.
+7. **On-Call Engineer** monitors CI/CD and fixes any breakages.
 
 ## Agents
 
@@ -32,7 +32,7 @@ User creates issue     →  PM grooms        →  Engineer builds  →  Tester v
 | **Product Manager** | `.claude/agents/product-manager.md` | Grooms issues into specs (start) + user acceptance review (end) |
 | **Software Engineer** | `.claude/agents/software-engineer.md` | Implements code + tests, does NOT commit until approved |
 | **Tester** | `.claude/agents/tester.md` | Runs all tests, verifies acceptance criteria technically |
-| **Pipeline Fixer** | `.claude/agents/pipeline-fixer.md` | Monitors CI/CD after push, fixes failures |
+| **On-Call Engineer** | `.claude/agents/oncall-engineer.md` | Monitors CI/CD after push, fixes failures |
 
 ## Agent Workflow
 
@@ -71,7 +71,7 @@ Orchestrator picks groomed issue
     │
     ├── if accept ──► Software Engineer commits and pushes
     │
-    └── Pipeline Fixer ──► monitors CI/CD, fixes if broken
+    └── On-Call Engineer ──► monitors CI/CD, fixes if broken
 ```
 
 ### Detailed Steps
@@ -97,7 +97,7 @@ Orchestrator picks groomed issue
 - If tester passes: launch product manager for acceptance review
 - If PM rejects: relay UX feedback to software engineer, fix, then re-launch PM
 - If PM accepts: tell software engineer to commit and push
-- After pushing, run pipeline-fixer to check CI/CD
+- After pushing, run oncall-engineer to check CI/CD
 - After committing, pick the next two issues (never stop until all issues are done)
 - Tester must actually run all tests — not just review code. Test report must include counts by type
 - Tester must run Playwright visual regression tests, not just verify they exist

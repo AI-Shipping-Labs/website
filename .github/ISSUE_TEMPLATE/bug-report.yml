@@ -1,0 +1,59 @@
+name: Bug Report
+description: Report something that's broken
+labels: ["needs grooming", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a bug? Fill in what you can and we'll investigate.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly
+      placeholder: When I do X, Y happens instead of Z
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Go to /page
+        2. Click button
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / logs
+      description: Paste any relevant screenshots, error messages, or console output
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Frontend / UI
+        - Backend / API
+        - Auth / Accounts
+        - Content
+        - Events
+        - Payments
+        - Email / Notifications
+        - Admin / Studio
+        - Other
+    validations:
+      required: true

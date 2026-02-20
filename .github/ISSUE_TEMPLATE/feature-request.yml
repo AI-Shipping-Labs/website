@@ -1,0 +1,76 @@
+name: Feature Request
+description: Request a new feature or improvement for the platform
+labels: ["needs grooming", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for submitting a feature request! Fill in what you can — the team will groom this into a detailed spec before implementation.
+
+  - type: input
+    id: title
+    attributes:
+      label: Feature title
+      description: Short, descriptive name for this feature
+      placeholder: e.g. "Add dark mode toggle to header"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What do you want?
+      description: Describe the feature in plain language. What should it do? Who is it for?
+      placeholder: |
+        As a [user/admin/member], I want to [do something] so that [benefit].
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details and examples
+      description: Any specifics — UI mockups, behavior descriptions, edge cases, links to similar features elsewhere
+      placeholder: |
+        - When I click X, it should do Y
+        - It should look like [link/screenshot]
+        - Edge case: what happens when...
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the platform does this affect?
+      multiple: true
+      options:
+        - Frontend / UI
+        - Backend / API
+        - Auth / Accounts
+        - Content (articles, courses, recordings)
+        - Events
+        - Payments / Subscriptions
+        - Email / Notifications
+        - Admin / Studio
+        - Infrastructure / CI/CD
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (your estimate)
+      options:
+        - Nice to have
+        - Important
+        - Critical / blocking
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: How will we know it's done?
+      description: List any specific things you'd check to verify this works. These will be refined into formal acceptance criteria during grooming.
+      placeholder: |
+        - I can see X on the page
+        - Clicking Y does Z
+        - It works on mobile

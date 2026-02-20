@@ -11,10 +11,13 @@ This script:
 2. Navigates to each URL with Playwright
 3. Captures full-page screenshots
 4. Saves them to a temporary directory
-5. Optionally uploads them to a GitHub issue as a comment
+5. Uploads them to the 'screenshots' orphan branch on GitHub
+6. Posts a comment on the issue with embedded images
 """
 
 import argparse
+import base64
+import json
 import os
 import subprocess
 import sys
@@ -33,6 +36,7 @@ DJANGO_HOST = "127.0.0.1"
 DJANGO_PORT = 8766  # Different from test port to avoid conflicts
 DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
 VIEWPORT = {"width": 1280, "height": 720}
+SCREENSHOT_BRANCH = "screenshots"
 
 
 def _server_is_running(url):
@@ -122,26 +126,121 @@ def capture_screenshots(urls, output_dir, login_as=None):
     return results
 
 
-def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website"):
-    """Post a comment listing captured screenshots.
+def _upload_file_to_branch(filepath, dest_path, repo, branch=SCREENSHOT_BRANCH):
+    """Upload a file to the screenshots orphan branch via GitHub Contents API.
 
-    Screenshots are saved locally. The comment lists the paths so a human
-    can attach them to the issue via the GitHub web UI (drag and drop).
+    Uses stdin (--input -) to avoid 'argument list too long' errors with
+    large base64 payloads.
+
+    Args:
+        filepath: Local path to the file to upload
+        dest_path: Destination path in the repo (e.g., "issue-42/home.png")
+        repo: GitHub repo in "owner/repo" format
+        branch: Branch to upload to
+
+    Returns:
+        Raw URL to the uploaded file
+    """
+    with open(filepath, "rb") as f:
+        b64_content = base64.b64encode(f.read()).decode("ascii")
+
+    payload = json.dumps({
+        "message": f"screenshot: {dest_path}",
+        "content": b64_content,
+        "branch": branch,
+    })
+
+    # Check if the file already exists (to get its SHA for updates)
+    check_cmd = [
+        "gh", "api",
+        f"repos/{repo}/contents/{dest_path}",
+        "--jq", ".sha",
+        "-H", "Accept: application/vnd.github.v3+json",
+        "--method", "GET",
+        "-f", f"ref={branch}",
+    ]
+    existing_sha = None
+    try:
+        result = subprocess.run(check_cmd, capture_output=True, text=True)
+        if result.returncode == 0 and result.stdout.strip():
+            existing_sha = result.stdout.strip()
+    except Exception:
+        pass
+
+    if existing_sha:
+        payload_dict = json.loads(payload)
+        payload_dict["sha"] = existing_sha
+        payload = json.dumps(payload_dict)
+
+    # Upload via stdin to avoid argument length limits
+    upload_cmd = [
+        "gh", "api", "--method", "PUT",
+        f"repos/{repo}/contents/{dest_path}",
+        "--input", "-",
+    ]
+
+    result = subprocess.run(
+        upload_cmd,
+        input=payload,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        print(f"  ERROR uploading {dest_path}: {result.stderr}", file=sys.stderr)
+        raise RuntimeError(f"Failed to upload {dest_path}: {result.stderr}")
+
+    owner, reponame = repo.split("/")
+    raw_url = f"https://raw.githubusercontent.com/{owner}/{reponame}/{branch}/{dest_path}"
+    print(f"  Uploaded: {raw_url}")
+    return raw_url
+
+
+def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website"):
+    """Upload screenshots to the orphan branch and post a comment on the issue.
+
+    Each screenshot is uploaded to issue-{N}/{safe_name}.png on the 'screenshots'
+    branch, then a single comment with all images embedded is posted to the issue.
+
+    Args:
+        issue_number: GitHub issue number
+        screenshots: List of (url_path, filepath) tuples
+        repo: GitHub repo in "owner/repo" format
     """
     if not screenshots:
         return
 
-    body_lines = ["## Screenshots\n"]
-    body_lines.append("Captured locally. Attach via GitHub web UI (drag and drop).\n")
+    image_entries = []
+
     for url_path, filepath in screenshots:
-        body_lines.append(f"- `{url_path}` -- `{filepath}`")
+        safe_name = url_path.strip("/").replace("/", "_") or "home"
+        dest_path = f"issue-{issue_number}/{safe_name}.png"
+
+        try:
+            raw_url = _upload_file_to_branch(filepath, dest_path, repo)
+            image_entries.append((url_path, raw_url))
+        except RuntimeError as e:
+            print(f"  Skipping {url_path}: {e}", file=sys.stderr)
+
+    if not image_entries:
+        print("No screenshots were uploaded successfully.", file=sys.stderr)
+        return
+
+    # Build a single comment with all screenshots
+    body_lines = ["## Screenshots\n"]
+    for url_path, raw_url in image_entries:
+        safe_name = url_path.strip("/").replace("/", "_") or "home"
+        body_lines.append(f"### `{url_path}`\n")
+        body_lines.append(f"![{safe_name}]({raw_url})\n")
 
     body = "\n".join(body_lines)
 
-    comment_cmd = ["gh", "issue", "comment", str(issue_number),
-                   "--repo", repo, "--body", body]
+    comment_cmd = [
+        "gh", "issue", "comment", str(issue_number),
+        "--repo", repo, "--body", body,
+    ]
     subprocess.run(comment_cmd, check=True)
-    print(f"Screenshot paths posted to issue #{issue_number}")
+    print(f"Screenshot comment posted to issue #{issue_number}")
 
 
 def main():

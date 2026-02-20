@@ -162,7 +162,26 @@ COMMENT
 )"
 ```
 
-### 7. Give Verdict
+### 7. Capture Screenshots
+
+After tests pass, capture screenshots of the feature's key pages and attach them to the issue:
+
+```bash
+uv run python scripts/capture_screenshots.py --urls {relevant URLs} --issue {NUMBER}
+```
+
+For authenticated pages, add `--login-email main@test.com` (or another test user).
+
+This uploads screenshots to the `screenshots` orphan branch and posts a comment with embedded images on the issue.
+
+**IMPORTANT: Use URLs without trailing slashes** (e.g., `/downloads` not `/downloads/`). Many Django routes don't have trailing slashes and will return 404.
+
+After capturing, **read each screenshot file** to verify:
+- The page rendered correctly (not a 404, error page, or stack trace)
+- Content is visible and not empty
+- If any screenshot shows an error, fix the URL and recapture
+
+### 8. Give Verdict
 
 Report your findings to the orchestrator:
 
@@ -175,7 +194,7 @@ The implementer will fix and you will re-review.
 
 PASS — approve for commit: Confirm all acceptance criteria met. Tell the orchestrator the feature is approved and the software engineer should commit and push.
 
-### 8. Re-review After Fixes
+### 9. Re-review After Fixes
 
 When the software engineer applies fixes (still uncommitted):
 1. Review the changed files again

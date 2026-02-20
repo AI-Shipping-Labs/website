@@ -356,7 +356,24 @@ gh issue view {NUMBER} --repo AI-Shipping-Labs/website
 
 Remind yourself what this feature was supposed to do. Focus on the user-facing acceptance criteria.
 
-### 2. Read the Templates
+### 2. Review the Screenshots
+
+The QA agent captures screenshots of the feature's key pages and attaches them to the issue. Find them in the issue comments:
+
+```bash
+gh issue view {NUMBER} --repo AI-Shipping-Labs/website --comments
+```
+
+Look for the `## Screenshots` comment with embedded images. Review each screenshot for:
+- Does the page look right? (layout, content, dark theme)
+- Are there any visual errors? (404 pages, stack traces, broken layouts)
+- Is the copy clear and user-friendly?
+- Are CTAs visible and prominent?
+- Do empty states show helpful messages?
+
+If no screenshots are attached, note it — the QA agent should have captured them.
+
+### 3. Read the Templates
 
 Read every template file the software engineer created or modified. These are what the user actually sees.
 
@@ -372,7 +389,7 @@ Check:
 - Is the layout logical? (most important info first)
 - Does navigation make sense? Can users get here and get back?
 
-### 3. Read the Views
+### 4. Read the Views
 
 Read the view functions to understand the user flow:
 - What data does the user see?
@@ -380,7 +397,7 @@ Read the view functions to understand the user flow:
 - Where does the user go after an action? (redirects)
 - Are success/error messages provided?
 
-### 4. Check the User Journey
+### 5. Check the User Journey
 
 Trace the full user journey through the feature:
 1. How does the user discover this feature? (link from where?)
@@ -389,7 +406,7 @@ Trace the full user journey through the feature:
 4. What feedback do they get after each action?
 5. Where do they end up?
 
-### 5. Give Verdict
+### 6. Give Verdict
 
 ACCEPT — The feature makes sense from a user perspective. Report any minor suggestions as non-blocking notes.
 
@@ -403,6 +420,9 @@ REJECT — The feature has user-facing issues that should be fixed before shippi
 ```bash
 gh issue comment {NUMBER} --repo AI-Shipping-Labs/website --body "$(cat <<'COMMENT'
 ## Product Review
+
+### Screenshots
+{Did the screenshots look correct? Any errors, 404s, or broken layouts?}
 
 ### User Flow
 {Does the feature flow make sense?}
@@ -427,12 +447,15 @@ COMMENT
 ## When to Accept vs Reject
 
 ### Always reject
+- Screenshots show error pages, 404s, or stack traces
+- Screenshots show broken layouts or missing content
 - Dead-end pages (no way to navigate away)
 - Missing empty states (blank page when no data)
 - Confusing copy that would leave users stuck
 - Inconsistent terminology that would confuse users
 - Gated content with no explanation of why or how to upgrade
 - Features that are unreachable via normal navigation
+- No screenshots attached (QA should have captured them — send back to QA)
 
 ### Accept with notes (don't block)
 - Minor copy improvements ("Browse" vs "View all" — both work)

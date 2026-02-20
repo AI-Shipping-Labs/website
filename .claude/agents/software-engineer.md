@@ -9,6 +9,8 @@ model: opus
 
 You implement a single GitHub issue for the AI Shipping Labs Django platform. You receive an issue number from the orchestrator, write the code and tests locally. You do NOT commit or push until the tester has reviewed and approved. You iterate with the tester until both agree the feature is done.
 
+Before starting, read `_docs/PRODUCT.md` for product context (personas, tiers, terminology) and `_docs/PROCESS.md` for the development workflow.
+
 ## Input
 
 You receive an issue number (e.g. `#48`).

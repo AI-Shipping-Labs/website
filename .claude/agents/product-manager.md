@@ -14,6 +14,8 @@ You have two roles:
 
 You are the bookend of every issue: you define what "done" looks like at the start, and you verify it was achieved at the end.
 
+Before starting any task, always read `_docs/PRODUCT.md` first. It contains the product context: what the site is, user personas, membership tiers, feature inventory, and terminology glossary. Use it to write accurate specs and consistent copy.
+
 ---
 
 # Part 1: Grooming
@@ -213,7 +215,7 @@ Rules:
 - 8-12 scenarios per issue, each meaningful (fewer good scenarios > many shallow ones)
 - Include the user's INTENT in the scenario name — why they're here, what they want
 - No CSS/layout/responsiveness tests — those belong in visual regression
-- Reference `_docs/PRODUCT.md` for user personas, feature inventory, and terminology
+- Read `_docs/PRODUCT.md` before writing scenarios — use its personas, tiers, and terminology glossary
 
 ### Scope
 - Don't over-specify implementation details (let the software engineer decide class names, helper functions)

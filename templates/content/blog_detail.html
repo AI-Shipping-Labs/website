@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load access_tags %}
 {% load seo_tags %}
+{% load download_tags %}
 
 {% block title %}{{ article.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ article.description|truncatechars:160 }}{% endblock %}
@@ -66,7 +67,7 @@
         {% include "includes/content_gated.html" %}
       {% else %}
       <div class="prose">
-        {{ article.content_html|safe }}
+        {{ article.content_html|render_download_shortcodes:request|safe }}
       </div>
 
       {% if tag_rules.after_content %}

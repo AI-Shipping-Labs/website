@@ -95,18 +95,22 @@ Blocks: #{blocked1} (or "—")
 
 ## Playwright Test Scenarios
 
-{Concrete E2E test scenarios that the software engineer must write as Playwright tests.
-Each scenario should be a test the tester agent can run.}
+Write BDD-style scenarios. Each scenario is a user story — a real person with a goal doing something meaningful.
 
-### Scenario: {Name}
-1. {Step 1 — e.g. "Navigate to /page"}
-2. {Step 2 — e.g. "Click the 'Sign Up' button"}
-3. {Step 3 — e.g. "Fill in email field with 'test@example.com'"}
-4. Assert: {What to verify — e.g. "Page shows 'Welcome' message"}
-5. Assert: {Additional check — e.g. "URL changed to /dashboard"}
+### Scenario: {User} {does something meaningful}
+Given: {who the user is and their starting context}
+When: {the actions they take, step by step}
+Then: {the outcome they experience}
 
-### Scenario: {Name}
-1. ...
+Example:
+### Scenario: Free member hits paywall and sees upgrade path
+Given: A user logged in as free@test.com (Free tier)
+1. Navigate to /blog
+2. Click on a gated article (required_level = Basic)
+Then: Article shows a teaser paragraph, blurred content, and "Upgrade to Basic to read this article" CTA
+3. Click the "View Pricing" link in the CTA
+Then: User lands on /pricing with all tier options visible
+Then: The Basic tier highlights the feature "Exclusive articles"
 
 ---
 
@@ -182,18 +186,34 @@ Report:
 - Mark `[HUMAN]` only for things that truly can't be automated: OAuth redirects to external providers, visual design judgment, external webhook delivery
 - Each criterion maps to one or more tests
 
-### Playwright Test Scenarios
-- Write scenarios that test user-visible behavior, not implementation details
-- Cover the happy path, edge cases, and error states
-- Each scenario should be independent (no ordering dependencies)
-- Include auth setup when needed: "Log in as a Main-tier user"
-- Use concrete test data: specific emails, names, values
-- Scenarios should cover:
-  - Happy path: The main flow works as expected
-  - Access control: Anonymous, free, and paid users see the right thing
-  - Empty states: What happens when there's no data
-  - Error handling: Invalid input, missing resources
-  - Responsiveness: (only if the issue mentions mobile/responsive)
+### Playwright Test Scenarios — BDD Style
+
+Write scenarios as user stories, not element-existence checks. Every scenario must answer: WHO is the user, WHAT are they trying to do, and WHAT OUTCOME do they experience?
+
+NEVER write:
+- "Page loads with X elements visible" — this is a layout check, not a user scenario
+- "Element Y has attribute Z" — this is an implementation detail
+- "Cards display in correct order in DOM" — this is a DOM structure test
+- "Page is responsive at 390px" — this is visual regression territory
+- "Header and footer are present" — this is generic page chrome, not feature behavior
+
+ALWAYS write:
+- "Free member hits a paywall and finds the upgrade path" — real user journey
+- "Cost-conscious visitor compares annual vs monthly pricing" — user with intent
+- "Admin publishes a draft article and verifies it appears on the blog" — end-to-end action
+- "Registered user cancels event registration and sees confirmation" — action → feedback loop
+
+Rules:
+- Each scenario tells a STORY with a beginning (who/context), middle (actions), and end (outcome)
+- Start with Given (who the user is: anonymous, free@test.com, main@test.com, admin)
+- Use When/Then structure: actions lead to observable outcomes
+- Test BEHAVIOR not PRESENCE — "user can upgrade" not "upgrade button exists"
+- Test what happens AFTER actions — redirects, state changes, confirmation messages, data updates
+- Cover the full journey — not just one page, but the path between pages
+- 8-12 scenarios per issue, each meaningful (fewer good scenarios > many shallow ones)
+- Include the user's INTENT in the scenario name — why they're here, what they want
+- No CSS/layout/responsiveness tests — those belong in visual regression
+- Reference PRODUCT.md for user personas and terminology
 
 ### Scope
 - Don't over-specify implementation details (let the software engineer decide class names, helper functions)
@@ -240,22 +260,29 @@ Blocks: —
 
 ## Playwright Test Scenarios
 
-### Scenario: Featured articles appear on homepage
-1. Seed 3 published articles with is_featured=True
-2. Navigate to /
-3. Assert: All 3 featured articles are visible in the hero section
-4. Assert: Each has title and excerpt visible
+### Scenario: Visitor discovers featured articles on the homepage
+Given: 3 published articles are marked as featured, 2 are not
+1. Navigate to / as an anonymous visitor
+2. Scroll to the hero section
+Then: The 3 featured articles appear prominently with title and excerpt
+Then: The 2 non-featured articles do not appear in the hero section
+3. Click on the first featured article
+Then: User navigates to the article detail page with the full content
 
-### Scenario: Homepage with no featured articles
-1. Ensure no articles have is_featured=True
-2. Navigate to /
-3. Assert: Hero section is not present in the DOM
+### Scenario: Homepage gracefully handles no featured content
+Given: No articles are marked as featured
+1. Navigate to / as an anonymous visitor
+Then: The page loads without errors — no empty hero section or broken layout
+Then: Other homepage content (courses, events, etc.) still renders normally
 
-### Scenario: Featured badge on blog listing
-1. Seed 1 featured and 1 non-featured published article
-2. Navigate to /blog
-3. Assert: Featured article has a "Featured" badge element
-4. Assert: Non-featured article does not have a "Featured" badge
+### Scenario: Reader identifies featured articles while browsing the blog
+Given: 1 featured and 3 non-featured published articles exist
+1. Navigate to /blog
+Then: The featured article has a visible "Featured" badge distinguishing it from others
+2. Click on the featured article
+Then: The detail page loads with the full article content
+3. Navigate back to /blog
+Then: The non-featured articles have no badge — only the featured one stands out
 
 ---
 

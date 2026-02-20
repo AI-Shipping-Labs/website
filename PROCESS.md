@@ -17,22 +17,22 @@ User creates issue     →  PM grooms        →  Engineer builds  →  Tester v
 (needs grooming)          (spec + tests)       (code + tests)     (runs all tests)    (user POV)     (commit + push)
 ```
 
-1. **User creates an issue** via the GitHub issue template. It gets the `needs grooming` label automatically.
-2. **Product Manager** reads the raw request, researches the codebase, and rewrites the issue with: scope, acceptance criteria, dependencies, and Playwright test scenarios. Removes `needs grooming`, adds proper labels.
-3. **Software Engineer** implements the groomed issue — writes code and tests locally. Does NOT commit.
-4. **Tester** reviews the code, runs ALL tests (unit + integration + Playwright E2E), verifies every acceptance criterion. Reports pass/fail.
-5. **Product Manager** does final acceptance review from the user's perspective — checks user flow, copy, empty states, navigation, consistency. Reports accept/reject.
-6. **Software Engineer** commits and pushes with `Closes #N`.
-7. **On-Call Engineer** monitors CI/CD and fixes any breakages.
+1. User creates an issue via the GitHub issue template. It gets the `needs grooming` label automatically.
+2. Product Manager reads the raw request, researches the codebase, and rewrites the issue with: scope, acceptance criteria, dependencies, and Playwright test scenarios. Removes `needs grooming`, adds proper labels.
+3. Software Engineer implements the groomed issue — writes code and tests locally. Does NOT commit.
+4. Tester reviews the code, runs ALL tests (unit + integration + Playwright E2E), verifies every acceptance criterion. Reports pass/fail.
+5. Product Manager does final acceptance review from the user's perspective — checks user flow, copy, empty states, navigation, consistency. Reports accept/reject.
+6. Software Engineer commits and pushes with `Closes #N`.
+7. On-Call Engineer monitors CI/CD and fixes any breakages.
 
 ## Agents
 
 | Agent | File | Role |
 |-------|------|------|
-| **Product Manager** | `.claude/agents/product-manager.md` | Grooms issues into specs (start) + user acceptance review (end) |
-| **Software Engineer** | `.claude/agents/software-engineer.md` | Implements code + tests, does NOT commit until approved |
-| **Tester** | `.claude/agents/tester.md` | Runs all tests, verifies acceptance criteria technically |
-| **On-Call Engineer** | `.claude/agents/oncall-engineer.md` | Monitors CI/CD after push, fixes failures |
+| Product Manager | `.claude/agents/product-manager.md` | Grooms issues into specs (start) + user acceptance review (end) |
+| Software Engineer | `.claude/agents/software-engineer.md` | Implements code + tests, does NOT commit until approved |
+| Tester | `.claude/agents/tester.md` | Runs all tests, verifies acceptance criteria technically |
+| On-Call Engineer | `.claude/agents/oncall-engineer.md` | Monitors CI/CD after push, fixes failures |
 
 ## Agent Workflow
 
@@ -107,13 +107,13 @@ Orchestrator picks groomed issue
 1. `gh issue list --repo AI-Shipping-Labs/website --state open --limit 50 --json number,title,labels --jq 'sort_by(.number) | .[] | "#\(.number) \(.title) [\(.labels | map(.name) | join(", "))]"'`
 2. Skip issues labeled `needs grooming` — they haven't been groomed yet
 3. Pick the lowest-numbered open groomed issues first (lower = more foundational)
-4. Check the issue's **Depends on** field — don't start until dependencies are closed
+4. Check the issue's Depends on field — don't start until dependencies are closed
 5. Skip issues whose dependencies are still open
 6. Pick 2 independent issues at a time and run them in parallel
 
 ### Continuous Issue Pipeline
 
-**Always keep the pipeline full.** When starting a batch, immediately add a "Pick next two issues" task blocked by the current batch. This ensures work never stops.
+Always keep the pipeline full. When starting a batch, immediately add a "Pick next two issues" task blocked by the current batch. This ensures work never stops.
 
 ```
 Batch N: implement + test + accept → commit + push
@@ -134,10 +134,10 @@ Some acceptance criteria are marked `[HUMAN]` in issues (OAuth flows, Stripe red
 
 | Category | Labels |
 |----------|--------|
-| **Workflow** | `needs grooming` |
-| **Area** | `auth`, `frontend`, `admin`, `content`, `courses`, `events`, `payments`, `email`, `community`, `seo`, `infra`, `integration` |
-| **Priority** | `P0` (must have), `P1` (important), `P2` (nice to have) |
-| **Special** | `human` (code done, needs manual verification) |
+| Workflow | `needs grooming` |
+| Area | `auth`, `frontend`, `admin`, `content`, `courses`, `events`, `payments`, `email`, `community`, `seo`, `infra`, `integration` |
+| Priority | `P0` (must have), `P1` (important), `P2` (nice to have) |
+| Special | `human` (code done, needs manual verification) |
 
 ## Technology Stack
 

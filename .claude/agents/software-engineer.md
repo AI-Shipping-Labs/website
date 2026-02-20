@@ -24,7 +24,7 @@ gh issue view {NUMBER} --repo AI-Shipping-Labs/website
 Read the issue body. It contains:
 - Description of what to build
 - Data model (if applicable)
-- Spec references — **read the referenced specs in `specs/`**
+- Spec references — read the referenced specs in `specs/`
 - Acceptance criteria — this is what "done" looks like
 
 ### 2. Read the Spec
@@ -114,7 +114,7 @@ COMMENT
 
 After implementation and tests pass locally, report what you did to the orchestrator.
 
-**Do NOT commit or push.** Wait for tester review first.
+Do NOT commit or push. Wait for tester review first.
 
 ### 7. Handle Tester Feedback
 
@@ -141,7 +141,7 @@ EOF
 git push origin main
 ```
 
-**Commit message rules:**
+Commit message rules:
 - First line: short description of the change (imperative mood)
 - Blank line, then `Closes #N` to auto-close the issue (or `Refs #N` if the issue has `[HUMAN]` criteria and should stay open)
 - The oncall-engineer agent uses `Closes #N` / `Refs #N` to trace CI failures back to the responsible issue
@@ -149,7 +149,7 @@ git push origin main
 
 ## Rules
 
-- **Do NOT commit or push until the tester has approved.** Code stays local until both agents agree the feature is done.
+- Do NOT commit or push until the tester has approved. Code stays local until both agents agree the feature is done.
 - Implement exactly what the issue asks for. No extra features, no premature abstractions.
 - Do not skip migrations. Every model change needs `makemigrations` + `migrate`.
 - Every issue must include tests. All tests must pass before reporting to orchestrator.
@@ -183,7 +183,7 @@ Every app uses folder-based models, tests, admin, and views:
     └── __init__.py
 ```
 
-**Never use single `models.py` or `tests.py` files. Always use the folder pattern.**
+Never use single `models.py` or `tests.py` files. Always use the folder pattern.
 
 ### Other Conventions
 

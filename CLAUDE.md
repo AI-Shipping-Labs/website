@@ -4,10 +4,10 @@
 
 AI Shipping Labs community platform — a Django-based website replacing the current Next.js static site.
 
-- **Process & agents:** See [`PROCESS.md`](PROCESS.md) for the full development workflow, agent definitions, issue lifecycle, and how to pick issues
-- **Specs:** `specs/` folder (14 requirement specs with data models, APIs, acceptance criteria)
-- **Issues:** GitHub Issues on [AI-Shipping-Labs/website](https://github.com/AI-Shipping-Labs/website/issues)
-- **Agents:** `.claude/agents/` (product-manager, software-engineer, tester, oncall-engineer)
+- Process & agents: See [`PROCESS.md`](PROCESS.md) for the full development workflow, agent definitions, issue lifecycle, and how to pick issues
+- Specs: `specs/` folder (14 requirement specs with data models, APIs, acceptance criteria)
+- Issues: GitHub Issues on [AI-Shipping-Labs/website](https://github.com/AI-Shipping-Labs/website/issues)
+- Agents: `.claude/agents/` (product-manager, software-engineer, tester, oncall-engineer)
 
 ## Technology Stack
 

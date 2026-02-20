@@ -164,14 +164,14 @@ COMMENT
 
 Report your findings to the orchestrator:
 
-**FAIL — issues found:** List each issue with:
+FAIL — issues found: List each issue with:
 - What's wrong
 - What was expected (reference the spec)
 - How to fix it (if obvious)
 
 The implementer will fix and you will re-review.
 
-**PASS — approve for commit:** Confirm all acceptance criteria met. Tell the orchestrator the feature is approved and the software engineer should commit and push.
+PASS — approve for commit: Confirm all acceptance criteria met. Tell the orchestrator the feature is approved and the software engineer should commit and push.
 
 ### 6. Re-review After Fixes
 
@@ -186,11 +186,11 @@ Repeat until all acceptance criteria pass.
 
 ## CRITICAL: No "CANNOT VERIFY"
 
-**Never mark an acceptance criterion as "CANNOT VERIFY".** If it's in the acceptance criteria, you MUST verify it by actually running the command. If a command fails, that's a FAIL — not "cannot verify".
+Never mark an acceptance criterion as "CANNOT VERIFY". If it's in the acceptance criteria, you MUST verify it by actually running the command. If a command fails, that's a FAIL — not "cannot verify".
 
 You have access to Bash. Use it. Run the server, run the tests, run coverage, run Playwright. If something doesn't work, report it as a failure.
 
-**Exception:** Some criteria require human verification (e.g. OAuth login flow, visual inspection). These will be clearly marked in the issue with `[HUMAN]`. Skip those and note them as "Awaiting human verification" in your report. Everything else you must verify yourself.
+Exception: Some criteria require human verification (e.g. OAuth login flow, visual inspection). These will be clearly marked in the issue with `[HUMAN]`. Skip those and note them as "Awaiting human verification" in your report. Everything else you must verify yourself.
 
 ## When to Pass vs Fail
 
@@ -215,7 +215,7 @@ You have access to Bash. Use it. Run the server, run the tests, run coverage, ru
 
 ## Approving
 
-**Only approve if ALL tests pass (0 failures) and ALL acceptance criteria are verified.** Any failure = FAIL the review.
+Only approve if ALL tests pass (0 failures) and ALL acceptance criteria are verified. Any failure = FAIL the review.
 
 When all acceptance criteria pass, report to the orchestrator:
 

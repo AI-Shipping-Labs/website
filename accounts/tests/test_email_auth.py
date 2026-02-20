@@ -751,3 +751,110 @@ class UnverifiedUserAccessTest(TestCase):
         self.client.force_login(user)
         resp = self.client.get("/account/")
         self.assertEqual(resp.status_code, 200)
+
+
+# ── CSRF Cookie on Login/Register Pages ─────────────────────────────
+
+
+class CsrfCookieOnAuthPagesTest(TestCase):
+    """Regression tests: login and register pages must set the csrftoken cookie.
+
+    Without @ensure_csrf_cookie on login_view and register_view, the
+    csrftoken cookie is not sent in the response. Client-side JS that reads
+    the cookie to set the X-CSRFToken header on API requests (e.g. POST
+    /api/login) gets an empty string, causing Django's CSRF middleware to
+    reject the request with 403 Forbidden.
+    """
+
+    def test_login_page_sets_csrftoken_cookie(self):
+        """GET /accounts/login/ must include a csrftoken cookie."""
+        resp = self.client.get("/accounts/login/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(
+            settings.CSRF_COOKIE_NAME,
+            resp.cookies,
+            "Login page did not set the csrftoken cookie",
+        )
+        cookie_value = resp.cookies[settings.CSRF_COOKIE_NAME].value
+        self.assertTrue(
+            len(cookie_value) > 0,
+            "csrftoken cookie is empty on the login page",
+        )
+
+    def test_register_page_sets_csrftoken_cookie(self):
+        """GET /accounts/register/ must include a csrftoken cookie."""
+        resp = self.client.get("/accounts/register/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(
+            settings.CSRF_COOKIE_NAME,
+            resp.cookies,
+            "Register page did not set the csrftoken cookie",
+        )
+        cookie_value = resp.cookies[settings.CSRF_COOKIE_NAME].value
+        self.assertTrue(
+            len(cookie_value) > 0,
+            "csrftoken cookie is empty on the register page",
+        )
+
+    def test_login_api_works_with_csrf_from_login_page(self):
+        """Full flow: visit login page, extract CSRF token, POST /api/login.
+
+        This reproduces the bug where getCsrfToken() returned an empty
+        string because the csrftoken cookie was missing, causing 403.
+        """
+        User.objects.create_user(
+            email="csrftest@example.com", password="secure1234"
+        )
+
+        # Step 1: Visit the login page to get the CSRF cookie
+        page_resp = self.client.get("/accounts/login/")
+        self.assertEqual(page_resp.status_code, 200)
+        csrf_token = page_resp.cookies[settings.CSRF_COOKIE_NAME].value
+        self.assertTrue(len(csrf_token) > 0)
+
+        # Step 2: POST to /api/login with the CSRF token in the header
+        # (mimicking the JS fetch() call with X-CSRFToken header)
+        login_resp = self.client.post(
+            "/api/login",
+            data=json.dumps(
+                {"email": "csrftest@example.com", "password": "secure1234"}
+            ),
+            content_type="application/json",
+            headers={"X-CSRFToken": csrf_token},
+        )
+        self.assertEqual(
+            login_resp.status_code,
+            200,
+            f"Expected 200 OK but got {login_resp.status_code}. "
+            "CSRF token from login page cookie may not be working.",
+        )
+        self.assertEqual(login_resp.json()["status"], "ok")
+
+    def test_register_api_works_with_csrf_from_register_page(self):
+        """Full flow: visit register page, extract CSRF token, POST /api/register.
+
+        Same bug pattern as login -- the register page JS also needs
+        the csrftoken cookie to POST to /api/register.
+        """
+        # Step 1: Visit the register page to get the CSRF cookie
+        page_resp = self.client.get("/accounts/register/")
+        self.assertEqual(page_resp.status_code, 200)
+        csrf_token = page_resp.cookies[settings.CSRF_COOKIE_NAME].value
+        self.assertTrue(len(csrf_token) > 0)
+
+        # Step 2: POST to /api/register with the CSRF token in the header
+        register_resp = self.client.post(
+            "/api/register",
+            data=json.dumps(
+                {"email": "csrfnew@example.com", "password": "secure1234"}
+            ),
+            content_type="application/json",
+            headers={"X-CSRFToken": csrf_token},
+        )
+        self.assertEqual(
+            register_resp.status_code,
+            201,
+            f"Expected 201 Created but got {register_resp.status_code}. "
+            "CSRF token from register page cookie may not be working.",
+        )
+        self.assertEqual(register_resp.json()["status"], "ok")

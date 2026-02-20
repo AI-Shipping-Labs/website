@@ -23,6 +23,58 @@ make run
 
 Visit http://localhost:8000
 
+## Seed Data and Test Users
+
+Load sample data for local development:
+
+```bash
+uv run python manage.py seed_data
+```
+
+This creates tiers, users, articles, courses, events, recordings, projects, polls, notifications, and newsletter subscribers. The command is idempotent -- running it twice won't create duplicates. Use `--flush` to wipe and recreate everything.
+
+### Test Users
+
+All test users have the password `testpass123`:
+
+| Email | Tier | Role |
+|-------|------|------|
+| `admin@aishippinglabs.com` | Premium | Superuser/staff (password: `admin123`) |
+| `free@test.com` | Free | Regular user |
+| `basic@test.com` | Basic | Regular user |
+| `main@test.com` | Main | Regular user |
+| `premium@test.com` | Premium | Regular user |
+| `alice@test.com` | Main | Regular user |
+| `charlie@test.com` | Basic | Regular user |
+| `diana@test.com` | Free | Regular user |
+
+Log in at http://localhost:8000/accounts/login/ with any of these emails. The admin panel is at http://localhost:8000/admin/ (use the admin account).
+
+### Creating Users Manually
+
+Via Django shell:
+
+```bash
+uv run python manage.py shell
+```
+
+```python
+from accounts.models import User
+from payments.models import Tier
+
+tier = Tier.objects.get(slug='main')  # free, basic, main, or premium
+user = User.objects.create_user(email='you@example.com', password='yourpass')
+user.tier = tier
+user.email_verified = True
+user.save()
+```
+
+Or create a superuser:
+
+```bash
+uv run python manage.py createsuperuser
+```
+
 ## Tests
 
 ```bash
@@ -32,7 +84,7 @@ make test
 # Tests with coverage report
 make coverage
 
-# Playwright visual regression tests
+# Playwright E2E tests
 make playwright
 
 # All tests (Django + Playwright)
@@ -92,7 +144,7 @@ jobs/                 # Background job infrastructure (Django-Q2 helpers, tasks)
 templates/            # Django templates
 static/               # Static files (CSS, images)
 specs/                # Requirement specs and task definitions
-playwright_tests/     # E2E visual regression tests
+playwright_tests/     # Playwright E2E tests
 ```
 
 ## Docs

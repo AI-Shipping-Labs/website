@@ -9,6 +9,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.models import User
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 JWT_ALGORITHM = "HS256"
 
 
+@ensure_csrf_cookie
 def login_view(request):
     """Render the login page with Google and GitHub OAuth buttons."""
     if request.user.is_authenticated:
@@ -26,6 +28,7 @@ def login_view(request):
     return render(request, "accounts/login.html")
 
 
+@ensure_csrf_cookie
 def register_view(request):
     """Render the registration page."""
     if request.user.is_authenticated:

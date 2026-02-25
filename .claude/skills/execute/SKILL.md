@@ -7,7 +7,26 @@ argument-hint: [number-of-issues]
 
 # Execute Development Loop
 
-Run the full issue pipeline. Number of issues per batch: $ARGUMENTS (default: 2)
+Run the full issue pipeline as defined in [`_docs/PROCESS.md`](_docs/PROCESS.md). Number of issues per batch: $ARGUMENTS (default: 2)
+
+The lifecycle: PM grooms → Engineer builds → Tester verifies → PM accepts → Ship. See PROCESS.md for the full agent workflow, issue lifecycle, and orchestrator responsibilities.
+
+## Step 0: PM Grooming (parallel)
+
+Before picking issues for implementation, check for ungroomed issues and groom them:
+
+```bash
+# Find open issues without BDD scenarios (no "needs grooming" or "human" label, but missing Given/When/Then)
+gh issue list --repo AI-Shipping-Labs/website --state open --limit 50 --json number,title,labels,body --jq 'sort_by(.number) | .[] | select(.labels | map(.name) | (contains(["human"]) | not) and (contains(["needs grooming"]) | not)) | select(.body | test("Given|Scenario"; "i") | not) | "#\(.number) \(.title)"'
+```
+
+For each ungroomed issue, launch a PM agent in parallel:
+
+```
+Task(subagent_type="general-purpose", model="sonnet", run_in_background=true, prompt="You are the Product Manager agent. Read _docs/PRODUCT.md and _docs/PROCESS.md first, then read .claude/agents/product-manager.md for your role. Groom issue #N: gh issue view N --repo AI-Shipping-Labs/website. Add BDD test scenarios (Given/When/Then format), clarify acceptance criteria, ensure it is implementation-ready. Update with gh issue edit N --body '...'. Do NOT use bold formatting. Use backticks for code, headings for structure. Keep existing content and add to it.")
+```
+
+Do NOT wait for grooming to finish before picking issues — run grooming in the background. Issues that already have BDD scenarios are ready for implementation. Newly groomed issues will be available for the next batch.
 
 ## Step 1: Pick Issues
 
@@ -22,12 +41,13 @@ gh issue list --repo AI-Shipping-Labs/website --state closed --label "needs-test
 ```
 
 Priority order:
-1. Open issues without `needs grooming` or `human` labels (new features to implement)
+1. Open issues without `needs grooming` or `human` labels that have BDD scenarios (new features to implement)
 2. If no open issues available: closed `needs-testing` issues (Playwright tests to write)
 
 Rules:
 - Skip issues labeled `needs grooming` (groom them first with PM agent)
 - Skip issues labeled `human` (waiting for manual verification)
+- Skip issues without BDD scenarios (wait for PM grooming to complete, or groom them now)
 - Pick the lowest-numbered issues first (lower = more foundational)
 - Check `Depends on` field -- don't start until dependencies are closed
 - If no actionable issues remain, report "No actionable issues" and stop
@@ -92,7 +112,10 @@ Task(subagent_type="general-purpose", model="opus", prompt="You are the Product 
 ## Step 6: Handle PM Results
 
 For each issue:
-- If PM ACCEPTS: proceed to commit
+- If PM ACCEPTS: proceed to commit. After commit, the PM closes the issue:
+  - Comment on the issue summarizing what was implemented and how it was tested
+  - Close the issue: `gh issue close N --repo AI-Shipping-Labs/website --comment "Accepted and merged in {commit_sha}. {brief summary of implementation}."`
+  - Exception: if the issue has `[HUMAN]` criteria, do NOT close — add the `human` label instead
 - If PM REJECTS: relay UX/DX feedback to engineer, fix, re-run PM review (max 2 retries)
 
 ## Step 7: Commit and Push

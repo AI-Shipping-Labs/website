@@ -76,6 +76,49 @@ class GetUserLevelTest(TierSetupMixin, TestCase):
         user.save()
         self.assertEqual(get_user_level(user), 30)
 
+    def test_staff_user_with_free_tier_returns_30(self):
+        user = User.objects.create_user(email='staff-free@example.com')
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.save()
+        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
+
+    def test_staff_user_without_tier_returns_30(self):
+        user = User.objects.create_user(email='staff-notier@example.com')
+        user.tier = None
+        user.is_staff = True
+        user.save()
+        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
+
+    def test_superuser_with_free_tier_returns_30(self):
+        user = User.objects.create_user(email='super-free@example.com')
+        user.tier = self.free_tier
+        user.is_superuser = True
+        user.save()
+        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
+
+    def test_superuser_without_tier_returns_30(self):
+        user = User.objects.create_user(email='super-notier@example.com')
+        user.tier = None
+        user.is_superuser = True
+        user.save()
+        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
+
+    def test_staff_superuser_returns_30(self):
+        user = User.objects.create_user(email='staffsuper@example.com')
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.is_superuser = True
+        user.save()
+        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
+
+    def test_staff_with_basic_tier_returns_30(self):
+        user = User.objects.create_user(email='staff-basic@example.com')
+        user.tier = self.basic_tier
+        user.is_staff = True
+        user.save()
+        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
+
 
 class CanAccessTest(TierSetupMixin, TestCase):
     """Test the can_access utility function."""
@@ -163,6 +206,36 @@ class CanAccessTest(TierSetupMixin, TestCase):
         self.assertTrue(can_access(user, self.main_article))
         self.assertTrue(can_access(user, self.premium_article))
 
+    def test_staff_user_can_access_all(self):
+        user = User.objects.create_user(email='staff-access@test.com')
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.save()
+        self.assertTrue(can_access(user, self.open_article))
+        self.assertTrue(can_access(user, self.basic_article))
+        self.assertTrue(can_access(user, self.main_article))
+        self.assertTrue(can_access(user, self.premium_article))
+
+    def test_superuser_can_access_all(self):
+        user = User.objects.create_user(email='super-access@test.com')
+        user.tier = self.free_tier
+        user.is_superuser = True
+        user.save()
+        self.assertTrue(can_access(user, self.open_article))
+        self.assertTrue(can_access(user, self.basic_article))
+        self.assertTrue(can_access(user, self.main_article))
+        self.assertTrue(can_access(user, self.premium_article))
+
+    def test_staff_without_tier_can_access_all(self):
+        user = User.objects.create_user(email='staff-notier@test.com')
+        user.tier = None
+        user.is_staff = True
+        user.save()
+        self.assertTrue(can_access(user, self.open_article))
+        self.assertTrue(can_access(user, self.basic_article))
+        self.assertTrue(can_access(user, self.main_article))
+        self.assertTrue(can_access(user, self.premium_article))
+
 
 class GetRequiredTierNameTest(TestCase):
     """Test tier name mapping."""
@@ -236,6 +309,22 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
         user.save()
         ctx = build_gating_context(user, self.article, 'article')
         self.assertTrue(ctx['is_gated'])
+
+    def test_not_gated_for_staff_user(self):
+        user = User.objects.create_user(email='staff@test.com')
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.save()
+        ctx = build_gating_context(user, self.article, 'article')
+        self.assertFalse(ctx['is_gated'])
+
+    def test_not_gated_for_superuser(self):
+        user = User.objects.create_user(email='super@test.com')
+        user.tier = self.free_tier
+        user.is_superuser = True
+        user.save()
+        ctx = build_gating_context(user, self.article, 'article')
+        self.assertFalse(ctx['is_gated'])
 
     def test_recording_cta_message(self):
         recording = Recording.objects.create(
@@ -389,6 +478,35 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Full main content')
         self.assertContains(response, 'Upgrade to Main to read this article')
 
+    def test_staff_user_sees_all_gated_articles(self):
+        user = User.objects.create_user(
+            email='staff-blog@test.com', password='testpass',
+        )
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.save()
+        self.client.login(email='staff-blog@test.com', password='testpass')
+        for slug, content_snippet in [
+            ('open-article', 'Full open content'),
+            ('basic-article', 'Full basic content'),
+            ('main-article', 'Full main content'),
+        ]:
+            response = self.client.get(f'/blog/{slug}')
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, content_snippet)
+
+    def test_superuser_sees_all_gated_articles(self):
+        user = User.objects.create_user(
+            email='super-blog@test.com', password='testpass',
+        )
+        user.tier = self.free_tier
+        user.is_superuser = True
+        user.save()
+        self.client.login(email='super-blog@test.com', password='testpass')
+        response = self.client.get('/blog/main-article')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Full main content')
+
 
 class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test recording detail view access control."""
@@ -432,6 +550,18 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Upgrade to Main')
 
+    def test_staff_user_sees_gated_recording(self):
+        user = User.objects.create_user(
+            email='staff-rec@test.com', password='testpass',
+        )
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.save()
+        self.client.login(email='staff-rec@test.com', password='testpass')
+        response = self.client.get('/event-recordings/gated-recording')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Upgrade to Main')
+
 
 class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test project detail view access control."""
@@ -457,6 +587,18 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         user.tier = self.basic_tier
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
+        response = self.client.get('/projects/gated-project')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Secret project content')
+
+    def test_staff_user_sees_gated_project(self):
+        user = User.objects.create_user(
+            email='staff-proj@test.com', password='testpass',
+        )
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.save()
+        self.client.login(email='staff-proj@test.com', password='testpass')
         response = self.client.get('/projects/gated-project')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Secret project content')
@@ -499,6 +641,18 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Secret tutorial content')
         self.assertContains(response, 'Upgrade to Premium')
+
+    def test_staff_user_sees_premium_tutorial(self):
+        user = User.objects.create_user(
+            email='staff-tut@test.com', password='testpass',
+        )
+        user.tier = self.free_tier
+        user.is_staff = True
+        user.save()
+        self.client.login(email='staff-tut@test.com', password='testpass')
+        response = self.client.get('/tutorials/gated-tutorial')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Secret tutorial content')
 
 
 # --- Lock icon in listing pages ---

@@ -32,9 +32,12 @@ def get_user_level(user):
     """Return the access level for a user.
 
     Anonymous users and users without a tier are treated as level 0.
+    Staff and superuser accounts always get maximum access (LEVEL_PREMIUM).
     """
     if user is None or not user.is_authenticated:
         return 0
+    if user.is_staff or user.is_superuser:
+        return LEVEL_PREMIUM
     if user.tier_id is None:
         return 0
     return user.tier.level

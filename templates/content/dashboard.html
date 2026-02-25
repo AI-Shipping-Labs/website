@@ -7,6 +7,19 @@
 <main class="min-h-screen pt-24">
   <div class="mx-auto max-w-7xl px-6 py-12 lg:px-8 lg:py-16">
 
+    <!-- Checkout Success Banner (shown via JS when ?checkout=success is present) -->
+    <div id="checkout-success-banner" class="mb-6 hidden rounded-xl border border-green-500/30 bg-green-500/10 p-4" role="alert">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <i data-lucide="check-circle" class="h-5 w-5 text-green-400"></i>
+          <p class="text-sm font-medium text-green-300">Payment successful! Welcome to AI Shipping Labs.</p>
+        </div>
+        <button type="button" id="dismiss-success-banner" class="text-green-400 hover:text-green-300 transition-colors" aria-label="Dismiss">
+          <i data-lucide="x" class="h-4 w-4"></i>
+        </button>
+      </div>
+    </div>
+
     <!-- Welcome Banner -->
     <section class="mb-10">
       <div class="rounded-2xl border border-border bg-card p-8">
@@ -269,4 +282,30 @@
   </div>
 </main>
 {% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('checkout') === 'success') {
+    var banner = document.getElementById('checkout-success-banner');
+    if (banner) {
+      banner.classList.remove('hidden');
+    }
+  }
+  var dismissBtn = document.getElementById('dismiss-success-banner');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', function() {
+      var banner = document.getElementById('checkout-success-banner');
+      if (banner) {
+        banner.remove();
+      }
+      var url = new URL(window.location);
+      url.searchParams.delete('checkout');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    });
+  }
+})();
+</script>
 {% endblock %}

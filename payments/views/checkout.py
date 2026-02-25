@@ -45,7 +45,7 @@ def create_checkout(request):
             {"error": "billing_period must be 'monthly' or 'yearly'"}, status=400
         )
 
-    success_url = request.build_absolute_uri("/pricing?checkout=success")
+    success_url = request.build_absolute_uri("/?checkout=success")
     cancel_url = request.build_absolute_uri("/pricing?checkout=cancelled")
 
     try:

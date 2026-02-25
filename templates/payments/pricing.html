@@ -7,7 +7,22 @@
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  <section class="pt-32 pb-24 lg:pb-32">
+  <!-- Checkout Cancelled Banner (shown via JS when ?checkout=cancelled is present) -->
+  <div id="checkout-cancelled-banner" class="hidden mx-auto max-w-7xl px-6 lg:px-8 pt-28" role="alert">
+    <div class="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <i data-lucide="info" class="h-5 w-5 text-blue-400"></i>
+          <p class="text-sm font-medium text-blue-300">Checkout was cancelled. You can try again anytime.</p>
+        </div>
+        <button type="button" id="dismiss-cancelled-banner" class="text-blue-400 hover:text-blue-300 transition-colors" aria-label="Dismiss">
+          <i data-lucide="x" class="h-4 w-4"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <section class="pt-32 pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <!-- Header -->
       <div class="mx-auto max-w-2xl text-center">
@@ -195,5 +210,40 @@ document.querySelectorAll('.tier-cta-link').forEach(function(el) {
     });
   });
 });
+
+// Checkout cancelled banner
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('checkout') === 'cancelled') {
+    var banner = document.getElementById('checkout-cancelled-banner');
+    if (banner) {
+      banner.classList.remove('hidden');
+      // Reduce padding on main section when banner is visible
+      var section = document.getElementById('pricing-section');
+      if (section) {
+        section.classList.remove('pt-32');
+        section.classList.add('pt-8');
+      }
+    }
+  }
+  var dismissBtn = document.getElementById('dismiss-cancelled-banner');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', function() {
+      var banner = document.getElementById('checkout-cancelled-banner');
+      if (banner) {
+        banner.remove();
+      }
+      // Restore section padding
+      var section = document.getElementById('pricing-section');
+      if (section) {
+        section.classList.remove('pt-8');
+        section.classList.add('pt-32');
+      }
+      var url = new URL(window.location);
+      url.searchParams.delete('checkout');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    });
+  }
+})();
 </script>
 {% endblock %}

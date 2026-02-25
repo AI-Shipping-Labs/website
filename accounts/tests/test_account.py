@@ -1,6 +1,7 @@
 """Tests for the Account page (issue #70)."""
 
 import json
+from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
 from django.urls import reverse
@@ -130,7 +131,7 @@ class AccountPagePaidUserTest(TestCase):
         self.assertIn("Billing Period Ends", content)
 
     def test_billing_period_end_formatted(self):
-        """Billing period end is formatted as 'Month Day, Year'."""
+        """Billing period end is formatted as dd/mm/yyyy."""
         from datetime import datetime
 
         self.user.billing_period_end = timezone.make_aware(
@@ -139,7 +140,7 @@ class AccountPagePaidUserTest(TestCase):
         self.user.save(update_fields=["billing_period_end"])
         response = self.client.get("/account/")
         content = response.content.decode()
-        self.assertIn("March 15, 2026", content)
+        self.assertIn("15/03/2026", content)
 
     def test_shows_upgrade_button_for_non_premium(self):
         """Main-tier users see 'Upgrade' button."""
@@ -265,7 +266,7 @@ class AccountPagePendingDowngradeTest(TestCase):
         content = response.content.decode()
         self.assertIn('id="pending-downgrade-notice"', content)
         self.assertIn("Basic", content)
-        self.assertIn("April 1, 2026", content)
+        self.assertIn("01/04/2026", content)
 
     def test_pending_downgrade_message_format(self):
         """Notice says 'Your plan will change to {tier} on {date}'."""
@@ -314,7 +315,7 @@ class AccountPagePendingCancellationTest(TestCase):
         content = response.content.decode()
         self.assertIn("Main", content)
         self.assertIn("access ends on", content)
-        self.assertIn("May 15, 2026", content)
+        self.assertIn("15/05/2026", content)
 
     def test_no_cancel_button_when_already_cancelled(self):
         """No cancel button when cancellation is already pending."""
@@ -456,6 +457,101 @@ class CancelSubscriptionAPITest(TestCase):
     def test_url_name_resolves(self):
         url = reverse("account_cancel_subscription")
         self.assertEqual(url, "/account/api/cancel")
+
+    @patch("payments.services.cancel_subscription")
+    def test_cancel_sets_billing_period_end(self, mock_cancel):
+        """Cancel API saves billing_period_end from Stripe response."""
+        main_tier = Tier.objects.get(slug="main")
+        self.user.tier = main_tier
+        self.user.subscription_id = "sub_cancel_test"
+        self.user.save(update_fields=["tier", "subscription_id"])
+
+        mock_sub = MagicMock()
+        mock_sub.current_period_end = 1774396800  # 2026-03-25 00:00:00 UTC
+        mock_cancel.return_value = mock_sub
+
+        response = self.client.post(
+            self.url,
+            data="{}",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.billing_period_end)
+        self.assertEqual(self.user.billing_period_end.year, 2026)
+        self.assertEqual(self.user.billing_period_end.month, 3)
+        self.assertEqual(self.user.billing_period_end.day, 25)
+
+    @patch("payments.services.cancel_subscription")
+    def test_cancel_sets_pending_tier_to_free(self, mock_cancel):
+        """Cancel API sets pending_tier to free tier."""
+        main_tier = Tier.objects.get(slug="main")
+        self.user.tier = main_tier
+        self.user.subscription_id = "sub_cancel_pending"
+        self.user.save(update_fields=["tier", "subscription_id"])
+
+        mock_sub = MagicMock()
+        mock_sub.current_period_end = 1774396800
+        mock_cancel.return_value = mock_sub
+
+        response = self.client.post(
+            self.url,
+            data="{}",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.pending_tier)
+        self.assertEqual(self.user.pending_tier.slug, "free")
+
+    @patch("payments.services.cancel_subscription")
+    def test_cancel_without_period_end_does_not_crash(self, mock_cancel):
+        """Cancel API handles missing current_period_end gracefully."""
+        main_tier = Tier.objects.get(slug="main")
+        self.user.tier = main_tier
+        self.user.subscription_id = "sub_cancel_noend"
+        self.user.save(update_fields=["tier", "subscription_id"])
+
+        mock_sub = MagicMock(spec=[])  # No attributes
+        mock_cancel.return_value = mock_sub
+
+        response = self.client.post(
+            self.url,
+            data="{}",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.pending_tier)
+        self.assertEqual(self.user.pending_tier.slug, "free")
+
+    @patch("payments.services.cancel_subscription")
+    def test_cancel_then_page_shows_date(self, mock_cancel):
+        """After cancellation, account page displays the billing end date."""
+        main_tier = Tier.objects.get(slug="main")
+        self.user.tier = main_tier
+        self.user.subscription_id = "sub_cancel_show"
+        self.user.save(update_fields=["tier", "subscription_id"])
+
+        mock_sub = MagicMock()
+        mock_sub.current_period_end = 1774396800  # 2026-03-25 00:00:00 UTC
+        mock_cancel.return_value = mock_sub
+
+        # Cancel the subscription
+        self.client.post(
+            self.url,
+            data="{}",
+            content_type="application/json",
+        )
+
+        # Load the account page
+        response = self.client.get("/account/")
+        content = response.content.decode()
+        self.assertIn("access ends on", content)
+        self.assertIn("25/03/2026", content)
 
 
 class AccountPageEmailPreferencesDisplayTest(TestCase):

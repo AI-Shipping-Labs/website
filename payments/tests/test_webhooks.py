@@ -369,6 +369,37 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.tier, basic_tier)
 
+    def test_cancel_at_period_end_saves_billing_period_end(self):
+        """billing_period_end is saved when cancel_at_period_end is True."""
+        from django.utils import timezone as django_tz
+
+        basic_tier = Tier.objects.get(slug="basic")
+        user = User.objects.create_user(email="cancel_billing@test.com")
+        user.tier = basic_tier
+        user.subscription_id = "sub_cancel_billing"
+        user.save(update_fields=["tier", "subscription_id"])
+
+        subscription_data = {
+            "id": "sub_cancel_billing",
+            "customer": "cus_cancel_billing",
+            "status": "active",
+            "cancel_at_period_end": True,
+            "current_period_end": 1774396800,
+            "items": {
+                "data": [
+                    {"price": {"id": "price_basic_monthly"}},
+                ],
+            },
+        }
+
+        handle_subscription_updated(subscription_data)
+
+        user.refresh_from_db()
+        self.assertIsNotNone(user.billing_period_end)
+        self.assertEqual(user.billing_period_end.year, 2026)
+        self.assertEqual(user.billing_period_end.month, 3)
+        self.assertEqual(user.billing_period_end.day, 25)
+
     def test_no_error_when_user_not_found(self):
         """Handler does not crash when no user matches the subscription."""
         subscription_data = {

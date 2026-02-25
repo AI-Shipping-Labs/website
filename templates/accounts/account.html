@@ -56,7 +56,7 @@
         {% if billing_period_end %}
         <div class="mb-6">
           <p class="text-sm text-muted-foreground">Billing Period Ends</p>
-          <p class="text-foreground mt-1" id="billing-period-end">{{ billing_period_end|date:"F j, Y" }}</p>
+          <p class="text-foreground mt-1" id="billing-period-end">{{ billing_period_end|date:"d/m/Y" }}</p>
         </div>
         {% endif %}
 
@@ -66,7 +66,7 @@
           <div class="flex items-start gap-3">
             <i data-lucide="info" class="h-5 w-5 text-amber-400 mt-0.5 shrink-0"></i>
             <p class="text-sm text-amber-200">
-              Your plan will change to <strong>{{ pending_tier.name }}</strong> on <strong>{{ billing_period_end|date:"F j, Y" }}</strong>.
+              Your plan will change to <strong>{{ pending_tier.name }}</strong> on <strong>{{ billing_period_end|date:"d/m/Y" }}</strong>.
             </p>
           </div>
         </div>
@@ -78,7 +78,7 @@
           <div class="flex items-start gap-3">
             <i data-lucide="alert-circle" class="h-5 w-5 text-red-400 mt-0.5 shrink-0"></i>
             <p class="text-sm text-red-200">
-              Your <strong>{{ tier.name }}</strong> access ends on <strong>{{ billing_period_end|date:"F j, Y" }}</strong>.
+              Your <strong>{{ tier.name }}</strong> access ends on <strong>{{ billing_period_end|date:"d/m/Y" }}</strong>.
             </p>
           </div>
         </div>
@@ -251,7 +251,7 @@
         <h3 class="text-xl font-semibold">Cancel Subscription</h3>
       </div>
       <p class="text-sm text-muted-foreground mb-6">
-        Are you sure you want to cancel? You will keep access to your current plan until the end of your billing period{% if billing_period_end %} ({{ billing_period_end|date:"F j, Y" }}){% endif %}.
+        Are you sure you want to cancel? You will keep access to your current plan until the end of your billing period{% if billing_period_end %} ({{ billing_period_end|date:"d/m/Y" }}){% endif %}.
       </p>
       <div class="flex gap-3">
         <button type="button"

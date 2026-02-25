@@ -1,6 +1,7 @@
 """Account page view and email preferences API."""
 
 import json
+from datetime import datetime, timezone
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -154,7 +155,7 @@ def cancel_subscription_view(request):
         return JsonResponse({"error": "No active subscription"}, status=400)
 
     try:
-        cancel_subscription(user)
+        updated_subscription = cancel_subscription(user)
     except ValueError as e:
         return JsonResponse({"error": str(e)}, status=400)
     except Exception:
@@ -164,8 +165,20 @@ def cancel_subscription_view(request):
 
     # Set pending_tier to free to indicate cancellation at period end
     free_tier = Tier.objects.filter(slug="free").first()
+    update_fields = []
     if free_tier:
         user.pending_tier = free_tier
-        user.save(update_fields=["pending_tier"])
+        update_fields.append("pending_tier")
+
+    # Update billing_period_end from the Stripe subscription response
+    current_period_end = getattr(updated_subscription, "current_period_end", None)
+    if current_period_end:
+        user.billing_period_end = datetime.fromtimestamp(
+            current_period_end, tz=timezone.utc
+        )
+        update_fields.append("billing_period_end")
+
+    if update_fields:
+        user.save(update_fields=update_fields)
 
     return JsonResponse({"status": "ok"})

@@ -442,7 +442,7 @@ class TestScenarioBasicMemberSubscription:
 
                 billing = page.locator("#billing-period-end")
                 assert billing.is_visible()
-                assert "March 15, 2026" in billing.inner_text()
+                assert "15/03/2026" in billing.inner_text()
                 ctx.close()
             finally:
                 browser.close()
@@ -677,7 +677,7 @@ class TestScenarioPendingDowngradeNotice:
                 assert notice.is_visible()
                 text = notice.inner_text()
                 assert "Basic" in text
-                assert "April 1, 2026" in text
+                assert "01/04/2026" in text
                 ctx.close()
             finally:
                 browser.close()
@@ -745,7 +745,7 @@ class TestScenarioPendingCancellationNotice:
                 assert notice.is_visible()
                 text = notice.inner_text()
                 assert "Main" in text
-                assert "May 15, 2026" in text
+                assert "15/05/2026" in text
                 ctx.close()
             finally:
                 browser.close()
@@ -801,7 +801,7 @@ class TestScenarioCancelSubscriptionConfirmation:
 
                 text = modal.inner_text()
                 assert "Are you sure you want to cancel" in text
-                assert "April 1, 2026" in text
+                assert "01/04/2026" in text
                 assert modal.locator("#confirm-cancel-btn").is_visible()
                 assert modal.locator(
                     "button", has_text="Keep Plan"

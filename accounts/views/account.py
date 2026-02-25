@@ -91,6 +91,9 @@ def account_view(request):
     upgrade_tiers = [t for t in all_tiers if t.level > current_level]
     downgrade_tiers = [t for t in all_tiers if 0 < t.level < current_level]
 
+    # Get current tier's feature list for the cancel confirmation modal
+    tier_features = tier.features if tier and tier.features else []
+
     context = {
         "tier": tier,
         "pending_tier": pending_tier,
@@ -105,6 +108,7 @@ def account_view(request):
         "downgrade_tiers": downgrade_tiers,
         "email_preferences": user.email_preferences,
         "newsletter_subscribed": not user.unsubscribed,
+        "tier_features": tier_features,
     }
 
     return render(request, "accounts/account.html", context)

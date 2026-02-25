@@ -800,11 +800,11 @@ class TestScenarioCancelSubscriptionConfirmation:
                 assert modal.is_visible()
 
                 text = modal.inner_text()
-                assert "Are you sure you want to cancel" in text
+                assert "You will keep access to your current tier until the end of your billing period" in text
                 assert "01/04/2026" in text
                 assert modal.locator("#confirm-cancel-btn").is_visible()
                 assert modal.locator(
-                    "button", has_text="Keep Plan"
+                    "button", has_text="Keep my plan"
                 ).is_visible()
                 ctx.close()
             finally:
@@ -829,7 +829,7 @@ class TestScenarioCancelSubscriptionConfirmation:
                 modal = page.locator("#cancel-modal")
                 assert modal.is_visible()
 
-                modal.locator("button", has_text="Keep Plan").click()
+                modal.locator("button", has_text="Keep my plan").click()
                 page.wait_for_timeout(500)
                 assert modal.is_hidden()
 

@@ -506,9 +506,8 @@ class TestScenario4MainMonthlyStripeLink:
             finally:
                 browser.close()
 
-    def test_main_join_button_has_target_blank(self, django_server):
-        """Verify the Join button has target=_blank to open Stripe in a new
-        tab."""
+    def test_main_join_button_uses_api_checkout(self, django_server):
+        """Verify the Join button uses JS-based API checkout (no target=_blank)."""
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(viewport=VIEWPORT)
@@ -519,8 +518,7 @@ class TestScenario4MainMonthlyStripeLink:
                 )
                 main_card = _get_tier_card_by_name(page, "Main")
                 join_button = main_card.locator("a.tier-cta-link")
-                target = join_button.get_attribute("target")
-                assert target == "_blank"
+                assert join_button.get_attribute("data-tier") == "main"
             finally:
                 browser.close()
 

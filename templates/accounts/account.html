@@ -250,20 +250,59 @@
         <i data-lucide="alert-triangle" class="h-6 w-6 text-red-400"></i>
         <h3 class="text-xl font-semibold">Cancel Subscription</h3>
       </div>
-      <p class="text-sm text-muted-foreground mb-6">
-        Are you sure you want to cancel? You will keep access to your current plan until the end of your billing period{% if billing_period_end %} ({{ billing_period_end|date:"d/m/Y" }}){% endif %}.
+
+      <p class="text-sm text-muted-foreground mb-4">
+        You will keep access to your current tier until the end of your billing period{% if billing_period_end %} ({{ billing_period_end|date:"d/m/Y" }}){% endif %}.
       </p>
+
+      <!-- Feature loss summary -->
+      <div class="mb-4" id="cancel-feature-loss">
+        <p class="text-sm font-medium text-foreground mb-2">Features you will lose:</p>
+        {% if tier_features %}
+        <ul class="space-y-1" id="cancel-feature-list">
+          {% for feature in tier_features %}
+          <li class="flex items-center gap-2 text-sm text-muted-foreground">
+            <i data-lucide="x" class="h-4 w-4 text-red-400 shrink-0"></i>
+            {{ feature }}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-muted-foreground" id="cancel-generic-loss">You will lose access to all paid features.</p>
+        {% endif %}
+      </div>
+
+      <!-- Checkbox confirmation -->
+      <div class="mb-4">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" id="cancel-confirm-checkbox"
+                 class="mt-0.5 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent">
+          <span class="text-sm text-foreground">I understand I will lose access to paid features at the end of my billing period</span>
+        </label>
+      </div>
+
+      <!-- Text confirmation -->
+      <div class="mb-6">
+        <input type="text" id="cancel-confirm-text"
+               class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+               placeholder="Type confirm to proceed"
+               autocomplete="off">
+      </div>
+
+      <!-- Action buttons -->
       <div class="flex gap-3">
         <button type="button"
-                class="flex-1 rounded-md bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
+                class="flex-1 rounded-md bg-red-500/50 px-4 py-2.5 text-sm font-medium text-white/50 cursor-not-allowed transition-colors"
                 id="confirm-cancel-btn"
+                disabled
                 onclick="doCancel()">
-          Yes, Cancel
+          Cancel my subscription
         </button>
         <button type="button"
                 class="flex-1 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                id="keep-plan-btn"
                 onclick="hideCancelConfirm()">
-          Keep Plan
+          Keep my plan
         </button>
       </div>
     </div>
@@ -304,11 +343,47 @@ function hideDowngradeModal() {
 
 // Cancel confirm
 function showCancelConfirm() {
+  // Reset the form state each time the modal opens
+  var checkbox = document.getElementById('cancel-confirm-checkbox');
+  var textInput = document.getElementById('cancel-confirm-text');
+  if (checkbox) checkbox.checked = false;
+  if (textInput) textInput.value = '';
+  updateCancelButton();
   document.getElementById('cancel-modal').classList.remove('hidden');
 }
 function hideCancelConfirm() {
   document.getElementById('cancel-modal').classList.add('hidden');
 }
+
+// Update cancel button enabled/disabled state
+function updateCancelButton() {
+  var checkbox = document.getElementById('cancel-confirm-checkbox');
+  var textInput = document.getElementById('cancel-confirm-text');
+  var btn = document.getElementById('confirm-cancel-btn');
+  if (!checkbox || !textInput || !btn) return;
+
+  var isChecked = checkbox.checked;
+  var isConfirmed = textInput.value.trim().toLowerCase() === 'confirm';
+
+  if (isChecked && isConfirmed) {
+    btn.disabled = false;
+    btn.classList.remove('bg-red-500/50', 'text-white/50', 'cursor-not-allowed');
+    btn.classList.add('bg-red-500', 'text-white', 'hover:bg-red-600', 'cursor-pointer');
+  } else {
+    btn.disabled = true;
+    btn.classList.add('bg-red-500/50', 'text-white/50', 'cursor-not-allowed');
+    btn.classList.remove('bg-red-500', 'text-white', 'hover:bg-red-600', 'cursor-pointer');
+  }
+}
+
+// Attach event listeners for cancel confirmation controls
+(function() {
+  var checkbox = document.getElementById('cancel-confirm-checkbox');
+  var textInput = document.getElementById('cancel-confirm-text');
+  if (checkbox) checkbox.addEventListener('change', updateCancelButton);
+  if (textInput) textInput.addEventListener('keyup', updateCancelButton);
+  if (textInput) textInput.addEventListener('input', updateCancelButton);
+})();
 
 // Upgrade action: create a checkout session via the existing API
 function doUpgrade(tierSlug) {

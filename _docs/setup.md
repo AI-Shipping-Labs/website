@@ -87,8 +87,26 @@ ZOOM_WEBHOOK_SECRET_TOKEN=
 Membership payments and subscriptions.
 
 1. [Stripe Dashboard](https://dashboard.stripe.com/test/apikeys) → Developers → API keys
-2. For webhooks: Developers → Webhooks → Add endpoint → `https://yourdomain.com/api/webhooks/stripe`
+2. Create test products and prices automatically:
+   ```bash
+   uv run python manage.py stripe_create_products
+   ```
+   This creates a Stripe Product for each paid tier (Basic, Main, Premium) with monthly and yearly prices, and saves the Price IDs to the database.
+3. Install Stripe CLI for local webhook forwarding (Linux):
+   ```bash
+   curl -s https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public | gpg --dearmor | sudo tee /usr/share/keyrings/stripe.gpg > /dev/null
+   echo "deb [signed-by=/usr/share/keyrings/stripe.gpg] https://packages.stripe.dev/stripe-cli-debian-local stable main" | sudo tee /etc/apt/sources.list.d/stripe.list
+   sudo apt update && sudo apt install stripe
+   ```
+4. Forward webhooks to your local server:
+   ```bash
+   stripe login
+   stripe listen --forward-to localhost:8000/api/webhooks/payments
+   ```
+   Copy the `whsec_...` secret it prints and add it to `.env` as `STRIPE_WEBHOOK_SECRET`.
+5. For production webhooks: Developers → Webhooks → Add endpoint → `https://yourdomain.com/api/webhooks/payments`
    - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+6. Test card: `4242 4242 4242 4242`, any future expiry, any CVC
 
 ```bash
 STRIPE_PUBLISHABLE_KEY=
@@ -115,9 +133,12 @@ AWS_SES_REGION=us-east-1
 
 Community integration — invite members, post announcements.
 
-1. [api.slack.com/apps](https://api.slack.com/apps) → Create app
-2. Bot Token Scopes: `chat:write`, `users:read`, `users:read.email`, `channels:read`
-3. Install to workspace
+1. [api.slack.com/apps](https://api.slack.com/apps) → Create app → From scratch
+2. OAuth & Permissions → Bot Token Scopes: `users:read`, `users:read.email`, `channels:read`, `chat:write`
+3. Install to workspace, copy the Bot User OAuth Token (`xoxb-...`)
+4. Add the bot to your community channels (`/invite @YourBotName`)
+5. Get channel IDs: right-click channel → View channel details → copy ID at the bottom
+6. Create a workspace invite link: workspace Settings → Invitations
 
 ```bash
 SLACK_BOT_TOKEN=

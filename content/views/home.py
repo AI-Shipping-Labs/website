@@ -2,6 +2,7 @@ from django.db.models import Max, Count, Q
 from django.shortcuts import render
 from django.conf import settings
 from django.utils import timezone
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import get_user_level
 from content.models import Article, Recording, Project, CuratedLink, Course, UserCourseProgress, Unit
@@ -184,6 +185,7 @@ SECTION_NAV = [
 ]
 
 
+@ensure_csrf_cookie
 def home(request):
     """Homepage view.
 

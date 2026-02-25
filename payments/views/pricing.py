@@ -1,9 +1,11 @@
 from django.conf import settings
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from payments.models import Tier
 
 
+@ensure_csrf_cookie
 def pricing(request):
     """Pricing page showing all membership tiers in a comparison grid."""
     tiers = Tier.objects.all()

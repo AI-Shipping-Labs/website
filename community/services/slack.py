@@ -6,10 +6,13 @@ Uses Slack Web API (channel-based approach - Approach B from spec 09):
 - users.lookupByEmail to find Slack users by email
 
 Requires a Slack bot token with scopes:
-- conversations:invite
-- conversations:kick (technically conversations:write)
-- users:read.email
 - users:read
+- users:read.email
+- channels:read
+- chat:write
+
+The bot must be a member of the community channels to use
+conversations.invite and conversations.kick.
 """
 
 import json

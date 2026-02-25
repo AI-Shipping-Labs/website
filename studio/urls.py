@@ -7,7 +7,7 @@ from studio.views.courses import (
     module_reorder,
 )
 from studio.views.articles import article_list, article_create, article_edit
-from studio.views.events import event_list, event_create, event_edit
+from studio.views.events import event_list, event_create, event_edit, event_create_zoom
 from studio.views.recordings import recording_list, recording_create, recording_edit
 from studio.views.campaigns import campaign_list, campaign_create, campaign_detail
 from studio.views.subscribers import subscriber_list, subscriber_export_csv
@@ -36,6 +36,7 @@ urlpatterns = [
     path('events/', event_list, name='studio_event_list'),
     path('events/new', event_create, name='studio_event_create'),
     path('events/<int:event_id>/edit', event_edit, name='studio_event_edit'),
+    path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
 
     # Recordings
     path('recordings/', recording_list, name='studio_recording_list'),

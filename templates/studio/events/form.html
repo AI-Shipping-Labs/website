@@ -110,4 +110,62 @@
     <a href="{% url 'studio_event_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
 </form>
+
+{% if event %}
+<div class="mt-8 max-w-3xl">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-medium text-foreground mb-4">Zoom Meeting</h2>
+    {% if event.zoom_meeting_id %}
+      <div class="space-y-2">
+        <p class="text-sm text-muted-foreground">Meeting ID: <span class="text-foreground">{{ event.zoom_meeting_id }}</span></p>
+        <p class="text-sm text-muted-foreground">Join URL: <a href="{{ event.zoom_join_url }}" target="_blank" class="text-accent hover:underline">{{ event.zoom_join_url }}</a></p>
+      </div>
+    {% else %}
+      <p class="text-sm text-muted-foreground mb-4">No Zoom meeting linked to this event.</p>
+      <button type="button" id="create-zoom-btn"
+              onclick="createZoomMeeting({{ event.pk }})"
+              class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+        Create Zoom Meeting
+      </button>
+      <span id="zoom-status" class="ml-3 text-sm text-muted-foreground"></span>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function createZoomMeeting(eventId) {
+  var btn = document.getElementById('create-zoom-btn');
+  var status = document.getElementById('zoom-status');
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+  status.textContent = '';
+
+  fetch('/studio/events/' + eventId + '/create-zoom', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    if (res.ok) {
+      status.textContent = 'Zoom meeting created!';
+      status.className = 'ml-3 text-sm text-green-500';
+      setTimeout(function() { location.reload(); }, 1000);
+    } else {
+      status.textContent = 'Error: ' + res.data.error;
+      status.className = 'ml-3 text-sm text-red-500';
+      btn.disabled = false;
+      btn.textContent = 'Create Zoom Meeting';
+    }
+  })
+  .catch(function(err) {
+    status.textContent = 'Network error: ' + err.message;
+    status.className = 'ml-3 text-sm text-red-500';
+    btn.disabled = false;
+    btn.textContent = 'Create Zoom Meeting';
+  });
+}
+</script>
+{% endif %}
 {% endblock %}

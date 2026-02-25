@@ -1,10 +1,16 @@
 """Studio views for event CRUD."""
 
+import logging
+
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST
 
 from events.models import Event
 from studio.decorators import staff_required
+
+logger = logging.getLogger(__name__)
 
 
 @staff_required
@@ -97,3 +103,27 @@ def event_edit(request, event_id):
         'event': event,
         'form_action': 'edit',
     })
+
+
+@staff_required
+@require_POST
+def event_create_zoom(request, event_id):
+    """Create a Zoom meeting for an existing event."""
+    event = get_object_or_404(Event, pk=event_id)
+
+    if event.zoom_meeting_id:
+        return JsonResponse({'error': 'Event already has a Zoom meeting'}, status=400)
+
+    try:
+        from integrations.services.zoom import create_meeting
+        result = create_meeting(event)
+        event.zoom_meeting_id = result['meeting_id']
+        event.zoom_join_url = result['join_url']
+        event.save(update_fields=['zoom_meeting_id', 'zoom_join_url'])
+        return JsonResponse({
+            'meeting_id': result['meeting_id'],
+            'join_url': result['join_url'],
+        })
+    except Exception as e:
+        logger.exception('Failed to create Zoom meeting for event %s', event.pk)
+        return JsonResponse({'error': str(e)}, status=500)

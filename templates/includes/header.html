@@ -49,6 +49,9 @@
           </div>
         </div>
       </div>
+      {% if user.is_staff %}
+      <a href="{% url 'studio_dashboard' %}" class="text-sm text-accent transition-colors hover:text-foreground">Studio</a>
+      {% endif %}
       <a href="{% url 'account' %}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">{{ user.email }}</a>
       <a href="{% url 'account_logout' %}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Log out
@@ -87,6 +90,11 @@
         <a href="/notifications" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Notifications <span id="mobile-notification-badge" class="hidden ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
         </a>
+        {% if user.is_staff %}
+        <a href="{% url 'studio_dashboard' %}" class="block w-full rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
+          Studio
+        </a>
+        {% endif %}
         <a href="{% url 'account' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>

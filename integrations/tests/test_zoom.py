@@ -610,11 +610,11 @@ class ZoomRecordingCompletedTest(TestCase):
         self.assertEqual(recording.date, self.event.start_datetime.date())
 
 
-# --- Event Admin Auto-Create Zoom Meeting Tests ---
+# --- Event Admin Zoom Meeting Tests ---
 
 
 class EventAdminZoomCreationTest(TestCase):
-    """Test that creating a live event via admin auto-creates a Zoom meeting."""
+    """Test that admin defers Zoom meeting creation to Studio."""
 
     def setUp(self):
         self.client = Client()
@@ -629,29 +629,12 @@ class EventAdminZoomCreationTest(TestCase):
         ZOOM_ACCOUNT_ID=ZOOM_TEST_ACCOUNT_ID,
     )
     @patch('integrations.services.zoom.requests.post')
-    def test_new_live_event_creates_zoom_meeting(self, mock_post):
-        """Creating a new live event via admin triggers Zoom meeting creation."""
-        from integrations.services import zoom
-        zoom.clear_token_cache()
+    def test_new_live_event_does_not_auto_create_zoom_meeting(self, mock_post):
+        """Creating a new live event via admin does not auto-create Zoom.
 
-        # Mock token request
-        token_response = MagicMock()
-        token_response.status_code = 200
-        token_response.json.return_value = {
-            'access_token': 'admin-token',
-            'expires_in': 3600,
-        }
-
-        # Mock meeting creation
-        meeting_response = MagicMock()
-        meeting_response.status_code = 201
-        meeting_response.json.return_value = {
-            'id': 55555555555,
-            'join_url': 'https://zoom.us/j/55555555555',
-        }
-
-        mock_post.side_effect = [token_response, meeting_response]
-
+        Zoom meeting creation is handled via the Studio endpoint
+        (POST /studio/events/<id>/create-zoom), not the admin save.
+        """
         start = timezone.now() + timedelta(days=7)
         response = self.client.post('/admin/events/event/add/', {
             'title': 'Admin Live Event',
@@ -673,10 +656,12 @@ class EventAdminZoomCreationTest(TestCase):
             'registrations-MAX_NUM_FORMS': '1000',
         })
 
-        # Event should have Zoom details populated
+        # Event should be saved but Zoom fields remain empty
         event = Event.objects.get(slug='admin-live-event')
-        self.assertEqual(event.zoom_meeting_id, '55555555555')
-        self.assertEqual(event.zoom_join_url, 'https://zoom.us/j/55555555555')
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+        # No Zoom API calls should have been made
+        mock_post.assert_not_called()
 
     @override_settings(
         ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,

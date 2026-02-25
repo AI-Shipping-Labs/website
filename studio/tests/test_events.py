@@ -175,3 +175,76 @@ class StudioEventEditTest(TestCase):
     def test_edit_nonexistent_event_returns_404(self):
         response = self.client.get('/studio/events/99999/edit')
         self.assertEqual(response.status_code, 404)
+
+
+class StudioEventCreateZoomTest(TestCase):
+    """Test Studio endpoint for creating Zoom meetings for events."""
+
+    def setUp(self):
+        from unittest.mock import MagicMock, patch  # noqa: F811
+        self.client = Client()
+        self.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        self.client.login(email='staff@test.com', password='testpass')
+        self.event = Event.objects.create(
+            title='Live Event', slug='live-event',
+            event_type='live',
+            start_datetime=timezone.now(),
+            timezone='Europe/Berlin',
+            status='draft',
+        )
+
+    def test_create_zoom_success(self):
+        from unittest.mock import MagicMock, patch
+        from django.test import override_settings
+
+        with override_settings(
+            ZOOM_CLIENT_ID='test-client-id',
+            ZOOM_CLIENT_SECRET='test-client-secret',
+            ZOOM_ACCOUNT_ID='test-account-id',
+        ):
+            with patch('integrations.services.zoom.requests.post') as mock_post:
+                from integrations.services import zoom
+                zoom.clear_token_cache()
+
+                token_resp = MagicMock()
+                token_resp.status_code = 200
+                token_resp.json.return_value = {
+                    'access_token': 'tok', 'expires_in': 3600,
+                }
+                meeting_resp = MagicMock()
+                meeting_resp.status_code = 201
+                meeting_resp.json.return_value = {
+                    'id': 12345678900,
+                    'join_url': 'https://zoom.us/j/12345678900',
+                }
+                mock_post.side_effect = [token_resp, meeting_resp]
+
+                response = self.client.post(
+                    f'/studio/events/{self.event.pk}/create-zoom',
+                )
+                self.assertEqual(response.status_code, 200)
+                self.event.refresh_from_db()
+                self.assertEqual(self.event.zoom_meeting_id, '12345678900')
+                self.assertEqual(
+                    self.event.zoom_join_url, 'https://zoom.us/j/12345678900',
+                )
+
+    def test_create_zoom_already_has_meeting(self):
+        self.event.zoom_meeting_id = 'existing-id'
+        self.event.save(update_fields=['zoom_meeting_id'])
+        response = self.client.post(
+            f'/studio/events/{self.event.pk}/create-zoom',
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_zoom_nonexistent_event(self):
+        response = self.client.post('/studio/events/99999/create-zoom')
+        self.assertEqual(response.status_code, 404)
+
+    def test_create_zoom_requires_post(self):
+        response = self.client.get(
+            f'/studio/events/{self.event.pk}/create-zoom',
+        )
+        self.assertEqual(response.status_code, 405)

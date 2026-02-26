@@ -273,7 +273,15 @@ def _dashboard(request):
 
 
 def _get_in_progress_courses(user):
-    """Return courses the user has started but not finished, most recently accessed first."""
+    """Return courses the user has started but not finished, most recently accessed first.
+
+    Only includes courses the user currently has access to based on their
+    tier level.  Progress records for inaccessible courses are preserved in
+    the database but excluded from the dashboard until the user's tier
+    qualifies again.
+    """
+    user_level = get_user_level(user)
+
     # Get all courses where user has at least one completed unit
     progress_qs = UserCourseProgress.objects.filter(
         user=user,
@@ -298,9 +306,13 @@ def _get_in_progress_courses(user):
             course_data[cid]['last_unit'] = prog.unit
 
     # Build result list, filtering out fully completed courses
+    # and courses the user can no longer access at their current tier level
     result = []
     for cid, data in course_data.items():
         course = data['course']
+        # Skip courses whose required_level exceeds the user's current tier
+        if course.required_level > user_level:
+            continue
         total = course.total_units()
         completed = data['completed_count']
         if total == 0 or completed >= total:

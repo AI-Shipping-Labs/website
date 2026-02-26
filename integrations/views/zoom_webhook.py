@@ -101,6 +101,10 @@ def zoom_webhook(request):
 def _handle_recording_completed(payload, webhook_log):
     """Process a recording.completed webhook payload.
 
+    Creates a Recording record from the event data, links it to the event,
+    marks the event as completed, and enqueues a background job to download
+    the recording from Zoom and upload it to S3.
+
     Args:
         payload: The parsed JSON payload from Zoom.
         webhook_log: The WebhookLog instance for this webhook.
@@ -122,10 +126,11 @@ def _handle_recording_completed(payload, webhook_log):
         )
         return
 
-    # Extract recording URL from Zoom payload
+    # Extract recording URLs from Zoom payload
     # Zoom provides recording files in the payload
     recording_files = object_data.get('recording_files', [])
     video_url = ''
+    download_url = ''
     for rec_file in recording_files:
         # Prefer shared_screen_with_speaker_view or shared_screen
         if rec_file.get('recording_type') in (
@@ -134,6 +139,7 @@ def _handle_recording_completed(payload, webhook_log):
             'active_speaker',
         ):
             video_url = rec_file.get('play_url', '') or rec_file.get('download_url', '')
+            download_url = rec_file.get('download_url', '')
             if video_url:
                 break
 
@@ -175,3 +181,22 @@ def _handle_recording_completed(payload, webhook_log):
         'Created Recording "%s" (slug=%s) from Zoom meeting %s for event "%s"',
         recording.title, recording.slug, meeting_id, event.title,
     )
+
+    # Enqueue background job to download from Zoom and upload to S3
+    if download_url:
+        from jobs.tasks import async_task
+        async_task(
+            'jobs.tasks.recording_upload.upload_recording_to_s3',
+            recording.id,
+            download_url,
+            max_retries=3,
+        )
+        logger.info(
+            'Enqueued S3 upload job for recording "%s" (id=%s)',
+            recording.title, recording.id,
+        )
+    else:
+        logger.warning(
+            'No download URL available for recording "%s", skipping S3 upload',
+            recording.title,
+        )

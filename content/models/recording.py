@@ -21,6 +21,10 @@ class Recording(models.Model):
     level = models.CharField(max_length=100, blank=True, default='')
     google_embed_url = models.URLField(max_length=500, blank=True, default='')
     youtube_url = models.URLField(max_length=500, blank=True, default='')
+    s3_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='S3 URL for the recording file (auto-populated after upload).',
+    )
     timestamps = models.JSONField(default=list, blank=True)
     materials = models.JSONField(default=list, blank=True)
     core_tools = models.JSONField(default=list, blank=True)
@@ -68,8 +72,8 @@ class Recording(models.Model):
 
     @property
     def video_url(self):
-        """Return the primary video URL (youtube_url or google_embed_url)."""
-        return self.youtube_url or self.google_embed_url
+        """Return the primary video URL (s3_url, youtube_url, or google_embed_url)."""
+        return self.s3_url or self.youtube_url or self.google_embed_url
 
     def get_absolute_url(self):
         return f'/event-recordings/{self.slug}'

@@ -7,3 +7,4 @@ from .campaigns import *
 from .subscribers import *
 from .downloads import *
 from .projects import *
+from .notifications import *

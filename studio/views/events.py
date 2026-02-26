@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
@@ -175,6 +176,8 @@ def event_edit(request, event_id):
 
     context = _event_form_context(event)
     context['form_action'] = 'edit'
+    context['notify_url'] = reverse('studio_event_notify', kwargs={'event_id': event.pk})
+    context['announce_url'] = reverse('studio_event_announce_slack', kwargs={'event_id': event.pk})
     return render(request, 'studio/events/form.html', context)
 
 

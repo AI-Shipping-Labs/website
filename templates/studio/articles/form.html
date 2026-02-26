@@ -92,4 +92,8 @@
     <a href="{% url 'studio_article_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
 </form>
+
+{% if article and article.published %}
+{% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
+{% endif %}
 {% endblock %}

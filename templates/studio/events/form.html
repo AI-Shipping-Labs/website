@@ -243,4 +243,8 @@ document.addEventListener('DOMContentLoaded', function() {
   updatePlatformVisibility();
 });
 </script>
+
+{% if event and event.status != 'draft' %}
+{% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
+{% endif %}
 {% endblock %}

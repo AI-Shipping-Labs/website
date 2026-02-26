@@ -98,4 +98,8 @@
     <a href="{% url 'studio_download_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
 </form>
+
+{% if download and download.published %}
+{% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
+{% endif %}
 {% endblock %}

@@ -103,6 +103,10 @@
   </div>
 </form>
 
+{% if course and course.status == 'published' %}
+{% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
+{% endif %}
+
 {% if course %}
 <!-- Modules & Units Section -->
 <div class="mt-12 max-w-3xl">

@@ -1,0 +1,96 @@
+<!-- Notification Actions: Notify Subscribers and Post to Slack -->
+<!-- Requires: notify_url, announce_url variables to be set before including -->
+<div class="mt-8 max-w-3xl">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-medium text-foreground mb-4">Notifications</h2>
+    <div class="flex items-center space-x-4">
+      <button type="button" id="notify-subscribers-btn"
+              onclick="notifySubscribers()"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Notify subscribers
+      </button>
+      <button type="button" id="post-to-slack-btn"
+              onclick="postToSlack()"
+              class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+        Post to Slack
+      </button>
+    </div>
+    <div id="notify-status" class="mt-3 text-sm" style="display:none;"></div>
+    <div id="slack-status" class="mt-3 text-sm" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+function notifySubscribers() {
+  var btn = document.getElementById('notify-subscribers-btn');
+  var status = document.getElementById('notify-status');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  status.style.display = 'none';
+
+  fetch('{{ notify_url }}', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, status: r.status, data: d}; }); })
+  .then(function(res) {
+    status.style.display = 'block';
+    if (res.ok) {
+      status.textContent = 'Notified ' + res.data.notified + ' subscribers';
+      status.className = 'mt-3 text-sm text-green-500';
+    } else if (res.status === 409) {
+      status.textContent = 'Already notified in the last 24 hours \u2014 sending again would duplicate notifications';
+      status.className = 'mt-3 text-sm text-yellow-500';
+    } else {
+      status.textContent = 'Error: ' + (res.data.error || 'Unknown error');
+      status.className = 'mt-3 text-sm text-red-500';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Notify subscribers';
+  })
+  .catch(function(err) {
+    status.style.display = 'block';
+    status.textContent = 'Network error: ' + err.message;
+    status.className = 'mt-3 text-sm text-red-500';
+    btn.disabled = false;
+    btn.textContent = 'Notify subscribers';
+  });
+}
+
+function postToSlack() {
+  var btn = document.getElementById('post-to-slack-btn');
+  var status = document.getElementById('slack-status');
+  btn.disabled = true;
+  btn.textContent = 'Posting...';
+  status.style.display = 'none';
+
+  fetch('{{ announce_url }}', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    status.style.display = 'block';
+    if (res.ok) {
+      status.textContent = 'Slack announcement posted successfully';
+      status.className = 'mt-3 text-sm text-green-500';
+    } else {
+      status.textContent = 'Error: ' + (res.data.error || 'Unknown error');
+      status.className = 'mt-3 text-sm text-red-500';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Post to Slack';
+  })
+  .catch(function(err) {
+    status.style.display = 'block';
+    status.textContent = 'Network error: ' + err.message;
+    status.className = 'mt-3 text-sm text-red-500';
+    btn.disabled = false;
+    btn.textContent = 'Post to Slack';
+  });
+}
+</script>

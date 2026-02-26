@@ -4,6 +4,7 @@ import json
 
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.utils.text import slugify
 
 from content.models import Course, Module, Unit
@@ -94,6 +95,8 @@ def course_edit(request, course_id):
         'course': course,
         'modules': modules,
         'form_action': 'edit',
+        'notify_url': reverse('studio_course_notify', kwargs={'course_id': course.pk}),
+        'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
     })
 
 

@@ -1,6 +1,7 @@
 """Studio views for article CRUD."""
 
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -108,7 +109,10 @@ def article_edit(request, article_id):
 
         return redirect('studio_article_edit', article_id=article.pk)
 
-    return render(request, 'studio/articles/form.html', {
+    context = {
         'article': article,
         'form_action': 'edit',
-    })
+        'notify_url': reverse('studio_article_notify', kwargs={'article_id': article.pk}),
+        'announce_url': reverse('studio_article_announce_slack', kwargs={'article_id': article.pk}),
+    }
+    return render(request, 'studio/articles/form.html', context)

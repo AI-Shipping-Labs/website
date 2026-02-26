@@ -80,4 +80,8 @@
     <a href="{% url 'studio_recording_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
 </form>
+
+{% if recording and recording.published %}
+{% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
+{% endif %}
 {% endblock %}

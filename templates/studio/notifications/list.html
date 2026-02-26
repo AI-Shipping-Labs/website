@@ -1,0 +1,61 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Notifications{% endblock %}
+
+{% block studio_content %}
+<div class="flex items-center justify-between mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Notification Log</h1>
+    <p class="text-muted-foreground mt-1">Deduplicated history of subscriber notifications.</p>
+  </div>
+</div>
+
+<!-- Notification Log -->
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Target URL</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created At</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User Count</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for batch in page_obj %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm font-medium text-foreground">{{ batch.title }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">
+          {% if batch.url %}
+          <a href="{{ batch.url }}" class="text-accent hover:underline">{{ batch.url }}</a>
+          {% else %}
+          -
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ batch.created_date|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ batch.user_count }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4" class="px-6 py-8 text-center text-sm text-muted-foreground">No notifications found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="flex items-center justify-center space-x-4 mt-6">
+  {% if page_obj.has_previous %}
+  <a href="?page={{ page_obj.previous_page_number }}" class="text-sm text-accent hover:underline">Previous</a>
+  {% endif %}
+  <span class="text-sm text-muted-foreground">
+    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+  </span>
+  {% if page_obj.has_next %}
+  <a href="?page={{ page_obj.next_page_number }}" class="text-sm text-accent hover:underline">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

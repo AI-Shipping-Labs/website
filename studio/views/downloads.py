@@ -1,6 +1,7 @@
 """Studio views for download/resource management."""
 
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.utils.text import slugify
 
 from content.models import Download
@@ -78,7 +79,10 @@ def download_edit(request, download_id):
         download.save()
         return redirect('studio_download_edit', download_id=download.pk)
 
-    return render(request, 'studio/downloads/form.html', {
+    context = {
         'download': download,
         'form_action': 'edit',
-    })
+        'notify_url': reverse('studio_download_notify', kwargs={'download_id': download.pk}),
+        'announce_url': reverse('studio_download_announce_slack', kwargs={'download_id': download.pk}),
+    }
+    return render(request, 'studio/downloads/form.html', context)

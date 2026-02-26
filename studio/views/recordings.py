@@ -1,6 +1,7 @@
 """Studio views for recording CRUD."""
 
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -89,7 +90,10 @@ def recording_edit(request, recording_id):
         recording.save()
         return redirect('studio_recording_edit', recording_id=recording.pk)
 
-    return render(request, 'studio/recordings/form.html', {
+    context = {
         'recording': recording,
         'form_action': 'edit',
-    })
+        'notify_url': reverse('studio_recording_notify', kwargs={'recording_id': recording.pk}),
+        'announce_url': reverse('studio_recording_announce_slack', kwargs={'recording_id': recording.pk}),
+    }
+    return render(request, 'studio/recordings/form.html', context)

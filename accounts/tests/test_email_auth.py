@@ -570,6 +570,16 @@ class RegisterPageTest(TestCase):
         self.assertIn("Sign up with Google", content)
         self.assertIn("Sign up with GitHub", content)
 
+    def test_register_page_contains_slack_button(self):
+        resp = self.client.get("/accounts/register/")
+        content = resp.content.decode()
+        self.assertIn("Sign up with Slack", content)
+
+    def test_register_page_contains_slack_oauth_link(self):
+        resp = self.client.get("/accounts/register/")
+        content = resp.content.decode()
+        self.assertIn("/accounts/slack/login/", content)
+
     def test_register_page_links_to_login(self):
         resp = self.client.get("/accounts/register/")
         content = resp.content.decode()

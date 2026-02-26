@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.github',
+    'allauth.socialaccount.providers.slack',
     'django_q',
     # Project apps
     'accounts',
@@ -162,6 +163,11 @@ ZOOM_WEBHOOK_SECRET_TOKEN = os.environ.get('ZOOM_WEBHOOK_SECRET_TOKEN', '')
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
 AWS_SES_REGION = os.environ.get('AWS_SES_REGION', 'us-east-1')
+
+# S3 configuration for recording uploads
+AWS_S3_RECORDINGS_BUCKET = os.environ.get('AWS_S3_RECORDINGS_BUCKET', '')
+AWS_S3_RECORDINGS_REGION = os.environ.get('AWS_S3_RECORDINGS_REGION', 'eu-central-1')
+
 SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', 'community@aishippinglabs.com')
 SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
 
@@ -219,6 +225,13 @@ SOCIALACCOUNT_PROVIDERS = {
         'APP': {
             'client_id': os.environ.get('GITHUB_OAUTH_CLIENT_ID', ''),
             'secret': os.environ.get('GITHUB_OAUTH_CLIENT_SECRET', ''),
+        },
+    },
+    'slack': {
+        'SCOPE': ['openid', 'profile', 'email'],
+        'APP': {
+            'client_id': os.environ.get('SLACK_OAUTH_CLIENT_ID', ''),
+            'secret': os.environ.get('SLACK_OAUTH_CLIENT_SECRET', ''),
         },
     },
 }

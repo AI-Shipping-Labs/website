@@ -35,6 +35,16 @@ class LoginViewTest(TestCase):
         content = response.content.decode()
         self.assertIn("/accounts/github/login/", content)
 
+    def test_login_page_contains_slack_button(self):
+        response = self.client.get("/accounts/login/")
+        content = response.content.decode()
+        self.assertIn("Sign in with Slack", content)
+
+    def test_login_page_contains_slack_oauth_link(self):
+        response = self.client.get("/accounts/login/")
+        content = response.content.decode()
+        self.assertIn("/accounts/slack/login/", content)
+
     def test_login_page_includes_header(self):
         response = self.client.get("/accounts/login/")
         content = response.content.decode()

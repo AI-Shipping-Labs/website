@@ -168,6 +168,11 @@ AWS_SES_REGION = os.environ.get('AWS_SES_REGION', 'us-east-1')
 AWS_S3_RECORDINGS_BUCKET = os.environ.get('AWS_S3_RECORDINGS_BUCKET', '')
 AWS_S3_RECORDINGS_REGION = os.environ.get('AWS_S3_RECORDINGS_REGION', 'eu-central-1')
 
+# YouTube Data API v3 credentials (OAuth2 with refresh token)
+YOUTUBE_CLIENT_ID = os.environ.get('YOUTUBE_CLIENT_ID', '')
+YOUTUBE_CLIENT_SECRET = os.environ.get('YOUTUBE_CLIENT_SECRET', '')
+YOUTUBE_REFRESH_TOKEN = os.environ.get('YOUTUBE_REFRESH_TOKEN', '')
+
 SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', 'community@aishippinglabs.com')
 SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
 

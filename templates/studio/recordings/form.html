@@ -81,6 +81,66 @@
   </div>
 </form>
 
+{% if recording %}
+<div class="mt-8 max-w-3xl" id="youtube-upload-section">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-medium text-foreground mb-4">YouTube Upload</h2>
+    {% if recording.youtube_url %}
+      <div class="space-y-2">
+        <p class="text-sm text-muted-foreground">YouTube URL: <a href="{{ recording.youtube_url }}" target="_blank" class="text-accent hover:underline">{{ recording.youtube_url }}</a></p>
+      </div>
+    {% elif recording.s3_url %}
+      <p class="text-sm text-muted-foreground mb-2">S3 URL: <span class="text-foreground">{{ recording.s3_url }}</span></p>
+      <p class="text-sm text-muted-foreground mb-4">Upload this recording from S3 to YouTube.</p>
+      <button type="button" id="publish-youtube-btn"
+              onclick="publishToYouTube({{ recording.pk }})"
+              class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
+        Publish to YouTube
+      </button>
+      <span id="youtube-status" class="ml-3 text-sm text-muted-foreground"></span>
+    {% else %}
+      <p class="text-sm text-muted-foreground">No S3 URL available. Upload the recording to S3 first before publishing to YouTube.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function publishToYouTube(recordingId) {
+  var btn = document.getElementById('publish-youtube-btn');
+  var status = document.getElementById('youtube-status');
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+  status.textContent = '';
+
+  fetch('/studio/recordings/' + recordingId + '/publish-youtube', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    if (res.ok) {
+      status.textContent = 'YouTube upload queued! It will appear here once complete.';
+      status.className = 'ml-3 text-sm text-green-500';
+      btn.textContent = 'Queued';
+    } else {
+      status.textContent = 'Error: ' + res.data.error;
+      status.className = 'ml-3 text-sm text-red-500';
+      btn.disabled = false;
+      btn.textContent = 'Publish to YouTube';
+    }
+  })
+  .catch(function(err) {
+    status.textContent = 'Network error: ' + err.message;
+    status.className = 'ml-3 text-sm text-red-500';
+    btn.disabled = false;
+    btn.textContent = 'Publish to YouTube';
+  });
+}
+</script>
+{% endif %}
+
 {% if recording and recording.published %}
 {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
 {% endif %}

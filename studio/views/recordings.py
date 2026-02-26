@@ -1,12 +1,19 @@
 """Studio views for recording CRUD."""
 
+import logging
+
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST
 
 from content.models import Recording
+from jobs.tasks import async_task
 from studio.decorators import staff_required
+
+logger = logging.getLogger(__name__)
 
 
 @staff_required
@@ -97,3 +104,43 @@ def recording_edit(request, recording_id):
         'announce_url': reverse('studio_recording_announce_slack', kwargs={'recording_id': recording.pk}),
     }
     return render(request, 'studio/recordings/form.html', context)
+
+
+@staff_required
+@require_POST
+def recording_publish_youtube(request, recording_id):
+    """Enqueue a background job to upload a recording from S3 to YouTube."""
+    recording = get_object_or_404(Recording, pk=recording_id)
+
+    if not recording.s3_url:
+        return JsonResponse(
+            {'error': 'Recording has no S3 URL. Upload to S3 first.'},
+            status=400,
+        )
+
+    if recording.youtube_url:
+        return JsonResponse(
+            {'error': 'Recording already has a YouTube URL.'},
+            status=400,
+        )
+
+    try:
+        task_id = async_task(
+            'jobs.tasks.youtube_upload.upload_recording_to_youtube',
+            recording.id,
+            max_retries=3,
+        )
+        logger.info(
+            'Enqueued YouTube upload for recording %s (task_id=%s)',
+            recording.pk, task_id,
+        )
+        return JsonResponse({
+            'status': 'queued',
+            'task_id': str(task_id) if task_id else None,
+            'message': 'YouTube upload has been queued.',
+        })
+    except Exception as e:
+        logger.exception(
+            'Failed to enqueue YouTube upload for recording %s', recording.pk,
+        )
+        return JsonResponse({'error': str(e)}, status=500)

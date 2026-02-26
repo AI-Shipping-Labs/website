@@ -9,6 +9,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from events.models import Event
+from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
@@ -187,7 +188,6 @@ def event_create_zoom(request, event_id):
         return JsonResponse({'error': 'Event already has a Zoom meeting'}, status=400)
 
     try:
-        from integrations.services.zoom import create_meeting
         result = create_meeting(event)
         event.zoom_meeting_id = result['meeting_id']
         event.zoom_join_url = result['join_url']

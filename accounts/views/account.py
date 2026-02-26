@@ -186,3 +186,39 @@ def cancel_subscription_view(request):
         user.save(update_fields=update_fields)
 
     return JsonResponse({"status": "ok"})
+
+
+@login_required
+@require_POST
+def theme_preference_view(request):
+    """Save the user's theme preference (dark/light/empty).
+
+    POST /api/account/theme-preference
+
+    Expects JSON body with:
+        theme: str - "dark", "light", or "" (follow system)
+
+    Returns:
+        200 with {"status": "ok"} on success.
+        400 with {"error": "..."} on validation failure.
+        401 for anonymous users (handled by @login_required).
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    theme = data.get("theme")
+    if theme is None:
+        return JsonResponse({"error": "theme field is required"}, status=400)
+
+    if theme not in ("dark", "light", ""):
+        return JsonResponse(
+            {"error": "theme must be 'dark', 'light', or ''"}, status=400
+        )
+
+    user = request.user
+    user.theme_preference = theme
+    user.save(update_fields=["theme_preference"])
+
+    return JsonResponse({"status": "ok"})

@@ -28,6 +28,15 @@
     </div>
 
     <div class="hidden md:flex md:items-center md:gap-4">
+      <!-- Theme Toggle (Desktop) -->
+      <button type="button"
+              data-testid="theme-toggle"
+              aria-label="Switch to light mode"
+              onclick="window.themeToggle.toggle()"
+              class="p-1 text-muted-foreground transition-colors hover:text-foreground">
+        <svg class="theme-icon-sun h-5 w-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      </button>
       {% if user.is_authenticated %}
       <!-- Notification Bell -->
       <div class="relative" id="notification-bell-container">
@@ -70,6 +79,18 @@
 
   <div class="border-t border-border bg-background md:hidden hidden" id="mobile-menu">
     <div class="space-y-1 px-6 py-4">
+      <!-- Theme Toggle (Mobile) -->
+      <div class="flex items-center justify-between py-2 mb-2 border-b border-border pb-3">
+        <span class="text-sm text-muted-foreground">Theme</span>
+        <button type="button"
+                data-testid="theme-toggle"
+                aria-label="Switch to light mode"
+                onclick="window.themeToggle.toggle()"
+                class="p-1 text-muted-foreground transition-colors hover:text-foreground">
+          <svg class="theme-icon-sun h-5 w-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+      </div>
       <a href="/about" class="block py-2 text-muted-foreground transition-colors hover:text-foreground">About</a>
       <a href="/activities" class="block py-2 text-muted-foreground transition-colors hover:text-foreground">Activities</a>
       <a href="/#tiers" class="block py-2 text-muted-foreground transition-colors hover:text-foreground">Membership</a>

@@ -21,6 +21,21 @@
   <meta name="twitter:description" content="{{ site_description }}">
   {% endblock %}
 
+  <!-- Blocking theme script: prevents flash of wrong theme -->
+  <script>
+    (function() {
+      var theme = localStorage.getItem('theme');
+      if (!theme) {
+        theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    })();
+  </script>
+
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-HXSHF376NY"></script>
   <script>
@@ -33,31 +48,82 @@
   <!-- Structured Data -->
   {% block structured_data %}{% structured_data %}{% endblock %}
 
+  <style>
+    /* Light theme (default) */
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 0 0% 9%;
+      --card: 0 0% 98%;
+      --card-foreground: 0 0% 9%;
+      --popover: 0 0% 100%;
+      --popover-foreground: 0 0% 9%;
+      --primary: 0 0% 9%;
+      --primary-foreground: 0 0% 98%;
+      --secondary: 0 0% 96%;
+      --secondary-foreground: 0 0% 9%;
+      --muted: 0 0% 96%;
+      --muted-foreground: 0 0% 45%;
+      --accent: 75 100% 35%;
+      --accent-foreground: 0 0% 100%;
+      --destructive: 0 84.2% 60.2%;
+      --border: 0 0% 90%;
+      --input: 0 0% 90%;
+      --ring: 45 100% 41%;
+      --hero-gradient-mid: 0 0% 96%;
+      --hero-gradient-end: 0 0% 100%;
+    }
+
+    /* Dark theme */
+    .dark {
+      --background: 0 0% 4%;
+      --foreground: 0 0% 98%;
+      --card: 0 0% 7%;
+      --card-foreground: 0 0% 98%;
+      --popover: 0 0% 7%;
+      --popover-foreground: 0 0% 98%;
+      --primary: 0 0% 98%;
+      --primary-foreground: 0 0% 4%;
+      --secondary: 0 0% 12%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 0 0% 15%;
+      --muted-foreground: 0 0% 60%;
+      --accent: 75 100% 50%;
+      --accent-foreground: 0 0% 4%;
+      --destructive: 0 84.2% 60.2%;
+      --border: 0 0% 18%;
+      --input: 0 0% 18%;
+      --ring: 45 100% 51%;
+      --hero-gradient-mid: 0 0% 12%;
+      --hero-gradient-end: 0 0% 4%;
+    }
+  </style>
+
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
-            background: 'hsl(0 0% 4%)',
-            foreground: 'hsl(0 0% 98%)',
-            card: 'hsl(0 0% 7%)',
-            'card-foreground': 'hsl(0 0% 98%)',
-            popover: 'hsl(0 0% 7%)',
-            'popover-foreground': 'hsl(0 0% 98%)',
-            primary: 'hsl(0 0% 98%)',
-            'primary-foreground': 'hsl(0 0% 4%)',
-            secondary: 'hsl(0 0% 12%)',
-            'secondary-foreground': 'hsl(0 0% 98%)',
-            muted: 'hsl(0 0% 15%)',
-            'muted-foreground': 'hsl(0 0% 60%)',
-            accent: 'hsl(75 100% 50%)',
-            'accent-foreground': 'hsl(0 0% 4%)',
-            destructive: 'hsl(0 84.2% 60.2%)',
-            border: 'hsl(0 0% 18%)',
-            input: 'hsl(0 0% 18%)',
-            ring: 'hsl(45 100% 51%)',
+            background: 'hsl(var(--background))',
+            foreground: 'hsl(var(--foreground))',
+            card: 'hsl(var(--card))',
+            'card-foreground': 'hsl(var(--card-foreground))',
+            popover: 'hsl(var(--popover))',
+            'popover-foreground': 'hsl(var(--popover-foreground))',
+            primary: 'hsl(var(--primary))',
+            'primary-foreground': 'hsl(var(--primary-foreground))',
+            secondary: 'hsl(var(--secondary))',
+            'secondary-foreground': 'hsl(var(--secondary-foreground))',
+            muted: 'hsl(var(--muted))',
+            'muted-foreground': 'hsl(var(--muted-foreground))',
+            accent: 'hsl(var(--accent))',
+            'accent-foreground': 'hsl(var(--accent-foreground))',
+            destructive: 'hsl(var(--destructive))',
+            border: 'hsl(var(--border))',
+            input: 'hsl(var(--input))',
+            ring: 'hsl(var(--ring))',
           },
           fontFamily: {
             sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -79,32 +145,39 @@
   <style>
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background-color: hsl(0 0% 4%);
-      color: hsl(0 0% 98%);
+      background-color: hsl(var(--background));
+      color: hsl(var(--foreground));
       -webkit-font-smoothing: antialiased;
+    }
+
+    /* Hero gradient that responds to theme */
+    .hero-gradient {
+      background: radial-gradient(ellipse at top, hsl(var(--hero-gradient-mid)), hsl(var(--hero-gradient-end)), hsl(var(--hero-gradient-end)));
     }
 
     /* Prose styles for markdown content */
     .prose h1 { font-size: 1.875rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
     .prose h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
     .prose h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 1.5rem; margin-bottom: 0.75rem; }
-    .prose p { margin-top: 1rem; font-size: 1rem; line-height: 1.75; color: hsl(0 0% 60%); }
-    .prose a { color: hsl(75 100% 50%); text-decoration: underline; text-underline-offset: 4px; }
-    .prose blockquote { border-left: 2px solid hsl(75 100% 50%); padding-left: 1rem; font-style: italic; color: hsl(0 0% 60%); margin-top: 1rem; }
-    .prose ul, .prose ol { margin-top: 1rem; margin-left: 1.5rem; color: hsl(0 0% 60%); list-style: disc; }
+    .prose p { margin-top: 1rem; font-size: 1rem; line-height: 1.75; color: hsl(var(--muted-foreground)); }
+    .prose a { color: hsl(var(--accent)); text-decoration: underline; text-underline-offset: 4px; }
+    .prose blockquote { border-left: 2px solid hsl(var(--accent)); padding-left: 1rem; font-style: italic; color: hsl(var(--muted-foreground)); margin-top: 1rem; }
+    .prose ul, .prose ol { margin-top: 1rem; margin-left: 1.5rem; color: hsl(var(--muted-foreground)); list-style: disc; }
     .prose ol { list-style: decimal; }
     .prose li { margin: 0.25rem 0; }
-    .prose code { border-radius: 0.25rem; background: hsl(0 0% 12%); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(75 100% 50%); }
-    .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(0 0% 18%); background: hsl(0 0% 7%); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; }
-    .prose pre code { background: transparent; padding: 0; color: hsl(0 0% 80%); }
-    .prose img { border-radius: 0.5rem; border: 1px solid hsl(0 0% 18%); width: 100%; margin: 1rem 0; }
-    .prose figure { margin: 3rem 0; border: 1px solid hsl(0 0% 18% / 0.5); border-radius: 0.5rem; padding: 1rem; background: hsl(0 0% 7% / 0.3); }
+    .prose code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(var(--accent)); }
+    .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; }
+    .prose pre code { background: transparent; padding: 0; color: hsl(var(--muted-foreground)); }
+    .dark .prose pre code { color: hsl(0 0% 80%); }
+    .prose img { border-radius: 0.5rem; border: 1px solid hsl(var(--border)); width: 100%; margin: 1rem 0; }
+    .prose figure { margin: 3rem 0; border: 1px solid hsl(var(--border) / 0.5); border-radius: 0.5rem; padding: 1rem; background: hsl(var(--card) / 0.3); }
     .prose figure img { margin: 0; }
-    .prose figcaption { text-align: center; font-size: 0.875rem; font-style: italic; color: hsl(0 0% 60% / 0.8); margin-top: 1rem; }
-    .prose strong { color: hsl(0 0% 98%); font-weight: 600; }
+    .prose figcaption { text-align: center; font-size: 0.875rem; font-style: italic; color: hsl(var(--muted-foreground) / 0.8); margin-top: 1rem; }
+    .prose strong { color: hsl(var(--foreground)); font-weight: 600; }
 
-    /* Pygments syntax highlighting (monokai theme) */
-    .prose .codehilite { background: #272822; color: #F8F8F2; border-radius: 0.5rem; border: 1px solid hsl(0 0% 18%); padding: 1rem; margin-top: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; }
+    /* Pygments syntax highlighting (monokai theme for dark, github-like for light) */
+    .prose .codehilite { background: #272822; color: #F8F8F2; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); padding: 1rem; margin-top: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; }
+    :root:not(.dark) .prose .codehilite { background: hsl(0 0% 97%); color: hsl(0 0% 20%); }
     .prose .codehilite pre { margin: 0; padding: 0; border: none; background: transparent; }
     .prose .codehilite code { background: transparent; padding: 0; color: inherit; }
     .codehilite .hll { background-color: #49483e }
@@ -133,6 +206,31 @@
     .codehilite .nt { color: #FF4689 }
     .codehilite .ow { color: #FF4689 }
 
+    /* Light theme overrides for syntax highlighting */
+    :root:not(.dark) .codehilite .c { color: #6a737d }
+    :root:not(.dark) .codehilite .err { color: #cb2431; background-color: transparent }
+    :root:not(.dark) .codehilite .k { color: #d73a49 }
+    :root:not(.dark) .codehilite .l { color: #005cc5 }
+    :root:not(.dark) .codehilite .n { color: #24292e }
+    :root:not(.dark) .codehilite .o { color: #d73a49 }
+    :root:not(.dark) .codehilite .p { color: #24292e }
+    :root:not(.dark) .codehilite .ch, :root:not(.dark) .codehilite .cm, :root:not(.dark) .codehilite .cp, :root:not(.dark) .codehilite .cpf, :root:not(.dark) .codehilite .c1, :root:not(.dark) .codehilite .cs { color: #6a737d }
+    :root:not(.dark) .codehilite .gd { color: #cb2431 }
+    :root:not(.dark) .codehilite .gi { color: #22863a }
+    :root:not(.dark) .codehilite .go { color: #005cc5 }
+    :root:not(.dark) .codehilite .gp { color: #6f42c1; font-weight: bold }
+    :root:not(.dark) .codehilite .gu { color: #6a737d }
+    :root:not(.dark) .codehilite .kc, :root:not(.dark) .codehilite .kd, :root:not(.dark) .codehilite .kp, :root:not(.dark) .codehilite .kr, :root:not(.dark) .codehilite .kt { color: #d73a49 }
+    :root:not(.dark) .codehilite .kn { color: #d73a49 }
+    :root:not(.dark) .codehilite .m, :root:not(.dark) .codehilite .mb, :root:not(.dark) .codehilite .mf, :root:not(.dark) .codehilite .mh, :root:not(.dark) .codehilite .mi, :root:not(.dark) .codehilite .mo, :root:not(.dark) .codehilite .il { color: #005cc5 }
+    :root:not(.dark) .codehilite .s, :root:not(.dark) .codehilite .sa, :root:not(.dark) .codehilite .sb, :root:not(.dark) .codehilite .sc, :root:not(.dark) .codehilite .dl, :root:not(.dark) .codehilite .sd, :root:not(.dark) .codehilite .s2, :root:not(.dark) .codehilite .sh, :root:not(.dark) .codehilite .si, :root:not(.dark) .codehilite .sx, :root:not(.dark) .codehilite .sr, :root:not(.dark) .codehilite .s1, :root:not(.dark) .codehilite .ss { color: #032f62 }
+    :root:not(.dark) .codehilite .se { color: #005cc5 }
+    :root:not(.dark) .codehilite .na { color: #6f42c1 }
+    :root:not(.dark) .codehilite .nc, :root:not(.dark) .codehilite .nd, :root:not(.dark) .codehilite .ne, :root:not(.dark) .codehilite .nf, :root:not(.dark) .codehilite .fm { color: #6f42c1 }
+    :root:not(.dark) .codehilite .nt { color: #22863a }
+    :root:not(.dark) .codehilite .ow { color: #d73a49 }
+    :root:not(.dark) .codehilite .hll { background-color: #fffbdd }
+
     /* Accordion styles */
     .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
     .accordion-content.open { max-height: 500px; }
@@ -153,6 +251,74 @@
   <script>
     // Initialize Lucide icons
     lucide.createIcons();
+
+    // Theme toggle functionality
+    window.themeToggle = {
+      isAuthenticated: {{ user.is_authenticated|yesno:"true,false" }},
+
+      getTheme: function() {
+        return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      },
+
+      setTheme: function(theme) {
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+        localStorage.setItem('theme', theme);
+        this.updateToggleButtons();
+      },
+
+      toggle: function() {
+        var current = this.getTheme();
+        var next = current === 'dark' ? 'light' : 'dark';
+        this.setTheme(next);
+
+        // Sync to server for authenticated users
+        if (this.isAuthenticated) {
+          var csrfCookie = document.cookie.split(';').find(function(c) {
+            return c.trim().startsWith('csrftoken=');
+          });
+          var csrfToken = csrfCookie ? csrfCookie.split('=')[1] : '';
+          fetch('/api/account/theme-preference', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ theme: next }),
+          }).catch(function() {});
+        }
+      },
+
+      updateToggleButtons: function() {
+        var isDark = this.getTheme() === 'dark';
+        var buttons = document.querySelectorAll('[data-testid="theme-toggle"]');
+        buttons.forEach(function(btn) {
+          var sunIcon = btn.querySelector('.theme-icon-sun');
+          var moonIcon = btn.querySelector('.theme-icon-moon');
+          if (sunIcon && moonIcon) {
+            if (isDark) {
+              sunIcon.classList.remove('hidden');
+              moonIcon.classList.add('hidden');
+              btn.setAttribute('aria-label', 'Switch to light mode');
+            } else {
+              sunIcon.classList.add('hidden');
+              moonIcon.classList.remove('hidden');
+              btn.setAttribute('aria-label', 'Switch to dark mode');
+            }
+          }
+        });
+      },
+
+      init: function() {
+        this.updateToggleButtons();
+      }
+    };
+
+    // Initialize toggle state after icons are created
+    window.themeToggle.init();
   </script>
   {% block extra_scripts %}{% endblock %}
 </body>

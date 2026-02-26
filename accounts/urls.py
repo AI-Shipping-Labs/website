@@ -15,6 +15,7 @@ from accounts.views.account import (
     account_view,
     cancel_subscription_view,
     email_preferences_view,
+    theme_preference_view,
 )
 
 urlpatterns = [
@@ -31,6 +32,7 @@ auth_api_urlpatterns = [
     path('verify-email', verify_email_api, name='api_verify_email'),
     path('password-reset-request', password_reset_request_api, name='api_password_reset_request'),
     path('password-reset', password_reset_api, name='api_password_reset'),
+    path('account/theme-preference', theme_preference_view, name='api_theme_preference'),
 ]
 
 # Account page and API endpoints (mounted at /account/ in project urls.py)

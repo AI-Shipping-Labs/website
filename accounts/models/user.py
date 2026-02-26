@@ -103,6 +103,14 @@ class User(AbstractUser):
         help_text="Slack user ID for community integration.",
     )
 
+    # UI preferences
+    theme_preference = models.CharField(
+        max_length=10,
+        blank=True,
+        default="",
+        help_text="User's preferred theme: 'dark', 'light', or '' (follow system).",
+    )
+
     class Meta:
         ordering = ["-date_joined"]
 

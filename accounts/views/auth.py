@@ -247,7 +247,11 @@ def login_api(request):
         )
 
     login(request, user)
-    return JsonResponse({"status": "ok"})
+    response_data = {"status": "ok"}
+    # Push server-side theme preference to client on login
+    if user.theme_preference:
+        response_data["theme_preference"] = user.theme_preference
+    return JsonResponse(response_data)
 
 
 @require_POST

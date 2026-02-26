@@ -95,6 +95,24 @@
     </div>
   </div>
 
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Individual Purchase</h2>
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Individual Price (EUR)</label>
+      <input type="number" name="individual_price_eur" step="0.01" min="0"
+             value="{% if course.individual_price_eur %}{{ course.individual_price_eur }}{% endif %}"
+             placeholder="Leave blank if not sold individually"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Set a price to allow one-time purchase without a subscription. Leave blank to disable.</p>
+    </div>
+    {% if course.stripe_product_id %}
+    <div class="space-y-2">
+      <p class="text-sm text-muted-foreground">Stripe Product ID: <span class="text-foreground">{{ course.stripe_product_id }}</span></p>
+      <p class="text-sm text-muted-foreground">Stripe Price ID: <span class="text-foreground">{{ course.stripe_price_id }}</span></p>
+    </div>
+    {% endif %}
+  </div>
+
   <div class="flex items-center space-x-4">
     <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
       {% if course %}Save Changes{% else %}Create Course{% endif %}
@@ -105,6 +123,57 @@
 
 {% if course and course.status == 'published' %}
 {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
+{% endif %}
+
+{% if course and course.individual_price_eur and not course.stripe_product_id %}
+<div class="mt-8 max-w-3xl" id="stripe-product-section">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-medium text-foreground mb-4">Stripe Product</h2>
+    <p class="text-sm text-muted-foreground mb-4">No Stripe product created for this course yet. Create one to enable individual purchases.</p>
+    <button type="button" id="create-stripe-product-btn"
+            onclick="createStripeProduct({{ course.pk }})"
+            class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+      Create Stripe Product
+    </button>
+    <span id="stripe-product-status" class="ml-3 text-sm text-muted-foreground"></span>
+  </div>
+</div>
+
+<script>
+function createStripeProduct(courseId) {
+  var btn = document.getElementById('create-stripe-product-btn');
+  var status = document.getElementById('stripe-product-status');
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+  status.textContent = '';
+
+  fetch('/studio/courses/' + courseId + '/create-stripe-product', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    if (res.ok) {
+      status.textContent = 'Stripe product created!';
+      status.className = 'ml-3 text-sm text-green-500';
+      setTimeout(function() { location.reload(); }, 1000);
+    } else {
+      status.textContent = 'Error: ' + res.data.error;
+      status.className = 'ml-3 text-sm text-red-500';
+      btn.disabled = false;
+      btn.textContent = 'Create Stripe Product';
+    }
+  })
+  .catch(function(err) {
+    status.textContent = 'Network error: ' + err.message;
+    status.className = 'ml-3 text-sm text-red-500';
+    btn.disabled = false;
+    btn.textContent = 'Create Stripe Product';
+  });
+}
+</script>
 {% endif %}
 
 {% if course %}

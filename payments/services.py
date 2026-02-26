@@ -93,7 +93,9 @@ def create_checkout_session(user, tier_slug, billing_period, success_url, cancel
 def handle_checkout_completed(session_data):
     """Process a checkout.session.completed event.
 
-    Sets the user's tier, stripe_customer_id, subscription_id, and
+    If metadata contains ``course_id``, creates a CourseAccess record
+    for an individual course purchase (one-time payment). Otherwise,
+    sets the user's tier, stripe_customer_id, subscription_id, and
     billing_period_end based on the completed checkout session.
     """
     customer_email = session_data.get("customer_details", {}).get("email", "")
@@ -102,6 +104,12 @@ def handle_checkout_completed(session_data):
     client_reference_id = session_data.get("client_reference_id")
     metadata = session_data.get("metadata", {})
     tier_slug = metadata.get("tier_slug", "")
+
+    # Check if this is an individual course purchase
+    course_id = metadata.get("course_id")
+    if course_id:
+        _handle_course_purchase(session_data, course_id)
+        return
 
     # Look up user: first by client_reference_id (user PK), then by email
     user = None
@@ -167,6 +175,69 @@ def handle_checkout_completed(session_data):
     # Community integration: invite user if tier qualifies (Main+ = level >= 20)
     if tier.level >= 20:
         _community_invite(user)
+
+
+def _handle_course_purchase(session_data, course_id):
+    """Handle a one-time course purchase from checkout.session.completed.
+
+    Creates a CourseAccess record. Does NOT change the user's tier.
+    """
+    from content.models import Course, CourseAccess
+
+    customer_email = session_data.get("customer_details", {}).get("email", "")
+    customer_id = session_data.get("customer", "")
+    client_reference_id = session_data.get("client_reference_id")
+    metadata = session_data.get("metadata", {})
+    session_id = session_data.get("id", "")
+
+    # Look up user
+    user = None
+    if client_reference_id:
+        user = User.objects.filter(pk=client_reference_id).first()
+    if user is None and metadata.get("user_id"):
+        user = User.objects.filter(pk=metadata["user_id"]).first()
+    if user is None and customer_email:
+        user = User.objects.filter(email=customer_email).first()
+
+    if user is None:
+        logger.error(
+            "course purchase: Could not find user. session_id=%s",
+            session_id,
+        )
+        return
+
+    # Look up course
+    try:
+        course = Course.objects.get(pk=course_id)
+    except Course.DoesNotExist:
+        logger.error(
+            "course purchase: Course %s not found. session_id=%s",
+            course_id,
+            session_id,
+        )
+        return
+
+    # Create CourseAccess (idempotent via get_or_create)
+    CourseAccess.objects.get_or_create(
+        user=user,
+        course=course,
+        defaults={
+            "access_type": "purchased",
+            "stripe_session_id": session_id,
+        },
+    )
+
+    # Update stripe_customer_id if not already set
+    if customer_id and not user.stripe_customer_id:
+        user.stripe_customer_id = customer_id
+        user.save(update_fields=["stripe_customer_id"])
+
+    logger.info(
+        "course purchase: user=%s course=%s (%s)",
+        user.email,
+        course.title,
+        course.pk,
+    )
 
 
 def handle_subscription_updated(subscription_data):

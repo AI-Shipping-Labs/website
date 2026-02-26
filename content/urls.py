@@ -16,6 +16,7 @@ from content.views.courses import (
     api_courses_list, api_course_detail,
     api_course_unit_detail, api_course_unit_complete,
     api_cohort_enroll, api_cohort_unenroll,
+    api_course_purchase,
 )
 
 urlpatterns = [
@@ -49,6 +50,7 @@ urlpatterns = [
     path('api/courses/<slug:slug>/units/<int:unit_id>/complete', api_course_unit_complete, name='api_course_unit_complete'),
     path('api/courses/<slug:slug>/cohorts/<int:cohort_id>/enroll', api_cohort_enroll, name='api_cohort_enroll'),
     path('api/courses/<slug:slug>/cohorts/<int:cohort_id>/unenroll', api_cohort_unenroll, name='api_cohort_unenroll'),
+    path('api/courses/<slug:slug>/purchase', api_course_purchase, name='api_course_purchase'),
     # Admin API endpoints
     path('api/admin/modules/reorder', reorder_modules, name='reorder_modules'),
     path('api/admin/units/reorder', reorder_units, name='reorder_units'),

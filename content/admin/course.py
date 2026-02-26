@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin
 
 from content.admin.widgets import TimestampEditorWidget
-from content.models import Course, Module, Unit, UserCourseProgress, Cohort
+from content.models import Course, Module, Unit, UserCourseProgress, Cohort, CourseAccess
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +121,10 @@ class CourseAdmin(admin.ModelAdmin):
         ('Tags & Visibility', {
             'fields': ('tags', 'required_level', 'is_free'),
         }),
+        ('Individual Purchase', {
+            'fields': ('individual_price_eur', 'stripe_product_id', 'stripe_price_id'),
+            'classes': ('collapse',),
+        }),
         ('Publishing', {
             'fields': ('status', 'discussion_url'),
         }),
@@ -175,3 +179,11 @@ class UserCourseProgressAdmin(admin.ModelAdmin):
     list_display = ['user', 'unit', 'completed_at']
     list_filter = ['completed_at']
     raw_id_fields = ['user', 'unit']
+
+
+@admin.register(CourseAccess)
+class CourseAccessAdmin(admin.ModelAdmin):
+    list_display = ['user', 'course', 'access_type', 'created_at']
+    list_filter = ['access_type', 'created_at']
+    raw_id_fields = ['user', 'course', 'granted_by']
+    search_fields = ['user__email', 'course__title']

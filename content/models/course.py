@@ -64,6 +64,18 @@ class Course(models.Model):
         max_length=500, blank=True, default='',
         help_text="Slack channel URL for paid courses, GitHub URL for free courses.",
     )
+    individual_price_eur = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text="Price for one-time individual purchase in EUR. Null = not sold individually.",
+    )
+    stripe_product_id = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="Stripe product ID for individual purchase.",
+    )
+    stripe_price_id = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="Stripe price ID for individual purchase.",
+    )
     tags = models.JSONField(default=list, blank=True)
     source_repo = models.CharField(
         max_length=300, blank=True, null=True, default=None,
@@ -241,3 +253,43 @@ class UserCourseProgress(models.Model):
     def __str__(self):
         status = 'completed' if self.completed_at else 'in progress'
         return f'{self.user} - {self.unit} ({status})'
+
+
+ACCESS_TYPE_CHOICES = [
+    ('purchased', 'Purchased'),
+    ('granted', 'Granted'),
+]
+
+
+class CourseAccess(models.Model):
+    """Individual course access granted via purchase or admin assignment."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='course_access',
+    )
+    course = models.ForeignKey(
+        Course, on_delete=models.CASCADE, related_name='individual_access',
+    )
+    access_type = models.CharField(
+        max_length=20, choices=ACCESS_TYPE_CHOICES, default='purchased',
+    )
+    stripe_session_id = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="Stripe checkout session ID (empty for granted access).",
+    )
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='granted_course_access',
+        help_text="Admin who granted access (null for purchased).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('user', 'course')]
+
+    def __str__(self):
+        return f'{self.user} - {self.course.title} ({self.access_type})'

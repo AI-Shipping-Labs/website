@@ -1,14 +1,18 @@
 """Studio views for course CRUD."""
 
 import json
+import logging
 
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST
 
 from content.models import Course, Module, Unit
 from studio.decorators import staff_required
+
+logger = logging.getLogger(__name__)
 
 
 @staff_required
@@ -46,6 +50,14 @@ def course_create(request):
         discussion_url = request.POST.get('discussion_url', '')
         tags_raw = request.POST.get('tags', '')
         tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+        individual_price_raw = request.POST.get('individual_price_eur', '').strip()
+        individual_price_eur = None
+        if individual_price_raw:
+            from decimal import Decimal, InvalidOperation
+            try:
+                individual_price_eur = Decimal(individual_price_raw)
+            except InvalidOperation:
+                pass
 
         course = Course.objects.create(
             title=title,
@@ -59,6 +71,7 @@ def course_create(request):
             required_level=required_level,
             discussion_url=discussion_url,
             tags=tags,
+            individual_price_eur=individual_price_eur,
         )
         return redirect('studio_course_edit', course_id=course.pk)
 
@@ -86,6 +99,15 @@ def course_edit(request, course_id):
         course.discussion_url = request.POST.get('discussion_url', '')
         tags_raw = request.POST.get('tags', '')
         course.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+        individual_price_raw = request.POST.get('individual_price_eur', '').strip()
+        if individual_price_raw:
+            from decimal import Decimal, InvalidOperation
+            try:
+                course.individual_price_eur = Decimal(individual_price_raw)
+            except InvalidOperation:
+                pass
+        else:
+            course.individual_price_eur = None
         course.save()
         return redirect('studio_course_edit', course_id=course.pk)
 
@@ -97,6 +119,7 @@ def course_edit(request, course_id):
         'form_action': 'edit',
         'notify_url': reverse('studio_course_notify', kwargs={'course_id': course.pk}),
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
+        'create_stripe_product_url': reverse('studio_course_create_stripe_product', kwargs={'course_id': course.pk}),
     })
 
 
@@ -171,3 +194,50 @@ def module_reorder(request, course_id):
         Module.objects.filter(pk=item['id']).update(sort_order=item['sort_order'])
 
     return JsonResponse({'status': 'ok'})
+
+
+@staff_required
+@require_POST
+def course_create_stripe_product(request, course_id):
+    """Create a Stripe product and price for individual course purchase."""
+    course = get_object_or_404(Course, pk=course_id)
+
+    if course.stripe_product_id:
+        return JsonResponse({'error': 'Course already has a Stripe product'}, status=400)
+
+    if not course.individual_price_eur:
+        return JsonResponse({'error': 'Set individual_price_eur before creating a Stripe product'}, status=400)
+
+    try:
+        from payments.services import _get_stripe_client
+
+        client = _get_stripe_client()
+
+        # Create Stripe product
+        product = client.products.create(params={
+            'name': course.title,
+            'description': course.description[:500] if course.description else '',
+            'metadata': {
+                'course_id': str(course.pk),
+                'course_slug': course.slug,
+            },
+        })
+
+        # Create Stripe price (one-time, in EUR)
+        price = client.prices.create(params={
+            'product': product.id,
+            'unit_amount': int(course.individual_price_eur * 100),
+            'currency': 'eur',
+        })
+
+        course.stripe_product_id = product.id
+        course.stripe_price_id = price.id
+        course.save(update_fields=['stripe_product_id', 'stripe_price_id'])
+
+        return JsonResponse({
+            'product_id': product.id,
+            'price_id': price.id,
+        })
+    except Exception as e:
+        logger.exception('Failed to create Stripe product for course %s', course.pk)
+        return JsonResponse({'error': str(e)}, status=500)

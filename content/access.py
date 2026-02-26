@@ -51,11 +51,23 @@ def can_access(user, content):
         content: Any model instance with a ``required_level`` attribute.
 
     Returns:
-        True if the user's tier level is >= the content's required_level.
+        True if the user's tier level is >= the content's required_level,
+        or if the user has individual CourseAccess for a Course.
     """
     if content.required_level == 0:
         return True
-    return get_user_level(user) >= content.required_level
+    if get_user_level(user) >= content.required_level:
+        return True
+    # Check individual course access (CourseAccess model)
+    if user is not None and user.is_authenticated and _is_course(content):
+        from content.models import CourseAccess
+        return CourseAccess.objects.filter(user=user, course=content).exists()
+    return False
+
+
+def _is_course(content):
+    """Check if a content object is a Course instance without importing at module level."""
+    return content.__class__.__name__ == 'Course'
 
 
 def get_required_tier_name(required_level):

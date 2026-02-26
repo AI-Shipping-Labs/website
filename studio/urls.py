@@ -4,11 +4,11 @@ from studio.views.dashboard import dashboard
 from studio.views.courses import (
     course_list, course_create, course_edit,
     module_create, unit_create, unit_edit,
-    module_reorder,
+    module_reorder, course_create_stripe_product,
 )
 from studio.views.articles import article_list, article_create, article_edit
 from studio.views.events import event_list, event_create, event_edit, event_create_zoom
-from studio.views.recordings import recording_list, recording_create, recording_edit
+from studio.views.recordings import recording_list, recording_create, recording_edit, recording_publish_youtube
 from studio.views.campaigns import campaign_list, campaign_create, campaign_detail
 from studio.views.subscribers import subscriber_list, subscriber_export_csv
 from studio.views.downloads import download_list, download_create, download_edit
@@ -36,6 +36,7 @@ urlpatterns = [
     path('units/<int:unit_id>/edit', unit_edit, name='studio_unit_edit'),
     path('courses/<int:course_id>/notify', course_notify, name='studio_course_notify'),
     path('courses/<int:course_id>/announce-slack', course_announce_slack, name='studio_course_announce_slack'),
+    path('courses/<int:course_id>/create-stripe-product', course_create_stripe_product, name='studio_course_create_stripe_product'),
 
     # Articles
     path('articles/', article_list, name='studio_article_list'),
@@ -56,6 +57,7 @@ urlpatterns = [
     path('recordings/', recording_list, name='studio_recording_list'),
     path('recordings/new', recording_create, name='studio_recording_create'),
     path('recordings/<int:recording_id>/edit', recording_edit, name='studio_recording_edit'),
+    path('recordings/<int:recording_id>/publish-youtube', recording_publish_youtube, name='studio_recording_publish_youtube'),
     path('recordings/<int:recording_id>/notify', recording_notify, name='studio_recording_notify'),
     path('recordings/<int:recording_id>/announce-slack', recording_announce_slack, name='studio_recording_announce_slack'),
 

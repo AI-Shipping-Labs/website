@@ -199,6 +199,17 @@
           View Pricing
           {% endif %}
         </a>
+        {% if buy_individual %}
+        <div class="mt-4">
+          <span class="text-sm text-muted-foreground">or</span>
+        </div>
+        <button type="button" id="buy-course-btn"
+                onclick="buyCourse('{{ course.slug }}')"
+                class="mt-3 inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-6 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20">
+          <i data-lucide="shopping-cart" class="h-4 w-4"></i>
+          Buy this course for EUR {{ buy_individual_price }}
+        </button>
+        {% endif %}
       </div>
       {% endif %}
     </div>
@@ -209,6 +220,17 @@
 
 {% block extra_scripts %}
 <script>
+  function getCsrfToken() {
+    var cookies = document.cookie.split(';');
+    for (var i = 0; i < cookies.length; i++) {
+      var cookie = cookies[i].trim();
+      if (cookie.startsWith('csrftoken=')) {
+        return cookie.substring('csrftoken='.length);
+      }
+    }
+    return '';
+  }
+
   (function() {
     var buttons = document.querySelectorAll('.cohort-action-btn');
     buttons.forEach(function(btn) {
@@ -237,17 +259,43 @@
         });
       });
     });
+  })();
 
-    function getCsrfToken() {
-      var cookies = document.cookie.split(';');
-      for (var i = 0; i < cookies.length; i++) {
-        var cookie = cookies[i].trim();
-        if (cookie.startsWith('csrftoken=')) {
-          return cookie.substring('csrftoken='.length);
+  {% if buy_individual %}
+  function buyCourse(slug) {
+    var btn = document.getElementById('buy-course-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Redirecting to checkout...';
+    }
+    fetch('/api/courses/' + slug + '/purchase', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'Content-Type': 'application/json',
+      },
+      credentials: 'same-origin',
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else if (data.error) {
+        alert(data.error);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Buy this course';
         }
       }
-      return '';
-    }
-  })();
+    })
+    .catch(function(err) {
+      alert('Something went wrong. Please try again.');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Buy this course';
+      }
+    });
+  }
+  {% endif %}
 </script>
 {% endblock %}

@@ -19,8 +19,16 @@ DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
 
 def _start_django_server():
     """Start Django dev server in a thread."""
+    from django.conf import settings
     from django.core.management import execute_from_command_line
     import sys
+
+    # Disable Slack API calls for E2E tests so no real messages are posted.
+    # post_slack_announcement() exits early when token/channel are empty (line 102),
+    # and SlackCommunityService reads SLACK_BOT_TOKEN from settings in __init__.
+    settings.SLACK_BOT_TOKEN = ''
+    settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = ''
+    settings.SLACK_COMMUNITY_CHANNEL_IDS = []
 
     # Run migrations first (uses in-memory or file-based sqlite)
     call_command("migrate", "--run-syncdb", verbosity=0)

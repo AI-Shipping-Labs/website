@@ -1,6 +1,7 @@
 """Studio views for event CRUD."""
 
 import logging
+from datetime import datetime, timedelta
 
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -11,6 +12,59 @@ from events.models import Event
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_event_datetime(post_data):
+    """Parse separate date, time, and duration fields into start/end datetimes.
+
+    Expects POST fields:
+    - event_date: dd/mm/yyyy
+    - event_time: HH:MM (24-hour)
+    - duration_hours: float (optional, default 1)
+
+    Returns (start_datetime, end_datetime) as naive datetime objects.
+    """
+    date_str = post_data.get('event_date', '').strip()
+    time_str = post_data.get('event_time', '').strip()
+    duration_str = post_data.get('duration_hours', '').strip()
+
+    # Parse date (dd/mm/yyyy)
+    day, month, year = date_str.split('/')
+    parsed_date = datetime(int(year), int(month), int(day))
+
+    # Parse time (HH:MM)
+    hour, minute = time_str.split(':')
+    start_dt = parsed_date.replace(hour=int(hour), minute=int(minute))
+
+    # Parse duration (default 1 hour)
+    duration = float(duration_str) if duration_str else 1.0
+    end_dt = start_dt + timedelta(hours=duration)
+
+    return start_dt, end_dt
+
+
+def _event_form_context(event):
+    """Build template context for the event form with pre-populated date/time/duration."""
+    context = {
+        'event': event,
+        'event_date': '',
+        'event_time': '',
+        'duration_hours': '1',
+    }
+    if event and event.start_datetime:
+        context['event_date'] = event.start_datetime.strftime('%d/%m/%Y')
+        context['event_time'] = event.start_datetime.strftime('%H:%M')
+        if event.end_datetime:
+            delta = event.end_datetime - event.start_datetime
+            hours = delta.total_seconds() / 3600
+            # Format nicely: show integer if whole number, else one decimal
+            if hours == int(hours):
+                context['duration_hours'] = str(int(hours))
+            else:
+                context['duration_hours'] = str(round(hours, 1))
+        else:
+            context['duration_hours'] = '1'
+    return context
 
 
 @staff_required
@@ -40,8 +94,7 @@ def event_create(request):
         slug = request.POST.get('slug', '').strip() or slugify(title)
         description = request.POST.get('description', '')
         event_type = request.POST.get('event_type', 'live')
-        start_datetime = request.POST.get('start_datetime', '')
-        end_datetime = request.POST.get('end_datetime', '') or None
+        start_dt, end_dt = _parse_event_datetime(request.POST)
         tz = request.POST.get('timezone', 'Europe/Berlin')
         location = request.POST.get('location', '')
         max_participants = request.POST.get('max_participants', '') or None
@@ -53,13 +106,17 @@ def event_create(request):
         if max_participants:
             max_participants = int(max_participants)
 
-        event = Event.objects.create(
+        platform = request.POST.get('platform', 'zoom')
+
+        # Build kwargs for event creation
+        create_kwargs = dict(
             title=title,
             slug=slug,
             description=description,
             event_type=event_type,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
+            platform=platform,
+            start_datetime=start_dt,
+            end_datetime=end_dt,
             timezone=tz,
             location=location,
             max_participants=max_participants,
@@ -67,12 +124,19 @@ def event_create(request):
             required_level=required_level,
             tags=tags,
         )
+
+        # When platform is 'custom', store custom_url in zoom_join_url
+        # and clear zoom_meeting_id
+        if platform == 'custom':
+            create_kwargs['zoom_join_url'] = request.POST.get('custom_url', '').strip()
+            create_kwargs['zoom_meeting_id'] = ''
+
+        event = Event.objects.create(**create_kwargs)
         return redirect('studio_event_edit', event_id=event.pk)
 
-    return render(request, 'studio/events/form.html', {
-        'event': None,
-        'form_action': 'create',
-    })
+    context = _event_form_context(None)
+    context['form_action'] = 'create'
+    return render(request, 'studio/events/form.html', context)
 
 
 @staff_required
@@ -85,9 +149,11 @@ def event_edit(request, event_id):
         event.slug = request.POST.get('slug', '').strip() or slugify(event.title)
         event.description = request.POST.get('description', '')
         event.event_type = request.POST.get('event_type', 'live')
-        event.start_datetime = request.POST.get('start_datetime', event.start_datetime)
-        end_dt = request.POST.get('end_datetime', '')
-        event.end_datetime = end_dt if end_dt else None
+        platform = request.POST.get('platform', 'zoom')
+        event.platform = platform
+        start_dt, end_dt = _parse_event_datetime(request.POST)
+        event.start_datetime = start_dt
+        event.end_datetime = end_dt
         event.timezone = request.POST.get('timezone', 'Europe/Berlin')
         event.location = request.POST.get('location', '')
         max_p = request.POST.get('max_participants', '')
@@ -96,13 +162,19 @@ def event_edit(request, event_id):
         event.required_level = int(request.POST.get('required_level', 0))
         tags_raw = request.POST.get('tags', '')
         event.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+
+        # When platform is 'custom', store custom_url in zoom_join_url
+        # and clear zoom_meeting_id
+        if platform == 'custom':
+            event.zoom_join_url = request.POST.get('custom_url', '').strip()
+            event.zoom_meeting_id = ''
+
         event.save()
         return redirect('studio_event_edit', event_id=event.pk)
 
-    return render(request, 'studio/events/form.html', {
-        'event': event,
-        'form_action': 'edit',
-    })
+    context = _event_form_context(event)
+    context['form_action'] = 'edit'
+    return render(request, 'studio/events/form.html', context)
 
 
 @staff_required

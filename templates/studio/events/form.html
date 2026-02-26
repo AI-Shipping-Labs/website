@@ -3,6 +3,11 @@
 {% block studio_title %}{% if event %}Edit Event{% else %}New Event{% endif %}{% endblock %}
 
 {% block studio_content %}
+<!-- Flatpickr CSS and JS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
 <div class="mb-8">
   <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
     <a href="{% url 'studio_event_list' %}" class="hover:text-foreground">Events</a>
@@ -34,7 +39,7 @@
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ event.description|default:'' }}</textarea>
     </div>
 
-    <div class="grid grid-cols-2 gap-4">
+    <div class="grid grid-cols-3 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Event Type</label>
         <select name="event_type" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
@@ -52,20 +57,51 @@
           <option value="cancelled" {% if event.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
         </select>
       </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Platform</label>
+        <select name="platform" id="platform-select" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          <option value="zoom" {% if not event or event.platform == 'zoom' %}selected{% endif %}>Zoom</option>
+          <option value="custom" {% if event.platform == 'custom' %}selected{% endif %}>Custom URL</option>
+        </select>
+      </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-4">
+    <div id="custom-url-section" style="display: none;">
+      <label class="block text-sm font-medium text-foreground mb-1">Custom URL</label>
+      <input type="url" name="custom_url" id="custom-url-input"
+             value="{% if event.platform == 'custom' %}{{ event.zoom_join_url|default:'' }}{% endif %}"
+             placeholder="https://youtube.com/live/abc123"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Enter the external URL for this event (e.g. YouTube Live, Discord).</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-4">
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Start Date/Time</label>
-        <input type="datetime-local" name="start_datetime" value="{% if event %}{{ event.start_datetime|date:'Y-m-d\TH:i' }}{% endif %}" required
+        <label class="block text-sm font-medium text-foreground mb-1">Date (dd/mm/yyyy)</label>
+        <input type="text" name="event_date" id="event-date-picker" value="{{ event_date }}" required
+               placeholder="dd/mm/yyyy"
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">End Date/Time (optional)</label>
-        <input type="datetime-local" name="end_datetime" value="{% if event.end_datetime %}{{ event.end_datetime|date:'Y-m-d\TH:i' }}{% endif %}"
+        <label class="block text-sm font-medium text-foreground mb-1">Time (HH:MM, 24h)</label>
+        <input type="text" name="event_time" id="event-time-input" value="{{ event_time }}" required
+               placeholder="14:30" pattern="[0-2][0-9]:[0-5][0-9]"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Duration (hours)</label>
+        <input type="number" name="duration_hours" id="event-duration-input" value="{{ duration_hours }}"
+               step="0.5" min="0.5" placeholder="1"
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       </div>
     </div>
+
+    {% if event %}
+    <div id="datetime-summary" class="text-sm text-muted-foreground bg-secondary rounded-lg px-4 py-2">
+      Resolved: <span id="summary-start">{{ event.start_datetime|date:'d/m/Y H:i' }}</span>
+      to <span id="summary-end">{% if event.end_datetime %}{{ event.end_datetime|date:'d/m/Y H:i' }}{% endif %}</span>
+    </div>
+    {% endif %}
 
     <div class="grid grid-cols-2 gap-4">
       <div>
@@ -111,8 +147,19 @@
   </div>
 </form>
 
+<!-- Initialize flatpickr on the date field -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  flatpickr('#event-date-picker', {
+    dateFormat: 'd/m/Y',
+    allowInput: true,
+    theme: 'dark'
+  });
+});
+</script>
+
 {% if event %}
-<div class="mt-8 max-w-3xl">
+<div class="mt-8 max-w-3xl" id="zoom-meeting-section">
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-lg font-medium text-foreground mb-4">Zoom Meeting</h2>
     {% if event.zoom_meeting_id %}
@@ -168,4 +215,32 @@ function createZoomMeeting(eventId) {
 }
 </script>
 {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var platformSelect = document.getElementById('platform-select');
+  var customUrlSection = document.getElementById('custom-url-section');
+  var zoomMeetingSection = document.getElementById('zoom-meeting-section');
+
+  function updatePlatformVisibility() {
+    var platform = platformSelect.value;
+    if (platform === 'custom') {
+      customUrlSection.style.display = 'block';
+      if (zoomMeetingSection) {
+        zoomMeetingSection.style.display = 'none';
+      }
+    } else {
+      customUrlSection.style.display = 'none';
+      if (zoomMeetingSection) {
+        zoomMeetingSection.style.display = 'block';
+      }
+    }
+  }
+
+  platformSelect.addEventListener('change', updatePlatformVisibility);
+
+  // Initialize visibility on page load
+  updatePlatformVisibility();
+});
+</script>
 {% endblock %}

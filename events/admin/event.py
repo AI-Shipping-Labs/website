@@ -53,10 +53,10 @@ class EventRegistrationInline(admin.TabularInline):
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = [
-        'title', 'slug', 'event_type', 'status',
+        'title', 'slug', 'event_type', 'platform', 'status',
         'start_datetime', 'required_level', 'registration_count_display',
     ]
-    list_filter = ['status', 'event_type', 'required_level']
+    list_filter = ['status', 'event_type', 'platform', 'required_level']
     search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
     actions = [make_upcoming, make_live, make_completed, make_cancelled]
@@ -65,7 +65,7 @@ class EventAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {
             'fields': (
-                'title', 'slug', 'description', 'event_type',
+                'title', 'slug', 'description', 'event_type', 'platform',
             ),
         }),
         ('Schedule', {
@@ -73,7 +73,7 @@ class EventAdmin(admin.ModelAdmin):
                 'start_datetime', 'end_datetime', 'timezone', 'location',
             ),
         }),
-        ('Zoom', {
+        ('Zoom / Custom URL', {
             'fields': ('zoom_meeting_id', 'zoom_join_url'),
             'classes': ('collapse',),
         }),

@@ -899,6 +899,7 @@ class EventAdminTest(TestCase):
             'slug': 'new-event',
             'description': 'A new event',
             'event_type': 'live',
+            'platform': 'zoom',
             'start_datetime_0': start.strftime('%Y-%m-%d'),
             'start_datetime_1': start.strftime('%H:%M:%S'),
             'timezone': 'Europe/Berlin',

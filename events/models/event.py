@@ -40,6 +40,11 @@ EVENT_STATUS_CHOICES = [
     ('cancelled', 'Cancelled'),
 ]
 
+EVENT_PLATFORM_CHOICES = [
+    ('zoom', 'Zoom'),
+    ('custom', 'Custom URL'),
+]
+
 
 class Event(models.Model):
     """Event for live or async community activities."""
@@ -58,6 +63,12 @@ class Event(models.Model):
         max_length=10,
         choices=EVENT_TYPE_CHOICES,
         default='live',
+    )
+    platform = models.CharField(
+        max_length=20,
+        choices=EVENT_PLATFORM_CHOICES,
+        default='zoom',
+        help_text='Platform for the event: Zoom or a custom external URL.',
     )
     start_datetime = models.DateTimeField(
         help_text='Start date/time of the event.',

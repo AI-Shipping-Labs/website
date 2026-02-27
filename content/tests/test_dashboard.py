@@ -666,3 +666,173 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         # base.html includes Tailwind CDN
         self.assertContains(response, 'tailwindcss')
+
+
+# ============================================================
+# Slack Community Section (issue #112)
+# ============================================================
+
+
+class SlackJoinPromptTest(TierSetupMixin, TestCase):
+    """Test the Slack join prompt on the dashboard for Main+ users."""
+
+    def _create_user(self, email, tier=None, slack_user_id=''):
+        user = User.objects.create_user(email=email, password='testpass')
+        if tier:
+            user.tier = tier
+            user.save()
+        if slack_user_id:
+            user.slack_user_id = slack_user_id
+            user.save()
+        return user
+
+    def test_main_user_without_slack_sees_join_card(self):
+        """Main tier users without slack_user_id see the join prompt."""
+        self._create_user('main@test.com', tier=self.main_tier)
+        self.client.login(email='main@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('Join our Slack community', content)
+        self.assertIn('Join Slack', content)
+
+    def test_premium_user_without_slack_sees_join_card(self):
+        """Premium tier users without slack_user_id see the join prompt."""
+        self._create_user('premium@test.com', tier=self.premium_tier)
+        self.client.login(email='premium@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('Join our Slack community', content)
+
+    def test_join_button_links_to_slack_invite_url(self):
+        """The Join Slack button links to the configured SLACK_INVITE_URL."""
+        self._create_user('main-link@test.com', tier=self.main_tier)
+        self.client.login(email='main-link@test.com', password='testpass')
+        invite_url = 'https://join.slack.com/t/aishippinglabs/shared_invite/abc123'
+        with self.settings(SLACK_INVITE_URL=invite_url):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn(invite_url, content)
+
+    def test_join_button_opens_in_new_tab(self):
+        """The Join Slack link has target=_blank and rel=noopener."""
+        self._create_user('main-tab@test.com', tier=self.main_tier)
+        self.client.login(email='main-tab@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('target="_blank"', content)
+        self.assertIn('rel="noopener"', content)
+
+    def test_slack_connected_replaces_join_card(self):
+        """Once slack_user_id is set, show connected status instead of join."""
+        self._create_user(
+            'main-connected@test.com', tier=self.main_tier,
+            slack_user_id='U12345',
+        )
+        self.client.login(email='main-connected@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertNotIn('Join our Slack community', content)
+        self.assertIn('Connected to Slack', content)
+        self.assertIn('AI Shipping Labs community workspace', content)
+
+    def test_free_user_sees_no_slack_section(self):
+        """Free tier users do not see any Slack-related content."""
+        self._create_user('free@test.com', tier=self.free_tier)
+        self.client.login(email='free@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertNotIn('Join our Slack community', content)
+        self.assertNotIn('Connected to Slack', content)
+        self.assertNotIn('Join Slack', content)
+
+    def test_basic_user_sees_no_slack_section(self):
+        """Basic tier users do not see any Slack-related content."""
+        self._create_user('basic@test.com', tier=self.basic_tier)
+        self.client.login(email='basic@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertNotIn('Join our Slack community', content)
+        self.assertNotIn('Connected to Slack', content)
+
+    def test_empty_slack_invite_url_hides_section(self):
+        """When SLACK_INVITE_URL is empty, no Slack section is shown."""
+        self._create_user('main-nourl@test.com', tier=self.main_tier)
+        self.client.login(email='main-nourl@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL=''):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertNotIn('Join our Slack community', content)
+        self.assertNotIn('Join Slack', content)
+
+    def test_dashboard_renders_normally_when_slack_url_empty(self):
+        """The rest of the dashboard renders without errors when SLACK_INVITE_URL is empty."""
+        self._create_user('main-normal@test.com', tier=self.main_tier)
+        self.client.login(email='main-normal@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL=''):
+            response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('Continue Learning', content)
+        self.assertIn('Welcome back', content)
+
+    def test_auto_linking_note_shown(self):
+        """The join card includes a note about automatic linking."""
+        self._create_user('main-note@test.com', tier=self.main_tier)
+        self.client.login(email='main-note@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('up to an hour', content)
+
+    def test_context_variables_show_slack_join(self):
+        """The show_slack_join context variable is True for qualifying users."""
+        self._create_user('main-ctx@test.com', tier=self.main_tier)
+        self.client.login(email='main-ctx@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        self.assertTrue(response.context['show_slack_join'])
+        self.assertFalse(response.context['slack_connected'])
+        self.assertEqual(
+            response.context['slack_invite_url'],
+            'https://join.slack.com/test',
+        )
+
+    def test_context_variables_slack_connected(self):
+        """The slack_connected context variable is True for linked users."""
+        self._create_user(
+            'main-ctx2@test.com', tier=self.main_tier,
+            slack_user_id='U99999',
+        )
+        self.client.login(email='main-ctx2@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        self.assertFalse(response.context['show_slack_join'])
+        self.assertTrue(response.context['slack_connected'])
+
+    def test_context_variables_free_user(self):
+        """Free user has both show_slack_join and slack_connected as False."""
+        self._create_user('free-ctx@test.com', tier=self.free_tier)
+        self.client.login(email='free-ctx@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        self.assertFalse(response.context['show_slack_join'])
+        self.assertFalse(response.context['slack_connected'])
+
+    def test_slack_section_position_below_welcome_above_continue(self):
+        """The Slack section appears between Welcome Banner and Continue Learning."""
+        self._create_user('main-pos@test.com', tier=self.main_tier)
+        self.client.login(email='main-pos@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        content = response.content.decode()
+        pos_welcome = content.index('Welcome back')
+        pos_slack = content.index('Join our Slack community')
+        pos_continue = content.index('Continue Learning')
+        self.assertLess(pos_welcome, pos_slack)
+        self.assertLess(pos_slack, pos_continue)

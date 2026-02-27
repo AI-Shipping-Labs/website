@@ -260,6 +260,15 @@ def _dashboard(request):
     # --- Notifications ---
     notifications = _get_notifications(user)
 
+    # --- Slack community ---
+    from content.access import LEVEL_MAIN
+    slack_invite_url = getattr(settings, 'SLACK_INVITE_URL', '')
+    has_qualifying_tier = user.tier_id and user.tier.level >= LEVEL_MAIN
+    show_slack_join = bool(
+        slack_invite_url and has_qualifying_tier and not user.slack_user_id
+    )
+    slack_connected = bool(has_qualifying_tier and user.slack_user_id)
+
     context = {
         'tier_name': tier_name,
         'in_progress_courses': in_progress_courses,
@@ -268,6 +277,9 @@ def _dashboard(request):
         'active_polls': active_polls,
         'quick_actions': quick_actions,
         'notifications': notifications,
+        'show_slack_join': show_slack_join,
+        'slack_connected': slack_connected,
+        'slack_invite_url': slack_invite_url,
     }
     return render(request, 'content/dashboard.html', context)
 

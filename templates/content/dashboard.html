@@ -58,6 +58,42 @@
       </div>
     </section>
 
+    <!-- Slack Community Section -->
+    {% if show_slack_join %}
+    <section class="mb-10">
+      <div class="rounded-2xl border border-border bg-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
+            <i data-lucide="message-square" class="h-6 w-6 text-purple-400"></i>
+          </div>
+          <div class="flex-1">
+            <h2 class="text-lg font-semibold text-foreground">Join our Slack community</h2>
+            <p class="mt-1 text-sm text-muted-foreground">Connect with other builders in our private Slack workspace.</p>
+            <p class="mt-2 text-xs text-muted-foreground">Already joined? It may take up to an hour for your account to be linked automatically.</p>
+          </div>
+          <a href="{{ slack_invite_url }}" target="_blank" rel="noopener" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-purple-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-500">
+            <i data-lucide="message-square" class="h-4 w-4"></i>
+            Join Slack
+          </a>
+        </div>
+      </div>
+    </section>
+    {% elif slack_connected %}
+    <section class="mb-10">
+      <div class="rounded-2xl border border-border bg-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-500/10">
+            <i data-lucide="check-circle" class="h-6 w-6 text-green-400"></i>
+          </div>
+          <div class="flex-1">
+            <h2 class="text-lg font-semibold text-foreground">Connected to Slack</h2>
+            <p class="mt-1 text-sm text-muted-foreground">You are a member of the AI Shipping Labs community workspace.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
     <div class="grid gap-8 lg:grid-cols-3">
       <!-- Main content: 2 columns wide -->
       <div class="lg:col-span-2 space-y-8">

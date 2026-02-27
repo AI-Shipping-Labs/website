@@ -1,0 +1,90 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Manage Access - {{ course.title }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_course_list' %}" class="hover:text-foreground">Courses</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="hover:text-foreground">{{ course.title }}</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">Manage Access</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">Manage Access</h1>
+  <p class="text-muted-foreground mt-1">Grant or revoke individual access to "{{ course.title }}".</p>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'info' %}bg-blue-500/20 text-blue-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Grant Access Form -->
+<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Grant Access</h2>
+  <form method="post" action="{% url 'studio_course_access_grant' course_id=course.pk %}" class="flex items-end space-x-4">
+    {% csrf_token %}
+    <div class="flex-1">
+      <label class="block text-sm font-medium text-foreground mb-1">User Email</label>
+      <input type="email" name="email" required placeholder="user@example.com"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Grant Access
+    </button>
+  </form>
+</div>
+
+<!-- Access Records Table -->
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User Email</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Access Type</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for access in access_records %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm text-foreground">{{ access.user.email }}</td>
+        <td class="px-6 py-4">
+          <span class="text-xs px-2 py-1 rounded-full {% if access.access_type == 'granted' %}bg-blue-500/20 text-blue-400{% else %}bg-green-500/20 text-green-400{% endif %}">
+            {{ access.get_access_type_display }}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">
+          {% if access.granted_by %}{{ access.granted_by.email }}{% else %}-{% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ access.created_at|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-right">
+          {% if access.access_type == 'granted' %}
+          <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}" class="inline"
+                onsubmit="return confirm('Revoke access for {{ access.user.email }}?');">
+            {% csrf_token %}
+            <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline">Revoke</button>
+          </form>
+          {% else %}
+          <span class="text-xs text-muted-foreground">-</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No individual access records for this course.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

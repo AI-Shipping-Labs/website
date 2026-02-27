@@ -118,6 +118,13 @@
       {% if course %}Save Changes{% else %}Create Course{% endif %}
     </button>
     <a href="{% url 'studio_course_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+    {% if course %}
+    <a href="{% url 'studio_course_access_list' course_id=course.pk %}"
+       class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
+      <i data-lucide="shield" class="w-4 h-4"></i>
+      <span>Manage Access</span>
+    </a>
+    {% endif %}
   </div>
 </form>
 

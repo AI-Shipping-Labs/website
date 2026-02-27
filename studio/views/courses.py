@@ -1,16 +1,20 @@
-"""Studio views for course CRUD."""
+"""Studio views for course CRUD and access management."""
 
 import json
 import logging
 
+from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
-from content.models import Course, Module, Unit
+from content.models import Course, Module, Unit, CourseAccess
 from studio.decorators import staff_required
+
+User = get_user_model()
 
 logger = logging.getLogger(__name__)
 
@@ -241,3 +245,77 @@ def course_create_stripe_product(request, course_id):
     except Exception as e:
         logger.exception('Failed to create Stripe product for course %s', course.pk)
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_required
+def course_access_list(request, course_id):
+    """List all users with individual access to a course."""
+    course = get_object_or_404(Course, pk=course_id)
+    access_records = (
+        CourseAccess.objects
+        .filter(course=course)
+        .select_related('user', 'granted_by')
+        .order_by('-created_at')
+    )
+
+    return render(request, 'studio/courses/access_list.html', {
+        'course': course,
+        'access_records': access_records,
+    })
+
+
+@staff_required
+@require_POST
+def course_access_grant(request, course_id):
+    """Grant a user access to a course by email."""
+    course = get_object_or_404(Course, pk=course_id)
+    email = request.POST.get('email', '').strip()
+
+    if not email:
+        messages.error(request, 'Please provide an email address.')
+        return redirect('studio_course_access_list', course_id=course.pk)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        messages.error(request, f'No user found with email "{email}".')
+        return redirect('studio_course_access_list', course_id=course.pk)
+
+    # Check if the user already has access
+    existing = CourseAccess.objects.filter(user=user, course=course).first()
+    if existing:
+        messages.info(
+            request,
+            f'{email} already has {existing.access_type} access to this course.',
+        )
+        return redirect('studio_course_access_list', course_id=course.pk)
+
+    CourseAccess.objects.create(
+        user=user,
+        course=course,
+        access_type='granted',
+        granted_by=request.user,
+    )
+    messages.success(request, f'Access granted to {email}.')
+    return redirect('studio_course_access_list', course_id=course.pk)
+
+
+@staff_required
+@require_POST
+def course_access_revoke(request, course_id, access_id):
+    """Revoke granted access for a user. Only granted access can be revoked."""
+    course = get_object_or_404(Course, pk=course_id)
+    access = get_object_or_404(CourseAccess, pk=access_id, course=course)
+
+    if access.access_type != 'granted':
+        messages.error(
+            request,
+            'Only granted access can be revoked from Studio. '
+            'Purchased access cannot be revoked here.',
+        )
+        return redirect('studio_course_access_list', course_id=course.pk)
+
+    email = access.user.email
+    access.delete()
+    messages.success(request, f'Access revoked for {email}.')
+    return redirect('studio_course_access_list', course_id=course.pk)

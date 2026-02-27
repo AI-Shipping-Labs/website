@@ -39,4 +39,12 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: event-reminders (every 15 min)'))
 
+        # Expire tier overrides every 15 minutes
+        schedule(
+            'jobs.tasks.expire_overrides.expire_tier_overrides',
+            cron='*/15 * * * *',
+            name='expire-tier-overrides',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: expire-tier-overrides (every 15 min)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

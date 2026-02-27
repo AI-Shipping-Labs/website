@@ -1,0 +1,187 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Tier Overrides{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold text-foreground">Tier Overrides</h1>
+  <p class="text-muted-foreground mt-1">Grant temporary tier upgrades to users for trials, promotions, or courtesy access.</p>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'info' %}bg-blue-500/20 text-blue-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if error_message %}
+<div class="mb-6">
+  <div class="px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400">
+    {{ error_message }}
+  </div>
+</div>
+{% endif %}
+
+<!-- Search Form -->
+<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Search User</h2>
+  <form method="get" action="{% url 'studio_tier_override' %}" class="flex items-end space-x-4">
+    <div class="flex-1">
+      <label class="block text-sm font-medium text-foreground mb-1">User Email (exact match)</label>
+      <input type="email" name="email" value="{{ search_email }}" required placeholder="user@example.com"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Search
+    </button>
+  </form>
+</div>
+
+{% if searched_user %}
+<!-- User Info -->
+<div class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">User Details</h2>
+  <div class="grid grid-cols-2 gap-4 max-w-lg">
+    <div>
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</p>
+      <p class="text-sm text-foreground mt-1">{{ searched_user.email }}</p>
+    </div>
+    <div>
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscription Tier</p>
+      <p class="text-sm text-foreground mt-1">
+        {% if searched_user.tier %}{{ searched_user.tier.name }} (Level {{ searched_user.tier.level }}){% else %}Free (Level 0){% endif %}
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Active Override -->
+{% if active_override %}
+<div class="bg-card border border-amber-500/30 rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+    <i data-lucide="shield-check" class="w-5 h-5 text-amber-400"></i>
+    Active Override
+  </h2>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+    <div>
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Override Tier</p>
+      <p class="text-sm text-foreground mt-1">{{ active_override.override_tier.name }}</p>
+    </div>
+    <div>
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Expires At</p>
+      <p class="text-sm text-foreground mt-1">{{ active_override.expires_at|date:"M d, Y H:i" }} UTC</p>
+    </div>
+    <div>
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</p>
+      <p class="text-sm text-foreground mt-1">{% if active_override.granted_by %}{{ active_override.granted_by.email }}{% else %}-{% endif %}</p>
+    </div>
+    <div>
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</p>
+      <p class="text-sm text-foreground mt-1">{{ active_override.created_at|date:"M d, Y H:i" }}</p>
+    </div>
+  </div>
+  <form method="post" action="{% url 'studio_tier_override_revoke' %}"
+        onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
+    {% csrf_token %}
+    <input type="hidden" name="override_id" value="{{ active_override.pk }}">
+    <input type="hidden" name="email" value="{{ searched_user.email }}">
+    <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline">
+      Revoke Override
+    </button>
+  </form>
+</div>
+{% endif %}
+
+<!-- Create Override Form -->
+<div class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Create Override</h2>
+
+  {% if is_highest_tier %}
+  <div class="px-4 py-3 rounded-lg text-sm bg-blue-500/20 text-blue-400">
+    User is already at the highest tier. No override needed.
+  </div>
+  {% elif available_tiers %}
+  <form method="post" action="{% url 'studio_tier_override_create' %}" id="override-form">
+    {% csrf_token %}
+    <input type="hidden" name="email" value="{{ searched_user.email }}">
+    <input type="hidden" name="duration" id="override-duration" value="">
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-2">Target Tier</label>
+      <div class="flex flex-wrap gap-3">
+        {% for tier in available_tiers %}
+        <label class="cursor-pointer">
+          <input type="radio" name="tier_id" value="{{ tier.pk }}" class="peer sr-only" {% if forloop.first %}checked{% endif %}>
+          <span class="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:bg-secondary">
+            {{ tier.name }} (Level {{ tier.level }})
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-2">Duration</label>
+      <div class="flex flex-wrap gap-3">
+        {% for label in duration_labels %}
+        <button type="submit" name="duration" value="{{ label }}"
+                class="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground hover:border-accent">
+          {{ label }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+  </form>
+  {% else %}
+  <div class="px-4 py-3 rounded-lg text-sm bg-yellow-500/20 text-yellow-400">
+    No tiers available for override.
+  </div>
+  {% endif %}
+</div>
+
+<!-- Override History -->
+{% if override_history %}
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <div class="px-6 py-4 border-b border-border">
+    <h2 class="text-lg font-semibold text-foreground">Override History</h2>
+  </div>
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Override Tier</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Original Tier</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Expires</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for override in override_history %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm text-foreground">{{ override.override_tier.name }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{% if override.original_tier %}{{ override.original_tier.name }}{% else %}None{% endif %}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{% if override.granted_by %}{{ override.granted_by.email }}{% else %}-{% endif %}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ override.created_at|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ override.expires_at|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4">
+          {% if override.is_active %}
+          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Active</span>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Inactive</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

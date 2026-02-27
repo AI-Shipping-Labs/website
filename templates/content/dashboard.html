@@ -29,7 +29,15 @@
               Welcome back{% if user.first_name %}, {{ user.first_name }}{% endif %}
             </h1>
             <div class="mt-2 flex items-center gap-3">
-              {% if tier_name %}
+              {% if override_tier_name %}
+              <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium
+                {% if override_tier_name == 'Premium' %}bg-amber-500/20 text-amber-400
+                {% elif override_tier_name == 'Main' %}bg-accent/20 text-accent
+                {% elif override_tier_name == 'Basic' %}bg-blue-500/20 text-blue-400
+                {% else %}bg-secondary text-muted-foreground{% endif %}">
+                {{ override_tier_name }} (trial)
+              </span>
+              {% elif tier_name %}
               <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium
                 {% if tier_name == 'Premium' %}bg-amber-500/20 text-amber-400
                 {% elif tier_name == 'Main' %}bg-accent/20 text-accent

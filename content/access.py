@@ -33,14 +33,64 @@ def get_user_level(user):
 
     Anonymous users and users without a tier are treated as level 0.
     Staff and superuser accounts always get maximum access (LEVEL_PREMIUM).
+
+    If the user has an active TierOverride (is_active=True and not yet
+    expired), returns ``max(user.tier.level, override.override_tier.level)``
+    so the override only ever grants MORE access, never less.
     """
     if user is None or not user.is_authenticated:
         return 0
     if user.is_staff or user.is_superuser:
         return LEVEL_PREMIUM
-    if user.tier_id is None:
-        return 0
-    return user.tier.level
+
+    base_level = 0
+    if user.tier_id is not None:
+        base_level = user.tier.level
+
+    # Check for active tier override
+    override_level = _get_override_level(user)
+    if override_level is not None:
+        return max(base_level, override_level)
+
+    return base_level
+
+
+def _get_override_level(user):
+    """Return the override tier level if the user has an active, non-expired override.
+
+    Returns None if no active override exists.
+    """
+    from django.utils import timezone
+    from accounts.models import TierOverride
+
+    override = (
+        TierOverride.objects
+        .filter(user=user, is_active=True, expires_at__gt=timezone.now())
+        .select_related('override_tier')
+        .first()
+    )
+    if override is not None:
+        return override.override_tier.level
+    return None
+
+
+def get_active_override(user):
+    """Return the active TierOverride for a user, or None.
+
+    Convenience function for views that need the full override object
+    (e.g. dashboard badge, account page).
+    """
+    if user is None or not user.is_authenticated:
+        return None
+    from django.utils import timezone
+    from accounts.models import TierOverride
+
+    return (
+        TierOverride.objects
+        .filter(user=user, is_active=True, expires_at__gt=timezone.now())
+        .select_related('override_tier')
+        .first()
+    )
 
 
 def can_access(user, content):

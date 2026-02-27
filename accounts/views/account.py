@@ -94,6 +94,10 @@ def account_view(request):
     # Get current tier's feature list for the cancel confirmation modal
     tier_features = tier.features if tier and tier.features else []
 
+    # Check for active tier override
+    from content.access import get_active_override
+    active_override = get_active_override(user)
+
     context = {
         "tier": tier,
         "pending_tier": pending_tier,
@@ -109,6 +113,7 @@ def account_view(request):
         "email_preferences": user.email_preferences,
         "newsletter_subscribed": not user.unsubscribed,
         "tier_features": tier_features,
+        "active_override": active_override,
     }
 
     return render(request, "accounts/account.html", context)

@@ -234,9 +234,18 @@ def _dashboard(request):
     user_level = get_user_level(user)
 
     # --- Welcome banner ---
+    # Check for active tier override to display the correct badge
+    from content.access import get_active_override
+    active_override = get_active_override(user)
+
     tier_name = ''
     if user.tier_id:
         tier_name = user.tier.name
+
+    # If there is an active override, show the override tier name with "(trial)"
+    override_tier_name = ''
+    if active_override is not None:
+        override_tier_name = active_override.override_tier.name
 
     # --- Continue learning ---
     # Find courses where the user has progress (at least one unit accessed)
@@ -261,6 +270,8 @@ def _dashboard(request):
     notifications = _get_notifications(user)
 
     # --- Slack community ---
+    # Slack join link is based on user.tier.level (NOT overridden level)
+    # because Slack access requires a paid subscription.
     from content.access import LEVEL_MAIN
     slack_invite_url = getattr(settings, 'SLACK_INVITE_URL', '')
     has_qualifying_tier = user.tier_id and user.tier.level >= LEVEL_MAIN
@@ -271,6 +282,7 @@ def _dashboard(request):
 
     context = {
         'tier_name': tier_name,
+        'override_tier_name': override_tier_name,
         'in_progress_courses': in_progress_courses,
         'upcoming_events': upcoming_events,
         'recent_content': recent_content,

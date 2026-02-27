@@ -33,6 +33,13 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.func, 'notifications.services.event_reminders.check_event_reminders')
         self.assertEqual(schedule.cron, '*/15 * * * *')
 
+    def test_creates_expire_tier_overrides_schedule(self):
+        """Command creates expire-tier-overrides schedule."""
+        call_command('setup_schedules')
+        schedule = Schedule.objects.get(name='expire-tier-overrides')
+        self.assertEqual(schedule.func, 'jobs.tasks.expire_overrides.expire_tier_overrides')
+        self.assertEqual(schedule.cron, '*/15 * * * *')
+
     def test_idempotent(self):
         """Running command twice does not create duplicate schedules."""
         call_command('setup_schedules')
@@ -40,8 +47,9 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='health-check').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='cleanup-webhook-logs').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='event-reminders').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='expire-tier-overrides').count(), 1)
 
     def test_total_schedules_created(self):
         """Command creates exactly the expected number of schedules."""
         call_command('setup_schedules')
-        self.assertEqual(Schedule.objects.count(), 3)
+        self.assertEqual(Schedule.objects.count(), 4)

@@ -14,6 +14,7 @@ from studio.views.campaigns import campaign_list, campaign_create, campaign_deta
 from studio.views.subscribers import subscriber_list, subscriber_export_csv
 from studio.views.downloads import download_list, download_create, download_edit
 from studio.views.projects import project_list, project_review
+from studio.views.tier_overrides import tier_override_page, tier_override_create, tier_override_revoke
 from studio.views.notifications import (
     notification_log,
     article_notify, article_announce_slack,
@@ -87,4 +88,9 @@ urlpatterns = [
     # Projects
     path('projects/', project_list, name='studio_project_list'),
     path('projects/<int:project_id>/review', project_review, name='studio_project_review'),
+
+    # Tier Overrides
+    path('users/tier-override/', tier_override_page, name='studio_tier_override'),
+    path('users/tier-override/create', tier_override_create, name='studio_tier_override_create'),
+    path('users/tier-override/revoke', tier_override_revoke, name='studio_tier_override_revoke'),
 ]

@@ -60,6 +60,23 @@
         </div>
         {% endif %}
 
+        <!-- Active Tier Override -->
+        {% if active_override %}
+        <div class="rounded-lg border border-accent/30 bg-accent/10 p-4 mb-6" id="tier-override-notice">
+          <div class="flex items-start gap-3">
+            <i data-lucide="shield-check" class="h-5 w-5 text-accent mt-0.5 shrink-0"></i>
+            <div>
+              <p class="text-sm text-foreground font-medium">
+                Temporary {{ active_override.override_tier.name }} access until {{ active_override.expires_at|date:"d/m/Y H:i" }} UTC
+              </p>
+              <p class="text-xs text-muted-foreground mt-1">
+                This is temporary access, not a subscription change. Your subscription tier and upgrade/downgrade options are unaffected.
+              </p>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Pending Downgrade Notice -->
         {% if is_pending_downgrade %}
         <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 mb-6" id="pending-downgrade-notice">

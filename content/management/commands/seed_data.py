@@ -491,6 +491,307 @@ COURSES = [
             },
         ],
     },
+    {
+        'slug': 'aihero',
+        'title': '7-Day AI Agents Email Crash-Course',
+        'description': (
+            '## Learn to Build a Production-Ready AI Agent for Your GitHub Project in Just 7 Days\n\n'
+            'Free email course. 1-2 hours per day, practical hands-on work. '
+            'Optional $3-8 in OpenAI API costs.\n\n'
+            '### The Problem\n\n'
+            'ChatGPT and similar LLMs lack access to recent developments and private codebases. '
+            'They cannot answer questions about your specific project, the latest framework release, '
+            'or internal documentation. The solution: build a search engine that understands any '
+            'modern framework by extracting information directly from GitHub repos.\n\n'
+            'By the end of this course, you will have a portfolio-ready project with documentation, '
+            'demos, deployment, and a completion certificate.\n\n'
+            '### What You Will Build\n\n'
+            '- A data pipeline that reads and indexes any GitHub repository\n'
+            '- AI-powered intelligent document chunking\n'
+            '- Hybrid search combining BM25 lexical search and semantic embeddings\n'
+            '- An AI agent with Pydantic AI function calling connected to your search engine\n'
+            '- A Streamlit web app deployed to the internet\n'
+            '- An AI-powered evaluation pipeline to measure quality\n\n'
+            '### Prerequisites\n\n'
+            '- Basic Python knowledge\n'
+            '- Comfort with the command line\n'
+            '- A standard laptop (no GPU required)\n'
+            '- An OpenAI API key (~$3-8 total cost for the entire course)\n'
+            '- 1-2 hours daily for 7 days\n'
+            '- A GitHub project you want to build a search agent for\n\n'
+            '### Certificate\n\n'
+            'Upon completion, you receive a certificate of completion:\n\n'
+            '- Hand-signed by Alexey Grigorev\n'
+            '- Unique ID with a public verification link and QR code\n'
+            '- Includes your GitHub project URL as proof of work\n'
+            '- Shareable with employers and on LinkedIn\n\n'
+            '### Progression Path\n\n'
+            'This course leads into the AI Bootcamp: From RAG to Agents -- '
+            'an advanced, production-focused program. '
+            'Email course graduates receive a 15% discount on the full bootcamp.'
+        ),
+        'instructor_name': 'Alexey Grigorev',
+        'instructor_bio': (
+            'Principal Data Scientist, 15+ years software engineering, 12+ years ML. '
+            'Founded DataTalks.Club, created the Zoomcamp series. '
+            'Taught 100,000+ students with a code-first, practical approach.'
+        ),
+        'cover_image_url': 'https://picsum.photos/seed/course-aihero/800/400',
+        'required_level': 0,
+        'status': 'published',
+        'is_free': True,
+        'tags': ['agents', 'ai', 'python', 'rag', 'pydantic-ai', 'free'],
+        'modules': [
+            {
+                'title': '7-Day AI Agents',
+                'sort_order': 0,
+                'units': [
+                    {
+                        'title': 'Day 1: Ingest and Index Your Data',
+                        'sort_order': 0,
+                        'is_preview': True,
+                        'body': (
+                            '## Extract Docs and Code from Any GitHub Repo\n\n'
+                            'In this first lesson, you will learn to use the GitHub API to pull '
+                            'README files, source code, issues, and comments from any public or '
+                            'private repository. By the end of the day, you will have a working '
+                            'script that extracts all the raw data you need for your search engine.\n\n'
+                            '### What You Will Learn\n\n'
+                            '- How the GitHub REST API works (authentication, rate limits, pagination)\n'
+                            '- Fetching repository contents: README, source files, directory trees\n'
+                            '- Extracting issues and comments for additional context\n'
+                            '- Organizing extracted data into a local directory structure\n'
+                            '- Handling edge cases: large repos, binary files, rate limiting\n\n'
+                            '### Key Concepts\n\n'
+                            'The GitHub API provides access to virtually everything in a repository. '
+                            'We will use the Contents API to fetch files, the Issues API for discussions, '
+                            'and the Trees API for efficient bulk retrieval. Authentication with a '
+                            'personal access token gives you 5,000 requests per hour -- more than enough '
+                            'for most repositories.\n\n'
+                            'Prepare the raw data for downstream search and indexing by storing it '
+                            'in a structured format that preserves file paths, metadata, and content type.'
+                        ),
+                        'homework': (
+                            '## Day 1 Homework: Set Up Your Data Pipeline\n\n'
+                            '1. Create a GitHub personal access token with `repo` scope\n'
+                            '2. Pick a target repository (your own project or an open-source repo you use)\n'
+                            '3. Write a Python script that:\n'
+                            '   - Connects to the GitHub API using your token\n'
+                            '   - Extracts the README file\n'
+                            '   - Downloads all source files (`.py`, `.js`, `.md`, etc.)\n'
+                            '   - Fetches open and closed issues with their comments\n'
+                            '   - Saves everything into a local directory structure\n'
+                            '4. Verify your script works by running it and inspecting the output'
+                        ),
+                    },
+                    {
+                        'title': 'Day 2: Intelligent Processing for Data',
+                        'sort_order': 1,
+                        'body': (
+                            '## Document Chunking Strategies\n\n'
+                            'Raw documents from GitHub can be thousands of lines long. To make them '
+                            'searchable, you need to split them into meaningful chunks that preserve '
+                            'context. Today you will implement and compare three chunking strategies.\n\n'
+                            '### What You Will Learn\n\n'
+                            '- Why chunking matters for search quality\n'
+                            '- Fixed-size chunking: simple but effective baseline\n'
+                            '- Paragraph-based chunking: respecting document structure\n'
+                            '- AI-assisted intelligent chunking: using an LLM to identify semantic boundaries\n'
+                            '- How chunk size affects retrieval precision and recall\n\n'
+                            '### Key Concepts\n\n'
+                            'The goal of chunking is to create text segments that are self-contained '
+                            'enough to be useful as search results, but small enough to fit in an LLM '
+                            'context window. There is no single best strategy -- the right approach '
+                            'depends on your content type.\n\n'
+                            'For code files, function-level chunking works well. For documentation, '
+                            'section-level chunking preserves the logical flow. AI-assisted chunking '
+                            'uses an LLM to identify natural breakpoints in the text.'
+                        ),
+                        'homework': (
+                            '## Day 2 Homework: Implement Chunking\n\n'
+                            '1. Implement three chunking strategies:\n'
+                            '   - Fixed-size (512 tokens with 50 token overlap)\n'
+                            '   - Paragraph-based (split on double newlines, merge small paragraphs)\n'
+                            '   - AI-assisted (use an LLM to identify semantic boundaries)\n'
+                            '2. Run all three strategies on your repository documentation\n'
+                            '3. Compare the output: count chunks, average chunk size, and inspect '
+                            'a few examples from each strategy\n'
+                            '4. Choose the best strategy for your data and document your reasoning'
+                        ),
+                    },
+                    {
+                        'title': 'Day 3: Add Search',
+                        'sort_order': 2,
+                        'body': (
+                            '## Build Hybrid Search\n\n'
+                            'With your data chunked, it is time to make it searchable. Today you will '
+                            'build three search approaches and combine them into a hybrid system that '
+                            'gets the best of both worlds.\n\n'
+                            '### What You Will Learn\n\n'
+                            '- Lexical search with BM25: fast keyword matching\n'
+                            '- Semantic search with embeddings: understanding meaning beyond keywords\n'
+                            '- Hybrid search: combining BM25 and embeddings with reciprocal rank fusion\n'
+                            '- Evaluating retrieval quality with test queries\n\n'
+                            '### Key Concepts\n\n'
+                            'BM25 excels at exact keyword matches -- when a user searches for a specific '
+                            'function name or error message, BM25 finds it instantly. Semantic search '
+                            'with embeddings understands synonyms and paraphrases -- "how to deploy" '
+                            'matches "deployment instructions" even without shared keywords.\n\n'
+                            'Hybrid search combines both using reciprocal rank fusion (RRF), which '
+                            'merges two ranked lists into one that captures the strengths of each approach.'
+                        ),
+                        'homework': (
+                            '## Day 3 Homework: Build and Evaluate Search\n\n'
+                            '1. Implement BM25 search over your chunked documents\n'
+                            '2. Generate embeddings for all chunks using OpenAI `text-embedding-3-small`\n'
+                            '3. Implement semantic search with cosine similarity\n'
+                            '4. Combine both into hybrid search using reciprocal rank fusion\n'
+                            '5. Write 10 test queries relevant to your repository\n'
+                            '6. For each query, compare results from BM25, semantic, and hybrid search\n'
+                            '7. Document which method returns the best results and why'
+                        ),
+                    },
+                    {
+                        'title': 'Day 4: Agents and Tools',
+                        'sort_order': 3,
+                        'body': (
+                            '## Build an AI Agent with Pydantic AI\n\n'
+                            'Today you will connect your search engine to a large language model, '
+                            'turning it into an intelligent agent that can answer questions about '
+                            'your codebase by searching and synthesizing results.\n\n'
+                            '### What You Will Learn\n\n'
+                            '- OpenAI function calling: letting the LLM decide when to search\n'
+                            '- Tool definitions: describing your search API to the model\n'
+                            '- Building agents with Pydantic AI: structured, type-safe agent development\n'
+                            '- Multi-turn conversations: maintaining context across questions\n\n'
+                            '### Key Concepts\n\n'
+                            'Function calling allows the LLM to invoke your search engine as a tool. '
+                            'Instead of stuffing all your data into the prompt, the agent decides when '
+                            'it needs information and calls your search function with the right query.\n\n'
+                            'Pydantic AI provides a clean, type-safe framework for building agents. '
+                            'You define tools as Python functions with type annotations, and Pydantic AI '
+                            'handles the JSON schema generation, validation, and error handling.'
+                        ),
+                        'homework': (
+                            '## Day 4 Homework: Build Your Agent\n\n'
+                            '1. Install Pydantic AI: `pip install pydantic-ai`\n'
+                            '2. Define your search engine as a tool with proper type annotations\n'
+                            '3. Create an agent that uses your search tool to answer questions\n'
+                            '4. Test the agent with 5 questions about your GitHub project\n'
+                            '5. Verify the agent searches when needed and synthesizes results correctly\n'
+                            '6. Handle edge cases: questions the agent cannot answer, ambiguous queries'
+                        ),
+                    },
+                    {
+                        'title': 'Day 5: Offline Evaluation and Testing',
+                        'sort_order': 4,
+                        'body': (
+                            '## Evaluate Your Agent Systematically\n\n'
+                            'Building an agent is only half the work. Today you will create evaluation '
+                            'datasets and measure how well your agent actually performs, using both '
+                            'traditional retrieval metrics and AI-powered evaluation.\n\n'
+                            '### What You Will Learn\n\n'
+                            '- Creating gold-standard evaluation datasets\n'
+                            '- Search performance metrics: Recall@K, Mean Reciprocal Rank (MRR)\n'
+                            '- AI-powered agent evaluation: using a second LLM to judge answers\n'
+                            '- Building an evaluation pipeline you can run repeatedly\n\n'
+                            '### Key Concepts\n\n'
+                            'Evaluation requires a ground truth dataset: pairs of questions and '
+                            'expected answers (or expected retrieved documents). You will create 20 '
+                            'such pairs for your repository.\n\n'
+                            'Recall@K measures what fraction of relevant documents appear in the top K '
+                            'results. MRR measures how high the first relevant result ranks. Together, '
+                            'these metrics tell you whether your search engine finds the right information.\n\n'
+                            'For end-to-end agent evaluation, you can use an LLM-as-judge approach: '
+                            'a separate model scores the agent responses for correctness, completeness, '
+                            'and relevance.'
+                        ),
+                        'homework': (
+                            '## Day 5 Homework: Evaluate Your Agent\n\n'
+                            '1. Create a gold-standard evaluation dataset of 20 question-answer pairs '
+                            'for your repository\n'
+                            '2. Run your search engine against these questions\n'
+                            '3. Calculate Recall@5 and MRR for your hybrid search\n'
+                            '4. Run your agent against the same questions\n'
+                            '5. Set up LLM-as-judge evaluation to score agent responses\n'
+                            '6. Report your scores and identify the weakest areas'
+                        ),
+                    },
+                    {
+                        'title': 'Day 6: Publish Your Agent',
+                        'sort_order': 5,
+                        'body': (
+                            '## Deploy with Streamlit\n\n'
+                            'Your agent works locally -- now it is time to share it with the world. '
+                            'Today you will build a web interface with Streamlit and deploy it '
+                            'so anyone with a URL can interact with your agent.\n\n'
+                            '### What You Will Learn\n\n'
+                            '- Building a chat UI with Streamlit\n'
+                            '- Managing state and conversation history in Streamlit\n'
+                            '- Deployment options: Streamlit Community Cloud, Railway, Render\n'
+                            '- Environment variables and secrets management\n\n'
+                            '### Key Concepts\n\n'
+                            'Streamlit makes it simple to build data apps and chat interfaces in Python. '
+                            'You will use `st.chat_input` and `st.chat_message` to create a '
+                            'conversational interface, and `st.session_state` to maintain conversation '
+                            'history across interactions.\n\n'
+                            'For deployment, Streamlit Community Cloud offers free hosting for public '
+                            'repositories. You will configure your app to read API keys from environment '
+                            'variables, add a `requirements.txt`, and deploy with a single click.'
+                        ),
+                        'homework': (
+                            '## Day 6 Homework: Deploy Your Agent\n\n'
+                            '1. Create a Streamlit app with a chat interface for your agent\n'
+                            '2. Add conversation history support using `st.session_state`\n'
+                            '3. Create a `requirements.txt` with all dependencies\n'
+                            '4. Deploy to Streamlit Community Cloud (or another platform)\n'
+                            '5. Share the public URL and verify it works end-to-end\n'
+                            '6. Test with a friend or colleague to get early feedback'
+                        ),
+                    },
+                    {
+                        'title': 'Day 7: Share Results and Peer Review',
+                        'sort_order': 6,
+                        'body': (
+                            '## Write Up, Demo, and Review\n\n'
+                            'The final day is about documenting your work, creating a compelling demo, '
+                            'and learning from others. You will write a README, record a demo, submit '
+                            'your project for peer review, and review other participants projects.\n\n'
+                            '### What You Will Learn\n\n'
+                            '- Writing an effective project README\n'
+                            '- Creating a demo recording (GIF or video)\n'
+                            '- Giving constructive peer review feedback\n'
+                            '- What makes a portfolio project stand out to employers\n\n'
+                            '### Key Concepts\n\n'
+                            'A good README answers three questions immediately: what does this project '
+                            'do, how do I run it, and what does the output look like. Include setup '
+                            'instructions, example queries, and a demo GIF or screenshot.\n\n'
+                            'Peer review is a two-way learning experience. When you review others '
+                            'projects, you discover alternative approaches, different GitHub repos, '
+                            'and creative solutions to common problems. When you receive feedback, '
+                            'you learn what is unclear and what can be improved.\n\n'
+                            'After completing all 7 days and submitting your project, you will receive '
+                            'your completion certificate with a unique verification link.'
+                        ),
+                        'homework': (
+                            '## Day 7 Homework: Share and Review\n\n'
+                            '1. Write a project README with:\n'
+                            '   - Project description and motivation\n'
+                            '   - Setup instructions (step by step)\n'
+                            '   - Example queries and screenshots\n'
+                            '   - A demo GIF or video\n'
+                            '2. Submit your project for peer review\n'
+                            '3. Review 3 other participants projects:\n'
+                            '   - Test their deployed app\n'
+                            '   - Read their README\n'
+                            '   - Leave constructive feedback\n'
+                            '4. Receive your completion certificate'
+                        ),
+                    },
+                ],
+            },
+        ],
+    },
 ]
 
 # ---------------------------------------------------------------------------

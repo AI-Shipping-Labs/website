@@ -972,6 +972,11 @@ class SyncFailureTest(TestCase):
 class GitHubAppAuthTest(TestCase):
     """Test GitHub App token generation."""
 
+    @override_settings(
+        GITHUB_APP_ID='',
+        GITHUB_APP_PRIVATE_KEY='',
+        GITHUB_APP_INSTALLATION_ID='',
+    )
     def test_missing_credentials_raises_error(self):
         from integrations.services.github import generate_github_app_token
         with self.assertRaises(GitHubSyncError) as ctx:
@@ -1301,3 +1306,167 @@ class DirectAdminEditFlagTest(TestCase):
         finally:
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# ===========================================================================
+# S3 Image Upload Tests
+# ===========================================================================
+
+
+class S3ImageUploadTest(TestCase):
+    """Test upload_images_to_s3 with MD5/ETag deduplication."""
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='test-org/content',
+            content_type='article',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+        # Create a test image file
+        self.img_path = os.path.join(self.temp_dir, 'hero.png')
+        self.img_content = b'\x89PNG fake image data for testing'
+        with open(self.img_path, 'wb') as f:
+            f.write(self.img_content)
+        self.img_md5 = hashlib.md5(self.img_content).hexdigest()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    @override_settings(AWS_S3_CONTENT_BUCKET='')
+    def test_skips_when_bucket_not_configured(self):
+        from integrations.services.github import upload_images_to_s3
+        result = upload_images_to_s3(self.temp_dir, self.source)
+        self.assertEqual(result, {'uploaded': 0, 'skipped': 0, 'errors': []})
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github.boto3.client')
+    def test_uploads_new_image(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        # No existing objects
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [{'Contents': []}]
+        mock_s3.get_paginator.return_value = mock_paginator
+
+        result = upload_images_to_s3(self.temp_dir, self.source)
+
+        self.assertEqual(result['uploaded'], 1)
+        self.assertEqual(result['skipped'], 0)
+        mock_s3.upload_file.assert_called_once()
+        call_args = mock_s3.upload_file.call_args
+        self.assertEqual(call_args[0][1], 'test-bucket')
+        self.assertEqual(call_args[0][2], 'content/hero.png')
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github.boto3.client')
+    def test_skips_when_etag_matches(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        # Existing object with matching ETag (quoted, as S3 returns it)
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [{
+            'Contents': [{
+                'Key': 'content/hero.png',
+                'ETag': f'"{self.img_md5}"',
+            }],
+        }]
+        mock_s3.get_paginator.return_value = mock_paginator
+
+        result = upload_images_to_s3(self.temp_dir, self.source)
+
+        self.assertEqual(result['uploaded'], 0)
+        self.assertEqual(result['skipped'], 1)
+        mock_s3.upload_file.assert_not_called()
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github.boto3.client')
+    def test_uploads_when_etag_differs(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        # Existing object with different ETag
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [{
+            'Contents': [{
+                'Key': 'content/hero.png',
+                'ETag': '"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+            }],
+        }]
+        mock_s3.get_paginator.return_value = mock_paginator
+
+        result = upload_images_to_s3(self.temp_dir, self.source)
+
+        self.assertEqual(result['uploaded'], 1)
+        self.assertEqual(result['skipped'], 0)
+        mock_s3.upload_file.assert_called_once()
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github.boto3.client')
+    def test_ignores_non_image_files(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        # Create a non-image file
+        with open(os.path.join(self.temp_dir, 'article.md'), 'w') as f:
+            f.write('# Hello')
+        # Remove the image so only .md remains
+        os.remove(self.img_path)
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [{'Contents': []}]
+        mock_s3.get_paginator.return_value = mock_paginator
+
+        result = upload_images_to_s3(self.temp_dir, self.source)
+
+        self.assertEqual(result['uploaded'], 0)
+        mock_s3.upload_file.assert_not_called()
+
+    @override_settings(
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github.boto3.client')
+    def test_upload_error_recorded(self, mock_boto_client):
+        from integrations.services.github import upload_images_to_s3
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [{'Contents': []}]
+        mock_s3.get_paginator.return_value = mock_paginator
+        mock_s3.upload_file.side_effect = Exception('Access Denied')
+
+        result = upload_images_to_s3(self.temp_dir, self.source)
+
+        self.assertEqual(result['uploaded'], 0)
+        self.assertEqual(len(result['errors']), 1)
+        self.assertIn('Access Denied', result['errors'][0]['error'])

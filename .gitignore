@@ -10,6 +10,7 @@ staticfiles/
 # Environment
 .env
 .venv/
+*.pem
 
 # Coverage
 .coverage

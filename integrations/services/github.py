@@ -10,6 +10,7 @@ Handles:
 import hashlib
 import hmac
 import logging
+import mimetypes
 import os
 import re
 import shutil
@@ -17,6 +18,7 @@ import subprocess
 import tempfile
 import time
 
+import boto3
 import frontmatter
 import jwt
 import requests
@@ -27,6 +29,8 @@ from django.utils import timezone
 from integrations.models import ContentSource, SyncLog
 
 logger = logging.getLogger(__name__)
+
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'}
 
 GITHUB_API_BASE = 'https://api.github.com'
 
@@ -244,6 +248,104 @@ def rewrite_image_urls(markdown_text, repo_name, base_path=''):
     return result
 
 
+def _md5_file(filepath, chunk_size=8192):
+    """Compute the MD5 hex digest of a file."""
+    md5 = hashlib.md5()
+    with open(filepath, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            md5.update(chunk)
+    return md5.hexdigest()
+
+
+def upload_images_to_s3(content_dir, source):
+    """Upload image files from a content directory to S3.
+
+    Walks the content directory for image files and uploads them to S3,
+    skipping files whose MD5 matches the existing S3 ETag.
+
+    Args:
+        content_dir: Local directory containing content files and images.
+        source: ContentSource instance (used for the S3 key prefix).
+
+    Returns:
+        dict: {'uploaded': int, 'skipped': int, 'errors': list}
+    """
+    bucket = getattr(settings, 'AWS_S3_CONTENT_BUCKET', '')
+    region = getattr(settings, 'AWS_S3_CONTENT_REGION', 'eu-central-1')
+
+    if not bucket:
+        logger.info('AWS_S3_CONTENT_BUCKET not configured, skipping image upload')
+        return {'uploaded': 0, 'skipped': 0, 'errors': []}
+
+    repo_short = source.repo_name.split('/')[-1] if '/' in source.repo_name else source.repo_name
+    stats = {'uploaded': 0, 'skipped': 0, 'errors': []}
+
+    try:
+        s3 = boto3.client(
+            's3',
+            region_name=region,
+            aws_access_key_id=getattr(settings, 'AWS_ACCESS_KEY_ID', ''),
+            aws_secret_access_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', ''),
+        )
+    except Exception as e:
+        logger.warning('Failed to create S3 client: %s', e)
+        return {'uploaded': 0, 'skipped': 0, 'errors': [{'file': '', 'error': str(e)}]}
+
+    # Build index of existing S3 ETags (MD5 for single-part uploads)
+    s3_prefix = f'{repo_short}/'
+    existing_etags = {}
+    try:
+        paginator = s3.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=bucket, Prefix=s3_prefix):
+            for obj in page.get('Contents', []):
+                # ETag is quoted, e.g. '"d41d8cd98f00b204e9800998ecf8427e"'
+                existing_etags[obj['Key']] = obj['ETag'].strip('"')
+    except Exception as e:
+        logger.warning('Failed to list S3 objects: %s', e)
+
+    for root, dirs, files in os.walk(content_dir):
+        # Skip .git directory
+        if '.git' in root:
+            continue
+        for filename in files:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in IMAGE_EXTENSIONS:
+                continue
+
+            filepath = os.path.join(root, filename)
+            rel_path = os.path.relpath(filepath, content_dir)
+            s3_key = f'{repo_short}/{rel_path}'
+
+            # Compute local MD5 and compare against S3 ETag
+            local_md5 = _md5_file(filepath)
+            if s3_key in existing_etags and existing_etags[s3_key] == local_md5:
+                stats['skipped'] += 1
+                continue
+
+            try:
+                content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+                s3.upload_file(
+                    filepath, bucket, s3_key,
+                    ExtraArgs={
+                        'ContentType': content_type,
+                        'CacheControl': 'public, max-age=86400',
+                    },
+                )
+                stats['uploaded'] += 1
+            except Exception as e:
+                stats['errors'].append({'file': rel_path, 'error': str(e)})
+                logger.warning('Failed to upload %s to S3: %s', rel_path, e)
+
+    logger.info(
+        'S3 image upload for %s: %d uploaded, %d skipped, %d errors',
+        source.repo_name, stats['uploaded'], stats['skipped'], len(stats['errors']),
+    )
+    return stats
+
+
 def sync_content_source(source, repo_dir=None):
     """Sync content from a GitHub repo into the database.
 
@@ -289,6 +391,18 @@ def sync_content_source(source, repo_dir=None):
                 raise GitHubSyncError(
                     f'Content path {source.content_path!r} not found in repo'
                 )
+
+        # Upload images to S3 before content sync (so CDN URLs are live)
+        s3_stats = upload_images_to_s3(content_dir, source)
+        if s3_stats['errors']:
+            raise GitHubSyncError(
+                f"S3 image upload failed for {len(s3_stats['errors'])} file(s): "
+                f"{s3_stats['errors']}"
+            )
+        logger.info(
+            'S3 upload for %s: %d uploaded, %d skipped',
+            source.repo_name, s3_stats['uploaded'], s3_stats['skipped'],
+        )
 
         # Dispatch to content-type-specific sync
         sync_func = _get_sync_function(source.content_type)

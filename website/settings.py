@@ -168,6 +168,10 @@ AWS_SES_REGION = os.environ.get('AWS_SES_REGION', 'us-east-1')
 AWS_S3_RECORDINGS_BUCKET = os.environ.get('AWS_S3_RECORDINGS_BUCKET', '')
 AWS_S3_RECORDINGS_REGION = os.environ.get('AWS_S3_RECORDINGS_REGION', 'eu-central-1')
 
+# S3 configuration for content images (synced from GitHub repos)
+AWS_S3_CONTENT_BUCKET = os.environ.get('AWS_S3_CONTENT_BUCKET', '')
+AWS_S3_CONTENT_REGION = os.environ.get('AWS_S3_CONTENT_REGION', 'eu-west-1')
+
 # YouTube Data API v3 credentials (OAuth2 with refresh token)
 YOUTUBE_CLIENT_ID = os.environ.get('YOUTUBE_CLIENT_ID', '')
 YOUTUBE_CLIENT_SECRET = os.environ.get('YOUTUBE_CLIENT_SECRET', '')
@@ -181,7 +185,12 @@ CONTENT_DIR = BASE_DIR / 'reference' / 'content'
 
 # GitHub App authentication for private repo access (set via environment variables)
 GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
-GITHUB_APP_PRIVATE_KEY = os.environ.get('GITHUB_APP_PRIVATE_KEY', '')
+_github_key_path = os.environ.get('GITHUB_APP_PRIVATE_KEY_FILE', '')
+if _github_key_path and os.path.isfile(_github_key_path):
+    with open(_github_key_path) as f:
+        GITHUB_APP_PRIVATE_KEY = f.read()
+else:
+    GITHUB_APP_PRIVATE_KEY = os.environ.get('GITHUB_APP_PRIVATE_KEY', '')
 GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')
 
 # CDN base URL for content images uploaded during sync

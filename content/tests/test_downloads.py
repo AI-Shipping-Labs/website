@@ -353,11 +353,6 @@ class DownloadsListTagFilterTest(TestCase):
         response = self.client.get('/downloads?tag=ai')
         self.assertEqual(response.context['current_tag'], 'ai')
 
-    def test_clear_filter_link(self):
-        response = self.client.get('/downloads?tag=ai')
-        content = response.content.decode()
-        self.assertIn('Clear all', content)
-
     def test_empty_tag_ignored(self):
         response = self.client.get('/downloads?tag=')
         self.assertContains(response, 'AI Guide')

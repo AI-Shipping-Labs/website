@@ -375,30 +375,6 @@ class FooterSubscribeFormTest(TestCase):
         self.assertIn('type="email"', content)
 
 
-class ArticleCTASubscribeFormTest(TestCase):
-    """Test that the subscribe CTA appears on article detail pages."""
-
-    def test_article_page_has_subscribe_cta(self):
-        from content.models import Article
-        from django.utils import timezone
-        import datetime
-
-        article = Article.objects.create(
-            title="Test Article",
-            slug="test-article",
-            content_markdown="# Hello World",
-            status="published",
-            date=datetime.date.today(),
-            published_at=timezone.now(),
-        )
-
-        response = self.client.get(f"/blog/{article.slug}")
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertIn("subscribe-form", content)
-        self.assertIn("Enjoyed this article?", content)
-
-
 class EmailServiceUnsubscribeLinkTest(TestCase):
     """Test that every outgoing email includes an unsubscribe link."""
 

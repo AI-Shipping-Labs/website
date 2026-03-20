@@ -174,6 +174,11 @@
     .prose figure img { margin: 0; }
     .prose figcaption { text-align: center; font-size: 0.875rem; font-style: italic; color: hsl(var(--muted-foreground) / 0.8); margin-top: 1rem; }
     .prose strong { color: hsl(var(--foreground)); font-weight: 600; }
+    .prose table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; font-size: 0.875rem; overflow-x: auto; display: block; }
+    .prose thead { border-bottom: 2px solid hsl(var(--border)); }
+    .prose th { padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; color: hsl(var(--foreground)); white-space: nowrap; }
+    .prose td { padding: 0.5rem 0.75rem; color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border)); }
+    .prose tbody tr:hover { background: hsl(var(--secondary) / 0.5); }
 
     /* Pygments syntax highlighting (monokai theme for dark, github-like for light) */
     .prose .codehilite { background: #272822; color: #F8F8F2; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); padding: 1rem; margin-top: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; }

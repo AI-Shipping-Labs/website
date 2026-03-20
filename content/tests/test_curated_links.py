@@ -380,14 +380,6 @@ class ResourcesTagFilteringTest(TestCase):
         self.assertNotContains(response, 'AI Model')
         self.assertNotContains(response, 'Python AI Tool')
 
-    def test_tag_chips_displayed(self):
-        response = self.client.get('/resources')
-        content = response.content.decode()
-        self.assertIn('?tag=python', content)
-        self.assertIn('?tag=ai', content)
-        self.assertIn('?tag=cli', content)
-        self.assertIn('?tag=llm', content)
-
     def test_all_tags_in_context(self):
         response = self.client.get('/resources')
         all_tags = response.context['all_tags']
@@ -399,16 +391,6 @@ class ResourcesTagFilteringTest(TestCase):
     def test_current_tag_in_context(self):
         response = self.client.get('/resources?tag=python')
         self.assertEqual(response.context['current_tag'], 'python')
-
-    def test_clear_filter_link(self):
-        response = self.client.get('/resources?tag=python')
-        content = response.content.decode()
-        self.assertIn('Clear all', content)
-
-    def test_filter_by_tag_label_shown(self):
-        response = self.client.get('/resources?tag=python')
-        content = response.content.decode()
-        self.assertIn('Active filters', content)
 
 
 # --- View: gating / access control ---

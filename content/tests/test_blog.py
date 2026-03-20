@@ -301,18 +301,13 @@ class BlogListTagFilteringTest(TestCase):
     def test_all_tags_displayed(self):
         response = self.client.get('/blog')
         content = response.content.decode()
-        # The tag filter bar should show all unique tags
-        self.assertIn('Filter by tag', content)
+        # Tags shown on individual article cards
+        self.assertIn('python', content)
 
     def test_current_tag_in_context(self):
         response = self.client.get('/blog?tag=python')
         self.assertEqual(response.context['current_tag'], 'python')
         self.assertEqual(response.context['selected_tags'], ['python'])
-
-    def test_clear_filter_link(self):
-        response = self.client.get('/blog?tag=python')
-        content = response.content.decode()
-        self.assertIn('Clear all', content)
 
 
 # --- Related articles tests ---

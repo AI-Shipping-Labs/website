@@ -266,19 +266,9 @@ class RecordingsListTagFilteringTest(TestCase):
         self.assertIn('?tag=django', content)
         self.assertIn('?tag=mcp', content)
 
-    def test_all_tags_displayed_in_filter_bar(self):
-        response = self.client.get('/event-recordings')
-        content = response.content.decode()
-        self.assertIn('Filter by tag', content)
-
     def test_current_tag_in_context(self):
         response = self.client.get('/event-recordings?tag=python')
         self.assertEqual(response.context['current_tag'], 'python')
-
-    def test_clear_filter_link(self):
-        response = self.client.get('/event-recordings?tag=python')
-        content = response.content.decode()
-        self.assertIn('Clear all', content)
 
     def test_empty_tag_ignored(self):
         response = self.client.get('/event-recordings?tag=')

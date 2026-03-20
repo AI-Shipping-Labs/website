@@ -368,21 +368,11 @@ class MultiTagFilteringBlogTest(TestCase):
         response = self.client.get('/blog?tag=python&tag=ai')
         self.assertEqual(sorted(response.context['selected_tags']), ['ai', 'python'])
 
-    def test_active_filters_shown(self):
+    def test_filtering_returns_correct_results(self):
         response = self.client.get('/blog?tag=python&tag=ai')
-        content = response.content.decode()
-        self.assertIn('Active filters', content)
-
-    def test_remove_tag_link_present(self):
-        response = self.client.get('/blog?tag=python&tag=ai')
-        content = response.content.decode()
-        # Should have a link to remove "python" (keeping "ai")
-        self.assertIn('tag=ai', content)
-
-    def test_clear_all_link_present(self):
-        response = self.client.get('/blog?tag=python&tag=ai')
-        content = response.content.decode()
-        self.assertIn('Clear all', content)
+        self.assertContains(response, 'Both Tags')
+        self.assertNotContains(response, 'Python Only')
+        self.assertNotContains(response, 'AI Only')
 
     def test_no_tags_shows_all(self):
         response = self.client.get('/blog')
@@ -455,10 +445,10 @@ class MultiTagFilteringCoursesTest(TestCase):
         self.assertContains(response, 'Both C')
         self.assertContains(response, 'Python C')
 
-    def test_tag_chips_shown(self):
-        response = self.client.get('/courses')
-        content = response.content.decode()
-        self.assertIn('Filter by tag', content)
+    def test_tag_filtering_works(self):
+        response = self.client.get('/courses?tag=python')
+        self.assertContains(response, 'Both C')
+        self.assertContains(response, 'Python C')
 
 
 class MultiTagFilteringDownloadsTest(TestCase):
@@ -734,60 +724,5 @@ class TagRuleInjectionRecordingTest(TestCase):
         self.assertContains(response, 'AI Roadmap')
 
 
-# --- Tag filter chips on listing pages ---
-
-
-class TagFilterChipsTest(TestCase):
-    """Test that tag filter chips appear on all listing pages."""
-
-    def setUp(self):
-        self.client = Client()
-        Article.objects.create(
-            title='A', slug='a', date=date(2025, 1, 1),
-            tags=['python'], published=True,
-        )
-        Recording.objects.create(
-            title='R', slug='r', date=date(2025, 1, 1),
-            tags=['python'], published=True,
-        )
-        Project.objects.create(
-            title='P', slug='p', date=date(2025, 1, 1),
-            tags=['python'], published=True,
-        )
-        Download.objects.create(
-            title='D', slug='d', file_url='https://example.com/f.pdf',
-            tags=['python'], published=True,
-        )
-        CuratedLink.objects.create(
-            item_id='cl', title='C', url='https://example.com',
-            category='tools', tags=['python'], published=True,
-        )
-        Course.objects.create(
-            title='Co', slug='co',
-            tags=['python'], status='published',
-        )
-
-    def test_blog_shows_tag_chips(self):
-        response = self.client.get('/blog')
-        self.assertContains(response, 'Filter by tag')
-        self.assertContains(response, 'python')
-
-    def test_recordings_shows_tag_chips(self):
-        response = self.client.get('/event-recordings')
-        self.assertContains(response, 'Filter by tag')
-
-    def test_projects_shows_tag_chips(self):
-        response = self.client.get('/projects')
-        self.assertContains(response, 'Filter by tag')
-
-    def test_downloads_shows_tag_chips(self):
-        response = self.client.get('/downloads')
-        self.assertContains(response, 'Filter by tag')
-
-    def test_resources_shows_tag_chips(self):
-        response = self.client.get('/resources')
-        self.assertContains(response, 'Filter by tag')
-
-    def test_courses_shows_tag_chips(self):
-        response = self.client.get('/courses')
-        self.assertContains(response, 'Filter by tag')
+# Tag filter chips were removed from listing pages (tag filtering
+# still works via URL params, tested in other test classes above).

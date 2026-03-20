@@ -1,0 +1,79 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Redirects{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Redirects</h1>
+    <p class="text-muted-foreground mt-1">Manage URL redirects for the site.</p>
+  </div>
+  <a href="{% url 'studio_redirect_create' %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    Add Redirect
+  </a>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if redirects %}
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source Path</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Target Path</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for redir in redirects %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm text-foreground font-mono">{{ redir.source_path }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground font-mono">{{ redir.target_path }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ redir.redirect_type }}</td>
+        <td class="px-6 py-4">
+          {% if redir.is_active %}
+          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Active</span>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Inactive</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-right space-x-3">
+          <form method="post" action="{% url 'studio_redirect_toggle' redirect_id=redir.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="text-sm text-blue-400 hover:text-blue-300 hover:underline">
+              {% if redir.is_active %}Deactivate{% else %}Activate{% endif %}
+            </button>
+          </form>
+          <a href="{% url 'studio_redirect_edit' redirect_id=redir.pk %}"
+             class="text-sm text-accent hover:underline">Edit</a>
+          <form method="post" action="{% url 'studio_redirect_delete' redirect_id=redir.pk %}" class="inline"
+                onsubmit="return confirm('Delete this redirect?');">
+            {% csrf_token %}
+            <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center">
+  <p class="text-muted-foreground">No redirects configured yet.</p>
+  <a href="{% url 'studio_redirect_create' %}" class="text-accent hover:underline text-sm mt-2 inline-block">Add your first redirect</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit Redirect{% else %}New Redirect{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_redirect_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Redirects
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">
+    {% if form_action == 'edit' %}Edit Redirect{% else %}New Redirect{% endif %}
+  </h1>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post" action="{% if form_action == 'edit' %}{% url 'studio_redirect_edit' redirect_id=redirect_obj.pk %}{% else %}{% url 'studio_redirect_create' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Source Path</label>
+      <input type="text" name="source_path" value="{% if redirect_obj %}{{ redirect_obj.source_path }}{% endif %}"
+             required placeholder="/old-page"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">The URL path to redirect from, e.g. /ai-engineer-resources</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Target Path</label>
+      <input type="text" name="target_path" value="{% if redirect_obj %}{{ redirect_obj.target_path }}{% endif %}"
+             required placeholder="/new-page"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">The URL path to redirect to, e.g. /interview</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Redirect Type</label>
+      <select name="redirect_type"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="301" {% if redirect_obj and redirect_obj.redirect_type == 301 %}selected{% endif %}>301 - Permanent</option>
+        <option value="302" {% if redirect_obj and redirect_obj.redirect_type == 302 %}selected{% endif %}>302 - Temporary</option>
+      </select>
+    </div>
+
+    <div class="mb-6">
+      <label class="flex items-center space-x-2 cursor-pointer">
+        <input type="checkbox" name="is_active"
+               {% if not redirect_obj or redirect_obj.is_active %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent">
+        <span class="text-sm text-foreground">Active</span>
+      </label>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        {% if form_action == 'edit' %}Save Changes{% else %}Create Redirect{% endif %}
+      </button>
+      <a href="{% url 'studio_redirect_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

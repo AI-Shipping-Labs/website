@@ -15,6 +15,7 @@ from studio.views.subscribers import subscriber_list, subscriber_export_csv
 from studio.views.downloads import download_list, download_create, download_edit
 from studio.views.projects import project_list, project_review
 from studio.views.tier_overrides import tier_override_page, tier_override_create, tier_override_revoke
+from studio.views.redirects import redirect_list, redirect_create, redirect_edit, redirect_delete, redirect_toggle
 from studio.views.notifications import (
     notification_log,
     article_notify, article_announce_slack,
@@ -93,4 +94,11 @@ urlpatterns = [
     path('users/tier-override/', tier_override_page, name='studio_tier_override'),
     path('users/tier-override/create', tier_override_create, name='studio_tier_override_create'),
     path('users/tier-override/revoke', tier_override_revoke, name='studio_tier_override_revoke'),
+
+    # Redirects
+    path('redirects/', redirect_list, name='studio_redirect_list'),
+    path('redirects/new', redirect_create, name='studio_redirect_create'),
+    path('redirects/<int:redirect_id>/edit', redirect_edit, name='studio_redirect_edit'),
+    path('redirects/<int:redirect_id>/delete', redirect_delete, name='studio_redirect_delete'),
+    path('redirects/<int:redirect_id>/toggle', redirect_toggle, name='studio_redirect_toggle'),
 ]

@@ -55,18 +55,19 @@ def github_webhook(request):
             status=400,
         )
 
-    # Find the content source
-    source = find_content_source(repo_full_name)
-    if not source:
+    # Find all content sources for this repo (monorepo may have multiple)
+    sources = find_content_source(repo_full_name)
+    if not sources.exists():
         logger.warning('GitHub webhook for unknown repo: %s', repo_full_name)
         return JsonResponse(
             {'error': 'Unknown repository'},
             status=404,
         )
 
-    # Validate webhook signature using the source's webhook_secret
-    if source.webhook_secret:
-        if not validate_webhook_signature(request, source.webhook_secret):
+    # Validate webhook signature using the first source's webhook_secret
+    first_source = sources.first()
+    if first_source.webhook_secret:
+        if not validate_webhook_signature(request, first_source.webhook_secret):
             logger.warning(
                 'Invalid GitHub webhook signature for repo %s', repo_full_name,
             )
@@ -88,17 +89,18 @@ def github_webhook(request):
     ref = payload.get('ref', '')
     if event_type == 'push' and ref in ('refs/heads/main', 'refs/heads/master'):
         try:
-            # Try to enqueue as a background job
-            try:
-                from django_q.tasks import async_task
-                async_task(
-                    'integrations.services.github.sync_content_source',
-                    source,
-                    task_name=f'sync-{source.repo_name}',
-                )
-            except ImportError:
-                # Django-Q not available, run synchronously
-                sync_content_source(source)
+            for source in sources:
+                # Try to enqueue as a background job
+                try:
+                    from django_q.tasks import async_task
+                    async_task(
+                        'integrations.services.github.sync_content_source',
+                        source,
+                        task_name=f'sync-{source.repo_name}-{source.content_type}',
+                    )
+                except ImportError:
+                    # Django-Q not available, run synchronously
+                    sync_content_source(source)
 
             webhook_log.processed = True
             webhook_log.save()

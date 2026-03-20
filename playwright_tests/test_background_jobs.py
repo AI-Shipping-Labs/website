@@ -235,8 +235,8 @@ def _seed_content_sources():
     for sd in sources_data:
         source, _ = ContentSource.objects.get_or_create(
             repo_name=sd["repo_name"],
+            content_type=sd["content_type"],
             defaults={
-                "content_type": sd["content_type"],
                 "is_private": sd["is_private"],
             },
         )

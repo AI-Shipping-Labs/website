@@ -23,12 +23,16 @@ class ContentSource(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     repo_name = models.CharField(
-        max_length=300, unique=True,
-        help_text="Full GitHub repo name (e.g. AI-Shipping-Labs/blog).",
+        max_length=300,
+        help_text="Full GitHub repo name (e.g. AI-Shipping-Labs/content).",
     )
     content_type = models.CharField(
         max_length=20, choices=CONTENT_TYPE_CHOICES,
         help_text="Type of content this repo contains.",
+    )
+    content_path = models.CharField(
+        max_length=300, blank=True, default='',
+        help_text="Subdirectory within the repo to sync from (e.g. blog/). Empty means repo root.",
     )
     webhook_secret = models.CharField(
         max_length=200, blank=True, default='',
@@ -56,6 +60,7 @@ class ContentSource(models.Model):
 
     class Meta:
         ordering = ['repo_name']
+        unique_together = [('repo_name', 'content_type')]
 
     def __str__(self):
         return f'{self.repo_name} ({self.content_type})'

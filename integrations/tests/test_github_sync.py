@@ -337,15 +337,30 @@ class FindContentSourceTest(TestCase):
 
     def test_find_existing_source(self):
         source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
+            repo_name='AI-Shipping-Labs/content',
             content_type='article',
+            content_path='blog',
         )
-        found = find_content_source('AI-Shipping-Labs/blog')
-        self.assertEqual(found.pk, source.pk)
+        found = find_content_source('AI-Shipping-Labs/content')
+        self.assertEqual(found.first().pk, source.pk)
+
+    def test_find_multiple_sources_for_monorepo(self):
+        s1 = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            content_path='blog',
+        )
+        s2 = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            content_path='courses',
+        )
+        found = find_content_source('AI-Shipping-Labs/content')
+        self.assertEqual(found.count(), 2)
 
     def test_find_nonexistent_source(self):
         found = find_content_source('nonexistent/repo')
-        self.assertIsNone(found)
+        self.assertFalse(found.exists())
 
 
 # ===========================================================================
@@ -1180,52 +1195,35 @@ class SeedContentSourcesCommandTest(TestCase):
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
         repos = set(ContentSource.objects.values_list('repo_name', flat=True))
-        expected = {
-            'AI-Shipping-Labs/blog',
-            'AI-Shipping-Labs/courses',
-            'AI-Shipping-Labs/resources',
-            'AI-Shipping-Labs/projects',
-        }
+        expected = {'AI-Shipping-Labs/content'}
         self.assertEqual(repos, expected)
 
-    def test_courses_repo_is_private(self):
+    def test_all_sources_are_private(self):
         from django.core.management import call_command
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
-        courses_source = ContentSource.objects.get(
-            repo_name='AI-Shipping-Labs/courses',
+        self.assertTrue(
+            all(s.is_private for s in ContentSource.objects.all())
         )
-        self.assertTrue(courses_source.is_private)
-
-    def test_blog_repo_is_public(self):
-        from django.core.management import call_command
-        from io import StringIO
-        call_command('seed_content_sources', stdout=StringIO())
-        blog_source = ContentSource.objects.get(
-            repo_name='AI-Shipping-Labs/blog',
-        )
-        self.assertFalse(blog_source.is_private)
 
     def test_content_types_correct(self):
         from django.core.management import call_command
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(
-            ContentSource.objects.get(repo_name='AI-Shipping-Labs/blog').content_type,
-            'article',
+        types = set(ContentSource.objects.values_list('content_type', flat=True))
+        self.assertEqual(types, {'article', 'course', 'resource', 'project'})
+
+    def test_content_paths_correct(self):
+        from django.core.management import call_command
+        from io import StringIO
+        call_command('seed_content_sources', stdout=StringIO())
+        paths = dict(
+            ContentSource.objects.values_list('content_type', 'content_path')
         )
-        self.assertEqual(
-            ContentSource.objects.get(repo_name='AI-Shipping-Labs/courses').content_type,
-            'course',
-        )
-        self.assertEqual(
-            ContentSource.objects.get(repo_name='AI-Shipping-Labs/resources').content_type,
-            'resource',
-        )
-        self.assertEqual(
-            ContentSource.objects.get(repo_name='AI-Shipping-Labs/projects').content_type,
-            'project',
-        )
+        self.assertEqual(paths['article'], 'blog')
+        self.assertEqual(paths['course'], 'courses')
+        self.assertEqual(paths['resource'], 'resources')
+        self.assertEqual(paths['project'], 'projects')
 
 
 # ===========================================================================

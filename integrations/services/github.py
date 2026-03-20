@@ -64,16 +64,28 @@ def validate_webhook_signature(request, secret):
 
 
 def find_content_source(repo_full_name):
-    """Find a ContentSource by repo name.
+    """Find ContentSource(s) by repo name.
 
     Args:
-        repo_full_name: Full repo name (e.g. "AI-Shipping-Labs/blog").
+        repo_full_name: Full repo name (e.g. "AI-Shipping-Labs/content").
+
+    Returns:
+        ContentSource queryset (may contain multiple sources for monorepo).
+    """
+    return ContentSource.objects.filter(repo_name=repo_full_name)
+
+
+def find_content_source_single(repo_full_name):
+    """Find a single ContentSource by repo name (legacy, for backward compat).
+
+    Args:
+        repo_full_name: Full repo name.
 
     Returns:
         ContentSource or None.
     """
     try:
-        return ContentSource.objects.get(repo_name=repo_full_name)
+        return ContentSource.objects.filter(repo_name=repo_full_name).first()
     except ContentSource.DoesNotExist:
         return None
 
@@ -188,7 +200,7 @@ def clone_or_pull_repo(repo_name, target_dir, is_private=False):
 
 
 def rewrite_image_urls(markdown_text, repo_name, base_path=''):
-    """Rewrite relative image URLs in markdown to absolute storage URLs.
+    """Rewrite relative image URLs in markdown and HTML to absolute storage URLs.
 
     Args:
         markdown_text: Markdown content with relative image paths.
@@ -201,20 +213,35 @@ def rewrite_image_urls(markdown_text, repo_name, base_path=''):
     cdn_base = getattr(settings, 'CONTENT_CDN_BASE', '/static/content-images')
     repo_short = repo_name.split('/')[-1] if '/' in repo_name else repo_name
 
-    def replace_image(match):
+    def _rewrite_path(path):
+        """Rewrite a single image path if it's relative."""
+        if path.startswith(('http://', 'https://')):
+            return path
+        # Strip leading slash for absolute-within-repo paths
+        clean_path = path.lstrip('/')
+        full_path = os.path.normpath(os.path.join(base_path, clean_path))
+        return f'{cdn_base}/{repo_short}/{full_path}'
+
+    def replace_md_image(match):
         alt = match.group(1)
         path = match.group(2)
-        # Skip absolute URLs
-        if path.startswith(('http://', 'https://', '/')):
-            return match.group(0)
-        # Normalize the path
-        full_path = os.path.normpath(os.path.join(base_path, path))
-        new_url = f'{cdn_base}/{repo_short}/{full_path}'
-        return f'![{alt}]({new_url})'
+        return f'![{alt}]({_rewrite_path(path)})'
 
-    # Match markdown image syntax: ![alt](path)
-    pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
-    return re.sub(pattern, replace_image, markdown_text)
+    def replace_html_image(match):
+        prefix = match.group(1)
+        path = match.group(2)
+        suffix = match.group(3)
+        return f'{prefix}{_rewrite_path(path)}{suffix}'
+
+    # Rewrite markdown image syntax: ![alt](path)
+    md_pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
+    result = re.sub(md_pattern, replace_md_image, markdown_text)
+
+    # Rewrite HTML img src: <img src="path" or <img src='path'
+    html_pattern = r'(<img\s[^>]*?src=["\'])([^"\']+)(["\'])'
+    result = re.sub(html_pattern, replace_html_image, result)
+
+    return result
 
 
 def sync_content_source(source, repo_dir=None):
@@ -254,9 +281,18 @@ def sync_content_source(source, repo_dir=None):
             # For testing, use provided directory
             commit_sha = 'test-commit-sha'
 
+        # Resolve content subdirectory
+        content_dir = repo_dir
+        if source.content_path:
+            content_dir = os.path.join(repo_dir, source.content_path)
+            if not os.path.isdir(content_dir):
+                raise GitHubSyncError(
+                    f'Content path {source.content_path!r} not found in repo'
+                )
+
         # Dispatch to content-type-specific sync
         sync_func = _get_sync_function(source.content_type)
-        stats = sync_func(source, repo_dir, commit_sha, sync_log)
+        stats = sync_func(source, content_dir, commit_sha, sync_log)
 
         # Update sync log
         sync_log.items_created = stats.get('created', 0)

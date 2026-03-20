@@ -11,24 +11,28 @@ from integrations.models import ContentSource
 
 DEFAULT_SOURCES = [
     {
-        'repo_name': 'AI-Shipping-Labs/blog',
+        'repo_name': 'AI-Shipping-Labs/content',
         'content_type': 'article',
-        'is_private': False,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/courses',
-        'content_type': 'course',
+        'content_path': 'blog',
         'is_private': True,
     },
     {
-        'repo_name': 'AI-Shipping-Labs/resources',
-        'content_type': 'resource',
-        'is_private': False,
+        'repo_name': 'AI-Shipping-Labs/content',
+        'content_type': 'course',
+        'content_path': 'courses',
+        'is_private': True,
     },
     {
-        'repo_name': 'AI-Shipping-Labs/projects',
+        'repo_name': 'AI-Shipping-Labs/content',
+        'content_type': 'resource',
+        'content_path': 'resources',
+        'is_private': True,
+    },
+    {
+        'repo_name': 'AI-Shipping-Labs/content',
         'content_type': 'project',
-        'is_private': False,
+        'content_path': 'projects',
+        'is_private': True,
     },
 ]
 
@@ -41,8 +45,9 @@ class Command(BaseCommand):
         for source_data in DEFAULT_SOURCES:
             _, created = ContentSource.objects.get_or_create(
                 repo_name=source_data['repo_name'],
+                content_type=source_data['content_type'],
                 defaults={
-                    'content_type': source_data['content_type'],
+                    'content_path': source_data.get('content_path', ''),
                     'is_private': source_data['is_private'],
                 },
             )

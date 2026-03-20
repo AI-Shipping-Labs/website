@@ -184,6 +184,14 @@ SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED'
 # Content directory (markdown files from reference)
 CONTENT_DIR = BASE_DIR / 'reference' / 'content'
 
+# External content repo (interview questions, learning paths, etc.)
+# Defaults to ~/git/ai-shipping-labs-content if it exists
+_default_content_repo = Path.home() / 'git' / 'ai-shipping-labs-content'
+CONTENT_REPO_DIR = Path(os.environ.get(
+    'CONTENT_REPO_DIR',
+    str(_default_content_repo) if _default_content_repo.exists() else '',
+))
+
 # GitHub App authentication for private repo access (set via environment variables)
 GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
 _github_key_path = os.environ.get('GITHUB_APP_PRIVATE_KEY_FILE', '')

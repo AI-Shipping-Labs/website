@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}AI Engineer Interview Questions | AI Shipping Labs{% endblock %}
+{% block meta_description %}Prepare for AI engineer interviews with theory, coding, system design, behavioral, and project deep dive questions.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+      <div class="mb-12">
+        <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
+          <i data-lucide="arrow-left" class="h-4 w-4"></i>
+          Back to home
+        </a>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Interview Prep</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          AI Engineer Interview Questions
+        </h1>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Prepare for AI engineer interviews with questions based on real candidate reports and job descriptions.
+        </p>
+      </div>
+
+      <div class="grid gap-6 sm:grid-cols-2">
+        {% for cat in categories %}
+        {% if cat.status == "coming-soon" %}
+        <div class="rounded-lg border border-border bg-card p-6 opacity-60">
+          <div class="flex items-start justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-muted-foreground">{{ cat.title }}</h2>
+              <p class="mt-2 text-sm text-muted-foreground">{{ cat.description }}</p>
+            </div>
+          </div>
+          <div class="mt-4">
+            <span class="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
+              Coming soon
+            </span>
+          </div>
+        </div>
+        {% else %}
+        <a href="/interview/{{ cat.slug }}" class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+          <div class="flex items-start justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">{{ cat.title }}</h2>
+              <p class="mt-2 text-sm text-muted-foreground">{{ cat.description }}</p>
+            </div>
+            <i data-lucide="arrow-right" class="h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+          </div>
+          {% if cat.sections %}
+          <div class="mt-4 text-xs text-muted-foreground">
+            {{ cat.sections|length }} section{{ cat.sections|length|pluralize }}
+          </div>
+          {% endif %}
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

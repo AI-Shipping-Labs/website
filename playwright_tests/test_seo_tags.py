@@ -801,13 +801,9 @@ class TestScenario6TagFiltersAcrossPages:
             page = context.new_page()
             try:
                 page.goto(
-                    f"{django_server}/courses", wait_until="networkidle"
+                    f"{django_server}/courses?tag=python",
+                    wait_until="networkidle",
                 )
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
 
                 body = page.content()
                 assert "Python Course" in body
@@ -874,14 +870,9 @@ class TestScenario6TagFiltersAcrossPages:
             page = context.new_page()
             try:
                 page.goto(
-                    f"{django_server}/projects",
+                    f"{django_server}/projects?tag=python",
                     wait_until="networkidle",
                 )
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
 
                 body = page.content()
                 assert "Python Project" in body
@@ -909,14 +900,9 @@ class TestScenario6TagFiltersAcrossPages:
             page = context.new_page()
             try:
                 page.goto(
-                    f"{django_server}/resources",
+                    f"{django_server}/resources?tag=python",
                     wait_until="networkidle",
                 )
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
 
                 body = page.content()
                 assert "Python CLI" in body

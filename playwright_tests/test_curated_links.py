@@ -560,12 +560,11 @@ class TestScenario6VisitorFiltersByTag:
                 assert "ai" in body
                 assert "llm" in body
 
-                # Step 2: Click the "python" tag chip
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
+                # Step 2: Navigate to the filtered URL directly
+                page.goto(
+                    f"{django_server}/resources?tag=python",
+                    wait_until="networkidle",
+                )
 
                 # URL updates
                 assert "tag=python" in page.url

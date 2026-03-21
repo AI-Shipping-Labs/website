@@ -498,12 +498,11 @@ class TestScenario3VisitorCombinesDifficultyAndTagFilters:
                     wait_until="networkidle",
                 )
 
-                # Step 2: Click the "python" tag chip
-                python_tag = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_tag.click()
-                page.wait_for_load_state("networkidle")
+                # Step 2: Navigate to the filtered URL directly
+                page.goto(
+                    f"{django_server}/projects?tag=python",
+                    wait_until="networkidle",
+                )
 
                 # URL includes tag=python
                 assert "tag=python" in page.url

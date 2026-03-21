@@ -335,8 +335,15 @@ class EventsListTierBadgeTest(TierSetupMixin, TestCase):
             required_level=LEVEL_PREMIUM,
         )
         response = self.client.get('/events')
-        self.assertContains(response, 'Premium')
+        # Lock icon appears next to the tier name in the badge
         self.assertContains(response, 'data-lucide="lock"')
+        # The tier name "Premium" appears in the gating badge context
+        content = response.content.decode()
+        # Both the lock icon and tier name are in the same badge span
+        lock_pos = content.index('data-lucide="lock"')
+        premium_pos = content.index('Premium', lock_pos)
+        # Premium appears shortly after the lock icon (within the same span)
+        self.assertLess(premium_pos - lock_pos, 100)
 
     def test_open_event_no_tier_badge(self):
         Event.objects.create(
@@ -609,7 +616,8 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main@test.com', password='pass')
         response = self.client.get('/events/gated-event')
-        self.assertContains(response, 'Register')
+        self.assertTrue(response.context['has_access'])
+        self.assertContains(response, 'id="register-btn"')
         self.assertNotContains(response, 'Upgrade to Main')
 
     def test_premium_user_sees_register_button(self):
@@ -618,7 +626,8 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='prem@test.com', password='pass')
         response = self.client.get('/events/gated-event')
-        self.assertContains(response, 'Register')
+        self.assertTrue(response.context['has_access'])
+        self.assertContains(response, 'id="register-btn"')
 
     def test_gated_event_never_returns_404(self):
         response = self.client.get('/events/gated-event')
@@ -712,7 +721,8 @@ class EventDetailRegisteredStatusTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(email='unreg@test.com', password='pass')
         self.client.login(email='unreg@test.com', password='pass')
         response = self.client.get('/events/unreg-event')
-        self.assertContains(response, 'Register')
+        self.assertFalse(response.context['is_registered'])
+        self.assertContains(response, 'id="register-btn"')
         self.assertNotContains(response, "You're registered!")
 
 
@@ -1035,7 +1045,11 @@ class EventsListRegisteredBadgeTest(TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='badge@test.com', password='pass')
         response = self.client.get('/events')
+        # The registered badge renders with a check icon and "Registered" text
+        # inside a green badge span
         self.assertContains(response, 'Registered')
+        # Verify the event ID is in the registered set in context
+        self.assertIn(event.id, response.context['registered_event_ids'])
 
     def test_unregistered_event_no_badge(self):
         Event.objects.create(
@@ -1047,7 +1061,7 @@ class EventsListRegisteredBadgeTest(TestCase):
         user = User.objects.create_user(email='nobadge@test.com', password='pass')
         self.client.login(email='nobadge@test.com', password='pass')
         response = self.client.get('/events')
-        content = response.content.decode()
-        # The "Registered" badge text should not be in the page for unregistered events
-        # (It may appear in JavaScript, so we check the card area specifically)
-        self.assertNotIn('Registered\n', content)
+        # No registered event IDs in context
+        self.assertEqual(len(response.context['registered_event_ids']), 0)
+        # The "Registered" badge text should not appear
+        self.assertNotContains(response, 'Registered')

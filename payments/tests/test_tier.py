@@ -121,15 +121,22 @@ class TierPricingViewTest(TestCase):
 
     def test_pricing_page_free_tier_has_subscribe_button(self):
         response = self.client.get("/pricing")
-        content = response.content.decode()
-        # Free tier should have Subscribe button
-        self.assertIn("Subscribe", content)
+        # Free tier CTA links to /#newsletter with "Subscribe" text
+        self.assertContains(
+            response,
+            '<a href="/#newsletter"',
+        )
+        self.assertContains(response, "Subscribe")
 
     def test_pricing_page_paid_tiers_have_join_button(self):
         response = self.client.get("/pricing")
         content = response.content.decode()
-        # Paid tiers should have Join buttons
-        self.assertIn("Join", content)
+        # Each paid tier has a CTA link with data-tier attribute
+        self.assertIn('data-tier="basic"', content)
+        self.assertIn('data-tier="main"', content)
+        self.assertIn('data-tier="premium"', content)
+        # CTA links use the tier-cta-link class
+        self.assertGreaterEqual(content.count("tier-cta-link"), 3)
 
     def test_pricing_page_contains_billing_toggle(self):
         response = self.client.get("/pricing")

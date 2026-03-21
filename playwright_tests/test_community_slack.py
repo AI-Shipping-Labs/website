@@ -330,9 +330,12 @@ class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
         main_cta = main_card.locator("a.tier-cta-link")
         assert main_cta.count() >= 1
 
-        # Verify the href is present (it will be a Stripe link or #)
+        # Verify the href points to a Stripe payment link
         href = main_cta.first.get_attribute("href")
-        assert href is not None
+        assert href is not None, "Main tier CTA link must have an href"
+        assert href.startswith("https://buy.stripe.com/") or href.startswith("#"), (
+            f"Expected Stripe payment link or placeholder, got: {href}"
+        )
 # ---------------------------------------------------------------
 # Scenario 5: Premium member also sees the Community quick action
 # ---------------------------------------------------------------

@@ -285,8 +285,9 @@ class TestScenario2SidebarNavigation:
         assert "M1 Unit 2" in body
         assert "M2 Unit 1" in body
 
-        # Unit 1 of Module 1 has a checkmark (check-circle-2)
-        assert "check-circle-2" in body
+        # Unit 1 of Module 1 has a checkmark icon in the sidebar
+        checkmark = page.locator('nav [data-lucide="check-circle-2"]')
+        assert checkmark.count() >= 1, "Expected a check-circle-2 icon for completed unit"
 
         # Step 2: Click on Module 2 unit in the sidebar
         sidebar_m2_link = page.locator(
@@ -309,7 +310,8 @@ class TestScenario2SidebarNavigation:
         body = page.content()
 
         # The completed checkmark for Unit 1 is still shown
-        assert "check-circle-2" in body
+        checkmark = page.locator('nav [data-lucide="check-circle-2"]')
+        assert checkmark.count() >= 1, "Expected check-circle-2 icon to persist after navigation"
 
         context.close()
 # ---------------------------------------------------------------

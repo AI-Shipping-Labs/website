@@ -219,9 +219,9 @@ class TestScenario1VisitorBrowsesProjects:
         assert "beginner" in body  # difficulty badge
         assert "Step 1: Define your bot architecture" in body
 
-        # Formatted date visible
-        # The project should have a date displayed
-        assert "calendar" in body.lower() or "202" in body
+        # Formatted date visible -- check for a date element with a calendar icon
+        date_element = page.locator('[data-lucide="calendar"]')
+        assert date_element.count() >= 1, "Expected a calendar icon for the project date"
 
         # Source Code and Live Demo links present
         source_link = page.locator('a:has-text("Source Code")')
@@ -577,8 +577,9 @@ class TestScenario6AnonymousHitsGatedProject:
         # Full content NOT present
         assert "Step 1: Define your agent architecture" not in body
 
-        # Blurred placeholder present
-        assert "blur" in body
+        # Blurred placeholder present -- check for blur style on the gated overlay
+        blurred = page.locator('[style*="blur"]')
+        assert blurred.count() >= 1, "Expected a blurred element for gated content"
 
         # Lock icon present
         lock_icon = page.locator('[data-lucide="lock"]')
@@ -1011,4 +1012,5 @@ class TestScenario12VisitorDistinguishesOpenFromGated:
         assert "Pro-only secret content" not in pro_body
         assert "Upgrade to" in pro_body
         # Blurred placeholder and lock icon in CTA
-        assert "blur" in pro_body
+        blurred_el = page.locator('[style*="blur"]')
+        assert blurred_el.count() >= 1, "Expected blurred element for gated project"

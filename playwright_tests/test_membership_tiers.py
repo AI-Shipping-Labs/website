@@ -18,7 +18,6 @@ import re
 
 import pytest
 from django.conf import settings
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import DJANGO_BASE_URL
 
@@ -64,100 +63,67 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
     for free.
     """
 
-    def test_pricing_page_loads_without_login(self, django_server):
+    def test_pricing_page_loads_without_login(self, django_server, page):
         """Navigate to /pricing without being logged in. Verify HTTP 200."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                assert response.status == 200
-            finally:
-                browser.close()
-
-    def test_free_tier_shows_zero_price_and_subscribe_button(self, django_server):
+        response = page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        assert response.status == 200
+    def test_free_tier_shows_zero_price_and_subscribe_button(self, django_server, page):
         """
         Read the Free tier card -- verify it shows currency 0 with /forever
         and a Subscribe button (not Join).
         """
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
 
-                # Check price shows 0
-                price_text = free_card.locator(
-                    "span.text-4xl"
-                ).inner_text()
-                assert "0" in price_text
+        # Check price shows 0
+        price_text = free_card.locator(
+            "span.text-4xl"
+        ).inner_text()
+        assert "0" in price_text
 
-                # Check /forever label
-                period_text = free_card.locator(
-                    "span.text-muted-foreground",
-                ).filter(has_text="/forever").inner_text()
-                assert "/forever" in period_text
+        # Check /forever label
+        period_text = free_card.locator(
+            "span.text-muted-foreground",
+        ).filter(has_text="/forever").inner_text()
+        assert "/forever" in period_text
 
-                # Check Subscribe button exists (not Join)
-                cta = free_card.locator("a")
-                cta_text = cta.inner_text()
-                assert cta_text.strip() == "Subscribe"
-            finally:
-                browser.close()
-
+        # Check Subscribe button exists (not Join)
+        cta = free_card.locator("a")
+        cta_text = cta.inner_text()
+        assert cta_text.strip() == "Subscribe"
     def test_free_tier_features_include_newsletter_and_open_content(
         self, django_server
-    ):
+    , page):
         """Verify the Free tier's feature list includes expected items."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                features_text = free_card.locator("ul").inner_text()
-                assert "Newsletter emails" in features_text
-                assert "Access to open content" in features_text
-            finally:
-                browser.close()
-
-    def test_free_subscribe_button_navigates_to_newsletter(self, django_server):
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        features_text = free_card.locator("ul").inner_text()
+        assert "Newsletter emails" in features_text
+        assert "Access to open content" in features_text
+    def test_free_subscribe_button_navigates_to_newsletter(self, django_server, page):
         """Click the Subscribe button on the Free tier and verify navigation."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                subscribe_link = free_card.locator("a")
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        subscribe_link = free_card.locator("a")
 
-                # Verify href before clicking
-                href = subscribe_link.get_attribute("href")
-                assert href == "/#newsletter"
+        # Verify href before clicking
+        href = subscribe_link.get_attribute("href")
+        assert href == "/#newsletter"
 
-                # Click and verify navigation
-                subscribe_link.click()
-                page.wait_for_timeout(1000)
-                assert "/#newsletter" in page.url or page.url.endswith(
-                    "/#newsletter"
-                )
-            finally:
-                browser.close()
-
-
+        # Click and verify navigation
+        subscribe_link.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/#newsletter" in page.url or page.url.endswith(
+            "/#newsletter"
+        )
 @pytest.mark.django_db
 class TestScenario2CompareAllFourTiers:
     """
@@ -165,147 +131,106 @@ class TestScenario2CompareAllFourTiers:
     to join.
     """
 
-    def test_four_tiers_in_ascending_order(self, django_server):
+    def test_four_tiers_in_ascending_order(self, django_server, page):
         """Verify all four tiers appear in ascending order: Free, Basic, Main,
         Premium."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                cards = _get_tier_cards(page)
-                assert cards.count() == 4
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        cards = _get_tier_cards(page)
+        assert cards.count() == 4
 
-                names = []
-                for i in range(4):
-                    name = cards.nth(i).locator("h2").inner_text().strip()
-                    names.append(name)
+        names = []
+        for i in range(4):
+            name = cards.nth(i).locator("h2").inner_text().strip()
+            names.append(name)
 
-                assert names == ["Free", "Basic", "Main", "Premium"]
-            finally:
-                browser.close()
-
+        assert names == ["Free", "Basic", "Main", "Premium"]
     def test_each_tier_has_name_price_description_and_features(
         self, django_server
-    ):
+    , page):
         """Verify each tier card has a name, a price, a description, and at
         least one feature."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                cards = _get_tier_cards(page)
-                for i in range(4):
-                    card = cards.nth(i)
-                    # Name
-                    name = card.locator("h2").inner_text().strip()
-                    assert len(name) > 0
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        cards = _get_tier_cards(page)
+        for i in range(4):
+            card = cards.nth(i)
+            # Name
+            name = card.locator("h2").inner_text().strip()
+            assert len(name) > 0
 
-                    # Price (all cards have a span with text-4xl class)
-                    price_el = card.locator("span.text-4xl")
-                    assert price_el.count() == 1
+            # Price (all cards have a span with text-4xl class)
+            price_el = card.locator("span.text-4xl")
+            assert price_el.count() == 1
 
-                    # Description (paragraph)
-                    desc = card.locator("p").first.inner_text().strip()
-                    assert len(desc) > 0
+            # Description (paragraph)
+            desc = card.locator("p").first.inner_text().strip()
+            assert len(desc) > 0
 
-                    # Features (at least one li)
-                    features = card.locator("ul li")
-                    assert features.count() >= 1
-            finally:
-                browser.close()
-
-    def test_cumulative_value_communicated(self, django_server):
+            # Features (at least one li)
+            features = card.locator("ul li")
+            assert features.count() >= 1
+    def test_cumulative_value_communicated(self, django_server, page):
         """Verify cumulative value: Basic lists its features, Main lists
         Everything in Basic, Premium lists Everything in Main."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # Basic card
-                basic_card = _get_tier_card_by_name(page, "Basic")
-                basic_features = basic_card.locator("ul").inner_text()
-                assert "Exclusive articles" in basic_features
-                assert "Tutorials with code examples" in basic_features
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # Basic card
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        basic_features = basic_card.locator("ul").inner_text()
+        assert "Exclusive articles" in basic_features
+        assert "Tutorials with code examples" in basic_features
 
-                # Main card
-                main_card = _get_tier_card_by_name(page, "Main")
-                main_features = main_card.locator("ul").inner_text()
-                assert "Everything in Basic" in main_features
-                assert "Slack community access" in main_features
-                assert "Group coding sessions" in main_features
+        # Main card
+        main_card = _get_tier_card_by_name(page, "Main")
+        main_features = main_card.locator("ul").inner_text()
+        assert "Everything in Basic" in main_features
+        assert "Slack community access" in main_features
+        assert "Group coding sessions" in main_features
 
-                # Premium card
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                premium_features = premium_card.locator("ul").inner_text()
-                assert "Everything in Main" in premium_features
-                assert "All mini-courses" in premium_features
-                assert "Resume/LinkedIn/GitHub teardowns" in premium_features
-            finally:
-                browser.close()
-
-    def test_only_main_tier_has_most_popular_badge(self, django_server):
+        # Premium card
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        premium_features = premium_card.locator("ul").inner_text()
+        assert "Everything in Main" in premium_features
+        assert "All mini-courses" in premium_features
+        assert "Resume/LinkedIn/GitHub teardowns" in premium_features
+    def test_only_main_tier_has_most_popular_badge(self, django_server, page):
         """Verify only the Main tier card displays the Most Popular badge."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # The "Most Popular" text should appear exactly once on the page
-                badges = page.locator("text=Most Popular")
-                assert badges.count() == 1
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # The "Most Popular" text should appear exactly once on the page
+        badges = page.locator("text=Most Popular")
+        assert badges.count() == 1
 
-                # And it should be inside the Main tier card
-                main_card = _get_tier_card_by_name(page, "Main")
-                main_badge = main_card.locator("text=Most Popular")
-                assert main_badge.count() == 1
+        # And it should be inside the Main tier card
+        main_card = _get_tier_card_by_name(page, "Main")
+        main_badge = main_card.locator("text=Most Popular")
+        assert main_badge.count() == 1
 
-                # Verify other tiers do NOT have it
-                for tier_name in ["Free", "Basic", "Premium"]:
-                    card = _get_tier_card_by_name(page, tier_name)
-                    badge = card.locator("text=Most Popular")
-                    assert badge.count() == 0
-            finally:
-                browser.close()
-
-    def test_paid_tiers_show_join_free_shows_subscribe(self, django_server):
+        # Verify other tiers do NOT have it
+        for tier_name in ["Free", "Basic", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            badge = card.locator("text=Most Popular")
+            assert badge.count() == 0
+    def test_paid_tiers_show_join_free_shows_subscribe(self, django_server, page):
         """Verify paid tiers show Join, Free shows Subscribe."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # Free -> Subscribe
-                free_card = _get_tier_card_by_name(page, "Free")
-                free_cta = free_card.locator("a").last
-                assert free_cta.inner_text().strip() == "Subscribe"
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # Free -> Subscribe
+        free_card = _get_tier_card_by_name(page, "Free")
+        free_cta = free_card.locator("a").last
+        assert free_cta.inner_text().strip() == "Subscribe"
 
-                # Paid tiers -> Join
-                for tier_name in ["Basic", "Main", "Premium"]:
-                    card = _get_tier_card_by_name(page, tier_name)
-                    cta = card.locator("a.tier-cta-link")
-                    assert cta.inner_text().strip() == "Join"
-            finally:
-                browser.close()
-
-
+        # Paid tiers -> Join
+        for tier_name in ["Basic", "Main", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            cta = card.locator("a.tier-cta-link")
+            assert cta.inner_text().strip() == "Join"
 @pytest.mark.django_db
 class TestScenario3BillingToggle:
     """
@@ -313,166 +238,125 @@ class TestScenario3BillingToggle:
     the savings.
     """
 
-    def test_default_shows_monthly_prices(self, django_server):
+    def test_default_shows_monthly_prices(self, django_server, page):
         """Verify the default state shows monthly prices."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # Check Basic price
-                basic_card = _get_tier_card_by_name(page, "Basic")
-                basic_price = basic_card.locator(".tier-price").inner_text()
-                assert "20" in basic_price
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # Check Basic price
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        basic_price = basic_card.locator(".tier-price").inner_text()
+        assert "20" in basic_price
 
-                basic_period = basic_card.locator(".tier-period").inner_text()
-                assert "/month" in basic_period
+        basic_period = basic_card.locator(".tier-period").inner_text()
+        assert "/month" in basic_period
 
-                # Check Main price
-                main_card = _get_tier_card_by_name(page, "Main")
-                main_price = main_card.locator(".tier-price").inner_text()
-                assert "50" in main_price
+        # Check Main price
+        main_card = _get_tier_card_by_name(page, "Main")
+        main_price = main_card.locator(".tier-price").inner_text()
+        assert "50" in main_price
 
-                # Check Premium price
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                premium_price = premium_card.locator(".tier-price").inner_text()
-                assert "100" in premium_price
-            finally:
-                browser.close()
-
-    def test_save_indicator_visible(self, django_server):
+        # Check Premium price
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        premium_price = premium_card.locator(".tier-price").inner_text()
+        assert "100" in premium_price
+    def test_save_indicator_visible(self, django_server, page):
         """Verify the Save ~17% indicator is visible near the Annual label."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                annual_label = page.locator("#annual-label")
-                label_text = annual_label.inner_text()
-                assert "Save ~17%" in label_text
-            finally:
-                browser.close()
-
-    def test_toggle_to_annual_shows_annual_prices(self, django_server):
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        annual_label = page.locator("#annual-label")
+        label_text = annual_label.inner_text()
+        assert "Save ~17%" in label_text
+    def test_toggle_to_annual_shows_annual_prices(self, django_server, page):
         """Click the toggle to switch to Annual and verify annual prices."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # Click the toggle
-                page.locator("#billing-toggle").click()
-                page.wait_for_timeout(300)
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # Click the toggle
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify Annual label is highlighted (text-foreground) and
-                # Monthly is muted
-                annual_label = page.locator("#annual-label")
-                assert "text-foreground" in annual_label.get_attribute("class")
-                monthly_label = page.locator("#monthly-label")
-                assert "text-muted-foreground" in monthly_label.get_attribute(
-                    "class"
-                )
+        # Verify Annual label is highlighted (text-foreground) and
+        # Monthly is muted
+        annual_label = page.locator("#annual-label")
+        assert "text-foreground" in annual_label.get_attribute("class")
+        monthly_label = page.locator("#monthly-label")
+        assert "text-muted-foreground" in monthly_label.get_attribute(
+            "class"
+        )
 
-                # Check annual prices
-                basic_card = _get_tier_card_by_name(page, "Basic")
-                assert "200" in basic_card.locator(".tier-price").inner_text()
-                assert "/year" in basic_card.locator(
-                    ".tier-period"
-                ).inner_text()
+        # Check annual prices
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        assert "200" in basic_card.locator(".tier-price").inner_text()
+        assert "/year" in basic_card.locator(
+            ".tier-period"
+        ).inner_text()
 
-                main_card = _get_tier_card_by_name(page, "Main")
-                assert "500" in main_card.locator(".tier-price").inner_text()
+        main_card = _get_tier_card_by_name(page, "Main")
+        assert "500" in main_card.locator(".tier-price").inner_text()
 
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                assert "1000" in premium_card.locator(
-                    ".tier-price"
-                ).inner_text()
-            finally:
-                browser.close()
-
-    def test_free_tier_unaffected_by_toggle(self, django_server):
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        assert "1000" in premium_card.locator(
+            ".tier-price"
+        ).inner_text()
+    def test_free_tier_unaffected_by_toggle(self, django_server, page):
         """Verify the Free tier price remains 0 when toggling to annual."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                price_before = free_card.locator(
-                    "span.text-4xl"
-                ).inner_text()
-                assert "0" in price_before
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        price_before = free_card.locator(
+            "span.text-4xl"
+        ).inner_text()
+        assert "0" in price_before
 
-                # Toggle to annual
-                page.locator("#billing-toggle").click()
-                page.wait_for_timeout(300)
+        # Toggle to annual
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
 
-                price_after = free_card.locator(
-                    "span.text-4xl"
-                ).inner_text()
-                assert "0" in price_after
+        price_after = free_card.locator(
+            "span.text-4xl"
+        ).inner_text()
+        assert "0" in price_after
 
-                # Period should still say /forever
-                period = free_card.locator(
-                    "span.text-muted-foreground"
-                ).filter(has_text="/forever")
-                assert period.count() == 1
-            finally:
-                browser.close()
-
-    def test_toggle_back_to_monthly_restores_prices(self, django_server):
+        # Period should still say /forever
+        period = free_card.locator(
+            "span.text-muted-foreground"
+        ).filter(has_text="/forever")
+        assert period.count() == 1
+    def test_toggle_back_to_monthly_restores_prices(self, django_server, page):
         """Toggle to annual and back to monthly, verify prices revert."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                toggle = page.locator("#billing-toggle")
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        toggle = page.locator("#billing-toggle")
 
-                # Toggle to annual
-                toggle.click()
-                page.wait_for_timeout(300)
+        # Toggle to annual
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Toggle back to monthly
-                toggle.click()
-                page.wait_for_timeout(300)
+        # Toggle back to monthly
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify monthly prices
-                basic_card = _get_tier_card_by_name(page, "Basic")
-                assert "20" in basic_card.locator(".tier-price").inner_text()
-                assert "/month" in basic_card.locator(
-                    ".tier-period"
-                ).inner_text()
+        # Verify monthly prices
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        assert "20" in basic_card.locator(".tier-price").inner_text()
+        assert "/month" in basic_card.locator(
+            ".tier-period"
+        ).inner_text()
 
-                main_card = _get_tier_card_by_name(page, "Main")
-                assert "50" in main_card.locator(".tier-price").inner_text()
+        main_card = _get_tier_card_by_name(page, "Main")
+        assert "50" in main_card.locator(".tier-price").inner_text()
 
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                assert "100" in premium_card.locator(
-                    ".tier-price"
-                ).inner_text()
-                assert "/month" in premium_card.locator(
-                    ".tier-period"
-                ).inner_text()
-            finally:
-                browser.close()
-
-
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        assert "100" in premium_card.locator(
+            ".tier-price"
+        ).inner_text()
+        assert "/month" in premium_card.locator(
+            ".tier-period"
+        ).inner_text()
 @pytest.mark.django_db
 class TestScenario4MainMonthlyStripeLink:
     """
@@ -482,47 +366,30 @@ class TestScenario4MainMonthlyStripeLink:
 
     def test_main_monthly_join_button_has_correct_stripe_link(
         self, django_server
-    ):
+    , page):
         """Verify the Main Join button href is a valid Stripe link matching
         the configured monthly payment link."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                main_card = _get_tier_card_by_name(page, "Main")
-                join_button = main_card.locator("a.tier-cta-link")
-                monthly_link = join_button.get_attribute("href")
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        main_card = _get_tier_card_by_name(page, "Main")
+        join_button = main_card.locator("a.tier-cta-link")
+        monthly_link = join_button.get_attribute("href")
 
-                # Verify it starts with https://buy.stripe.com/
-                assert monthly_link.startswith("https://buy.stripe.com/")
+        # Verify it starts with https://buy.stripe.com/
+        assert monthly_link.startswith("https://buy.stripe.com/")
 
-                # Verify it matches the configured payment link
-                expected = STRIPE_LINKS["main"]["monthly"]
-                assert monthly_link == expected
-            finally:
-                browser.close()
-
-    def test_main_join_button_uses_api_checkout(self, django_server):
+        # Verify it matches the configured payment link
+        expected = STRIPE_LINKS["main"]["monthly"]
+        assert monthly_link == expected
+    def test_main_join_button_uses_api_checkout(self, django_server, page):
         """Verify the Join button uses JS-based API checkout (no target=_blank)."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                main_card = _get_tier_card_by_name(page, "Main")
-                join_button = main_card.locator("a.tier-cta-link")
-                assert join_button.get_attribute("data-tier") == "main"
-            finally:
-                browser.close()
-
-
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        main_card = _get_tier_card_by_name(page, "Main")
+        join_button = main_card.locator("a.tier-cta-link")
+        assert join_button.get_attribute("data-tier") == "main"
 @pytest.mark.django_db
 class TestScenario5AnnualStripeLinksSwap:
     """
@@ -532,97 +399,72 @@ class TestScenario5AnnualStripeLinksSwap:
 
     def test_paid_tiers_have_distinct_monthly_and_annual_data_attributes(
         self, django_server
-    ):
+    , page):
         """Verify each paid tier's Join button has distinct values in
         data-link-monthly and data-link-annual."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                for tier_name in ["Basic", "Main", "Premium"]:
-                    card = _get_tier_card_by_name(page, tier_name)
-                    cta = card.locator("a.tier-cta-link")
-                    monthly_attr = cta.get_attribute("data-link-monthly")
-                    annual_attr = cta.get_attribute("data-link-annual")
-                    assert monthly_attr is not None, (
-                        f"{tier_name} missing data-link-monthly"
-                    )
-                    assert annual_attr is not None, (
-                        f"{tier_name} missing data-link-annual"
-                    )
-                    assert monthly_attr != annual_attr, (
-                        f"{tier_name} monthly and annual links are the same"
-                    )
-            finally:
-                browser.close()
-
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        for tier_name in ["Basic", "Main", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            cta = card.locator("a.tier-cta-link")
+            monthly_attr = cta.get_attribute("data-link-monthly")
+            annual_attr = cta.get_attribute("data-link-annual")
+            assert monthly_attr is not None, (
+                f"{tier_name} missing data-link-monthly"
+            )
+            assert annual_attr is not None, (
+                f"{tier_name} missing data-link-annual"
+            )
+            assert monthly_attr != annual_attr, (
+                f"{tier_name} monthly and annual links are the same"
+            )
     def test_toggle_to_annual_updates_href_to_annual_links(
         self, django_server
-    ):
+    , page):
         """After toggling to annual, each paid tier Join button href matches
         its data-link-annual value."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # Toggle to annual
-                page.locator("#billing-toggle").click()
-                page.wait_for_timeout(300)
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # Toggle to annual
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
 
-                for tier_name in ["Basic", "Main", "Premium"]:
-                    card = _get_tier_card_by_name(page, tier_name)
-                    cta = card.locator("a.tier-cta-link")
-                    href = cta.get_attribute("href")
-                    annual_attr = cta.get_attribute("data-link-annual")
-                    assert href == annual_attr, (
-                        f"{tier_name} href {href} does not match "
-                        f"data-link-annual {annual_attr}"
-                    )
-            finally:
-                browser.close()
-
+        for tier_name in ["Basic", "Main", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            cta = card.locator("a.tier-cta-link")
+            href = cta.get_attribute("href")
+            annual_attr = cta.get_attribute("data-link-annual")
+            assert href == annual_attr, (
+                f"{tier_name} href {href} does not match "
+                f"data-link-annual {annual_attr}"
+            )
     def test_toggle_back_to_monthly_reverts_href_to_monthly_links(
         self, django_server
-    ):
+    , page):
         """After toggling back to monthly, each paid tier Join button href
         reverts to data-link-monthly."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                toggle = page.locator("#billing-toggle")
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        toggle = page.locator("#billing-toggle")
 
-                # Toggle to annual then back to monthly
-                toggle.click()
-                page.wait_for_timeout(300)
-                toggle.click()
-                page.wait_for_timeout(300)
+        # Toggle to annual then back to monthly
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                for tier_name in ["Basic", "Main", "Premium"]:
-                    card = _get_tier_card_by_name(page, tier_name)
-                    cta = card.locator("a.tier-cta-link")
-                    href = cta.get_attribute("href")
-                    monthly_attr = cta.get_attribute("data-link-monthly")
-                    assert href == monthly_attr, (
-                        f"{tier_name} href {href} does not match "
-                        f"data-link-monthly {monthly_attr}"
-                    )
-            finally:
-                browser.close()
-
-
+        for tier_name in ["Basic", "Main", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            cta = card.locator("a.tier-cta-link")
+            href = cta.get_attribute("href")
+            monthly_attr = cta.get_attribute("data-link-monthly")
+            assert href == monthly_attr, (
+                f"{tier_name} href {href} does not match "
+                f"data-link-monthly {monthly_attr}"
+            )
 @pytest.mark.django_db
 class TestScenario6PremiumAnnualStripeLink:
     """
@@ -632,59 +474,42 @@ class TestScenario6PremiumAnnualStripeLink:
 
     def test_premium_annual_shows_correct_price_and_stripe_link(
         self, django_server
-    ):
+    , page):
         """Toggle to annual, verify Premium shows 1000/year and the correct
         Stripe link."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # Toggle to annual
-                page.locator("#billing-toggle").click()
-                page.wait_for_timeout(300)
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # Toggle to annual
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
 
-                premium_card = _get_tier_card_by_name(page, "Premium")
+        premium_card = _get_tier_card_by_name(page, "Premium")
 
-                # Verify price
-                price = premium_card.locator(".tier-price").inner_text()
-                assert "1000" in price
+        # Verify price
+        price = premium_card.locator(".tier-price").inner_text()
+        assert "1000" in price
 
-                period = premium_card.locator(".tier-period").inner_text()
-                assert "/year" in period
+        period = premium_card.locator(".tier-period").inner_text()
+        assert "/year" in period
 
-                # Verify Stripe link
-                cta = premium_card.locator("a.tier-cta-link")
-                href = cta.get_attribute("href")
-                assert href.startswith("https://buy.stripe.com/")
+        # Verify Stripe link
+        cta = premium_card.locator("a.tier-cta-link")
+        href = cta.get_attribute("href")
+        assert href.startswith("https://buy.stripe.com/")
 
-                expected = STRIPE_LINKS["premium"]["annual"]
-                assert href == expected
-            finally:
-                browser.close()
-
-    def test_premium_annual_link_differs_from_monthly(self, django_server):
+        expected = STRIPE_LINKS["premium"]["annual"]
+        assert href == expected
+    def test_premium_annual_link_differs_from_monthly(self, django_server, page):
         """Verify Premium annual link is different from its monthly link."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                cta = premium_card.locator("a.tier-cta-link")
-                monthly_link = cta.get_attribute("data-link-monthly")
-                annual_link = cta.get_attribute("data-link-annual")
-                assert monthly_link != annual_link
-            finally:
-                browser.close()
-
-
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        cta = premium_card.locator("a.tier-cta-link")
+        monthly_link = cta.get_attribute("data-link-monthly")
+        annual_link = cta.get_attribute("data-link-annual")
+        assert monthly_link != annual_link
 @pytest.mark.django_db
 class TestScenario7FreeSubscribeFlow:
     """
@@ -692,81 +517,48 @@ class TestScenario7FreeSubscribeFlow:
     newsletter signup flow.
     """
 
-    def test_free_tier_has_no_join_button(self, django_server):
+    def test_free_tier_has_no_join_button(self, django_server, page):
         """Verify the Free tier card does NOT have a Join button."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                join_buttons = free_card.locator("a.tier-cta-link")
-                assert join_buttons.count() == 0
-            finally:
-                browser.close()
-
-    def test_free_subscribe_links_to_newsletter(self, django_server):
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        join_buttons = free_card.locator("a.tier-cta-link")
+        assert join_buttons.count() == 0
+    def test_free_subscribe_links_to_newsletter(self, django_server, page):
         """Verify the Subscribe button links to /#newsletter."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                subscribe_link = free_card.locator("a")
-                href = subscribe_link.get_attribute("href")
-                assert href == "/#newsletter"
-            finally:
-                browser.close()
-
-    def test_free_tier_shows_zero_forever(self, django_server):
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        subscribe_link = free_card.locator("a")
+        href = subscribe_link.get_attribute("href")
+        assert href == "/#newsletter"
+    def test_free_tier_shows_zero_forever(self, django_server, page):
         """Verify the Free tier card shows 0 with /forever."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                price = free_card.locator("span.text-4xl").inner_text()
-                assert "0" in price
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        price = free_card.locator("span.text-4xl").inner_text()
+        assert "0" in price
 
-                forever = free_card.locator(
-                    "span.text-muted-foreground"
-                ).filter(has_text="/forever")
-                assert forever.count() == 1
-            finally:
-                browser.close()
-
+        forever = free_card.locator(
+            "span.text-muted-foreground"
+        ).filter(has_text="/forever")
+        assert forever.count() == 1
     def test_subscribe_click_navigates_to_newsletter_section(
         self, django_server
-    ):
+    , page):
         """Click Subscribe and verify navigation to /#newsletter."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                subscribe_link = free_card.locator("a")
-                subscribe_link.click()
-                page.wait_for_timeout(1000)
-                assert "newsletter" in page.url
-            finally:
-                browser.close()
-
-
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        subscribe_link = free_card.locator("a")
+        subscribe_link.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "newsletter" in page.url
 @pytest.mark.django_db
 class TestScenario8MainTierVisualDistinction:
     """
@@ -774,79 +566,54 @@ class TestScenario8MainTierVisualDistinction:
     the recommended plan.
     """
 
-    def test_main_tier_has_most_popular_badge(self, django_server):
+    def test_main_tier_has_most_popular_badge(self, django_server, page):
         """Verify Most Popular badge appears on Main and no other card."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                main_card = _get_tier_card_by_name(page, "Main")
-                badge = main_card.locator("text=Most Popular")
-                assert badge.count() == 1
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        main_card = _get_tier_card_by_name(page, "Main")
+        badge = main_card.locator("text=Most Popular")
+        assert badge.count() == 1
 
-                # No other card has it
-                for name in ["Free", "Basic", "Premium"]:
-                    card = _get_tier_card_by_name(page, name)
-                    assert card.locator("text=Most Popular").count() == 0
-            finally:
-                browser.close()
-
-    def test_main_tier_has_accent_border_and_ring(self, django_server):
+        # No other card has it
+        for name in ["Free", "Basic", "Premium"]:
+            card = _get_tier_card_by_name(page, name)
+            assert card.locator("text=Most Popular").count() == 0
+    def test_main_tier_has_accent_border_and_ring(self, django_server, page):
         """Verify the Main tier card has border-accent and ring-2 ring-accent/20
         CSS classes."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                main_card = _get_tier_card_by_name(page, "Main")
-                classes = main_card.get_attribute("class")
-                assert "border-accent" in classes
-                assert "ring-2" in classes
-                assert "ring-accent/20" in classes
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        main_card = _get_tier_card_by_name(page, "Main")
+        classes = main_card.get_attribute("class")
+        assert "border-accent" in classes
+        assert "ring-2" in classes
+        assert "ring-accent/20" in classes
 
-                # Other cards should NOT have these accent classes
-                for name in ["Free", "Basic", "Premium"]:
-                    card = _get_tier_card_by_name(page, name)
-                    card_classes = card.get_attribute("class")
-                    assert "border-accent" not in card_classes
-            finally:
-                browser.close()
-
-    def test_main_join_button_styled_differently(self, django_server):
+        # Other cards should NOT have these accent classes
+        for name in ["Free", "Basic", "Premium"]:
+            card = _get_tier_card_by_name(page, name)
+            card_classes = card.get_attribute("class")
+            assert "border-accent" not in card_classes
+    def test_main_join_button_styled_differently(self, django_server, page):
         """Verify the Main Join button uses bg-accent while others use
         bg-secondary."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                # Main Join button should have bg-accent
-                main_card = _get_tier_card_by_name(page, "Main")
-                main_cta = main_card.locator("a.tier-cta-link")
-                main_classes = main_cta.get_attribute("class")
-                assert "bg-accent" in main_classes
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        # Main Join button should have bg-accent
+        main_card = _get_tier_card_by_name(page, "Main")
+        main_cta = main_card.locator("a.tier-cta-link")
+        main_classes = main_cta.get_attribute("class")
+        assert "bg-accent" in main_classes
 
-                # Basic and Premium should have bg-secondary
-                for name in ["Basic", "Premium"]:
-                    card = _get_tier_card_by_name(page, name)
-                    cta = card.locator("a.tier-cta-link")
-                    cta_classes = cta.get_attribute("class")
-                    assert "bg-secondary" in cta_classes
-            finally:
-                browser.close()
-
-
+        # Basic and Premium should have bg-secondary
+        for name in ["Basic", "Premium"]:
+            card = _get_tier_card_by_name(page, name)
+            cta = card.locator("a.tier-cta-link")
+            cta_classes = cta.get_attribute("class")
+            assert "bg-secondary" in cta_classes
 @pytest.mark.django_db
 class TestScenario9CumulativeFeatureLists:
     """
@@ -854,112 +621,79 @@ class TestScenario9CumulativeFeatureLists:
     value proposition.
     """
 
-    def test_free_tier_features(self, django_server):
+    def test_free_tier_features(self, django_server, page):
         """Verify Free tier lists exactly Newsletter emails and Access to
         open content."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                free_card = _get_tier_card_by_name(page, "Free")
-                features = free_card.locator("ul li")
-                assert features.count() == 2
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        features = free_card.locator("ul li")
+        assert features.count() == 2
 
-                texts = [
-                    features.nth(i).inner_text().strip()
-                    for i in range(features.count())
-                ]
-                assert "Newsletter emails" in texts
-                assert "Access to open content" in texts
-            finally:
-                browser.close()
-
-    def test_basic_tier_features(self, django_server):
+        texts = [
+            features.nth(i).inner_text().strip()
+            for i in range(features.count())
+        ]
+        assert "Newsletter emails" in texts
+        assert "Access to open content" in texts
+    def test_basic_tier_features(self, django_server, page):
         """Verify Basic tier features include expected items."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                basic_card = _get_tier_card_by_name(page, "Basic")
-                features_text = basic_card.locator("ul").inner_text()
-                for expected in [
-                    "Exclusive articles",
-                    "Tutorials with code examples",
-                    "AI tool breakdowns",
-                    "Research notes",
-                    "Curated social posts",
-                ]:
-                    assert expected in features_text, (
-                        f"Basic tier missing feature: {expected}"
-                    )
-            finally:
-                browser.close()
-
-    def test_main_tier_features(self, django_server):
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        features_text = basic_card.locator("ul").inner_text()
+        for expected in [
+            "Exclusive articles",
+            "Tutorials with code examples",
+            "AI tool breakdowns",
+            "Research notes",
+            "Curated social posts",
+        ]:
+            assert expected in features_text, (
+                f"Basic tier missing feature: {expected}"
+            )
+    def test_main_tier_features(self, django_server, page):
         """Verify Main tier starts with Everything in Basic and includes
         expected features."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                main_card = _get_tier_card_by_name(page, "Main")
-                features_text = main_card.locator("ul").inner_text()
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        main_card = _get_tier_card_by_name(page, "Main")
+        features_text = main_card.locator("ul").inner_text()
 
-                for expected in [
-                    "Everything in Basic",
-                    "Slack community access",
-                    "Group coding sessions",
-                    "Project-based learning",
-                    "Community hackathons",
-                    "Career discussions",
-                    "Personal brand guidance",
-                    "Topic voting",
-                ]:
-                    assert expected in features_text, (
-                        f"Main tier missing feature: {expected}"
-                    )
-            finally:
-                browser.close()
-
-    def test_premium_tier_features(self, django_server):
+        for expected in [
+            "Everything in Basic",
+            "Slack community access",
+            "Group coding sessions",
+            "Project-based learning",
+            "Community hackathons",
+            "Career discussions",
+            "Personal brand guidance",
+            "Topic voting",
+        ]:
+            assert expected in features_text, (
+                f"Main tier missing feature: {expected}"
+            )
+    def test_premium_tier_features(self, django_server, page):
         """Verify Premium tier starts with Everything in Main and includes
         expected features."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                features_text = premium_card.locator("ul").inner_text()
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        features_text = premium_card.locator("ul").inner_text()
 
-                for expected in [
-                    "Everything in Main",
-                    "All mini-courses",
-                    "Mini-course topic voting",
-                    "Resume/LinkedIn/GitHub teardowns",
-                ]:
-                    assert expected in features_text, (
-                        f"Premium tier missing feature: {expected}"
-                    )
-            finally:
-                browser.close()
-
-
+        for expected in [
+            "Everything in Main",
+            "All mini-courses",
+            "Mini-course topic voting",
+            "Resume/LinkedIn/GitHub teardowns",
+        ]:
+            assert expected in features_text, (
+                f"Premium tier missing feature: {expected}"
+            )
 @pytest.mark.django_db
 class TestScenario10RapidToggleStressTest:
     """
@@ -969,122 +703,107 @@ class TestScenario10RapidToggleStressTest:
 
     def test_rapid_toggle_returns_to_monthly_after_even_clicks(
         self, django_server
-    ):
+    , page):
         """Click toggle rapidly multiple times. An even number of clicks
         (starting from the monthly default) returns to monthly. Verify that
         rapid toggling does not corrupt state."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
 
-                # Use JavaScript to fire exactly 6 click events rapidly
-                # (even number -> back to monthly default)
-                # monthly->annual->monthly->annual->monthly->annual->monthly
-                # Wait, 6 clicks from false: T F T F T F => false = monthly
-                page.evaluate("""
-                    const toggle = document.getElementById('billing-toggle');
-                    for (let i = 0; i < 6; i++) {
-                        toggle.click();
-                    }
-                """)
+        # Use JavaScript to fire exactly 6 click events rapidly
+        # (even number -> back to monthly default)
+        # monthly->annual->monthly->annual->monthly->annual->monthly
+        # Wait, 6 clicks from false: T F T F T F => false = monthly
+        page.evaluate("""
+            const toggle = document.getElementById('billing-toggle');
+            for (let i = 0; i < 6; i++) {
+                toggle.click();
+            }
+        """)
 
-                page.wait_for_timeout(500)
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify monthly prices (even clicks = back to default)
-                basic_card = _get_tier_card_by_name(page, "Basic")
-                assert "20" in basic_card.locator(".tier-price").inner_text()
-                assert "/month" in basic_card.locator(
-                    ".tier-period"
-                ).inner_text()
+        # Verify monthly prices (even clicks = back to default)
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        assert "20" in basic_card.locator(".tier-price").inner_text()
+        assert "/month" in basic_card.locator(
+            ".tier-period"
+        ).inner_text()
 
-                main_card = _get_tier_card_by_name(page, "Main")
-                assert "50" in main_card.locator(".tier-price").inner_text()
-                assert "/month" in main_card.locator(
-                    ".tier-period"
-                ).inner_text()
+        main_card = _get_tier_card_by_name(page, "Main")
+        assert "50" in main_card.locator(".tier-price").inner_text()
+        assert "/month" in main_card.locator(
+            ".tier-period"
+        ).inner_text()
 
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                assert "100" in premium_card.locator(
-                    ".tier-price"
-                ).inner_text()
-                assert "/month" in premium_card.locator(
-                    ".tier-period"
-                ).inner_text()
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        assert "100" in premium_card.locator(
+            ".tier-price"
+        ).inner_text()
+        assert "/month" in premium_card.locator(
+            ".tier-period"
+        ).inner_text()
 
-                # Verify links match monthly
-                for tier_name in ["Basic", "Main", "Premium"]:
-                    card = _get_tier_card_by_name(page, tier_name)
-                    cta = card.locator("a.tier-cta-link")
-                    href = cta.get_attribute("href")
-                    monthly_attr = cta.get_attribute("data-link-monthly")
-                    assert href == monthly_attr, (
-                        f"{tier_name} href after rapid toggle doesn't match "
-                        f"monthly link"
-                    )
-            finally:
-                browser.close()
-
+        # Verify links match monthly
+        for tier_name in ["Basic", "Main", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            cta = card.locator("a.tier-cta-link")
+            href = cta.get_attribute("href")
+            monthly_attr = cta.get_attribute("data-link-monthly")
+            assert href == monthly_attr, (
+                f"{tier_name} href after rapid toggle doesn't match "
+                f"monthly link"
+            )
     def test_one_more_toggle_after_rapid_switches_to_annual(
         self, django_server
-    ):
+    , page):
         """After rapid even-number toggles (back to monthly), one more click
         switches to annual. Confirms state is not corrupted by rapid
         toggling."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/pricing", wait_until="networkidle"
-                )
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
 
-                # Fire exactly 6 click events via JavaScript (back to monthly)
-                page.evaluate("""
-                    const toggle = document.getElementById('billing-toggle');
-                    for (let i = 0; i < 6; i++) {
-                        toggle.click();
-                    }
-                """)
+        # Fire exactly 6 click events via JavaScript (back to monthly)
+        page.evaluate("""
+            const toggle = document.getElementById('billing-toggle');
+            for (let i = 0; i < 6; i++) {
+                toggle.click();
+            }
+        """)
 
-                page.wait_for_timeout(500)
+        page.wait_for_load_state("domcontentloaded")
 
-                # One more click -> annual (7 total = odd = annual)
-                page.locator("#billing-toggle").click()
-                page.wait_for_timeout(300)
+        # One more click -> annual (7 total = odd = annual)
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify annual state
-                basic_card = _get_tier_card_by_name(page, "Basic")
-                assert "200" in basic_card.locator(".tier-price").inner_text()
-                assert "/year" in basic_card.locator(
-                    ".tier-period"
-                ).inner_text()
+        # Verify annual state
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        assert "200" in basic_card.locator(".tier-price").inner_text()
+        assert "/year" in basic_card.locator(
+            ".tier-period"
+        ).inner_text()
 
-                main_card = _get_tier_card_by_name(page, "Main")
-                assert "500" in main_card.locator(".tier-price").inner_text()
+        main_card = _get_tier_card_by_name(page, "Main")
+        assert "500" in main_card.locator(".tier-price").inner_text()
 
-                premium_card = _get_tier_card_by_name(page, "Premium")
-                assert "1000" in premium_card.locator(
-                    ".tier-price"
-                ).inner_text()
-                assert "/year" in premium_card.locator(
-                    ".tier-period"
-                ).inner_text()
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        assert "1000" in premium_card.locator(
+            ".tier-price"
+        ).inner_text()
+        assert "/year" in premium_card.locator(
+            ".tier-period"
+        ).inner_text()
 
-                # Verify links match annual
-                for tier_name in ["Basic", "Main", "Premium"]:
-                    card = _get_tier_card_by_name(page, tier_name)
-                    cta = card.locator("a.tier-cta-link")
-                    href = cta.get_attribute("href")
-                    annual_attr = cta.get_attribute("data-link-annual")
-                    assert href == annual_attr, (
-                        f"{tier_name} href after toggle doesn't match "
-                        f"annual link"
-                    )
-            finally:
-                browser.close()
+        # Verify links match annual
+        for tier_name in ["Basic", "Main", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            cta = card.locator("a.tier-cta-link")
+            href = cta.get_attribute("href")
+            annual_attr = cta.get_attribute("data-link-annual")
+            assert href == annual_attr, (
+                f"{tier_name} href after toggle doesn't match "
+                f"annual link"
+            )

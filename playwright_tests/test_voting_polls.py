@@ -23,7 +23,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -36,9 +35,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -128,7 +124,7 @@ class TestScenario1MainMemberBrowsesAndVotes:
 
     def test_main_member_browses_polls_and_votes(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll 'Next Workshop Topic' exists with 3 options,
         max_votes_per_user = 3.
@@ -155,93 +151,85 @@ class TestScenario1MainMemberBrowsesAndVotes:
         opt2 = _create_option(poll, "RAG Pipelines")
         opt3 = _create_option(poll, "Fine-tuning Models")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /vote
-                page.goto(
-                    f"{django_server}/vote",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /vote
+        page.goto(
+            f"{django_server}/vote",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The poll listing shows the topic poll
-                assert "Next Workshop Topic" in body
-                assert "Topic Poll" in body
+        # Then: The poll listing shows the topic poll
+        assert "Next Workshop Topic" in body
+        assert "Topic Poll" in body
 
-                # Step 2: Click on the poll
-                page.click(
-                    f'a[href="/vote/{poll.id}"]'
-                )
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the poll
+        page.click(
+            f'a[href="/vote/{poll.id}"]'
+        )
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: User lands on the poll detail page
-                assert f"/vote/{poll.id}" in page.url
-                body = page.content()
+        # Then: User lands on the poll detail page
+        assert f"/vote/{poll.id}" in page.url
+        body = page.content()
 
-                # All 3 options are visible
-                assert "LangChain Deep Dive" in body
-                assert "RAG Pipelines" in body
-                assert "Fine-tuning Models" in body
+        # All 3 options are visible
+        assert "LangChain Deep Dive" in body
+        assert "RAG Pipelines" in body
+        assert "Fine-tuning Models" in body
 
-                # Votes remaining shows 3
-                remaining_el = page.locator("#votes-remaining-count")
-                assert remaining_el.inner_text() == "3"
+        # Votes remaining shows 3
+        remaining_el = page.locator("#votes-remaining-count")
+        assert remaining_el.inner_text() == "3"
 
-                # Step 3: Click the "Vote" button on the first option
-                vote_btn_1 = page.locator(
-                    f'button.vote-btn[data-option-id="{opt1.id}"]'
-                )
-                vote_btn_1.click()
+        # Step 3: Click the "Vote" button on the first option
+        vote_btn_1 = page.locator(
+            f'button.vote-btn[data-option-id="{opt1.id}"]'
+        )
+        vote_btn_1.click()
 
-                # Wait for the button to update to "Voted"
-                page.wait_for_function(
-                    f"""() => {{
-                        var btn = document.querySelector('button.vote-btn[data-option-id="{opt1.id}"]');
-                        return btn && btn.getAttribute('data-voted') === 'true';
-                    }}""",
-                    timeout=10000,
-                )
+        # Wait for the button to update to "Voted"
+        page.wait_for_function(
+            f"""() => {{
+                var btn = document.querySelector('button.vote-btn[data-option-id="{opt1.id}"]');
+                return btn && btn.getAttribute('data-voted') === 'true';
+            }}""",
+            timeout=10000,
+        )
 
-                # Then: Vote count for option 1 increases to 1
-                vote_count_1 = page.locator(
-                    f'.vote-count[data-option-id="{opt1.id}"]'
-                )
-                assert vote_count_1.inner_text() == "1"
+        # Then: Vote count for option 1 increases to 1
+        vote_count_1 = page.locator(
+            f'.vote-count[data-option-id="{opt1.id}"]'
+        )
+        assert vote_count_1.inner_text() == "1"
 
-                # Then: Votes remaining decreases to 2
-                assert remaining_el.inner_text() == "2"
+        # Then: Votes remaining decreases to 2
+        assert remaining_el.inner_text() == "2"
 
-                # Step 4: Click the "Vote" button on the second option
-                vote_btn_2 = page.locator(
-                    f'button.vote-btn[data-option-id="{opt2.id}"]'
-                )
-                vote_btn_2.click()
+        # Step 4: Click the "Vote" button on the second option
+        vote_btn_2 = page.locator(
+            f'button.vote-btn[data-option-id="{opt2.id}"]'
+        )
+        vote_btn_2.click()
 
-                # Wait for the button to update to "Voted"
-                page.wait_for_function(
-                    f"""() => {{
-                        var btn = document.querySelector('button.vote-btn[data-option-id="{opt2.id}"]');
-                        return btn && btn.getAttribute('data-voted') === 'true';
-                    }}""",
-                    timeout=10000,
-                )
+        # Wait for the button to update to "Voted"
+        page.wait_for_function(
+            f"""() => {{
+                var btn = document.querySelector('button.vote-btn[data-option-id="{opt2.id}"]');
+                return btn && btn.getAttribute('data-voted') === 'true';
+            }}""",
+            timeout=10000,
+        )
 
-                # Then: Vote count for option 2 increases to 1
-                vote_count_2 = page.locator(
-                    f'.vote-count[data-option-id="{opt2.id}"]'
-                )
-                assert vote_count_2.inner_text() == "1"
+        # Then: Vote count for option 2 increases to 1
+        vote_count_2 = page.locator(
+            f'.vote-count[data-option-id="{opt2.id}"]'
+        )
+        assert vote_count_2.inner_text() == "1"
 
-                # Then: Votes remaining decreases to 1
-                assert remaining_el.inner_text() == "1"
-
-            finally:
-                browser.close()
-
-
+        # Then: Votes remaining decreases to 1
+        assert remaining_el.inner_text() == "1"
 # ---------------------------------------------------------------
 # Scenario 2: Main member changes their mind and unvotes an option
 # ---------------------------------------------------------------
@@ -252,7 +240,7 @@ class TestScenario2MainMemberUnvotes:
 
     def test_main_member_unvotes_option(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll exists, the user has already voted on option
         'LangChain Deep Dive'.
@@ -276,60 +264,52 @@ class TestScenario2MainMemberUnvotes:
         # User has already voted on LangChain Deep Dive
         _create_vote(poll, opt1, user)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the poll detail page
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the poll detail page
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: "LangChain Deep Dive" shows as already voted
-                vote_btn = page.locator(
-                    f'button.vote-btn[data-option-id="{opt1.id}"]'
-                )
-                assert vote_btn.get_attribute("data-voted") == "true"
-                assert "Voted" in vote_btn.inner_text()
+        # Then: "LangChain Deep Dive" shows as already voted
+        vote_btn = page.locator(
+            f'button.vote-btn[data-option-id="{opt1.id}"]'
+        )
+        assert vote_btn.get_attribute("data-voted") == "true"
+        assert "Voted" in vote_btn.inner_text()
 
-                # Vote count should be 1
-                vote_count = page.locator(
-                    f'.vote-count[data-option-id="{opt1.id}"]'
-                )
-                assert vote_count.inner_text() == "1"
+        # Vote count should be 1
+        vote_count = page.locator(
+            f'.vote-count[data-option-id="{opt1.id}"]'
+        )
+        assert vote_count.inner_text() == "1"
 
-                # Votes remaining should be 2 (3 max - 1 used)
-                remaining_el = page.locator("#votes-remaining-count")
-                assert remaining_el.inner_text() == "2"
+        # Votes remaining should be 2 (3 max - 1 used)
+        remaining_el = page.locator("#votes-remaining-count")
+        assert remaining_el.inner_text() == "2"
 
-                # Step 2: Click the vote toggle to unvote
-                vote_btn.click()
+        # Step 2: Click the vote toggle to unvote
+        vote_btn.click()
 
-                # Wait for the button to update to "Vote" (unvoted)
-                page.wait_for_function(
-                    f"""() => {{
-                        var btn = document.querySelector('button.vote-btn[data-option-id="{opt1.id}"]');
-                        return btn && btn.getAttribute('data-voted') === 'false';
-                    }}""",
-                    timeout=10000,
-                )
+        # Wait for the button to update to "Vote" (unvoted)
+        page.wait_for_function(
+            f"""() => {{
+                var btn = document.querySelector('button.vote-btn[data-option-id="{opt1.id}"]');
+                return btn && btn.getAttribute('data-voted') === 'false';
+            }}""",
+            timeout=10000,
+        )
 
-                # Then: Vote count decreases to 0
-                assert vote_count.inner_text() == "0"
+        # Then: Vote count decreases to 0
+        assert vote_count.inner_text() == "0"
 
-                # Then: Votes remaining increases to 3
-                assert remaining_el.inner_text() == "3"
+        # Then: Votes remaining increases to 3
+        assert remaining_el.inner_text() == "3"
 
-                # Button now shows "Vote" instead of "Voted"
-                assert "Vote" in vote_btn.inner_text()
-
-            finally:
-                browser.close()
-
-
+        # Button now shows "Vote" instead of "Voted"
+        assert "Vote" in vote_btn.inner_text()
 # ---------------------------------------------------------------
 # Scenario 3: Main member hits the maximum votes limit on a poll
 # ---------------------------------------------------------------
@@ -340,7 +320,7 @@ class TestScenario3MaxVotesLimit:
 
     def test_main_member_cannot_exceed_max_votes(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll with 5 options and max_votes_per_user = 3, the user
         has already voted on 3 options.
@@ -369,69 +349,61 @@ class TestScenario3MaxVotesLimit:
         _create_vote(poll, opt2, user)
         _create_vote(poll, opt3, user)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the poll detail page
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the poll detail page
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Votes remaining shows 0
-                remaining_el = page.locator("#votes-remaining-count")
-                assert remaining_el.inner_text() == "0"
+        # Then: Votes remaining shows 0
+        remaining_el = page.locator("#votes-remaining-count")
+        assert remaining_el.inner_text() == "0"
 
-                # Vote count for Option D should be 0
-                vote_count_4 = page.locator(
-                    f'.vote-count[data-option-id="{opt4.id}"]'
-                )
-                assert vote_count_4.inner_text() == "0"
+        # Vote count for Option D should be 0
+        vote_count_4 = page.locator(
+            f'.vote-count[data-option-id="{opt4.id}"]'
+        )
+        assert vote_count_4.inner_text() == "0"
 
-                # Step 2: Attempt to vote on the 4th option
-                # The JS will show an alert with the error message.
-                # Capture the dialog.
-                dialog_messages = []
-                page.on(
-                    "dialog",
-                    lambda dialog: (
-                        dialog_messages.append(dialog.message),
-                        dialog.accept(),
-                    ),
-                )
+        # Step 2: Attempt to vote on the 4th option
+        # The JS will show an alert with the error message.
+        # Capture the dialog.
+        dialog_messages = []
+        page.on(
+            "dialog",
+            lambda dialog: (
+                dialog_messages.append(dialog.message),
+                dialog.accept(),
+            ),
+        )
 
-                vote_btn_4 = page.locator(
-                    f'button.vote-btn[data-option-id="{opt4.id}"]'
-                )
-                vote_btn_4.click()
+        vote_btn_4 = page.locator(
+            f'button.vote-btn[data-option-id="{opt4.id}"]'
+        )
+        vote_btn_4.click()
 
-                # Wait for the alert dialog to appear
-                page.wait_for_function(
-                    """() => {
-                        // Give time for the fetch + alert cycle
-                        return true;
-                    }""",
-                    timeout=5000,
-                )
-                # Small delay to ensure the dialog handler fires
-                page.wait_for_timeout(2000)
+        # Wait for the alert dialog to appear
+        page.wait_for_function(
+            """() => {
+                // Give time for the fetch + alert cycle
+                return true;
+            }""",
+            timeout=5000,
+        )
+        # Small delay to ensure the dialog handler fires
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: An error alert was shown about max votes
-                assert len(dialog_messages) >= 1
-                assert "Maximum 3 votes" in dialog_messages[0]
+        # Then: An error alert was shown about max votes
+        assert len(dialog_messages) >= 1
+        assert "Maximum 3 votes" in dialog_messages[0]
 
-                # Then: Vote count for Option D unchanged (still 0)
-                assert vote_count_4.inner_text() == "0"
+        # Then: Vote count for Option D unchanged (still 0)
+        assert vote_count_4.inner_text() == "0"
 
-                # Votes remaining still 0
-                assert remaining_el.inner_text() == "0"
-
-            finally:
-                browser.close()
-
-
+        # Votes remaining still 0
+        assert remaining_el.inner_text() == "0"
 # ---------------------------------------------------------------
 # Scenario 4: Main member proposes a new option on a poll that
 #              accepts proposals
@@ -444,7 +416,7 @@ class TestScenario4ProposeNewOption:
 
     def test_main_member_proposes_option(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll with allow_proposals = true.
         1. Navigate to the poll detail page
@@ -464,72 +436,64 @@ class TestScenario4ProposeNewOption:
         )
         _create_option(poll, "Existing Option")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the poll detail page
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the poll detail page
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # The proposal form is visible
-                propose_form = page.locator("#propose-form")
-                assert propose_form.count() >= 1
+        # The proposal form is visible
+        propose_form = page.locator("#propose-form")
+        assert propose_form.count() >= 1
 
-                # Step 2: Fill in the proposal form
-                page.fill(
-                    "#proposal-title",
-                    "Fine-tuning LLMs on custom data",
-                )
-                page.fill(
-                    "#proposal-description",
-                    "Hands-on session covering LoRA and QLoRA techniques",
-                )
+        # Step 2: Fill in the proposal form
+        page.fill(
+            "#proposal-title",
+            "Fine-tuning LLMs on custom data",
+        )
+        page.fill(
+            "#proposal-description",
+            "Hands-on session covering LoRA and QLoRA techniques",
+        )
 
-                # Step 3: Submit the proposal
-                page.click(
-                    '#propose-form button[type="submit"]'
-                )
+        # Step 3: Submit the proposal
+        page.click(
+            '#propose-form button[type="submit"]'
+        )
 
-                # Then: Success message appears
-                message_el = page.locator("#propose-message")
-                page.wait_for_function(
-                    """() => {
-                        var el = document.getElementById('propose-message');
-                        return el && el.textContent.includes('Proposal submitted');
-                    }""",
-                    timeout=10000,
-                )
+        # Then: Success message appears
+        message_el = page.locator("#propose-message")
+        page.wait_for_function(
+            """() => {
+                var el = document.getElementById('propose-message');
+                return el && el.textContent.includes('Proposal submitted');
+            }""",
+            timeout=10000,
+        )
 
-                message_text = message_el.inner_text()
-                assert "Proposal submitted" in message_text
+        message_text = message_el.inner_text()
+        assert "Proposal submitted" in message_text
 
-                # Wait for page reload (the JS does setTimeout reload)
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(2000)
+        # Wait for page reload (the JS does setTimeout reload)
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_load_state("domcontentloaded")
 
-                # After reload, navigate again to ensure fresh state
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # After reload, navigate again to ensure fresh state
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The new option appears
-                assert "Fine-tuning LLMs on custom data" in body
+        # Then: The new option appears
+        assert "Fine-tuning LLMs on custom data" in body
 
-                # Then: The option has 0 votes
-                # Find the option element and check vote count
-                assert "main@test.com" in body  # Attributed to proposer
-
-            finally:
-                browser.close()
-
-
+        # Then: The option has 0 votes
+        # Find the option element and check vote count
+        assert "main@test.com" in body  # Attributed to proposer
 # ---------------------------------------------------------------
 # Scenario 5: Free member cannot access topic polls and sees the
 #              upgrade path
@@ -542,7 +506,7 @@ class TestScenario5FreeMemberCannotAccessTopicPolls:
 
     def test_free_member_sees_no_polls_and_gating_on_direct_access(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier), an open
         topic poll exists (required_level = 20).
         1. Navigate to /vote
@@ -562,49 +526,41 @@ class TestScenario5FreeMemberCannotAccessTopicPolls:
         )
         _create_option(poll, "Option 1")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /vote
-                page.goto(
-                    f"{django_server}/vote",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /vote
+        page.goto(
+            f"{django_server}/vote",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: No polls are visible (free user lacks Main tier)
-                assert "Topic Poll for Main Members" not in body
-                assert "No active polls right now" in body
+        # Then: No polls are visible (free user lacks Main tier)
+        assert "Topic Poll for Main Members" not in body
+        assert "No active polls right now" in body
 
-                # Step 2: Navigate directly to the poll detail
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 2: Navigate directly to the poll detail
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Gating message is shown
-                assert "Upgrade to Main to participate in this poll" in body
+        # Then: Gating message is shown
+        assert "Upgrade to Main to participate in this poll" in body
 
-                # "View Pricing" link is present
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
+        # "View Pricing" link is present
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
 
-                # Step 3: Click "View Pricing"
-                pricing_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click "View Pricing"
+        pricing_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: User lands on /pricing
-                assert "/pricing" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: User lands on /pricing
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: Main member cannot access course polls reserved for
 #              Premium
@@ -616,7 +572,7 @@ class TestScenario6MainMemberCannotAccessCoursePoll:
 
     def test_main_member_sees_gating_on_course_poll(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         course poll 'Next Mini-Course' exists (required_level = 30).
         1. Navigate to /vote
@@ -636,41 +592,33 @@ class TestScenario6MainMemberCannotAccessCoursePoll:
         )
         _create_option(poll, "Course Option A")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /vote
-                page.goto(
-                    f"{django_server}/vote",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /vote
+        page.goto(
+            f"{django_server}/vote",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The course poll does not appear
-                assert "Next Mini-Course" not in body
+        # Then: The course poll does not appear
+        assert "Next Mini-Course" not in body
 
-                # Step 2: Navigate directly to the course poll
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 2: Navigate directly to the course poll
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Gating message for Premium
-                assert "Upgrade to Premium to participate in this poll" in body
+        # Then: Gating message for Premium
+        assert "Upgrade to Premium to participate in this poll" in body
 
-                # "View Pricing" link is present
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
-
-            finally:
-                browser.close()
-
-
+        # "View Pricing" link is present
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 7: Premium member votes on a course poll
 # ---------------------------------------------------------------
@@ -681,7 +629,7 @@ class TestScenario7PremiumMemberVotesOnCoursePoll:
 
     def test_premium_member_sees_and_votes_on_course_poll(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as premium@test.com (Premium tier),
         an open course poll 'Next Mini-Course' with 4 options exists.
         1. Navigate to /vote
@@ -704,63 +652,55 @@ class TestScenario7PremiumMemberVotesOnCoursePoll:
         opt3 = _create_option(poll, "Computer Vision")
         opt4 = _create_option(poll, "NLP Fundamentals")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "premium@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /vote
-                page.goto(
-                    f"{django_server}/vote",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "premium@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /vote
+        page.goto(
+            f"{django_server}/vote",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The course poll appears with "Course Poll" badge
-                assert "Next Mini-Course" in body
-                assert "Course Poll" in body
+        # Then: The course poll appears with "Course Poll" badge
+        assert "Next Mini-Course" in body
+        assert "Course Poll" in body
 
-                # Step 2: Click on the course poll
-                page.click(
-                    f'a[href="/vote/{poll.id}"]'
-                )
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the course poll
+        page.click(
+            f'a[href="/vote/{poll.id}"]'
+        )
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: User lands on the detail page
-                assert f"/vote/{poll.id}" in page.url
-                body = page.content()
+        # Then: User lands on the detail page
+        assert f"/vote/{poll.id}" in page.url
+        body = page.content()
 
-                # All 4 options are visible
-                assert "AI Agents" in body
-                assert "MLOps" in body
-                assert "Computer Vision" in body
-                assert "NLP Fundamentals" in body
+        # All 4 options are visible
+        assert "AI Agents" in body
+        assert "MLOps" in body
+        assert "Computer Vision" in body
+        assert "NLP Fundamentals" in body
 
-                # Step 3: Vote on one option
-                vote_btn = page.locator(
-                    f'button.vote-btn[data-option-id="{opt1.id}"]'
-                )
-                vote_btn.click()
+        # Step 3: Vote on one option
+        vote_btn = page.locator(
+            f'button.vote-btn[data-option-id="{opt1.id}"]'
+        )
+        vote_btn.click()
 
-                # Wait for the vote to register
-                page.wait_for_function(
-                    f"""() => {{
-                        var btn = document.querySelector('button.vote-btn[data-option-id="{opt1.id}"]');
-                        return btn && btn.getAttribute('data-voted') === 'true';
-                    }}""",
-                    timeout=10000,
-                )
+        # Wait for the vote to register
+        page.wait_for_function(
+            f"""() => {{
+                var btn = document.querySelector('button.vote-btn[data-option-id="{opt1.id}"]');
+                return btn && btn.getAttribute('data-voted') === 'true';
+            }}""",
+            timeout=10000,
+        )
 
-                # Then: Vote count updates to 1
-                vote_count = page.locator(
-                    f'.vote-count[data-option-id="{opt1.id}"]'
-                )
-                assert vote_count.inner_text() == "1"
-
-            finally:
-                browser.close()
-
-
+        # Then: Vote count updates to 1
+        vote_count = page.locator(
+            f'.vote-count[data-option-id="{opt1.id}"]'
+        )
+        assert vote_count.inner_text() == "1"
 # ---------------------------------------------------------------
 # Scenario 8: Member views a closed poll with read-only results
 # ---------------------------------------------------------------
@@ -771,7 +711,7 @@ class TestScenario8ClosedPollReadOnly:
 
     def test_closed_poll_shows_read_only_results(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), a closed
         topic poll exists with several options that received votes.
         1. Navigate to /vote/{poll_id} for the closed poll
@@ -798,38 +738,30 @@ class TestScenario8ClosedPollReadOnly:
         _create_vote(poll, opt1, other_user)
         _create_vote(poll, opt2, other_user)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the closed poll
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the closed poll
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "Closed" status indicator
-                assert "Closed" in body
+        # Then: Shows "Closed" status indicator
+        assert "Closed" in body
 
-                # Then: All options are visible with vote counts
-                assert "Option Alpha" in body
-                assert "Option Beta" in body
-                assert "Option Gamma" in body
+        # Then: All options are visible with vote counts
+        assert "Option Alpha" in body
+        assert "Option Beta" in body
+        assert "Option Gamma" in body
 
-                # Then: No vote buttons are available
-                vote_buttons = page.locator("button.vote-btn")
-                assert vote_buttons.count() == 0
+        # Then: No vote buttons are available
+        vote_buttons = page.locator("button.vote-btn")
+        assert vote_buttons.count() == 0
 
-                # Then: No proposal form is available
-                propose_form = page.locator("#propose-form")
-                assert propose_form.count() == 0
-
-            finally:
-                browser.close()
-
-
+        # Then: No proposal form is available
+        propose_form = page.locator("#propose-form")
+        assert propose_form.count() == 0
 # ---------------------------------------------------------------
 # Scenario 9: Anonymous visitor navigates to polls and is prompted
 #              to sign in
@@ -842,7 +774,7 @@ class TestScenario9AnonymousVisitorPromptedToSignIn:
 
     def test_anonymous_visitor_sees_sign_in_prompts(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor (not logged in), an open topic
         poll exists.
         1. Navigate to /vote
@@ -861,41 +793,32 @@ class TestScenario9AnonymousVisitorPromptedToSignIn:
         _create_option(poll, "Option X")
         _create_option(poll, "Option Y")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /vote
-                page.goto(
-                    f"{django_server}/vote",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _anon_context(browser)
+        # Step 1: Navigate to /vote
+        page.goto(
+            f"{django_server}/vote",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: No active polls shown (anonymous has level 0,
-                # topic polls require level 20)
-                assert "Public Topic Poll" not in body
+        # Then: No active polls shown (anonymous has level 0,
+        # topic polls require level 20)
+        assert "Public Topic Poll" not in body
 
-                # Then: Sign in prompt is present
-                assert "Sign in" in body
+        # Then: Sign in prompt is present
+        assert "Sign in" in body
 
-                # Step 2: Navigate directly to /vote/{poll_id}
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 2: Navigate directly to /vote/{poll_id}
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The poll is visible but shows gating or
-                # sign-in prompt to vote
-                assert "Public Topic Poll" in body
-                assert "Sign in" in body
-
-            finally:
-                browser.close()
-
-
+        # Then: The poll is visible but shows gating or
+        # sign-in prompt to vote
+        assert "Public Topic Poll" in body
+        assert "Sign in" in body
 # ---------------------------------------------------------------
 # Scenario 10: Main member navigates to polls from the dashboard
 # ---------------------------------------------------------------
@@ -906,7 +829,7 @@ class TestScenario10NavigateFromDashboard:
 
     def test_main_member_finds_poll_from_dashboard(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll exists.
         1. Navigate to / (the member dashboard)
@@ -927,48 +850,40 @@ class TestScenario10NavigateFromDashboard:
         opt1 = _create_option(poll, "Dashboard Option A")
         _create_option(poll, "Dashboard Option B")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to / (dashboard)
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to / (dashboard)
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The dashboard shows the Active Polls section
-                assert "Active Polls" in body
-                assert "Dashboard Poll Test" in body
+        # Then: The dashboard shows the Active Polls section
+        assert "Active Polls" in body
+        assert "Dashboard Poll Test" in body
 
-                # Step 2: Click the poll link on the dashboard
-                poll_link = page.locator(
-                    f'a[href="/vote/{poll.id}"]'
-                )
-                assert poll_link.count() >= 1
-                poll_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the poll link on the dashboard
+        poll_link = page.locator(
+            f'a[href="/vote/{poll.id}"]'
+        )
+        assert poll_link.count() >= 1
+        poll_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: User arrives at the poll detail page
-                assert f"/vote/{poll.id}" in page.url
-                body = page.content()
+        # Then: User arrives at the poll detail page
+        assert f"/vote/{poll.id}" in page.url
+        body = page.content()
 
-                # Step 3: Options and vote counts are visible
-                assert "Dashboard Option A" in body
-                assert "Dashboard Option B" in body
+        # Step 3: Options and vote counts are visible
+        assert "Dashboard Option A" in body
+        assert "Dashboard Option B" in body
 
-                # User can vote
-                vote_btn = page.locator(
-                    f'button.vote-btn[data-option-id="{opt1.id}"]'
-                )
-                assert vote_btn.count() >= 1
-
-            finally:
-                browser.close()
-
-
+        # User can vote
+        vote_btn = page.locator(
+            f'button.vote-btn[data-option-id="{opt1.id}"]'
+        )
+        assert vote_btn.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 11: Member submits a proposal with missing title and
 #               gets validation feedback
@@ -981,7 +896,7 @@ class TestScenario11ProposalMissingTitle:
 
     def test_proposal_with_empty_title_shows_error(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll with allow_proposals = true.
         1. Navigate to the poll detail page
@@ -1000,62 +915,54 @@ class TestScenario11ProposalMissingTitle:
         )
         _create_option(poll, "Existing Option")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the poll detail page
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the poll detail page
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 2: Leave title empty and submit
-                # The title input has the HTML `required` attribute,
-                # which makes the browser block the submit before the
-                # JS handler runs. Remove the attribute so that the
-                # form's JavaScript validation path is exercised.
-                page.evaluate(
-                    """() => {
-                        document.getElementById('proposal-title')
-                            .removeAttribute('required');
-                    }"""
-                )
-                title_input = page.locator("#proposal-title")
-                title_input.fill("")
+        # Step 2: Leave title empty and submit
+        # The title input has the HTML `required` attribute,
+        # which makes the browser block the submit before the
+        # JS handler runs. Remove the attribute so that the
+        # form's JavaScript validation path is exercised.
+        page.evaluate(
+            """() => {
+                document.getElementById('proposal-title')
+                    .removeAttribute('required');
+            }"""
+        )
+        title_input = page.locator("#proposal-title")
+        title_input.fill("")
 
-                # Click submit -- the JS handler checks title first
-                page.click(
-                    '#propose-form button[type="submit"]'
-                )
+        # Click submit -- the JS handler checks title first
+        page.click(
+            '#propose-form button[type="submit"]'
+        )
 
-                # Wait for the error message from JS
-                message_el = page.locator("#propose-message")
-                page.wait_for_function(
-                    """() => {
-                        var el = document.getElementById('propose-message');
-                        return el && el.textContent.includes('Title is required');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for the error message from JS
+        message_el = page.locator("#propose-message")
+        page.wait_for_function(
+            """() => {
+                var el = document.getElementById('propose-message');
+                return el && el.textContent.includes('Title is required');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Error message shows "Title is required"
-                message_text = message_el.inner_text()
-                assert "Title is required" in message_text
+        # Then: Error message shows "Title is required"
+        message_text = message_el.inner_text()
+        assert "Title is required" in message_text
 
-                # Then: No new option was added
-                from voting.models import PollOption
+        # Then: No new option was added
+        from voting.models import PollOption
 
-                options_count = PollOption.objects.filter(
-                    poll=poll
-                ).count()
-                assert options_count == 1  # Only the original
-
-            finally:
-                browser.close()
-
-
+        options_count = PollOption.objects.filter(
+            poll=poll
+        ).count()
+        assert options_count == 1  # Only the original
 # ---------------------------------------------------------------
 # Scenario 12: Poll with no options yet shows empty state and
 #               encourages proposals
@@ -1068,7 +975,7 @@ class TestScenario12EmptyPollEncouragesProposals:
 
     def test_empty_poll_shows_empty_state_and_accepts_proposal(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier), an open
         topic poll with allow_proposals = true and zero options.
         1. Navigate to the poll detail page
@@ -1088,57 +995,51 @@ class TestScenario12EmptyPollEncouragesProposals:
         )
         # No options created
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the poll detail page
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the poll detail page
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Empty state message
-                assert "No options yet" in body
-                assert "first to propose" in body
+        # Then: Empty state message
+        assert "No options yet" in body
+        assert "first to propose" in body
 
-                # The proposal form is available
-                propose_form = page.locator("#propose-form")
-                assert propose_form.count() >= 1
+        # The proposal form is available
+        propose_form = page.locator("#propose-form")
+        assert propose_form.count() >= 1
 
-                # Step 2: Fill in and submit a proposal
-                page.fill("#proposal-title", "Building AI Agents")
-                page.click(
-                    '#propose-form button[type="submit"]'
-                )
+        # Step 2: Fill in and submit a proposal
+        page.fill("#proposal-title", "Building AI Agents")
+        page.click(
+            '#propose-form button[type="submit"]'
+        )
 
-                # Wait for success message
-                page.wait_for_function(
-                    """() => {
-                        var el = document.getElementById('propose-message');
-                        return el && el.textContent.includes('Proposal submitted');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for success message
+        page.wait_for_function(
+            """() => {
+                var el = document.getElementById('propose-message');
+                return el && el.textContent.includes('Proposal submitted');
+            }""",
+            timeout=10000,
+        )
 
-                # Wait for page reload
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(2000)
+        # Wait for page reload
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_load_state("domcontentloaded")
 
-                # Navigate again to see the fresh state
-                page.goto(
-                    f"{django_server}/vote/{poll.id}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Navigate again to see the fresh state
+        page.goto(
+            f"{django_server}/vote/{poll.id}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The new option appears
-                assert "Building AI Agents" in body
+        # Then: The new option appears
+        assert "Building AI Agents" in body
 
-                # The "No options yet" message is gone
-                assert "No options yet" not in body
-
-            finally:
-                browser.close()
+        # The "No options yet" message is gone
+        assert "No options yet" not in body

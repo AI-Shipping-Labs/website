@@ -28,7 +28,6 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -40,9 +39,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -142,7 +138,7 @@ def _clear_audit_logs():
 class TestScenario1MainMemberSeesCommunityQuickAction:
     """Main member sees the Community quick action on their dashboard."""
 
-    def test_main_member_sees_community_action_card(self, django_server):
+    def test_main_member_sees_community_action_card(self, django_server, browser):
         """Given a user logged in as main@test.com (Main tier, level 20).
         Navigate to / (authenticated dashboard), scroll to Quick Actions.
         A 'Community' action card appears with a link to /community.
@@ -150,40 +146,33 @@ class TestScenario1MainMemberSeesCommunityQuickAction:
         _ensure_tiers()
         _create_user("main@test.com", tier_slug="main")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to / (authenticated dashboard)
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to / (authenticated dashboard)
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # The dashboard should show the Quick Actions section
-                assert "Quick Actions" in body
+        # The dashboard should show the Quick Actions section
+        assert "Quick Actions" in body
 
-                # Step 2: Verify the Community action card is present
-                community_card = page.locator(
-                    'a[href="/community"]'
-                )
-                assert community_card.count() >= 1
+        # Step 2: Verify the Community action card is present
+        community_card = page.locator(
+            'a[href="/community"]'
+        )
+        assert community_card.count() >= 1
 
-                community_text = community_card.first.inner_text()
-                assert "Community" in community_text
+        community_text = community_card.first.inner_text()
+        assert "Community" in community_text
 
-                # Step 3: Click the Community action card
-                community_card.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click the Community action card
+        community_card.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: User navigates to /community
-                assert "/community" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: User navigates to /community
+        assert "/community" in page.url
 # ---------------------------------------------------------------
 # Scenario 2: Basic member does not see the Community quick action
 # ---------------------------------------------------------------
@@ -192,7 +181,7 @@ class TestScenario1MainMemberSeesCommunityQuickAction:
 class TestScenario2BasicMemberNoCommunityAction:
     """Basic member does not see the Community quick action."""
 
-    def test_basic_member_does_not_see_community_card(self, django_server):
+    def test_basic_member_does_not_see_community_card(self, django_server, browser):
         """Given a user logged in as basic@test.com (Basic tier, level 10).
         Navigate to / (authenticated dashboard), scroll to Quick Actions.
         Quick actions include Browse Courses, View Recordings, and Submit
@@ -200,35 +189,28 @@ class TestScenario2BasicMemberNoCommunityAction:
         _ensure_tiers()
         _create_user("basic@test.com", tier_slug="basic")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to / (authenticated dashboard)
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to / (authenticated dashboard)
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # The dashboard should show Quick Actions
-                assert "Quick Actions" in body
+        # The dashboard should show Quick Actions
+        assert "Quick Actions" in body
 
-                # Step 2: Verify standard quick actions are present
-                assert "Browse Courses" in body
-                assert "View Recordings" in body
-                assert "Submit Project" in body
+        # Step 2: Verify standard quick actions are present
+        assert "Browse Courses" in body
+        assert "View Recordings" in body
+        assert "Submit Project" in body
 
-                # Then: No Community action card is shown
-                community_link = page.locator(
-                    'a[href="/community"]'
-                )
-                assert community_link.count() == 0
-            finally:
-                browser.close()
-
-
+        # Then: No Community action card is shown
+        community_link = page.locator(
+            'a[href="/community"]'
+        )
+        assert community_link.count() == 0
 # ---------------------------------------------------------------
 # Scenario 3: Free member discovers community access is a Main
 #              tier benefit on the activities page
@@ -241,7 +223,7 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
 
     def test_free_member_sees_community_activity_with_tier_badges(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier).
         Navigate to /activities. 'Closed Community Access' is listed
         as an activity available at Main and Premium tiers, not Free
@@ -250,56 +232,49 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
         _ensure_tiers()
         _create_user("free@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /activities
-                page.goto(
-                    f"{django_server}/activities",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /activities
+        page.goto(
+            f"{django_server}/activities",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Step 2: Look at the activity cards
-                # Then: "Closed Community Access" is listed
-                assert "Closed Community Access" in body
+        # Step 2: Look at the activity cards
+        # Then: "Closed Community Access" is listed
+        assert "Closed Community Access" in body
 
-                # Find the Closed Community Access activity card
-                activity_cards = page.locator(".activity-card")
-                community_card = None
-                for i in range(activity_cards.count()):
-                    card = activity_cards.nth(i)
-                    if "Closed Community Access" in card.inner_text():
-                        community_card = card
-                        break
+        # Find the Closed Community Access activity card
+        activity_cards = page.locator(".activity-card")
+        community_card = None
+        for i in range(activity_cards.count()):
+            card = activity_cards.nth(i)
+            if "Closed Community Access" in card.inner_text():
+                community_card = card
+                break
 
-                assert community_card is not None, (
-                    "Could not find 'Closed Community Access' activity card"
-                )
+        assert community_card is not None, (
+            "Could not find 'Closed Community Access' activity card"
+        )
 
-                # Then: The card has data-tiers containing main and premium
-                tiers_attr = community_card.get_attribute("data-tiers")
-                assert "main" in tiers_attr
-                assert "premium" in tiers_attr
-                # Free and Basic should NOT be included
-                assert "free" not in tiers_attr
-                assert "basic" not in tiers_attr
+        # Then: The card has data-tiers containing main and premium
+        tiers_attr = community_card.get_attribute("data-tiers")
+        assert "main" in tiers_attr
+        assert "premium" in tiers_attr
+        # Free and Basic should NOT be included
+        assert "free" not in tiers_attr
+        assert "basic" not in tiers_attr
 
-                # Step 3: Click the Membership link in the header
-                membership_link = page.locator(
-                    'header a[href="/#tiers"]'
-                ).first
-                membership_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click the Membership link in the header
+        membership_link = page.locator(
+            'header a[href="/#tiers"]'
+        ).first
+        membership_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: User is taken to the homepage tiers section
-                assert "/#tiers" in page.url or "tiers" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: User is taken to the homepage tiers section
+        assert "/#tiers" in page.url or "tiers" in page.url
 # ---------------------------------------------------------------
 # Scenario 4: Anonymous visitor sees community access highlighted
 #              in the Main tier on the pricing page
@@ -312,7 +287,7 @@ class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
 
     def test_anonymous_sees_slack_community_in_main_tier(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor (not logged in).
         Navigate to /pricing, review the tier comparison grid.
         The Main tier card lists 'Slack community access'. The Free
@@ -321,64 +296,55 @@ class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
         Stripe checkout."""
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /pricing
-                page.goto(
-                    f"{django_server}/pricing",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /pricing
+        page.goto(
+            f"{django_server}/pricing",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Step 2: Review the tier comparison grid
-                # Get all tier cards
-                grid = page.locator(
-                    "div.grid.sm\\:grid-cols-2.lg\\:grid-cols-4"
-                )
-                tier_cards = grid.locator("> div")
+        # Step 2: Review the tier comparison grid
+        # Get all tier cards
+        grid = page.locator(
+            "div.grid.sm\\:grid-cols-2.lg\\:grid-cols-4"
+        )
+        tier_cards = grid.locator("> div")
 
-                # Then: The Main tier card lists "Slack community access"
-                # Find Main card by h2 text
-                main_card = None
-                free_card = None
-                basic_card = None
-                for i in range(tier_cards.count()):
-                    card = tier_cards.nth(i)
-                    h2_text = card.locator("h2").first.inner_text()
-                    if h2_text == "Main":
-                        main_card = card
-                    elif h2_text == "Free":
-                        free_card = card
-                    elif h2_text == "Basic":
-                        basic_card = card
+        # Then: The Main tier card lists "Slack community access"
+        # Find Main card by h2 text
+        main_card = None
+        free_card = None
+        basic_card = None
+        for i in range(tier_cards.count()):
+            card = tier_cards.nth(i)
+            h2_text = card.locator("h2").first.inner_text()
+            if h2_text == "Main":
+                main_card = card
+            elif h2_text == "Free":
+                free_card = card
+            elif h2_text == "Basic":
+                basic_card = card
 
-                assert main_card is not None, "Main tier card not found"
-                main_features = main_card.locator("ul").inner_text()
-                assert "Slack community access" in main_features
+        assert main_card is not None, "Main tier card not found"
+        main_features = main_card.locator("ul").inner_text()
+        assert "Slack community access" in main_features
 
-                # Then: Free and Basic do not mention Slack community access
-                assert free_card is not None, "Free tier card not found"
-                free_features = free_card.locator("ul").inner_text()
-                assert "Slack community access" not in free_features
+        # Then: Free and Basic do not mention Slack community access
+        assert free_card is not None, "Free tier card not found"
+        free_features = free_card.locator("ul").inner_text()
+        assert "Slack community access" not in free_features
 
-                assert basic_card is not None, "Basic tier card not found"
-                basic_features = basic_card.locator("ul").inner_text()
-                assert "Slack community access" not in basic_features
+        assert basic_card is not None, "Basic tier card not found"
+        basic_features = basic_card.locator("ul").inner_text()
+        assert "Slack community access" not in basic_features
 
-                # Step 3: Click the payment link for the Main tier
-                main_cta = main_card.locator("a.tier-cta-link")
-                assert main_cta.count() >= 1
+        # Step 3: Click the payment link for the Main tier
+        main_cta = main_card.locator("a.tier-cta-link")
+        assert main_cta.count() >= 1
 
-                # Verify the href is present (it will be a Stripe link or #)
-                href = main_cta.first.get_attribute("href")
-                assert href is not None
-            finally:
-                browser.close()
-
-
+        # Verify the href is present (it will be a Stripe link or #)
+        href = main_cta.first.get_attribute("href")
+        assert href is not None
 # ---------------------------------------------------------------
 # Scenario 5: Premium member also sees the Community quick action
 # ---------------------------------------------------------------
@@ -389,7 +355,7 @@ class TestScenario5PremiumMemberSeesCommunityAction:
 
     def test_premium_member_sees_community_action_card(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as premium@test.com (Premium tier,
         level 30). Navigate to / (authenticated dashboard), scroll to
         Quick Actions. A 'Community' action card appears -- Premium
@@ -397,40 +363,33 @@ class TestScenario5PremiumMemberSeesCommunityAction:
         _ensure_tiers()
         _create_user("premium@test.com", tier_slug="premium")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "premium@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to / (authenticated dashboard)
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "premium@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to / (authenticated dashboard)
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # The dashboard should show Quick Actions
-                assert "Quick Actions" in body
+        # The dashboard should show Quick Actions
+        assert "Quick Actions" in body
 
-                # Step 2: Verify the Community action card is present
-                community_card = page.locator(
-                    'a[href="/community"]'
-                )
-                assert community_card.count() >= 1
+        # Step 2: Verify the Community action card is present
+        community_card = page.locator(
+            'a[href="/community"]'
+        )
+        assert community_card.count() >= 1
 
-                community_text = community_card.first.inner_text()
-                assert "Community" in community_text
+        community_text = community_card.first.inner_text()
+        assert "Community" in community_text
 
-                # Step 3: Click the Community action card
-                community_card.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click the Community action card
+        community_card.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: User navigates to /community
-                assert "/community" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: User navigates to /community
+        assert "/community" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: New Main member receives community invite after
 #              completing checkout
@@ -761,7 +720,7 @@ class TestScenario9EmailMatcherLinksSlackUser:
 class TestScenario10AdminReviewsAuditLog:
     """Admin reviews community audit log in Django admin."""
 
-    def test_admin_sees_audit_log_list_and_detail(self, django_server):
+    def test_admin_sees_audit_log_list_and_detail(self, django_server, browser):
         """Given a staff user logged in to /admin/. Navigate to the
         Community Audit Logs section. The admin sees a list of audit
         log entries with user email, action, and timestamp columns.
@@ -798,58 +757,51 @@ class TestScenario10AdminReviewsAuditLog:
             }),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "admin@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the Community Audit Logs section
-                page.goto(
-                    f"{django_server}/admin/community/communityauditlog/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the Community Audit Logs section
+        page.goto(
+            f"{django_server}/admin/community/communityauditlog/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The admin sees a list of audit log entries
-                assert "audited@test.com" in body
-                assert "invite" in body.lower() or "Invite" in body
-                assert "remove" in body.lower() or "Remove" in body
+        # Then: The admin sees a list of audit log entries
+        assert "audited@test.com" in body
+        assert "invite" in body.lower() or "Invite" in body
+        assert "remove" in body.lower() or "Remove" in body
 
-                # Step 2: Click on the most recent audit log entry
-                # (the remove entry, which is listed first due to ordering)
-                first_row = page.locator("#result_list tbody tr").first
-                first_row.locator("a").first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the most recent audit log entry
+        # (the remove entry, which is listed first due to ordering)
+        first_row = page.locator("#result_list tbody tr").first
+        first_row.locator("a").first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Then: The entry shows full details
-                assert "audited@test.com" in body
-                # Details field shows Slack API response data
-                assert "U12345" in body
-                assert "C001" in body
+        # Then: The entry shows full details
+        assert "audited@test.com" in body
+        # Details field shows Slack API response data
+        assert "U12345" in body
+        assert "C001" in body
 
-                # Then: The entry is read-only -- no save button should
-                # appear (has_change_permission returns False)
-                save_btn = page.locator('input[name="_save"]')
-                assert save_btn.count() == 0
+        # Then: The entry is read-only -- no save button should
+        # appear (has_change_permission returns False)
+        save_btn = page.locator('input[name="_save"]')
+        assert save_btn.count() == 0
 
-                # Verify there is no "Add community audit log" button
-                # on the changelist page (has_add_permission returns False)
-                page.goto(
-                    f"{django_server}/admin/community/communityauditlog/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                # The main content area should not have an "Add" link
-                # for this model (sidebar has add links for other models)
-                content_area = page.locator("#content-main")
-                content_html = content_area.inner_html()
-                assert "communityauditlog/add" not in content_html
-            finally:
-                browser.close()
-
-
+        # Verify there is no "Add community audit log" button
+        # on the changelist page (has_add_permission returns False)
+        page.goto(
+            f"{django_server}/admin/community/communityauditlog/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        # The main content area should not have an "Add" link
+        # for this model (sidebar has add links for other models)
+        content_area = page.locator("#content-main")
+        content_html = content_area.inner_html()
+        assert "communityauditlog/add" not in content_html
 # ---------------------------------------------------------------
 # Scenario 11: Subscription deletion triggers community removal
 # ---------------------------------------------------------------
@@ -921,7 +873,7 @@ class TestScenario11SubscriptionDeletionTriggersRemoval:
 
     def test_deleted_subscription_user_no_community_on_dashboard(
         self, django_server
-    ):
+    , browser):
         """After subscription deletion, the user's dashboard no longer
         shows the Community quick action."""
         _ensure_tiers()
@@ -929,24 +881,19 @@ class TestScenario11SubscriptionDeletionTriggersRemoval:
         # Create user on Free tier (post-deletion state)
         _create_user("deleted-dash@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "deleted-dash@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "deleted-dash@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Quick Actions section is present
-                assert "Quick Actions" in body
+        # Quick Actions section is present
+        assert "Quick Actions" in body
 
-                # Community action card should NOT be shown for Free user
-                community_link = page.locator(
-                    'a[href="/community"]'
-                )
-                assert community_link.count() == 0
-            finally:
-                browser.close()
+        # Community action card should NOT be shown for Free user
+        community_link = page.locator(
+            'a[href="/community"]'
+        )
+        assert community_link.count() == 0

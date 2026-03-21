@@ -10,6 +10,7 @@ import time
 
 import pytest
 from django.core.management import call_command
+from playwright.sync_api import sync_playwright
 
 
 DJANGO_HOST = "127.0.0.1"
@@ -72,6 +73,38 @@ def django_server(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock():
         thread = _start_django_server()
         yield DJANGO_BASE_URL
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped browser fixture (Step 6b: reuse browser across all tests)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def browser():
+    """Launch a single Chromium instance for the entire test session.
+
+    This avoids the ~1-2s overhead of launching a new browser per test.
+    Each test gets a fresh browser context via the ``page`` fixture.
+    """
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        yield browser
+        browser.close()
+
+
+@pytest.fixture
+def page(browser):
+    """Provide a fresh browser page in its own context for each test.
+
+    The context is created with a standard viewport and closed after
+    the test finishes, ensuring full isolation between tests without
+    re-launching the browser.
+    """
+    context = browser.new_context(viewport={"width": 1280, "height": 720})
+    page = context.new_page()
+    yield page
+    context.close()
 
 
 # ---------------------------------------------------------------------------

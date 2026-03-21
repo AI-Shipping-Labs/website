@@ -23,7 +23,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -33,9 +32,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -199,7 +195,7 @@ def _create_test_users():
 
 
 @pytest.fixture(scope="session")
-def test_users(django_server, django_db_setup, django_db_blocker):
+def test_users(django_server, django_db_setup, django_db_blocker, browser):
     """Create test users for account page tests."""
     with django_db_blocker.unblock():
         return _create_test_users()
@@ -234,7 +230,7 @@ def _auth_context(browser, email, db_blocker):
 
 def _go_to_account(page, base_url):
     """Navigate to the account page."""
-    page.goto(f"{base_url}/account/", wait_until="networkidle")
+    page.goto(f"{base_url}/account/", wait_until="domcontentloaded")
 
 
 # ---------------------------------------------------------------
@@ -246,46 +242,31 @@ class TestScenarioAnonymousRedirectToLogin:
     """Anonymous visitor is redirected to login when trying to manage
     their account."""
 
-    def test_anonymous_redirected_to_login(self, django_server, test_users):
+    def test_anonymous_redirected_to_login(self, django_server, test_users, page):
         """Navigate to /account/ without login -- redirects to
         /accounts/login/."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/account/",
-                    wait_until="networkidle",
-                )
-                assert "/accounts/login/" in page.url
-            finally:
-                browser.close()
-
+        page.goto(
+            f"{django_server}/account/",
+            wait_until="domcontentloaded",
+        )
+        assert "/accounts/login/" in page.url
     def test_authenticated_user_sees_account_page(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """After authenticating, the user reaches the account page with
         Account heading and their membership details."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                context = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = context.new_page()
-                _go_to_account(page, django_server)
+        context = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = context.new_page()
+        _go_to_account(page, django_server)
 
-                heading = page.locator("h1")
-                assert "Account" in heading.inner_text()
+        heading = page.locator("h1")
+        assert "Account" in heading.inner_text()
 
-                tier_name = page.locator("#tier-name").inner_text().strip()
-                assert tier_name == "Free"
-                context.close()
-            finally:
-                browser.close()
-
-
+        tier_name = page.locator("#tier-name").inner_text().strip()
+        assert tier_name == "Free"
+        context.close()
 # ---------------------------------------------------------------
 # Scenario: Free member visits account page
 # ---------------------------------------------------------------
@@ -296,101 +277,70 @@ class TestScenarioFreeMemberAccountPage:
 
     def test_free_tier_name_and_level(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Page shows tier name Free and level Level 0."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#tier-name").inner_text().strip() == "Free"
-                assert "Level 0" in page.locator("#tier-badge").inner_text()
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#tier-name").inner_text().strip() == "Free"
+        assert "Level 0" in page.locator("#tier-badge").inner_text()
+        ctx.close()
     def test_no_billing_period_for_free(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """No billing period date is shown for free members."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#billing-period-end").count() == 0
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#billing-period-end").count() == 0
+        ctx.close()
     def test_upgrade_link_points_to_pricing(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """An Upgrade link is visible pointing to /pricing."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                btn = page.locator("#upgrade-btn")
-                assert btn.is_visible()
-                assert btn.get_attribute("href") == "/pricing"
-                ctx.close()
-            finally:
-                browser.close()
-
+        btn = page.locator("#upgrade-btn")
+        assert btn.is_visible()
+        assert btn.get_attribute("href") == "/pricing"
+        ctx.close()
     def test_no_downgrade_or_cancel_for_free(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """No Downgrade or Cancel Subscription actions for free members."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#downgrade-btn").count() == 0
-                assert page.locator("#cancel-btn").count() == 0
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#downgrade-btn").count() == 0
+        assert page.locator("#cancel-btn").count() == 0
+        ctx.close()
     def test_upgrade_link_navigates_to_pricing(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Click Upgrade link and land on /pricing."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.click("#upgrade-btn")
-                page.wait_for_load_state("networkidle")
-                assert "/pricing" in page.url
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        page.click("#upgrade-btn")
+        page.wait_for_load_state("domcontentloaded")
+        assert "/pricing" in page.url
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Basic member views subscription details
 # ---------------------------------------------------------------
@@ -402,107 +352,82 @@ class TestScenarioBasicMemberSubscription:
 
     def test_basic_tier_name_level_and_billing(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Page shows Basic, Level 10, and billing period end
         March 15, 2026."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "basic@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "basic@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#tier-name").inner_text().strip() == "Basic"
-                assert "Level 10" in page.locator("#tier-badge").inner_text()
+        assert page.locator("#tier-name").inner_text().strip() == "Basic"
+        assert "Level 10" in page.locator("#tier-badge").inner_text()
 
-                billing = page.locator("#billing-period-end")
-                assert billing.is_visible()
-                assert "15/03/2026" in billing.inner_text()
-                ctx.close()
-            finally:
-                browser.close()
-
+        billing = page.locator("#billing-period-end")
+        assert billing.is_visible()
+        assert "15/03/2026" in billing.inner_text()
+        ctx.close()
     def test_basic_has_upgrade_and_cancel_no_downgrade(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Basic member has Upgrade and Cancel, but no Downgrade."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "basic@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "basic@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#upgrade-btn").is_visible()
-                assert page.locator("#cancel-btn").is_visible()
-                assert page.locator("#downgrade-btn").count() == 0
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#upgrade-btn").is_visible()
+        assert page.locator("#cancel-btn").is_visible()
+        assert page.locator("#downgrade-btn").count() == 0
+        ctx.close()
     def test_upgrade_modal_shows_higher_tiers(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Click Upgrade -- modal lists Main and Premium."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "basic@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "basic@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.click("#upgrade-btn")
-                page.wait_for_timeout(500)
+        page.click("#upgrade-btn")
+        modal = page.locator("#upgrade-modal")
+        modal.wait_for(state="visible", timeout=5000)
 
-                modal = page.locator("#upgrade-modal")
-                assert modal.is_visible()
-                assert "Upgrade Your Plan" in modal.locator("h3").inner_text()
+        assert modal.is_visible()
+        assert "Upgrade Your Plan" in modal.locator("h3").inner_text()
 
-                buttons = modal.locator("#upgrade-tiers button")
-                all_text = " ".join(
-                    buttons.nth(i).inner_text()
-                    for i in range(buttons.count())
-                )
-                assert "Main" in all_text
-                assert "Premium" in all_text
-                ctx.close()
-            finally:
-                browser.close()
-
+        buttons = modal.locator("#upgrade-tiers button")
+        all_text = " ".join(
+            buttons.nth(i).inner_text()
+            for i in range(buttons.count())
+        )
+        assert "Main" in all_text
+        assert "Premium" in all_text
+        ctx.close()
     def test_close_upgrade_modal(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Close upgrade modal with Cancel -- no changes."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "basic@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "basic@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.click("#upgrade-btn")
-                page.wait_for_timeout(500)
+        page.click("#upgrade-btn")
+        modal = page.locator("#upgrade-modal")
+        modal.wait_for(state="visible", timeout=5000)
 
-                modal = page.locator("#upgrade-modal")
-                assert modal.is_visible()
+        assert modal.is_visible()
 
-                modal.locator("button", has_text="Cancel").click()
-                page.wait_for_timeout(500)
-                assert modal.is_hidden()
-                assert "/account" in page.url
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        modal.locator("button", has_text="Cancel").click()
+        page.wait_for_load_state("domcontentloaded")
+        assert modal.is_hidden()
+        assert "/account" in page.url
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Main member initiates a downgrade
 # ---------------------------------------------------------------
@@ -513,74 +438,55 @@ class TestScenarioMainMemberDowngrade:
 
     def test_main_tier_name_and_level(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Page shows Main and Level 20."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#tier-name").inner_text().strip() == "Main"
-                assert "Level 20" in page.locator("#tier-badge").inner_text()
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#tier-name").inner_text().strip() == "Main"
+        assert "Level 20" in page.locator("#tier-badge").inner_text()
+        ctx.close()
     def test_main_has_all_three_actions(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Main member has Upgrade, Downgrade, and Cancel."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#upgrade-btn").is_visible()
-                assert page.locator("#downgrade-btn").is_visible()
-                assert page.locator("#cancel-btn").is_visible()
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#upgrade-btn").is_visible()
+        assert page.locator("#downgrade-btn").is_visible()
+        assert page.locator("#cancel-btn").is_visible()
+        ctx.close()
     def test_downgrade_modal_shows_only_basic(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Downgrade modal lists only Basic."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.click("#downgrade-btn")
-                page.wait_for_timeout(500)
+        page.click("#downgrade-btn")
+        modal = page.locator("#downgrade-modal")
+        modal.wait_for(state="visible", timeout=5000)
 
-                modal = page.locator("#downgrade-modal")
-                assert modal.is_visible()
-                assert "Downgrade Your Plan" in modal.locator("h3").inner_text()
+        assert modal.is_visible()
+        assert "Downgrade Your Plan" in modal.locator("h3").inner_text()
 
-                buttons = modal.locator("#downgrade-tiers button")
-                assert buttons.count() == 1
-                text = buttons.first.inner_text()
-                assert "Basic" in text
-                assert "Main" not in text
-                assert "Premium" not in text
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        buttons = modal.locator("#downgrade-tiers button")
+        assert buttons.count() == 1
+        text = buttons.first.inner_text()
+        assert "Basic" in text
+        assert "Main" not in text
+        assert "Premium" not in text
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Premium member at highest tier
 # ---------------------------------------------------------------
@@ -591,44 +497,31 @@ class TestScenarioPremiumMemberHighestTier:
 
     def test_premium_tier_name_and_level(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Page shows Premium and Level 30."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "premium@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "premium@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#tier-name").inner_text().strip() == "Premium"
-                assert "Level 30" in page.locator("#tier-badge").inner_text()
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#tier-name").inner_text().strip() == "Premium"
+        assert "Level 30" in page.locator("#tier-badge").inner_text()
+        ctx.close()
     def test_premium_no_upgrade_has_downgrade_and_cancel(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """No Upgrade for Premium. Downgrade and Cancel available."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "premium@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "premium@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#upgrade-btn").count() == 0
-                assert page.locator("#downgrade-btn").is_visible()
-                assert page.locator("#cancel-btn").is_visible()
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        assert page.locator("#upgrade-btn").count() == 0
+        assert page.locator("#downgrade-btn").is_visible()
+        assert page.locator("#cancel-btn").is_visible()
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Pending downgrade notice
 # ---------------------------------------------------------------
@@ -639,63 +532,44 @@ class TestScenarioPendingDowngradeNotice:
 
     def test_pending_downgrade_notice_visible(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Notice says plan will change to Basic on April 1, 2026."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main-downgrade@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main-downgrade@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                notice = page.locator("#pending-downgrade-notice")
-                assert notice.is_visible()
-                text = notice.inner_text()
-                assert "Basic" in text
-                assert "01/04/2026" in text
-                ctx.close()
-            finally:
-                browser.close()
-
+        notice = page.locator("#pending-downgrade-notice")
+        assert notice.is_visible()
+        text = notice.inner_text()
+        assert "Basic" in text
+        assert "01/04/2026" in text
+        ctx.close()
     def test_no_downgrade_action_when_pending(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """No Downgrade action when already scheduled."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main-downgrade@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main-downgrade@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#downgrade-btn").count() == 0
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#downgrade-btn").count() == 0
+        ctx.close()
     def test_cancel_still_available_with_pending_downgrade(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Cancel still available despite pending downgrade."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main-downgrade@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main-downgrade@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#cancel-btn").is_visible()
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        assert page.locator("#cancel-btn").is_visible()
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Pending cancellation notice
 # ---------------------------------------------------------------
@@ -707,47 +581,34 @@ class TestScenarioPendingCancellationNotice:
 
     def test_pending_cancellation_notice_visible(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Notice says Main access ends on May 15, 2026."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main-cancel@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main-cancel@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                notice = page.locator("#pending-cancellation-notice")
-                assert notice.is_visible()
-                text = notice.inner_text()
-                assert "Main" in text
-                assert "15/05/2026" in text
-                ctx.close()
-            finally:
-                browser.close()
-
+        notice = page.locator("#pending-cancellation-notice")
+        assert notice.is_visible()
+        text = notice.inner_text()
+        assert "Main" in text
+        assert "15/05/2026" in text
+        ctx.close()
     def test_no_actions_when_cancelled(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """No Upgrade, Downgrade, or Cancel actions when cancelled."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main-cancel@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main-cancel@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#upgrade-btn").count() == 0
-                assert page.locator("#downgrade-btn").count() == 0
-                assert page.locator("#cancel-btn").count() == 0
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        assert page.locator("#upgrade-btn").count() == 0
+        assert page.locator("#downgrade-btn").count() == 0
+        assert page.locator("#cancel-btn").count() == 0
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Cancel subscription confirmation
 # ---------------------------------------------------------------
@@ -759,64 +620,51 @@ class TestScenarioCancelSubscriptionConfirmation:
 
     def test_cancel_modal_shows_confirmation(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Confirmation modal shows date and buttons."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.click("#cancel-btn")
-                page.wait_for_timeout(500)
+        page.click("#cancel-btn")
+        modal = page.locator("#cancel-modal")
+        modal.wait_for(state="visible", timeout=5000)
 
-                modal = page.locator("#cancel-modal")
-                assert modal.is_visible()
+        assert modal.is_visible()
 
-                text = modal.inner_text()
-                assert "You will keep access to your current tier until the end of your billing period" in text
-                assert "01/04/2026" in text
-                assert modal.locator("#confirm-cancel-btn").is_visible()
-                assert modal.locator(
-                    "button", has_text="Keep my plan"
-                ).is_visible()
-                ctx.close()
-            finally:
-                browser.close()
-
+        text = modal.inner_text()
+        assert "You will keep access to your current tier until the end of your billing period" in text
+        assert "01/04/2026" in text
+        assert modal.locator("#confirm-cancel-btn").is_visible()
+        assert modal.locator(
+            "button", has_text="Keep my plan"
+        ).is_visible()
+        ctx.close()
     def test_keep_plan_closes_modal(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Click Keep Plan -- modal closes, no changes."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "main@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "main@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.click("#cancel-btn")
-                page.wait_for_timeout(500)
+        page.click("#cancel-btn")
+        modal = page.locator("#cancel-modal")
+        modal.wait_for(state="visible", timeout=5000)
 
-                modal = page.locator("#cancel-modal")
-                assert modal.is_visible()
+        assert modal.is_visible()
 
-                modal.locator("button", has_text="Keep my plan").click()
-                page.wait_for_timeout(500)
-                assert modal.is_hidden()
+        modal.locator("button", has_text="Keep my plan").click()
+        page.wait_for_load_state("domcontentloaded")
+        assert modal.is_hidden()
 
-                assert "/account" in page.url
-                assert page.locator("#tier-name").inner_text().strip() == "Main"
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        assert "/account" in page.url
+        assert page.locator("#tier-name").inner_text().strip() == "Main"
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Newsletter toggle
 # ---------------------------------------------------------------
@@ -827,85 +675,66 @@ class TestScenarioNewsletterToggle:
 
     def test_newsletter_subscribed_status(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Initially shows subscribed status."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                status = page.locator("#newsletter-status")
-                assert "You are subscribed to newsletters." in status.inner_text()
-                ctx.close()
-            finally:
-                browser.close()
-
+        status = page.locator("#newsletter-status")
+        assert "You are subscribed to newsletters." in status.inner_text()
+        ctx.close()
     def test_toggle_off_and_on(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Toggle off shows unsubscribed, toggle on shows subscribed."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                toggle = page.locator("#newsletter-toggle")
-                status = page.locator("#newsletter-status")
+        toggle = page.locator("#newsletter-toggle")
+        status = page.locator("#newsletter-status")
 
-                # Ensure starting state is subscribed
-                if "unsubscribed" in status.inner_text():
-                    toggle.click()
-                    page.wait_for_timeout(1000)
+        # Ensure starting state is subscribed
+        if "unsubscribed" in status.inner_text():
+            toggle.click()
+            page.wait_for_load_state("domcontentloaded")
 
-                # Toggle off
-                toggle.click()
-                page.wait_for_timeout(1000)
-                assert "You are unsubscribed from newsletters." in status.inner_text()
+        # Toggle off
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "You are unsubscribed from newsletters." in status.inner_text()
 
-                # Toggle back on
-                toggle.click()
-                page.wait_for_timeout(1000)
-                assert "You are subscribed to newsletters." in status.inner_text()
-                ctx.close()
-            finally:
-                browser.close()
-
+        # Toggle back on
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "You are subscribed to newsletters." in status.inner_text()
+        ctx.close()
     def test_newsletter_persists_after_reload(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Newsletter preference persists after page reload."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                status = page.locator("#newsletter-status")
-                if "unsubscribed" in status.inner_text():
-                    page.locator("#newsletter-toggle").click()
-                    page.wait_for_timeout(1000)
+        status = page.locator("#newsletter-status")
+        if "unsubscribed" in status.inner_text():
+            page.locator("#newsletter-toggle").click()
+            page.wait_for_load_state("domcontentloaded")
 
-                assert "You are subscribed to newsletters." in status.inner_text()
+        assert "You are subscribed to newsletters." in status.inner_text()
 
-                page.reload(wait_until="networkidle")
-                status = page.locator("#newsletter-status")
-                assert "You are subscribed to newsletters." in status.inner_text()
-                ctx.close()
-            finally:
-                browser.close()
-
-
+        page.reload(wait_until="domcontentloaded")
+        status = page.locator("#newsletter-status")
+        assert "You are subscribed to newsletters." in status.inner_text()
+        ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Change password success
 # ---------------------------------------------------------------
@@ -916,89 +745,75 @@ class TestScenarioChangePasswordSuccess:
 
     def test_change_password_success_message_and_fields_cleared(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Success message appears and form fields are cleared."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.fill("#current-password", DEFAULT_PASSWORD)
-                page.fill("#new-password", "NewSecure456!")
-                page.fill("#confirm-new-password", "NewSecure456!")
-                page.click("#change-password-form button[type='submit']")
-                page.wait_for_timeout(2000)
+        page.fill("#current-password", DEFAULT_PASSWORD)
+        page.fill("#new-password", "NewSecure456!")
+        page.fill("#confirm-new-password", "NewSecure456!")
+        page.click("#change-password-form button[type='submit']")
+        page.wait_for_load_state("domcontentloaded")
 
-                success = page.locator("#password-success")
-                assert success.is_visible()
-                assert "password" in success.inner_text().lower()
+        success = page.locator("#password-success")
+        assert success.is_visible()
+        assert "password" in success.inner_text().lower()
 
-                assert page.locator("#current-password").input_value() == ""
-                assert page.locator("#new-password").input_value() == ""
-                assert page.locator("#confirm-new-password").input_value() == ""
+        assert page.locator("#current-password").input_value() == ""
+        assert page.locator("#new-password").input_value() == ""
+        assert page.locator("#confirm-new-password").input_value() == ""
 
-                # Reset password back for other tests
-                page.fill("#current-password", "NewSecure456!")
-                page.fill("#new-password", DEFAULT_PASSWORD)
-                page.fill("#confirm-new-password", DEFAULT_PASSWORD)
-                page.click("#change-password-form button[type='submit']")
-                page.wait_for_timeout(2000)
-                ctx.close()
-            finally:
-                browser.close()
-
+        # Reset password back for other tests
+        page.fill("#current-password", "NewSecure456!")
+        page.fill("#new-password", DEFAULT_PASSWORD)
+        page.fill("#confirm-new-password", DEFAULT_PASSWORD)
+        page.click("#change-password-form button[type='submit']")
+        ctx.close()
     def test_new_password_works_after_change(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """After changing password, a new session can be created
         (verifying the password hash updated)."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                # Change to new password
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        # Change to new password
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.fill("#current-password", DEFAULT_PASSWORD)
-                page.fill("#new-password", "NewSecure456!")
-                page.fill("#confirm-new-password", "NewSecure456!")
-                page.click("#change-password-form button[type='submit']")
-                page.wait_for_timeout(2000)
-                assert page.locator("#password-success").is_visible()
-                ctx.close()
+        page.fill("#current-password", DEFAULT_PASSWORD)
+        page.fill("#new-password", "NewSecure456!")
+        page.fill("#confirm-new-password", "NewSecure456!")
+        page.click("#change-password-form button[type='submit']")
+        page.wait_for_load_state("domcontentloaded")
+        assert page.locator("#password-success").is_visible()
+        ctx.close()
 
-                # Verify new session works
-                ctx2 = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page2 = ctx2.new_page()
-                _go_to_account(page2, django_server)
-                assert "Account" in page2.locator("h1").inner_text()
-                ctx2.close()
+        # Verify new session works
+        ctx2 = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page2 = ctx2.new_page()
+        _go_to_account(page2, django_server)
+        assert "Account" in page2.locator("h1").inner_text()
+        ctx2.close()
 
-                # Reset password
-                ctx3 = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page3 = ctx3.new_page()
-                _go_to_account(page3, django_server)
-                page3.fill("#current-password", "NewSecure456!")
-                page3.fill("#new-password", DEFAULT_PASSWORD)
-                page3.fill("#confirm-new-password", DEFAULT_PASSWORD)
-                page3.click("#change-password-form button[type='submit']")
-                page3.wait_for_timeout(2000)
-                ctx3.close()
-            finally:
-                browser.close()
-
-
+        # Reset password
+        ctx3 = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page3 = ctx3.new_page()
+        _go_to_account(page3, django_server)
+        page3.fill("#current-password", "NewSecure456!")
+        page3.fill("#new-password", DEFAULT_PASSWORD)
+        page3.fill("#confirm-new-password", DEFAULT_PASSWORD)
+        page3.click("#change-password-form button[type='submit']")
+        page3.wait_for_load_state("domcontentloaded")
+        ctx3.close()
 # ---------------------------------------------------------------
 # Scenario: Change password error
 # ---------------------------------------------------------------
@@ -1009,63 +824,50 @@ class TestScenarioChangePasswordError:
 
     def test_wrong_current_password_shows_error(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Wrong current password shows error, no success."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.fill("#current-password", "WrongPassword99")
-                page.fill("#new-password", "NewSecure456!")
-                page.fill("#confirm-new-password", "NewSecure456!")
-                page.click("#change-password-form button[type='submit']")
-                page.wait_for_timeout(2000)
+        page.fill("#current-password", "WrongPassword99")
+        page.fill("#new-password", "NewSecure456!")
+        page.fill("#confirm-new-password", "NewSecure456!")
+        page.click("#change-password-form button[type='submit']")
+        page.wait_for_load_state("domcontentloaded")
 
-                assert page.locator("#password-error").is_visible()
-                assert page.locator("#password-success").is_hidden()
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#password-error").is_visible()
+        assert page.locator("#password-success").is_hidden()
+        ctx.close()
     def test_old_password_still_works_after_failed_change(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """After failed change, old password still works."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                # Attempt failed change
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        # Attempt failed change
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                page.fill("#current-password", "WrongPassword99")
-                page.fill("#new-password", "NewSecure456!")
-                page.fill("#confirm-new-password", "NewSecure456!")
-                page.click("#change-password-form button[type='submit']")
-                page.wait_for_timeout(2000)
-                assert page.locator("#password-error").is_visible()
-                ctx.close()
+        page.fill("#current-password", "WrongPassword99")
+        page.fill("#new-password", "NewSecure456!")
+        page.fill("#confirm-new-password", "NewSecure456!")
+        page.click("#change-password-form button[type='submit']")
+        page.wait_for_load_state("domcontentloaded")
+        assert page.locator("#password-error").is_visible()
+        ctx.close()
 
-                # Verify old password works (create new session)
-                ctx2 = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page2 = ctx2.new_page()
-                _go_to_account(page2, django_server)
-                assert "Account" in page2.locator("h1").inner_text()
-                ctx2.close()
-            finally:
-                browser.close()
-
-
+        # Verify old password works (create new session)
+        ctx2 = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page2 = ctx2.new_page()
+        _go_to_account(page2, django_server)
+        assert "Account" in page2.locator("h1").inner_text()
+        ctx2.close()
 # ---------------------------------------------------------------
 # Scenario: Email verification banner
 # ---------------------------------------------------------------
@@ -1077,43 +879,32 @@ class TestScenarioEmailVerificationBanner:
 
     def test_unverified_user_sees_banner(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Unverified user sees Verify your email banner; rest of page
         is accessible."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free-unverified@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free-unverified@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                banner = page.locator("#email-verification-banner")
-                assert banner.is_visible()
-                assert "Verify your email" in banner.inner_text()
+        banner = page.locator("#email-verification-banner")
+        assert banner.is_visible()
+        assert "Verify your email" in banner.inner_text()
 
-                assert page.locator("#tier-name").is_visible()
-                assert page.locator("#email-preferences-section").is_visible()
-                assert page.locator("#change-password-section").is_visible()
-                ctx.close()
-            finally:
-                browser.close()
-
+        assert page.locator("#tier-name").is_visible()
+        assert page.locator("#email-preferences-section").is_visible()
+        assert page.locator("#change-password-section").is_visible()
+        ctx.close()
     def test_verified_user_no_banner(
         self, django_server, test_users, django_db_blocker
-    ):
+    , browser):
         """Verified user does not see verification banner."""
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                ctx = _auth_context(
-                    browser, "free@test.com", django_db_blocker
-                )
-                page = ctx.new_page()
-                _go_to_account(page, django_server)
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
 
-                assert page.locator("#email-verification-banner").count() == 0
-                ctx.close()
-            finally:
-                browser.close()
+        assert page.locator("#email-verification-banner").count() == 0
+        ctx.close()

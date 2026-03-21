@@ -23,7 +23,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -37,9 +36,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -218,7 +214,7 @@ class TestScenario1CheckUnreadNotificationsViaBell:
 
     def test_bell_badge_shows_unread_count_and_dropdown_works(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier) who has 3
         unread notifications (new article, new recording, new download).
         1. Observe the header bell icon - badge shows "3"
@@ -256,79 +252,71 @@ class TestScenario1CheckUnreadNotificationsViaBell:
             notification_type="new_content",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to homepage, observe the bell icon
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to homepage, observe the bell icon
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait for the badge to update (JS polls on load)
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
+        # Wait for the badge to update (JS polls on load)
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
 
-                # Then: Badge shows "3"
-                assert badge.inner_text() == "3"
+        # Then: Badge shows "3"
+        assert badge.inner_text() == "3"
 
-                # Step 2: Click the bell icon
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Step 2: Click the bell icon
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                # Wait for dropdown to appear and load notifications
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        # Wait for dropdown to appear and load notifications
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                # Wait for notifications to load (not "Loading...")
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for notifications to load (not "Loading...")
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Dropdown shows the 3 notifications with titles
-                dropdown_text = dropdown.inner_text()
-                assert "New article: Test Article for Notif" in dropdown_text
-                assert "New recording: Workshop Recording" in dropdown_text
-                assert "New download: AI Cheat Sheet" in dropdown_text
+        # Then: Dropdown shows the 3 notifications with titles
+        dropdown_text = dropdown.inner_text()
+        assert "New article: Test Article for Notif" in dropdown_text
+        assert "New recording: Workshop Recording" in dropdown_text
+        assert "New download: AI Cheat Sheet" in dropdown_text
 
-                # Step 3: Click on the first notification (article)
-                # The article link navigates to /blog/test-article-notif
-                article_notif = page.locator(
-                    '#notification-list a[href="/blog/test-article-notif"]'
-                )
-                assert article_notif.count() >= 1
-                article_notif.first.click()
+        # Step 3: Click on the first notification (article)
+        # The article link navigates to /blog/test-article-notif
+        article_notif = page.locator(
+            '#notification-list a[href="/blog/test-article-notif"]'
+        )
+        assert article_notif.count() >= 1
+        article_notif.first.click()
 
-                # Then: Navigates to the article detail page
-                page.wait_for_url(
-                    f"**/blog/test-article-notif**",
-                    timeout=10000,
-                )
-                assert "/blog/test-article-notif" in page.url
+        # Then: Navigates to the article detail page
+        page.wait_for_url(
+            f"**/blog/test-article-notif**",
+            timeout=10000,
+        )
+        assert "/blog/test-article-notif" in page.url
 
-                # Step 4: Navigate back, click the bell icon again
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        # Step 4: Navigate back, click the bell icon again
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait for badge to update
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
+        # Wait for badge to update
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
 
-                # Then: Badge shows "2" (one was marked as read)
-                assert badge.inner_text() == "2"
-
-            finally:
-                browser.close()
-
-
+        # Then: Badge shows "2" (one was marked as read)
+        assert badge.inner_text() == "2"
 # ---------------------------------------------------------------
 # Scenario 2: Member marks all notifications as read from the
 #              dropdown
@@ -340,7 +328,7 @@ class TestScenario2MarkAllReadFromDropdown:
 
     def test_mark_all_as_read_in_dropdown(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier) who has 5
         unread notifications.
         1. Click the bell icon to open the dropdown - all 5 appear unread
@@ -359,73 +347,65 @@ class TestScenario2MarkAllReadFromDropdown:
                 notification_type="new_content",
             )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait for badge to show "5"
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
-                assert badge.inner_text() == "5"
+        # Wait for badge to show "5"
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
+        assert badge.inner_text() == "5"
 
-                # Step 1: Click the bell icon
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Step 1: Click the bell icon
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                # Wait for notifications to load
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for notifications to load
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: All 5 notifications appear
-                list_el = page.locator("#notification-list")
-                list_text = list_el.inner_text()
-                for i in range(5):
-                    assert f"Notification {i + 1}" in list_text
+        # Then: All 5 notifications appear
+        list_el = page.locator("#notification-list")
+        list_text = list_el.inner_text()
+        for i in range(5):
+            assert f"Notification {i + 1}" in list_text
 
-                # Check that unread indicators (blue dots) are present
-                unread_dots = page.locator(
-                    "#notification-list .rounded-full.bg-accent"
-                )
-                assert unread_dots.count() == 5
+        # Check that unread indicators (blue dots) are present
+        unread_dots = page.locator(
+            "#notification-list .rounded-full.bg-accent"
+        )
+        assert unread_dots.count() == 5
 
-                # Step 2: Click "Mark all as read"
-                mark_all_btn = dropdown.locator(
-                    'button:has-text("Mark all as read")'
-                )
-                mark_all_btn.click()
+        # Step 2: Click "Mark all as read"
+        mark_all_btn = dropdown.locator(
+            'button:has-text("Mark all as read")'
+        )
+        mark_all_btn.click()
 
-                # Wait for the notifications to reload without unread dots
-                page.wait_for_function(
-                    """() => {
-                        var dots = document.querySelectorAll('#notification-list .rounded-full.bg-accent');
-                        return dots.length === 0;
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for the notifications to reload without unread dots
+        page.wait_for_function(
+            """() => {
+                var dots = document.querySelectorAll('#notification-list .rounded-full.bg-accent');
+                return dots.length === 0;
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Badge disappears
-                assert badge.evaluate(
-                    "el => el.classList.contains('hidden')"
-                )
-
-            finally:
-                browser.close()
-
-
+        # Then: Badge disappears
+        assert badge.evaluate(
+            "el => el.classList.contains('hidden')"
+        )
 # ---------------------------------------------------------------
 # Scenario 3: Member browses the full notifications page and
 #              navigates between pages
@@ -438,7 +418,7 @@ class TestScenario3BrowseNotificationsPage:
 
     def test_notifications_page_pagination_and_click(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier) who has
         25 notifications (some read, some unread).
         1. Navigate to /notifications - 20 shown, pagination controls appear
@@ -466,88 +446,80 @@ class TestScenario3BrowseNotificationsPage:
             slug="notif-item-25",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /notifications
-                page.goto(
-                    f"{django_server}/notifications",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /notifications
+        page.goto(
+            f"{django_server}/notifications",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Page shows notifications with unread ones visually
-                # distinguished (unread have bg-accent dot, read do not)
-                assert "Notifications" in body
+        # Then: Page shows notifications with unread ones visually
+        # distinguished (unread have bg-accent dot, read do not)
+        assert "Notifications" in body
 
-                # 20 notifications on page 1
-                notification_links = page.locator(
-                    "main .space-y-2 > a"
-                )
-                assert notification_links.count() == 20
+        # 20 notifications on page 1
+        notification_links = page.locator(
+            "main .space-y-2 > a"
+        )
+        assert notification_links.count() == 20
 
-                # Pagination controls appear with "Next"
-                next_link = page.locator('a:has-text("Next")')
-                assert next_link.count() >= 1
+        # Pagination controls appear with "Next"
+        next_link = page.locator('a:has-text("Next")')
+        assert next_link.count() >= 1
 
-                # Unread indicators exist on the page (some notifications
-                # are unread)
-                unread_dots = page.locator(
-                    "main .rounded-full.bg-accent"
-                )
-                assert unread_dots.count() > 0
+        # Unread indicators exist on the page (some notifications
+        # are unread)
+        unread_dots = page.locator(
+            "main .rounded-full.bg-accent"
+        )
+        assert unread_dots.count() > 0
 
-                # Step 2: Click "Next" to go to page 2
-                next_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Next" to go to page 2
+        next_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Page 2 shows the remaining 5
-                assert "page=2" in page.url
-                notification_links_p2 = page.locator(
-                    "main .space-y-2 > a"
-                )
-                assert notification_links_p2.count() == 5
+        # Then: Page 2 shows the remaining 5
+        assert "page=2" in page.url
+        notification_links_p2 = page.locator(
+            "main .space-y-2 > a"
+        )
+        assert notification_links_p2.count() == 5
 
-                # "Previous" link exists, no "Next" link
-                prev_link = page.locator('a:has-text("Previous")')
-                assert prev_link.count() >= 1
-                next_link_p2 = page.locator('a:has-text("Next")')
-                assert next_link_p2.count() == 0
+        # "Previous" link exists, no "Next" link
+        prev_link = page.locator('a:has-text("Previous")')
+        assert prev_link.count() >= 1
+        next_link_p2 = page.locator('a:has-text("Next")')
+        assert next_link_p2.count() == 0
 
-                # Step 3: Click on an unread notification
-                # The notifications on page 2 are from the oldest created
-                # (items 1-5 based on ordering), which are read (i < 10).
-                # Navigate back to page 1 where there are unread ones.
-                page.goto(
-                    f"{django_server}/notifications",
-                    wait_until="networkidle",
-                )
+        # Step 3: Click on an unread notification
+        # The notifications on page 2 are from the oldest created
+        # (items 1-5 based on ordering), which are read (i < 10).
+        # Navigate back to page 1 where there are unread ones.
+        page.goto(
+            f"{django_server}/notifications",
+            wait_until="domcontentloaded",
+        )
 
-                # Find the link for "Notification Item 25" (most recent,
-                # unread, on page 1). The onclick handler calls
-                # markRead(event, id, url) which does fetch then
-                # window.location.href = url.
-                target_link = page.locator(
-                    'a[href="/blog/notif-item-25"]'
-                )
-                assert target_link.count() >= 1
-                target_link.first.click()
+        # Find the link for "Notification Item 25" (most recent,
+        # unread, on page 1). The onclick handler calls
+        # markRead(event, id, url) which does fetch then
+        # window.location.href = url.
+        target_link = page.locator(
+            'a[href="/blog/notif-item-25"]'
+        )
+        assert target_link.count() >= 1
+        target_link.first.click()
 
-                # Wait for the JS to POST mark-read then navigate
-                page.wait_for_url(
-                    "**/blog/notif-item-25**",
-                    timeout=10000,
-                )
+        # Wait for the JS to POST mark-read then navigate
+        page.wait_for_url(
+            "**/blog/notif-item-25**",
+            timeout=10000,
+        )
 
-                # Then: Navigates to the content page
-                assert "/blog/notif-item-25" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to the content page
+        assert "/blog/notif-item-25" in page.url
 # ---------------------------------------------------------------
 # Scenario 4: Member uses "Mark all as read" on the notifications
 #              page
@@ -559,7 +531,7 @@ class TestScenario4MarkAllReadOnNotificationsPage:
 
     def test_mark_all_read_on_notifications_page(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier) who has
         8 unread notifications.
         1. Navigate to /notifications - 8 appear as unread
@@ -580,63 +552,55 @@ class TestScenario4MarkAllReadOnNotificationsPage:
                 read=False,
             )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /notifications
-                page.goto(
-                    f"{django_server}/notifications",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /notifications
+        page.goto(
+            f"{django_server}/notifications",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: 8 notifications appear as unread (with accent dots)
-                unread_dots = page.locator(
-                    "main .rounded-full.bg-accent"
-                )
-                assert unread_dots.count() == 8
+        # Then: 8 notifications appear as unread (with accent dots)
+        unread_dots = page.locator(
+            "main .rounded-full.bg-accent"
+        )
+        assert unread_dots.count() == 8
 
-                # Step 2: Click "Mark all as read"
-                mark_all_btn = page.locator(
-                    '#mark-all-btn'
-                )
-                assert mark_all_btn.count() >= 1
+        # Step 2: Click "Mark all as read"
+        mark_all_btn = page.locator(
+            '#mark-all-btn'
+        )
+        assert mark_all_btn.count() >= 1
 
-                # The JS does fetch then window.location.reload().
-                # Use expect_navigation to wait for the reload.
-                with page.expect_navigation(
-                    wait_until="networkidle", timeout=15000,
-                ):
-                    mark_all_btn.click()
+        # The JS does fetch then window.location.reload().
+        # Use expect_navigation to wait for the reload.
+        with page.expect_navigation(
+            wait_until="domcontentloaded", timeout=15000,
+        ):
+            mark_all_btn.click()
 
-                # Then: All notifications appear as read (no unread dots)
-                unread_dots_after = page.locator(
-                    "main .rounded-full.bg-accent"
-                )
-                assert unread_dots_after.count() == 0
+        # Then: All notifications appear as read (no unread dots)
+        unread_dots_after = page.locator(
+            "main .rounded-full.bg-accent"
+        )
+        assert unread_dots_after.count() == 0
 
-                # Step 3: Observe the header bell icon
-                badge = page.locator("#notification-badge")
+        # Step 3: Observe the header bell icon
+        badge = page.locator("#notification-badge")
 
-                # Wait for the JS to poll and update badge
-                page.wait_for_function(
-                    """() => {
-                        var b = document.getElementById('notification-badge');
-                        return b && b.classList.contains('hidden');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for the JS to poll and update badge
+        page.wait_for_function(
+            """() => {
+                var b = document.getElementById('notification-badge');
+                return b && b.classList.contains('hidden');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Badge is hidden (no unread count)
-                assert badge.evaluate(
-                    "el => el.classList.contains('hidden')"
-                )
-
-            finally:
-                browser.close()
-
-
+        # Then: Badge is hidden (no unread count)
+        assert badge.evaluate(
+            "el => el.classList.contains('hidden')"
+        )
 # ---------------------------------------------------------------
 # Scenario 5: Notification is created for eligible members when
 #              an article is published
@@ -649,7 +613,7 @@ class TestScenario5NotificationOnArticlePublish:
 
     def test_publish_creates_notification_for_eligible_not_ineligible(
         self, django_server
-    ):
+    , browser):
         """Given an admin, two members (basic and free), and an unpublished
         article with required_level=10 (Basic).
         1. Admin publishes the article via the admin publish action
@@ -684,103 +648,88 @@ class TestScenario5NotificationOnArticlePublish:
         NotificationService.notify("article", article.pk)
 
         # Step 2: Log in as basic@test.com
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait for badge to appear
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
+        # Wait for badge to appear
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
 
-                # Step 3: Click the bell icon
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Step 3: Click the bell icon
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                # Wait for notifications to load
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for notifications to load
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Notification about the article appears
-                dropdown_text = dropdown.inner_text()
-                assert "New article: Exclusive Basic Article" in dropdown_text
+        # Then: Notification about the article appears
+        dropdown_text = dropdown.inner_text()
+        assert "New article: Exclusive Basic Article" in dropdown_text
 
-                # Step 4: Click the notification
-                article_link = page.locator(
-                    '#notification-list a[href="/blog/exclusive-basic-article"]'
-                )
-                assert article_link.count() >= 1
-                article_link.first.click()
+        # Step 4: Click the notification
+        article_link = page.locator(
+            '#notification-list a[href="/blog/exclusive-basic-article"]'
+        )
+        assert article_link.count() >= 1
+        article_link.first.click()
 
-                # Then: Navigates to the article detail page
-                page.wait_for_url(
-                    "**/blog/exclusive-basic-article**",
-                    timeout=10000,
-                )
-                assert "/blog/exclusive-basic-article" in page.url
-
-            finally:
-                browser.close()
-
+        # Then: Navigates to the article detail page
+        page.wait_for_url(
+            "**/blog/exclusive-basic-article**",
+            timeout=10000,
+        )
+        assert "/blog/exclusive-basic-article" in page.url
         # Step 5: Log in as free@test.com
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait a moment for the badge poll to complete
-                page.wait_for_timeout(2000)
+        # Wait a moment for the badge poll to complete
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: No badge visible (no notifications for free user)
-                badge = page.locator("#notification-badge")
-                is_hidden = badge.evaluate(
-                    "el => el.classList.contains('hidden')"
-                )
-                assert is_hidden, (
-                    "Free user should not see a notification badge "
-                    "for Basic-gated content"
-                )
+        # Then: No badge visible (no notifications for free user)
+        badge = page.locator("#notification-badge")
+        is_hidden = badge.evaluate(
+            "el => el.classList.contains('hidden')"
+        )
+        assert is_hidden, (
+            "Free user should not see a notification badge "
+            "for Basic-gated content"
+        )
 
-                # Click bell and verify no article notification
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Click bell and verify no article notification
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                dropdown_text = dropdown.inner_text()
-                assert "Exclusive Basic Article" not in dropdown_text
-
-            finally:
-                browser.close()
-
-
+        dropdown_text = dropdown.inner_text()
+        assert "Exclusive Basic Article" not in dropdown_text
 # ---------------------------------------------------------------
 # Scenario 6: Free member sees notifications for open content but
 #              not for gated content
@@ -793,7 +742,7 @@ class TestScenario6FreeSeesOpenNotGated:
 
     def test_free_member_only_sees_open_notification(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier) and two
         notifications exist -- one for an open article (required_level=0)
         and one for a Basic-gated recording (required_level=10).
@@ -824,58 +773,50 @@ class TestScenario6FreeSeesOpenNotGated:
         # was never created for this user because they're not eligible.
         # So we verify only the open one shows up.
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait for badge to show "1"
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
-                assert badge.inner_text() == "1"
+        # Wait for badge to show "1"
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
+        assert badge.inner_text() == "1"
 
-                # Step 1: Click the bell icon
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Step 1: Click the bell icon
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Only the open article notification appears
-                dropdown_text = dropdown.inner_text()
-                assert "Open Article for All" in dropdown_text
+        # Then: Only the open article notification appears
+        dropdown_text = dropdown.inner_text()
+        assert "Open Article for All" in dropdown_text
 
-                # Step 2: Click the open article notification
-                article_link = page.locator(
-                    '#notification-list a[href="/blog/open-article-for-all"]'
-                )
-                assert article_link.count() >= 1
-                article_link.first.click()
+        # Step 2: Click the open article notification
+        article_link = page.locator(
+            '#notification-list a[href="/blog/open-article-for-all"]'
+        )
+        assert article_link.count() >= 1
+        article_link.first.click()
 
-                # Then: Navigates to the article
-                page.wait_for_url(
-                    "**/blog/open-article-for-all**",
-                    timeout=10000,
-                )
-                assert "/blog/open-article-for-all" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to the article
+        page.wait_for_url(
+            "**/blog/open-article-for-all**",
+            timeout=10000,
+        )
+        assert "/blog/open-article-for-all" in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Anonymous visitor cannot access notifications and
 #              is redirected to login
@@ -888,40 +829,31 @@ class TestScenario7AnonymousRedirectedToLogin:
 
     def test_anonymous_redirected_on_notifications_page(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor (not logged in).
         1. Navigate to /notifications - redirected to login
         2. Try /api/notifications/unread-count - authentication required
         """
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /notifications
-                page.goto(
-                    f"{django_server}/notifications",
-                    wait_until="networkidle",
-                )
+        context = _anon_context(browser)
+        # Step 1: Navigate to /notifications
+        page.goto(
+            f"{django_server}/notifications",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Redirected to login page
-                assert "/accounts/login/" in page.url
+        # Then: Redirected to login page
+        assert "/accounts/login/" in page.url
 
-                # Step 2: Try /api/notifications/unread-count
-                response = page.goto(
-                    f"{django_server}/api/notifications/unread-count",
-                    wait_until="networkidle",
-                )
+        # Step 2: Try /api/notifications/unread-count
+        response = page.goto(
+            f"{django_server}/api/notifications/unread-count",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Authentication required (redirect to login)
-                assert "/accounts/login/" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: Authentication required (redirect to login)
+        assert "/accounts/login/" in page.url
 # ---------------------------------------------------------------
 # Scenario 8: Member clicks a notification in the dropdown and
 #              lands on the correct content page
@@ -934,7 +866,7 @@ class TestScenario8NotificationLinksToCorrectContent:
 
     def test_notifications_link_to_correct_content_types(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier) who has
         notifications for an article, a course, and an event.
         1. Click the bell - dropdown shows all three
@@ -982,98 +914,90 @@ class TestScenario8NotificationLinksToCorrectContent:
             url="/events/event-for-main",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait for badge
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
+        # Wait for badge
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
 
-                # Step 1: Click the bell icon
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Step 1: Click the bell icon
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: All three notifications are shown
-                dropdown_text = dropdown.inner_text()
-                assert "New article: Article for Main" in dropdown_text
-                assert "New course: Course for Main" in dropdown_text
-                assert "Upcoming event: Event for Main" in dropdown_text
+        # Then: All three notifications are shown
+        dropdown_text = dropdown.inner_text()
+        assert "New article: Article for Main" in dropdown_text
+        assert "New course: Course for Main" in dropdown_text
+        assert "Upcoming event: Event for Main" in dropdown_text
 
-                # Step 2: Click the event notification
-                event_link = page.locator(
-                    '#notification-list a[href="/events/event-for-main"]'
-                )
-                assert event_link.count() >= 1
-                event_link.first.click()
+        # Step 2: Click the event notification
+        event_link = page.locator(
+            '#notification-list a[href="/events/event-for-main"]'
+        )
+        assert event_link.count() >= 1
+        event_link.first.click()
 
-                page.wait_for_url(
-                    "**/events/event-for-main**",
-                    timeout=10000,
-                )
+        page.wait_for_url(
+            "**/events/event-for-main**",
+            timeout=10000,
+        )
 
-                # Then: Navigates to the event detail page
-                assert "/events/event-for-main" in page.url
-                body = page.content()
-                assert "Event for Main" in body
+        # Then: Navigates to the event detail page
+        assert "/events/event-for-main" in page.url
+        body = page.content()
+        assert "Event for Main" in body
 
-                # Step 3: Navigate back, click bell, click course
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        # Step 3: Navigate back, click bell, click course
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                course_link = page.locator(
-                    '#notification-list a[href="/courses/course-for-main"]'
-                )
-                assert course_link.count() >= 1
-                course_link.first.click()
+        course_link = page.locator(
+            '#notification-list a[href="/courses/course-for-main"]'
+        )
+        assert course_link.count() >= 1
+        course_link.first.click()
 
-                page.wait_for_url(
-                    "**/courses/course-for-main**",
-                    timeout=10000,
-                )
+        page.wait_for_url(
+            "**/courses/course-for-main**",
+            timeout=10000,
+        )
 
-                # Then: Navigates to the course detail page
-                assert "/courses/course-for-main" in page.url
-                body = page.content()
-                assert "Course for Main" in body
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to the course detail page
+        assert "/courses/course-for-main" in page.url
+        body = page.content()
+        assert "Course for Main" in body
 # ---------------------------------------------------------------
 # Scenario 9: Member with many notifications sees the badge cap
 #              at 9+
@@ -1085,7 +1009,7 @@ class TestScenario9BadgeCapsAt9Plus:
 
     def test_badge_shows_9_plus_for_many_unread(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier) who has
         15 unread notifications.
         1. Observe the bell icon - badge displays "9+"
@@ -1104,48 +1028,40 @@ class TestScenario9BadgeCapsAt9Plus:
                 notification_type="new_content",
             )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 1: Wait for badge to appear
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
+        # Step 1: Wait for badge to appear
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
 
-                # Then: Badge displays "9+" (not "15")
-                assert badge.inner_text() == "9+"
+        # Then: Badge displays "9+" (not "15")
+        assert badge.inner_text() == "9+"
 
-                # Step 2: Click the bell icon
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Step 2: Click the bell icon
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Dropdown shows notifications (up to 20 from API)
-                notification_items = page.locator(
-                    "#notification-list a"
-                )
-                assert notification_items.count() == 15
-
-            finally:
-                browser.close()
-
-
+        # Then: Dropdown shows notifications (up to 20 from API)
+        notification_items = page.locator(
+            "#notification-list a"
+        )
+        assert notification_items.count() == 15
 # ---------------------------------------------------------------
 # Scenario 10: Registered member receives event reminder
 #               notification before an upcoming event
@@ -1158,7 +1074,7 @@ class TestScenario10EventReminderNotification:
 
     def test_event_reminder_appears_in_bell(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as main@test.com (Main tier) who is
         registered for an event starting in ~24 hours, and the event
         reminder background job has run.
@@ -1195,60 +1111,52 @@ class TestScenario10EventReminderNotification:
             body=f"{event.title} is starting soon. Don't forget to join!",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Wait for badge to show
-                badge = page.locator("#notification-badge")
-                badge.wait_for(state="visible", timeout=10000)
+        # Wait for badge to show
+        badge = page.locator("#notification-badge")
+        badge.wait_for(state="visible", timeout=10000)
 
-                # Step 1: Click the bell icon
-                bell_btn = page.locator("#notification-bell-btn")
-                bell_btn.click()
+        # Step 1: Click the bell icon
+        bell_btn = page.locator("#notification-bell-btn")
+        bell_btn.click()
 
-                dropdown = page.locator("#notification-dropdown")
-                dropdown.wait_for(state="visible", timeout=5000)
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.wait_for(state="visible", timeout=5000)
 
-                page.wait_for_function(
-                    """() => {
-                        var list = document.getElementById('notification-list');
-                        return list && !list.textContent.includes('Loading');
-                    }""",
-                    timeout=10000,
-                )
+        page.wait_for_function(
+            """() => {
+                var list = document.getElementById('notification-list');
+                return list && !list.textContent.includes('Loading');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Reminder notification appears
-                dropdown_text = dropdown.inner_text()
-                assert "Reminder: AI Workshop Tomorrow starts in 24 hours" in dropdown_text
+        # Then: Reminder notification appears
+        dropdown_text = dropdown.inner_text()
+        assert "Reminder: AI Workshop Tomorrow starts in 24 hours" in dropdown_text
 
-                # Step 2: Click the reminder notification
-                event_link = page.locator(
-                    f'#notification-list a[href="/events/ai-workshop-tomorrow"]'
-                )
-                assert event_link.count() >= 1
-                event_link.first.click()
+        # Step 2: Click the reminder notification
+        event_link = page.locator(
+            f'#notification-list a[href="/events/ai-workshop-tomorrow"]'
+        )
+        assert event_link.count() >= 1
+        event_link.first.click()
 
-                page.wait_for_url(
-                    "**/events/ai-workshop-tomorrow**",
-                    timeout=10000,
-                )
+        page.wait_for_url(
+            "**/events/ai-workshop-tomorrow**",
+            timeout=10000,
+        )
 
-                # Then: Navigates to the event detail page
-                assert "/events/ai-workshop-tomorrow" in page.url
-                body = page.content()
-                assert "AI Workshop Tomorrow" in body
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to the event detail page
+        assert "/events/ai-workshop-tomorrow" in page.url
+        body = page.content()
+        assert "AI Workshop Tomorrow" in body
 # ---------------------------------------------------------------
 # Scenario 11: Notifications page shows a helpful empty state
 #               for a new member
@@ -1260,7 +1168,7 @@ class TestScenario11EmptyStateNewMember:
 
     def test_empty_state_message_and_no_badge(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier) who has
         zero notifications.
         1. Navigate to /notifications - shows "No notifications yet."
@@ -1270,43 +1178,37 @@ class TestScenario11EmptyStateNewMember:
         _clear_notifications()
         _create_user("free@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /notifications
-                page.goto(
-                    f"{django_server}/notifications",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /notifications
+        page.goto(
+            f"{django_server}/notifications",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "No notifications yet." message
-                assert "No notifications yet." in body
+        # Then: Shows "No notifications yet." message
+        assert "No notifications yet." in body
 
-                # The page should NOT show notification items
-                notification_links = page.locator(
-                    "main .space-y-2 > a"
-                )
-                assert notification_links.count() == 0
+        # The page should NOT show notification items
+        notification_links = page.locator(
+            "main .space-y-2 > a"
+        )
+        assert notification_links.count() == 0
 
-                # Step 2: Observe the header bell icon
-                badge = page.locator("#notification-badge")
+        # Step 2: Observe the header bell icon
+        badge = page.locator("#notification-badge")
 
-                # Wait for the JS poll to run
-                page.wait_for_function(
-                    """() => {
-                        var b = document.getElementById('notification-badge');
-                        return b && b.classList.contains('hidden');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for the JS poll to run
+        page.wait_for_function(
+            """() => {
+                var b = document.getElementById('notification-badge');
+                return b && b.classList.contains('hidden');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: No unread badge is shown
-                assert badge.evaluate(
-                    "el => el.classList.contains('hidden')"
-                )
-
-            finally:
-                browser.close()
+        # Then: No unread badge is shown
+        assert badge.evaluate(
+            "el => el.classList.contains('hidden')"
+        )

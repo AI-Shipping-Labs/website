@@ -25,7 +25,6 @@ import os
 import jwt
 import pytest
 from django.conf import settings
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -38,9 +37,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -145,7 +141,7 @@ class TestScenario1SubscribeFromDedicatedPage:
 
     def test_anonymous_subscribes_from_subscribe_page(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor on the site.
         1. Navigate to /subscribe
         2. Enter a new email address into the subscribe form and submit
@@ -155,63 +151,55 @@ class TestScenario1SubscribeFromDedicatedPage:
         Then: The form is available for another visitor."""
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /subscribe
-                page.goto(
-                    f"{django_server}/subscribe",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _anon_context(browser)
+        # Step 1: Navigate to /subscribe
+        page.goto(
+            f"{django_server}/subscribe",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # The subscribe form is visible
-                assert "Subscribe" in body
-                email_input = page.locator(
-                    '.subscribe-form input[name="email"]'
-                )
-                assert email_input.count() >= 1
+        # The subscribe form is visible
+        assert "Subscribe" in body
+        email_input = page.locator(
+            '.subscribe-form input[name="email"]'
+        )
+        assert email_input.count() >= 1
 
-                # Step 2: Enter email and submit
-                email_input.first.fill("newvisitor@test.com")
-                submit_btn = page.locator(
-                    '.subscribe-form button[type="submit"]'
-                )
-                submit_btn.first.click()
+        # Step 2: Enter email and submit
+        email_input.first.fill("newvisitor@test.com")
+        submit_btn = page.locator(
+            '.subscribe-form button[type="submit"]'
+        )
+        submit_btn.first.click()
 
-                # Wait for the success message to appear
-                message_el = page.locator(".subscribe-message")
-                message_el.first.wait_for(state="visible", timeout=10000)
+        # Wait for the success message to appear
+        message_el = page.locator(".subscribe-message")
+        message_el.first.wait_for(state="visible", timeout=10000)
 
-                # Then: Confirmation message appears
-                message_text = message_el.first.inner_text()
-                assert "Check your email to confirm your subscription" in message_text
+        # Then: Confirmation message appears
+        message_text = message_el.first.inner_text()
+        assert "Check your email to confirm your subscription" in message_text
 
-                # Then: The email input is cleared
-                assert email_input.first.input_value() == ""
+        # Then: The email input is cleared
+        assert email_input.first.input_value() == ""
 
-                # Step 3: Navigate to /subscribe again
-                page.goto(
-                    f"{django_server}/subscribe",
-                    wait_until="networkidle",
-                )
+        # Step 3: Navigate to /subscribe again
+        page.goto(
+            f"{django_server}/subscribe",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: The form is available (no session state leftover)
-                email_input_new = page.locator(
-                    '.subscribe-form input[name="email"]'
-                )
-                assert email_input_new.count() >= 1
-                assert email_input_new.first.input_value() == ""
-                submit_btn_new = page.locator(
-                    '.subscribe-form button[type="submit"]'
-                )
-                assert submit_btn_new.count() >= 1
-            finally:
-                browser.close()
-
-
+        # Then: The form is available (no session state leftover)
+        email_input_new = page.locator(
+            '.subscribe-form input[name="email"]'
+        )
+        assert email_input_new.count() >= 1
+        assert email_input_new.first.input_value() == ""
+        submit_btn_new = page.locator(
+            '.subscribe-form button[type="submit"]'
+        )
+        assert submit_btn_new.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 2: Anonymous visitor subscribes from the homepage
 #              newsletter section
@@ -223,7 +211,7 @@ class TestScenario2SubscribeFromHomepageNewsletter:
 
     def test_anonymous_subscribes_from_homepage_newsletter(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor on the homepage.
         1. Navigate to /
         2. Scroll to the newsletter section (anchor #newsletter)
@@ -232,53 +220,45 @@ class TestScenario2SubscribeFromHomepageNewsletter:
         Then: The visitor remains on the homepage (no redirect)."""
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
+        context = _anon_context(browser)
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 2: Scroll to the #newsletter section
-                newsletter_section = page.locator("#newsletter")
-                assert newsletter_section.count() >= 1
-                newsletter_section.scroll_into_view_if_needed()
+        # Step 2: Scroll to the #newsletter section
+        newsletter_section = page.locator("#newsletter")
+        assert newsletter_section.count() >= 1
+        newsletter_section.scroll_into_view_if_needed()
 
-                # Step 3: Enter email and submit via the newsletter
-                # section form (not the footer form)
-                newsletter_form = newsletter_section.locator(
-                    ".subscribe-form"
-                )
-                email_input = newsletter_form.locator(
-                    'input[name="email"]'
-                )
-                email_input.fill("homepage-sub@test.com")
+        # Step 3: Enter email and submit via the newsletter
+        # section form (not the footer form)
+        newsletter_form = newsletter_section.locator(
+            ".subscribe-form"
+        )
+        email_input = newsletter_form.locator(
+            'input[name="email"]'
+        )
+        email_input.fill("homepage-sub@test.com")
 
-                submit_btn = newsletter_form.locator(
-                    'button[type="submit"]'
-                )
-                submit_btn.click()
+        submit_btn = newsletter_form.locator(
+            'button[type="submit"]'
+        )
+        submit_btn.click()
 
-                # Wait for the success message
-                message_el = newsletter_section.locator(
-                    ".subscribe-message"
-                )
-                message_el.wait_for(state="visible", timeout=10000)
+        # Wait for the success message
+        message_el = newsletter_section.locator(
+            ".subscribe-message"
+        )
+        message_el.wait_for(state="visible", timeout=10000)
 
-                # Then: Confirmation message appears
-                message_text = message_el.inner_text()
-                assert "Check your email" in message_text
+        # Then: Confirmation message appears
+        message_text = message_el.inner_text()
+        assert "Check your email" in message_text
 
-                # Then: Visitor remains on the homepage
-                assert page.url.rstrip("/") == django_server.rstrip("/") or page.url.endswith("/")
-            finally:
-                browser.close()
-
-
+        # Then: Visitor remains on the homepage
+        assert page.url.rstrip("/") == django_server.rstrip("/") or page.url.endswith("/")
 # ---------------------------------------------------------------
 # Scenario 3: Anonymous visitor subscribes from the site footer
 # ---------------------------------------------------------------
@@ -289,7 +269,7 @@ class TestScenario3SubscribeFromFooter:
 
     def test_anonymous_subscribes_from_footer(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor reading any page.
         1. Navigate to /blog
         2. Scroll to the footer
@@ -298,50 +278,42 @@ class TestScenario3SubscribeFromFooter:
         Then: The visitor remains on /blog (no page navigation)."""
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
+        context = _anon_context(browser)
+        # Step 1: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 2: Scroll to the footer
-                footer = page.locator("footer")
-                assert footer.count() >= 1
-                footer.scroll_into_view_if_needed()
+        # Step 2: Scroll to the footer
+        footer = page.locator("footer")
+        assert footer.count() >= 1
+        footer.scroll_into_view_if_needed()
 
-                # Step 3: Enter email and submit
-                footer_form = footer.locator(".subscribe-form")
-                email_input = footer_form.locator(
-                    'input[name="email"]'
-                )
-                email_input.fill("footer-sub@test.com")
+        # Step 3: Enter email and submit
+        footer_form = footer.locator(".subscribe-form")
+        email_input = footer_form.locator(
+            'input[name="email"]'
+        )
+        email_input.fill("footer-sub@test.com")
 
-                submit_btn = footer_form.locator(
-                    'button[type="submit"]'
-                )
-                submit_btn.click()
+        submit_btn = footer_form.locator(
+            'button[type="submit"]'
+        )
+        submit_btn.click()
 
-                # Wait for the success message in the footer
-                message_el = footer.locator(
-                    ".footer-subscribe-message"
-                )
-                message_el.wait_for(state="visible", timeout=10000)
+        # Wait for the success message in the footer
+        message_el = footer.locator(
+            ".footer-subscribe-message"
+        )
+        message_el.wait_for(state="visible", timeout=10000)
 
-                # Then: Confirmation message appears
-                message_text = message_el.inner_text()
-                assert "Check your email" in message_text
+        # Then: Confirmation message appears
+        message_text = message_el.inner_text()
+        assert "Check your email" in message_text
 
-                # Then: Visitor remains on /blog
-                assert "/blog" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: Visitor remains on /blog
+        assert "/blog" in page.url
 # ---------------------------------------------------------------
 # Scenario 4: Returning visitor submits an already-registered
 #              email and gets no information leak
@@ -354,7 +326,7 @@ class TestScenario4NoInformationLeak:
 
     def test_existing_email_returns_same_success_message(
         self, django_server
-    ):
+    , page):
         """Given a subscriber already exists with 'existing@test.com'.
         1. Navigate to /subscribe
         2. Enter 'existing@test.com' into the form and submit
@@ -368,48 +340,40 @@ class TestScenario4NoInformationLeak:
             email_verified=False,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /subscribe
-                page.goto(
-                    f"{django_server}/subscribe",
-                    wait_until="networkidle",
-                )
+        context = _anon_context(browser)
+        # Step 1: Navigate to /subscribe
+        page.goto(
+            f"{django_server}/subscribe",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 2: Enter existing email and submit
-                email_input = page.locator(
-                    '.subscribe-form input[name="email"]'
-                )
-                email_input.first.fill("existing@test.com")
+        # Step 2: Enter existing email and submit
+        email_input = page.locator(
+            '.subscribe-form input[name="email"]'
+        )
+        email_input.first.fill("existing@test.com")
 
-                submit_btn = page.locator(
-                    '.subscribe-form button[type="submit"]'
-                )
-                submit_btn.first.click()
+        submit_btn = page.locator(
+            '.subscribe-form button[type="submit"]'
+        )
+        submit_btn.first.click()
 
-                # Wait for the success message
-                message_el = page.locator(".subscribe-message")
-                message_el.first.wait_for(state="visible", timeout=10000)
+        # Wait for the success message
+        message_el = page.locator(".subscribe-message")
+        message_el.first.wait_for(state="visible", timeout=10000)
 
-                # Then: Same success message appears
-                message_text = message_el.first.inner_text()
-                assert "Check your email to confirm your subscription" in message_text
+        # Then: Same success message appears
+        message_text = message_el.first.inner_text()
+        assert "Check your email to confirm your subscription" in message_text
 
-                # Then: No error is shown
-                error_el = page.locator(".subscribe-error")
-                is_hidden = error_el.first.evaluate(
-                    "el => el.classList.contains('hidden')"
-                )
-                assert is_hidden, (
-                    "Error element should remain hidden for existing email"
-                )
-            finally:
-                browser.close()
-
-
+        # Then: No error is shown
+        error_el = page.locator(".subscribe-error")
+        is_hidden = error_el.first.evaluate(
+            "el => el.classList.contains('hidden')"
+        )
+        assert is_hidden, (
+            "Error element should remain hidden for existing email"
+        )
 # ---------------------------------------------------------------
 # Scenario 5: New subscriber completes the double opt-in
 #              verification flow
@@ -421,7 +385,7 @@ class TestScenario5DoubleOptInVerification:
 
     def test_verification_link_verifies_email(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor who just subscribed.
         1. The system sends a verification email with a JWT token
         2. Visit the verification link
@@ -442,51 +406,43 @@ class TestScenario5DoubleOptInVerification:
         # Step 1 & 2: Generate token and visit verification link
         token = _make_verification_token(user.pk)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/api/verify-email?token={token}",
-                    wait_until="networkidle",
-                )
+        context = _anon_context(browser)
+        response = page.goto(
+            f"{django_server}/api/verify-email?token={token}",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Response confirms email verified (200 with JSON)
-                assert response.status == 200
-                body = page.content()
-                assert "verified" in body.lower()
+        # Then: Response confirms email verified (200 with JSON)
+        assert response.status == 200
+        body = page.content()
+        assert "verified" in body.lower()
 
-                # Then: User is now email_verified in the database
-                user.refresh_from_db()
-                assert user.email_verified
+        # Then: User is now email_verified in the database
+        user.refresh_from_db()
+        assert user.email_verified
 
-                # Step 3: Log in with the subscriber's email
-                page.goto(
-                    f"{django_server}/accounts/login/",
-                    wait_until="networkidle",
-                )
+        # Step 3: Log in with the subscriber's email
+        page.goto(
+            f"{django_server}/accounts/login/",
+            wait_until="domcontentloaded",
+        )
 
-                # Fill login form
-                page.fill('input[name="email"]', "verify-flow@test.com")
-                page.fill('input[name="password"]', DEFAULT_PASSWORD)
+        # Fill login form
+        page.fill('input[name="email"]', "verify-flow@test.com")
+        page.fill('input[name="password"]', DEFAULT_PASSWORD)
 
-                # Submit login form (JS-based)
-                page.click('button[type="submit"]')
+        # Submit login form (JS-based)
+        page.click('button[type="submit"]')
 
-                # Wait for redirect to the dashboard after login
-                page.wait_for_url(
-                    f"{django_server}/",
-                    timeout=10000,
-                )
+        # Wait for redirect to the dashboard after login
+        page.wait_for_url(
+            f"{django_server}/",
+            timeout=10000,
+        )
 
-                # Then: User can access the authenticated dashboard
-                body = page.content()
-                assert "Quick Actions" in body or "Welcome" in body
-            finally:
-                browser.close()
-
-
+        # Then: User can access the authenticated dashboard
+        body = page.content()
+        assert "Quick Actions" in body or "Welcome" in body
 # ---------------------------------------------------------------
 # Scenario 6: Subscriber tries to verify with an expired token
 #              and understands what to do
@@ -499,7 +455,7 @@ class TestScenario6ExpiredTokenError:
 
     def test_expired_token_shows_error(
         self, django_server
-    ):
+    , page):
         """Given a subscriber who received a verification email
         more than 24 hours ago.
         1. Visit /api/verify-email?token={expired_token}
@@ -514,28 +470,19 @@ class TestScenario6ExpiredTokenError:
         # Generate an expired token
         token = _make_verification_token(user.pk, expired=True)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/api/verify-email?token={token}",
-                    wait_until="networkidle",
-                )
+        response = page.goto(
+            f"{django_server}/api/verify-email?token={token}",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Error response indicates token expired
-                assert response.status == 400
-                body = page.content()
-                assert "expired" in body.lower()
+        # Then: Error response indicates token expired
+        assert response.status == 400
+        body = page.content()
+        assert "expired" in body.lower()
 
-                # Then: User is NOT verified
-                user.refresh_from_db()
-                assert not user.email_verified
-            finally:
-                browser.close()
-
-
+        # Then: User is NOT verified
+        user.refresh_from_db()
+        assert not user.email_verified
 # ---------------------------------------------------------------
 # Scenario 7: Anonymous visitor downloads a lead magnet by
 #              subscribing with their email
@@ -548,7 +495,7 @@ class TestScenario7LeadMagnetSubscribeFlow:
 
     def test_anonymous_sees_signup_cta_on_lead_magnet(
         self, django_server
-    ):
+    , page):
         """Given a published download with required_level=0 (lead magnet)
         and an anonymous visitor.
         1. Navigate to /downloads
@@ -568,39 +515,31 @@ class TestScenario7LeadMagnetSubscribeFlow:
             required_level=0,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /downloads
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /downloads
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Step 2: Find the lead magnet download card
-                assert "Free AI Cheat Sheet" in body
+        # Step 2: Find the lead magnet download card
+        assert "Free AI Cheat Sheet" in body
 
-                # Then: Shows "Sign Up to Download" CTA
-                signup_btn = page.locator(
-                    'a:has-text("Sign Up to Download")'
-                )
-                assert signup_btn.count() >= 1
+        # Then: Shows "Sign Up to Download" CTA
+        signup_btn = page.locator(
+            'a:has-text("Sign Up to Download")'
+        )
+        assert signup_btn.count() >= 1
 
-                # Step 3: Click the sign-up link
-                signup_btn.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click the sign-up link
+        signup_btn.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Visitor is directed to signup/register
-                assert (
-                    "/accounts/signup" in page.url
-                    or "/accounts/register" in page.url
-                )
-            finally:
-                browser.close()
-
+        # Then: Visitor is directed to signup/register
+        assert (
+            "/accounts/signup" in page.url
+            or "/accounts/register" in page.url
+        )
     def test_lead_magnet_verification_redirects_to_download(
         self, django_server
     ):
@@ -629,47 +568,38 @@ class TestScenario7LeadMagnetSubscribeFlow:
             redirect_to="/api/downloads/lead-magnet-resource/file",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Intercept the redirect to avoid following to
-                # external download URL
-                redirect_location = None
+        # Intercept the redirect to avoid following to
+        # external download URL
+        redirect_location = None
 
-                def handle_route(route):
-                    nonlocal redirect_location
-                    resp = route.fetch(max_redirects=0)
-                    redirect_location = resp.headers.get(
-                        "location", ""
-                    )
-                    route.fulfill(
-                        status=200,
-                        body="intercepted-redirect",
-                    )
+        def handle_route(route):
+            nonlocal redirect_location
+            resp = route.fetch(max_redirects=0)
+            redirect_location = resp.headers.get(
+                "location", ""
+            )
+            route.fulfill(
+                status=200,
+                body="intercepted-redirect",
+            )
 
-                page.route(
-                    "**/api/verify-email*",
-                    handle_route,
-                )
+        page.route(
+            "**/api/verify-email*",
+            handle_route,
+        )
 
-                page.goto(
-                    f"{django_server}/api/verify-email?token={token}",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/api/verify-email?token={token}",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Redirect to the download file URL
-                assert redirect_location is not None
-                assert "/api/downloads/lead-magnet-resource/file" in redirect_location
+        # Then: Redirect to the download file URL
+        assert redirect_location is not None
+        assert "/api/downloads/lead-magnet-resource/file" in redirect_location
 
-                # Then: User is now verified
-                user.refresh_from_db()
-                assert user.email_verified
-            finally:
-                browser.close()
-
-
+        # Then: User is now verified
+        user.refresh_from_db()
+        assert user.email_verified
 # ---------------------------------------------------------------
 # Scenario 8: Authenticated free member downloads a lead magnet
 #              directly
@@ -681,7 +611,7 @@ class TestScenario8AuthenticatedLeadMagnetDownload:
 
     def test_authenticated_user_sees_direct_download(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier, verified).
         1. Navigate to /downloads
         2. Find a download with required_level=0 (lead magnet)
@@ -700,64 +630,57 @@ class TestScenario8AuthenticatedLeadMagnetDownload:
             required_level=0,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /downloads
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /downloads
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Step 2: Find the lead magnet
-                assert "Free Guide" in body
+        # Step 2: Find the lead magnet
+        assert "Free Guide" in body
 
-                # Then: Direct download link is present (no signup CTA)
-                download_link = page.locator(
-                    'a[href="/api/downloads/free-guide/file"]'
-                )
-                assert download_link.count() >= 1
+        # Then: Direct download link is present (no signup CTA)
+        download_link = page.locator(
+            'a[href="/api/downloads/free-guide/file"]'
+        )
+        assert download_link.count() >= 1
 
-                # No "Sign Up to Download" button for authenticated user
-                signup_btn = page.locator(
-                    'a:has-text("Sign Up to Download")'
-                )
-                assert signup_btn.count() == 0
+        # No "Sign Up to Download" button for authenticated user
+        signup_btn = page.locator(
+            'a:has-text("Sign Up to Download")'
+        )
+        assert signup_btn.count() == 0
 
-                # Step 3: Click the download button and intercept
-                redirect_status = None
-                redirect_location = None
+        # Step 3: Click the download button and intercept
+        redirect_status = None
+        redirect_location = None
 
-                def handle_route(route):
-                    nonlocal redirect_status, redirect_location
-                    resp = route.fetch(max_redirects=0)
-                    redirect_status = resp.status
-                    redirect_location = resp.headers.get(
-                        "location", ""
-                    )
-                    route.fulfill(
-                        status=200,
-                        body="intercepted",
-                    )
+        def handle_route(route):
+            nonlocal redirect_status, redirect_location
+            resp = route.fetch(max_redirects=0)
+            redirect_status = resp.status
+            redirect_location = resp.headers.get(
+                "location", ""
+            )
+            route.fulfill(
+                status=200,
+                body="intercepted",
+            )
 
-                page.route(
-                    "**/api/downloads/free-guide/file",
-                    handle_route,
-                )
+        page.route(
+            "**/api/downloads/free-guide/file",
+            handle_route,
+        )
 
-                download_link.first.click()
-                page.wait_for_load_state("networkidle")
+        download_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: File download triggered (302 redirect to file)
-                assert redirect_status == 302
-                assert "example.com/guide.pdf" in redirect_location
-            finally:
-                browser.close()
-
-
+        # Then: File download triggered (302 redirect to file)
+        assert redirect_status == 302
+        assert "example.com/guide.pdf" in redirect_location
 # ---------------------------------------------------------------
 # Scenario 9: Subscriber unsubscribes via the link in an email
 # ---------------------------------------------------------------
@@ -768,7 +691,7 @@ class TestScenario9UnsubscribeViaEmailLink:
 
     def test_unsubscribe_link_works(
         self, django_server
-    ):
+    , page):
         """Given a verified subscriber with an unsubscribe token.
         1. Visit /api/unsubscribe?token={valid_unsubscribe_token}
         Then: The page shows 'Unsubscribed' with a message.
@@ -785,46 +708,37 @@ class TestScenario9UnsubscribeViaEmailLink:
 
         token = _make_unsubscribe_token(user.pk)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Visit unsubscribe link
-                page.goto(
-                    f"{django_server}/api/unsubscribe?token={token}",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Visit unsubscribe link
+        page.goto(
+            f"{django_server}/api/unsubscribe?token={token}",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "Unsubscribed" heading
-                assert "Unsubscribed" in body
+        # Then: Shows "Unsubscribed" heading
+        assert "Unsubscribed" in body
 
-                # Then: Shows the unsubscribed message
-                assert "You have been unsubscribed from all emails" in body
+        # Then: Shows the unsubscribed message
+        assert "You have been unsubscribed from all emails" in body
 
-                # Then: Link to /account/ for re-subscribing
-                account_link = page.locator('a[href="/account/"]')
-                assert account_link.count() >= 1
+        # Then: Link to /account/ for re-subscribing
+        account_link = page.locator('a[href="/account/"]')
+        assert account_link.count() >= 1
 
-                # Verify user is actually unsubscribed
-                user.refresh_from_db()
-                assert user.unsubscribed
+        # Verify user is actually unsubscribed
+        user.refresh_from_db()
+        assert user.unsubscribed
 
-                # Step 2: Click "Go to Homepage"
-                homepage_link = page.locator(
-                    'a:has-text("Go to Homepage")'
-                )
-                assert homepage_link.count() >= 1
-                homepage_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Go to Homepage"
+        homepage_link = page.locator(
+            'a:has-text("Go to Homepage")'
+        )
+        assert homepage_link.count() >= 1
+        homepage_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Visitor lands on the homepage
-                assert page.url.rstrip("/") == django_server.rstrip("/") or page.url.endswith("/")
-            finally:
-                browser.close()
-
-
+        # Then: Visitor lands on the homepage
+        assert page.url.rstrip("/") == django_server.rstrip("/") or page.url.endswith("/")
 # ---------------------------------------------------------------
 # Scenario 10: Previously unsubscribed member re-subscribes from
 #               the account page
@@ -837,7 +751,7 @@ class TestScenario10ResubscribeFromAccountPage:
 
     def test_unsubscribed_user_toggles_newsletter_on(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as unsubscribed@test.com who
         previously unsubscribed.
         1. Navigate to /account/
@@ -853,70 +767,63 @@ class TestScenario10ResubscribeFromAccountPage:
             unsubscribed=True,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "unsubscribed@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /account/
-                page.goto(
-                    f"{django_server}/account/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "unsubscribed@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /account/
+        page.goto(
+            f"{django_server}/account/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Newsletter toggle is present
-                toggle = page.locator("#newsletter-toggle")
-                assert toggle.count() >= 1
+        # Then: Newsletter toggle is present
+        toggle = page.locator("#newsletter-toggle")
+        assert toggle.count() >= 1
 
-                # Then: Shows unsubscribed state
-                status_text = page.locator("#newsletter-status")
-                assert "unsubscribed" in status_text.inner_text().lower()
+        # Then: Shows unsubscribed state
+        status_text = page.locator("#newsletter-status")
+        assert "unsubscribed" in status_text.inner_text().lower()
 
-                # The toggle dot should be at translate-x-0 (off)
-                toggle_dot = page.locator("#newsletter-toggle-dot")
-                assert toggle_dot.evaluate(
-                    "el => el.classList.contains('translate-x-0')"
-                )
+        # The toggle dot should be at translate-x-0 (off)
+        toggle_dot = page.locator("#newsletter-toggle-dot")
+        assert toggle_dot.evaluate(
+            "el => el.classList.contains('translate-x-0')"
+        )
 
-                # Step 2: Click the toggle to subscribe
-                toggle.click()
+        # Step 2: Click the toggle to subscribe
+        toggle.click()
 
-                # Wait for the status text to update
-                page.wait_for_function(
-                    """() => {
-                        var el = document.getElementById('newsletter-status');
-                        return el && el.textContent.includes('You are subscribed');
-                    }""",
-                    timeout=10000,
-                )
+        # Wait for the status text to update
+        page.wait_for_function(
+            """() => {
+                var el = document.getElementById('newsletter-status');
+                return el && el.textContent.includes('You are subscribed');
+            }""",
+            timeout=10000,
+        )
 
-                # Then: Toggle is now in subscribed position
-                assert toggle_dot.evaluate(
-                    "el => el.classList.contains('translate-x-5')"
-                )
+        # Then: Toggle is now in subscribed position
+        assert toggle_dot.evaluate(
+            "el => el.classList.contains('translate-x-5')"
+        )
 
-                # Then: Status text shows subscribed
-                assert "You are subscribed to newsletters" in status_text.inner_text()
+        # Then: Status text shows subscribed
+        assert "You are subscribed to newsletters" in status_text.inner_text()
 
-                # Step 3: Refresh /account/ to verify persistence
-                page.goto(
-                    f"{django_server}/account/",
-                    wait_until="networkidle",
-                )
+        # Step 3: Refresh /account/ to verify persistence
+        page.goto(
+            f"{django_server}/account/",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Toggle still shows subscribed
-                status_text = page.locator("#newsletter-status")
-                assert "You are subscribed to newsletters" in status_text.inner_text()
+        # Then: Toggle still shows subscribed
+        status_text = page.locator("#newsletter-status")
+        assert "You are subscribed to newsletters" in status_text.inner_text()
 
-                toggle_dot = page.locator("#newsletter-toggle-dot")
-                assert toggle_dot.evaluate(
-                    "el => el.classList.contains('translate-x-5')"
-                )
-            finally:
-                browser.close()
-
-
+        toggle_dot = page.locator("#newsletter-toggle-dot")
+        assert toggle_dot.evaluate(
+            "el => el.classList.contains('translate-x-5')"
+        )
 # ---------------------------------------------------------------
 # Scenario 11: Visitor submits an invalid email and sees a
 #               helpful error
@@ -928,7 +835,7 @@ class TestScenario11InvalidEmailError:
 
     def test_invalid_email_shows_error(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor on /subscribe.
         1. Enter an invalid email that passes browser validation but
            fails server validation and submit
@@ -937,64 +844,56 @@ class TestScenario11InvalidEmailError:
         2. Verify the email field is required (browser validation)."""
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /subscribe
-                page.goto(
-                    f"{django_server}/subscribe",
-                    wait_until="networkidle",
-                )
+        context = _anon_context(browser)
+        # Step 1: Navigate to /subscribe
+        page.goto(
+            f"{django_server}/subscribe",
+            wait_until="domcontentloaded",
+        )
 
-                # Enter an email that passes browser type="email"
-                # validation but fails server-side validation
-                # (no period in domain part)
-                email_input = page.locator(
-                    '.subscribe-form input[name="email"]'
-                )
-                email_input.first.fill("user@invalid")
+        # Enter an email that passes browser type="email"
+        # validation but fails server-side validation
+        # (no period in domain part)
+        email_input = page.locator(
+            '.subscribe-form input[name="email"]'
+        )
+        email_input.first.fill("user@invalid")
 
-                submit_btn = page.locator(
-                    '.subscribe-form button[type="submit"]'
-                )
-                submit_btn.first.click()
+        submit_btn = page.locator(
+            '.subscribe-form button[type="submit"]'
+        )
+        submit_btn.first.click()
 
-                # Wait for the error message
-                error_el = page.locator(".subscribe-error")
-                error_el.first.wait_for(state="visible", timeout=10000)
+        # Wait for the error message
+        error_el = page.locator(".subscribe-error")
+        error_el.first.wait_for(state="visible", timeout=10000)
 
-                # Then: Error message about invalid email
-                error_text = error_el.first.inner_text()
-                assert "invalid" in error_text.lower() or "email" in error_text.lower()
+        # Then: Error message about invalid email
+        error_text = error_el.first.inner_text()
+        assert "invalid" in error_text.lower() or "email" in error_text.lower()
 
-                # Then: Form is still on the page
-                assert email_input.first.is_visible()
-                assert submit_btn.first.is_visible()
+        # Then: Form is still on the page
+        assert email_input.first.is_visible()
+        assert submit_btn.first.is_visible()
 
-                # Step 2: Verify the email field has required attribute
-                # (browser validation prevents empty submission)
-                is_required = email_input.first.evaluate(
-                    "el => el.hasAttribute('required')"
-                )
-                assert is_required, (
-                    "Email field should have the 'required' attribute"
-                )
+        # Step 2: Verify the email field has required attribute
+        # (browser validation prevents empty submission)
+        is_required = email_input.first.evaluate(
+            "el => el.hasAttribute('required')"
+        )
+        assert is_required, (
+            "Email field should have the 'required' attribute"
+        )
 
-                # Verify that the input has type="email" so browser
-                # enforces email format validation
-                input_type = email_input.first.evaluate(
-                    "el => el.type"
-                )
-                assert input_type == "email", (
-                    "Email input should have type='email' for browser "
-                    "validation"
-                )
-            finally:
-                browser.close()
-
-
+        # Verify that the input has type="email" so browser
+        # enforces email format validation
+        input_type = email_input.first.evaluate(
+            "el => el.type"
+        )
+        assert input_type == "email", (
+            "Email input should have type='email' for browser "
+            "validation"
+        )
 # ---------------------------------------------------------------
 # Scenario 12: Free member discovers the subscribe page from the
 #               pricing page
@@ -1007,7 +906,7 @@ class TestScenario12DiscoverSubscribeFromPricing:
 
     def test_pricing_free_tier_links_to_newsletter(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor comparing membership options.
         1. Navigate to /pricing
         2. Find the Free tier card
@@ -1018,62 +917,56 @@ class TestScenario12DiscoverSubscribeFromPricing:
               homepage (/#newsletter) or /subscribe."""
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /pricing
-                page.goto(
-                    f"{django_server}/pricing",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _anon_context(browser)
+        # Step 1: Navigate to /pricing
+        page.goto(
+            f"{django_server}/pricing",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Step 2: Find the Free tier card
-                # The pricing grid has tier cards
-                grid = page.locator(
-                    "div.grid.sm\\:grid-cols-2.lg\\:grid-cols-4"
-                )
-                tier_cards = grid.locator("> div")
+        # Step 2: Find the Free tier card
+        # The pricing grid has tier cards
+        grid = page.locator(
+            "div.grid.sm\\:grid-cols-2.lg\\:grid-cols-4"
+        )
+        tier_cards = grid.locator("> div")
 
-                free_card = None
-                for i in range(tier_cards.count()):
-                    card = tier_cards.nth(i)
-                    h2_text = card.locator("h2").first.inner_text()
-                    if h2_text == "Free":
-                        free_card = card
-                        break
+        free_card = None
+        for i in range(tier_cards.count()):
+            card = tier_cards.nth(i)
+            h2_text = card.locator("h2").first.inner_text()
+            if h2_text == "Free":
+                free_card = card
+                break
 
-                assert free_card is not None, "Free tier card not found"
+        assert free_card is not None, "Free tier card not found"
 
-                # Then: Free tier has a CTA link
-                free_cta = free_card.locator("a")
-                assert free_cta.count() >= 1
+        # Then: Free tier has a CTA link
+        free_cta = free_card.locator("a")
+        assert free_cta.count() >= 1
 
-                # The CTA should link to /#newsletter or /subscribe
-                cta_href = free_cta.first.get_attribute("href")
-                assert (
-                    "newsletter" in cta_href
-                    or "/subscribe" in cta_href
-                ), (
-                    f"Free tier CTA should link to newsletter, "
-                    f"got: {cta_href}"
-                )
+        # The CTA should link to /#newsletter or /subscribe
+        cta_href = free_cta.first.get_attribute("href")
+        assert (
+            "newsletter" in cta_href
+            or "/subscribe" in cta_href
+        ), (
+            f"Free tier CTA should link to newsletter, "
+            f"got: {cta_href}"
+        )
 
-                # Step 3: Follow the Free tier's CTA
-                free_cta.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Follow the Free tier's CTA
+        free_cta.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Arrives at the newsletter section or subscribe
-                current_url = page.url
-                assert (
-                    "newsletter" in current_url
-                    or "/subscribe" in current_url
-                    or page.url.endswith("/")  # homepage with #newsletter
-                ), (
-                    f"Expected newsletter or subscribe page, "
-                    f"got: {current_url}"
-                )
-            finally:
-                browser.close()
+        # Then: Arrives at the newsletter section or subscribe
+        current_url = page.url
+        assert (
+            "newsletter" in current_url
+            or "/subscribe" in current_url
+            or page.url.endswith("/")  # homepage with #newsletter
+        ), (
+            f"Expected newsletter or subscribe page, "
+            f"got: {current_url}"
+        )

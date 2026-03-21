@@ -25,7 +25,6 @@ import tempfile
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -39,10 +38,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django raises
-# SynchronousOnlyOperation when we make ORM calls inside a
-# sync_playwright() context.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -61,11 +56,11 @@ def _create_staff_user(email="admin@test.com", password=ADMIN_PASSWORD):
 
 def _login_admin_via_browser(page, base_url, email, password=ADMIN_PASSWORD):
     """Log in an admin user via the Django admin login page."""
-    page.goto(f"{base_url}/admin/login/", wait_until="networkidle")
+    page.goto(f"{base_url}/admin/login/", wait_until="domcontentloaded")
     page.fill("#id_username", email)
     page.fill("#id_password", password)
     page.click('input[type="submit"]')
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
 
 
 def _clear_content_sources():
@@ -351,7 +346,7 @@ class TestScenario1AdminTriggersSingleSync:
     shares the database), then verify the dashboard reflects the result.
     """
 
-    def test_admin_syncs_blog_and_sees_updated_status(self, django_server):
+    def test_admin_syncs_blog_and_sees_updated_status(self, django_server, page):
         """After a blog sync completes, the dashboard shows an updated
         timestamp and a success/partial status (not 'Never synced')."""
         _clear_content_sources()
@@ -361,62 +356,53 @@ class TestScenario1AdminTriggersSingleSync:
         sources = _seed_content_sources()
         blog_source = sources[0]  # AI-Shipping-Labs/blog
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                _login_admin_via_browser(page, django_server, "admin@test.com")
+        _login_admin_via_browser(page, django_server, "admin@test.com")
 
-                # Step 1: Navigate to /admin/sync/ and verify initial state
-                page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /admin/sync/ and verify initial state
+        page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Step 2: Find the blog source row - initially "Never synced"
-                assert "AI-Shipping-Labs/blog" in body
-                blog_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/blog")'
-                ).first
-                assert "Never synced" in blog_card.inner_text()
+        # Step 2: Find the blog source row - initially "Never synced"
+        assert "AI-Shipping-Labs/blog" in body
+        blog_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/blog")'
+        ).first
+        assert "Never synced" in blog_card.inner_text()
 
-                # Verify the Sync Now button exists
-                sync_button = blog_card.locator('button:has-text("Sync Now")')
-                assert sync_button.count() >= 1
+        # Verify the Sync Now button exists
+        sync_button = blog_card.locator('button:has-text("Sync Now")')
+        assert sync_button.count() >= 1
 
-                # Step 3: Run the sync via the ORM (equivalent to what
-                # the Sync Now button does when the task executes)
-                _sync_blog_source_with_articles(blog_source, [
-                    {
-                        "slug": "test-article",
-                        "title": "Test Article",
-                        "body": "# Test\n\nContent.",
-                    },
-                ])
+        # Step 3: Run the sync via the ORM (equivalent to what
+        # the Sync Now button does when the task executes)
+        _sync_blog_source_with_articles(blog_source, [
+            {
+                "slug": "test-article",
+                "title": "Test Article",
+                "body": "# Test\n\nContent.",
+            },
+        ])
 
-                # Step 4: Reload the dashboard
-                page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
+        # Step 4: Reload the dashboard
+        page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Blog source shows updated "Last synced" timestamp
-                blog_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/blog")'
-                ).first
-                blog_text = blog_card.inner_text()
+        # Then: Blog source shows updated "Last synced" timestamp
+        blog_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/blog")'
+        ).first
+        blog_text = blog_card.inner_text()
 
-                # Should no longer say "Never synced"
-                assert "Never synced" not in blog_text
+        # Should no longer say "Never synced"
+        assert "Never synced" not in blog_text
 
-                # Then: Status displays as "success" or "partial"
-                assert "success" in blog_text or "partial" in blog_text
-            finally:
-                browser.close()
-
-
+        # Then: Status displays as "success" or "partial"
+        assert "success" in blog_text or "partial" in blog_text
 # ---------------------------------------------------------------------------
 # Scenario 2: Admin triggers "Sync All" to update every content source at once
 # ---------------------------------------------------------------------------
@@ -430,7 +416,7 @@ class TestScenario2AdminTriggersSyncAll:
     happens when all sources are synced, then verify the dashboard.
     """
 
-    def test_admin_sync_all_updates_all_sources(self, django_server):
+    def test_admin_sync_all_updates_all_sources(self, django_server, page):
         """After all 4 sources are synced, dashboard shows updated timestamps."""
         _clear_content_sources()
         _clear_articles()
@@ -439,71 +425,62 @@ class TestScenario2AdminTriggersSyncAll:
         _create_staff_user("admin@test.com")
         sources = _seed_content_sources()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                _login_admin_via_browser(page, django_server, "admin@test.com")
+        _login_admin_via_browser(page, django_server, "admin@test.com")
 
-                # Step 1: Navigate to /admin/sync/
-                page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /admin/sync/
+        page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
 
-                # Verify all 4 sources show "Never synced" initially
-                body = page.content()
-                assert body.count("Never synced") >= 4
+        # Verify all 4 sources show "Never synced" initially
+        body = page.content()
+        assert body.count("Never synced") >= 4
 
-                # Verify Sync All button exists
-                sync_all_btn = page.locator('button:has-text("Sync All")')
-                assert sync_all_btn.count() >= 1
+        # Verify Sync All button exists
+        sync_all_btn = page.locator('button:has-text("Sync All")')
+        assert sync_all_btn.count() >= 1
 
-                # Step 2: Run syncs for all sources via ORM
-                for source in sources:
-                    if source.content_type == "article":
-                        _sync_blog_source_with_articles(source, [
-                            {"slug": "sync-all-test", "title": "Sync All Test"},
-                        ])
-                    elif source.content_type == "course":
-                        _sync_courses_source(source)
-                    else:
-                        # For resource and project sources, run an empty
-                        # sync which still updates the source status
-                        _sync_blog_source_empty(source)
+        # Step 2: Run syncs for all sources via ORM
+        for source in sources:
+            if source.content_type == "article":
+                _sync_blog_source_with_articles(source, [
+                    {"slug": "sync-all-test", "title": "Sync All Test"},
+                ])
+            elif source.content_type == "course":
+                _sync_courses_source(source)
+            else:
+                # For resource and project sources, run an empty
+                # sync which still updates the source status
+                _sync_blog_source_empty(source)
 
-                # Step 3: Reload the dashboard
-                page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
+        # Step 3: Reload the dashboard
+        page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: All 4 sources show updated timestamps
-                body = page.content()
-                cards = page.locator(".bg-card").all()
-                synced_count = 0
-                for card in cards:
-                    card_text = card.inner_text()
-                    if "Never synced" not in card_text:
-                        synced_count += 1
+        # Then: All 4 sources show updated timestamps
+        body = page.content()
+        cards = page.locator(".bg-card").all()
+        synced_count = 0
+        for card in cards:
+            card_text = card.inner_text()
+            if "Never synced" not in card_text:
+                synced_count += 1
 
-                # All 4 sources should have been synced
-                assert synced_count >= 4
+        # All 4 sources should have been synced
+        assert synced_count >= 4
 
-                # Each source should display a sync status
-                for card in cards:
-                    card_text = card.inner_text()
-                    has_status = (
-                        "success" in card_text
-                        or "partial" in card_text
-                        or "running" in card_text
-                    )
-                    assert has_status, f"Card missing status: {card_text[:80]}"
-            finally:
-                browser.close()
-
-
+        # Each source should display a sync status
+        for card in cards:
+            card_text = card.inner_text()
+            has_status = (
+                "success" in card_text
+                or "partial" in card_text
+                or "running" in card_text
+            )
+            assert has_status, f"Card missing status: {card_text[:80]}"
 # ---------------------------------------------------------------------------
 # Scenario 3: Admin reviews sync history to investigate past sync results
 # ---------------------------------------------------------------------------
@@ -513,7 +490,7 @@ class TestScenario2AdminTriggersSyncAll:
 class TestScenario3AdminReviewsSyncHistory:
     """Admin reviews sync history to investigate past sync results."""
 
-    def test_admin_views_sync_history_entries(self, django_server):
+    def test_admin_views_sync_history_entries(self, django_server, page):
         """Blog source has 2 sync logs; admin sees them in history page."""
         _clear_content_sources()
         _clear_articles()
@@ -535,52 +512,43 @@ class TestScenario3AdminReviewsSyncHistory:
             errors=[{"file": "bad.md", "error": "Parse error"}],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                _login_admin_via_browser(page, django_server, "admin@test.com")
+        _login_admin_via_browser(page, django_server, "admin@test.com")
 
-                # Step 1: Navigate to /admin/sync/
-                page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /admin/sync/
+        page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 2: Click "History" link for the blog source
-                blog_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/blog")'
-                ).first
-                history_link = blog_card.locator('a:has-text("History")')
-                history_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "History" link for the blog source
+        blog_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/blog")'
+        ).first
+        history_link = blog_card.locator('a:has-text("History")')
+        history_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: History page loads
-                assert "/history/" in page.url
+        # Then: History page loads
+        assert "/history/" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Then: At least 2 sync log entries visible
-                assert "success" in body
-                assert "partial" in body
+        # Then: At least 2 sync log entries visible
+        assert "success" in body
+        assert "partial" in body
 
-                # Then: Item counts shown
-                assert "created" in body
-                assert "updated" in body
+        # Then: Item counts shown
+        assert "created" in body
+        assert "updated" in body
 
-                # Step 3: Click "Back to Content Sync"
-                back_link = page.locator('a:has-text("Back to Content Sync")')
-                assert back_link.count() >= 1
-                back_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click "Back to Content Sync"
+        back_link = page.locator('a:has-text("Back to Content Sync")')
+        assert back_link.count() >= 1
+        back_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Returns to the sync dashboard
-                assert page.url.rstrip("/").endswith("/admin/sync")
-            finally:
-                browser.close()
-
-
+        # Then: Returns to the sync dashboard
+        assert page.url.rstrip("/").endswith("/admin/sync")
 # ---------------------------------------------------------------------------
 # Scenario 4: Admin reviews error details for a sync that had parsing failures
 # ---------------------------------------------------------------------------
@@ -590,7 +558,7 @@ class TestScenario3AdminReviewsSyncHistory:
 class TestScenario4AdminReviewsErrorDetails:
     """Admin reviews error details for a sync that had parsing failures."""
 
-    def test_admin_sees_error_details_in_sync_history(self, django_server):
+    def test_admin_sees_error_details_in_sync_history(self, django_server, page):
         """A partial sync log with errors shows file names and error messages."""
         _clear_content_sources()
         _clear_articles()
@@ -611,44 +579,35 @@ class TestScenario4AdminReviewsErrorDetails:
             ],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                _login_admin_via_browser(page, django_server, "admin@test.com")
+        _login_admin_via_browser(page, django_server, "admin@test.com")
 
-                # Step 1: Navigate to /admin/sync/
-                page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /admin/sync/
+        page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 2: Click "History" for blog source
-                blog_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/blog")'
-                ).first
-                history_link = blog_card.locator('a:has-text("History")')
-                history_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "History" for blog source
+        blog_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/blog")'
+        ).first
+        history_link = blog_card.locator('a:has-text("History")')
+        history_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Sync entry with status "partial"
-                assert "partial" in body
+        # Then: Sync entry with status "partial"
+        assert "partial" in body
 
-                # Then: Error section lists specific files and messages
-                assert "malformed-article.md" in body
-                assert "Invalid YAML frontmatter" in body
-                assert "broken-encoding.md" in body
-                assert "UnicodeDecodeError" in body
+        # Then: Error section lists specific files and messages
+        assert "malformed-article.md" in body
+        assert "Invalid YAML frontmatter" in body
+        assert "broken-encoding.md" in body
+        assert "UnicodeDecodeError" in body
 
-                # Then: Item counts > 0 show successful operations alongside errors
-                assert "created" in body
-            finally:
-                browser.close()
-
-
+        # Then: Item counts > 0 show successful operations alongside errors
+        assert "created" in body
 # ---------------------------------------------------------------------------
 # Scenario 5: Admin verifies that synced articles appear on the public
 #              blog listing
@@ -659,7 +618,7 @@ class TestScenario4AdminReviewsErrorDetails:
 class TestScenario5SyncedArticlesAppearOnBlog:
     """Admin verifies that synced articles appear on the public blog listing."""
 
-    def test_synced_articles_visible_on_blog(self, django_server):
+    def test_synced_articles_visible_on_blog(self, django_server, page):
         """After syncing the blog source, articles appear on /blog and
         detail pages show correct content."""
         _clear_content_sources()
@@ -700,50 +659,41 @@ class TestScenario5SyncedArticlesAppearOnBlog:
         ]
         _sync_blog_source_with_articles(blog_source, articles_data)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: 3 synced articles appear
-                assert "Building AI Agents" in body
-                assert "Shipping Features Fast" in body
-                assert "Data Pipeline Patterns" in body
+        # Then: 3 synced articles appear
+        assert "Building AI Agents" in body
+        assert "Shipping Features Fast" in body
+        assert "Data Pipeline Patterns" in body
 
-                # Step 2: Click on one article
-                page.locator(
-                    'h2:has-text("Data Pipeline Patterns")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on one article
+        page.locator(
+            'h2:has-text("Data Pipeline Patterns")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Detail page shows full content
-                assert "/blog/data-pipeline-patterns" in page.url
-                detail_body = page.content()
-                assert "Data Pipeline Patterns" in detail_body
-                assert "Common patterns for data pipelines" in detail_body
-                assert "ETL" in detail_body
+        # Then: Detail page shows full content
+        assert "/blog/data-pipeline-patterns" in page.url
+        detail_body = page.content()
+        assert "Data Pipeline Patterns" in detail_body
+        assert "Common patterns for data pipelines" in detail_body
+        assert "ETL" in detail_body
 
-                # Step 3: Navigate back to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 3: Navigate back to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Other synced articles remain
-                assert "Building AI Agents" in body
-                assert "Shipping Features Fast" in body
-            finally:
-                browser.close()
-
-
+        # Then: Other synced articles remain
+        assert "Building AI Agents" in body
+        assert "Shipping Features Fast" in body
 # ---------------------------------------------------------------------------
 # Scenario 6: Admin verifies that removing a file from the repo
 #              soft-deletes the corresponding article
@@ -754,7 +704,7 @@ class TestScenario5SyncedArticlesAppearOnBlog:
 class TestScenario6SoftDeleteOnFileRemoval:
     """Admin verifies that removing a file from repo soft-deletes the article."""
 
-    def test_removed_file_soft_deletes_article(self, django_server):
+    def test_removed_file_soft_deletes_article(self, django_server, page):
         """Sync creates an article; second sync without the file soft-deletes it."""
         _clear_content_sources()
         _clear_articles()
@@ -788,41 +738,32 @@ class TestScenario6SoftDeleteOnFileRemoval:
             },
         ])
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: "old-article" no longer in published listing
-                assert "Old Article" not in body
+        # Then: "old-article" no longer in published listing
+        assert "Old Article" not in body
 
-                # "staying-article" still visible
-                assert "Staying Article" in body
+        # "staying-article" still visible
+        assert "Staying Article" in body
 
-                # Step 2: Verify in admin that article still exists (soft-deleted)
-                _login_admin_via_browser(page, django_server, "admin@test.com")
-                page.goto(
-                    f"{django_server}/admin/content/article/",
-                    wait_until="networkidle",
-                )
-                admin_body = page.content()
+        # Step 2: Verify in admin that article still exists (soft-deleted)
+        _login_admin_via_browser(page, django_server, "admin@test.com")
+        page.goto(
+            f"{django_server}/admin/content/article/",
+            wait_until="domcontentloaded",
+        )
+        admin_body = page.content()
 
-                # Article still exists in the database
-                assert "Old Article" in admin_body or "old-article" in admin_body
+        # Article still exists in the database
+        assert "Old Article" in admin_body or "old-article" in admin_body
 
-                # It should be marked as draft (soft-deleted)
-                assert "draft" in admin_body.lower()
-            finally:
-                browser.close()
-
-
+        # It should be marked as draft (soft-deleted)
+        assert "draft" in admin_body.lower()
 # ---------------------------------------------------------------------------
 # Scenario 7: Admin creates an article directly in Studio and it
 #              coexists with synced content
@@ -833,7 +774,7 @@ class TestScenario6SoftDeleteOnFileRemoval:
 class TestScenario7StudioArticleCoexistsWithSynced:
     """Admin creates an article in Studio; it coexists with synced content."""
 
-    def test_studio_article_survives_sync(self, django_server):
+    def test_studio_article_survives_sync(self, django_server, page):
         """Admin creates an article via Studio with source_repo=null. After
         a sync, the Studio article remains because it has no source_repo."""
         _clear_content_sources()
@@ -871,52 +812,43 @@ class TestScenario7StudioArticleCoexistsWithSynced:
             source_repo=None,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Both synced and admin articles appear
-                assert "Synced Article One" in body
-                assert "Synced Article Two" in body
-                assert "Admin-Only Article" in body
+        # Then: Both synced and admin articles appear
+        assert "Synced Article One" in body
+        assert "Synced Article Two" in body
+        assert "Admin-Only Article" in body
 
-                # Step 2: Trigger another sync (same articles, no admin-only)
-                _sync_blog_source_with_articles(blog_source, [
-                    {
-                        "slug": "synced-article-1",
-                        "title": "Synced Article One",
-                        "body": "# Synced Article One\n\nUpdated from repo.",
-                    },
-                    {
-                        "slug": "synced-article-2",
-                        "title": "Synced Article Two",
-                        "body": "# Synced Article Two\n\nUpdated from repo.",
-                    },
-                ])
+        # Step 2: Trigger another sync (same articles, no admin-only)
+        _sync_blog_source_with_articles(blog_source, [
+            {
+                "slug": "synced-article-1",
+                "title": "Synced Article One",
+                "body": "# Synced Article One\n\nUpdated from repo.",
+            },
+            {
+                "slug": "synced-article-2",
+                "title": "Synced Article Two",
+                "body": "# Synced Article Two\n\nUpdated from repo.",
+            },
+        ])
 
-                # Step 3: Navigate to /blog again
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 3: Navigate to /blog again
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Admin-Only Article still appears (not soft-deleted)
-                assert "Admin-Only Article" in body
-                assert "Synced Article One" in body
-                assert "Synced Article Two" in body
-            finally:
-                browser.close()
-
-
+        # Then: Admin-Only Article still appears (not soft-deleted)
+        assert "Admin-Only Article" in body
+        assert "Synced Article One" in body
+        assert "Synced Article Two" in body
 # ---------------------------------------------------------------------------
 # Scenario 8: Synced content overwrites a manually-created article when
 #              slugs match
@@ -927,7 +859,7 @@ class TestScenario7StudioArticleCoexistsWithSynced:
 class TestScenario8SyncOverwritesManualArticle:
     """Synced content overwrites a manually-created article when slugs match."""
 
-    def test_sync_overwrites_studio_article_by_slug(self, django_server):
+    def test_sync_overwrites_studio_article_by_slug(self, django_server, page):
         """An article created in Studio (source_repo=null) is overwritten when
         the blog repo contains a file with the same slug."""
         _clear_content_sources()
@@ -968,30 +900,21 @@ class TestScenario8SyncOverwritesManualArticle:
         assert article.source_repo == "AI-Shipping-Labs/blog"
         assert article.title == "Repo Version of Article"
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 2: Navigate to the article
-                page.goto(
-                    f"{django_server}/blog/conflicting-slug",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 2: Navigate to the article
+        page.goto(
+            f"{django_server}/blog/conflicting-slug",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Title and metadata match the repo version
-                assert "Repo Version of Article" in body
+        # Then: Title and metadata match the repo version
+        assert "Repo Version of Article" in body
 
-                # Then: The article page title shows the repo version
-                assert page.title() == "Repo Version of Article | AI Shipping Labs"
+        # Then: The article page title shows the repo version
+        assert page.title() == "Repo Version of Article | AI Shipping Labs"
 
-                # Then: The source is tracked to the blog repo (verified via ORM)
-                # (already asserted above via the ORM check)
-            finally:
-                browser.close()
-
-
+        # Then: The source is tracked to the blog repo (verified via ORM)
+        # (already asserted above via the ORM check)
 # ---------------------------------------------------------------------------
 # Scenario 9: Non-staff user cannot access the sync dashboard
 # ---------------------------------------------------------------------------
@@ -1001,35 +924,28 @@ class TestScenario8SyncOverwritesManualArticle:
 class TestScenario9NonStaffCannotAccessSyncDashboard:
     """Non-staff user cannot access the sync dashboard."""
 
-    def test_basic_member_redirected_from_sync_dashboard(self, django_server):
+    def test_basic_member_redirected_from_sync_dashboard(self, django_server, browser):
         """A Basic-tier (non-staff) user is redirected to login when
         accessing /admin/sync/."""
         _clear_content_sources()
         _ensure_tiers()
         _create_user("member@test.com", tier_slug="basic")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "member@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /admin/sync/
-                response = page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "member@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /admin/sync/
+        response = page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Redirected to login page
-                assert "login" in page.url.lower()
+        # Then: Redirected to login page
+        assert "login" in page.url.lower()
 
-                # Then: No sync controls visible
-                body = page.content()
-                assert "Sync Now" not in body
-                assert "Sync All" not in body
-            finally:
-                browser.close()
-
-
+        # Then: No sync controls visible
+        body = page.content()
+        assert "Sync Now" not in body
+        assert "Sync All" not in body
 # ---------------------------------------------------------------------------
 # Scenario 10: Admin verifies that synced courses include modules and units
 # ---------------------------------------------------------------------------
@@ -1039,7 +955,7 @@ class TestScenario9NonStaffCannotAccessSyncDashboard:
 class TestScenario10SyncedCoursesWithModulesAndUnits:
     """Admin verifies synced courses include modules and units."""
 
-    def test_synced_course_appears_with_modules_and_units(self, django_server):
+    def test_synced_course_appears_with_modules_and_units(self, django_server, browser):
         """After syncing the courses repo, a course with modules and units
         appears on /courses and its detail/unit pages work."""
         _clear_content_sources()
@@ -1055,57 +971,49 @@ class TestScenario10SyncedCoursesWithModulesAndUnits:
         # Sync a course
         _sync_courses_source(courses_source)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses
-                page.goto(
-                    f"{django_server}/courses",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = browser.new_context(viewport=VIEWPORT)
+        page = context.new_page()
+        # Step 1: Navigate to /courses
+        page.goto(
+            f"{django_server}/courses",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Course appears in listing
-                assert "Python for Data AI" in body
+        # Then: Course appears in listing
+        assert "Python for Data AI" in body
 
-                # Step 2: Click on the course
-                page.locator(
-                    'a[href="/courses/python-data-ai"]'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the course
+        page.locator(
+            'a[href="/courses/python-data-ai"]'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Modules listed in the syllabus
-                assert "Getting Started" in body
+        # Then: Modules listed in the syllabus
+        assert "Getting Started" in body
 
-                # Then: Units listed
-                assert "Introduction to the Course" in body
-                assert "Setting Up Your Environment" in body
+        # Then: Units listed
+        assert "Introduction to the Course" in body
+        assert "Setting Up Your Environment" in body
 
-                # Step 3: Click on the first unit (as authenticated user)
-                # We need an authenticated context for unit access
-                browser.close()
+        # Step 3: Click on the first unit (as authenticated user)
+        # We need an authenticated context for unit access
+        context.close()
 
-                browser = p.chromium.launch(headless=True)
-                context = _auth_context(browser, "free-course@test.com")
-                page = context.new_page()
+        context = _auth_context(browser, "free-course@test.com")
+        page = context.new_page()
 
-                page.goto(
-                    f"{django_server}/courses/python-data-ai/1/1",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/courses/python-data-ai/1/1",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Unit page shows lesson content
-                assert "Introduction" in body
-                assert "Welcome to Python for Data AI" in body
-            finally:
-                browser.close()
-
-
+        # Then: Unit page shows lesson content
+        assert "Introduction" in body
+        assert "Welcome to Python for Data AI" in body
 # ---------------------------------------------------------------------------
 # Scenario 11: Anonymous visitor reads an open synced article without
 #              any access restriction
@@ -1116,7 +1024,7 @@ class TestScenario10SyncedCoursesWithModulesAndUnits:
 class TestScenario11AnonymousReadsOpenSyncedArticle:
     """Anonymous visitor reads an open synced article without restriction."""
 
-    def test_anonymous_reads_synced_open_article(self, django_server):
+    def test_anonymous_reads_synced_open_article(self, django_server, page):
         """An open (required_level=0) synced article is fully readable
         by an anonymous visitor without login or paywall."""
         _clear_content_sources()
@@ -1139,48 +1047,39 @@ class TestScenario11AnonymousReadsOpenSyncedArticle:
             },
         ])
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            # Anonymous context (no session)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Anonymous context (no session)
+        # Step 1: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Article visible without lock icon
-                assert "Open Synced Article" in body
+        # Then: Article visible without lock icon
+        assert "Open Synced Article" in body
 
-                # Step 2: Click on the article
-                page.locator(
-                    'h2:has-text("Open Synced Article")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the article
+        page.locator(
+            'h2:has-text("Open Synced Article")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Full content visible with no paywall
-                assert "This content is freely available to everyone" in body
-                assert "Getting Started" in body
-                assert "Here is how to get started" in body
+        # Then: Full content visible with no paywall
+        assert "This content is freely available to everyone" in body
+        assert "Getting Started" in body
+        assert "Here is how to get started" in body
 
-                # Then: No paywall or login prompt
-                assert "Upgrade to" not in body
+        # Then: No paywall or login prompt
+        assert "Upgrade to" not in body
 
-                # No gating overlay (the gating overlay uses filter:blur
-                # and specific CTA text)
-                gating_overlay = page.locator(
-                    'text="Upgrade to Basic to read this article"'
-                )
-                assert gating_overlay.count() == 0
-            finally:
-                browser.close()
-
-
+        # No gating overlay (the gating overlay uses filter:blur
+        # and specific CTA text)
+        gating_overlay = page.locator(
+            'text="Upgrade to Basic to read this article"'
+        )
+        assert gating_overlay.count() == 0
 # ---------------------------------------------------------------------------
 # Scenario 12: Admin views all four seeded content sources on the sync dashboard
 # ---------------------------------------------------------------------------
@@ -1190,7 +1089,7 @@ class TestScenario11AnonymousReadsOpenSyncedArticle:
 class TestScenario12AdminViewsSeededSources:
     """Admin views all four seeded content sources on the sync dashboard."""
 
-    def test_four_seeded_sources_displayed_correctly(self, django_server):
+    def test_four_seeded_sources_displayed_correctly(self, django_server, page):
         """After seeding, the sync dashboard shows all 4 sources with correct
         attributes: repo names, content types, private flag, and 'Never synced'."""
         _clear_content_sources()
@@ -1198,59 +1097,52 @@ class TestScenario12AdminViewsSeededSources:
         _create_staff_user("admin@test.com")
         _seed_content_sources()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                _login_admin_via_browser(page, django_server, "admin@test.com")
+        _login_admin_via_browser(page, django_server, "admin@test.com")
 
-                # Step 1: Navigate to /admin/sync/
-                page.goto(
-                    f"{django_server}/admin/sync/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /admin/sync/
+        page.goto(
+            f"{django_server}/admin/sync/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: All 4 sources listed
-                assert "AI-Shipping-Labs/blog" in body
-                assert "AI-Shipping-Labs/courses" in body
-                assert "AI-Shipping-Labs/resources" in body
-                assert "AI-Shipping-Labs/projects" in body
+        # Then: All 4 sources listed
+        assert "AI-Shipping-Labs/blog" in body
+        assert "AI-Shipping-Labs/courses" in body
+        assert "AI-Shipping-Labs/resources" in body
+        assert "AI-Shipping-Labs/projects" in body
 
-                # Then: Content types shown
-                assert "article" in body
-                assert "course" in body
-                assert "resource" in body
-                assert "project" in body
+        # Then: Content types shown
+        assert "article" in body
+        assert "course" in body
+        assert "resource" in body
+        assert "project" in body
 
-                # Then: Courses source marked as "Private"
-                courses_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/courses")'
-                ).first
-                courses_text = courses_card.inner_text()
-                assert "Private" in courses_text
+        # Then: Courses source marked as "Private"
+        courses_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/courses")'
+        ).first
+        courses_text = courses_card.inner_text()
+        assert "Private" in courses_text
 
-                # Then: Blog, resources, projects are NOT marked private
-                blog_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/blog")'
-                ).first
-                blog_text = blog_card.inner_text()
-                assert "Private" not in blog_text
+        # Then: Blog, resources, projects are NOT marked private
+        blog_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/blog")'
+        ).first
+        blog_text = blog_card.inner_text()
+        assert "Private" not in blog_text
 
-                resources_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/resources")'
-                ).first
-                resources_text = resources_card.inner_text()
-                assert "Private" not in resources_text
+        resources_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/resources")'
+        ).first
+        resources_text = resources_card.inner_text()
+        assert "Private" not in resources_text
 
-                projects_card = page.locator(
-                    '.bg-card:has-text("AI-Shipping-Labs/projects")'
-                ).first
-                projects_text = projects_card.inner_text()
-                assert "Private" not in projects_text
+        projects_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/projects")'
+        ).first
+        projects_text = projects_card.inner_text()
+        assert "Private" not in projects_text
 
-                # Then: Each source shows "Never synced"
-                assert body.count("Never synced") >= 4
-            finally:
-                browser.close()
+        # Then: Each source shows "Never synced"
+        assert body.count("Never synced") >= 4

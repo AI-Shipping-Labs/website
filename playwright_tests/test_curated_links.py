@@ -20,7 +20,6 @@ Usage:
 import os
 
 import pytest
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -33,9 +32,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -91,7 +87,7 @@ def _clear_curated_links():
 class TestScenario1VisitorBrowsesByCategory:
     """Visitor browses curated links organized by category."""
 
-    def test_links_grouped_under_category_headers(self, django_server):
+    def test_links_grouped_under_category_headers(self, django_server, page):
         """Two published curated links in different categories appear under
         their respective category headers with descriptive subtitles."""
         _clear_curated_links()
@@ -112,50 +108,41 @@ class TestScenario1VisitorBrowsesByCategory:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Page heading (& is HTML-encoded as &amp; in raw HTML)
-                heading = page.locator("h1")
-                assert "Tools, Models & Courses" in heading.inner_text()
+        # Page heading (& is HTML-encoded as &amp; in raw HTML)
+        heading = page.locator("h1")
+        assert "Tools, Models & Courses" in heading.inner_text()
 
-                # Both links visible
-                assert "FastAPI Toolkit" in body
-                assert "LLaMA Hub" in body
+        # Both links visible
+        assert "FastAPI Toolkit" in body
+        assert "LLaMA Hub" in body
 
-                # Category headers present
-                assert "Tools" in body
-                assert "Models" in body
+        # Category headers present
+        assert "Tools" in body
+        assert "Models" in body
 
-                # FastAPI Toolkit appears under "Tools" header
-                # LLaMA Hub appears under "Models" header
-                tools_pos = body.index(">Tools<")
-                models_pos = body.index(">Models<")
-                fastapi_pos = body.index("FastAPI Toolkit")
-                llama_pos = body.index("LLaMA Hub")
+        # FastAPI Toolkit appears under "Tools" header
+        # LLaMA Hub appears under "Models" header
+        tools_pos = body.index(">Tools<")
+        models_pos = body.index(">Models<")
+        fastapi_pos = body.index("FastAPI Toolkit")
+        llama_pos = body.index("LLaMA Hub")
 
-                # FastAPI Toolkit comes after Tools header
-                assert fastapi_pos > tools_pos
-                # LLaMA Hub comes after Models header
-                assert llama_pos > models_pos
-                # Tools section comes before Models section
-                assert tools_pos < models_pos
+        # FastAPI Toolkit comes after Tools header
+        assert fastapi_pos > tools_pos
+        # LLaMA Hub comes after Models header
+        assert llama_pos > models_pos
+        # Tools section comes before Models section
+        assert tools_pos < models_pos
 
-                # Category descriptions (subtitles) present
-                assert "GitHub repos, CLIs, and dev tools" in body
-                assert "Model hubs, runtimes, and inference" in body
-            finally:
-                browser.close()
-
-
+        # Category descriptions (subtitles) present
+        assert "GitHub repos, CLIs, and dev tools" in body
+        assert "Model hubs, runtimes, and inference" in body
 # ---------------------------------------------------------------
 # Scenario 2: Visitor clicks an open link and it opens in a new tab
 # ---------------------------------------------------------------
@@ -166,7 +153,7 @@ class TestScenario2VisitorClicksOpenLink:
 
     def test_open_link_has_target_blank_and_external_icon(
         self, django_server
-    ):
+    , page):
         """A published open curated link opens in a new tab with
         target='_blank' and displays an external-link icon."""
         _clear_curated_links()
@@ -179,43 +166,34 @@ class TestScenario2VisitorClicksOpenLink:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Link is visible
-                assert "Ollama" in body
+        # Link is visible
+        assert "Ollama" in body
 
-                # Find the link card element
-                link_card = page.locator(
-                    'a:has-text("Ollama")'
-                ).first
+        # Find the link card element
+        link_card = page.locator(
+            'a:has-text("Ollama")'
+        ).first
 
-                # Opens in new tab
-                assert link_card.get_attribute("target") == "_blank"
+        # Opens in new tab
+        assert link_card.get_attribute("target") == "_blank"
 
-                # Points to the correct URL
-                assert (
-                    link_card.get_attribute("href")
-                    == "https://github.com/ollama/ollama"
-                )
+        # Points to the correct URL
+        assert (
+            link_card.get_attribute("href")
+            == "https://github.com/ollama/ollama"
+        )
 
-                # External link icon present
-                external_icon = link_card.locator(
-                    '[data-lucide="external-link"]'
-                )
-                assert external_icon.count() >= 1
-            finally:
-                browser.close()
-
-
+        # External link icon present
+        external_icon = link_card.locator(
+            '[data-lucide="external-link"]'
+        )
+        assert external_icon.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 3: Free user encounters a gated link and sees upgrade CTA
 # ---------------------------------------------------------------
@@ -226,7 +204,7 @@ class TestScenario3FreeUserSeesGatedLink:
 
     def test_gated_link_shows_lock_icon_and_hides_url(
         self, django_server
-    ):
+    , page):
         """A gated link shows a lock icon, hides the actual URL from
         the page source, and reveals an upgrade CTA on click."""
         _clear_curated_links()
@@ -239,55 +217,46 @@ class TestScenario3FreeUserSeesGatedLink:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Link title is visible
-                assert "Pro CLI Toolkit" in body
+        # Link title is visible
+        assert "Pro CLI Toolkit" in body
 
-                # Lock icon present instead of external-link icon
-                gated_card = page.locator(
-                    '.gated-link:has-text("Pro CLI Toolkit")'
-                )
-                lock_icon = gated_card.locator('[data-lucide="lock"]')
-                assert lock_icon.count() >= 1
+        # Lock icon present instead of external-link icon
+        gated_card = page.locator(
+            '.gated-link:has-text("Pro CLI Toolkit")'
+        )
+        lock_icon = gated_card.locator('[data-lucide="lock"]')
+        assert lock_icon.count() >= 1
 
-                # The actual URL does NOT appear anywhere in the page source
-                assert "pro-cli-secret-url" not in body
+        # The actual URL does NOT appear anywhere in the page source
+        assert "pro-cli-secret-url" not in body
 
-                # Click on the gated card to reveal the CTA
-                gated_card.click()
+        # Click on the gated card to reveal the CTA
+        gated_card.click()
 
-                # Wait for the CTA to become visible
-                cta = gated_card.locator(".gated-cta")
-                cta.wait_for(state="visible", timeout=3000)
+        # Wait for the CTA to become visible
+        cta = gated_card.locator(".gated-cta")
+        cta.wait_for(state="visible", timeout=3000)
 
-                # Upgrade prompt appears
-                cta_text = cta.inner_text()
-                assert "Upgrade to Basic to access this resource" in cta_text
+        # Upgrade prompt appears
+        cta_text = cta.inner_text()
+        assert "Upgrade to Basic to access this resource" in cta_text
 
-                # "View Plans" link pointing to /pricing
-                view_plans_link = cta.locator('a:has-text("View Plans")')
-                assert view_plans_link.count() >= 1
-                href = view_plans_link.first.get_attribute("href")
-                assert "/pricing" in href
+        # "View Plans" link pointing to /pricing
+        view_plans_link = cta.locator('a:has-text("View Plans")')
+        assert view_plans_link.count() >= 1
+        href = view_plans_link.first.get_attribute("href")
+        assert "/pricing" in href
 
-                # Click "View Plans" and land on /pricing
-                view_plans_link.first.click()
-                page.wait_for_load_state("networkidle")
-                assert "/pricing" in page.url
-            finally:
-                browser.close()
-
-
+        # Click "View Plans" and land on /pricing
+        view_plans_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 4: Basic member accesses a Basic-gated link successfully
 # ---------------------------------------------------------------
@@ -298,7 +267,7 @@ class TestScenario4BasicMemberAccessesBasicLink:
 
     def test_basic_member_sees_external_link_icon_no_lock(
         self, django_server
-    ):
+    , browser):
         """A Basic-tier user sees a Basic-gated link with an external-link
         icon, not a lock icon, and the href is present and clickable."""
         _clear_curated_links()
@@ -312,48 +281,41 @@ class TestScenario4BasicMemberAccessesBasicLink:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic-cl@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic-cl@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Link title is visible
-                assert "Exclusive Toolkit" in body
+        # Link title is visible
+        assert "Exclusive Toolkit" in body
 
-                # Find the link card -- it should be an <a> tag, not a div
-                link_card = page.locator(
-                    'a:has-text("Exclusive Toolkit")'
-                ).first
+        # Find the link card -- it should be an <a> tag, not a div
+        link_card = page.locator(
+            'a:has-text("Exclusive Toolkit")'
+        ).first
 
-                # External-link icon present (not lock icon)
-                external_icon = link_card.locator(
-                    '[data-lucide="external-link"]'
-                )
-                assert external_icon.count() >= 1
+        # External-link icon present (not lock icon)
+        external_icon = link_card.locator(
+            '[data-lucide="external-link"]'
+        )
+        assert external_icon.count() >= 1
 
-                # No lock icon on this card
-                lock_icon = link_card.locator('[data-lucide="lock"]')
-                assert lock_icon.count() == 0
+        # No lock icon on this card
+        lock_icon = link_card.locator('[data-lucide="lock"]')
+        assert lock_icon.count() == 0
 
-                # The href is present and points to the correct URL
-                href = link_card.get_attribute("href")
-                assert href == "https://example.com/exclusive-toolkit"
+        # The href is present and points to the correct URL
+        href = link_card.get_attribute("href")
+        assert href == "https://example.com/exclusive-toolkit"
 
-                # Opens in new tab
-                assert link_card.get_attribute("target") == "_blank"
+        # Opens in new tab
+        assert link_card.get_attribute("target") == "_blank"
 
-                # No upgrade prompt anywhere
-                assert "Upgrade to" not in body
-            finally:
-                browser.close()
-
-
+        # No upgrade prompt anywhere
+        assert "Upgrade to" not in body
 # ---------------------------------------------------------------
 # Scenario 5: Basic member is still gated from Main-tier links
 # ---------------------------------------------------------------
@@ -364,7 +326,7 @@ class TestScenario5BasicMemberGatedFromMainLinks:
 
     def test_basic_member_sees_basic_link_open_and_main_link_locked(
         self, django_server
-    ):
+    , browser):
         """A Basic-tier user can access a Basic-gated link but sees a
         lock icon and upgrade CTA for a Main-gated link."""
         _clear_curated_links()
@@ -386,56 +348,49 @@ class TestScenario5BasicMemberGatedFromMainLinks:
             sort_order=2,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic-cl2@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic-cl2@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Both links visible
-                assert "Basic Toolkit" in body
-                assert "Community Dashboard" in body
+        # Both links visible
+        assert "Basic Toolkit" in body
+        assert "Community Dashboard" in body
 
-                # Basic Toolkit: accessible with external-link icon
-                basic_card = page.locator(
-                    'a:has-text("Basic Toolkit")'
-                ).first
-                basic_external = basic_card.locator(
-                    '[data-lucide="external-link"]'
-                )
-                assert basic_external.count() >= 1
+        # Basic Toolkit: accessible with external-link icon
+        basic_card = page.locator(
+            'a:has-text("Basic Toolkit")'
+        ).first
+        basic_external = basic_card.locator(
+            '[data-lucide="external-link"]'
+        )
+        assert basic_external.count() >= 1
 
-                # Community Dashboard: gated with lock icon, URL hidden
-                assert "community-dashboard-secret" not in body
-                gated_card = page.locator(
-                    '.gated-link:has-text("Community Dashboard")'
-                )
-                lock_icon = gated_card.locator('[data-lucide="lock"]')
-                assert lock_icon.count() >= 1
+        # Community Dashboard: gated with lock icon, URL hidden
+        assert "community-dashboard-secret" not in body
+        gated_card = page.locator(
+            '.gated-link:has-text("Community Dashboard")'
+        )
+        lock_icon = gated_card.locator('[data-lucide="lock"]')
+        assert lock_icon.count() >= 1
 
-                # Click on the gated card
-                gated_card.click()
+        # Click on the gated card
+        gated_card.click()
 
-                # Wait for CTA to appear
-                cta = gated_card.locator(".gated-cta")
-                cta.wait_for(state="visible", timeout=3000)
+        # Wait for CTA to appear
+        cta = gated_card.locator(".gated-cta")
+        cta.wait_for(state="visible", timeout=3000)
 
-                # Upgrade prompt mentions "Main"
-                cta_text = cta.inner_text()
-                assert "Upgrade to Main to access this resource" in cta_text
+        # Upgrade prompt mentions "Main"
+        cta_text = cta.inner_text()
+        assert "Upgrade to Main to access this resource" in cta_text
 
-                # "View Plans" link present
-                view_plans_link = cta.locator('a:has-text("View Plans")')
-                assert view_plans_link.count() >= 1
-            finally:
-                browser.close()
-
-
+        # "View Plans" link present
+        view_plans_link = cta.locator('a:has-text("View Plans")')
+        assert view_plans_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 6: Visitor filters links by tag
 # ---------------------------------------------------------------
@@ -444,7 +399,7 @@ class TestScenario5BasicMemberGatedFromMainLinks:
 class TestScenario6VisitorFiltersByTag:
     """Visitor filters links by tag."""
 
-    def test_tag_filter_narrows_results(self, django_server):
+    def test_tag_filter_narrows_results(self, django_server, page):
         """Click the 'python' tag chip and only links with that tag are
         shown. URL updates and active filter indicator appears."""
         _clear_curated_links()
@@ -465,59 +420,50 @@ class TestScenario6VisitorFiltersByTag:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /resources
-                page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /resources
+        page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Both links visible
-                assert "Python CLI" in body
-                assert "GPT-4 API" in body
+        # Both links visible
+        assert "Python CLI" in body
+        assert "GPT-4 API" in body
 
-                # Tag filter chips appear for all tags
-                assert "python" in body
-                assert "cli" in body
-                assert "ai" in body
-                assert "llm" in body
+        # Tag filter chips appear for all tags
+        assert "python" in body
+        assert "cli" in body
+        assert "ai" in body
+        assert "llm" in body
 
-                # Step 2: Navigate to the filtered URL directly
-                page.goto(
-                    f"{django_server}/resources?tag=python",
-                    wait_until="networkidle",
-                )
+        # Step 2: Navigate to the filtered URL directly
+        page.goto(
+            f"{django_server}/resources?tag=python",
+            wait_until="domcontentloaded",
+        )
 
-                # URL updates
-                assert "tag=python" in page.url
-                assert "/resources" in page.url
+        # URL updates
+        assert "tag=python" in page.url
+        assert "/resources" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Only "Python CLI" is visible
-                assert "Python CLI" in body
-                # GPT-4 API should not appear in link cards
-                # (it may still appear in the tag filter chips area)
-                # Check the actual card content areas
-                link_cards = page.locator(
-                    '.gated-link, a[target="_blank"]'
-                )
-                cards_text = " ".join(
-                    [card.inner_text() for card in link_cards.all()]
-                )
-                assert "GPT-4 API" not in cards_text
+        # Only "Python CLI" is visible
+        assert "Python CLI" in body
+        # GPT-4 API should not appear in link cards
+        # (it may still appear in the tag filter chips area)
+        # Check the actual card content areas
+        link_cards = page.locator(
+            '.gated-link, a[target="_blank"]'
+        )
+        cards_text = " ".join(
+            [card.inner_text() for card in link_cards.all()]
+        )
+        assert "GPT-4 API" not in cards_text
 
-                # Tag filter is active (visible in URL)
-                assert "tag=python" in page.url
-            finally:
-                browser.close()
-
-
+        # Tag filter is active (visible in URL)
+        assert "tag=python" in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Visitor clears tag filter to see all links
 # ---------------------------------------------------------------
@@ -526,7 +472,7 @@ class TestScenario6VisitorFiltersByTag:
 class TestScenario7VisitorClearsTagFilter:
     """Visitor clears tag filter to see all links."""
 
-    def test_navigating_to_base_url_restores_all_links(self, django_server):
+    def test_navigating_to_base_url_restores_all_links(self, django_server, page):
         """From a filtered view, navigating to /resources restores all links."""
         _clear_curated_links()
         _create_curated_link(
@@ -546,41 +492,32 @@ class TestScenario7VisitorClearsTagFilter:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Start on the filtered view
-                page.goto(
-                    f"{django_server}/resources?tag=python",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Start on the filtered view
+        page.goto(
+            f"{django_server}/resources?tag=python",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Only "Python CLI" visible
-                assert "Python CLI" in body
+        # Only "Python CLI" visible
+        assert "Python CLI" in body
 
-                # Step 1: Navigate to /resources without query params
-                page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /resources without query params
+        page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
 
-                # URL resets to /resources with no query params
-                assert "tag=" not in page.url
-                url_path = page.url.split("?")[0]
-                assert url_path.rstrip("/").endswith("/resources")
+        # URL resets to /resources with no query params
+        assert "tag=" not in page.url
+        url_path = page.url.split("?")[0]
+        assert url_path.rstrip("/").endswith("/resources")
 
-                body = page.content()
+        body = page.content()
 
-                # Both links visible again
-                assert "Python CLI" in body
-                assert "GPT-4 API" in body
-            finally:
-                browser.close()
-
-
+        # Both links visible again
+        assert "Python CLI" in body
+        assert "GPT-4 API" in body
 # ---------------------------------------------------------------
 # Scenario 8: Empty state when tag filter matches nothing
 # ---------------------------------------------------------------
@@ -589,7 +526,7 @@ class TestScenario7VisitorClearsTagFilter:
 class TestScenario8EmptyStateNoMatchingTag:
     """Empty state when tag filter matches nothing."""
 
-    def test_no_matching_tag_shows_empty_message(self, django_server):
+    def test_no_matching_tag_shows_empty_message(self, django_server, page):
         """Filtering by a nonexistent tag shows an empty state message
         with a 'View all links' link."""
         _clear_curated_links()
@@ -602,43 +539,34 @@ class TestScenario8EmptyStateNoMatchingTag:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Navigate with nonexistent tag
-                page.goto(
-                    f"{django_server}/resources?tag=rust",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Navigate with nonexistent tag
+        page.goto(
+            f"{django_server}/resources?tag=rust",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # No link cards shown
-                assert "Python CLI" not in body
+        # No link cards shown
+        assert "Python CLI" not in body
 
-                # Empty state message
-                assert "No links found with the selected tags" in body
+        # Empty state message
+        assert "No links found with the selected tags" in body
 
-                # "View all links" link pointing to /resources
-                view_all_link = page.locator(
-                    'a:has-text("View all links")'
-                )
-                assert view_all_link.count() >= 1
-                href = view_all_link.first.get_attribute("href")
-                assert href == "/resources"
+        # "View all links" link pointing to /resources
+        view_all_link = page.locator(
+            'a:has-text("View all links")'
+        )
+        assert view_all_link.count() >= 1
+        href = view_all_link.first.get_attribute("href")
+        assert href == "/resources"
 
-                # Click the link
-                view_all_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Click the link
+        view_all_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Back to full listing
-                body = page.content()
-                assert "Python CLI" in body
-            finally:
-                browser.close()
-
-
+        # Back to full listing
+        body = page.content()
+        assert "Python CLI" in body
 # ---------------------------------------------------------------
 # Scenario 9: Backward compatibility -- /collection URL works
 # ---------------------------------------------------------------
@@ -647,7 +575,7 @@ class TestScenario8EmptyStateNoMatchingTag:
 class TestScenario9BackwardCompatCollection:
     """Backward compatibility -- /collection URL works same as /resources."""
 
-    def test_collection_url_serves_same_page(self, django_server):
+    def test_collection_url_serves_same_page(self, django_server, page):
         """Navigating to /collection loads successfully and displays the
         same curated links page as /resources."""
         _clear_curated_links()
@@ -659,31 +587,22 @@ class TestScenario9BackwardCompatCollection:
             sort_order=1,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/collection",
-                    wait_until="networkidle",
-                )
+        response = page.goto(
+            f"{django_server}/collection",
+            wait_until="domcontentloaded",
+        )
 
-                # HTTP 200
-                assert response.status == 200
+        # HTTP 200
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # Same heading as /resources (& is HTML-encoded as &amp;)
-                heading = page.locator("h1")
-                assert "Tools, Models & Courses" in heading.inner_text()
+        # Same heading as /resources (& is HTML-encoded as &amp;)
+        heading = page.locator("h1")
+        assert "Tools, Models & Courses" in heading.inner_text()
 
-                # Link is visible
-                assert "Legacy Link" in body
-            finally:
-                browser.close()
-
-
+        # Link is visible
+        assert "Legacy Link" in body
 # ---------------------------------------------------------------
 # Scenario 10: Visitor sees no content when no links are published
 # ---------------------------------------------------------------
@@ -692,39 +611,32 @@ class TestScenario9BackwardCompatCollection:
 class TestScenario10EmptyStateNoLinks:
     """Visitor sees no content when no links are published."""
 
-    def test_empty_state_shows_clean_message(self, django_server):
+    def test_empty_state_shows_clean_message(self, django_server, page):
         """With no published curated links, the page loads with a clean
         empty state message and no category headers."""
         _clear_curated_links()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/resources",
-                    wait_until="networkidle",
-                )
+        response = page.goto(
+            f"{django_server}/resources",
+            wait_until="domcontentloaded",
+        )
 
-                # Page loads without errors
-                assert response.status == 200
+        # Page loads without errors
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # Empty state message
-                assert "No curated links yet. Check back soon." in body
+        # Empty state message
+        assert "No curated links yet. Check back soon." in body
 
-                # No category headers
-                # The categories would appear as h2 elements within the
-                # grouped_categories section. With no links, none should
-                # be rendered.
-                category_headers = page.locator(
-                    'h2:has-text("Tools"), '
-                    'h2:has-text("Models"), '
-                    'h2:has-text("Courses"), '
-                    'h2:has-text("Other")'
-                )
-                assert category_headers.count() == 0
-            finally:
-                browser.close()
+        # No category headers
+        # The categories would appear as h2 elements within the
+        # grouped_categories section. With no links, none should
+        # be rendered.
+        category_headers = page.locator(
+            'h2:has-text("Tools"), '
+            'h2:has-text("Models"), '
+            'h2:has-text("Courses"), '
+            'h2:has-text("Other")'
+        )
+        assert category_headers.count() == 0

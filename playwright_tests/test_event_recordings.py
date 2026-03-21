@@ -22,7 +22,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -35,9 +34,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -96,7 +92,7 @@ def _clear_recordings():
 class TestScenario1VisitorBrowsesAndWatchesOpen:
     """Anonymous visitor browses recordings and watches an open one."""
 
-    def test_visitor_browses_and_watches_open_recording(self, django_server):
+    def test_visitor_browses_and_watches_open_recording(self, django_server, page):
         """Given two published open recordings, the visitor sees both on the
         listing, clicks into one, and sees the full video player with
         timestamps and materials."""
@@ -127,71 +123,61 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
             date=datetime.date(2026, 2, 10),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /event-recordings
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Both recording titles are visible
-                assert "Building AI Agents" in body
-                assert "Advanced RAG Pipelines" in body
+        # Both recording titles are visible
+        assert "Building AI Agents" in body
+        assert "Advanced RAG Pipelines" in body
 
-                # Building AI Agents appears before Advanced RAG Pipelines
-                # (more recent date = first in listing)
-                agents_pos = body.index("Building AI Agents")
-                rag_pos = body.index("Advanced RAG Pipelines")
-                assert agents_pos < rag_pos
+        # Building AI Agents appears before Advanced RAG Pipelines
+        # (more recent date = first in listing)
+        agents_pos = body.index("Building AI Agents")
+        rag_pos = body.index("Advanced RAG Pipelines")
+        assert agents_pos < rag_pos
 
-                # Step 2: Click the "Building AI Agents" card link
-                page.locator(
-                    'a:has-text("Building AI Agents")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "Building AI Agents" card link
+        page.locator(
+            'a:has-text("Building AI Agents")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # The recording detail page loads
-                assert "/event-recordings/building-ai-agents" in page.url
+        # The recording detail page loads
+        assert "/event-recordings/building-ai-agents" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Title in the heading
-                assert "Building AI Agents" in body
+        # Title in the heading
+        assert "Building AI Agents" in body
 
-                # YouTube iframe present (video player)
-                assert "youtube" in body.lower() or "iframe" in body.lower()
+        # YouTube iframe present (video player)
+        assert "youtube" in body.lower() or "iframe" in body.lower()
 
-                # Timestamps are listed as clickable elements
-                assert "[00:00]" in body
-                assert "Introduction" in body
-                assert "[05:00]" in body
-                assert "Architecture" in body
-                assert "[15:00]" in body
-                assert "Implementation" in body
+        # Timestamps are listed as clickable elements
+        assert "[00:00]" in body
+        assert "Introduction" in body
+        assert "[05:00]" in body
+        assert "Architecture" in body
+        assert "[15:00]" in body
+        assert "Implementation" in body
 
-                # Materials section shows links
-                assert "Workshop Slides" in body
-                assert "GitHub Repo" in body
+        # Materials section shows links
+        assert "Workshop Slides" in body
+        assert "GitHub Repo" in body
 
-                # Material links open in new tab (target="_blank")
-                slides_link = page.locator(
-                    'a:has-text("Workshop Slides")'
-                ).first
-                assert slides_link.get_attribute("target") == "_blank"
-                assert slides_link.get_attribute("href") == "https://example.com/slides.pdf"
+        # Material links open in new tab (target="_blank")
+        slides_link = page.locator(
+            'a:has-text("Workshop Slides")'
+        ).first
+        assert slides_link.get_attribute("target") == "_blank"
+        assert slides_link.get_attribute("href") == "https://example.com/slides.pdf"
 
-                # No upgrade message or lock icon on the page
-                assert "Upgrade to" not in body
-
-            finally:
-                browser.close()
-
-
+        # No upgrade message or lock icon on the page
+        assert "Upgrade to" not in body
 # ---------------------------------------------------------------
 # Scenario 2: Visitor filters recordings by tag to find a topic
 # ---------------------------------------------------------------
@@ -200,7 +186,7 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
 class TestScenario2VisitorFiltersRecordingsByTag:
     """Visitor filters recordings by tag to find a topic."""
 
-    def test_visitor_filters_by_tag(self, django_server):
+    def test_visitor_filters_by_tag(self, django_server, page):
         """Given three recordings with different tags, the visitor can filter
         by tag, see correct results, and clear the filter."""
         _clear_recordings()
@@ -229,73 +215,63 @@ class TestScenario2VisitorFiltersRecordingsByTag:
             date=datetime.date(2026, 2, 13),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /event-recordings
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # All three recordings are visible
-                assert "Intro to LangChain" in body
-                assert "Django REST APIs" in body
-                assert "Prompt Engineering" in body
+        # All three recordings are visible
+        assert "Intro to LangChain" in body
+        assert "Django REST APIs" in body
+        assert "Prompt Engineering" in body
 
-                # Tag filter chips appear
-                assert "langchain" in body
-                assert "python" in body
-                assert "django" in body
-                assert "prompts" in body
+        # Tag filter chips appear
+        assert "langchain" in body
+        assert "python" in body
+        assert "django" in body
+        assert "prompts" in body
 
-                # Step 2: Click a "python" tag link on a card
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click a "python" tag link on a card
+        python_chip = page.locator(
+            'a[href*="tag=python"]'
+        ).first
+        python_chip.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # URL updates to include tag=python
-                assert "tag=python" in page.url
+        # URL updates to include tag=python
+        assert "tag=python" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # "Intro to LangChain" and "Django REST APIs" are visible
-                assert "Intro to LangChain" in body
-                assert "Django REST APIs" in body
+        # "Intro to LangChain" and "Django REST APIs" are visible
+        assert "Intro to LangChain" in body
+        assert "Django REST APIs" in body
 
-                # "Prompt Engineering" is no longer visible
-                # Check the recording cards specifically, not the tag chips
-                recording_cards = page.locator("article")
-                cards_text = " ".join(
-                    [card.inner_text() for card in recording_cards.all()]
-                )
-                assert "Prompt Engineering" not in cards_text
+        # "Prompt Engineering" is no longer visible
+        # Check the recording cards specifically, not the tag chips
+        recording_cards = page.locator("article")
+        cards_text = " ".join(
+            [card.inner_text() for card in recording_cards.all()]
+        )
+        assert "Prompt Engineering" not in cards_text
 
-                # Step 3: Navigate back to /event-recordings without filters
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
+        # Step 3: Navigate back to /event-recordings without filters
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
 
-                # URL returns to /event-recordings without tag parameters
-                assert "tag=" not in page.url
-                assert "/event-recordings" in page.url
+        # URL returns to /event-recordings without tag parameters
+        assert "tag=" not in page.url
+        assert "/event-recordings" in page.url
 
-                # All three recordings are visible again
-                body = page.content()
-                assert "Intro to LangChain" in body
-                assert "Django REST APIs" in body
-                assert "Prompt Engineering" in body
-
-            finally:
-                browser.close()
-
-
+        # All three recordings are visible again
+        body = page.content()
+        assert "Intro to LangChain" in body
+        assert "Django REST APIs" in body
+        assert "Prompt Engineering" in body
 # ---------------------------------------------------------------
 # Scenario 3: Free user tries to watch a gated recording
 # ---------------------------------------------------------------
@@ -306,7 +282,7 @@ class TestScenario3FreeUserSeesUpgradePath:
 
     def test_free_user_sees_gated_recording_with_upgrade_cta(
         self, django_server
-    ):
+    , browser):
         """Given a Basic-gated recording and a Free-tier user, the user sees
         a lock icon on the listing, a blurred placeholder on detail, and an
         upgrade CTA linking to /pricing."""
@@ -321,71 +297,63 @@ class TestScenario3FreeUserSeesUpgradePath:
             tags=["fine-tuning"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-rec@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free-rec@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /event-recordings
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Recording appears in the listing with a lock icon
-                assert "Premium Workshop on Fine-Tuning" in body
-                # The lock icon is rendered via data-lucide="lock"
-                # next to gated recording titles
-                recording_card = page.locator(
-                    'article:has-text("Premium Workshop on Fine-Tuning")'
-                )
-                lock_icon = recording_card.locator('[data-lucide="lock"]')
-                assert lock_icon.count() >= 1
+        # Recording appears in the listing with a lock icon
+        assert "Premium Workshop on Fine-Tuning" in body
+        # The lock icon is rendered via data-lucide="lock"
+        # next to gated recording titles
+        recording_card = page.locator(
+            'article:has-text("Premium Workshop on Fine-Tuning")'
+        )
+        lock_icon = recording_card.locator('[data-lucide="lock"]')
+        assert lock_icon.count() >= 1
 
-                # Step 2: Click on "Premium Workshop on Fine-Tuning"
-                page.locator(
-                    'a:has-text("Premium Workshop on Fine-Tuning")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on "Premium Workshop on Fine-Tuning"
+        page.locator(
+            'a:has-text("Premium Workshop on Fine-Tuning")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Title visible
-                assert "Premium Workshop on Fine-Tuning" in body
+        # Title visible
+        assert "Premium Workshop on Fine-Tuning" in body
 
-                # Description visible
-                assert "in-depth workshop covering fine-tuning" in body
+        # Description visible
+        assert "in-depth workshop covering fine-tuning" in body
 
-                # No video player or YouTube iframe shown
-                main_element = page.locator("main")
-                main_html = main_element.inner_html()
-                assert 'data-source="youtube"' not in main_html
-                # Ensure no iframe embed in main content
-                assert "<iframe" not in main_html.lower() or "ft999" not in main_html
+        # No video player or YouTube iframe shown
+        main_element = page.locator("main")
+        main_html = main_element.inner_html()
+        assert 'data-source="youtube"' not in main_html
+        # Ensure no iframe embed in main content
+        assert "<iframe" not in main_html.lower() or "ft999" not in main_html
 
-                # Blurred placeholder and upgrade CTA visible
-                assert "blur" in body
-                assert "Upgrade to Basic to watch this recording" in body
+        # Blurred placeholder and upgrade CTA visible
+        assert "blur" in body
+        assert "Upgrade to Basic to watch this recording" in body
 
-                # Step 3: Click "View Pricing" link
-                pricing_link = page.locator('a:has-text("View Pricing")')
-                assert pricing_link.count() >= 1
-                pricing_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click "View Pricing" link
+        pricing_link = page.locator('a:has-text("View Pricing")')
+        assert pricing_link.count() >= 1
+        pricing_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User lands on /pricing
-                assert "/pricing" in page.url
-                pricing_body = page.content()
-                assert "Free" in pricing_body
-                assert "Basic" in pricing_body
-                assert "Main" in pricing_body
-                assert "Premium" in pricing_body
-
-            finally:
-                browser.close()
-
-
+        # User lands on /pricing
+        assert "/pricing" in page.url
+        pricing_body = page.content()
+        assert "Free" in pricing_body
+        assert "Basic" in pricing_body
+        assert "Main" in pricing_body
+        assert "Premium" in pricing_body
 # ---------------------------------------------------------------
 # Scenario 4: Basic member watches a Basic-gated recording
 # ---------------------------------------------------------------
@@ -394,7 +362,7 @@ class TestScenario3FreeUserSeesUpgradePath:
 class TestScenario4BasicMemberWatchesBasicRecording:
     """Basic member watches a Basic-gated recording successfully."""
 
-    def test_basic_member_sees_full_recording(self, django_server):
+    def test_basic_member_sees_full_recording(self, django_server, browser):
         """Given a Basic-gated recording with timestamps and materials,
         a Basic-tier user sees the full video player, timestamps, and
         materials without any upgrade prompts."""
@@ -416,46 +384,38 @@ class TestScenario4BasicMemberWatchesBasicRecording:
             tags=["ai-tools"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic-rec@test.com")
-            page = context.new_page()
-            try:
-                # Navigate directly to the recording detail page
-                page.goto(
-                    f"{django_server}/event-recordings/ai-tool-breakdown-cursor",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "basic-rec@test.com")
+        page = context.new_page()
+        # Navigate directly to the recording detail page
+        page.goto(
+            f"{django_server}/event-recordings/ai-tool-breakdown-cursor",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Full video player is visible with YouTube embed
-                assert "youtube" in body.lower() or "iframe" in body.lower()
+        # Full video player is visible with YouTube embed
+        assert "youtube" in body.lower() or "iframe" in body.lower()
 
-                # No upgrade message or blurred overlay
-                assert "Upgrade to" not in body
+        # No upgrade message or blurred overlay
+        assert "Upgrade to" not in body
 
-                # Timestamps are listed
-                assert "[00:00]" in body
-                assert "Overview" in body
-                assert "[05:00]" in body
-                assert "Live demo" in body
+        # Timestamps are listed
+        assert "[00:00]" in body
+        assert "Overview" in body
+        assert "[05:00]" in body
+        assert "Live demo" in body
 
-                # Verify timestamps are clickable elements
-                timestamps = page.locator(".video-timestamp")
-                assert timestamps.count() == 2
+        # Verify timestamps are clickable elements
+        timestamps = page.locator(".video-timestamp")
+        assert timestamps.count() == 2
 
-                # Materials section shows a "Slides" link
-                assert "Slides" in body
-                slides_link = page.locator(
-                    'a:has-text("Slides")'
-                ).first
-                assert slides_link.get_attribute("href") == "https://example.com/slides.pdf"
-
-            finally:
-                browser.close()
-
-
+        # Materials section shows a "Slides" link
+        assert "Slides" in body
+        slides_link = page.locator(
+            'a:has-text("Slides")'
+        ).first
+        assert slides_link.get_attribute("href") == "https://example.com/slides.pdf"
 # ---------------------------------------------------------------
 # Scenario 5: Reader navigates from detail back to filtered listing
 # ---------------------------------------------------------------
@@ -467,7 +427,7 @@ class TestScenario5NavigateFromDetailToFilteredListing:
 
     def test_navigate_detail_to_filtered_listing_and_back(
         self, django_server
-    ):
+    , page):
         """Given two recordings with different tags, the visitor clicks a
         tag chip on the detail page, sees filtered results, clicks back
         into the recording, then uses the back link to return to the
@@ -490,73 +450,63 @@ class TestScenario5NavigateFromDetailToFilteredListing:
             date=datetime.date(2026, 2, 14),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to recording detail page
-                page.goto(
-                    f"{django_server}/event-recordings/building-chatbots",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to recording detail page
+        page.goto(
+            f"{django_server}/event-recordings/building-chatbots",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Tag chips visible in the recording header
-                assert "chatbots" in body
-                assert "python" in body
+        # Tag chips visible in the recording header
+        assert "chatbots" in body
+        assert "python" in body
 
-                # Step 2: Click the "python" tag chip on the detail page
-                tag_link = page.locator(
-                    'a[href="/event-recordings?tag=python"]'
-                )
-                assert tag_link.count() >= 1
-                tag_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "python" tag chip on the detail page
+        tag_link = page.locator(
+            'a[href="/event-recordings?tag=python"]'
+        )
+        assert tag_link.count() >= 1
+        tag_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User is taken to /event-recordings?tag=python
-                assert "tag=python" in page.url
-                assert "/event-recordings" in page.url
+        # User is taken to /event-recordings?tag=python
+        assert "tag=python" in page.url
+        assert "/event-recordings" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Building Chatbots appears (has python tag)
-                assert "Building Chatbots" in body
+        # Building Chatbots appears (has python tag)
+        assert "Building Chatbots" in body
 
-                # Deploy with Docker does not appear (no python tag)
-                recording_cards = page.locator("article")
-                cards_text = " ".join(
-                    [card.inner_text() for card in recording_cards.all()]
-                )
-                assert "Deploy with Docker" not in cards_text
+        # Deploy with Docker does not appear (no python tag)
+        recording_cards = page.locator("article")
+        cards_text = " ".join(
+            [card.inner_text() for card in recording_cards.all()]
+        )
+        assert "Deploy with Docker" not in cards_text
 
-                # Step 3: Click the "Building Chatbots" card to return
-                page.locator(
-                    'a:has-text("Building Chatbots")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
-                assert "/event-recordings/building-chatbots" in page.url
+        # Step 3: Click the "Building Chatbots" card to return
+        page.locator(
+            'a:has-text("Building Chatbots")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/event-recordings/building-chatbots" in page.url
 
-                # Step 4: Click the "Back to Event Recordings" link
-                back_link = page.locator(
-                    'a:has-text("Back to Event Recordings")'
-                )
-                assert back_link.count() >= 1
-                back_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 4: Click the "Back to Event Recordings" link
+        back_link = page.locator(
+            'a:has-text("Back to Event Recordings")'
+        )
+        assert back_link.count() >= 1
+        back_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User returns to /event-recordings with no filters
-                assert "/event-recordings" in page.url
-                # The back link goes to /event-recordings (no tag param)
-                # Both recordings are visible
-                body = page.content()
-                assert "Building Chatbots" in body
-                assert "Deploy with Docker" in body
-
-            finally:
-                browser.close()
-
-
+        # User returns to /event-recordings with no filters
+        assert "/event-recordings" in page.url
+        # The back link goes to /event-recordings (no tag param)
+        # Both recordings are visible
+        body = page.content()
+        assert "Building Chatbots" in body
+        assert "Deploy with Docker" in body
 # ---------------------------------------------------------------
 # Scenario 6: Visitor paginates through a large collection
 # ---------------------------------------------------------------
@@ -565,7 +515,7 @@ class TestScenario5NavigateFromDetailToFilteredListing:
 class TestScenario6PaginateLargeCollection:
     """Visitor paginates through a large recording collection."""
 
-    def test_visitor_paginates_25_recordings(self, django_server):
+    def test_visitor_paginates_25_recordings(self, django_server, page):
         """Given 25 published recordings, the visitor sees 20 on page 1
         with pagination controls, then navigates to page 2 with 5, then
         back to page 1."""
@@ -580,57 +530,47 @@ class TestScenario6PaginateLargeCollection:
                 date=datetime.date(2026, 1, 1) + datetime.timedelta(days=i),
             )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /event-recordings
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
 
-                # Exactly 20 recording cards on the first page
-                recording_cards = page.locator("article")
-                assert recording_cards.count() == 20
+        # Exactly 20 recording cards on the first page
+        recording_cards = page.locator("article")
+        assert recording_cards.count() == 20
 
-                body = page.content()
+        body = page.content()
 
-                # Pagination indicator visible
-                assert "Page 1 of 2" in body
+        # Pagination indicator visible
+        assert "Page 1 of 2" in body
 
-                # "Next" link visible
-                next_link = page.locator('a:has-text("Next")')
-                assert next_link.count() >= 1
+        # "Next" link visible
+        next_link = page.locator('a:has-text("Next")')
+        assert next_link.count() >= 1
 
-                # Step 2: Click "Next"
-                next_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Next"
+        next_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # URL contains page=2
-                assert "page=2" in page.url
+        # URL contains page=2
+        assert "page=2" in page.url
 
-                # Remaining 5 recording cards
-                recording_cards = page.locator("article")
-                assert recording_cards.count() == 5
+        # Remaining 5 recording cards
+        recording_cards = page.locator("article")
+        assert recording_cards.count() == 5
 
-                # "Previous" link visible
-                prev_link = page.locator('a:has-text("Previous")')
-                assert prev_link.count() >= 1
+        # "Previous" link visible
+        prev_link = page.locator('a:has-text("Previous")')
+        assert prev_link.count() >= 1
 
-                # Step 3: Click "Previous"
-                prev_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click "Previous"
+        prev_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Back to page 1 with 20 recordings
-                recording_cards = page.locator("article")
-                assert recording_cards.count() == 20
-
-            finally:
-                browser.close()
-
-
+        # Back to page 1 with 20 recordings
+        recording_cards = page.locator("article")
+        assert recording_cards.count() == 20
 # ---------------------------------------------------------------
 # Scenario 7: Paginate a filtered listing without losing the tag
 # ---------------------------------------------------------------
@@ -639,7 +579,7 @@ class TestScenario6PaginateLargeCollection:
 class TestScenario7PaginateFilteredListing:
     """Visitor paginates a filtered listing without losing the tag filter."""
 
-    def test_paginate_filtered_by_tag(self, django_server):
+    def test_paginate_filtered_by_tag(self, django_server, page):
         """Given 22 recordings tagged 'agents' and 3 tagged 'other',
         filtering by 'agents' shows 20 on page 1, then page 2 has 2,
         and the tag filter stays active."""
@@ -663,45 +603,35 @@ class TestScenario7PaginateFilteredListing:
                 date=datetime.date(2026, 3, 1) + datetime.timedelta(days=i),
             )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings?tag=agents
-                page.goto(
-                    f"{django_server}/event-recordings?tag=agents",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /event-recordings?tag=agents
+        page.goto(
+            f"{django_server}/event-recordings?tag=agents",
+            wait_until="domcontentloaded",
+        )
 
-                # Only agents-tagged recordings shown, 20 on first page
-                recording_cards = page.locator("article")
-                assert recording_cards.count() == 20
+        # Only agents-tagged recordings shown, 20 on first page
+        recording_cards = page.locator("article")
+        assert recording_cards.count() == 20
 
-                # "Next" link visible
-                next_link = page.locator('a:has-text("Next")')
-                assert next_link.count() >= 1
+        # "Next" link visible
+        next_link = page.locator('a:has-text("Next")')
+        assert next_link.count() >= 1
 
-                # Step 2: Click "Next"
-                next_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Next"
+        next_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # URL contains both tag=agents and page=2
-                assert "tag=agents" in page.url
-                assert "page=2" in page.url
+        # URL contains both tag=agents and page=2
+        assert "tag=agents" in page.url
+        assert "page=2" in page.url
 
-                # Remaining 2 agents-tagged recordings
-                recording_cards = page.locator("article")
-                assert recording_cards.count() == 2
+        # Remaining 2 agents-tagged recordings
+        recording_cards = page.locator("article")
+        assert recording_cards.count() == 2
 
-                # The "agents" tag filter is still active (in URL)
-                body = page.content()
-                assert "tag=agents" in page.url
-
-            finally:
-                browser.close()
-
-
+        # The "agents" tag filter is still active (in URL)
+        body = page.content()
+        assert "tag=agents" in page.url
 # ---------------------------------------------------------------
 # Scenario 8: Empty state when no recordings exist
 # ---------------------------------------------------------------
@@ -710,46 +640,36 @@ class TestScenario7PaginateFilteredListing:
 class TestScenario8EmptyStateNoRecordings:
     """Empty state when no recordings exist at all."""
 
-    def test_empty_state_shows_helpful_message(self, django_server):
+    def test_empty_state_shows_helpful_message(self, django_server, page):
         """Given no published recordings, the page loads with the heading
         and a helpful message, and no tag filter chips."""
         _clear_recordings()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings
-                response = page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /event-recordings
+        response = page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
 
-                # Page loads without errors
-                assert response.status == 200
+        # Page loads without errors
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # Heading is present (& is HTML-encoded as &amp;)
-                heading = page.locator("h1")
-                assert "Workshops" in heading.inner_text()
-                assert "Learning Materials" in heading.inner_text()
+        # Heading is present (& is HTML-encoded as &amp;)
+        heading = page.locator("h1")
+        assert "Workshops" in heading.inner_text()
+        assert "Learning Materials" in heading.inner_text()
 
-                # Helpful empty state message
-                assert (
-                    "No resources yet. Check back soon for workshops and learning materials."
-                    in body
-                )
+        # Helpful empty state message
+        assert (
+            "No resources yet. Check back soon for workshops and learning materials."
+            in body
+        )
 
-                # No recording cards (empty state)
-                recording_cards = page.locator("article")
-                assert recording_cards.count() == 0
-
-            finally:
-                browser.close()
-
-
+        # No recording cards (empty state)
+        recording_cards = page.locator("article")
+        assert recording_cards.count() == 0
 # ---------------------------------------------------------------
 # Scenario 9: Empty state when no recordings match a tag filter
 # ---------------------------------------------------------------
@@ -760,7 +680,7 @@ class TestScenario9EmptyStateNoMatchingTag:
 
     def test_no_matching_tag_shows_message_and_clear_link(
         self, django_server
-    ):
+    , page):
         """Given published recordings but none tagged 'quantum-computing',
         filtering by that tag shows an empty message with a link to view
         all recordings."""
@@ -773,47 +693,37 @@ class TestScenario9EmptyStateNoMatchingTag:
             tags=["ai"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings?tag=quantum-computing
-                page.goto(
-                    f"{django_server}/event-recordings?tag=quantum-computing",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /event-recordings?tag=quantum-computing
+        page.goto(
+            f"{django_server}/event-recordings?tag=quantum-computing",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # No recording cards visible
-                recording_cards = page.locator("article")
-                assert recording_cards.count() == 0
+        # No recording cards visible
+        recording_cards = page.locator("article")
+        assert recording_cards.count() == 0
 
-                # Empty state message
-                assert "No recordings found with the selected tags." in body
+        # Empty state message
+        assert "No recordings found with the selected tags." in body
 
-                # "View all recordings" link
-                view_all_link = page.locator(
-                    'a:has-text("View all recordings")'
-                )
-                assert view_all_link.count() >= 1
-                href = view_all_link.first.get_attribute("href")
-                assert "/event-recordings" in href
+        # "View all recordings" link
+        view_all_link = page.locator(
+            'a:has-text("View all recordings")'
+        )
+        assert view_all_link.count() >= 1
+        href = view_all_link.first.get_attribute("href")
+        assert "/event-recordings" in href
 
-                # Step 2: Click "View all recordings"
-                view_all_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "View all recordings"
+        view_all_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User returns to the full unfiltered listing
-                assert "/event-recordings" in page.url
-                body = page.content()
-                assert "Some Recording" in body
-
-            finally:
-                browser.close()
-
-
+        # User returns to the full unfiltered listing
+        assert "/event-recordings" in page.url
+        body = page.content()
+        assert "Some Recording" in body
 # ---------------------------------------------------------------
 # Scenario 10: Insufficient-tier paid member sees correct CTA
 # ---------------------------------------------------------------
@@ -822,7 +732,7 @@ class TestScenario9EmptyStateNoMatchingTag:
 class TestScenario10InsufficientTierSeesCTAWithCorrectName:
     """Insufficient-tier paid member sees gated CTA with correct tier name."""
 
-    def test_basic_member_sees_main_tier_cta(self, django_server):
+    def test_basic_member_sees_main_tier_cta(self, django_server, browser):
         """Given a Main-gated recording and a Basic-tier user, the user
         sees the upgrade CTA mentioning 'Main' (not 'Basic'), with a
         lock icon on the listing and a View Pricing link."""
@@ -837,52 +747,46 @@ class TestScenario10InsufficientTierSeesCTAWithCorrectName:
             tags=["deployment"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic-insuf@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /event-recordings
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic-insuf@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /event-recordings
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Recording appears with a lock icon
-                assert "Main-Only Deep Dive" in body
-                recording_card = page.locator(
-                    'article:has-text("Main-Only Deep Dive")'
-                )
-                lock_icon = recording_card.locator('[data-lucide="lock"]')
-                assert lock_icon.count() >= 1
+        # Recording appears with a lock icon
+        assert "Main-Only Deep Dive" in body
+        recording_card = page.locator(
+            'article:has-text("Main-Only Deep Dive")'
+        )
+        lock_icon = recording_card.locator('[data-lucide="lock"]')
+        assert lock_icon.count() >= 1
 
-                # Step 2: Click on "Main-Only Deep Dive"
-                page.locator(
-                    'a:has-text("Main-Only Deep Dive")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on "Main-Only Deep Dive"
+        page.locator(
+            'a:has-text("Main-Only Deep Dive")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Title and description are visible
-                assert "Main-Only Deep Dive" in body
-                assert "exclusive deep dive" in body
+        # Title and description are visible
+        assert "Main-Only Deep Dive" in body
+        assert "exclusive deep dive" in body
 
-                # Video is hidden -- no YouTube iframe present
-                main_element = page.locator("main")
-                main_html = main_element.inner_html()
-                assert "<iframe" not in main_html.lower() or "maindd789" not in main_html
+        # Video is hidden -- no YouTube iframe present
+        main_element = page.locator("main")
+        main_html = main_element.inner_html()
+        assert "<iframe" not in main_html.lower() or "maindd789" not in main_html
 
-                # CTA reads "Upgrade to Main" not "Upgrade to Basic"
-                assert "Upgrade to Main to watch this recording" in body
-                assert "Upgrade to Basic" not in body
+        # CTA reads "Upgrade to Main" not "Upgrade to Basic"
+        assert "Upgrade to Main to watch this recording" in body
+        assert "Upgrade to Basic" not in body
 
-                # "View Pricing" link to /pricing is available
-                pricing_link = page.locator('a:has-text("View Pricing")')
-                assert pricing_link.count() >= 1
-                href = pricing_link.first.get_attribute("href")
-                assert "/pricing" in href
-
-            finally:
-                browser.close()
+        # "View Pricing" link to /pricing is available
+        pricing_link = page.locator('a:has-text("View Pricing")')
+        assert pricing_link.count() >= 1
+        href = pricing_link.first.get_attribute("href")
+        assert "/pricing" in href

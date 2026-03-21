@@ -25,7 +25,6 @@ import re
 
 import pytest
 from django.core.management import call_command
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -36,10 +35,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django raises
-# SynchronousOnlyOperation when we make ORM calls inside a
-# sync_playwright() context.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 ADMIN_EMAIL = "admin@aishippinglabs.com"
 ADMIN_PASSWORD = "admin123"
@@ -121,11 +116,11 @@ def _parse_summary(output):
 
 def _login_admin_via_browser(page, base_url, email, password=ADMIN_PASSWORD):
     """Log in an admin user via the Django admin login page."""
-    page.goto(f"{base_url}/admin/login/", wait_until="networkidle")
+    page.goto(f"{base_url}/admin/login/", wait_until="domcontentloaded")
     page.fill("#id_username", email)
     page.fill("#id_password", password)
     page.click('input[type="submit"]')
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
 
 
 # ---------------------------------------------------------------------------
@@ -800,73 +795,65 @@ class TestScenario11BrowseSiteAsAdmin:
     Then: Seeded recordings appear
     """
 
-    def test_browse_site_shows_seeded_content(self, django_server):
+    def test_browse_site_shows_seeded_content(self, django_server, browser):
         _flush_all_seed_data()
         _ensure_tiers()
         _run_seed_data()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, ADMIN_EMAIL)
-            page = context.new_page()
-            try:
-                # Step 2: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, ADMIN_EMAIL)
+        page = context.new_page()
+        # Step 2: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Seeded articles appear with realistic titles
-                # (not lorem ipsum)
-                assert "Getting Started with LLM Agents" in body
-                assert "RAG Pipeline Best Practices" in body
+        # Then: Seeded articles appear with realistic titles
+        # (not lorem ipsum)
+        assert "Getting Started with LLM Agents" in body
+        assert "RAG Pipeline Best Practices" in body
 
-                # Verify no lorem ipsum placeholder text
-                assert "Lorem ipsum" not in body
-                assert "lorem ipsum" not in body
+        # Verify no lorem ipsum placeholder text
+        assert "Lorem ipsum" not in body
+        assert "lorem ipsum" not in body
 
-                # Step 3: Navigate to /courses
-                page.goto(
-                    f"{django_server}/courses",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 3: Navigate to /courses
+        page.goto(
+            f"{django_server}/courses",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Seeded courses appear
-                assert "LLM Agents Fundamentals" in body
-                assert "RAG in Production" in body
+        # Then: Seeded courses appear
+        assert "LLM Agents Fundamentals" in body
+        assert "RAG in Production" in body
 
-                # Step 4: Navigate to /events
-                page.goto(
-                    f"{django_server}/events",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 4: Navigate to /events
+        page.goto(
+            f"{django_server}/events",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Seeded events appear with a mix of statuses
-                assert "LLM Agents Workshop" in body
-                assert "Fine-Tuning Masterclass" in body
+        # Then: Seeded events appear with a mix of statuses
+        assert "LLM Agents Workshop" in body
+        assert "Fine-Tuning Masterclass" in body
 
-                # Verify status indicators are present
-                body_text = page.inner_text("body").lower()
-                assert "upcoming" in body_text or "completed" in body_text
+        # Verify status indicators are present
+        body_text = page.inner_text("body").lower()
+        assert "upcoming" in body_text or "completed" in body_text
 
-                # Step 5: Navigate to /event-recordings
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 5: Navigate to /event-recordings
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Seeded recordings appear
-                assert "Fine-Tuning Masterclass" in body
-                assert "Introduction to Model Context Protocol" in body
-
-            finally:
-                browser.close()
-
-
+        # Then: Seeded recordings appear
+        assert "Fine-Tuning Masterclass" in body
+        assert "Introduction to Model Context Protocol" in body
 # ---------------------------------------------------------------------------
 # Scenario 12: Developer verifies cohort enrollments are created for
 #               gated courses

@@ -23,7 +23,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -36,9 +35,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -296,7 +292,7 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
 
     def test_anonymous_sees_hero_and_tiers_not_dashboard(
         self, django_server
-    ):
+    , page):
         """Given: An anonymous visitor (not logged in).
         1. Navigate to /
         Then: The public marketing homepage loads with the hero section,
@@ -308,59 +304,50 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
               Basic, Main, and Premium options."""
         _ensure_tiers()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _anon_context(browser)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                response = page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                assert response.status == 200
+        context = _anon_context(browser)
+        # Step 1: Navigate to /
+        response = page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Public homepage elements are present
-                assert "Turn AI ideas into" in body
-                assert "real projects" in body
-                assert "View Membership Tiers" in body
+        # Then: Public homepage elements are present
+        assert "Turn AI ideas into" in body
+        assert "real projects" in body
+        assert "View Membership Tiers" in body
 
-                # Testimonials section
-                assert "testimonials" in body.lower() or "Rolando" in body
+        # Testimonials section
+        assert "testimonials" in body.lower() or "Rolando" in body
 
-                # Newsletter signup (in footer or dedicated section)
-                assert "Subscribe" in body
+        # Newsletter signup (in footer or dedicated section)
+        assert "Subscribe" in body
 
-                # Then: No dashboard sections shown
-                assert "Welcome back" not in body
-                assert "Continue Learning" not in body
-                assert "Upcoming Events" not in body
-                assert "Quick Actions" not in body
+        # Then: No dashboard sections shown
+        assert "Welcome back" not in body
+        assert "Continue Learning" not in body
+        assert "Upcoming Events" not in body
+        assert "Quick Actions" not in body
 
-                # Step 2: Click "View Membership Tiers"
-                tiers_link = page.locator(
-                    'a:has-text("View Membership Tiers")'
-                )
-                assert tiers_link.count() >= 1
-                tiers_link.first.click()
+        # Step 2: Click "View Membership Tiers"
+        tiers_link = page.locator(
+            'a:has-text("View Membership Tiers")'
+        )
+        assert tiers_link.count() >= 1
+        tiers_link.first.click()
 
-                # Wait for scroll to settle
-                page.wait_for_timeout(1000)
+        # Wait for scroll to settle
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Tiers section is visible with all tier names
-                tiers_section = page.locator("#tiers")
-                assert tiers_section.count() >= 1
-                tiers_text = tiers_section.inner_text()
-                assert "Basic" in tiers_text
-                assert "Main" in tiers_text
-                assert "Premium" in tiers_text
-
-            finally:
-                browser.close()
-
-
+        # Then: Tiers section is visible with all tier names
+        tiers_section = page.locator("#tiers")
+        assert tiers_section.count() >= 1
+        tiers_text = tiers_section.inner_text()
+        assert "Basic" in tiers_text
+        assert "Main" in tiers_text
+        assert "Premium" in tiers_text
 # -------------------------------------------------------------------
 # Scenario 2: Free member sees personalized dashboard with tier
 #              badge after login
@@ -373,7 +360,7 @@ class TestScenario2FreeMemberSeesDashboard:
 
     def test_free_member_dashboard_with_welcome_and_badge(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as free@test.com (Free tier,
         first name 'Alex').
         1. Navigate to /
@@ -391,45 +378,37 @@ class TestScenario2FreeMemberSeesDashboard:
             first_name="Alex",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Dashboard with welcome and tier badge
-                assert "Welcome back" in body
-                assert "Alex" in body
-                assert "Free" in body
+        # Then: Dashboard with welcome and tier badge
+        assert "Welcome back" in body
+        assert "Alex" in body
+        assert "Free" in body
 
-                # Then: Marketing homepage elements NOT shown
-                assert "Turn AI ideas into" not in body
-                assert "View Membership Tiers" not in body
+        # Then: Marketing homepage elements NOT shown
+        assert "Turn AI ideas into" not in body
+        assert "View Membership Tiers" not in body
 
-                # Step 2: Click the "Account" link in the
-                # welcome banner (not the mobile menu version)
-                welcome_section = page.locator(
-                    'section:has(h1:has-text("Welcome back"))'
-                )
-                account_link = welcome_section.locator(
-                    'a:has-text("Account")'
-                )
-                account_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "Account" link in the
+        # welcome banner (not the mobile menu version)
+        welcome_section = page.locator(
+            'section:has(h1:has-text("Welcome back"))'
+        )
+        account_link = welcome_section.locator(
+            'a:has-text("Account")'
+        )
+        account_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to /account/
-                assert "/account" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to /account/
+        assert "/account" in page.url
 # -------------------------------------------------------------------
 # Scenario 3: Free member with no activity sees helpful empty states
 #              that guide next steps
@@ -442,7 +421,7 @@ class TestScenario3EmptyStatesGuideNextSteps:
 
     def test_empty_dashboard_shows_ctas(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as free@test.com (Free tier) who
         has no course progress, no event registrations, and no
         unread notifications.
@@ -458,46 +437,38 @@ class TestScenario3EmptyStatesGuideNextSteps:
         _clear_dashboard_data()
         _create_user("free@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Empty state messages
-                assert "No courses in progress yet" in body
-                assert "No upcoming events" in body
-                assert "No new notifications" in body
+        # Then: Empty state messages
+        assert "No courses in progress yet" in body
+        assert "No upcoming events" in body
+        assert "No new notifications" in body
 
-                # CTA links present
-                browse_courses_link = page.locator(
-                    'a:has-text("Browse Courses")'
-                )
-                assert browse_courses_link.count() >= 1
+        # CTA links present
+        browse_courses_link = page.locator(
+            'a:has-text("Browse Courses")'
+        )
+        assert browse_courses_link.count() >= 1
 
-                browse_events_link = page.locator(
-                    'a:has-text("Browse Events")'
-                )
-                assert browse_events_link.count() >= 1
+        browse_events_link = page.locator(
+            'a:has-text("Browse Events")'
+        )
+        assert browse_events_link.count() >= 1
 
-                # Step 2: Click "Browse Courses" in the empty
-                # continue learning section
-                browse_courses_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Browse Courses" in the empty
+        # continue learning section
+        browse_courses_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to /courses
-                assert "/courses" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to /courses
+        assert "/courses" in page.url
 # -------------------------------------------------------------------
 # Scenario 4: Basic member resumes an in-progress course from the
 #              dashboard
@@ -509,7 +480,7 @@ class TestScenario4BasicMemberResumesCourse:
 
     def test_in_progress_course_with_progress_bar(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as basic@test.com (Basic tier) who
         has completed 3 of 10 units in a course titled
         'AI Agents Buildcamp'.
@@ -551,45 +522,37 @@ class TestScenario4BasicMemberResumesCourse:
                 completed_at=base_time + datetime.timedelta(hours=i),
             )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Course shown in Continue Learning
-                assert "AI Agents Buildcamp" in body
-                assert "3/10 units completed" in body
+        # Then: Course shown in Continue Learning
+        assert "AI Agents Buildcamp" in body
+        assert "3/10 units completed" in body
 
-                # Progress bar at 30% is rendered (check style attr)
-                progress_bar = page.locator(
-                    'div[style*="width: 30%"]'
-                )
-                assert progress_bar.count() >= 1
+        # Progress bar at 30% is rendered (check style attr)
+        progress_bar = page.locator(
+            'div[style*="width: 30%"]'
+        )
+        assert progress_bar.count() >= 1
 
-                # Last completed unit title shown
-                assert "Unit 3" in body
+        # Last completed unit title shown
+        assert "Unit 3" in body
 
-                # Step 2: Click "Continue"
-                continue_btn = page.locator(
-                    'a:has-text("Continue")'
-                ).first
-                continue_btn.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Continue"
+        continue_btn = page.locator(
+            'a:has-text("Continue")'
+        ).first
+        continue_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to course detail
-                assert "/courses/ai-agents-buildcamp" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to course detail
+        assert "/courses/ai-agents-buildcamp" in page.url
 # -------------------------------------------------------------------
 # Scenario 5: Main member sees upcoming registered events and
 #              navigates to event detail
@@ -602,7 +565,7 @@ class TestScenario5MainMemberSeesUpcomingEvents:
 
     def test_upcoming_events_shown_ordered_by_date(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as main@test.com (Main tier) who
         is registered for 2 upcoming events.
         1. Navigate to /
@@ -636,47 +599,39 @@ class TestScenario5MainMemberSeesUpcomingEvents:
         _register_user_for_event(user, event1)
         _register_user_for_event(user, event2)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Both events shown
-                assert "AI Workshop: Prompt Engineering" in body
-                assert "RAG Pipeline Deep Dive" in body
+        # Then: Both events shown
+        assert "AI Workshop: Prompt Engineering" in body
+        assert "RAG Pipeline Deep Dive" in body
 
-                # Events ordered by date: verify that prompt
-                # engineering appears before RAG in the HTML
-                pos1 = body.index("AI Workshop: Prompt Engineering")
-                pos2 = body.index("RAG Pipeline Deep Dive")
-                assert pos1 < pos2, (
-                    "Events should be ordered soonest first"
-                )
+        # Events ordered by date: verify that prompt
+        # engineering appears before RAG in the HTML
+        pos1 = body.index("AI Workshop: Prompt Engineering")
+        pos2 = body.index("RAG Pipeline Deep Dive")
+        assert pos1 < pos2, (
+            "Events should be ordered soonest first"
+        )
 
-                # Step 2: Click "View Event" on the first event
-                view_event_links = page.locator(
-                    'a:has-text("View Event")'
-                )
-                assert view_event_links.count() >= 1
-                view_event_links.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "View Event" on the first event
+        view_event_links = page.locator(
+            'a:has-text("View Event")'
+        )
+        assert view_event_links.count() >= 1
+        view_event_links.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to the event detail page
-                assert "/events/ai-workshop-prompt-engineering" in page.url
-                event_body = page.content()
-                assert "AI Workshop: Prompt Engineering" in event_body
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to the event detail page
+        assert "/events/ai-workshop-prompt-engineering" in page.url
+        event_body = page.content()
+        assert "AI Workshop: Prompt Engineering" in event_body
 # -------------------------------------------------------------------
 # Scenario 6: Main member sees the Community quick action that Free
 #              members do not
@@ -689,7 +644,7 @@ class TestScenario6CommunityQuickActionTierGated:
 
     def test_community_action_for_main_not_for_free(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as main@test.com (Main tier).
         1. Navigate to /
         Then: The 'Quick Actions' section includes 'Browse Courses',
@@ -704,58 +659,21 @@ class TestScenario6CommunityQuickActionTierGated:
         _create_user("main@test.com", tier_slug="main")
         _create_user("free@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
 
-            # Step 1: Main member sees Community action
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Main member sees Community action
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: All 4 quick actions present
-                assert "Browse Courses" in body
-                assert "View Recordings" in body
-                assert "Community" in body
-                assert "Submit Project" in body
-
-            finally:
-                context.close()
-
-            # Steps 2-3: Free member does NOT see Community
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-
-                # Then: Quick actions present except Community
-                assert "Browse Courses" in body
-                assert "View Recordings" in body
-                assert "Submit Project" in body
-
-                # Community quick action should NOT be present.
-                # Check the Quick Actions section specifically
-                # (the word "Community" may appear in footer etc.)
-                quick_actions_section = page.locator(
-                    'section:has(h2:has-text("Quick Actions"))'
-                )
-                qa_text = quick_actions_section.inner_text()
-                assert "Community" not in qa_text
-
-            finally:
-                context.close()
-
-            browser.close()
-
-
+        # Then: All 4 quick actions present
+        assert "Browse Courses" in body
+        assert "View Recordings" in body
+        assert "Community" in body
+        assert "Submit Project" in body
 # -------------------------------------------------------------------
 # Scenario 7: Free member discovers gated content in recent content
 #              and finds the upgrade path
@@ -768,7 +686,7 @@ class TestScenario7GatedContentInRecentContent:
 
     def test_recent_content_excludes_gated_articles(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as free@test.com (Free tier), and
         3 open articles (level 0) plus 2 gated articles (level 10
         Basic) exist.
@@ -827,75 +745,67 @@ class TestScenario7GatedContentInRecentContent:
             date=datetime.date(2026, 2, 22),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Recent Content shows only open articles
-                # The dashboard "Recent Content" section filters by
-                # user level
-                recent_section = page.locator(
-                    'section:has(h2:has-text("Recent Content"))'
-                )
-                recent_text = recent_section.inner_text()
-                assert "Getting Started with Python" in recent_text
-                assert "Intro to Machine Learning" in recent_text
-                assert "Data Cleaning Tips" in recent_text
+        # Then: Recent Content shows only open articles
+        # The dashboard "Recent Content" section filters by
+        # user level
+        recent_section = page.locator(
+            'section:has(h2:has-text("Recent Content"))'
+        )
+        recent_text = recent_section.inner_text()
+        assert "Getting Started with Python" in recent_text
+        assert "Intro to Machine Learning" in recent_text
+        assert "Data Cleaning Tips" in recent_text
 
-                # Gated articles NOT in Recent Content
-                assert "Advanced RAG Techniques" not in recent_text
-                assert "Fine-tuning LLMs Guide" not in recent_text
+        # Gated articles NOT in Recent Content
+        assert "Advanced RAG Techniques" not in recent_text
+        assert "Fine-tuning LLMs Guide" not in recent_text
 
-                # Step 2: Click an open article
-                page.locator(
-                    'a[href="/blog/getting-started-python"]'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click an open article
+        page.locator(
+            'a[href="/blog/getting-started-python"]'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigate to article detail
-                assert "/blog/getting-started-python" in page.url
-                article_body = page.content()
-                assert "Getting Started with Python" in article_body
+        # Then: Navigate to article detail
+        assert "/blog/getting-started-python" in page.url
+        article_body = page.content()
+        assert "Getting Started with Python" in article_body
 
-                # Step 3: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
-                blog_body = page.content()
+        # Step 3: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
+        blog_body = page.content()
 
-                # Gated articles have lock icons
-                gated_card = page.locator(
-                    'article:has-text("Advanced RAG Techniques")'
-                )
-                lock_icon = gated_card.locator(
-                    '[data-lucide="lock"]'
-                )
-                assert lock_icon.count() >= 1
+        # Gated articles have lock icons
+        gated_card = page.locator(
+            'article:has-text("Advanced RAG Techniques")'
+        )
+        lock_icon = gated_card.locator(
+            '[data-lucide="lock"]'
+        )
+        assert lock_icon.count() >= 1
 
-                # Step 4: Click on a gated article
-                page.locator(
-                    'h2:has-text("Advanced RAG Techniques")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 4: Click on a gated article
+        page.locator(
+            'h2:has-text("Advanced RAG Techniques")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Paywall message shown
-                gated_body = page.content()
-                assert "Upgrade to Basic to read this article" in gated_body
-                assert "/pricing" in gated_body
-
-            finally:
-                browser.close()
-
-
+        # Then: Paywall message shown
+        gated_body = page.content()
+        assert "Upgrade to Basic to read this article" in gated_body
+        assert "/pricing" in gated_body
 # -------------------------------------------------------------------
 # Scenario 8: Premium member sees active polls and navigates to vote
 # -------------------------------------------------------------------
@@ -906,7 +816,7 @@ class TestScenario8PremiumMemberSeesActivePolls:
 
     def test_active_polls_shown_with_vote_counts(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as premium@test.com (Premium tier),
         and 2 open polls exist (1 topic poll at Main level, 1 course
         poll at Premium level).
@@ -941,53 +851,45 @@ class TestScenario8PremiumMemberSeesActivePolls:
         _create_poll_option(course_poll, "MLOps Basics")
         _create_poll_option(course_poll, "Computer Vision")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(
-                browser, "premium@test.com"
-            )
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(
+            browser, "premium@test.com"
+        )
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Active Polls section shows both polls
-                assert "Active Polls" in body
-                assert "Next Workshop Topic" in body
-                assert "Next Mini-Course" in body
+        # Then: Active Polls section shows both polls
+        assert "Active Polls" in body
+        assert "Next Workshop Topic" in body
+        assert "Next Mini-Course" in body
 
-                # Vote and option counts are displayed
-                polls_section = page.locator(
-                    'section:has(h2:has-text("Active Polls"))'
-                )
-                polls_text = polls_section.inner_text()
-                assert "vote" in polls_text.lower()
-                assert "option" in polls_text.lower()
+        # Vote and option counts are displayed
+        polls_section = page.locator(
+            'section:has(h2:has-text("Active Polls"))'
+        )
+        polls_text = polls_section.inner_text()
+        assert "vote" in polls_text.lower()
+        assert "option" in polls_text.lower()
 
-                # Step 2: Click on the course poll
-                poll_link = page.locator(
-                    f'a[href="/vote/{course_poll.id}"]'
-                )
-                assert poll_link.count() >= 1
-                poll_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the course poll
+        poll_link = page.locator(
+            f'a[href="/vote/{course_poll.id}"]'
+        )
+        assert poll_link.count() >= 1
+        poll_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to the poll detail page
-                assert f"/vote/{course_poll.id}" in page.url
-                poll_body = page.content()
-                assert "Next Mini-Course" in poll_body
-                assert "AI Agents 101" in poll_body
-                assert "MLOps Basics" in poll_body
-                assert "Computer Vision" in poll_body
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to the poll detail page
+        assert f"/vote/{course_poll.id}" in page.url
+        poll_body = page.content()
+        assert "Next Mini-Course" in poll_body
+        assert "AI Agents 101" in poll_body
+        assert "MLOps Basics" in poll_body
+        assert "Computer Vision" in poll_body
 # -------------------------------------------------------------------
 # Scenario 9: Member reads an unread notification from the dashboard
 #              and follows it
@@ -1000,7 +902,7 @@ class TestScenario9MemberReadsNotificationFromDashboard:
 
     def test_notifications_shown_and_view_all_link(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as basic@test.com (Basic tier) who
         has 3 unread notifications.
         1. Navigate to /
@@ -1034,43 +936,35 @@ class TestScenario9MemberReadsNotificationFromDashboard:
             url="/events/hackathon",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Notifications section shows the 3 notifications
-                notif_section = page.locator(
-                    'section:has(h2:has-text("Notifications"))'
-                )
-                notif_text = notif_section.inner_text()
-                assert "New article: Advanced Deployment" in notif_text
-                assert "New recording: AI Workshop" in notif_text
-                assert "Event reminder: Hackathon" in notif_text
+        # Then: Notifications section shows the 3 notifications
+        notif_section = page.locator(
+            'section:has(h2:has-text("Notifications"))'
+        )
+        notif_text = notif_section.inner_text()
+        assert "New article: Advanced Deployment" in notif_text
+        assert "New recording: AI Workshop" in notif_text
+        assert "Event reminder: Hackathon" in notif_text
 
-                # Step 2: Click "View all" in the notifications
-                # section header
-                view_all_link = notif_section.locator(
-                    'a:has-text("View all")'
-                )
-                assert view_all_link.count() >= 1
-                view_all_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "View all" in the notifications
+        # section header
+        view_all_link = notif_section.locator(
+            'a:has-text("View all")'
+        )
+        assert view_all_link.count() >= 1
+        view_all_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to /notifications
-                assert "/notifications" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to /notifications
+        assert "/notifications" in page.url
 # -------------------------------------------------------------------
 # Scenario 10: Member with a completed course does not see it in
 #               continue learning
@@ -1083,7 +977,7 @@ class TestScenario10CompletedCourseNotInContinueLearning:
 
     def test_completed_course_excluded_in_progress_shown(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as basic@test.com (Basic tier) who
         has completed all 10 of 10 units in 'AI Agents Buildcamp' and
         completed 2 of 5 units in 'Python Fundamentals'.
@@ -1144,39 +1038,31 @@ class TestScenario10CompletedCourseNotInContinueLearning:
                 ),
             )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Continue Learning shows Python Fundamentals
-                learning_section = page.locator(
-                    'section:has(h2:has-text("Continue Learning"))'
-                )
-                learning_text = learning_section.inner_text()
-                assert "Python Fundamentals" in learning_text
-                assert "2/5 units completed" in learning_text
+        # Then: Continue Learning shows Python Fundamentals
+        learning_section = page.locator(
+            'section:has(h2:has-text("Continue Learning"))'
+        )
+        learning_text = learning_section.inner_text()
+        assert "Python Fundamentals" in learning_text
+        assert "2/5 units completed" in learning_text
 
-                # Progress bar at 40%
-                progress_bar = page.locator(
-                    'div[style*="width: 40%"]'
-                )
-                assert progress_bar.count() >= 1
+        # Progress bar at 40%
+        progress_bar = page.locator(
+            'div[style*="width: 40%"]'
+        )
+        assert progress_bar.count() >= 1
 
-                # Then: Completed course NOT shown
-                assert "AI Agents Buildcamp" not in learning_text
-
-            finally:
-                browser.close()
-
-
+        # Then: Completed course NOT shown
+        assert "AI Agents Buildcamp" not in learning_text
 # -------------------------------------------------------------------
 # Scenario 11: Free member uses the Upgrade link in the welcome
 #               banner to explore paid tiers
@@ -1189,7 +1075,7 @@ class TestScenario11FreeMemberUpgradeLink:
 
     def test_upgrade_link_navigates_to_pricing(
         self, django_server
-    ):
+    , browser):
         """Given: A user logged in as free@test.com (Free tier).
         1. Navigate to /
         Then: The welcome banner shows an 'Upgrade' button alongside
@@ -1201,46 +1087,40 @@ class TestScenario11FreeMemberUpgradeLink:
         _clear_dashboard_data()
         _create_user("free@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Welcome banner has both Account and Upgrade
-                assert "Account" in body
-                assert "Upgrade" in body
+        # Then: Welcome banner has both Account and Upgrade
+        assert "Account" in body
+        assert "Upgrade" in body
 
-                # Both links are in the welcome banner section
-                welcome_section = page.locator(
-                    'section:has(h1:has-text("Welcome back"))'
-                )
-                welcome_text = welcome_section.inner_text()
-                assert "Account" in welcome_text
-                assert "Upgrade" in welcome_text
+        # Both links are in the welcome banner section
+        welcome_section = page.locator(
+            'section:has(h1:has-text("Welcome back"))'
+        )
+        welcome_text = welcome_section.inner_text()
+        assert "Account" in welcome_text
+        assert "Upgrade" in welcome_text
 
-                # Step 2: Click "Upgrade"
-                upgrade_link = welcome_section.locator(
-                    'a:has-text("Upgrade")'
-                )
-                assert upgrade_link.count() >= 1
-                upgrade_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Upgrade"
+        upgrade_link = welcome_section.locator(
+            'a:has-text("Upgrade")'
+        )
+        assert upgrade_link.count() >= 1
+        upgrade_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to /pricing
-                assert "/pricing" in page.url
-                pricing_body = page.content()
+        # Then: Navigates to /pricing
+        assert "/pricing" in page.url
+        pricing_body = page.content()
 
-                # Tier options are shown
-                assert "Basic" in pricing_body
-                assert "Main" in pricing_body
-                assert "Premium" in pricing_body
-
-            finally:
-                browser.close()
+        # Tier options are shown
+        assert "Basic" in pricing_body
+        assert "Main" in pricing_body
+        assert "Premium" in pricing_body

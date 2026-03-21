@@ -20,7 +20,6 @@ Usage:
 import os
 
 import pytest
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -33,9 +32,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -143,7 +139,7 @@ def _mark_unit_completed(user_email, unit):
 class TestScenario1PremiumMemberWorksThrough:
     """Premium member works through a course unit from start to finish."""
 
-    def test_premium_member_full_unit_workflow(self, django_server):
+    def test_premium_member_full_unit_workflow(self, django_server, browser):
         """Given a Premium member and a published course with required_level=30,
         navigate to the course, click into Unit 1, verify video/lesson/homework,
         mark complete, then proceed to the next unit."""
@@ -176,72 +172,65 @@ class TestScenario1PremiumMemberWorksThrough:
             body="# Wrap Up\n\nConclusion.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "premium-cu@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/{slug}
-                page.goto(
-                    f"{django_server}/courses/advanced-ai-patterns",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "Advanced AI Patterns" in body
+        context = _auth_context(browser, "premium-cu@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/{slug}
+        page.goto(
+            f"{django_server}/courses/advanced-ai-patterns",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "Advanced AI Patterns" in body
 
-                # Step 2: Click on Unit 1 in the syllabus
-                page.locator(
-                    'a:has-text("Unit 1: Intro")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on Unit 1 in the syllabus
+        page.locator(
+            'a:has-text("Unit 1: Intro")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify URL
-                assert "/courses/advanced-ai-patterns/0/0" in page.url
+        # Verify URL
+        assert "/courses/advanced-ai-patterns/0/0" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Video player is present
-                assert "video-player" in body or "test123" in body
+        # Video player is present
+        assert "video-player" in body or "test123" in body
 
-                # Lesson text is rendered
-                assert "Welcome" in body
-                assert "first" in body
+        # Lesson text is rendered
+        assert "Welcome" in body
+        assert "first" in body
 
-                # Homework section is present
-                assert "Homework" in body
-                assert "Task 1" in body
-                assert "Build a simple agent" in body
+        # Homework section is present
+        assert "Homework" in body
+        assert "Task 1" in body
+        assert "Build a simple agent" in body
 
-                # Step 3: Click "Mark as completed"
-                complete_btn = page.locator("#mark-complete-btn")
-                assert complete_btn.is_visible()
-                assert "Mark as completed" in complete_btn.inner_text()
+        # Step 3: Click "Mark as completed"
+        complete_btn = page.locator("#mark-complete-btn")
+        assert complete_btn.is_visible()
+        assert "Mark as completed" in complete_btn.inner_text()
 
-                complete_btn.click()
-                page.wait_for_timeout(2000)
+        complete_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Button changes to "Completed"
-                btn_text = complete_btn.inner_text()
-                assert "Completed" in btn_text
+        # Button changes to "Completed"
+        btn_text = complete_btn.inner_text()
+        assert "Completed" in btn_text
 
-                # Step 4: Click the "Next" button to proceed to Unit 2
-                next_btn = page.locator(
-                    'a:has-text("Next: Unit 2: Deep Dive")'
-                )
-                assert next_btn.count() >= 1
-                next_btn.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 4: Click the "Next" button to proceed to Unit 2
+        next_btn = page.locator(
+            'a:has-text("Next: Unit 2: Deep Dive")'
+        )
+        assert next_btn.count() >= 1
+        next_btn.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify we are on Unit 2
-                assert "/courses/advanced-ai-patterns/0/1" in page.url
-                body = page.content()
-                assert "Deep Dive" in body
+        # Verify we are on Unit 2
+        assert "/courses/advanced-ai-patterns/0/1" in page.url
+        body = page.content()
+        assert "Deep Dive" in body
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 2: Member navigates between units using the sidebar
 # ---------------------------------------------------------------
@@ -250,7 +239,7 @@ class TestScenario1PremiumMemberWorksThrough:
 class TestScenario2SidebarNavigation:
     """Member navigates between units using the sidebar."""
 
-    def test_sidebar_navigation_with_checkmarks(self, django_server):
+    def test_sidebar_navigation_with_checkmarks(self, django_server, browser):
         """Given a Premium member with Unit 1 of Module 1 already completed,
         verify sidebar shows checkmark, navigate to Module 2 via sidebar,
         then back -- checkmark persists."""
@@ -280,56 +269,49 @@ class TestScenario2SidebarNavigation:
         # Mark Unit 1 of Module 1 as completed
         _mark_unit_completed("premium-sb@test.com", unit1_m1)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "premium-sb@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/{slug}/0/0 (Unit 1 of Module 1)
-                page.goto(
-                    f"{django_server}/courses/sidebar-nav-course/0/0",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "premium-sb@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/{slug}/0/0 (Unit 1 of Module 1)
+        page.goto(
+            f"{django_server}/courses/sidebar-nav-course/0/0",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Sidebar shows all modules and units
-                assert "Module 1" in body
-                assert "Module 2" in body
-                assert "M1 Unit 1" in body
-                assert "M1 Unit 2" in body
-                assert "M2 Unit 1" in body
+        # Sidebar shows all modules and units
+        assert "Module 1" in body
+        assert "Module 2" in body
+        assert "M1 Unit 1" in body
+        assert "M1 Unit 2" in body
+        assert "M2 Unit 1" in body
 
-                # Unit 1 of Module 1 has a checkmark (check-circle-2)
-                assert "check-circle-2" in body
+        # Unit 1 of Module 1 has a checkmark (check-circle-2)
+        assert "check-circle-2" in body
 
-                # Step 2: Click on Module 2 unit in the sidebar
-                sidebar_m2_link = page.locator(
-                    'nav a:has-text("M2 Unit 1")'
-                )
-                assert sidebar_m2_link.count() >= 1
-                sidebar_m2_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on Module 2 unit in the sidebar
+        sidebar_m2_link = page.locator(
+            'nav a:has-text("M2 Unit 1")'
+        )
+        assert sidebar_m2_link.count() >= 1
+        sidebar_m2_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify URL
-                assert "/courses/sidebar-nav-course/1/0" in page.url
-                body = page.content()
-                assert "Module 2 unit" in body
+        # Verify URL
+        assert "/courses/sidebar-nav-course/1/0" in page.url
+        body = page.content()
+        assert "Module 2 unit" in body
 
-                # Step 3: Navigate back to /courses/{slug}/0/0
-                page.goto(
-                    f"{django_server}/courses/sidebar-nav-course/0/0",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 3: Navigate back to /courses/{slug}/0/0
+        page.goto(
+            f"{django_server}/courses/sidebar-nav-course/0/0",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # The completed checkmark for Unit 1 is still shown
-                assert "check-circle-2" in body
+        # The completed checkmark for Unit 1 is still shown
+        assert "check-circle-2" in body
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 3: Free member previews a gated course unit marked
 #              as preview
@@ -341,7 +323,7 @@ class TestScenario3FreePreviewUnit:
 
     def test_free_member_accesses_preview_and_blocked_on_non_preview(
         self, django_server
-    ):
+    , browser):
         """Given a Free member and a Premium course, Unit 1 (is_preview=true)
         is accessible while Unit 2 (is_preview=false) shows a gated message."""
         _clear_courses()
@@ -365,66 +347,59 @@ class TestScenario3FreePreviewUnit:
             body="# Locked Content\n\nPremium only.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-cu@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/{slug}
-                page.goto(
-                    f"{django_server}/courses/preview-test-course",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free-cu@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/{slug}
+        page.goto(
+            f"{django_server}/courses/preview-test-course",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Syllabus shows both units
-                assert "Preview Unit" in body
-                assert "Locked Unit" in body
-                # The Preview badge is rendered for non-access users
-                # (shown next to the preview unit title)
-                preview_badge = page.locator('span:has-text("Preview")')
-                assert preview_badge.count() >= 1
+        # Syllabus shows both units
+        assert "Preview Unit" in body
+        assert "Locked Unit" in body
+        # The Preview badge is rendered for non-access users
+        # (shown next to the preview unit title)
+        preview_badge = page.locator('span:has-text("Preview")')
+        assert preview_badge.count() >= 1
 
-                # Step 2: Navigate directly to the preview unit page
-                # (unit titles are not clickable links when user lacks
-                # course-level access, but preview units are directly
-                # accessible via URL)
-                page.goto(
-                    f"{django_server}/courses/preview-test-course/0/0",
-                    wait_until="networkidle",
-                )
+        # Step 2: Navigate directly to the preview unit page
+        # (unit titles are not clickable links when user lacks
+        # course-level access, but preview units are directly
+        # accessible via URL)
+        page.goto(
+            f"{django_server}/courses/preview-test-course/0/0",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Full content is visible despite lacking Premium tier
-                assert "Preview Content" in body
-                assert "Free for all to see" in body
-                # Video should be present
-                assert "prev123" in body or "video-player" in body
-                # Homework should be present
-                assert "Homework" in body
-                assert "Preview Homework" in body
+        # Full content is visible despite lacking Premium tier
+        assert "Preview Content" in body
+        assert "Free for all to see" in body
+        # Video should be present
+        assert "prev123" in body or "video-player" in body
+        # Homework should be present
+        assert "Homework" in body
+        assert "Preview Homework" in body
 
-                # Step 3: Navigate to the locked unit
-                page.goto(
-                    f"{django_server}/courses/preview-test-course/0/1",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 3: Navigate to the locked unit
+        page.goto(
+            f"{django_server}/courses/preview-test-course/0/1",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Gated message with correct tier name
-                assert "Upgrade to Premium to access this lesson" in body
-                # "View Pricing" link
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
+        # Gated message with correct tier name
+        assert "Upgrade to Premium to access this lesson" in body
+        # "View Pricing" link
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 4: Free member hits paywall on a gated unit and finds
 #              the upgrade path
@@ -436,7 +411,7 @@ class TestScenario4FreePaywall:
 
     def test_free_member_sees_gated_message_and_navigates_to_pricing(
         self, django_server
-    ):
+    , browser):
         """Given a Free member and a Main-level course with a non-preview
         unit, navigating to the unit shows the gated message. Clicking
         'View Pricing' leads to /pricing."""
@@ -454,39 +429,32 @@ class TestScenario4FreePaywall:
             body="# Main Content\n\nFor Main members.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-pw@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the unit
-                page.goto(
-                    f"{django_server}/courses/main-course/0/0",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free-pw@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the unit
+        page.goto(
+            f"{django_server}/courses/main-course/0/0",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Gated message mentions correct tier
-                assert "Upgrade to Main to access this lesson" in body
+        # Gated message mentions correct tier
+        assert "Upgrade to Main to access this lesson" in body
 
-                # "View Pricing" link is visible
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
+        # "View Pricing" link is visible
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
 
-                # Step 2: Click "View Pricing"
-                pricing_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "View Pricing"
+        pricing_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Lands on /pricing
-                assert "/pricing" in page.url
+        # Lands on /pricing
+        assert "/pricing" in page.url
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 5: Anonymous visitor explores the course syllabus but
 #              cannot access units
@@ -498,7 +466,7 @@ class TestScenario5AnonymousSyllabus:
 
     def test_anonymous_sees_syllabus_without_clickable_links(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor and a Basic-level published course,
         the syllabus shows unit titles but they are NOT clickable links.
         A CTA says 'Unlock with Basic' and 'View Pricing' navigates to /pricing."""
@@ -519,49 +487,39 @@ class TestScenario5AnonymousSyllabus:
             body="# B\n\nContent.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/{slug}
-                page.goto(
-                    f"{django_server}/courses/anonymous-test-course",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /courses/{slug}
+        page.goto(
+            f"{django_server}/courses/anonymous-test-course",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Unit titles are visible
-                assert "Lesson A" in body
-                assert "Lesson B" in body
+        # Unit titles are visible
+        assert "Lesson A" in body
+        assert "Lesson B" in body
 
-                # Unit titles are NOT clickable links (rendered as <span>)
-                # Check that there are no <a> tags linking to unit pages
-                unit_links = page.locator(
-                    'a[href*="/courses/anonymous-test-course/0/"]'
-                )
-                assert unit_links.count() == 0
+        # Unit titles are NOT clickable links (rendered as <span>)
+        # Check that there are no <a> tags linking to unit pages
+        unit_links = page.locator(
+            'a[href*="/courses/anonymous-test-course/0/"]'
+        )
+        assert unit_links.count() == 0
 
-                # CTA mentions "Unlock with Basic"
-                assert "Unlock with Basic" in body
+        # CTA mentions "Unlock with Basic"
+        assert "Unlock with Basic" in body
 
-                # "View Pricing" link present
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
+        # "View Pricing" link present
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
 
-                # Step 2: Click "View Pricing"
-                pricing_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "View Pricing"
+        pricing_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Lands on /pricing
-                assert "/pricing" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Lands on /pricing
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: Member marks a unit completed and then undoes it
 # ---------------------------------------------------------------
@@ -570,7 +528,7 @@ class TestScenario5AnonymousSyllabus:
 class TestScenario6ToggleCompletion:
     """Member marks a unit completed and then undoes it."""
 
-    def test_mark_complete_and_undo(self, django_server):
+    def test_mark_complete_and_undo(self, django_server, browser):
         """Given a Basic member and a Basic-level course, navigate to a unit,
         mark it completed, then undo -- the button toggles accordingly."""
         _clear_courses()
@@ -587,44 +545,37 @@ class TestScenario6ToggleCompletion:
             body="# Toggle\n\nTest toggling.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic-toggle@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the unit
-                page.goto(
-                    f"{django_server}/courses/toggle-course/0/0",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "basic-toggle@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the unit
+        page.goto(
+            f"{django_server}/courses/toggle-course/0/0",
+            wait_until="domcontentloaded",
+        )
 
-                complete_btn = page.locator("#mark-complete-btn")
-                assert complete_btn.is_visible()
+        complete_btn = page.locator("#mark-complete-btn")
+        assert complete_btn.is_visible()
 
-                # Initially shows "Mark as completed"
-                assert "Mark as completed" in complete_btn.inner_text()
+        # Initially shows "Mark as completed"
+        assert "Mark as completed" in complete_btn.inner_text()
 
-                # Step 2: Click "Mark as completed"
-                complete_btn.click()
-                page.wait_for_timeout(2000)
+        # Step 2: Click "Mark as completed"
+        complete_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Button changes to "Completed"
-                btn_text = complete_btn.inner_text()
-                assert "Completed" in btn_text
+        # Button changes to "Completed"
+        btn_text = complete_btn.inner_text()
+        assert "Completed" in btn_text
 
-                # Step 3: Click "Completed" to undo
-                complete_btn.click()
-                page.wait_for_timeout(2000)
+        # Step 3: Click "Completed" to undo
+        complete_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Button reverts to "Mark as completed"
-                btn_text = complete_btn.inner_text()
-                assert "Mark as completed" in btn_text
+        # Button reverts to "Mark as completed"
+        btn_text = complete_btn.inner_text()
+        assert "Mark as completed" in btn_text
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 7: Member completes units and sees progress reflected
 #              on the course detail page
@@ -636,7 +587,7 @@ class TestScenario7ProgressBar:
 
     def test_progress_bar_updates_after_completing_units(
         self, django_server
-    ):
+    , browser):
         """Given a Premium member and a course with 3 units, none completed,
         the progress bar shows 0 of 3. After completing 2 units, the
         progress bar shows 2 of 3."""
@@ -662,52 +613,45 @@ class TestScenario7ProgressBar:
             body="# PU3\n\nThird.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "premium-pb@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Check initial progress (0 of 3)
-                page.goto(
-                    f"{django_server}/courses/progress-course",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "0 of 3 completed" in body
+        context = _auth_context(browser, "premium-pb@test.com")
+        page = context.new_page()
+        # Step 1: Check initial progress (0 of 3)
+        page.goto(
+            f"{django_server}/courses/progress-course",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "0 of 3 completed" in body
 
-                # Step 2: Complete Unit 1
-                page.goto(
-                    f"{django_server}/courses/progress-course/0/0",
-                    wait_until="networkidle",
-                )
-                complete_btn = page.locator("#mark-complete-btn")
-                complete_btn.click()
-                page.wait_for_timeout(2000)
+        # Step 2: Complete Unit 1
+        page.goto(
+            f"{django_server}/courses/progress-course/0/0",
+            wait_until="domcontentloaded",
+        )
+        complete_btn = page.locator("#mark-complete-btn")
+        complete_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Step 3: Complete Unit 2
-                page.goto(
-                    f"{django_server}/courses/progress-course/0/1",
-                    wait_until="networkidle",
-                )
-                complete_btn = page.locator("#mark-complete-btn")
-                complete_btn.click()
-                page.wait_for_timeout(2000)
+        # Step 3: Complete Unit 2
+        page.goto(
+            f"{django_server}/courses/progress-course/0/1",
+            wait_until="domcontentloaded",
+        )
+        complete_btn = page.locator("#mark-complete-btn")
+        complete_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Step 4: Navigate back to course detail
-                page.goto(
-                    f"{django_server}/courses/progress-course",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 4: Navigate back to course detail
+        page.goto(
+            f"{django_server}/courses/progress-course",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Progress bar shows 2 of 3
-                assert "2 of 3 completed" in body
+        # Progress bar shows 2 of 3
+        assert "2 of 3 completed" in body
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 8: Member reaches the last unit and sees no next button
 # ---------------------------------------------------------------
@@ -716,7 +660,7 @@ class TestScenario7ProgressBar:
 class TestScenario8LastUnitNoNext:
     """Member reaches the last unit and sees no next button."""
 
-    def test_last_unit_has_no_next_button(self, django_server):
+    def test_last_unit_has_no_next_button(self, django_server, browser):
         """Given a Basic member and a course with 2 units, the first unit
         shows a 'Next' button but the second (last) unit does not."""
         _clear_courses()
@@ -737,42 +681,35 @@ class TestScenario8LastUnitNoNext:
             body="# Last\n\nEnd of course.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic-last@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the first unit
-                page.goto(
-                    f"{django_server}/courses/last-unit-course/0/0",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic-last@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the first unit
+        page.goto(
+            f"{django_server}/courses/last-unit-course/0/0",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # "Next" button is visible pointing to the second unit
-                next_link = page.locator('a:has-text("Next: Last Unit")')
-                assert next_link.count() >= 1
+        # "Next" button is visible pointing to the second unit
+        next_link = page.locator('a:has-text("Next: Last Unit")')
+        assert next_link.count() >= 1
 
-                # Step 2: Click the "Next" button
-                next_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "Next" button
+        next_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify URL is the second (last) unit
-                assert "/courses/last-unit-course/0/1" in page.url
+        # Verify URL is the second (last) unit
+        assert "/courses/last-unit-course/0/1" in page.url
 
-                body = page.content()
-                assert "Last Unit" in body
-                assert "End of course" in body
+        body = page.content()
+        assert "Last Unit" in body
+        assert "End of course" in body
 
-                # No "Next" button is shown on the last unit
-                next_buttons = page.locator('a:has-text("Next:")')
-                assert next_buttons.count() == 0
+        # No "Next" button is shown on the last unit
+        next_buttons = page.locator('a:has-text("Next:")')
+        assert next_buttons.count() == 0
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 9: Member navigates via breadcrumbs from unit back to
 #              the course and catalog
@@ -782,7 +719,7 @@ class TestScenario8LastUnitNoNext:
 class TestScenario9BreadcrumbNavigation:
     """Member navigates via breadcrumbs from unit back to the course and catalog."""
 
-    def test_breadcrumb_navigation(self, django_server):
+    def test_breadcrumb_navigation(self, django_server, browser):
         """Given a Premium member on a unit page, clicking 'Courses' in the
         breadcrumb leads to /courses, clicking the course title leads to
         /courses/{slug}."""
@@ -800,63 +737,56 @@ class TestScenario9BreadcrumbNavigation:
             body="# BC\n\nBreadcrumb test.",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "premium-bc@test.com")
-            page = context.new_page()
-            try:
-                # Navigate to the unit page
-                page.goto(
-                    f"{django_server}/courses/breadcrumb-course/0/0",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "Courses" in body
-                assert "Breadcrumb Course" in body
+        context = _auth_context(browser, "premium-bc@test.com")
+        page = context.new_page()
+        # Navigate to the unit page
+        page.goto(
+            f"{django_server}/courses/breadcrumb-course/0/0",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "Courses" in body
+        assert "Breadcrumb Course" in body
 
-                # Step 1: Verify "Courses" breadcrumb link exists
-                courses_link = page.locator(
-                    'a[href="/courses"]:has-text("Courses")'
-                )
-                assert courses_link.count() >= 1
+        # Step 1: Verify "Courses" breadcrumb link exists
+        courses_link = page.locator(
+            'a[href="/courses"]:has-text("Courses")'
+        )
+        assert courses_link.count() >= 1
 
-                # Navigate to /courses directly (breadcrumb destination)
-                page.goto(
-                    f"{django_server}/courses",
-                    wait_until="networkidle",
-                )
+        # Navigate to /courses directly (breadcrumb destination)
+        page.goto(
+            f"{django_server}/courses",
+            wait_until="domcontentloaded",
+        )
 
-                # Lands on /courses
-                assert page.url.rstrip("/").endswith("/courses")
+        # Lands on /courses
+        assert page.url.rstrip("/").endswith("/courses")
 
-                # Step 2: Navigate back to the unit page
-                page.goto(
-                    f"{django_server}/courses/breadcrumb-course/0/0",
-                    wait_until="networkidle",
-                )
+        # Step 2: Navigate back to the unit page
+        page.goto(
+            f"{django_server}/courses/breadcrumb-course/0/0",
+            wait_until="domcontentloaded",
+        )
 
-                # Step 3: Verify the course title breadcrumb link exists
-                course_link = page.locator(
-                    'a[href="/courses/breadcrumb-course"]:has-text("Breadcrumb Course")'
-                )
-                assert course_link.count() >= 1
+        # Step 3: Verify the course title breadcrumb link exists
+        course_link = page.locator(
+            'a[href="/courses/breadcrumb-course"]:has-text("Breadcrumb Course")'
+        )
+        assert course_link.count() >= 1
 
-                # Navigate to the course detail page directly
-                page.goto(
-                    f"{django_server}/courses/breadcrumb-course",
-                    wait_until="networkidle",
-                )
+        # Navigate to the course detail page directly
+        page.goto(
+            f"{django_server}/courses/breadcrumb-course",
+            wait_until="domcontentloaded",
+        )
 
-                # Lands on the course detail page
-                assert "/courses/breadcrumb-course" in page.url
-                # Should NOT be on a unit page
-                assert "/0/" not in page.url
+        # Lands on the course detail page
+        assert "/courses/breadcrumb-course" in page.url
+        # Should NOT be on a unit page
+        assert "/0/" not in page.url
 
-                context.close()
-            finally:
-                browser.close()
-
-
+        context.close()
 # ---------------------------------------------------------------
 # Scenario 10: Course in progress appears on the member dashboard
 #               for easy resumption
@@ -866,7 +796,7 @@ class TestScenario9BreadcrumbNavigation:
 class TestScenario10DashboardContinueLearning:
     """Course in progress appears on the member dashboard for easy resumption."""
 
-    def test_in_progress_course_on_dashboard(self, django_server):
+    def test_in_progress_course_on_dashboard(self, django_server, browser):
         """Given a Premium member with 1 of 3 units completed, the
         dashboard shows the course in 'Continue Learning' with progress.
         Clicking it leads to the course detail page."""
@@ -895,38 +825,33 @@ class TestScenario10DashboardContinueLearning:
         # Mark 1 unit as completed
         _mark_unit_completed("premium-dash@test.com", unit1)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "premium-dash@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the dashboard
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "premium-dash@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the dashboard
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # "Continue Learning" section is present
-                assert "Continue Learning" in body
+        # "Continue Learning" section is present
+        assert "Continue Learning" in body
 
-                # The course appears with progress
-                assert "Dashboard Course" in body
-                # Progress indicator shows "1 of 3" or "1/3"
-                progress_text = page.locator("text=/1\\s*(of|\\/)\\s*3/")
-                assert progress_text.count() >= 1, "Expected progress indicator like '1 of 3' or '1/3'"
+        # The course appears with progress
+        assert "Dashboard Course" in body
+        # Progress indicator shows "1 of 3" or "1/3"
+        progress_text = page.locator("text=/1\\s*(of|\\/)\\s*3/")
+        assert progress_text.count() >= 1, "Expected progress indicator like '1 of 3' or '1/3'"
 
-                # Step 2: Click on the course in the Continue Learning section
-                course_link = page.locator(
-                    'a[href="/courses/dashboard-course"]'
-                )
-                assert course_link.count() >= 1
-                course_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the course in the Continue Learning section
+        course_link = page.locator(
+            'a[href="/courses/dashboard-course"]'
+        )
+        assert course_link.count() >= 1
+        course_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Lands on the course detail page
-                assert "/courses/dashboard-course" in page.url
+        # Lands on the course detail page
+        assert "/courses/dashboard-course" in page.url
 
-                context.close()
-            finally:
-                browser.close()
+        context.close()

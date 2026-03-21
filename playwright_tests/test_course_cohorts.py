@@ -23,7 +23,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -37,9 +36,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -166,7 +162,7 @@ def _enroll_user_in_cohort(user, cohort):
 class TestScenario1MainMemberDiscoversCohortAndEnrolls:
     """Main member discovers an upcoming cohort and enrolls from the course page."""
 
-    def test_main_member_sees_cohort_info_and_enrolls(self, django_server):
+    def test_main_member_sees_cohort_info_and_enrolls(self, django_server, browser):
         """Given a Main-tier user, a published course with required_level=20,
         and an active cohort 'March 2026' with 30 max_participants starting
         March 1, 2026. Navigate to /courses, click the course, verify cohort
@@ -192,64 +188,57 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
             max_participants=30,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses
-                page.goto(
-                    f"{django_server}/courses",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "LLM Engineering" in body
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses
+        page.goto(
+            f"{django_server}/courses",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "LLM Engineering" in body
 
-                # Step 2: Click on "LLM Engineering"
-                course_link = page.locator(
-                    'a[href="/courses/llm-engineering"]'
-                ).first
-                course_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on "LLM Engineering"
+        course_link = page.locator(
+            'a[href="/courses/llm-engineering"]'
+        ).first
+        course_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                assert "/courses/llm-engineering" in page.url
+        assert "/courses/llm-engineering" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Course detail page shows "Next cohort" with name and date
-                assert "Next cohort" in body
-                assert "March 2026" in body
-                assert "March 1, 2026" in body
+        # Then: Course detail page shows "Next cohort" with name and date
+        assert "Next cohort" in body
+        assert "March 2026" in body
+        assert "March 1, 2026" in body
 
-                # Then: Shows "30 of 30 spots remaining"
-                assert "30 of 30 spots remaining" in body
+        # Then: Shows "30 of 30 spots remaining"
+        assert "30 of 30 spots remaining" in body
 
-                # Step 3: Click the "Enroll" button
-                enroll_btn = page.locator(
-                    'button[data-action="enroll"]'
-                )
-                assert enroll_btn.count() >= 1
-                enroll_btn.first.click()
+        # Step 3: Click the "Enroll" button
+        enroll_btn = page.locator(
+            'button[data-action="enroll"]'
+        )
+        assert enroll_btn.count() >= 1
+        enroll_btn.first.click()
 
-                # The JS calls fetch() then window.location.reload().
-                # Wait for the unenroll button to appear after reload.
-                enrolled_btn = page.locator(
-                    'button[data-action="unenroll"]'
-                )
-                enrolled_btn.wait_for(state="visible", timeout=10000)
+        # The JS calls fetch() then window.location.reload().
+        # Wait for the unenroll button to appear after reload.
+        enrolled_btn = page.locator(
+            'button[data-action="unenroll"]'
+        )
+        enrolled_btn.wait_for(state="visible", timeout=10000)
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Button changes to "Enrolled"
-                assert enrolled_btn.count() >= 1
-                assert "Enrolled" in enrolled_btn.first.inner_text()
+        # Then: Button changes to "Enrolled"
+        assert enrolled_btn.count() >= 1
+        assert "Enrolled" in enrolled_btn.first.inner_text()
 
-                # Then: Spots remaining decreases to "29 of 30 spots remaining"
-                assert "29 of 30 spots remaining" in body
-            finally:
-                browser.close()
-
-
+        # Then: Spots remaining decreases to "29 of 30 spots remaining"
+        assert "29 of 30 spots remaining" in body
 # ---------------------------------------------------------------
 # Scenario 2: Enrolled member unenrolls from a cohort
 # ---------------------------------------------------------------
@@ -258,7 +247,7 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
 class TestScenario2EnrolledMemberUnenrolls:
     """Enrolled member unenrolls from a cohort."""
 
-    def test_enrolled_member_unenrolls(self, django_server):
+    def test_enrolled_member_unenrolls(self, django_server, browser):
         """Given a Main-tier user already enrolled in the March 2026 cohort
         of LLM Engineering. Navigate to the course page, verify Enrolled
         button, click to unenroll, verify button changes back to Enroll."""
@@ -284,44 +273,37 @@ class TestScenario2EnrolledMemberUnenrolls:
         )
         _enroll_user_in_cohort(user, cohort)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/llm-engineering
-                page.goto(
-                    f"{django_server}/courses/llm-engineering",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/llm-engineering
+        page.goto(
+            f"{django_server}/courses/llm-engineering",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The cohort card shows an "Enrolled" button
-                enrolled_btn = page.locator(
-                    'button[data-action="unenroll"]'
-                )
-                assert enrolled_btn.count() >= 1
-                assert "Enrolled" in enrolled_btn.first.inner_text()
+        # Then: The cohort card shows an "Enrolled" button
+        enrolled_btn = page.locator(
+            'button[data-action="unenroll"]'
+        )
+        assert enrolled_btn.count() >= 1
+        assert "Enrolled" in enrolled_btn.first.inner_text()
 
-                # Step 2: Click the "Enrolled" button to unenroll
-                enrolled_btn.first.click()
+        # Step 2: Click the "Enrolled" button to unenroll
+        enrolled_btn.first.click()
 
-                # The JS calls fetch() then window.location.reload().
-                # Wait for the enroll button to appear after reload.
-                enroll_btn = page.locator(
-                    'button[data-action="enroll"]'
-                )
-                enroll_btn.wait_for(state="visible", timeout=10000)
+        # The JS calls fetch() then window.location.reload().
+        # Wait for the enroll button to appear after reload.
+        enroll_btn = page.locator(
+            'button[data-action="enroll"]'
+        )
+        enroll_btn.wait_for(state="visible", timeout=10000)
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Button changes back to "Enroll"
-                assert enroll_btn.count() >= 1
-                assert "Enroll" in enroll_btn.first.inner_text()
-            finally:
-                browser.close()
-
-
+        # Then: Button changes back to "Enroll"
+        assert enroll_btn.count() >= 1
+        assert "Enroll" in enroll_btn.first.inner_text()
 # ---------------------------------------------------------------
 # Scenario 3: Member cannot enroll when a cohort is full
 # ---------------------------------------------------------------
@@ -330,7 +312,7 @@ class TestScenario2EnrolledMemberUnenrolls:
 class TestScenario3CohortFullCannotEnroll:
     """Member cannot enroll when a cohort is full."""
 
-    def test_full_cohort_shows_full_message(self, django_server):
+    def test_full_cohort_shows_full_message(self, django_server, browser):
         """Given a Main-tier user and a cohort with max_participants=1 that
         already has 1 enrolled user. The cohort card shows 'Cohort is full'
         instead of an Enroll button."""
@@ -359,30 +341,23 @@ class TestScenario3CohortFullCannotEnroll:
         other_user = _create_user("other@test.com", tier_slug="main")
         _enroll_user_in_cohort(other_user, cohort)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/llm-engineering
-                page.goto(
-                    f"{django_server}/courses/llm-engineering",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/llm-engineering
+        page.goto(
+            f"{django_server}/courses/llm-engineering",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "Cohort is full" instead of an Enroll button
-                assert "Cohort is full" in body
+        # Then: Shows "Cohort is full" instead of an Enroll button
+        assert "Cohort is full" in body
 
-                # Then: No Enroll button is shown
-                enroll_btn = page.locator(
-                    'button[data-action="enroll"]'
-                )
-                assert enroll_btn.count() == 0
-            finally:
-                browser.close()
-
-
+        # Then: No Enroll button is shown
+        enroll_btn = page.locator(
+            'button[data-action="enroll"]'
+        )
+        assert enroll_btn.count() == 0
 # ---------------------------------------------------------------
 # Scenario 4: Free member sees the cohort but cannot enroll
 #              due to tier restriction
@@ -392,7 +367,7 @@ class TestScenario3CohortFullCannotEnroll:
 class TestScenario4FreeMemberCannotEnroll:
     """Free member sees the cohort but cannot enroll due to tier restriction."""
 
-    def test_free_member_sees_cohort_no_enroll_button(self, django_server):
+    def test_free_member_sees_cohort_no_enroll_button(self, django_server, browser):
         """Given a Free-tier user and a course with required_level=20.
         The cohort info is visible but no Enroll button is shown.
         An upgrade CTA links to /pricing."""
@@ -417,39 +392,32 @@ class TestScenario4FreeMemberCannotEnroll:
             max_participants=30,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/llm-engineering
-                page.goto(
-                    f"{django_server}/courses/llm-engineering",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/llm-engineering
+        page.goto(
+            f"{django_server}/courses/llm-engineering",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The cohort name and start date are visible
-                assert "March 2026" in body
-                assert "March 1, 2026" in body
+        # Then: The cohort name and start date are visible
+        assert "March 2026" in body
+        assert "March 1, 2026" in body
 
-                # Then: No Enroll button is shown
-                enroll_btn = page.locator(
-                    'button[data-action="enroll"]'
-                )
-                assert enroll_btn.count() == 0
+        # Then: No Enroll button is shown
+        enroll_btn = page.locator(
+            'button[data-action="enroll"]'
+        )
+        assert enroll_btn.count() == 0
 
-                # Then: Upgrade CTA links to /pricing
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
-                href = pricing_link.first.get_attribute("href")
-                assert "/pricing" in href
-            finally:
-                browser.close()
-
-
+        # Then: Upgrade CTA links to /pricing
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
+        href = pricing_link.first.get_attribute("href")
+        assert "/pricing" in href
 # ---------------------------------------------------------------
 # Scenario 5: Anonymous visitor browses a course with cohorts and
 #              sees the sign-up path
@@ -459,7 +427,7 @@ class TestScenario4FreeMemberCannotEnroll:
 class TestScenario5AnonymousVisitorSeesCohortAndPricing:
     """Anonymous visitor browses a course with cohorts and sees the sign-up path."""
 
-    def test_anonymous_sees_cohort_info_and_pricing_cta(self, django_server):
+    def test_anonymous_sees_cohort_info_and_pricing_cta(self, django_server, page):
         """Given an anonymous visitor and a course with required_level=20
         and an active cohort. The cohort info is visible, no Enroll button
         is shown, and a View Pricing CTA links to /pricing."""
@@ -483,44 +451,35 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
             max_participants=30,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/llm-engineering
-                page.goto(
-                    f"{django_server}/courses/llm-engineering",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /courses/llm-engineering
+        page.goto(
+            f"{django_server}/courses/llm-engineering",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Cohort info is visible
-                assert "March 2026" in body
-                assert "March 1, 2026" in body
+        # Then: Cohort info is visible
+        assert "March 2026" in body
+        assert "March 1, 2026" in body
 
-                # Then: No Enroll button
-                enroll_btn = page.locator(
-                    'button[data-action="enroll"]'
-                )
-                assert enroll_btn.count() == 0
+        # Then: No Enroll button
+        enroll_btn = page.locator(
+            'button[data-action="enroll"]'
+        )
+        assert enroll_btn.count() == 0
 
-                # Then: A "View Pricing" CTA is visible
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
+        # Then: A "View Pricing" CTA is visible
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
 
-                # Step 2: Click the "View Pricing" link
-                pricing_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "View Pricing" link
+        pricing_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Lands on /pricing
-                assert "/pricing" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: Lands on /pricing
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: Enrolled cohort member accesses a drip-locked unit
 #              and sees the unlock date
@@ -530,7 +489,7 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
 class TestScenario6DripLockedUnit:
     """Enrolled cohort member accesses a drip-locked unit and sees the unlock date."""
 
-    def test_drip_locked_unit_shows_unlock_date(self, django_server):
+    def test_drip_locked_unit_shows_unlock_date(self, django_server, browser):
         """Given a Main-tier user enrolled in a cohort starting January 1, 2030,
         and a unit with available_after_days=14. The unit page shows the
         unlock date (January 15, 2030), hides the lesson content, and
@@ -562,53 +521,46 @@ class TestScenario6DripLockedUnit:
         )
         _enroll_user_in_cohort(user, cohort)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the drip-locked unit page
-                page.goto(
-                    f"{django_server}/courses/drip-course/1/1",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the drip-locked unit page
+        page.goto(
+            f"{django_server}/courses/drip-course/1/1",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows the date when the lesson will become available
-                assert "January 15, 2030" in body
+        # Then: Shows the date when the lesson will become available
+        assert "January 15, 2030" in body
 
-                # Then: The lesson content (body_html, homework_html) is NOT
-                # visible in the rendered page. The title appears in the
-                # <title> tag and gated header, but the actual lesson text
-                # and homework should be absent from the visible content.
-                # Check that the rendered body text is not in the main content.
-                main_content = page.locator("main")
-                main_text = main_content.inner_text()
-                assert "This should be hidden" not in main_text
-                assert "Do the task" not in main_text
+        # Then: The lesson content (body_html, homework_html) is NOT
+        # visible in the rendered page. The title appears in the
+        # <title> tag and gated header, but the actual lesson text
+        # and homework should be absent from the visible content.
+        # Check that the rendered body text is not in the main content.
+        main_content = page.locator("main")
+        main_text = main_content.inner_text()
+        assert "This should be hidden" not in main_text
+        assert "Do the task" not in main_text
 
-                # The video player should not be rendered
-                video_iframe = page.locator("iframe")
-                assert video_iframe.count() == 0
+        # The video player should not be rendered
+        video_iframe = page.locator("iframe")
+        assert video_iframe.count() == 0
 
-                # Then: A "Back to Course" link is available
-                back_link = page.locator(
-                    'a:has-text("Back to Course")'
-                )
-                assert back_link.count() >= 1
+        # Then: A "Back to Course" link is available
+        back_link = page.locator(
+            'a:has-text("Back to Course")'
+        )
+        assert back_link.count() >= 1
 
-                # Step 2: Click "Back to Course"
-                back_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Back to Course"
+        back_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Returns to the course detail page
-                assert "/courses/drip-course" in page.url
-                # Make sure we are NOT on a unit page
-                assert "/1/1" not in page.url
-            finally:
-                browser.close()
-
-
+        # Then: Returns to the course detail page
+        assert "/courses/drip-course" in page.url
+        # Make sure we are NOT on a unit page
+        assert "/1/1" not in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Enrolled cohort member accesses a unit after the
 #              drip date has passed
@@ -618,7 +570,7 @@ class TestScenario6DripLockedUnit:
 class TestScenario7DripUnlockedUnit:
     """Enrolled cohort member accesses a unit after the drip date has passed."""
 
-    def test_drip_unit_accessible_after_date_passes(self, django_server):
+    def test_drip_unit_accessible_after_date_passes(self, django_server, browser):
         """Given a Main-tier user enrolled in a cohort that started January 1, 2020
         and a unit with available_after_days=14. The lesson content is fully
         accessible and the user can mark the unit as completed."""
@@ -649,42 +601,35 @@ class TestScenario7DripUnlockedUnit:
         )
         _enroll_user_in_cohort(user, cohort)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the unit page
-                page.goto(
-                    f"{django_server}/courses/past-drip-course/1/1",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the unit page
+        page.goto(
+            f"{django_server}/courses/past-drip-course/1/1",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Lesson content is fully accessible
-                assert "Unlocked Content" in body
-                assert "This lesson is available" in body
+        # Then: Lesson content is fully accessible
+        assert "Unlocked Content" in body
+        assert "This lesson is available" in body
 
-                # Video player present
-                assert "test456" in body or "video-player" in body
+        # Video player present
+        assert "test456" in body or "video-player" in body
 
-                # Homework visible
-                assert "Homework" in body
-                assert "Complete the assignment" in body
+        # Homework visible
+        assert "Homework" in body
+        assert "Complete the assignment" in body
 
-                # Then: User can mark the unit as completed
-                mark_btn = page.locator("#mark-complete-btn")
-                assert mark_btn.count() >= 1
-                assert "Mark as completed" in mark_btn.inner_text()
+        # Then: User can mark the unit as completed
+        mark_btn = page.locator("#mark-complete-btn")
+        assert mark_btn.count() >= 1
+        assert "Mark as completed" in mark_btn.inner_text()
 
-                mark_btn.click()
-                page.wait_for_timeout(1000)
+        mark_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                assert "Completed" in mark_btn.inner_text()
-            finally:
-                browser.close()
-
-
+        assert "Completed" in mark_btn.inner_text()
 # ---------------------------------------------------------------
 # Scenario 8: Non-cohort member accesses a drip-scheduled unit
 #              without restriction
@@ -694,7 +639,7 @@ class TestScenario7DripUnlockedUnit:
 class TestScenario8NonCohortMemberAccessesDripUnit:
     """Non-cohort member accesses a drip-scheduled unit without restriction."""
 
-    def test_non_cohort_member_accesses_drip_unit_freely(self, django_server):
+    def test_non_cohort_member_accesses_drip_unit_freely(self, django_server, browser):
         """Given a Main-tier user NOT enrolled in any cohort and a course
         with a unit that has available_after_days=14. The lesson content
         is fully accessible because drip scheduling only applies to
@@ -729,42 +674,35 @@ class TestScenario8NonCohortMemberAccessesDripUnit:
             end_date=datetime.date(2030, 6, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the drip-scheduled unit
-                page.goto(
-                    f"{django_server}/courses/drip-no-cohort-course/1/1",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to the drip-scheduled unit
+        page.goto(
+            f"{django_server}/courses/drip-no-cohort-course/1/1",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Content is fully accessible
-                assert "Freely Accessible" in body
-                assert "No cohort needed" in body
+        # Then: Content is fully accessible
+        assert "Freely Accessible" in body
+        assert "No cohort needed" in body
 
-                # Homework visible
-                assert "Homework" in body
-                assert "Do it now" in body
+        # Homework visible
+        assert "Homework" in body
+        assert "Do it now" in body
 
-                # Then: User can mark as completed
-                mark_btn = page.locator("#mark-complete-btn")
-                assert mark_btn.count() >= 1
-                assert "Mark as completed" in mark_btn.inner_text()
+        # Then: User can mark as completed
+        mark_btn = page.locator("#mark-complete-btn")
+        assert mark_btn.count() >= 1
+        assert "Mark as completed" in mark_btn.inner_text()
 
-                mark_btn.click()
-                page.wait_for_timeout(1000)
-                assert "Completed" in mark_btn.inner_text()
+        mark_btn.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "Completed" in mark_btn.inner_text()
 
-                # Then: Can navigate to the next unit
-                next_btn = page.locator('a:has-text("Next:")')
-                assert next_btn.count() >= 1
-            finally:
-                browser.close()
-
-
+        # Then: Can navigate to the next unit
+        next_btn = page.locator('a:has-text("Next:")')
+        assert next_btn.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 9: Main member enrolls in a free course cohort
 #              without tier issues
@@ -774,7 +712,7 @@ class TestScenario8NonCohortMemberAccessesDripUnit:
 class TestScenario9FreeCourseEnrollment:
     """Main member enrolls in a free course cohort without tier issues."""
 
-    def test_free_tier_user_enrolls_in_free_course_cohort(self, django_server):
+    def test_free_tier_user_enrolls_in_free_course_cohort(self, django_server, browser):
         """Given a Free-tier user and a published free course 'Intro to AI'
         with required_level=0 and an active cohort 'Spring 2026'. The
         cohort card shows an Enroll button, and clicking it enrolls the user."""
@@ -800,45 +738,38 @@ class TestScenario9FreeCourseEnrollment:
             max_participants=50,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-user@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/intro-to-ai
-                page.goto(
-                    f"{django_server}/courses/intro-to-ai",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free-user@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/intro-to-ai
+        page.goto(
+            f"{django_server}/courses/intro-to-ai",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Cohort card shows "Spring 2026" with Enroll button
-                assert "Spring 2026" in body
+        # Then: Cohort card shows "Spring 2026" with Enroll button
+        assert "Spring 2026" in body
 
-                enroll_btn = page.locator(
-                    'button[data-action="enroll"]'
-                )
-                assert enroll_btn.count() >= 1
+        enroll_btn = page.locator(
+            'button[data-action="enroll"]'
+        )
+        assert enroll_btn.count() >= 1
 
-                # Step 2: Click the "Enroll" button
-                enroll_btn.first.click()
+        # Step 2: Click the "Enroll" button
+        enroll_btn.first.click()
 
-                # The JS calls fetch() then window.location.reload().
-                # Wait for the enrolled button to appear after reload.
-                enrolled_btn = page.locator(
-                    'button[data-action="unenroll"]'
-                )
-                enrolled_btn.wait_for(state="visible", timeout=10000)
+        # The JS calls fetch() then window.location.reload().
+        # Wait for the enrolled button to appear after reload.
+        enrolled_btn = page.locator(
+            'button[data-action="unenroll"]'
+        )
+        enrolled_btn.wait_for(state="visible", timeout=10000)
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Shows "Enrolled"
-                assert enrolled_btn.count() >= 1
-                assert "Enrolled" in enrolled_btn.first.inner_text()
-            finally:
-                browser.close()
-
-
+        # Then: Shows "Enrolled"
+        assert enrolled_btn.count() >= 1
+        assert "Enrolled" in enrolled_btn.first.inner_text()
 # ---------------------------------------------------------------
 # Scenario 10: Course with no active cohorts shows the syllabus
 #               without cohort section
@@ -848,7 +779,7 @@ class TestScenario9FreeCourseEnrollment:
 class TestScenario10NoCohortsSyllabus:
     """Course with no active cohorts shows the syllabus without cohort section."""
 
-    def test_no_active_cohorts_no_cohort_section(self, django_server):
+    def test_no_active_cohorts_no_cohort_section(self, django_server, browser):
         """Given a Main-tier user and a course with all cohorts inactive.
         The course detail page shows the syllabus but no 'Next cohort'
         section. The user can still access individual units."""
@@ -875,43 +806,36 @@ class TestScenario10NoCohortsSyllabus:
             is_active=False,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "main@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/llm-engineering
-                page.goto(
-                    f"{django_server}/courses/llm-engineering",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "main@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/llm-engineering
+        page.goto(
+            f"{django_server}/courses/llm-engineering",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Syllabus shows modules and units
-                assert "Module 1" in body
-                assert "Lesson 1" in body
-                assert "Lesson 2" in body
+        # Then: Syllabus shows modules and units
+        assert "Module 1" in body
+        assert "Lesson 1" in body
+        assert "Lesson 2" in body
 
-                # Then: No "Next cohort" section is displayed
-                assert "Next cohort" not in body
+        # Then: No "Next cohort" section is displayed
+        assert "Next cohort" not in body
 
-                # Then: User can click into individual units
-                lesson_link = page.locator(
-                    'a[href="/courses/llm-engineering/1/1"]'
-                )
-                assert lesson_link.count() >= 1
+        # Then: User can click into individual units
+        lesson_link = page.locator(
+            'a[href="/courses/llm-engineering/1/1"]'
+        )
+        assert lesson_link.count() >= 1
 
-                lesson_link.first.click()
-                page.wait_for_load_state("networkidle")
+        lesson_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Navigated to the unit page
-                assert "/courses/llm-engineering/1/1" in page.url
-                body = page.content()
-                assert "Lesson 1" in body
-            finally:
-                browser.close()
-
-
+        # Navigated to the unit page
+        assert "/courses/llm-engineering/1/1" in page.url
+        body = page.content()
+        assert "Lesson 1" in body
 # ---------------------------------------------------------------
 # Scenario 11: Admin creates a new cohort for a course through
 #               Django admin
@@ -923,7 +847,7 @@ class TestScenario11AdminCreatesCohort:
 
     def test_admin_creates_cohort_and_it_appears_on_course_page(
         self, django_server
-    ):
+    , browser):
         """Given a staff/superuser. Navigate to admin, create a cohort
         for 'LLM Engineering', then verify it appears on the course
         detail page."""
@@ -940,55 +864,50 @@ class TestScenario11AdminCreatesCohort:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "admin@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /admin/content/cohort/add/
-                page.goto(
-                    f"{django_server}/admin/content/cohort/add/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /admin/content/cohort/add/
+        page.goto(
+            f"{django_server}/admin/content/cohort/add/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # The add form should be present
-                assert "Add cohort" in body.lower() or "cohort" in body.lower()
+        # The add form should be present
+        assert "Add cohort" in body.lower() or "cohort" in body.lower()
 
-                # Step 2: Select the course
-                course_select = page.locator("#id_course")
-                course_select.select_option(str(course.pk))
+        # Step 2: Select the course
+        course_select = page.locator("#id_course")
+        course_select.select_option(str(course.pk))
 
-                # Step 3: Enter cohort name
-                page.locator("#id_name").fill("Summer 2026")
+        # Step 3: Enter cohort name
+        page.locator("#id_name").fill("Summer 2026")
 
-                # Step 4: Set start_date and end_date
-                page.locator("#id_start_date").fill("2026-06-01")
-                page.locator("#id_end_date").fill("2026-09-01")
+        # Step 4: Set start_date and end_date
+        page.locator("#id_start_date").fill("2026-06-01")
+        page.locator("#id_end_date").fill("2026-09-01")
 
-                # Step 5: Set max_participants
-                page.locator("#id_max_participants").fill("25")
+        # Step 5: Set max_participants
+        page.locator("#id_max_participants").fill("25")
 
-                # Step 6: Save the cohort
-                page.locator('input[name="_save"]').click()
-                page.wait_for_load_state("networkidle")
+        # Step 6: Save the cohort
+        page.locator('input[name="_save"]').click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Lands on the cohort list page
-                assert "/admin/content/cohort/" in page.url
-                body = page.content()
-                assert "Summer 2026" in body
+        # Then: Lands on the cohort list page
+        assert "/admin/content/cohort/" in page.url
+        body = page.content()
+        assert "Summer 2026" in body
 
-                # Step 7: Navigate to /courses/llm-engineering
-                page.goto(
-                    f"{django_server}/courses/llm-engineering",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 7: Navigate to /courses/llm-engineering
+        page.goto(
+            f"{django_server}/courses/llm-engineering",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Course detail page shows the new cohort
-                assert "Next cohort" in body
-                assert "Summer 2026" in body
-                assert "June 1, 2026" in body
-                assert "25 of 25 spots remaining" in body
-            finally:
-                browser.close()
+        # Then: Course detail page shows the new cohort
+        assert "Next cohort" in body
+        assert "Summer 2026" in body
+        assert "June 1, 2026" in body
+        assert "25 of 25 spots remaining" in body

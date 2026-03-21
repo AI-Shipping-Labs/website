@@ -24,7 +24,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -38,9 +37,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -136,7 +132,7 @@ class TestScenario1VisitorBrowsesCatalog:
 
     def test_downloads_catalog_shows_type_badges_sizes_descriptions(
         self, django_server
-    ):
+    , page):
         """Two published downloads exist. Anonymous visitor sees both
         download cards with titles, file type badges, human-readable
         file sizes, and descriptions."""
@@ -160,37 +156,28 @@ class TestScenario1VisitorBrowsesCatalog:
             tags=["starter"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Both download card titles are visible
-                assert "AI Cheat Sheet" in body
-                assert "Starter Kit" in body
+        # Both download card titles are visible
+        assert "AI Cheat Sheet" in body
+        assert "Starter Kit" in body
 
-                # File type badges
-                assert "PDF" in body
-                assert "ZIP" in body
+        # File type badges
+        assert "PDF" in body
+        assert "ZIP" in body
 
-                # File sizes: 2,500,000 bytes = 2.4 MB
-                assert "2.4 MB" in body
-                # 9,961,472 bytes = 9.5 MB
-                assert "9.5 MB" in body
+        # File sizes: 2,500,000 bytes = 2.4 MB
+        assert "2.4 MB" in body
+        # 9,961,472 bytes = 9.5 MB
+        assert "9.5 MB" in body
 
-                # Each card displays its description
-                assert "comprehensive cheat sheet" in body
-                assert "Everything you need to get started" in body
-            finally:
-                browser.close()
-
-
+        # Each card displays its description
+        assert "comprehensive cheat sheet" in body
+        assert "Everything you need to get started" in body
 # ---------------------------------------------------------------
 # Scenario 2: Anonymous visitor encounters a lead magnet and is
 #              prompted to sign up
@@ -203,7 +190,7 @@ class TestScenario2AnonymousLeadMagnetSignup:
 
     def test_anonymous_sees_signup_button_for_free_download(
         self, django_server
-    ):
+    , page):
         """A free download (required_level=0) shows 'Sign Up to Download'
         button for anonymous visitors, linking to /accounts/signup with
         a next parameter."""
@@ -217,42 +204,33 @@ class TestScenario2AnonymousLeadMagnetSignup:
             required_level=0,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Card for "Free PDF Guide" is visible
-                assert "Free PDF Guide" in body
+        # Card for "Free PDF Guide" is visible
+        assert "Free PDF Guide" in body
 
-                # Shows "Sign Up to Download" button
-                signup_btn = page.locator(
-                    'a:has-text("Sign Up to Download")'
-                )
-                assert signup_btn.count() >= 1
+        # Shows "Sign Up to Download" button
+        signup_btn = page.locator(
+            'a:has-text("Sign Up to Download")'
+        )
+        assert signup_btn.count() >= 1
 
-                # Button links to /accounts/signup with next parameter
-                href = signup_btn.first.get_attribute("href")
-                assert "/accounts/signup" in href
-                assert "next=" in href
-                assert "/api/downloads/free-pdf-guide/file" in href
+        # Button links to /accounts/signup with next parameter
+        href = signup_btn.first.get_attribute("href")
+        assert "/accounts/signup" in href
+        assert "next=" in href
+        assert "/api/downloads/free-pdf-guide/file" in href
 
-                # Click the signup button
-                signup_btn.first.click()
-                page.wait_for_load_state("networkidle")
+        # Click the signup button
+        signup_btn.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Visitor lands on the signup page
-                assert "/accounts/signup" in page.url
-            finally:
-                browser.close()
-
-
+        # Visitor lands on the signup page
+        assert "/accounts/signup" in page.url
 # ---------------------------------------------------------------
 # Scenario 3: Anonymous visitor on a gated download sees upgrade
 #              CTA, not a signup prompt
@@ -265,7 +243,7 @@ class TestScenario3AnonymousGatedDownloadUpgradeCTA:
 
     def test_anonymous_sees_upgrade_cta_for_gated_download(
         self, django_server
-    ):
+    , page):
         """A gated download (required_level=10) shows 'Upgrade to Basic
         to download' with a 'View Pricing' link. No direct file download
         link is exposed."""
@@ -279,42 +257,33 @@ class TestScenario3AnonymousGatedDownloadUpgradeCTA:
             required_level=10,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Shows upgrade CTA, not signup form
-                assert "Upgrade to Basic to download" in body
-                # No signup form should be shown
-                signup_btn = page.locator(
-                    'a:has-text("Sign Up to Download")'
-                )
-                assert signup_btn.count() == 0
+        # Shows upgrade CTA, not signup form
+        assert "Upgrade to Basic to download" in body
+        # No signup form should be shown
+        signup_btn = page.locator(
+            'a:has-text("Sign Up to Download")'
+        )
+        assert signup_btn.count() == 0
 
-                # "View Pricing" link points to /pricing
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
-                href = pricing_link.first.get_attribute("href")
-                assert "/pricing" in href
+        # "View Pricing" link points to /pricing
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
+        href = pricing_link.first.get_attribute("href")
+        assert "/pricing" in href
 
-                # No direct file download link is present
-                file_link = page.locator(
-                    'a[href*="/api/downloads/basic-toolkit/file"]'
-                )
-                assert file_link.count() == 0
-            finally:
-                browser.close()
-
-
+        # No direct file download link is present
+        file_link = page.locator(
+            'a[href*="/api/downloads/basic-toolkit/file"]'
+        )
+        assert file_link.count() == 0
 # ---------------------------------------------------------------
 # Scenario 4: Authorized member downloads a file and the download
 #              count increments
@@ -327,7 +296,7 @@ class TestScenario4AuthorizedMemberDownloads:
 
     def test_basic_member_downloads_file_and_count_increments(
         self, django_server
-    ):
+    , browser):
         """A Basic-tier member sees a 'Download' link for a Basic-gated
         download. Clicking it triggers a redirect (302) to the file URL
         and increments download_count."""
@@ -343,68 +312,61 @@ class TestScenario4AuthorizedMemberDownloads:
         )
         initial_count = download.download_count
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Shows "Download" link, no upgrade CTA, no signup
-                download_link = page.locator(
-                    'a[href="/api/downloads/member-resource/file"]'
-                )
-                assert download_link.count() >= 1
-                assert "Upgrade to" not in body
-                assert "Sign Up to Download" not in body
+        # Shows "Download" link, no upgrade CTA, no signup
+        download_link = page.locator(
+            'a[href="/api/downloads/member-resource/file"]'
+        )
+        assert download_link.count() >= 1
+        assert "Upgrade to" not in body
+        assert "Sign Up to Download" not in body
 
-                # Use Playwright's route interception to capture
-                # the 302 redirect response without following it
-                redirect_status = None
-                redirect_location = None
+        # Use Playwright's route interception to capture
+        # the 302 redirect response without following it
+        redirect_status = None
+        redirect_location = None
 
-                def handle_route(route):
-                    nonlocal redirect_status, redirect_location
-                    # Fetch the request manually without following
-                    # the redirect
-                    resp = route.fetch(max_redirects=0)
-                    redirect_status = resp.status
-                    redirect_location = resp.headers.get(
-                        "location", ""
-                    )
-                    route.fulfill(
-                        status=200,
-                        body="intercepted",
-                    )
+        def handle_route(route):
+            nonlocal redirect_status, redirect_location
+            # Fetch the request manually without following
+            # the redirect
+            resp = route.fetch(max_redirects=0)
+            redirect_status = resp.status
+            redirect_location = resp.headers.get(
+                "location", ""
+            )
+            route.fulfill(
+                status=200,
+                body="intercepted",
+            )
 
-                page.route(
-                    "**/api/downloads/member-resource/file",
-                    handle_route,
-                )
+        page.route(
+            "**/api/downloads/member-resource/file",
+            handle_route,
+        )
 
-                # Click the download link
-                download_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Click the download link
+        download_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # The server responds with a redirect (302)
-                assert redirect_status == 302
-                assert "example.com/member.pdf" in redirect_location
+        # The server responds with a redirect (302)
+        assert redirect_status == 302
+        assert "example.com/member.pdf" in redirect_location
 
-                # Verify download_count incremented
-                from content.models import Download
+        # Verify download_count incremented
+        from content.models import Download
 
-                download_obj = Download.objects.get(
-                    slug="member-resource"
-                )
-                assert download_obj.download_count == initial_count + 1
-            finally:
-                browser.close()
-
-
+        download_obj = Download.objects.get(
+            slug="member-resource"
+        )
+        assert download_obj.download_count == initial_count + 1
 # ---------------------------------------------------------------
 # Scenario 5: Insufficient-tier member sees upgrade CTA with the
 #              file URL never exposed
@@ -417,7 +379,7 @@ class TestScenario5InsufficientTierUpgradeCTA:
 
     def test_basic_member_cannot_access_premium_download(
         self, django_server
-    ):
+    , browser):
         """A Basic-tier member viewing a Premium-gated download sees
         'Upgrade to Premium to download'. The actual file URL
         (https://example.com/secret.pdf) never appears in the page
@@ -433,40 +395,33 @@ class TestScenario5InsufficientTierUpgradeCTA:
             required_level=30,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Shows upgrade CTA with correct tier name
-                assert "Upgrade to Premium to download" in body
+        # Shows upgrade CTA with correct tier name
+        assert "Upgrade to Premium to download" in body
 
-                # "View Pricing" link
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
-                href = pricing_link.first.get_attribute("href")
-                assert "/pricing" in href
+        # "View Pricing" link
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
+        href = pricing_link.first.get_attribute("href")
+        assert "/pricing" in href
 
-                # The actual file URL never appears in the page source
-                assert "https://example.com/secret.pdf" not in body
+        # The actual file URL never appears in the page source
+        assert "https://example.com/secret.pdf" not in body
 
-                # No download link for this download exists in the DOM
-                file_link = page.locator(
-                    'a[href*="/api/downloads/premium-report/file"]'
-                )
-                assert file_link.count() == 0
-            finally:
-                browser.close()
-
-
+        # No download link for this download exists in the DOM
+        file_link = page.locator(
+            'a[href*="/api/downloads/premium-report/file"]'
+        )
+        assert file_link.count() == 0
 # ---------------------------------------------------------------
 # Scenario 6: Visitor narrows the downloads catalog by clicking
 #              a tag chip
@@ -478,7 +433,7 @@ class TestScenario6VisitorFiltersByTag:
 
     def test_tag_filter_narrows_to_matching_downloads(
         self, django_server
-    ):
+    , page):
         """Two downloads with different tags. Clicking a tag chip
         filters to show only matching downloads. A link to clear
         the filter is available."""
@@ -500,53 +455,44 @@ class TestScenario6VisitorFiltersByTag:
             tags=["django"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Both cards visible
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "Doc A" in body
-                assert "Doc B" in body
+        # Step 1: Both cards visible
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "Doc A" in body
+        assert "Doc B" in body
 
-                # Step 2: Navigate to the filtered URL directly
-                page.goto(
-                    f"{django_server}/downloads?tag=python",
-                    wait_until="networkidle",
-                )
+        # Step 2: Navigate to the filtered URL directly
+        page.goto(
+            f"{django_server}/downloads?tag=python",
+            wait_until="domcontentloaded",
+        )
 
-                # URL updates to /downloads?tag=python
-                assert "tag=python" in page.url
+        # URL updates to /downloads?tag=python
+        assert "tag=python" in page.url
 
-                # Only Doc A is visible
-                body = page.content()
-                assert "Doc A" in body
+        # Only Doc A is visible
+        body = page.content()
+        assert "Doc A" in body
 
-                # Doc B is hidden because it lacks the "python" tag
-                # Check within article cards specifically
-                cards = page.locator("article")
-                cards_text = " ".join(
-                    [card.inner_text() for card in cards.all()]
-                )
-                assert "Doc B" not in cards_text
+        # Doc B is hidden because it lacks the "python" tag
+        # Check within article cards specifically
+        cards = page.locator("article")
+        cards_text = " ".join(
+            [card.inner_text() for card in cards.all()]
+        )
+        assert "Doc B" not in cards_text
 
-                # Navigate back to unfiltered page
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "Doc A" in body
-                assert "Doc B" in body
-            finally:
-                browser.close()
-
-
+        # Navigate back to unfiltered page
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "Doc A" in body
+        assert "Doc B" in body
 # ---------------------------------------------------------------
 # Scenario 7: Visitor filters by a tag with no matching downloads
 #              and sees helpful empty state
@@ -559,43 +505,34 @@ class TestScenario7EmptyTagFilter:
 
     def test_nonexistent_tag_shows_empty_message_and_recovery_link(
         self, django_server
-    ):
+    , page):
         """No published downloads tagged 'nonexistent'. The page shows
         an empty message and a 'View all downloads' link."""
         _clear_downloads()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/downloads?tag=nonexistent",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/downloads?tag=nonexistent",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # No download cards appear
-                cards = page.locator("article")
-                assert cards.count() == 0
+        # No download cards appear
+        cards = page.locator("article")
+        assert cards.count() == 0
 
-                # The message is displayed
-                assert (
-                    "No downloads found with the selected tags."
-                    in body
-                )
+        # The message is displayed
+        assert (
+            "No downloads found with the selected tags."
+            in body
+        )
 
-                # "View all downloads" link pointing to /downloads
-                view_all_link = page.locator(
-                    'a:has-text("View all downloads")'
-                )
-                assert view_all_link.count() >= 1
-                href = view_all_link.first.get_attribute("href")
-                assert href == "/downloads"
-            finally:
-                browser.close()
-
-
+        # "View all downloads" link pointing to /downloads
+        view_all_link = page.locator(
+            'a:has-text("View all downloads")'
+        )
+        assert view_all_link.count() >= 1
+        href = view_all_link.first.get_attribute("href")
+        assert href == "/downloads"
 # ---------------------------------------------------------------
 # Scenario 8: Shortcode embeds a download card inside an article
 #              for an anonymous reader
@@ -608,7 +545,7 @@ class TestScenario8ShortcodeAnonymousReader:
 
     def test_anonymous_sees_inline_card_with_signup_button(
         self, django_server
-    ):
+    , page):
         """A published article contains the shortcode
         {{download:inline-pdf}}. An anonymous visitor sees the inline
         download card with title, description, file type badge, and
@@ -636,43 +573,34 @@ class TestScenario8ShortcodeAnonymousReader:
             published=True,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/article-with-download",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        page.goto(
+            f"{django_server}/blog/article-with-download",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Inline download card appears with title
-                assert "Inline Resource" in body
-                # Description
-                assert "Get it here" in body
-                # PDF badge
-                assert "PDF" in body
+        # Inline download card appears with title
+        assert "Inline Resource" in body
+        # Description
+        assert "Get it here" in body
+        # PDF badge
+        assert "PDF" in body
 
-                # "Sign Up to Download Free" button with next param
-                signup_btn = page.locator(
-                    'a:has-text("Sign Up to Download Free")'
-                )
-                assert signup_btn.count() >= 1
-                href = signup_btn.first.get_attribute("href")
-                assert "/accounts/signup" in href
-                assert "next=" in href
-                assert "/api/downloads/inline-pdf/file" in href
+        # "Sign Up to Download Free" button with next param
+        signup_btn = page.locator(
+            'a:has-text("Sign Up to Download Free")'
+        )
+        assert signup_btn.count() >= 1
+        href = signup_btn.first.get_attribute("href")
+        assert "/accounts/signup" in href
+        assert "next=" in href
+        assert "/api/downloads/inline-pdf/file" in href
 
-                # No direct download link is exposed
-                direct_link = page.locator(
-                    'a[href="/api/downloads/inline-pdf/file"]'
-                )
-                assert direct_link.count() == 0
-            finally:
-                browser.close()
-
-
+        # No direct download link is exposed
+        direct_link = page.locator(
+            'a[href="/api/downloads/inline-pdf/file"]'
+        )
+        assert direct_link.count() == 0
 # ---------------------------------------------------------------
 # Scenario 9: Authenticated reader sees a direct download button
 #              on an in-article shortcode card
@@ -685,7 +613,7 @@ class TestScenario9AuthenticatedShortcodeDownload:
 
     def test_authenticated_user_sees_direct_download_link(
         self, django_server
-    ):
+    , browser):
         """A logged-in Free-tier user viewing the same article with
         {{download:inline-pdf}} sees a 'Download PDF' link and no
         'Sign Up to Download Free' prompt."""
@@ -713,34 +641,27 @@ class TestScenario9AuthenticatedShortcodeDownload:
             published=True,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/article-with-download",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/blog/article-with-download",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # "Download PDF" link pointing to the file endpoint
-                download_link = page.locator(
-                    'a:has-text("Download PDF")'
-                )
-                assert download_link.count() >= 1
-                href = download_link.first.get_attribute("href")
-                assert "/api/downloads/inline-pdf/file" in href
+        # "Download PDF" link pointing to the file endpoint
+        download_link = page.locator(
+            'a:has-text("Download PDF")'
+        )
+        assert download_link.count() >= 1
+        href = download_link.first.get_attribute("href")
+        assert "/api/downloads/inline-pdf/file" in href
 
-                # "Sign Up to Download Free" prompt is absent
-                signup_btn = page.locator(
-                    'a:has-text("Sign Up to Download Free")'
-                )
-                assert signup_btn.count() == 0
-            finally:
-                browser.close()
-
-
+        # "Sign Up to Download Free" prompt is absent
+        signup_btn = page.locator(
+            'a:has-text("Sign Up to Download Free")'
+        )
+        assert signup_btn.count() == 0
 # ---------------------------------------------------------------
 # Scenario 10: Free member reads an article with a gated download
 #               shortcode and sees upgrade path
@@ -753,7 +674,7 @@ class TestScenario10FreeUserGatedShortcode:
 
     def test_free_user_sees_upgrade_cta_in_shortcode_card(
         self, django_server
-    ):
+    , browser):
         """A Free-tier user viewing an article with {{download:gated-slides}}
         (required_level=10) sees 'Upgrade to Basic to download' and a
         'View Pricing' link. No download link is present."""
@@ -780,38 +701,31 @@ class TestScenario10FreeUserGatedShortcode:
             published=True,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/article-gated-download",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/blog/article-gated-download",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Inline card for "Gated Slides" shows upgrade CTA
-                assert "Gated Slides" in body
-                assert "Upgrade to Basic to download" in body
+        # Inline card for "Gated Slides" shows upgrade CTA
+        assert "Gated Slides" in body
+        assert "Upgrade to Basic to download" in body
 
-                # "View Pricing" link to /pricing
-                pricing_link = page.locator(
-                    'a:has-text("View Pricing")'
-                )
-                assert pricing_link.count() >= 1
-                href = pricing_link.first.get_attribute("href")
-                assert "/pricing" in href
+        # "View Pricing" link to /pricing
+        pricing_link = page.locator(
+            'a:has-text("View Pricing")'
+        )
+        assert pricing_link.count() >= 1
+        href = pricing_link.first.get_attribute("href")
+        assert "/pricing" in href
 
-                # No download link is present
-                file_link = page.locator(
-                    'a[href*="/api/downloads/gated-slides/file"]'
-                )
-                assert file_link.count() == 0
-            finally:
-                browser.close()
-
-
+        # No download link is present
+        file_link = page.locator(
+            'a[href*="/api/downloads/gated-slides/file"]'
+        )
+        assert file_link.count() == 0
 # ---------------------------------------------------------------
 # Scenario 11: Staff member creates a new download via Studio and
 #               it appears on the public listing
@@ -822,86 +736,79 @@ class TestScenario11StaffCreatesDownloadViaStudio:
     """Staff member creates a new download via Studio and it appears
     on the public listing."""
 
-    def test_staff_creates_download_in_studio(self, django_server):
+    def test_staff_creates_download_in_studio(self, django_server, browser):
         """Staff navigates to Studio, clicks 'New Download', fills in
         the form, submits, and the download appears on the public
         /downloads listing."""
         _clear_downloads()
         _create_staff_user("admin@test.com")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            try:
-                # Step 1: Navigate to /studio/downloads/
-                staff_ctx = _auth_context(browser, "admin@test.com")
-                staff_page = staff_ctx.new_page()
-                staff_page.goto(
-                    f"{django_server}/studio/downloads/",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /studio/downloads/
+        staff_ctx = _auth_context(browser, "admin@test.com")
+        staff_page = staff_ctx.new_page()
+        staff_page.goto(
+            f"{django_server}/studio/downloads/",
+            wait_until="domcontentloaded",
+        )
 
-                body = staff_page.content()
-                assert "Downloads" in body
+        body = staff_page.content()
+        assert "Downloads" in body
 
-                # Step 2: Click "New Download"
-                new_btn = staff_page.locator(
-                    'a:has-text("New Download")'
-                )
-                assert new_btn.count() >= 1
-                new_btn.first.click()
-                staff_page.wait_for_load_state("networkidle")
+        # Step 2: Click "New Download"
+        new_btn = staff_page.locator(
+            'a:has-text("New Download")'
+        )
+        assert new_btn.count() >= 1
+        new_btn.first.click()
+        staff_page.wait_for_load_state("domcontentloaded")
 
-                # Step 3: Fill in the form
-                staff_page.fill(
-                    'input[name="title"]', "Test Resource"
-                )
-                staff_page.fill(
-                    'input[name="file_url"]',
-                    "https://example.com/test.pdf",
-                )
-                staff_page.select_option(
-                    'select[name="file_type"]', "pdf"
-                )
-                staff_page.select_option(
-                    'select[name="required_level"]', "0"
-                )
-                staff_page.check('input[name="published"]')
+        # Step 3: Fill in the form
+        staff_page.fill(
+            'input[name="title"]', "Test Resource"
+        )
+        staff_page.fill(
+            'input[name="file_url"]',
+            "https://example.com/test.pdf",
+        )
+        staff_page.select_option(
+            'select[name="file_type"]', "pdf"
+        )
+        staff_page.select_option(
+            'select[name="required_level"]', "0"
+        )
+        staff_page.check('input[name="published"]')
 
-                # Step 4: Submit the form
-                staff_page.click(
-                    'button:has-text("Create Download")'
-                )
-                staff_page.wait_for_load_state("networkidle")
+        # Step 4: Submit the form
+        staff_page.click(
+            'button:has-text("Create Download")'
+        )
+        staff_page.wait_for_load_state("domcontentloaded")
 
-                # Redirected to the edit page for the newly created
-                # download
-                assert "/studio/downloads/" in staff_page.url
-                assert "/edit" in staff_page.url
+        # Redirected to the edit page for the newly created
+        # download
+        assert "/studio/downloads/" in staff_page.url
+        assert "/edit" in staff_page.url
 
-                # The edit form is pre-populated with "Test Resource"
-                title_input = staff_page.locator(
-                    'input[name="title"]'
-                )
-                assert title_input.input_value() == "Test Resource"
+        # The edit form is pre-populated with "Test Resource"
+        title_input = staff_page.locator(
+            'input[name="title"]'
+        )
+        assert title_input.input_value() == "Test Resource"
 
-                staff_ctx.close()
+        staff_ctx.close()
 
-                # Step 5: Navigate to /downloads as anonymous
-                anon_ctx = browser.new_context(viewport=VIEWPORT)
-                anon_page = anon_ctx.new_page()
-                anon_page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
+        # Step 5: Navigate to /downloads as anonymous
+        anon_ctx = browser.new_context(viewport=VIEWPORT)
+        anon_page = anon_ctx.new_page()
+        anon_page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
 
-                # A card for "Test Resource" appears in the listing
-                body = anon_page.content()
-                assert "Test Resource" in body
-                anon_ctx.close()
-            finally:
-                browser.close()
-
-
+        # A card for "Test Resource" appears in the listing
+        body = anon_page.content()
+        assert "Test Resource" in body
+        anon_ctx.close()
 # ---------------------------------------------------------------
 # Scenario 12: Regular member cannot access the Studio download
 #               management area
@@ -914,32 +821,27 @@ class TestScenario12RegularMemberCannotAccessStudio:
 
     def test_non_staff_member_is_denied_studio_access(
         self, django_server
-    ):
+    , browser):
         """A Basic-tier non-staff user navigating to /studio/downloads/
         either gets redirected to the login page or receives a 403."""
         _create_user("basic@test.com", tier_slug="basic")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/studio/downloads/",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        response = page.goto(
+            f"{django_server}/studio/downloads/",
+            wait_until="domcontentloaded",
+        )
 
-                # Either redirected to login or got 403
-                is_redirected = "/accounts/login" in page.url
-                is_forbidden = response.status == 403
+        # Either redirected to login or got 403
+        is_redirected = "/accounts/login" in page.url
+        is_forbidden = response.status == 403
 
-                assert is_redirected or is_forbidden, (
-                    f"Expected redirect to login or 403, "
-                    f"got status={response.status} url={page.url}"
-                )
+        assert is_redirected or is_forbidden, (
+            f"Expected redirect to login or 403, "
+            f"got status={response.status} url={page.url}"
+        )
 
-                # The user should NOT see the download management UI
-                body = page.content()
-                assert "New Download" not in body
-            finally:
-                browser.close()
+        # The user should NOT see the download management UI
+        body = page.content()
+        assert "New Download" not in body

@@ -24,7 +24,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -37,9 +36,6 @@ from playwright_tests.conftest import (
 )
 
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django 6 raises
-# SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -136,7 +132,7 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
 
     def test_visitor_sees_upcoming_and_past_events_then_clicks_detail(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor. Two events exist: an upcoming live
         event and a completed event. The listing shows both in the correct
         sections. Clicking the upcoming event shows the full detail page."""
@@ -166,63 +162,54 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
             status="completed",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events
-                page.goto(
-                    f"{django_server}/events",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /events
+        page.goto(
+            f"{django_server}/events",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: The page shows two sections -- "Upcoming" and "Past"
-                assert "Upcoming" in body
-                assert "Past" in body
+        # Then: The page shows two sections -- "Upcoming" and "Past"
+        assert "Upcoming" in body
+        assert "Past" in body
 
-                # "AI Prompt Engineering Workshop" appears in the Upcoming section
-                upcoming_section = page.locator("h2:has-text('Upcoming')").locator("..")
-                upcoming_text = upcoming_section.inner_text()
-                assert "AI Prompt Engineering Workshop" in upcoming_text
+        # "AI Prompt Engineering Workshop" appears in the Upcoming section
+        upcoming_section = page.locator("h2:has-text('Upcoming')").locator("..")
+        upcoming_text = upcoming_section.inner_text()
+        assert "AI Prompt Engineering Workshop" in upcoming_text
 
-                # With a "Live" type badge
-                assert "Live" in body
+        # With a "Live" type badge
+        assert "Live" in body
 
-                # Location "Zoom" and "20 spots remaining"
-                assert "Zoom" in body
-                assert "20 spots remaining" in body
+        # Location "Zoom" and "20 spots remaining"
+        assert "Zoom" in body
+        assert "20 spots remaining" in body
 
-                # "Intro to LLMs" appears in the Past section
-                past_section = page.locator("h2:has-text('Past')").locator("..")
-                past_text = past_section.inner_text()
-                assert "Intro to LLMs" in past_text
+        # "Intro to LLMs" appears in the Past section
+        past_section = page.locator("h2:has-text('Past')").locator("..")
+        past_text = past_section.inner_text()
+        assert "Intro to LLMs" in past_text
 
-                # Step 2: Click on "AI Prompt Engineering Workshop"
-                page.click(
-                    'a[href="/events/ai-prompt-engineering-workshop"]'
-                )
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on "AI Prompt Engineering Workshop"
+        page.click(
+            'a[href="/events/ai-prompt-engineering-workshop"]'
+        )
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Visitor lands on the detail page
-                assert "/events/ai-prompt-engineering-workshop" in page.url
-                body = page.content()
+        # Then: Visitor lands on the detail page
+        assert "/events/ai-prompt-engineering-workshop" in page.url
+        body = page.content()
 
-                # Title, description, location, timezone, and tags
-                assert "AI Prompt Engineering Workshop" in body
-                assert "Zoom" in body
-                assert "Europe/Berlin" in body
-                assert "python" in body
-                assert "ai" in body
+        # Title, description, location, timezone, and tags
+        assert "AI Prompt Engineering Workshop" in body
+        assert "Zoom" in body
+        assert "Europe/Berlin" in body
+        assert "python" in body
+        assert "ai" in body
 
-                # "Back to Events" link is available
-                back_link = page.locator('a:has-text("Back to Events")')
-                assert back_link.count() >= 1
-            finally:
-                browser.close()
-
-
+        # "Back to Events" link is available
+        back_link = page.locator('a:has-text("Back to Events")')
+        assert back_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 2: Anonymous visitor wants to register for an event
 #              but is directed to sign in
@@ -235,7 +222,7 @@ class TestScenario2AnonymousDirectedToSignIn:
 
     def test_anonymous_sees_sign_in_cta_on_open_event(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor (not logged in). An upcoming open
         event exists. The detail page loads (HTTP 200, no redirect) and
         shows 'Sign in to register' with a Sign In link that includes
@@ -250,45 +237,36 @@ class TestScenario2AnonymousDirectedToSignIn:
             status="upcoming",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/open-workshop
-                response = page.goto(
-                    f"{django_server}/events/open-workshop",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to /events/open-workshop
+        response = page.goto(
+            f"{django_server}/events/open-workshop",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Event detail page loads (HTTP 200, no redirect)
-                assert response.status == 200
-                assert "/events/open-workshop" in page.url
-                body = page.content()
+        # Then: Event detail page loads (HTTP 200, no redirect)
+        assert response.status == 200
+        assert "/events/open-workshop" in page.url
+        body = page.content()
 
-                # Shows "Sign in to register for this event" message
-                assert "Sign in to register for this event" in body
+        # Shows "Sign in to register for this event" message
+        assert "Sign in to register for this event" in body
 
-                # Sign In link is present (within the registration card,
-                # not the header nav). Target the link with ?next= param.
-                sign_in_link = page.locator(
-                    'a[href*="/accounts/login/?next="]'
-                )
-                assert sign_in_link.count() >= 1
-                href = sign_in_link.first.get_attribute("href")
-                assert "next" in href
-                assert "open-workshop" in href
+        # Sign In link is present (within the registration card,
+        # not the header nav). Target the link with ?next= param.
+        sign_in_link = page.locator(
+            'a[href*="/accounts/login/?next="]'
+        )
+        assert sign_in_link.count() >= 1
+        href = sign_in_link.first.get_attribute("href")
+        assert "next" in href
+        assert "open-workshop" in href
 
-                # Step 2: Click the "Sign In" link
-                sign_in_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "Sign In" link
+        sign_in_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Taken to /accounts/login/ with next parameter
-                assert "/accounts/login/" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: Taken to /accounts/login/ with next parameter
+        assert "/accounts/login/" in page.url
 # ---------------------------------------------------------------
 # Scenario 3: Eligible member registers for an event and sees
 #              confirmation
@@ -300,7 +278,7 @@ class TestScenario3EligibleMemberRegisters:
 
     def test_free_member_registers_for_open_event(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier). An upcoming
         open event exists with max_participants=10. The user sees a Register
         button and '10 spots remaining'. After clicking Register, the page
@@ -317,50 +295,43 @@ class TestScenario3EligibleMemberRegisters:
             status="upcoming",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/coding-session
-                page.goto(
-                    f"{django_server}/events/coding-session",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /events/coding-session
+        page.goto(
+            f"{django_server}/events/coding-session",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: User sees a "Register" button and "10 spots remaining"
-                register_btn = page.locator("#register-btn")
-                assert register_btn.count() >= 1
-                assert "Register" in register_btn.inner_text()
-                assert "10 spots remaining" in body
+        # Then: User sees a "Register" button and "10 spots remaining"
+        register_btn = page.locator("#register-btn")
+        assert register_btn.count() >= 1
+        assert "Register" in register_btn.inner_text()
+        assert "10 spots remaining" in body
 
-                # Step 2: Click the "Register" button
-                register_btn.click()
+        # Step 2: Click the "Register" button
+        register_btn.click()
 
-                # The JS calls fetch then window.location.reload().
-                # Wait for the "You're registered!" text to appear.
-                page.wait_for_selector(
-                    'text="You\'re registered!"',
-                    timeout=10000,
-                )
+        # The JS calls fetch then window.location.reload().
+        # Wait for the "You're registered!" text to appear.
+        page.wait_for_selector(
+            'text="You\'re registered!"',
+            timeout=10000,
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Then: Shows "You're registered!" with a green check
-                assert "You're registered!" in body
+        # Then: Shows "You're registered!" with a green check
+        assert "You're registered!" in body
 
-                # The "Register" button is replaced by "Cancel Registration"
-                cancel_btn = page.locator("#unregister-btn")
-                assert cancel_btn.count() >= 1
-                assert "Cancel Registration" in cancel_btn.inner_text()
+        # The "Register" button is replaced by "Cancel Registration"
+        cancel_btn = page.locator("#unregister-btn")
+        assert cancel_btn.count() >= 1
+        assert "Cancel Registration" in cancel_btn.inner_text()
 
-                # Spots count updates (9 remaining or 1/10 spots taken)
-                assert "1/10 spots taken" in body
-            finally:
-                browser.close()
-
-
+        # Spots count updates (9 remaining or 1/10 spots taken)
+        assert "1/10 spots taken" in body
 # ---------------------------------------------------------------
 # Scenario 4: Registered member cancels their event registration
 # ---------------------------------------------------------------
@@ -371,7 +342,7 @@ class TestScenario4RegisteredMemberCancels:
 
     def test_registered_member_cancels_registration(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com who is already
         registered for an upcoming event. The detail page shows
         'You're registered!' and a 'Cancel Registration' button.
@@ -389,47 +360,40 @@ class TestScenario4RegisteredMemberCancels:
         )
         _register_user_for_event(user, event)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/cancel-test
-                page.goto(
-                    f"{django_server}/events/cancel-test",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /events/cancel-test
+        page.goto(
+            f"{django_server}/events/cancel-test",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "You're registered!" and "Cancel Registration"
-                assert "You're registered!" in body
-                cancel_btn = page.locator("#unregister-btn")
-                assert cancel_btn.count() >= 1
-                assert "Cancel Registration" in cancel_btn.inner_text()
+        # Then: Shows "You're registered!" and "Cancel Registration"
+        assert "You're registered!" in body
+        cancel_btn = page.locator("#unregister-btn")
+        assert cancel_btn.count() >= 1
+        assert "Cancel Registration" in cancel_btn.inner_text()
 
-                # Step 2: Click "Cancel Registration"
-                # The JS shows confirm() dialog. Accept it.
-                page.on("dialog", lambda dialog: dialog.accept())
-                cancel_btn.click()
+        # Step 2: Click "Cancel Registration"
+        # The JS shows confirm() dialog. Accept it.
+        page.on("dialog", lambda dialog: dialog.accept())
+        cancel_btn.click()
 
-                # Step 3: After confirmation, page reloads
-                # Wait for the Register button to appear
-                page.wait_for_selector(
-                    "#register-btn",
-                    timeout=10000,
-                )
+        # Step 3: After confirmation, page reloads
+        # Wait for the Register button to appear
+        page.wait_for_selector(
+            "#register-btn",
+            timeout=10000,
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Then: "You're registered!" is gone and Register button is back
-                assert "You're registered!" not in body
-                register_btn = page.locator("#register-btn")
-                assert register_btn.count() >= 1
-                assert "Register" in register_btn.inner_text()
-            finally:
-                browser.close()
-
-
+        # Then: "You're registered!" is gone and Register button is back
+        assert "You're registered!" not in body
+        register_btn = page.locator("#register-btn")
+        assert register_btn.count() >= 1
+        assert "Register" in register_btn.inner_text()
 # ---------------------------------------------------------------
 # Scenario 5: Member tries to register for a full event and
 #              learns it is at capacity
@@ -442,7 +406,7 @@ class TestScenario5FullEventCapacity:
 
     def test_full_event_shows_event_is_full(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier). An upcoming
         open event with max_participants=1 and one other user already
         registered. The detail page shows 'Event is full' and 'This event
@@ -463,29 +427,22 @@ class TestScenario5FullEventCapacity:
         other_user = _create_user("other@test.com", tier_slug="free")
         _register_user_for_event(other_user, event)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/full-workshop
-                page.goto(
-                    f"{django_server}/events/full-workshop",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /events/full-workshop
+        page.goto(
+            f"{django_server}/events/full-workshop",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "Event is full" and capacity message
-                assert "Event is full" in body
-                assert "This event has reached its maximum capacity" in body
+        # Then: Shows "Event is full" and capacity message
+        assert "Event is full" in body
+        assert "This event has reached its maximum capacity" in body
 
-                # No Register button
-                register_btn = page.locator("#register-btn")
-                assert register_btn.count() == 0
-            finally:
-                browser.close()
-
-
+        # No Register button
+        register_btn = page.locator("#register-btn")
+        assert register_btn.count() == 0
 # ---------------------------------------------------------------
 # Scenario 6: Free member on a gated event sees the upgrade path
 # ---------------------------------------------------------------
@@ -496,7 +453,7 @@ class TestScenario6FreeMemberGatedEventUpgradePath:
 
     def test_free_member_sees_upgrade_cta_on_premium_event(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com (Free tier, level=0).
         An upcoming event with required_level=30 (Premium). The detail
         page is visible but shows 'Upgrade to Premium to attend' with
@@ -513,38 +470,31 @@ class TestScenario6FreeMemberGatedEventUpgradePath:
             status="upcoming",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/premium-masterclass
-                page.goto(
-                    f"{django_server}/events/premium-masterclass",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /events/premium-masterclass
+        page.goto(
+            f"{django_server}/events/premium-masterclass",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Event detail page is visible (title, description, date)
-                assert "Premium Masterclass" in body
+        # Then: Event detail page is visible (title, description, date)
+        assert "Premium Masterclass" in body
 
-                # Shows "Upgrade to Premium to attend"
-                assert "Upgrade to Premium to attend" in body
+        # Shows "Upgrade to Premium to attend"
+        assert "Upgrade to Premium to attend" in body
 
-                # "View Pricing" link is present
-                pricing_link = page.locator('a:has-text("View Pricing")')
-                assert pricing_link.count() >= 1
+        # "View Pricing" link is present
+        pricing_link = page.locator('a:has-text("View Pricing")')
+        assert pricing_link.count() >= 1
 
-                # Step 2: Click "View Pricing"
-                pricing_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "View Pricing"
+        pricing_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Lands on /pricing
-                assert "/pricing" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: Lands on /pricing
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Registered member returns shortly before event
 #              start and sees the Zoom join link
@@ -557,7 +507,7 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
 
     def test_zoom_link_shown_within_15_minutes_of_start(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com who is registered for
         an upcoming live event starting 10 minutes from now. The detail
         page shows 'You're registered!' and a 'Join the event' section
@@ -578,34 +528,27 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
         )
         _register_user_for_event(user, event)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/imminent-workshop
-                page.goto(
-                    f"{django_server}/events/imminent-workshop",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /events/imminent-workshop
+        page.goto(
+            f"{django_server}/events/imminent-workshop",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "You're registered!"
-                assert "You're registered!" in body
+        # Then: Shows "You're registered!"
+        assert "You're registered!" in body
 
-                # "Join the event" section appears with the Zoom link
-                assert "Join the event" in body
-                assert "https://zoom.us/j/123456" in body
+        # "Join the event" section appears with the Zoom link
+        assert "Join the event" in body
+        assert "https://zoom.us/j/123456" in body
 
-                # The Zoom link is clickable
-                zoom_link = page.locator(
-                    'a[href="https://zoom.us/j/123456"]'
-                )
-                assert zoom_link.count() >= 1
-            finally:
-                browser.close()
-
-
+        # The Zoom link is clickable
+        zoom_link = page.locator(
+            'a[href="https://zoom.us/j/123456"]'
+        )
+        assert zoom_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 8: Registered member checks an event that is still
 #              far away and Zoom link is hidden
@@ -618,7 +561,7 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
 
     def test_zoom_link_hidden_when_event_is_far_away(
         self, django_server
-    ):
+    , browser):
         """Given a user logged in as free@test.com who is registered for
         an upcoming live event starting 2 hours from now. The detail page
         shows 'You're registered!' but no 'Join the event' section and
@@ -639,30 +582,23 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
         )
         _register_user_for_event(user, event)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/future-workshop
-                page.goto(
-                    f"{django_server}/events/future-workshop",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /events/future-workshop
+        page.goto(
+            f"{django_server}/events/future-workshop",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "You're registered!"
-                assert "You're registered!" in body
+        # Then: Shows "You're registered!"
+        assert "You're registered!" in body
 
-                # No "Join the event" section
-                assert "Join the event" not in body
+        # No "Join the event" section
+        assert "Join the event" not in body
 
-                # The Zoom URL is not displayed anywhere on the page
-                assert "https://zoom.us/j/999000" not in body
-            finally:
-                browser.close()
-
-
+        # The Zoom URL is not displayed anywhere on the page
+        assert "https://zoom.us/j/999000" not in body
 # ---------------------------------------------------------------
 # Scenario 9: Visitor views a completed event and finds the
 #              recording
@@ -674,7 +610,7 @@ class TestScenario9CompletedEventWithRecording:
 
     def test_completed_event_shows_recording_link(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor. A completed event linked to a
         recording. The detail page shows 'This event has been recorded'
         with a 'Watch the recording' link. Clicking it navigates to
@@ -697,37 +633,28 @@ class TestScenario9CompletedEventWithRecording:
             recording=recording,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/past-workshop
-                page.goto(
-                    f"{django_server}/events/past-workshop",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /events/past-workshop
+        page.goto(
+            f"{django_server}/events/past-workshop",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Shows "This event has been recorded"
-                assert "This event has been recorded" in body
+        # Then: Shows "This event has been recorded"
+        assert "This event has been recorded" in body
 
-                # "Watch the recording" link is present
-                watch_link = page.locator(
-                    'a:has-text("Watch the recording")'
-                )
-                assert watch_link.count() >= 1
+        # "Watch the recording" link is present
+        watch_link = page.locator(
+            'a:has-text("Watch the recording")'
+        )
+        assert watch_link.count() >= 1
 
-                # Step 2: Click "Watch the recording"
-                watch_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click "Watch the recording"
+        watch_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Then: Navigates to the recording page
-                assert "/event-recordings/past-workshop-recording" in page.url
-            finally:
-                browser.close()
-
-
+        # Then: Navigates to the recording page
+        assert "/event-recordings/past-workshop-recording" in page.url
 # ---------------------------------------------------------------
 # Scenario 10: Visitor views a completed event that has no
 #               recording yet
@@ -739,7 +666,7 @@ class TestScenario10CompletedEventNoRecording:
 
     def test_completed_event_without_recording_shows_no_recording_link(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor. A completed event with no recording.
         The detail page loads but there is no 'Watch the recording' link
         and no 'This event has been recorded' message."""
@@ -756,33 +683,24 @@ class TestScenario10CompletedEventNoRecording:
             recording=None,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events/unrecorded-session
-                page.goto(
-                    f"{django_server}/events/unrecorded-session",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /events/unrecorded-session
+        page.goto(
+            f"{django_server}/events/unrecorded-session",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: Event info is visible
-                assert "Unrecorded Session" in body
+        # Then: Event info is visible
+        assert "Unrecorded Session" in body
 
-                # No "Watch the recording" link
-                watch_link = page.locator(
-                    'a:has-text("Watch the recording")'
-                )
-                assert watch_link.count() == 0
+        # No "Watch the recording" link
+        watch_link = page.locator(
+            'a:has-text("Watch the recording")'
+        )
+        assert watch_link.count() == 0
 
-                # No "This event has been recorded" message
-                assert "This event has been recorded" not in body
-            finally:
-                browser.close()
-
-
+        # No "This event has been recorded" message
+        assert "This event has been recorded" not in body
 # ---------------------------------------------------------------
 # Scenario 11: Draft events are not visible to the public
 # ---------------------------------------------------------------
@@ -793,7 +711,7 @@ class TestScenario11DraftEventsNotVisible:
 
     def test_draft_event_not_on_listing_and_404_on_direct_access(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor. A draft event exists. It does not
         appear on the /events listing page. Navigating directly to its
         detail page returns a 404."""
@@ -813,36 +731,27 @@ class TestScenario11DraftEventsNotVisible:
             status="upcoming",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events
-                page.goto(
-                    f"{django_server}/events",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /events
+        page.goto(
+            f"{django_server}/events",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: "Secret Draft Event" does not appear
-                assert "Secret Draft Event" not in body
+        # Then: "Secret Draft Event" does not appear
+        assert "Secret Draft Event" not in body
 
-                # The public event is visible
-                assert "Public Event" in body
+        # The public event is visible
+        assert "Public Event" in body
 
-                # Step 2: Navigate directly to /events/secret-draft
-                response = page.goto(
-                    f"{django_server}/events/secret-draft",
-                    wait_until="networkidle",
-                )
+        # Step 2: Navigate directly to /events/secret-draft
+        response = page.goto(
+            f"{django_server}/events/secret-draft",
+            wait_until="domcontentloaded",
+        )
 
-                # Then: Returns a 404
-                assert response.status == 404
-            finally:
-                browser.close()
-
-
+        # Then: Returns a 404
+        assert response.status == 404
 # ---------------------------------------------------------------
 # Scenario 12: Visitor spots a cancelled event in the past events
 #               section
@@ -854,7 +763,7 @@ class TestScenario12CancelledEventInPastSection:
 
     def test_cancelled_event_shows_in_past_with_cancelled_badge(
         self, django_server
-    ):
+    , page):
         """Given an anonymous visitor. A cancelled event exists. It appears
         in the Past section of /events with a visible 'Cancelled' badge."""
         _clear_events()
@@ -868,26 +777,19 @@ class TestScenario12CancelledEventInPastSection:
             start_datetime=now - datetime.timedelta(days=1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /events
-                page.goto(
-                    f"{django_server}/events",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /events
+        page.goto(
+            f"{django_server}/events",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Then: "Cancelled AI Meetup" appears in the Past section
-                past_section = page.locator(
-                    "h2:has-text('Past')"
-                ).locator("..")
-                past_text = past_section.inner_text()
-                assert "Cancelled AI Meetup" in past_text
+        # Then: "Cancelled AI Meetup" appears in the Past section
+        past_section = page.locator(
+            "h2:has-text('Past')"
+        ).locator("..")
+        past_text = past_section.inner_text()
+        assert "Cancelled AI Meetup" in past_text
 
-                # With a visible "Cancelled" badge
-                assert "Cancelled" in past_text
-            finally:
-                browser.close()
+        # With a visible "Cancelled" badge
+        assert "Cancelled" in past_text

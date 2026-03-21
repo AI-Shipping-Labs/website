@@ -19,7 +19,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -68,50 +67,41 @@ class TestScenario1AnonymousDiscoversCourse:
 
     def test_course_appears_in_catalog_and_navigates_to_detail(
         self, django_server
-    ):
+    , page):
         """The seed data has been loaded. Anonymous visitor navigates to
         /courses, sees the AI Hero course card with title, Free badge,
         and instructor. Clicking the card navigates to /courses/aihero."""
         _ensure_tiers()
         _ensure_aihero_course()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses
-                page.goto(
-                    f"{django_server}/courses",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /courses
+        page.goto(
+            f"{django_server}/courses",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Course title appears in the listing
-                assert "7-Day AI Agents Email Crash-Course" in body
+        # Course title appears in the listing
+        assert "7-Day AI Agents Email Crash-Course" in body
 
-                # Free badge is visible
-                free_badge = page.locator(
-                    'span.text-green-400:has-text("Free")'
-                )
-                assert free_badge.count() >= 1
+        # Free badge is visible
+        free_badge = page.locator(
+            'span.text-green-400:has-text("Free")'
+        )
+        assert free_badge.count() >= 1
 
-                # Instructor name appears
-                assert "Alexey Grigorev" in body
+        # Instructor name appears
+        assert "Alexey Grigorev" in body
 
-                # Step 2: Click on the course card
-                course_link = page.locator(
-                    'a[href="/courses/aihero"]'
-                ).first
-                course_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the course card
+        course_link = page.locator(
+            'a[href="/courses/aihero"]'
+        ).first
+        course_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Lands on /courses/aihero
-                assert "/courses/aihero" in page.url
-            finally:
-                browser.close()
-
-
+        # Lands on /courses/aihero
+        assert "/courses/aihero" in page.url
 # ---------------------------------------------------------------
 # Scenario 2: Anonymous visitor reads the course landing page and
 #              sees signup CTA
@@ -121,69 +111,60 @@ class TestScenario1AnonymousDiscoversCourse:
 class TestScenario2AnonymousLandingPageSignupCTA:
     """Anonymous visitor reads the course landing page and sees signup CTA."""
 
-    def test_landing_page_content_and_signup_cta(self, django_server):
+    def test_landing_page_content_and_signup_cta(self, django_server, page):
         """Anonymous visitor navigates to /courses/aihero and sees the full
         course detail page with title, Free badge, instructor, description,
         syllabus with 7 units, and a Sign up free CTA."""
         _ensure_tiers()
         _ensure_aihero_course()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/aihero
-                response = page.goto(
-                    f"{django_server}/courses/aihero",
-                    wait_until="networkidle",
-                )
-                assert response.status == 200
+        # Step 1: Navigate to /courses/aihero
+        response = page.goto(
+            f"{django_server}/courses/aihero",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # Course title
-                assert "7-Day AI Agents Email Crash-Course" in body
+        # Course title
+        assert "7-Day AI Agents Email Crash-Course" in body
 
-                # Free badge
-                free_badge = page.locator(
-                    'span.text-green-400:has-text("Free")'
-                )
-                assert free_badge.count() >= 1
+        # Free badge
+        free_badge = page.locator(
+            'span.text-green-400:has-text("Free")'
+        )
+        assert free_badge.count() >= 1
 
-                # Instructor name and bio
-                assert "Alexey Grigorev" in body
-                assert "Principal Data Scientist" in body
+        # Instructor name and bio
+        assert "Alexey Grigorev" in body
+        assert "Principal Data Scientist" in body
 
-                # Description content - key phrases
-                assert "Production-Ready AI Agent" in body
-                assert "Prerequisites" in body
-                assert "Certificate" in body
+        # Description content - key phrases
+        assert "Production-Ready AI Agent" in body
+        assert "Prerequisites" in body
+        assert "Certificate" in body
 
-                # Syllabus with 1 module and 7 units
-                assert "7-Day AI Agents" in body
-                assert "Day 1: Ingest and Index Your Data" in body
-                assert "Day 2: Intelligent Processing for Data" in body
-                assert "Day 3: Add Search" in body
-                assert "Day 4: Agents and Tools" in body
-                assert "Day 5: Offline Evaluation and Testing" in body
-                assert "Day 6: Publish Your Agent" in body
-                assert "Day 7: Share Results and Peer Review" in body
+        # Syllabus with 1 module and 7 units
+        assert "7-Day AI Agents" in body
+        assert "Day 1: Ingest and Index Your Data" in body
+        assert "Day 2: Intelligent Processing for Data" in body
+        assert "Day 3: Add Search" in body
+        assert "Day 4: Agents and Tools" in body
+        assert "Day 5: Offline Evaluation and Testing" in body
+        assert "Day 6: Publish Your Agent" in body
+        assert "Day 7: Share Results and Peer Review" in body
 
-                # Sign up free CTA
-                assert "sign up free" in body.lower()
-                signup_btn = page.locator(
-                    'a:has-text("Sign Up Free")'
-                )
-                assert signup_btn.count() >= 1
+        # Sign up free CTA
+        assert "sign up free" in body.lower()
+        signup_btn = page.locator(
+            'a:has-text("Sign Up Free")'
+        )
+        assert signup_btn.count() >= 1
 
-                # Step 2: Click the Sign Up Free CTA
-                href = signup_btn.first.get_attribute("href")
-                assert "/accounts/" in href
-            finally:
-                browser.close()
-
-
+        # Step 2: Click the Sign Up Free CTA
+        href = signup_btn.first.get_attribute("href")
+        assert "/accounts/" in href
 # ---------------------------------------------------------------
 # Scenario 3: Anonymous visitor can preview Day 1 content
 # ---------------------------------------------------------------
@@ -192,38 +173,29 @@ class TestScenario2AnonymousLandingPageSignupCTA:
 class TestScenario3AnonymousPreviewDay1:
     """Anonymous visitor can preview Day 1 content."""
 
-    def test_anonymous_can_view_day1_preview(self, django_server):
+    def test_anonymous_can_view_day1_preview(self, django_server, page):
         """Anonymous visitor navigates to /courses/aihero, clicks Day 1
         (which is marked is_preview=True), and sees the full lesson
         content and homework."""
         _ensure_tiers()
         _ensure_aihero_course()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Navigate directly to Day 1 unit page
-                # For a free course (required_level=0), the unit URL
-                # is /courses/aihero/0/0
-                page.goto(
-                    f"{django_server}/courses/aihero/0/0",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Navigate directly to Day 1 unit page
+        # For a free course (required_level=0), the unit URL
+        # is /courses/aihero/0/0
+        page.goto(
+            f"{django_server}/courses/aihero/0/0",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Lesson content about GitHub API data extraction
-                assert "GitHub" in body
-                assert "Ingest and Index" in body or "Day 1" in body
+        # Lesson content about GitHub API data extraction
+        assert "GitHub" in body
+        assert "Ingest and Index" in body or "Day 1" in body
 
-                # Homework section is visible
-                assert "Homework" in body or "homework" in body.lower()
-                assert "GitHub" in body
-            finally:
-                browser.close()
-
-
+        # Homework section is visible
+        assert "Homework" in body or "homework" in body.lower()
+        assert "GitHub" in body
 # ---------------------------------------------------------------
 # Scenario 4: Free member works through Day 1 to Day 2
 # ---------------------------------------------------------------
@@ -234,7 +206,7 @@ class TestScenario4FreeMemberDay1ToDay2:
 
     def test_free_member_completes_day1_and_proceeds_to_day2(
         self, django_server
-    ):
+    , browser):
         """A Free tier user navigates to /courses/aihero, sees all 7 units
         accessible, clicks Day 1, views content, marks complete, clicks
         Next to proceed to Day 2."""
@@ -242,58 +214,51 @@ class TestScenario4FreeMemberDay1ToDay2:
         _ensure_aihero_course()
         _create_user("free-ah@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-ah@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/aihero
-                page.goto(
-                    f"{django_server}/courses/aihero",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free-ah@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/aihero
+        page.goto(
+            f"{django_server}/courses/aihero",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # All 7 units accessible (shown as links, no lock icons)
-                day1_link = page.locator(
-                    'a[href="/courses/aihero/0/0"]'
-                )
-                assert day1_link.count() >= 1
+        # All 7 units accessible (shown as links, no lock icons)
+        day1_link = page.locator(
+            'a[href="/courses/aihero/0/0"]'
+        )
+        assert day1_link.count() >= 1
 
-                # Step 2: Click on Day 1
-                day1_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on Day 1
+        day1_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Unit page loads with lesson content
-                assert "Day 1" in body or "Ingest and Index" in body
+        # Unit page loads with lesson content
+        assert "Day 1" in body or "Ingest and Index" in body
 
-                # Homework section visible
-                assert "Homework" in body or "homework" in body.lower()
+        # Homework section visible
+        assert "Homework" in body or "homework" in body.lower()
 
-                # Step 3: Mark Day 1 as completed
-                mark_btn = page.locator("#mark-complete-btn")
-                assert mark_btn.count() >= 1
-                mark_btn.click()
-                page.wait_for_timeout(1500)
+        # Step 3: Mark Day 1 as completed
+        mark_btn = page.locator("#mark-complete-btn")
+        assert mark_btn.count() >= 1
+        mark_btn.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Button changes to Completed
-                assert "Completed" in mark_btn.inner_text()
+        # Button changes to Completed
+        assert "Completed" in mark_btn.inner_text()
 
-                # Step 4: Click Next to proceed to Day 2
-                next_btn = page.locator('a:has-text("Next:")')
-                assert next_btn.count() >= 1
-                next_btn.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 4: Click Next to proceed to Day 2
+        next_btn = page.locator('a:has-text("Next:")')
+        assert next_btn.count() >= 1
+        next_btn.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Lands on Day 2
-                body = page.content()
-                assert "Day 2" in body or "Intelligent Processing" in body
-            finally:
-                browser.close()
-
-
+        # Lands on Day 2
+        body = page.content()
+        assert "Day 2" in body or "Intelligent Processing" in body
 # ---------------------------------------------------------------
 # Scenario 5: Free member tracks progress across the course
 # ---------------------------------------------------------------
@@ -302,7 +267,7 @@ class TestScenario4FreeMemberDay1ToDay2:
 class TestScenario5FreeMemberTracksProgress:
     """Free member tracks progress across the course."""
 
-    def test_progress_bar_shows_completed_units(self, django_server):
+    def test_progress_bar_shows_completed_units(self, django_server, browser):
         """A Free tier user who has completed Day 1 and Day 2 sees the
         progress bar showing 2 of 7 units completed."""
         _ensure_tiers()
@@ -318,30 +283,23 @@ class TestScenario5FreeMemberTracksProgress:
         _mark_unit_completed(user, day1)
         _mark_unit_completed(user, day2)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-prog@test.com")
-            page = context.new_page()
-            try:
-                # Navigate to /courses/aihero
-                page.goto(
-                    f"{django_server}/courses/aihero",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free-prog@test.com")
+        page = context.new_page()
+        # Navigate to /courses/aihero
+        page.goto(
+            f"{django_server}/courses/aihero",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Progress shows 2 of 7 completed
-                assert "2 of 7 completed" in body
+        # Progress shows 2 of 7 completed
+        assert "2 of 7 completed" in body
 
-                # Day 1 and Day 2 appear as completed (checkmark icons)
-                check_icons = page.locator(
-                    '[data-lucide="check-circle-2"]'
-                )
-                assert check_icons.count() >= 2
-            finally:
-                browser.close()
-
-
+        # Day 1 and Day 2 appear as completed (checkmark icons)
+        check_icons = page.locator(
+            '[data-lucide="check-circle-2"]'
+        )
+        assert check_icons.count() >= 2
 # ---------------------------------------------------------------
 # Scenario 6: Free member accesses the last unit (Day 7)
 # ---------------------------------------------------------------
@@ -352,7 +310,7 @@ class TestScenario6FreeMemberAccessesDay7:
 
     def test_day7_loads_with_content_about_readme_and_peer_review(
         self, django_server
-    ):
+    , browser):
         """A Free tier user navigates to /courses/aihero, clicks Day 7,
         and sees content about writing a README, creating a demo, and
         peer review."""
@@ -360,38 +318,31 @@ class TestScenario6FreeMemberAccessesDay7:
         _ensure_aihero_course()
         _create_user("free-d7@test.com", tier_slug="free")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-d7@test.com")
-            page = context.new_page()
-            try:
-                # Navigate to /courses/aihero
-                page.goto(
-                    f"{django_server}/courses/aihero",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "free-d7@test.com")
+        page = context.new_page()
+        # Navigate to /courses/aihero
+        page.goto(
+            f"{django_server}/courses/aihero",
+            wait_until="domcontentloaded",
+        )
 
-                # Click on Day 7
-                day7_link = page.locator(
-                    'a[href="/courses/aihero/0/6"]'
-                )
-                assert day7_link.count() >= 1
-                day7_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Click on Day 7
+        day7_link = page.locator(
+            'a[href="/courses/aihero/0/6"]'
+        )
+        assert day7_link.count() >= 1
+        day7_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Content about README, demo, and peer review
-                assert "README" in body
-                assert "peer review" in body.lower() or "Peer Review" in body
+        # Content about README, demo, and peer review
+        assert "README" in body
+        assert "peer review" in body.lower() or "Peer Review" in body
 
-                # Homework mentions submitting project and reviewing peers
-                assert "Submit" in body or "submit" in body
-                assert "review" in body.lower()
-            finally:
-                browser.close()
-
-
+        # Homework mentions submitting project and reviewing peers
+        assert "Submit" in body or "submit" in body
+        assert "review" in body.lower()
 # ---------------------------------------------------------------
 # Scenario 7: Course appears on the authenticated member dashboard
 # ---------------------------------------------------------------
@@ -402,7 +353,7 @@ class TestScenario7DashboardContinueLearning:
 
     def test_dashboard_shows_aihero_in_continue_learning(
         self, django_server
-    ):
+    , browser):
         """A Free tier user who has completed at least 1 unit sees the
         AI Hero course in the Continue Learning section on the dashboard."""
         _ensure_tiers()
@@ -416,36 +367,29 @@ class TestScenario7DashboardContinueLearning:
         day1 = Unit.objects.get(module=module, sort_order=0)
         _mark_unit_completed(user, day1)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free-dash@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to dashboard
-                page.goto(
-                    f"{django_server}/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "free-dash@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to dashboard
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Continue Learning section shows the AI Hero course
-                assert "Continue Learning" in body
-                assert "7-Day AI Agents" in body or "Crash-Course" in body
+        # Continue Learning section shows the AI Hero course
+        assert "Continue Learning" in body
+        assert "7-Day AI Agents" in body or "Crash-Course" in body
 
-                # Step 2: Click on the course
-                course_link = page.locator(
-                    'a[href="/courses/aihero"]'
-                )
-                assert course_link.count() >= 1
-                course_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the course
+        course_link = page.locator(
+            'a[href="/courses/aihero"]'
+        )
+        assert course_link.count() >= 1
+        course_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Lands on /courses/aihero
-                assert "/courses/aihero" in page.url
-            finally:
-                browser.close()
-
-
+        # Lands on /courses/aihero
+        assert "/courses/aihero" in page.url
 # ---------------------------------------------------------------
 # Scenario 8: Basic member can also access the free course
 # ---------------------------------------------------------------
@@ -454,7 +398,7 @@ class TestScenario7DashboardContinueLearning:
 class TestScenario8BasicMemberAccessesFree:
     """Basic member can also access the free course."""
 
-    def test_basic_member_accesses_all_units(self, django_server):
+    def test_basic_member_accesses_all_units(self, django_server, browser):
         """A Basic tier user navigates to /courses/aihero, all 7 units
         are accessible. Clicking Day 4 loads the content about OpenAI
         function calling and Pydantic AI."""
@@ -462,32 +406,27 @@ class TestScenario8BasicMemberAccessesFree:
         _ensure_aihero_course()
         _create_user("basic-ah@test.com", tier_slug="basic")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic-ah@test.com")
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /courses/aihero
-                page.goto(
-                    f"{django_server}/courses/aihero",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        context = _auth_context(browser, "basic-ah@test.com")
+        page = context.new_page()
+        # Step 1: Navigate to /courses/aihero
+        page.goto(
+            f"{django_server}/courses/aihero",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # All 7 units accessible
-                day4_link = page.locator(
-                    'a[href="/courses/aihero/0/3"]'
-                )
-                assert day4_link.count() >= 1
+        # All 7 units accessible
+        day4_link = page.locator(
+            'a[href="/courses/aihero/0/3"]'
+        )
+        assert day4_link.count() >= 1
 
-                # Step 2: Click on Day 4
-                day4_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on Day 4
+        day4_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
+        body = page.content()
 
-                # Content about function calling and Pydantic AI
-                assert "function calling" in body.lower() or "Function Calling" in body
-                assert "Pydantic AI" in body or "Pydantic" in body
-            finally:
-                browser.close()
+        # Content about function calling and Pydantic AI
+        assert "function calling" in body.lower() or "Function Calling" in body
+        assert "Pydantic AI" in body or "Pydantic" in body

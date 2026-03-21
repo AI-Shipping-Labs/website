@@ -22,13 +22,9 @@ import datetime
 import os
 
 import pytest
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import DJANGO_BASE_URL
 
-# Allow Django ORM calls from within sync_playwright (which runs an
-# event loop internally). Without this, Django raises
-# SynchronousOnlyOperation when we create objects inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -269,7 +265,7 @@ class TestScenario1TagCloudExploration:
 
     def test_tags_page_shows_tags_with_counts_sorted_by_count(
         self, django_server
-    ):
+    , page):
         """Tags appear with their content counts, highest counts first."""
         _clear_all_content()
         _create_article(
@@ -291,43 +287,34 @@ class TestScenario1TagCloudExploration:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/tags", wait_until="networkidle"
-                )
-                assert response.status == 200
+        response = page.goto(
+            f"{django_server}/tags", wait_until="domcontentloaded"
+        )
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # All tags are visible
-                assert "python" in body
-                assert "ai" in body
-                assert "workshop" in body
+        # All tags are visible
+        assert "python" in body
+        assert "ai" in body
+        assert "workshop" in body
 
-                # Tags show counts: ai=3, python=2, workshop=1
-                # Tags are links to /tags/{tag}
-                ai_link = page.locator('a[href="/tags/ai"]')
-                assert ai_link.count() >= 1
+        # Tags show counts: ai=3, python=2, workshop=1
+        # Tags are links to /tags/{tag}
+        ai_link = page.locator('a[href="/tags/ai"]')
+        assert ai_link.count() >= 1
 
-                python_link = page.locator('a[href="/tags/python"]')
-                assert python_link.count() >= 1
+        python_link = page.locator('a[href="/tags/python"]')
+        assert python_link.count() >= 1
 
-                # Verify ordering: highest counts appear first in the
-                # tag cloud. "ai" (count 3) should appear before
-                # "workshop" (count 1) in the page.
-                # Use the href attribute to find tag positions reliably.
-                ai_pos = body.index('/tags/ai"')
-                workshop_pos = body.index('/tags/workshop"')
-                assert ai_pos < workshop_pos
-
-            finally:
-                browser.close()
-
-    def test_click_tag_navigates_to_tag_detail(self, django_server):
+        # Verify ordering: highest counts appear first in the
+        # tag cloud. "ai" (count 3) should appear before
+        # "workshop" (count 1) in the page.
+        # Use the href attribute to find tag positions reliably.
+        ai_pos = body.index('/tags/ai"')
+        workshop_pos = body.index('/tags/workshop"')
+        assert ai_pos < workshop_pos
+    def test_click_tag_navigates_to_tag_detail(self, django_server, page):
         """Click on the 'ai' tag and see all 3 items with type badges."""
         _clear_all_content()
         _create_article(
@@ -349,38 +336,28 @@ class TestScenario1TagCloudExploration:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/tags", wait_until="networkidle"
-                )
+        page.goto(
+            f"{django_server}/tags", wait_until="domcontentloaded"
+        )
 
-                # Click on the "ai" tag
-                ai_link = page.locator('a[href="/tags/ai"]').first
-                ai_link.click()
-                page.wait_for_load_state("networkidle")
+        # Click on the "ai" tag
+        ai_link = page.locator('a[href="/tags/ai"]').first
+        ai_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User lands on /tags/ai
-                assert "/tags/ai" in page.url
+        # User lands on /tags/ai
+        assert "/tags/ai" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # All 3 items with the "ai" tag are visible
-                assert "Python Basics" in body
-                assert "Python Advanced" in body
-                assert "AI Workshop Recording" in body
+        # All 3 items with the "ai" tag are visible
+        assert "Python Basics" in body
+        assert "Python Advanced" in body
+        assert "AI Workshop Recording" in body
 
-                # Content type badges are shown
-                assert "Article" in body
-                assert "Recording" in body
-
-            finally:
-                browser.close()
-
-
+        # Content type badges are shown
+        assert "Article" in body
+        assert "Recording" in body
 # ---------------------------------------------------------------
 # Scenario 2: Visitor drills into a tag and navigates to an article
 # ---------------------------------------------------------------
@@ -397,7 +374,7 @@ class TestScenario2DrillIntoTagAndNavigate:
 
     def test_tag_detail_shows_both_items_sorted_by_date(
         self, django_server
-    ):
+    , page):
         """Both items appear on the tag detail page, sorted newest first."""
         _clear_all_content()
         _create_article(
@@ -416,35 +393,26 @@ class TestScenario2DrillIntoTagAndNavigate:
             date=datetime.date(2026, 2, 10),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/tags/ai-engineering",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/tags/ai-engineering",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Both items are visible
-                assert "Intro to AI Engineering" in body
-                assert "AI Workshop" in body
+        # Both items are visible
+        assert "Intro to AI Engineering" in body
+        assert "AI Workshop" in body
 
-                # Type badges are shown
-                assert "Article" in body
-                assert "Recording" in body
+        # Type badges are shown
+        assert "Article" in body
+        assert "Recording" in body
 
-                # Newest first: article (Feb 15) before recording (Feb 10)
-                article_pos = body.index("Intro to AI Engineering")
-                recording_pos = body.index("AI Workshop")
-                assert article_pos < recording_pos
-
-            finally:
-                browser.close()
-
-    def test_click_article_from_tag_detail(self, django_server):
+        # Newest first: article (Feb 15) before recording (Feb 10)
+        article_pos = body.index("Intro to AI Engineering")
+        recording_pos = body.index("AI Workshop")
+        assert article_pos < recording_pos
+    def test_click_article_from_tag_detail(self, django_server, page):
         """Click on an article from the tag detail page to navigate
         to the article detail page."""
         _clear_all_content()
@@ -463,35 +431,25 @@ class TestScenario2DrillIntoTagAndNavigate:
             date=datetime.date(2026, 2, 10),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/tags/ai-engineering",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/tags/ai-engineering",
+            wait_until="domcontentloaded",
+        )
 
-                # Click on the article by its title text
-                # The tag_detail template wraps each item in an <a> tag
-                article_title = page.locator(
-                    'h2:has-text("Intro to AI Engineering")'
-                ).first
-                article_title.click()
-                page.wait_for_load_state("networkidle")
+        # Click on the article by its title text
+        # The tag_detail template wraps each item in an <a> tag
+        article_title = page.locator(
+            'h2:has-text("Intro to AI Engineering")'
+        ).first
+        article_title.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User arrives at the article detail page
-                assert "/blog/intro-to-ai-engineering" in page.url
+        # User arrives at the article detail page
+        assert "/blog/intro-to-ai-engineering" in page.url
 
-                body = page.content()
-                assert "Intro to AI Engineering" in body
-                assert "Full article content about AI" in body
-
-            finally:
-                browser.close()
-
-
+        body = page.content()
+        assert "Intro to AI Engineering" in body
+        assert "Full article content about AI" in body
 # ---------------------------------------------------------------
 # Scenario 3: Visitor narrows blog results by selecting a single tag
 # ---------------------------------------------------------------
@@ -505,7 +463,7 @@ class TestScenario3SingleTagFilter:
     "AI Overview" tagged "ai", and "Python AI" tagged "python" and "ai".
     """
 
-    def test_single_tag_filter_narrows_results(self, django_server):
+    def test_single_tag_filter_narrows_results(self, django_server, page):
         """Click the 'python' tag filter chip and only matching
         articles appear."""
         _clear_all_content()
@@ -531,44 +489,34 @@ class TestScenario3SingleTagFilter:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog
-                page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                body = page.content()
+        # Step 1: Navigate to /blog
+        page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        body = page.content()
 
-                # All 3 articles are visible
-                assert "Python Basics" in body
-                assert "AI Overview" in body
-                assert "Python AI" in body
+        # All 3 articles are visible
+        assert "Python Basics" in body
+        assert "AI Overview" in body
+        assert "Python AI" in body
 
-                # Step 2: Click the "python" tag filter chip
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "python" tag filter chip
+        python_chip = page.locator(
+            'a[href*="tag=python"]'
+        ).first
+        python_chip.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # URL updates to /blog?tag=python
-                assert "tag=python" in page.url
+        # URL updates to /blog?tag=python
+        assert "tag=python" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Only "Python Basics" and "Python AI" appear
-                assert "Python Basics" in body
-                assert "Python AI" in body
-                # "AI Overview" is hidden
-                assert "AI Overview" not in body
-
-            finally:
-                browser.close()
-
-
+        # Only "Python Basics" and "Python AI" appear
+        assert "Python Basics" in body
+        assert "Python AI" in body
+        # "AI Overview" is hidden
+        assert "AI Overview" not in body
 # ---------------------------------------------------------------
 # Scenario 4: Visitor combines multiple tag filters with AND logic
 # ---------------------------------------------------------------
@@ -584,7 +532,7 @@ class TestScenario4MultiTagAndLogic:
 
     def test_multi_tag_filter_narrows_to_intersection(
         self, django_server
-    ):
+    , page):
         """Add the 'ai' tag filter to 'python' and only the article
         with both tags remains."""
         _clear_all_content()
@@ -607,50 +555,40 @@ class TestScenario4MultiTagAndLogic:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog?tag=python
-                page.goto(
-                    f"{django_server}/blog?tag=python",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /blog?tag=python
+        page.goto(
+            f"{django_server}/blog?tag=python",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # "Python Basics" and "Python AI" are shown
-                assert "Python Basics" in body
-                assert "Python AI" in body
+        # "Python Basics" and "Python AI" are shown
+        assert "Python Basics" in body
+        assert "Python AI" in body
 
-                # Step 2: Click the "ai" tag filter chip to add it
-                # Look for a link that adds ai to the current python filter
-                ai_chip = page.locator(
-                    'a[href*="tag=python"][href*="tag=ai"], '
-                    'a[href*="tag=ai"][href*="tag=python"]'
-                ).first
-                ai_chip.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click the "ai" tag filter chip to add it
+        # Look for a link that adds ai to the current python filter
+        ai_chip = page.locator(
+            'a[href*="tag=python"][href*="tag=ai"], '
+            'a[href*="tag=ai"][href*="tag=python"]'
+        ).first
+        ai_chip.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # URL has both tag=python and tag=ai
-                assert "tag=python" in page.url
-                assert "tag=ai" in page.url
+        # URL has both tag=python and tag=ai
+        assert "tag=python" in page.url
+        assert "tag=ai" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Only "Python AI" remains
-                assert "Python AI" in body
-                assert "Python Basics" not in body
-                assert "AI Overview" not in body
+        # Only "Python AI" remains
+        assert "Python AI" in body
+        assert "Python Basics" not in body
+        assert "AI Overview" not in body
 
-                # Both "python" and "ai" are active in the URL
-                assert "tag=python" in page.url
-                assert "tag=ai" in page.url
-
-            finally:
-                browser.close()
-
-
+        # Both "python" and "ai" are active in the URL
+        assert "tag=python" in page.url
+        assert "tag=ai" in page.url
 # ---------------------------------------------------------------
 # Scenario 5: Visitor removes one tag filter to broaden results
 # ---------------------------------------------------------------
@@ -664,7 +602,7 @@ class TestScenario5RemoveTagFilter:
     and "Python Basics" tagged "python".
     """
 
-    def test_remove_tag_filter_and_clear_all(self, django_server):
+    def test_remove_tag_filter_and_clear_all(self, django_server, page):
         """Remove the 'ai' filter chip to broaden results, then
         clear all to see everything."""
         _clear_all_content()
@@ -681,56 +619,46 @@ class TestScenario5RemoveTagFilter:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /blog?tag=python&tag=ai
-                page.goto(
-                    f"{django_server}/blog?tag=python&tag=ai",
-                    wait_until="networkidle",
-                )
-                body = page.content()
+        # Step 1: Navigate to /blog?tag=python&tag=ai
+        page.goto(
+            f"{django_server}/blog?tag=python&tag=ai",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
-                # Only "Python AI" is shown
-                assert "Python AI" in body
-                assert "Python Basics" not in body
+        # Only "Python AI" is shown
+        assert "Python AI" in body
+        assert "Python Basics" not in body
 
-                # Step 2: Navigate to /blog?tag=python (removing ai)
-                page.goto(
-                    f"{django_server}/blog?tag=python",
-                    wait_until="networkidle",
-                )
+        # Step 2: Navigate to /blog?tag=python (removing ai)
+        page.goto(
+            f"{django_server}/blog?tag=python",
+            wait_until="domcontentloaded",
+        )
 
-                # URL updates to /blog?tag=python (no ai)
-                assert "tag=python" in page.url
-                assert "tag=ai" not in page.url
+        # URL updates to /blog?tag=python (no ai)
+        assert "tag=python" in page.url
+        assert "tag=ai" not in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Both python-tagged articles now appear
-                assert "Python AI" in body
-                assert "Python Basics" in body
+        # Both python-tagged articles now appear
+        assert "Python AI" in body
+        assert "Python Basics" in body
 
-                # Step 3: Navigate to /blog to remove all filters
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
+        # Step 3: Navigate to /blog to remove all filters
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
 
-                # URL returns to /blog with no query params
-                assert page.url.rstrip("/").endswith("/blog")
+        # URL returns to /blog with no query params
+        assert page.url.rstrip("/").endswith("/blog")
 
-                # All articles are listed
-                body = page.content()
-                assert "Python AI" in body
-                assert "Python Basics" in body
-
-            finally:
-                browser.close()
-
-
+        # All articles are listed
+        body = page.content()
+        assert "Python AI" in body
+        assert "Python Basics" in body
 # ---------------------------------------------------------------
 # Scenario 6: Visitor uses tag filters across different listing pages
 # ---------------------------------------------------------------
@@ -744,7 +672,7 @@ class TestScenario6TagFiltersAcrossPages:
     recordings, courses, projects, curated links, and downloads.
     """
 
-    def test_tag_filter_on_blog(self, django_server):
+    def test_tag_filter_on_blog(self, django_server, page):
         """Blog results are filtered to show only articles tagged 'python'."""
         _clear_all_content()
         _create_article(
@@ -760,28 +688,20 @@ class TestScenario6TagFiltersAcrossPages:
             date=datetime.date(2026, 1, 2),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                # Click the "python" tag chip
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
+        page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        # Click the "python" tag chip
+        python_chip = page.locator(
+            'a[href*="tag=python"]'
+        ).first
+        python_chip.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
-                assert "Python Article" in body
-                assert "Go Article" not in body
-            finally:
-                browser.close()
-
-    def test_tag_filter_on_courses(self, django_server):
+        body = page.content()
+        assert "Python Article" in body
+        assert "Go Article" not in body
+    def test_tag_filter_on_courses(self, django_server, page):
         """Course results are filtered to show only courses tagged 'python'."""
         _clear_all_content()
         _create_course(
@@ -795,23 +715,15 @@ class TestScenario6TagFiltersAcrossPages:
             tags=["go"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/courses?tag=python",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/courses?tag=python",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
-                assert "Python Course" in body
-                assert "Go Course" not in body
-            finally:
-                browser.close()
-
-    def test_tag_filter_on_recordings(self, django_server):
+        body = page.content()
+        assert "Python Course" in body
+        assert "Go Course" not in body
+    def test_tag_filter_on_recordings(self, django_server, page):
         """Recording results are filtered to show only recordings tagged 'python'."""
         _clear_all_content()
         _create_recording(
@@ -827,28 +739,20 @@ class TestScenario6TagFiltersAcrossPages:
             date=datetime.date(2026, 1, 2),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/event-recordings",
-                    wait_until="networkidle",
-                )
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
+        page.goto(
+            f"{django_server}/event-recordings",
+            wait_until="domcontentloaded",
+        )
+        python_chip = page.locator(
+            'a[href*="tag=python"]'
+        ).first
+        python_chip.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
-                assert "Python Recording" in body
-                assert "Go Recording" not in body
-            finally:
-                browser.close()
-
-    def test_tag_filter_on_projects(self, django_server):
+        body = page.content()
+        assert "Python Recording" in body
+        assert "Go Recording" not in body
+    def test_tag_filter_on_projects(self, django_server, page):
         """Project results are filtered to show only projects tagged 'python'."""
         _clear_all_content()
         _create_project(
@@ -864,23 +768,15 @@ class TestScenario6TagFiltersAcrossPages:
             date=datetime.date(2026, 1, 2),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/projects?tag=python",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/projects?tag=python",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
-                assert "Python Project" in body
-                assert "Go Project" not in body
-            finally:
-                browser.close()
-
-    def test_tag_filter_on_resources(self, django_server):
+        body = page.content()
+        assert "Python Project" in body
+        assert "Go Project" not in body
+    def test_tag_filter_on_resources(self, django_server, page):
         """Curated link results are filtered to show only links tagged 'python'."""
         _clear_all_content()
         _create_curated_link(
@@ -894,30 +790,22 @@ class TestScenario6TagFiltersAcrossPages:
             sort_order=2,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/resources?tag=python",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/resources?tag=python",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
-                assert "Python CLI" in body
-                # Verify Go Toolkit is not in the link cards
-                link_cards = page.locator(
-                    '.gated-link, a[target="_blank"]'
-                )
-                cards_text = " ".join(
-                    [card.inner_text() for card in link_cards.all()]
-                )
-                assert "Go Toolkit" not in cards_text
-            finally:
-                browser.close()
-
-    def test_tag_filter_on_downloads(self, django_server):
+        body = page.content()
+        assert "Python CLI" in body
+        # Verify Go Toolkit is not in the link cards
+        link_cards = page.locator(
+            '.gated-link, a[target="_blank"]'
+        )
+        cards_text = " ".join(
+            [card.inner_text() for card in link_cards.all()]
+        )
+        assert "Go Toolkit" not in cards_text
+    def test_tag_filter_on_downloads(self, django_server, page):
         """Download results are filtered to show only downloads tagged 'python'."""
         _clear_all_content()
         _create_download(
@@ -931,28 +819,19 @@ class TestScenario6TagFiltersAcrossPages:
             tags=["go"],
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/downloads",
-                    wait_until="networkidle",
-                )
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
+        page.goto(
+            f"{django_server}/downloads",
+            wait_until="domcontentloaded",
+        )
+        python_chip = page.locator(
+            'a[href*="tag=python"]'
+        ).first
+        python_chip.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                body = page.content()
-                assert "Python Cheatsheet" in body
-                assert "Go Cheatsheet" not in body
-            finally:
-                browser.close()
-
-
+        body = page.content()
+        assert "Python Cheatsheet" in body
+        assert "Go Cheatsheet" not in body
 # ---------------------------------------------------------------
 # Scenario 7: Visitor reads an article with a tag rule injection
 # ---------------------------------------------------------------
@@ -972,7 +851,7 @@ class TestScenario7TagRuleInjection:
 
     def test_course_promo_injected_after_article_content(
         self, django_server
-    ):
+    , page):
         """After the article body, a course promo component appears
         with the configured title and CTA."""
         _clear_all_content()
@@ -1004,46 +883,36 @@ class TestScenario7TagRuleInjection:
             position="after_content",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/getting-started-with-ai-engineering",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/blog/getting-started-with-ai-engineering",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Article content is rendered
-                assert "Getting Started with AI Engineering" in body
-                assert "article body about AI engineering" in body
+        # Article content is rendered
+        assert "Getting Started with AI Engineering" in body
+        assert "article body about AI engineering" in body
 
-                # Course promo component appears
-                assert "Recommended Course" in body
-                assert "Start learning" in body
+        # Course promo component appears
+        assert "Recommended Course" in body
+        assert "Start learning" in body
 
-                # The tag-rule component is present in the DOM
-                tag_rule_component = page.locator(
-                    '.tag-rule-component'
-                )
-                assert tag_rule_component.count() >= 1
+        # The tag-rule component is present in the DOM
+        tag_rule_component = page.locator(
+            '.tag-rule-component'
+        )
+        assert tag_rule_component.count() >= 1
 
-                # Click the "Start learning" link
-                cta_link = page.locator(
-                    'a:has-text("Start learning")'
-                ).first
-                cta_link.click()
-                page.wait_for_load_state("networkidle")
+        # Click the "Start learning" link
+        cta_link = page.locator(
+            'a:has-text("Start learning")'
+        ).first
+        cta_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User navigates to the course page
-                assert "/courses/python-data-ai" in page.url
-
-            finally:
-                browser.close()
-
-
+        # User navigates to the course page
+        assert "/courses/python-data-ai" in page.url
 # ---------------------------------------------------------------
 # Scenario 8: No matching tag rules = no injected components
 # ---------------------------------------------------------------
@@ -1060,7 +929,7 @@ class TestScenario8NoMatchingTagRules:
 
     def test_no_injected_components_for_unmatched_tags(
         self, django_server
-    ):
+    , page):
         """No promo or CTA components appear for articles whose tags
         do not match any tag rule."""
         _clear_all_content()
@@ -1086,36 +955,26 @@ class TestScenario8NoMatchingTagRules:
             position="after_content",
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/intro-to-go",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/blog/intro-to-go",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Article content renders normally
-                assert "Intro to Go" in body
-                assert "article body about Go" in body
+        # Article content renders normally
+        assert "Intro to Go" in body
+        assert "article body about Go" in body
 
-                # No tag-rule components are injected
-                tag_rule_component = page.locator(
-                    '.tag-rule-component'
-                )
-                assert tag_rule_component.count() == 0
+        # No tag-rule components are injected
+        tag_rule_component = page.locator(
+            '.tag-rule-component'
+        )
+        assert tag_rule_component.count() == 0
 
-                # No course promo appears
-                assert "Recommended Course" not in body
-                assert "Start learning" not in body
-
-            finally:
-                browser.close()
-
-
+        # No course promo appears
+        assert "Recommended Course" not in body
+        assert "Start learning" not in body
 # ---------------------------------------------------------------
 # Scenario 9: Empty tags page with no content
 # ---------------------------------------------------------------
@@ -1128,38 +987,28 @@ class TestScenario9EmptyTagsPage:
     Given: No published content exists with any tags.
     """
 
-    def test_empty_tags_page_shows_message(self, django_server):
+    def test_empty_tags_page_shows_message(self, django_server, page):
         """The page loads without errors and shows a 'No tags yet' message."""
         _clear_all_content()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/tags", wait_until="networkidle"
-                )
-                assert response.status == 200
+        response = page.goto(
+            f"{django_server}/tags", wait_until="domcontentloaded"
+        )
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # Empty state message
-                assert "No tags yet" in body
+        # Empty state message
+        assert "No tags yet" in body
 
-                # The visitor can still navigate via the header
-                # (header links should be present)
-                header = page.locator("header")
-                assert header.count() >= 1
+        # The visitor can still navigate via the header
+        # (header links should be present)
+        header = page.locator("header")
+        assert header.count() >= 1
 
-                # Navigation links exist in the header
-                nav_links = page.locator("header a")
-                assert nav_links.count() >= 1
-
-            finally:
-                browser.close()
-
-
+        # Navigation links exist in the header
+        nav_links = page.locator("header a")
+        assert nav_links.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 10: Navigate between tag detail and tag index
 # ---------------------------------------------------------------
@@ -1174,7 +1023,7 @@ class TestScenario10NavigateBetweenTagPages:
     tagged "python".
     """
 
-    def test_navigate_tag_index_to_detail_and_back(self, django_server):
+    def test_navigate_tag_index_to_detail_and_back(self, django_server, page):
         """Navigate from /tags to /tags/python, back to /tags, then
         to /tags/ai."""
         _clear_all_content()
@@ -1197,63 +1046,53 @@ class TestScenario10NavigateBetweenTagPages:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to /tags
-                page.goto(
-                    f"{django_server}/tags", wait_until="networkidle"
-                )
-                body = page.content()
-                assert "python" in body
-                assert "ai" in body
+        # Step 1: Navigate to /tags
+        page.goto(
+            f"{django_server}/tags", wait_until="domcontentloaded"
+        )
+        body = page.content()
+        assert "python" in body
+        assert "ai" in body
 
-                # Step 2: Click on the "python" tag
-                python_link = page.locator(
-                    'a[href="/tags/python"]'
-                ).first
-                python_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 2: Click on the "python" tag
+        python_link = page.locator(
+            'a[href="/tags/python"]'
+        ).first
+        python_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                assert "/tags/python" in page.url
-                body = page.content()
-                # Sees the article and the recording
-                assert "Python Tutorial" in body
-                assert "Python Workshop" in body
+        assert "/tags/python" in page.url
+        body = page.content()
+        # Sees the article and the recording
+        assert "Python Tutorial" in body
+        assert "Python Workshop" in body
 
-                # Step 3: Click "All Tags" to go back to the tag index
-                all_tags_link = page.locator(
-                    'a:has-text("All Tags")'
-                ).first
-                all_tags_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click "All Tags" to go back to the tag index
+        all_tags_link = page.locator(
+            'a:has-text("All Tags")'
+        ).first
+        all_tags_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Returns to /tags
-                assert page.url.rstrip("/").endswith("/tags")
-                body = page.content()
-                assert "python" in body
-                assert "ai" in body
+        # Returns to /tags
+        assert page.url.rstrip("/").endswith("/tags")
+        body = page.content()
+        assert "python" in body
+        assert "ai" in body
 
-                # Step 4: Click on the "ai" tag
-                ai_link = page.locator(
-                    'a[href="/tags/ai"]'
-                ).first
-                ai_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 4: Click on the "ai" tag
+        ai_link = page.locator(
+            'a[href="/tags/ai"]'
+        ).first
+        ai_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                assert "/tags/ai" in page.url
-                body = page.content()
-                assert "AI Guide" in body
-                # Python-only content should not appear
-                assert "Python Tutorial" not in body
-                assert "Python Workshop" not in body
-
-            finally:
-                browser.close()
-
-
+        assert "/tags/ai" in page.url
+        body = page.content()
+        assert "AI Guide" in body
+        # Python-only content should not appear
+        assert "Python Tutorial" not in body
+        assert "Python Workshop" not in body
 # ---------------------------------------------------------------
 # Scenario 11: Tag chip on article detail links to tag detail page
 # ---------------------------------------------------------------
@@ -1273,7 +1112,7 @@ class TestScenario11TagChipOnArticleDetail:
     link to /blog?tag=X.
     """
 
-    def test_tag_chip_navigates_to_filtered_blog(self, django_server):
+    def test_tag_chip_navigates_to_filtered_blog(self, django_server, page):
         """Click a tag chip on an article detail page and land on
         the blog listing filtered by that tag."""
         _clear_all_content()
@@ -1294,35 +1133,27 @@ class TestScenario11TagChipOnArticleDetail:
             date=datetime.date(2026, 2, 5),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Step 1: Navigate to the article detail page
-                page.goto(
-                    f"{django_server}/blog/ai-patterns",
-                    wait_until="networkidle",
-                )
+        # Step 1: Navigate to the article detail page
+        page.goto(
+            f"{django_server}/blog/ai-patterns",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
-                assert "AI Patterns" in body
+        body = page.content()
+        assert "AI Patterns" in body
 
-                # Step 2: Notice tag chips on the page
-                assert "design-patterns" in body
+        # Step 2: Notice tag chips on the page
+        assert "design-patterns" in body
 
-                # Step 3: Click the "design-patterns" tag chip
-                # The blog_detail template links to /blog?tag=X
-                tag_link = page.locator(
-                    'a[href*="tag=design-patterns"]'
-                ).first
-                tag_link.click()
-                page.wait_for_load_state("networkidle")
+        # Step 3: Click the "design-patterns" tag chip
+        # The blog_detail template links to /blog?tag=X
+        tag_link = page.locator(
+            'a[href*="tag=design-patterns"]'
+        ).first
+        tag_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # User sees all content tagged "design-patterns"
-                body = page.content()
-                assert "AI Patterns" in body
-                assert "Design Patterns Explained" in body
-
-            finally:
-                browser.close()
+        # User sees all content tagged "design-patterns"
+        body = page.content()
+        assert "AI Patterns" in body
+        assert "Design Patterns Explained" in body

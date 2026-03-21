@@ -24,7 +24,6 @@ import os
 
 import pytest
 from django.utils import timezone
-from playwright.sync_api import sync_playwright
 
 from playwright_tests.conftest import (
     DJANGO_BASE_URL,
@@ -36,9 +35,6 @@ from playwright_tests.conftest import (
 
 # Playwright creates an async event loop internally. Django's async safety
 # check detects this and raises SynchronousOnlyOperation when we make ORM
-# calls inside a sync_playwright() context. This is safe because we're
-# running synchronous code in the main thread and the event loop is only
-# used by Playwright's internal IPC.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
@@ -99,11 +95,11 @@ def _create_user(email, password="testpass123", tier_slug=None):
 
 def _login_admin_via_browser(page, base_url, email, password="adminpass123"):
     """Log in an admin user via the Django admin login page."""
-    page.goto(f"{base_url}/admin/login/", wait_until="networkidle")
+    page.goto(f"{base_url}/admin/login/", wait_until="domcontentloaded")
     page.fill("#id_username", email)
     page.fill("#id_password", password)
     page.click('input[type="submit"]')
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
 
 
 @pytest.mark.django_db(transaction=True)
@@ -112,7 +108,7 @@ class TestScenario1AnonymousDiscoverArticles:
     Scenario 1: Anonymous visitor discovers articles and reads one.
     """
 
-    def test_blog_listing_shows_published_articles_only(self, django_server):
+    def test_blog_listing_shows_published_articles_only(self, django_server, page):
         """Three published articles appear; the draft does not."""
         _clear_articles()
         _create_article(
@@ -156,35 +152,27 @@ class TestScenario1AnonymousDiscoverArticles:
             published=False,
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                assert response.status == 200
+        response = page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        assert response.status == 200
 
-                content = page.content()
+        content = page.content()
 
-                # Published articles are visible
-                assert "Deploying ML Models" in content
-                assert "AI in Production" in content
-                assert "Data Pipeline Patterns" in content
+        # Published articles are visible
+        assert "Deploying ML Models" in content
+        assert "AI in Production" in content
+        assert "Data Pipeline Patterns" in content
 
-                # Draft is NOT visible
-                assert "Secret Draft" not in content
+        # Draft is NOT visible
+        assert "Secret Draft" not in content
 
-                # Verify excerpts, authors, and dates are shown
-                assert "Learn how to deploy ML models" in content
-                assert "Alice" in content
-                assert "Bob" in content
-                assert "Charlie" in content
-            finally:
-                browser.close()
-
-    def test_clicking_article_navigates_to_detail(self, django_server):
+        # Verify excerpts, authors, and dates are shown
+        assert "Learn how to deploy ML models" in content
+        assert "Alice" in content
+        assert "Bob" in content
+        assert "Charlie" in content
+    def test_clicking_article_navigates_to_detail(self, django_server, page):
         """Click an article card and navigate to its detail page."""
         _clear_articles()
         _create_article(
@@ -203,53 +191,44 @@ class TestScenario1AnonymousDiscoverArticles:
             date=datetime.date(2026, 1, 3),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(f"{django_server}/blog", wait_until="networkidle")
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
 
-                # Click on the article card (the h2 title text)
-                page.locator(
-                    'h2:has-text("Deploying ML Models")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Click on the article card (the h2 title text)
+        page.locator(
+            'h2:has-text("Deploying ML Models")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify URL
-                assert "/blog/deploying-ml-models" in page.url
+        # Verify URL
+        assert "/blog/deploying-ml-models" in page.url
 
-                # Verify page title
-                assert page.title() == "Deploying ML Models | AI Shipping Labs"
+        # Verify page title
+        assert page.title() == "Deploying ML Models | AI Shipping Labs"
 
-                # Verify full article body is rendered
-                body = page.content()
-                assert "Deploying ML Models" in body
+        # Verify full article body is rendered
+        body = page.content()
+        assert "Deploying ML Models" in body
 
-                # Check markdown rendering: headings, bold, code blocks
-                assert "deploying" in body
-                assert "Setup" in body
+        # Check markdown rendering: headings, bold, code blocks
+        assert "deploying" in body
+        assert "Setup" in body
 
-                # Check code block with syntax highlighting
-                assert "codehilite" in body or "highlight" in body
-                assert "hello world" in body
+        # Check code block with syntax highlighting
+        assert "codehilite" in body or "highlight" in body
+        assert "hello world" in body
 
-                # Back to Blog link
-                back_link = page.locator('a:has-text("Back to Blog")')
-                assert back_link.count() >= 1
-                href = back_link.first.get_attribute("href")
-                assert href == "/blog"
-            finally:
-                browser.close()
-
-
+        # Back to Blog link
+        back_link = page.locator('a:has-text("Back to Blog")')
+        assert back_link.count() >= 1
+        href = back_link.first.get_attribute("href")
+        assert href == "/blog"
 @pytest.mark.django_db(transaction=True)
 class TestScenario2FilterByTag:
     """
     Scenario 2: Reader filters articles by tag to find a specific topic.
     """
 
-    def test_tag_filtering(self, django_server):
+    def test_tag_filtering(self, django_server, page):
         """Click a tag chip and verify filtering works."""
         _clear_articles()
         _create_article(
@@ -280,53 +259,44 @@ class TestScenario2FilterByTag:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(f"{django_server}/blog", wait_until="networkidle")
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
 
-                # All three articles visible initially
-                content = page.content()
-                assert "Python for ML" in content
-                assert "Go Microservices" in content
-                assert "Python Web Scraping" in content
+        # All three articles visible initially
+        content = page.content()
+        assert "Python for ML" in content
+        assert "Go Microservices" in content
+        assert "Python Web Scraping" in content
 
-                # Click the "python" tag chip on the filter bar or on a card
-                python_tag_link = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_tag_link.click()
-                page.wait_for_load_state("networkidle")
+        # Click the "python" tag chip on the filter bar or on a card
+        python_tag_link = page.locator(
+            'a[href*="tag=python"]'
+        ).first
+        python_tag_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify URL has tag=python
-                assert "tag=python" in page.url
+        # Verify URL has tag=python
+        assert "tag=python" in page.url
 
-                # Only python articles are shown
-                content = page.content()
-                assert "Python for ML" in content
-                assert "Python Web Scraping" in content
-                assert "Go Microservices" not in content
+        # Only python articles are shown
+        content = page.content()
+        assert "Python for ML" in content
+        assert "Python Web Scraping" in content
+        assert "Go Microservices" not in content
 
-                # Navigate back to /blog without query params
-                page.goto(
-                    f"{django_server}/blog",
-                    wait_until="networkidle",
-                )
+        # Navigate back to /blog without query params
+        page.goto(
+            f"{django_server}/blog",
+            wait_until="domcontentloaded",
+        )
 
-                # URL should be /blog without query params
-                assert page.url.rstrip("/").endswith("/blog")
+        # URL should be /blog without query params
+        assert page.url.rstrip("/").endswith("/blog")
 
-                # All articles are visible again
-                content = page.content()
-                assert "Python for ML" in content
-                assert "Go Microservices" in content
-                assert "Python Web Scraping" in content
-            finally:
-                browser.close()
-
-
+        # All articles are visible again
+        content = page.content()
+        assert "Python for ML" in content
+        assert "Go Microservices" in content
+        assert "Python Web Scraping" in content
 @pytest.mark.django_db(transaction=True)
 class TestScenario3FreeUserPaywall:
     """
@@ -334,7 +304,7 @@ class TestScenario3FreeUserPaywall:
     and sees the upgrade path.
     """
 
-    def test_free_user_sees_paywall_on_gated_article(self, django_server):
+    def test_free_user_sees_paywall_on_gated_article(self, django_server, browser):
         """Free user sees lock icon on listing, teaser + CTA on detail."""
         _clear_articles()
         _create_user("free@test.com", tier_slug="free")
@@ -353,73 +323,66 @@ class TestScenario3FreeUserPaywall:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "free@test.com")
-            page = context.new_page()
-            try:
-                # Navigate to blog listing
-                page.goto(f"{django_server}/blog", wait_until="networkidle")
-                content = page.content()
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        # Navigate to blog listing
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
+        content = page.content()
 
-                # Article card shows lock icon (lucide lock icon)
-                assert "Advanced Deployment Strategies" in content
-                article_card = page.locator(
-                    'article:has-text("Advanced Deployment Strategies")'
-                )
-                lock_icon = article_card.locator('[data-lucide="lock"]')
-                assert lock_icon.count() >= 1
+        # Article card shows lock icon (lucide lock icon)
+        assert "Advanced Deployment Strategies" in content
+        article_card = page.locator(
+            'article:has-text("Advanced Deployment Strategies")'
+        )
+        lock_icon = article_card.locator('[data-lucide="lock"]')
+        assert lock_icon.count() >= 1
 
-                # Tier badge visible (e.g. "Basic+")
-                assert "Basic+" in article_card.inner_text()
+        # Tier badge visible (e.g. "Basic+")
+        assert "Basic+" in article_card.inner_text()
 
-                # Click on the article (use h2 title text inside card)
-                page.locator(
-                    'h2:has-text("Advanced Deployment Strategies")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Click on the article (use h2 title text inside card)
+        page.locator(
+            'h2:has-text("Advanced Deployment Strategies")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Detail page loads (HTTP 200, not a redirect)
-                assert "/blog/advanced-deployment-strategies" in page.url
+        # Detail page loads (HTTP 200, not a redirect)
+        assert "/blog/advanced-deployment-strategies" in page.url
 
-                body = page.content()
+        body = page.content()
 
-                # Teaser text is visible
-                assert (
-                    "Learn advanced deployment patterns for ML systems" in body
-                )
+        # Teaser text is visible
+        assert (
+            "Learn advanced deployment patterns for ML systems" in body
+        )
 
-                # Full article body is NOT present
-                assert (
-                    "This is the full article content that should be hidden"
-                    not in body
-                )
+        # Full article body is NOT present
+        assert (
+            "This is the full article content that should be hidden"
+            not in body
+        )
 
-                # CTA banner is shown
-                assert "Upgrade to Basic to read this article" in body
+        # CTA banner is shown
+        assert "Upgrade to Basic to read this article" in body
 
-                # Blurred placeholder is present (filter: blur)
-                assert "blur" in body
+        # Blurred placeholder is present (filter: blur)
+        assert "blur" in body
 
-                # Click "View Pricing" link
-                pricing_link = page.locator('a:has-text("View Pricing")')
-                assert pricing_link.count() >= 1
-                pricing_link.first.click()
-                page.wait_for_load_state("networkidle")
+        # Click "View Pricing" link
+        pricing_link = page.locator('a:has-text("View Pricing")')
+        assert pricing_link.count() >= 1
+        pricing_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Navigated to /pricing
-                assert "/pricing" in page.url
-            finally:
-                browser.close()
-
-
+        # Navigated to /pricing
+        assert "/pricing" in page.url
 @pytest.mark.django_db(transaction=True)
 class TestScenario4BasicMemberReadsGatedArticle:
     """
     Scenario 4: Basic member reads a Basic-gated article successfully.
     """
 
-    def test_basic_member_sees_full_article(self, django_server):
+    def test_basic_member_sees_full_article(self, django_server, browser):
         """Basic user sees no paywall and gets full content."""
         _clear_articles()
         _create_user("basic@test.com", tier_slug="basic")
@@ -439,36 +402,29 @@ class TestScenario4BasicMemberReadsGatedArticle:
             date=datetime.date(2026, 1, 15),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                # Navigate to article detail
-                page.goto(
-                    f"{django_server}/blog/advanced-deployment-strategies",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        # Navigate to article detail
+        page.goto(
+            f"{django_server}/blog/advanced-deployment-strategies",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # No paywall
-                assert "Upgrade to Basic" not in body
+        # No paywall
+        assert "Upgrade to Basic" not in body
 
-                # Full article body is rendered
-                assert "full article" in body
-                assert "Configuration" in body
-                assert "codehilite" in body or "highlight" in body
+        # Full article body is rendered
+        assert "full article" in body
+        assert "Configuration" in body
+        assert "codehilite" in body or "highlight" in body
 
-                # Title, author, date, tags visible in header
-                assert "Advanced Deployment Strategies" in body
-                assert "Expert" in body
-                assert "mlops" in body
-                assert "deployment" in body
-            finally:
-                browser.close()
-
-
+        # Title, author, date, tags visible in header
+        assert "Advanced Deployment Strategies" in body
+        assert "Expert" in body
+        assert "mlops" in body
+        assert "deployment" in body
 @pytest.mark.django_db(transaction=True)
 class TestScenario5BasicMemberHitsMainGatedArticle:
     """
@@ -476,7 +432,7 @@ class TestScenario5BasicMemberHitsMainGatedArticle:
     upgrade CTA.
     """
 
-    def test_basic_user_sees_main_paywall(self, django_server):
+    def test_basic_user_sees_main_paywall(self, django_server, browser):
         """Basic user cannot read Main-gated article."""
         _clear_articles()
         _create_user("basic@test.com", tier_slug="basic")
@@ -494,41 +450,34 @@ class TestScenario5BasicMemberHitsMainGatedArticle:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = _auth_context(browser, "basic@test.com")
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/exclusive-community-insights",
-                    wait_until="networkidle",
-                )
+        context = _auth_context(browser, "basic@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/blog/exclusive-community-insights",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Teaser text visible
-                assert (
-                    "Deep dive into community-driven AI development" in body
-                )
+        # Teaser text visible
+        assert (
+            "Deep dive into community-driven AI development" in body
+        )
 
-                # Full article body NOT present
-                assert "This is the secret Main-level content" not in body
+        # Full article body NOT present
+        assert "This is the secret Main-level content" not in body
 
-                # CTA reads "Upgrade to Main to read this article"
-                assert "Upgrade to Main to read this article" in body
+        # CTA reads "Upgrade to Main to read this article"
+        assert "Upgrade to Main to read this article" in body
 
-                # Blurred placeholder is present
-                assert "blur" in body
+        # Blurred placeholder is present
+        assert "blur" in body
 
-                # View Pricing link to /pricing
-                pricing_link = page.locator('a:has-text("View Pricing")')
-                assert pricing_link.count() >= 1
-                href = pricing_link.first.get_attribute("href")
-                assert "/pricing" in href
-            finally:
-                browser.close()
-
-
+        # View Pricing link to /pricing
+        pricing_link = page.locator('a:has-text("View Pricing")')
+        assert pricing_link.count() >= 1
+        href = pricing_link.first.get_attribute("href")
+        assert "/pricing" in href
 @pytest.mark.django_db(transaction=True)
 class TestScenario6RelatedArticles:
     """
@@ -537,7 +486,7 @@ class TestScenario6RelatedArticles:
 
     def test_related_articles_shown_based_on_shared_tags(
         self, django_server
-    ):
+    , page):
         """Related articles with shared tags appear; unrelated do not."""
         _clear_articles()
         _create_article(
@@ -583,44 +532,35 @@ class TestScenario6RelatedArticles:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/intro-to-mlops",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/blog/intro-to-mlops",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
+        body = page.content()
 
-                # Related Articles section exists
-                assert "Related Articles" in body
+        # Related Articles section exists
+        assert "Related Articles" in body
 
-                # Related articles are shown (they share tags)
-                assert "MLOps Best Practices" in body
-                assert "Python ML Libraries" in body
+        # Related articles are shown (they share tags)
+        assert "MLOps Best Practices" in body
+        assert "Python ML Libraries" in body
 
-                # Unrelated article is NOT shown in related section
-                related_section = page.locator(
-                    'section:has-text("Related Articles")'
-                )
-                related_text = related_section.inner_text()
-                assert "Go Concurrency" not in related_text
+        # Unrelated article is NOT shown in related section
+        related_section = page.locator(
+            'section:has-text("Related Articles")'
+        )
+        related_text = related_section.inner_text()
+        assert "Go Concurrency" not in related_text
 
-                # Click on a related article
-                related_section.locator(
-                    'a[href="/blog/mlops-best-practices"]'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Click on a related article
+        related_section.locator(
+            'a[href="/blog/mlops-best-practices"]'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                assert "/blog/mlops-best-practices" in page.url
-                assert "MLOps Best Practices" in page.content()
-            finally:
-                browser.close()
-
-
+        assert "/blog/mlops-best-practices" in page.url
+        assert "MLOps Best Practices" in page.content()
 @pytest.mark.django_db(transaction=True)
 class TestScenario7AdminPublishesDraft:
     """
@@ -628,7 +568,7 @@ class TestScenario7AdminPublishesDraft:
     the blog.
     """
 
-    def test_admin_publishes_article_via_action(self, django_server):
+    def test_admin_publishes_article_via_action(self, django_server, page):
         """Admin uses admin action to publish a draft article."""
         _clear_articles()
         from accounts.models import User
@@ -650,69 +590,60 @@ class TestScenario7AdminPublishesDraft:
             date=datetime.date(2026, 2, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Log in as admin
-                _login_admin_via_browser(
-                    page, django_server, "admin@test.com"
-                )
+        # Log in as admin
+        _login_admin_via_browser(
+            page, django_server, "admin@test.com"
+        )
 
-                # Navigate to article admin list
-                page.goto(
-                    f"{django_server}/admin/content/article/",
-                    wait_until="networkidle",
-                )
+        # Navigate to article admin list
+        page.goto(
+            f"{django_server}/admin/content/article/",
+            wait_until="domcontentloaded",
+        )
 
-                body = page.content()
-                assert "Upcoming Feature Guide" in body
+        body = page.content()
+        assert "Upcoming Feature Guide" in body
 
-                # Verify status shows "draft"
-                assert "draft" in body.lower()
+        # Verify status shows "draft"
+        assert "draft" in body.lower()
 
-                # Select the checkbox for the article
-                checkbox = page.locator(
-                    'input[type="checkbox"][name="_selected_action"]'
-                ).first
-                checkbox.check()
+        # Select the checkbox for the article
+        checkbox = page.locator(
+            'input[type="checkbox"][name="_selected_action"]'
+        ).first
+        checkbox.check()
 
-                # Choose "Publish selected articles" action and submit
-                page.select_option(
-                    'select[name="action"]', "publish_articles"
-                )
-                page.click('button[name="index"]')
-                page.wait_for_load_state("networkidle")
+        # Choose "Publish selected articles" action and submit
+        page.select_option(
+            'select[name="action"]', "publish_articles"
+        )
+        page.click('button[name="index"]')
+        page.wait_for_load_state("domcontentloaded")
 
-                # Reload to see updated status
-                page.goto(
-                    f"{django_server}/admin/content/article/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "published" in body.lower()
+        # Reload to see updated status
+        page.goto(
+            f"{django_server}/admin/content/article/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "published" in body.lower()
 
-                # Navigate to public blog listing
-                page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                body = page.content()
-                assert "Upcoming Feature Guide" in body
+        # Navigate to public blog listing
+        page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        body = page.content()
+        assert "Upcoming Feature Guide" in body
 
-                # Click to verify the detail page works
-                page.locator(
-                    'h2:has-text("Upcoming Feature Guide"), '
-                    'a:has-text("Upcoming Feature Guide")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Click to verify the detail page works
+        page.locator(
+            'h2:has-text("Upcoming Feature Guide"), '
+            'a:has-text("Upcoming Feature Guide")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                assert "/blog/upcoming-feature-guide" in page.url
-                assert "Upcoming Feature Guide" in page.content()
-            finally:
-                browser.close()
-
-
+        assert "/blog/upcoming-feature-guide" in page.url
+        assert "Upcoming Feature Guide" in page.content()
 @pytest.mark.django_db(transaction=True)
 class TestScenario8AdminUnpublishesArticle:
     """
@@ -720,7 +651,7 @@ class TestScenario8AdminUnpublishesArticle:
     the blog.
     """
 
-    def test_admin_unpublishes_article(self, django_server):
+    def test_admin_unpublishes_article(self, django_server, page):
         """Admin unpublishes a published article; it disappears from
         public blog and returns 404."""
         _clear_articles()
@@ -740,107 +671,89 @@ class TestScenario8AdminUnpublishesArticle:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Verify article is visible on blog first
-                page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                assert "Old Announcement" in page.content()
+        # Verify article is visible on blog first
+        page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        assert "Old Announcement" in page.content()
 
-                # Log in as admin
-                _login_admin_via_browser(
-                    page, django_server, "admin@test.com"
-                )
+        # Log in as admin
+        _login_admin_via_browser(
+            page, django_server, "admin@test.com"
+        )
 
-                # Navigate to article admin list
-                page.goto(
-                    f"{django_server}/admin/content/article/",
-                    wait_until="networkidle",
-                )
+        # Navigate to article admin list
+        page.goto(
+            f"{django_server}/admin/content/article/",
+            wait_until="domcontentloaded",
+        )
 
-                # Select the checkbox for the article
-                checkbox = page.locator(
-                    'input[type="checkbox"][name="_selected_action"]'
-                ).first
-                checkbox.check()
+        # Select the checkbox for the article
+        checkbox = page.locator(
+            'input[type="checkbox"][name="_selected_action"]'
+        ).first
+        checkbox.check()
 
-                # Choose "Unpublish selected articles"
-                page.select_option(
-                    'select[name="action"]', "unpublish_articles"
-                )
-                page.click('button[name="index"]')
-                page.wait_for_load_state("networkidle")
+        # Choose "Unpublish selected articles"
+        page.select_option(
+            'select[name="action"]', "unpublish_articles"
+        )
+        page.click('button[name="index"]')
+        page.wait_for_load_state("domcontentloaded")
 
-                # Verify status changed to draft
-                page.goto(
-                    f"{django_server}/admin/content/article/",
-                    wait_until="networkidle",
-                )
-                body = page.content()
-                assert "draft" in body.lower()
+        # Verify status changed to draft
+        page.goto(
+            f"{django_server}/admin/content/article/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "draft" in body.lower()
 
-                # Navigate to public blog
-                page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                assert "Old Announcement" not in page.content()
+        # Navigate to public blog
+        page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        assert "Old Announcement" not in page.content()
 
-                # Direct access returns 404
-                response = page.goto(
-                    f"{django_server}/blog/old-announcement",
-                    wait_until="networkidle",
-                )
-                assert response.status == 404
-            finally:
-                browser.close()
-
-
+        # Direct access returns 404
+        response = page.goto(
+            f"{django_server}/blog/old-announcement",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 404
 @pytest.mark.django_db(transaction=True)
 class TestScenario9EmptyBlog:
     """
     Scenario 9: Reader encounters an empty blog (no published articles).
     """
 
-    def test_empty_blog_shows_friendly_message(self, django_server):
+    def test_empty_blog_shows_friendly_message(self, django_server, page):
         """With no published articles, blog shows a friendly empty state."""
         _clear_articles()
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                response = page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                assert response.status == 200
+        response = page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        assert response.status == 200
 
-                body = page.content()
+        body = page.content()
 
-                # Friendly empty state message
-                assert "No posts yet" in body
-                assert "AI engineering" in body
+        # Friendly empty state message
+        assert "No posts yet" in body
+        assert "AI engineering" in body
 
-                # Subscribe link
-                subscribe_link = page.locator(
-                    'a:has-text("Subscribe to get notified")'
-                )
-                assert subscribe_link.count() >= 1
-            finally:
-                browser.close()
-
-
+        # Subscribe link
+        subscribe_link = page.locator(
+            'a:has-text("Subscribe to get notified")'
+        )
+        assert subscribe_link.count() >= 1
 @pytest.mark.django_db(transaction=True)
 class TestScenario10FilterByTagNoMatches:
     """
     Scenario 10: Reader filters by a tag with no matching articles.
     """
 
-    def test_no_matching_tag_shows_message(self, django_server):
+    def test_no_matching_tag_shows_message(self, django_server, page):
         """Filtering by a tag with no articles shows a helpful message."""
         _clear_articles()
         _create_article(
@@ -853,38 +766,29 @@ class TestScenario10FilterByTagNoMatches:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Navigate with a tag that has no matching articles
-                response = page.goto(
-                    f"{django_server}/blog?tag=rust",
-                    wait_until="networkidle",
-                )
-                assert response.status == 200
+        # Navigate with a tag that has no matching articles
+        response = page.goto(
+            f"{django_server}/blog?tag=rust",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 200
 
-                body = page.content()
-                assert "No articles found with the selected tags" in body
+        body = page.content()
+        assert "No articles found with the selected tags" in body
 
-                # "View all articles" link is visible
-                view_all = page.locator(
-                    'a:has-text("View all articles")'
-                )
-                assert view_all.count() >= 1
+        # "View all articles" link is visible
+        view_all = page.locator(
+            'a:has-text("View all articles")'
+        )
+        assert view_all.count() >= 1
 
-                # Click it
-                view_all.first.click()
-                page.wait_for_load_state("networkidle")
+        # Click it
+        view_all.first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # Back to /blog, Python Basics is visible
-                assert page.url.rstrip("/").endswith("/blog")
-                assert "Python Basics" in page.content()
-            finally:
-                browser.close()
-
-
+        # Back to /blog, Python Basics is visible
+        assert page.url.rstrip("/").endswith("/blog")
+        assert "Python Basics" in page.content()
 @pytest.mark.django_db(transaction=True)
 class TestScenario11TagChipOnDetailPage:
     """
@@ -894,7 +798,7 @@ class TestScenario11TagChipOnDetailPage:
 
     def test_tag_chip_on_detail_navigates_to_filtered_listing(
         self, django_server
-    ):
+    , page):
         """Click a tag on the detail page and see filtered listing."""
         _clear_articles()
         _create_article(
@@ -916,34 +820,25 @@ class TestScenario11TagChipOnDetailPage:
             date=datetime.date(2026, 1, 1),
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                page.goto(
-                    f"{django_server}/blog/intro-to-python",
-                    wait_until="networkidle",
-                )
+        page.goto(
+            f"{django_server}/blog/intro-to-python",
+            wait_until="domcontentloaded",
+        )
 
-                # Click the "python" tag chip in the article header
-                tag_link = page.locator(
-                    'a[href="/blog?tag=python"]'
-                ).first
-                tag_link.click()
-                page.wait_for_load_state("networkidle")
+        # Click the "python" tag chip in the article header
+        tag_link = page.locator(
+            'a[href="/blog?tag=python"]'
+        ).first
+        tag_link.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                # URL should be /blog?tag=python
-                assert "tag=python" in page.url
+        # URL should be /blog?tag=python
+        assert "tag=python" in page.url
 
-                body = page.content()
-                # Both python-tagged articles should be shown
-                assert "Intro to Python" in body
-                assert "Advanced Python" in body
-            finally:
-                browser.close()
-
-
+        body = page.content()
+        # Both python-tagged articles should be shown
+        assert "Intro to Python" in body
+        assert "Advanced Python" in body
 @pytest.mark.django_db(transaction=True)
 class TestScenario12AdminCreatesArticle:
     """
@@ -951,7 +846,7 @@ class TestScenario12AdminCreatesArticle:
     the blog.
     """
 
-    def test_admin_creates_article_via_admin(self, django_server):
+    def test_admin_creates_article_via_admin(self, django_server, page):
         """Admin creates a new article via admin interface."""
         _clear_articles()
         from accounts.models import User
@@ -960,102 +855,95 @@ class TestScenario12AdminCreatesArticle:
             email="admin@test.com", password="adminpass123"
         )
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport=VIEWPORT)
-            page = context.new_page()
-            try:
-                # Log in as admin
-                _login_admin_via_browser(
-                    page, django_server, "admin@test.com"
-                )
+        # Log in as admin
+        _login_admin_via_browser(
+            page, django_server, "admin@test.com"
+        )
 
-                # Navigate to the add article form
-                page.goto(
-                    f"{django_server}/admin/content/article/add/",
-                    wait_until="networkidle",
-                )
+        # Navigate to the add article form
+        page.goto(
+            f"{django_server}/admin/content/article/add/",
+            wait_until="domcontentloaded",
+        )
 
-                # Fill in Title
-                page.fill("#id_title", "Getting Started with LLMs")
+        # Fill in Title
+        page.fill("#id_title", "Getting Started with LLMs")
 
-                # Trigger the slug prepopulation by clicking the slug field
-                page.click("#id_slug")
-                page.wait_for_timeout(500)
+        # Trigger the slug prepopulation by clicking the slug field
+        page.click("#id_slug")
+        page.wait_for_load_state("domcontentloaded")
 
-                # Check slug was auto-populated
-                slug_value = page.input_value("#id_slug")
-                assert slug_value == "getting-started-with-llms"
+        # Check slug was auto-populated
+        slug_value = page.input_value("#id_slug")
+        assert slug_value == "getting-started-with-llms"
 
-                # Fill in description
-                page.fill(
-                    "#id_description",
-                    "A beginner guide to large language models.",
-                )
+        # Fill in description
+        page.fill(
+            "#id_description",
+            "A beginner guide to large language models.",
+        )
 
-                # Fill in author
-                page.fill("#id_author", "Test Author")
+        # Fill in author
+        page.fill("#id_author", "Test Author")
 
-                # Fill in content_markdown with headings and a code block
-                page.fill(
-                    "#id_content_markdown",
-                    (
-                        "# Getting Started with LLMs\n\n"
-                        "This article covers the basics of LLMs.\n\n"
-                        "## Installation\n\n"
-                        "```python\npip install openai\n```\n\n"
-                        "## Usage\n\n"
-                        "Call the API to generate text."
-                    ),
-                )
+        # Fill in content_markdown with headings and a code block
+        page.fill(
+            "#id_content_markdown",
+            (
+                "# Getting Started with LLMs\n\n"
+                "This article covers the basics of LLMs.\n\n"
+                "## Installation\n\n"
+                "```python\npip install openai\n```\n\n"
+                "## Usage\n\n"
+                "Call the API to generate text."
+            ),
+        )
 
-                # Fill in tags as JSON (the field is a JSONField)
-                page.fill("#id_tags", '["llm", "ai"]')
+        # Fill in tags as JSON (the field is a JSONField)
+        page.fill("#id_tags", '["llm", "ai"]')
 
-                # Set date
-                page.fill("#id_date", "2026-02-20")
+        # Set date
+        page.fill("#id_date", "2026-02-20")
 
-                # Check the "Published" checkbox
-                published_checkbox = page.locator("#id_published")
-                if not published_checkbox.is_checked():
-                    published_checkbox.check()
+        # Check the "Published" checkbox
+        published_checkbox = page.locator("#id_published")
+        if not published_checkbox.is_checked():
+            published_checkbox.check()
 
-                # Click "Save"
-                page.click('input[name="_save"]')
-                page.wait_for_load_state("networkidle")
+        # Click "Save"
+        page.click('input[name="_save"]')
+        page.wait_for_load_state("domcontentloaded")
 
-                # Should redirect to the changelist
-                assert "/admin/content/article/" in page.url
+        # Should redirect to the changelist
+        assert "/admin/content/article/" in page.url
 
-                body = page.content()
-                assert "Getting Started with LLMs" in body
-                assert "published" in body.lower()
+        body = page.content()
+        assert "Getting Started with LLMs" in body
+        assert "published" in body.lower()
 
-                # Navigate to public blog
-                page.goto(
-                    f"{django_server}/blog", wait_until="networkidle"
-                )
-                body = page.content()
-                assert "Getting Started with LLMs" in body
-                assert (
-                    "A beginner guide to large language models" in body
-                )
-                assert "Test Author" in body
+        # Navigate to public blog
+        page.goto(
+            f"{django_server}/blog", wait_until="domcontentloaded"
+        )
+        body = page.content()
+        assert "Getting Started with LLMs" in body
+        assert (
+            "A beginner guide to large language models" in body
+        )
+        assert "Test Author" in body
 
-                # Click on the article
-                page.locator(
-                    'h2:has-text("Getting Started with LLMs"), '
-                    'a:has-text("Getting Started with LLMs")'
-                ).first.click()
-                page.wait_for_load_state("networkidle")
+        # Click on the article
+        page.locator(
+            'h2:has-text("Getting Started with LLMs"), '
+            'a:has-text("Getting Started with LLMs")'
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
 
-                assert "/blog/getting-started-with-llms" in page.url
-                body = page.content()
-                assert "Getting Started with LLMs" in body
-                # Verify code block with syntax highlighting
-                assert "codehilite" in body or "highlight" in body
-                # Code content is present (may be wrapped in spans
-                # by Pygments syntax highlighting)
-                assert "openai" in body
-            finally:
-                browser.close()
+        assert "/blog/getting-started-with-llms" in page.url
+        body = page.content()
+        assert "Getting Started with LLMs" in body
+        # Verify code block with syntax highlighting
+        assert "codehilite" in body or "highlight" in body
+        # Code content is present (may be wrapped in spans
+        # by Pygments syntax highlighting)
+        assert "openai" in body

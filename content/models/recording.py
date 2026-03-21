@@ -25,6 +25,14 @@ class Recording(models.Model):
         max_length=500, blank=True, default='',
         help_text='S3 URL for the recording file (auto-populated after upload).',
     )
+    transcript_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='URL to the VTT transcript file (Zoom cloud URL or S3).',
+    )
+    transcript_text = models.TextField(
+        blank=True, default='',
+        help_text='Plain-text transcript content for display and search.',
+    )
     timestamps = models.JSONField(default=list, blank=True)
     materials = models.JSONField(default=list, blank=True)
     core_tools = models.JSONField(default=list, blank=True)

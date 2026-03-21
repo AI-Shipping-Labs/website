@@ -124,6 +124,7 @@ def create_meeting(event):
             'join_before_host': True,
             'mute_upon_entry': True,
             'waiting_room': False,
+            'auto_transcribing': True,
         },
     }
 

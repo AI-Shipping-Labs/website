@@ -41,8 +41,32 @@ def make_zoom_signature(body, timestamp, secret=ZOOM_TEST_SECRET):
     return f'v0={sig}'
 
 
-def make_recording_completed_payload(meeting_id, share_url='https://zoom.us/rec/share/abc'):
+def make_recording_completed_payload(
+    meeting_id,
+    share_url='https://zoom.us/rec/share/abc',
+    include_transcript=False,
+):
     """Create a recording.completed webhook payload."""
+    recording_files = [
+        {
+            'recording_type': 'shared_screen_with_speaker_view',
+            'play_url': 'https://zoom.us/rec/play/abc123',
+            'download_url': 'https://zoom.us/rec/download/abc123',
+        },
+        {
+            'recording_type': 'audio_only',
+            'play_url': 'https://zoom.us/rec/play/audio',
+            'download_url': 'https://zoom.us/rec/download/audio',
+        },
+    ]
+    if include_transcript:
+        recording_files.append({
+            'recording_type': 'audio_transcript',
+            'file_type': 'VTT',
+            'download_url': 'https://zoom.us/rec/download/transcript123.vtt',
+            'file_size': 12345,
+            'status': 'completed',
+        })
     return {
         'event': 'recording.completed',
         'payload': {
@@ -50,18 +74,7 @@ def make_recording_completed_payload(meeting_id, share_url='https://zoom.us/rec/
                 'id': meeting_id,
                 'topic': 'Test Meeting',
                 'share_url': share_url,
-                'recording_files': [
-                    {
-                        'recording_type': 'shared_screen_with_speaker_view',
-                        'play_url': 'https://zoom.us/rec/play/abc123',
-                        'download_url': 'https://zoom.us/rec/download/abc123',
-                    },
-                    {
-                        'recording_type': 'audio_only',
-                        'play_url': 'https://zoom.us/rec/play/audio',
-                        'download_url': 'https://zoom.us/rec/download/audio',
-                    },
-                ],
+                'recording_files': recording_files,
             },
         },
     }
@@ -211,6 +224,7 @@ class ZoomCreateMeetingTest(TestCase):
         self.assertEqual(payload['duration'], 120)  # 2 hours
         self.assertEqual(payload['timezone'], 'Europe/Berlin')
         self.assertEqual(payload['settings']['auto_recording'], 'cloud')
+        self.assertTrue(payload['settings']['auto_transcribing'])
 
     @override_settings(
         ZOOM_CLIENT_ID=ZOOM_TEST_CLIENT_ID,
@@ -608,6 +622,46 @@ class ZoomRecordingCompletedTest(TestCase):
 
         recording = Recording.objects.get(slug='workshop-building-ai-agents')
         self.assertEqual(recording.date, self.event.start_datetime.date())
+
+    def test_transcript_url_stored_when_present(self):
+        """When webhook includes an audio_transcript file, transcript_url is stored."""
+        payload = make_recording_completed_payload(
+            '12345678901', include_transcript=True,
+        )
+        response = self._post_webhook(payload)
+        self.assertEqual(response.status_code, 200)
+
+        recording = Recording.objects.get(slug='workshop-building-ai-agents')
+        self.assertEqual(
+            recording.transcript_url,
+            'https://zoom.us/rec/download/transcript123.vtt',
+        )
+
+    def test_transcript_url_empty_when_not_present(self):
+        """When webhook has no audio_transcript file, transcript_url is empty."""
+        payload = make_recording_completed_payload(
+            '12345678901', include_transcript=False,
+        )
+        response = self._post_webhook(payload)
+        self.assertEqual(response.status_code, 200)
+
+        recording = Recording.objects.get(slug='workshop-building-ai-agents')
+        self.assertEqual(recording.transcript_url, '')
+
+    def test_recording_created_normally_without_transcript(self):
+        """Recording is still created with all fields when no transcript is present."""
+        payload = make_recording_completed_payload(
+            '12345678901', include_transcript=False,
+        )
+        self._post_webhook(payload)
+
+        recording = Recording.objects.get(slug='workshop-building-ai-agents')
+        self.assertEqual(recording.title, 'Workshop: Building AI Agents')
+        self.assertEqual(recording.transcript_url, '')
+        self.assertEqual(recording.transcript_text, '')
+
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.status, 'completed')
 
 
 # --- Event Admin Zoom Meeting Tests ---

@@ -131,9 +131,11 @@ def _handle_recording_completed(payload, webhook_log):
     recording_files = object_data.get('recording_files', [])
     video_url = ''
     download_url = ''
+    transcript_url = ''
     for rec_file in recording_files:
+        recording_type = rec_file.get('recording_type', '')
         # Prefer shared_screen_with_speaker_view or shared_screen
-        if rec_file.get('recording_type') in (
+        if recording_type in (
             'shared_screen_with_speaker_view',
             'shared_screen',
             'active_speaker',
@@ -142,6 +144,11 @@ def _handle_recording_completed(payload, webhook_log):
             download_url = rec_file.get('download_url', '')
             if video_url:
                 break
+    # Extract transcript URL (audio_transcript VTT file)
+    for rec_file in recording_files:
+        if rec_file.get('recording_type') == 'audio_transcript':
+            transcript_url = rec_file.get('download_url', '')
+            break
 
     # Fallback: use the share_url from the object if available
     if not video_url:
@@ -164,6 +171,7 @@ def _handle_recording_completed(payload, webhook_log):
         date=event.start_datetime.date(),
         tags=event.tags,
         youtube_url=video_url,
+        transcript_url=transcript_url,
         required_level=event.required_level,
         published=False,  # Admin needs to review before publishing
     )

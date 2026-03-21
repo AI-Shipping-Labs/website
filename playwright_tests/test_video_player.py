@@ -26,32 +26,19 @@ import pytest
 from django.utils import timezone
 from playwright.sync_api import sync_playwright
 
-from playwright_tests.conftest import DJANGO_BASE_URL
+from playwright_tests.conftest import (
+    DJANGO_BASE_URL,
+    VIEWPORT,
+    ensure_tiers as _ensure_tiers,
+    create_session_for_user as _create_session_for_user,
+    auth_context as _auth_context,
+)
 
 
 # Allow Django ORM calls from within sync_playwright (which runs an
 # event loop internally). Without this, Django 6 raises
 # SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
-
-
-VIEWPORT = {"width": 1280, "height": 720}
-
-
-def _ensure_tiers():
-    """Ensure membership tiers exist."""
-    from payments.models import Tier
-
-    TIERS = [
-        {"slug": "free", "name": "Free", "level": 0},
-        {"slug": "basic", "name": "Basic", "level": 10},
-        {"slug": "main", "name": "Main", "level": 20},
-        {"slug": "premium", "name": "Premium", "level": 30},
-    ]
-    for tier_data in TIERS:
-        Tier.objects.get_or_create(
-            slug=tier_data["slug"], defaults=tier_data
-        )
 
 
 def _clear_recordings():
@@ -222,48 +209,6 @@ def _create_user(email, password="testpass123", tier_slug=None):
         user.tier = tier
     user.save()
     return user
-
-
-def _create_session_for_user(email):
-    """Create a Django session for the given user and return the session key."""
-    from django.contrib.sessions.backends.db import SessionStore
-    from django.contrib.auth import (
-        SESSION_KEY,
-        BACKEND_SESSION_KEY,
-        HASH_SESSION_KEY,
-    )
-    from accounts.models import User
-
-    user = User.objects.get(email=email)
-    session = SessionStore()
-    session[SESSION_KEY] = str(user.pk)
-    session[BACKEND_SESSION_KEY] = (
-        "django.contrib.auth.backends.ModelBackend"
-    )
-    session[HASH_SESSION_KEY] = user.get_session_auth_hash()
-    session.create()
-    return session.session_key
-
-
-def _auth_context(browser, email):
-    """Create an authenticated browser context for the given user."""
-    session_key = _create_session_for_user(email)
-    context = browser.new_context(viewport=VIEWPORT)
-    context.add_cookies([
-        {
-            "name": "sessionid",
-            "value": session_key,
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-        {
-            "name": "csrftoken",
-            "value": "e2e-test-csrf-token-value",
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-    ])
-    return context
 
 
 def _login_admin_via_browser(page, base_url, email, password="adminpass123"):

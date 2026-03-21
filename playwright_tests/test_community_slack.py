@@ -30,18 +30,20 @@ import pytest
 from django.utils import timezone
 from playwright.sync_api import sync_playwright
 
-from playwright_tests.conftest import DJANGO_BASE_URL
+from playwright_tests.conftest import (
+    DJANGO_BASE_URL,
+    VIEWPORT,
+    DEFAULT_PASSWORD,
+    create_staff_user as _create_admin_user,
+    create_session_for_user as _create_session_for_user,
+    auth_context as _auth_context,
+)
 
 
 # Allow Django ORM calls from within sync_playwright (which runs an
 # event loop internally). Without this, Django 6 raises
 # SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
-
-
-VIEWPORT = {"width": 1280, "height": 720}
-
-DEFAULT_PASSWORD = "TestPass123!"
 
 
 # ---------------------------------------------------------------------------
@@ -122,69 +124,6 @@ def _create_user(email, tier_slug="free", password=DEFAULT_PASSWORD):
     user.email_verified = True
     user.save()
     return user
-
-
-def _create_admin_user(email="admin@test.com", password=DEFAULT_PASSWORD):
-    """Create a superuser for admin tests."""
-    from accounts.models import User
-
-    _ensure_tiers()
-    user, created = User.objects.get_or_create(
-        email=email,
-        defaults={
-            "email_verified": True,
-            "is_staff": True,
-            "is_superuser": True,
-        },
-    )
-    user.set_password(password)
-    user.is_staff = True
-    user.is_superuser = True
-    user.email_verified = True
-    user.save()
-    return user
-
-
-def _create_session_for_user(email):
-    """Create a Django session for the given user and return the session key."""
-    from django.contrib.sessions.backends.db import SessionStore
-    from django.contrib.auth import (
-        SESSION_KEY,
-        BACKEND_SESSION_KEY,
-        HASH_SESSION_KEY,
-    )
-    from accounts.models import User
-
-    user = User.objects.get(email=email)
-    session = SessionStore()
-    session[SESSION_KEY] = str(user.pk)
-    session[BACKEND_SESSION_KEY] = (
-        "django.contrib.auth.backends.ModelBackend"
-    )
-    session[HASH_SESSION_KEY] = user.get_session_auth_hash()
-    session.create()
-    return session.session_key
-
-
-def _auth_context(browser, email):
-    """Create an authenticated browser context for the given user."""
-    session_key = _create_session_for_user(email)
-    context = browser.new_context(viewport=VIEWPORT)
-    context.add_cookies([
-        {
-            "name": "sessionid",
-            "value": session_key,
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-        {
-            "name": "csrftoken",
-            "value": "e2e-test-csrf-token-value",
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-    ])
-    return context
 
 
 def _clear_audit_logs():

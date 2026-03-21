@@ -26,7 +26,13 @@ import pytest
 from django.utils import timezone
 from playwright.sync_api import sync_playwright
 
-from playwright_tests.conftest import DJANGO_BASE_URL
+from playwright_tests.conftest import (
+    DJANGO_BASE_URL,
+    VIEWPORT,
+    ensure_tiers as _ensure_tiers,
+    create_session_for_user as _create_session_for_user,
+    auth_context as _auth_context,
+)
 
 # Playwright creates an async event loop internally. Django's async safety
 # check detects this and raises SynchronousOnlyOperation when we make ORM
@@ -34,29 +40,6 @@ from playwright_tests.conftest import DJANGO_BASE_URL
 # running synchronous code in the main thread and the event loop is only
 # used by Playwright's internal IPC.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
-
-
-VIEWPORT = {"width": 1280, "height": 720}
-
-
-def _ensure_tiers():
-    """Ensure membership tiers exist (they may be flushed between tests).
-
-    The seed migration creates tiers, but TransactionTestCase flushes all
-    tables between tests, removing them. This re-creates them if missing.
-    """
-    from payments.models import Tier
-
-    TIERS = [
-        {"slug": "free", "name": "Free", "level": 0},
-        {"slug": "basic", "name": "Basic", "level": 10},
-        {"slug": "main", "name": "Main", "level": 20},
-        {"slug": "premium", "name": "Premium", "level": 30},
-    ]
-    for tier_data in TIERS:
-        Tier.objects.get_or_create(
-            slug=tier_data["slug"], defaults=tier_data
-        )
 
 
 def _clear_articles():
@@ -112,57 +95,6 @@ def _create_user(email, password="testpass123", tier_slug=None):
         user.tier = tier
         user.save()
     return user
-
-
-def _create_session_for_user(email):
-    """Create a Django session for the given user and return the session key.
-
-    This creates a server-side session directly in the database, bypassing
-    the login API and CSRF entirely. This is the same pattern used by
-    test_account_page.py.
-    """
-    from django.contrib.sessions.backends.db import SessionStore
-    from django.contrib.auth import (
-        SESSION_KEY,
-        BACKEND_SESSION_KEY,
-        HASH_SESSION_KEY,
-    )
-    from accounts.models import User
-
-    user = User.objects.get(email=email)
-    session = SessionStore()
-    session[SESSION_KEY] = str(user.pk)
-    session[BACKEND_SESSION_KEY] = (
-        "django.contrib.auth.backends.ModelBackend"
-    )
-    session[HASH_SESSION_KEY] = user.get_session_auth_hash()
-    session.create()
-    return session.session_key
-
-
-def _auth_context(browser, email):
-    """Create an authenticated browser context for the given user.
-
-    Creates a Django session via the ORM and sets the sessionid cookie
-    on a new browser context.
-    """
-    session_key = _create_session_for_user(email)
-    context = browser.new_context(viewport=VIEWPORT)
-    context.add_cookies([
-        {
-            "name": "sessionid",
-            "value": session_key,
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-        {
-            "name": "csrftoken",
-            "value": "e2e-test-csrf-token-value",
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-    ])
-    return context
 
 
 def _login_admin_via_browser(page, base_url, email, password="adminpass123"):

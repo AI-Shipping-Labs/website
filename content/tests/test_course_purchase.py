@@ -21,29 +21,10 @@ from django.test import TestCase, Client
 
 from content.access import can_access, get_user_level
 from content.models import Course, Module, Unit, CourseAccess
-from payments.models import Tier
 from payments.services import handle_checkout_completed
+from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
-
-
-class TierSetupMixin:
-    """Mixin that creates the four standard tiers."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.free_tier, _ = Tier.objects.get_or_create(
-            slug='free', defaults={'name': 'Free', 'level': 0},
-        )
-        cls.basic_tier, _ = Tier.objects.get_or_create(
-            slug='basic', defaults={'name': 'Basic', 'level': 10},
-        )
-        cls.main_tier, _ = Tier.objects.get_or_create(
-            slug='main', defaults={'name': 'Main', 'level': 20, 'price_eur_year': 500},
-        )
-        cls.premium_tier, _ = Tier.objects.get_or_create(
-            slug='premium', defaults={'name': 'Premium', 'level': 30, 'price_eur_year': 1000},
-        )
 
 
 # ============================================================

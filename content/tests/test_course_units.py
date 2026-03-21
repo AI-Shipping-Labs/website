@@ -19,28 +19,9 @@ from django.utils import timezone
 
 from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
 from content.models import Course, Module, Unit, UserCourseProgress
+from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
-
-
-class TierSetupMixin:
-    """Mixin that creates the four standard tiers."""
-
-    @classmethod
-    def setUpTestData(cls):
-        from payments.models import Tier
-        cls.free_tier, _ = Tier.objects.get_or_create(
-            slug='free', defaults={'name': 'Free', 'level': 0},
-        )
-        cls.basic_tier, _ = Tier.objects.get_or_create(
-            slug='basic', defaults={'name': 'Basic', 'level': 10},
-        )
-        cls.main_tier, _ = Tier.objects.get_or_create(
-            slug='main', defaults={'name': 'Main', 'level': 20, 'price_eur_year': 99},
-        )
-        cls.premium_tier, _ = Tier.objects.get_or_create(
-            slug='premium', defaults={'name': 'Premium', 'level': 30, 'price_eur_year': 199},
-        )
 
 
 class CourseUnitSetupMixin(TierSetupMixin):

@@ -16,19 +16,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from email_app.models import EmailCampaign, EmailLog
+from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
 
 
-class EmailCampaignModelTest(TestCase):
+class EmailCampaignModelTest(TierSetupMixin, TestCase):
     """Test EmailCampaign model enhancements for campaigns."""
-
-    def setUp(self):
-        from payments.models import Tier
-        self.free_tier, _ = Tier.objects.get_or_create(slug='free', defaults={'name': 'Free', 'level': 0})
-        self.basic_tier, _ = Tier.objects.get_or_create(slug='basic', defaults={'name': 'Basic', 'level': 10})
-        self.main_tier, _ = Tier.objects.get_or_create(slug='main', defaults={'name': 'Main', 'level': 20})
-        self.premium_tier, _ = Tier.objects.get_or_create(slug='premium', defaults={'name': 'Premium', 'level': 30})
 
     def test_target_level_choices(self):
         """target_min_level has choices for 0/10/20/30."""
@@ -162,14 +156,10 @@ class EmailCampaignModelTest(TestCase):
         self.assertEqual(str(campaign), 'My Campaign (draft)')
 
 
-class SendCampaignTaskTest(TestCase):
+class SendCampaignTaskTest(TierSetupMixin, TestCase):
     """Test the send_campaign background task."""
 
     def setUp(self):
-        from payments.models import Tier
-        self.free_tier, _ = Tier.objects.get_or_create(slug='free', defaults={'name': 'Free', 'level': 0})
-        self.basic_tier, _ = Tier.objects.get_or_create(slug='basic', defaults={'name': 'Basic', 'level': 10})
-
         # Create eligible users
         self.user1 = User.objects.create_user(
             email='user1@test.com', tier=self.free_tier,
@@ -329,13 +319,10 @@ class SendCampaignTaskTest(TestCase):
         self.assertEqual(self.campaign.sent_count, 2)
 
 
-class CampaignAdminTest(TestCase):
+class CampaignAdminTest(TierSetupMixin, TestCase):
     """Test admin views for email campaigns."""
 
     def setUp(self):
-        from payments.models import Tier
-        self.free_tier, _ = Tier.objects.get_or_create(slug='free', defaults={'name': 'Free', 'level': 0})
-
         self.admin_user = User.objects.create_superuser(
             email='admin@test.com',
             password='adminpass123',

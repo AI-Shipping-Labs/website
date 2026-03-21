@@ -72,3 +72,121 @@ def django_server(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock():
         thread = _start_django_server()
         yield DJANGO_BASE_URL
+
+
+# ---------------------------------------------------------------------------
+# Shared E2E helpers
+# ---------------------------------------------------------------------------
+
+VIEWPORT = {"width": 1280, "height": 720}
+
+DEFAULT_PASSWORD = "TestPass123!"
+
+
+def ensure_tiers():
+    """Ensure membership tiers exist in the database."""
+    from payments.models import Tier
+
+    TIERS = [
+        {"slug": "free", "name": "Free", "level": 0},
+        {"slug": "basic", "name": "Basic", "level": 10},
+        {"slug": "main", "name": "Main", "level": 20},
+        {"slug": "premium", "name": "Premium", "level": 30},
+    ]
+    for tier_data in TIERS:
+        Tier.objects.get_or_create(
+            slug=tier_data["slug"], defaults=tier_data
+        )
+
+
+def create_user(
+    email,
+    tier_slug="free",
+    password=DEFAULT_PASSWORD,
+    email_verified=True,
+    unsubscribed=False,
+    is_staff=False,
+    first_name="",
+):
+    """Create a user with the given tier and options."""
+    from accounts.models import User
+    from payments.models import Tier
+
+    ensure_tiers()
+    user, created = User.objects.get_or_create(
+        email=email,
+        defaults={"email_verified": email_verified},
+    )
+    user.set_password(password)
+    tier = Tier.objects.get(slug=tier_slug)
+    user.tier = tier
+    user.email_verified = email_verified
+    user.unsubscribed = unsubscribed
+    user.is_staff = is_staff
+    if first_name:
+        user.first_name = first_name
+    user.save()
+    return user
+
+
+def create_staff_user(email="admin@test.com", password=DEFAULT_PASSWORD):
+    """Create a staff/superuser for admin and studio tests."""
+    from accounts.models import User
+
+    ensure_tiers()
+    user, created = User.objects.get_or_create(
+        email=email,
+        defaults={
+            "email_verified": True,
+            "is_staff": True,
+            "is_superuser": True,
+        },
+    )
+    user.set_password(password)
+    user.is_staff = True
+    user.is_superuser = True
+    user.email_verified = True
+    user.save()
+    return user
+
+
+def create_session_for_user(email):
+    """Create a Django session for the given user and return the session key."""
+    from django.contrib.sessions.backends.db import SessionStore
+    from django.contrib.auth import (
+        SESSION_KEY,
+        BACKEND_SESSION_KEY,
+        HASH_SESSION_KEY,
+    )
+    from accounts.models import User
+
+    user = User.objects.get(email=email)
+    session = SessionStore()
+    session[SESSION_KEY] = str(user.pk)
+    session[BACKEND_SESSION_KEY] = (
+        "django.contrib.auth.backends.ModelBackend"
+    )
+    session[HASH_SESSION_KEY] = user.get_session_auth_hash()
+    session.create()
+    return session.session_key
+
+
+def auth_context(browser, email):
+    """Create an authenticated browser context for the given user."""
+    session_key = create_session_for_user(email)
+    context = browser.new_context(viewport=VIEWPORT)
+    context.add_cookies([
+        {
+            "name": "sessionid",
+            "value": session_key,
+            "domain": "127.0.0.1",
+            "path": "/",
+        },
+        {
+            "name": "csrftoken",
+            "value": "e2e-test-csrf-token-value",
+            "domain": "127.0.0.1",
+            "path": "/",
+        },
+    ])
+    return context

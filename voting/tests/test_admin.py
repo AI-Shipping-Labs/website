@@ -3,16 +3,8 @@
 from django.test import TestCase, Client
 
 from accounts.models import User
-from payments.models import Tier
+from tests.fixtures import TierSetupMixin
 from voting.models import Poll, PollOption, PollVote
-
-
-class TierSetupMixin:
-    @classmethod
-    def setUpTestData(cls):
-        cls.free_tier, _ = Tier.objects.get_or_create(
-            slug='free', defaults={'name': 'Free', 'level': 0},
-        )
 
 
 class PollAdminTest(TierSetupMixin, TestCase):

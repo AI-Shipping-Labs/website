@@ -21,28 +21,9 @@ from django.utils import timezone
 
 from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
 from content.models import Recording
-from payments.models import Tier
+from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
-
-
-class TierSetupMixin:
-    """Mixin that creates the four standard tiers."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.free_tier, _ = Tier.objects.get_or_create(
-            slug='free', defaults={'name': 'Free', 'level': 0},
-        )
-        cls.basic_tier, _ = Tier.objects.get_or_create(
-            slug='basic', defaults={'name': 'Basic', 'level': 10},
-        )
-        cls.main_tier, _ = Tier.objects.get_or_create(
-            slug='main', defaults={'name': 'Main', 'level': 20},
-        )
-        cls.premium_tier, _ = Tier.objects.get_or_create(
-            slug='premium', defaults={'name': 'Premium', 'level': 30},
-        )
 
 
 # --- Model field tests ---

@@ -27,29 +27,10 @@ from content.models import (
     Course, Module, Unit, UserCourseProgress, Project,
 )
 from events.models import Event, EventRegistration
-from payments.models import Tier
 from payments.services import handle_checkout_completed, handle_subscription_deleted
+from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
-
-
-class TierSetupMixin:
-    """Mixin that ensures the four standard tiers exist."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.free_tier, _ = Tier.objects.get_or_create(
-            slug='free', defaults={'name': 'Free', 'level': 0},
-        )
-        cls.basic_tier, _ = Tier.objects.get_or_create(
-            slug='basic', defaults={'name': 'Basic', 'level': 10},
-        )
-        cls.main_tier, _ = Tier.objects.get_or_create(
-            slug='main', defaults={'name': 'Main', 'level': 20},
-        )
-        cls.premium_tier, _ = Tier.objects.get_or_create(
-            slug='premium', defaults={'name': 'Premium', 'level': 30},
-        )
 
 
 # ============================================================

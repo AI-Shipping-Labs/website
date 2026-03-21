@@ -25,18 +25,18 @@ import pytest
 from django.utils import timezone
 from playwright.sync_api import sync_playwright
 
-from playwright_tests.conftest import DJANGO_BASE_URL
+from playwright_tests.conftest import (
+    DJANGO_BASE_URL,
+    VIEWPORT,
+    DEFAULT_PASSWORD,
+    create_session_for_user as _create_session_for_user,
+)
 
 
 # Allow Django ORM calls from within sync_playwright (which runs an
 # event loop internally). Without this, Django 6 raises
 # SynchronousOnlyOperation when we create sessions inside test methods.
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
-
-
-VIEWPORT = {"width": 1280, "height": 720}
-
-DEFAULT_PASSWORD = "TestPass123!"
 
 
 def _create_test_users():
@@ -196,29 +196,6 @@ def _create_test_users():
     users["free_unverified"] = free_unverified
 
     return users
-
-
-def _create_session_for_user(email):
-    """Create a Django session for the given user and return the session
-    key. This creates a server-side session that can be used as a cookie
-    in Playwright to authenticate without going through the login UI."""
-    from django.contrib.sessions.backends.db import SessionStore
-    from django.contrib.auth import (
-        SESSION_KEY,
-        BACKEND_SESSION_KEY,
-        HASH_SESSION_KEY,
-    )
-    from accounts.models import User
-
-    user = User.objects.get(email=email)
-    session = SessionStore()
-    session[SESSION_KEY] = str(user.pk)
-    session[BACKEND_SESSION_KEY] = (
-        "django.contrib.auth.backends.ModelBackend"
-    )
-    session[HASH_SESSION_KEY] = user.get_session_auth_hash()
-    session.create()
-    return session.session_key
 
 
 @pytest.fixture(scope="session")

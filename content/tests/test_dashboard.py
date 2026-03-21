@@ -26,28 +26,9 @@ from content.models import (
 from events.models import Event, EventRegistration
 from notifications.models import Notification
 from voting.models import Poll, PollOption
+from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
-
-
-class TierSetupMixin:
-    """Mixin that creates the four standard tiers."""
-
-    @classmethod
-    def setUpTestData(cls):
-        from payments.models import Tier
-        cls.free_tier, _ = Tier.objects.get_or_create(
-            slug='free', defaults={'name': 'Free', 'level': 0},
-        )
-        cls.basic_tier, _ = Tier.objects.get_or_create(
-            slug='basic', defaults={'name': 'Basic', 'level': 10},
-        )
-        cls.main_tier, _ = Tier.objects.get_or_create(
-            slug='main', defaults={'name': 'Main', 'level': 20},
-        )
-        cls.premium_tier, _ = Tier.objects.get_or_create(
-            slug='premium', defaults={'name': 'Premium', 'level': 30},
-        )
 
 
 # ============================================================

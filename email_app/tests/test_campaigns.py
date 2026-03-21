@@ -240,6 +240,24 @@ class SendCampaignTaskTest(TierSetupMixin, TestCase):
             self.assertEqual(log.campaign, self.campaign)
 
     @patch('email_app.tasks.send_campaign.EmailService')
+    def test_send_campaign_calls_ses_with_recipient_emails(self, MockService):
+        """Campaign send calls _send_ses once per eligible recipient with correct email."""
+        mock_service = MockService.return_value
+        mock_service._send_ses.return_value = 'ses-123'
+        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
+
+        from email_app.tasks.send_campaign import send_campaign
+        send_campaign(self.campaign.pk, send_delay=0)
+
+        # Verify _send_ses was called exactly twice (for user1 and user2)
+        self.assertEqual(mock_service._send_ses.call_count, 2)
+        sent_emails = {c[0][0] for c in mock_service._send_ses.call_args_list}
+        self.assertIn('user1@test.com', sent_emails)
+        self.assertIn('user2@test.com', sent_emails)
+        # Unsubscribed user3 should NOT be in the sent list
+        self.assertNotIn('user3@test.com', sent_emails)
+
+    @patch('email_app.tasks.send_campaign.EmailService')
     def test_send_campaign_continues_on_individual_failure(self, MockService):
         """If one email fails, the rest continue sending."""
         from email_app.services.email_service import EmailServiceError

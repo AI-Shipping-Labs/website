@@ -1,6 +1,7 @@
 """Tests for redirect model, middleware, and studio views."""
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase, Client, override_settings
 
 from integrations.middleware import clear_redirect_cache
@@ -33,7 +34,7 @@ class RedirectModelTest(TestCase):
 
     def test_source_path_unique(self):
         Redirect.objects.create(source_path='/old', target_path='/new')
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             Redirect.objects.create(source_path='/old', target_path='/other')
 
     def test_default_redirect_type_is_301(self):

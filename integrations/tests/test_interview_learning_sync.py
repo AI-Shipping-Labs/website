@@ -4,6 +4,7 @@ import os
 import tempfile
 import shutil
 
+from django.db import IntegrityError
 from django.test import TestCase
 
 from content.models import InterviewCategory, LearningPath
@@ -294,7 +295,7 @@ class InterviewCategoryModelTest(TestCase):
 
     def test_slug_unique(self):
         InterviewCategory.objects.create(slug='theory', title='Theory')
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             InterviewCategory.objects.create(slug='theory', title='Theory 2')
 
 
@@ -313,5 +314,5 @@ class LearningPathModelTest(TestCase):
 
     def test_slug_unique(self):
         LearningPath.objects.create(slug='ai-engineer', title='Path 1')
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             LearningPath.objects.create(slug='ai-engineer', title='Path 2')

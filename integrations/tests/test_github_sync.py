@@ -22,6 +22,7 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
@@ -97,7 +98,7 @@ class ContentSourceModelTest(TestCase):
             repo_name='AI-Shipping-Labs/blog',
             content_type='article',
         )
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             ContentSource.objects.create(
                 repo_name='AI-Shipping-Labs/blog',
                 content_type='article',

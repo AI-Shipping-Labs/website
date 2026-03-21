@@ -13,6 +13,7 @@ Tests cover:
 
 import json
 import datetime
+from unittest.mock import patch
 
 import jwt
 from django.conf import settings
@@ -76,6 +77,14 @@ class RegisterAPITest(TestCase):
         data = resp.json()
         self.assertEqual(data["status"], "ok")
         self.assertTrue(User.objects.filter(email="new@example.com").exists())
+
+    @patch("accounts.views.auth._send_verification_email")
+    def test_register_sends_verification_email(self, mock_send):
+        """Registration triggers a verification email to the new user."""
+        self._post({"email": "verify-send@example.com", "password": "secure1234"})
+        mock_send.assert_called_once()
+        sent_user = mock_send.call_args[0][0]
+        self.assertEqual(sent_user.email, "verify-send@example.com")
 
     def test_register_user_has_password(self):
         """Registered user has a usable password."""
@@ -318,6 +327,21 @@ class PasswordResetRequestAPITest(TestCase):
         resp = self._post({"email": "reset@example.com"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["status"], "ok")
+
+    @patch("accounts.views.auth._send_password_reset_email")
+    def test_reset_request_sends_email_to_existing_user(self, mock_send):
+        """Password reset request sends a reset email to existing user."""
+        User.objects.create_user(email="reset-email@example.com", password="test1234")
+        self._post({"email": "reset-email@example.com"})
+        mock_send.assert_called_once()
+        sent_user = mock_send.call_args[0][0]
+        self.assertEqual(sent_user.email, "reset-email@example.com")
+
+    @patch("accounts.views.auth._send_password_reset_email")
+    def test_reset_request_does_not_send_email_for_nonexistent_user(self, mock_send):
+        """Password reset request does NOT send email for non-existent user."""
+        self._post({"email": "nobody@example.com"})
+        mock_send.assert_not_called()
 
     def test_reset_request_for_nonexistent_email_returns_200(self):
         """Request with non-existent email still returns 200 (no reveal)."""

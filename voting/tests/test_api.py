@@ -42,6 +42,12 @@ class VoteToggleAPITest(TierSetupMixin, TestCase):
         response = self._vote(self.poll.id, self.option_a.id)
         self.assertEqual(response.status_code, 401)
 
+    def test_unauthenticated_vote_creates_no_db_record(self):
+        """Unauthenticated vote attempt must not create a PollVote row."""
+        vote_count_before = PollVote.objects.count()
+        self._vote(self.poll.id, self.option_a.id)
+        self.assertEqual(PollVote.objects.count(), vote_count_before)
+
     def test_vote_creates_vote(self):
         self.client.login(email='main@test.com', password='testpass')
         response = self._vote(self.poll.id, self.option_a.id)
@@ -191,6 +197,12 @@ class ProposeOptionAPITest(TierSetupMixin, TestCase):
     def test_propose_requires_authentication(self):
         response = self._propose(self.poll.id, 'New Topic')
         self.assertEqual(response.status_code, 401)
+
+    def test_unauthenticated_propose_creates_no_db_record(self):
+        """Unauthenticated proposal attempt must not create a PollOption row."""
+        option_count_before = PollOption.objects.count()
+        self._propose(self.poll.id, 'Sneaky Topic')
+        self.assertEqual(PollOption.objects.count(), option_count_before)
 
     def test_propose_creates_option(self):
         self.client.login(email='main@test.com', password='testpass')

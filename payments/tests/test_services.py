@@ -7,10 +7,13 @@ Tests cover:
 - cancel_subscription with Stripe API mocked
 - _tier_for_price_id helper
 - verify_webhook_signature
+- Stripe error handling (CardError, RateLimitError, network timeout)
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
+import stripe
 from django.test import TestCase, override_settings
 
 from accounts.models import User
@@ -304,3 +307,144 @@ class CancelSubscriptionTest(TestCase):
             "sub_test_cancel",
             params={"cancel_at_period_end": True},
         )
+
+
+# ── Stripe Error Handling (view-level) ────────────────────────────────
+
+
+class CheckoutStripeErrorViewTest(TestCase):
+    """Test that Stripe errors during checkout return user-friendly errors, not 500s."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="stripe-err@test.com", password="testpass123"
+        )
+        self.basic = Tier.objects.get(slug="basic")
+        self.basic.stripe_price_id_monthly = "price_basic_monthly"
+        self.basic.save()
+        self.client.login(email="stripe-err@test.com", password="testpass123")
+
+    def _post_checkout(self, data=None):
+        if data is None:
+            data = {"tier_slug": "basic", "billing_period": "monthly"}
+        return self.client.post(
+            "/api/checkout/create",
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+
+    @patch("payments.services._get_stripe_client")
+    def test_card_error_during_checkout_returns_500(self, mock_get_client):
+        """stripe.error.CardError during checkout returns 500 with friendly message."""
+        mock_client = MagicMock()
+        mock_client.checkout.sessions.create.side_effect = stripe.CardError(
+            message="Your card was declined.",
+            param="card",
+            code="card_declined",
+        )
+        mock_get_client.return_value = mock_client
+
+        response = self._post_checkout()
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("error", data)
+        # Should be a user-friendly message, not a traceback
+        self.assertNotIn("Traceback", data["error"])
+
+    @patch("payments.services._get_stripe_client")
+    def test_rate_limit_error_during_checkout_returns_500(self, mock_get_client):
+        """stripe.error.RateLimitError during checkout returns 500 with friendly message."""
+        mock_client = MagicMock()
+        mock_client.checkout.sessions.create.side_effect = stripe.RateLimitError(
+            message="Too many requests",
+        )
+        mock_get_client.return_value = mock_client
+
+        response = self._post_checkout()
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertNotIn("Traceback", data["error"])
+
+
+class UpgradeStripeErrorViewTest(TestCase):
+    """Test that Stripe errors during upgrade return user-friendly errors."""
+
+    def setUp(self):
+        self.main = Tier.objects.get(slug="main")
+        self.main.stripe_price_id_monthly = "price_main_monthly"
+        self.main.save()
+
+        self.user = User.objects.create_user(
+            email="upgrade-err@test.com", password="testpass123"
+        )
+        self.user.subscription_id = "sub_upgrade_err"
+        self.user.save(update_fields=["subscription_id"])
+        self.client.login(email="upgrade-err@test.com", password="testpass123")
+
+    @patch("payments.services._get_stripe_client")
+    def test_rate_limit_error_during_upgrade_returns_500(self, mock_get_client):
+        """stripe.error.RateLimitError during upgrade returns 500, not a traceback."""
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.side_effect = stripe.RateLimitError(
+            message="Too many requests",
+        )
+        mock_get_client.return_value = mock_client
+
+        response = self.client.post(
+            "/api/subscription/upgrade",
+            data=json.dumps({"tier_slug": "main", "billing_period": "monthly"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertNotIn("Traceback", data["error"])
+
+
+class CancelStripeErrorViewTest(TestCase):
+    """Test that Stripe errors during cancel return user-friendly errors."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="cancel-err@test.com", password="testpass123"
+        )
+        self.user.subscription_id = "sub_cancel_err"
+        self.user.save(update_fields=["subscription_id"])
+        self.client.login(email="cancel-err@test.com", password="testpass123")
+
+    @patch("payments.services._get_stripe_client")
+    def test_network_timeout_during_cancel_returns_500(self, mock_get_client):
+        """Network timeout during cancel returns 500 with friendly message."""
+        mock_client = MagicMock()
+        mock_client.subscriptions.update.side_effect = stripe.APIConnectionError(
+            message="Network error: Connection timed out",
+        )
+        mock_get_client.return_value = mock_client
+
+        response = self.client.post(
+            "/api/subscription/cancel",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertNotIn("Traceback", data["error"])
+
+    @patch("payments.services._get_stripe_client")
+    def test_stripe_error_during_cancel_returns_500(self, mock_get_client):
+        """Generic Stripe API error during cancel returns 500 with friendly message."""
+        mock_client = MagicMock()
+        mock_client.subscriptions.update.side_effect = stripe.APIError(
+            message="Internal Stripe error",
+        )
+        mock_get_client.return_value = mock_client
+
+        response = self.client.post(
+            "/api/subscription/cancel",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"], "Failed to cancel subscription")

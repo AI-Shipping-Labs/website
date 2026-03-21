@@ -143,6 +143,46 @@ class SubscribeAPITest(TestCase):
         self.assertEqual(User.objects.filter(email__iexact="user@example.com").count(), 1)
 
 
+class SubscribeEmailDeliveryTest(TestCase):
+    """Test that subscribe API actually triggers verification email delivery."""
+
+    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-id")
+    def test_subscribe_new_email_sends_verification_via_ses(self, mock_ses):
+        """New subscriber triggers a verification email through SES."""
+        response = self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "delivery-test@example.com"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # SES should have been called with the subscriber's email
+        mock_ses.assert_called_once()
+        recipient_email = mock_ses.call_args[0][0]
+        self.assertEqual(recipient_email, "delivery-test@example.com")
+
+        # Subject should relate to verification
+        subject = mock_ses.call_args[0][1]
+        self.assertTrue(
+            "verify" in subject.lower() or "confirm" in subject.lower(),
+            f"Expected verification-related subject, got: {subject}",
+        )
+
+    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-id")
+    def test_subscribe_existing_verified_does_not_send_email(self, mock_ses):
+        """Already-verified subscriber does not trigger another email."""
+        User.objects.create_user(
+            email="already-v@example.com",
+            email_verified=True,
+        )
+        self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "already-v@example.com"}),
+            content_type="application/json",
+        )
+        mock_ses.assert_not_called()
+
+
 class SubscribeLeadMagnetTest(TestCase):
     """Test subscribe API with redirect_to for lead magnet flow."""
 

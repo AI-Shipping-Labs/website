@@ -1,7 +1,7 @@
 """
 Playwright E2E tests for Email Campaigns (Issue #87).
 
-Tests cover all 11 BDD scenarios from the issue:
+Tests cover 10 of 11 BDD scenarios from the issue:
 - Staff member creates a new campaign from the Studio
 - Staff member reviews campaign details and estimated recipients
 - Staff member sends a test email before sending a campaign
@@ -9,14 +9,16 @@ Tests cover all 11 BDD scenarios from the issue:
 - Staff member filters the campaign list by status
 - Staff member searches campaigns by subject
 - Staff member cannot re-send an already sent campaign
-- Campaign only reaches users who meet all eligibility criteria
 - Staff member creates a campaign targeting Premium-only audience
 - Non-staff user cannot access the campaign management pages
 - Staff member views the campaign list when no campaigns exist yet
 
+Scenario 8 (eligibility criteria) was moved to
+email_app/tests/test_campaigns.py because it exercises the send task
+directly with no browser interaction.
+
 Scenarios 1, 2, 4-6, 9-11 are full E2E browser tests against the Studio UI.
 Scenarios 3, 7 are tested against the Django admin change form.
-Scenario 8 exercises the campaign send task directly with mocked SES.
 
 Usage:
     uv run pytest playwright_tests/test_email_campaigns.py -v
@@ -553,116 +555,9 @@ class TestScenario7CannotResendSentCampaign:
         assert body_textarea.count() == 0
         assert target_select.count() == 0
 # ---------------------------------------------------------------
-# Scenario 8: Campaign only reaches users who meet all eligibility
-#              criteria
+# Scenario 8 was moved to email_app/tests/test_campaigns.py
+# (CampaignEligibilityCriteriaTest) -- no browser interaction needed.
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario8EligibilityCriteria:
-    """Campaign only reaches users who meet all eligibility criteria."""
-
-    def test_campaign_send_respects_tier_verification_and_subscription(
-        self,
-    ):
-        """Given a draft campaign targeting 'Main and above' (level 20).
-        The system has: 2 verified Main members, 1 verified Premium member,
-        1 unsubscribed Main member, 1 unverified Main member, and 3 Free
-        members. After sending, sent_count is 3 (2 Main + 1 Premium)."""
-        _clear_campaigns()
-        _ensure_tiers()
-
-        # 2 verified Main members (eligible)
-        _create_user(
-            "main-eligible-1@test.com",
-            tier_slug="main",
-            email_verified=True,
-            unsubscribed=False,
-        )
-        _create_user(
-            "main-eligible-2@test.com",
-            tier_slug="main",
-            email_verified=True,
-            unsubscribed=False,
-        )
-
-        # 1 verified Premium member (eligible)
-        _create_user(
-            "premium-eligible@test.com",
-            tier_slug="premium",
-            email_verified=True,
-            unsubscribed=False,
-        )
-
-        # 1 unsubscribed Main member (NOT eligible)
-        _create_user(
-            "main-unsub@test.com",
-            tier_slug="main",
-            email_verified=True,
-            unsubscribed=True,
-        )
-
-        # 1 unverified Main member (NOT eligible)
-        _create_user(
-            "main-unverified@test.com",
-            tier_slug="main",
-            email_verified=False,
-            unsubscribed=False,
-        )
-
-        # 3 Free members (NOT eligible for level 20)
-        for i in range(3):
-            _create_user(
-                f"free-ineligible-{i}@test.com",
-                tier_slug="free",
-                email_verified=True,
-                unsubscribed=False,
-            )
-
-        campaign = _create_campaign(
-            subject="Main+ Campaign",
-            body="Content for Main and above",
-            target_min_level=20,
-            status="draft",
-        )
-
-        # Step 1: Trigger the campaign send with mocked SES
-        with patch(
-            "email_app.services.email_service.EmailService._send_ses"
-        ) as mock_ses:
-            mock_ses.return_value = "ses-msg-id"
-
-            from email_app.tasks.send_campaign import send_campaign
-            result = send_campaign(
-                campaign_id=campaign.pk, send_delay=0
-            )
-
-        # Then: The campaign sent_count is 3
-        from email_app.models import EmailCampaign, EmailLog
-
-        campaign.refresh_from_db()
-        assert campaign.sent_count == 3
-        assert campaign.status == "sent"
-
-        # Verify exactly 3 EmailLog entries were created
-        logs = EmailLog.objects.filter(campaign=campaign)
-        assert logs.count() == 3
-
-        # Verify the recipients are correct
-        recipient_emails = set(
-            logs.values_list("user__email", flat=True)
-        )
-        assert "main-eligible-1@test.com" in recipient_emails
-        assert "main-eligible-2@test.com" in recipient_emails
-        assert "premium-eligible@test.com" in recipient_emails
-
-        # Verify excluded users did NOT receive the email
-        assert "main-unsub@test.com" not in recipient_emails
-        assert "main-unverified@test.com" not in recipient_emails
-        for i in range(3):
-            assert (
-                f"free-ineligible-{i}@test.com"
-                not in recipient_emails
-            )
 
 
 # ---------------------------------------------------------------

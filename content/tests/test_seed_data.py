@@ -352,3 +352,90 @@ class SeedDataContentQualityTest(TestCase):
         for project in Project.objects.all():
             self.assertTrue(project.content_markdown)
             self.assertGreater(len(project.content_markdown), 20)
+
+
+class SeedDataAccessLevelTest(TestCase):
+    """Tests verifying access levels span free and gated content.
+
+    Moved from playwright_tests/test_seed_data.py scenarios 3, 4, 6, 9, 12.
+    """
+
+    def test_articles_span_access_levels(self):
+        """Seeded articles include both free and gated articles."""
+        run_seed()
+        published = Article.objects.filter(published=True)
+        self.assertGreaterEqual(published.count(), 5)
+        free_articles = published.filter(required_level=0)
+        gated_articles = published.filter(required_level__gt=0)
+        self.assertGreaterEqual(free_articles.count(), 1)
+        self.assertGreaterEqual(gated_articles.count(), 1)
+
+    def test_courses_include_free_and_gated(self):
+        """Seeded courses include both free and gated courses."""
+        run_seed()
+        published = Course.objects.filter(status='published')
+        self.assertGreaterEqual(published.count(), 2)
+        free_courses = published.filter(required_level=0)
+        gated_courses = published.filter(required_level__gt=0)
+        self.assertGreaterEqual(free_courses.count(), 1)
+        self.assertGreaterEqual(gated_courses.count(), 1)
+
+    def test_units_have_video_url(self):
+        """At least one unit has a video_url set."""
+        run_seed()
+        units_with_video = Unit.objects.exclude(
+            video_url=''
+        ).exclude(video_url__isnull=True)
+        self.assertGreaterEqual(units_with_video.count(), 1)
+
+    def test_recordings_linked_to_completed_events(self):
+        """At least one recording is linked to a completed event."""
+        run_seed()
+        linked_to_completed = Recording.objects.filter(
+            event__isnull=False, event__status='completed'
+        )
+        self.assertGreaterEqual(linked_to_completed.count(), 1)
+
+    def test_recordings_have_timestamps(self):
+        """At least one recording has non-empty timestamps."""
+        run_seed()
+        for rec in Recording.objects.filter(published=True):
+            if rec.timestamps and len(rec.timestamps) > 0:
+                return
+        self.fail('No recording has non-empty timestamps')
+
+    def test_polls_include_topic_and_course_types(self):
+        """Seeded polls include at least one topic and one course poll."""
+        run_seed()
+        open_polls = Poll.objects.filter(status='open')
+        topic_polls = open_polls.filter(poll_type='topic')
+        course_polls = open_polls.filter(poll_type='course')
+        self.assertGreaterEqual(topic_polls.count(), 1)
+        self.assertGreaterEqual(course_polls.count(), 1)
+
+    def test_each_poll_has_at_least_3_options(self):
+        """Each open poll has at least 3 options."""
+        run_seed()
+        for poll in Poll.objects.filter(status='open'):
+            options_count = PollOption.objects.filter(poll=poll).count()
+            self.assertGreaterEqual(
+                options_count, 3,
+                f"Poll '{poll.title}' has only {options_count} options",
+            )
+
+    def test_cohort_enrollments_have_sufficient_tier(self):
+        """Enrolled users have a tier level sufficient for the cohort's course."""
+        run_seed()
+        active_cohorts = Cohort.objects.filter(is_active=True)
+        self.assertGreaterEqual(active_cohorts.count(), 1)
+        for cohort in active_cohorts:
+            enrollments = CohortEnrollment.objects.filter(cohort=cohort)
+            self.assertGreater(enrollments.count(), 0)
+            required_level = cohort.course.required_level
+            for enrollment in enrollments:
+                user_level = enrollment.user.tier.level if enrollment.user.tier else 0
+                self.assertGreaterEqual(
+                    user_level, required_level,
+                    f"User '{enrollment.user.email}' has tier level "
+                    f"{user_level} but course requires {required_level}",
+                )

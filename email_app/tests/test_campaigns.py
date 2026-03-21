@@ -577,3 +577,88 @@ class CampaignAdminUnauthenticatedTest(TestCase):
         url = f'/admin/email_app/emailcampaign/{campaign.pk}/send-campaign/'
         response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
+
+
+class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
+    """Campaign send respects tier, verification, and subscription status.
+
+    Moved from playwright_tests/test_email_campaigns.py Scenario 8.
+    """
+
+    @patch('email_app.tasks.send_campaign.EmailService')
+    def test_campaign_send_respects_tier_verification_and_subscription(
+        self, MockService
+    ):
+        """Main+ campaign sends only to verified, subscribed Main/Premium users.
+
+        Given: 2 verified Main, 1 verified Premium, 1 unsubscribed Main,
+        1 unverified Main, 3 Free users.
+        Then: sent_count is 3 (2 Main + 1 Premium).
+        """
+        mock_service = MockService.return_value
+        mock_service._send_ses.return_value = 'ses-msg-id'
+        mock_service._build_unsubscribe_url.return_value = 'http://example.com/unsub'
+
+        # 2 verified Main members (eligible)
+        User.objects.create_user(
+            email='main-eligible-1@test.com', tier=self.main_tier,
+            email_verified=True, unsubscribed=False,
+        )
+        User.objects.create_user(
+            email='main-eligible-2@test.com', tier=self.main_tier,
+            email_verified=True, unsubscribed=False,
+        )
+
+        # 1 verified Premium member (eligible)
+        User.objects.create_user(
+            email='premium-eligible@test.com', tier=self.premium_tier,
+            email_verified=True, unsubscribed=False,
+        )
+
+        # 1 unsubscribed Main member (NOT eligible)
+        User.objects.create_user(
+            email='main-unsub@test.com', tier=self.main_tier,
+            email_verified=True, unsubscribed=True,
+        )
+
+        # 1 unverified Main member (NOT eligible)
+        User.objects.create_user(
+            email='main-unverified@test.com', tier=self.main_tier,
+            email_verified=False, unsubscribed=False,
+        )
+
+        # 3 Free members (NOT eligible for level 20)
+        for i in range(3):
+            User.objects.create_user(
+                email=f'free-ineligible-{i}@test.com', tier=self.free_tier,
+                email_verified=True, unsubscribed=False,
+            )
+
+        campaign = EmailCampaign.objects.create(
+            subject='Main+ Campaign',
+            body='Content for Main and above',
+            target_min_level=20,
+            status='draft',
+        )
+
+        from email_app.tasks.send_campaign import send_campaign
+        result = send_campaign(campaign.pk, send_delay=0)
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.sent_count, 3)
+        self.assertEqual(campaign.status, 'sent')
+
+        logs = EmailLog.objects.filter(campaign=campaign)
+        self.assertEqual(logs.count(), 3)
+
+        recipient_emails = set(logs.values_list('user__email', flat=True))
+        self.assertIn('main-eligible-1@test.com', recipient_emails)
+        self.assertIn('main-eligible-2@test.com', recipient_emails)
+        self.assertIn('premium-eligible@test.com', recipient_emails)
+
+        self.assertNotIn('main-unsub@test.com', recipient_emails)
+        self.assertNotIn('main-unverified@test.com', recipient_emails)
+        for i in range(3):
+            self.assertNotIn(
+                f'free-ineligible-{i}@test.com', recipient_emails
+            )

@@ -685,11 +685,11 @@ class SyncArticlesTest(TestCase):
         if sync_log.errors:
             self.assertEqual(sync_log.status, 'partial')
 
-    def test_sync_overwrites_direct_admin_edit_by_slug(self):
-        """If slug matches in repo, sync overwrites the direct admin edit."""
+    def test_sync_does_not_overwrite_studio_content(self):
+        """Repo sync does not overwrite Studio-created content (source_repo=NULL)."""
         Article.objects.create(
             title='Admin Version', slug='same-slug', date=date.today(),
-            source_repo=None,  # direct admin edit
+            source_repo=None,  # direct admin/Studio edit
             published=True,
         )
         self._write_article(
@@ -697,10 +697,15 @@ class SyncArticlesTest(TestCase):
             {'title': 'Repo Version', 'slug': 'same-slug', 'date': '2026-01-15'},
             'From repo.',
         )
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        # Studio article should be untouched
         article = Article.objects.get(slug='same-slug')
-        self.assertEqual(article.title, 'Repo Version')
-        self.assertEqual(article.source_repo, 'AI-Shipping-Labs/blog')
+        self.assertEqual(article.title, 'Admin Version')
+        self.assertIsNone(article.source_repo)
+        # Error should be logged for slug collision
+        self.assertTrue(
+            any('Slug collision' in str(e.get('error', '')) for e in sync_log.errors),
+        )
 
 
 # ===========================================================================
@@ -1278,8 +1283,8 @@ class DirectAdminEditFlagTest(TestCase):
         self.assertIsNone(article.source_path)
         self.assertIsNone(article.source_commit)
 
-    def test_sync_overwrites_admin_edit(self):
-        """When slug matches in repo, sync overwrites even if source_repo was null."""
+    def test_sync_does_not_overwrite_studio_article(self):
+        """When slug matches but source_repo differs, sync skips and logs collision."""
         Article.objects.create(
             title='Admin Version', slug='overwrite-me', date=date.today(),
             source_repo=None,
@@ -1300,11 +1305,17 @@ class DirectAdminEditFlagTest(TestCase):
                 f.write('---\n')
                 f.write('Content from repo.\n')
 
-            sync_content_source(source, repo_dir=temp_dir)
+            sync_log = sync_content_source(source, repo_dir=temp_dir)
 
+            # Studio article should be untouched
             article = Article.objects.get(slug='overwrite-me')
-            self.assertEqual(article.title, 'Repo Version')
-            self.assertEqual(article.source_repo, 'test-org/blog')
+            self.assertEqual(article.title, 'Admin Version')
+            self.assertIsNone(article.source_repo)
+            # Slug collision logged
+            self.assertTrue(
+                any('Slug collision' in str(e.get('error', ''))
+                    for e in sync_log.errors),
+            )
         finally:
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)

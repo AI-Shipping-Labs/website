@@ -17,6 +17,7 @@ SYNC_STATUS_CHOICES = [
     ('partial', 'Partial'),
     ('failed', 'Failed'),
     ('running', 'Running'),
+    ('skipped', 'Skipped'),
 ]
 
 
@@ -56,6 +57,22 @@ class ContentSource(models.Model):
     last_sync_log = models.TextField(
         blank=True, null=True, default=None,
         help_text="Log output from the last sync.",
+    )
+    sync_locked_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Timestamp of current sync lock. NULL when unlocked.",
+    )
+    sync_requested = models.BooleanField(
+        default=False,
+        help_text="Flag indicating a sync was requested while another was running.",
+    )
+    last_webhook_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Timestamp of last webhook received.",
+    )
+    max_files = models.PositiveIntegerField(
+        default=1000,
+        help_text="Safety limit on number of content files to process per sync.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

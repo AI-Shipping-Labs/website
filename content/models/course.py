@@ -89,6 +89,28 @@ class Course(models.Model):
         max_length=40, blank=True, null=True, default=None,
         help_text="Git commit SHA of the last sync.",
     )
+    # Peer review configuration
+    peer_review_enabled = models.BooleanField(
+        default=False,
+        help_text="Toggle peer review on/off for this course.",
+    )
+    peer_review_count = models.IntegerField(
+        default=3,
+        help_text="Number of peers each student must review.",
+    )
+    peer_review_deadline_days = models.IntegerField(
+        default=7,
+        help_text="Days from batch assignment until review deadline.",
+    )
+    peer_review_criteria = models.TextField(
+        blank=True, default='',
+        help_text="Markdown rubric/criteria shown to reviewers.",
+    )
+    peer_review_criteria_html = models.TextField(
+        blank=True, default='',
+        help_text="Auto-rendered HTML from peer_review_criteria markdown.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -107,6 +129,8 @@ class Course(models.Model):
 
         if self.description:
             self.description_html = render_markdown(self.description)
+        if self.peer_review_criteria:
+            self.peer_review_criteria_html = render_markdown(self.peer_review_criteria)
         super().save(*args, **kwargs)
 
     @property
@@ -201,6 +225,10 @@ class Unit(models.Model):
     available_after_days = models.IntegerField(
         null=True, blank=True,
         help_text="For cohort drip schedule: unit becomes available this many days after cohort start_date. Null = available immediately.",
+    )
+    content_hash = models.CharField(
+        max_length=32, blank=True, null=True,
+        help_text="MD5 hex digest of body text for rename detection.",
     )
     source_repo = models.CharField(
         max_length=300, blank=True, null=True, default=None,

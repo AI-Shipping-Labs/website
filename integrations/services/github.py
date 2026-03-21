@@ -31,8 +31,24 @@ from integrations.models import ContentSource, SyncLog
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'}
+CONTENT_EXTENSIONS = {'.md', '.yaml', '.yml'}
 
 GITHUB_API_BASE = 'https://api.github.com'
+
+# Required frontmatter fields per content type
+REQUIRED_FIELDS = {
+    'article': ['title', 'slug'],
+    'course': ['title', 'slug'],
+    'module': ['title', 'sort_order'],
+    'unit': ['title', 'sort_order'],
+    'recording': ['title', 'slug', 'video_url'],
+    'project': ['title', 'slug'],
+    'curated_link': ['title', 'url', 'item_id'],
+    'download': ['title', 'slug'],
+}
+
+# Sync lock timeout in minutes
+SYNC_LOCK_TIMEOUT_MINUTES = 10
 
 
 class GitHubSyncError(Exception):
@@ -163,6 +179,8 @@ def clone_or_pull_repo(repo_name, target_dir, is_private=False):
     else:
         repo_url = f'https://github.com/{repo_name}.git'
 
+    clone_timeout = getattr(settings, 'GITHUB_SYNC_CLONE_TIMEOUT', 300)
+
     try:
         if os.path.exists(os.path.join(target_dir, '.git')):
             # Pull existing repo
@@ -171,7 +189,7 @@ def clone_or_pull_repo(repo_name, target_dir, is_private=False):
                 cwd=target_dir,
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=clone_timeout,
             )
         else:
             # Clone fresh
@@ -179,7 +197,7 @@ def clone_or_pull_repo(repo_name, target_dir, is_private=False):
                 ['git', 'clone', '--depth', '1', repo_url, target_dir],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=clone_timeout,
             )
 
         if result.returncode != 0:
@@ -363,6 +381,21 @@ def sync_content_source(source, repo_dir=None):
     Returns:
         SyncLog: The sync log entry.
     """
+    # Acquire sync lock (Edge Case 4: Concurrent Syncs)
+    # Skip locking when repo_dir is provided (testing mode)
+    use_lock = repo_dir is None
+    if use_lock and not acquire_sync_lock(source):
+        logger.info(
+            'Sync already in progress for %s, skipping.', source.repo_name,
+        )
+        sync_log = SyncLog.objects.create(
+            source=source,
+            status='skipped',
+            finished_at=timezone.now(),
+            errors=[{'file': '', 'error': 'Sync already in progress, skipped.'}],
+        )
+        return sync_log
+
     sync_log = SyncLog.objects.create(
         source=source,
         status='running',
@@ -392,27 +425,44 @@ def sync_content_source(source, repo_dir=None):
                     f'Content path {source.content_path!r} not found in repo'
                 )
 
-        # Upload images to S3 before content sync (so CDN URLs are live)
-        s3_stats = upload_images_to_s3(content_dir, source)
-        if s3_stats['errors']:
+        # Edge Case 5: Max files guard
+        file_count = _count_content_files(content_dir)
+        if file_count > source.max_files:
             raise GitHubSyncError(
-                f"S3 image upload failed for {len(s3_stats['errors'])} file(s): "
-                f"{s3_stats['errors']}"
+                f'Repository contains more than {source.max_files} content files. '
+                f'Increase max_files on the ContentSource or reduce repo size.'
+            )
+
+        # Upload images to S3 before content sync (so CDN URLs are live)
+        # Edge Case 3: S3 errors do not abort sync
+        s3_stats = upload_images_to_s3(content_dir, source)
+        s3_errors = s3_stats.get('errors', [])
+        if s3_errors:
+            logger.warning(
+                'S3 image upload had %d error(s) for %s, continuing with content sync.',
+                len(s3_errors), source.repo_name,
             )
         logger.info(
             'S3 upload for %s: %d uploaded, %d skipped',
             source.repo_name, s3_stats['uploaded'], s3_stats['skipped'],
         )
 
+        # Collect known image paths for broken reference checks (Edge Case 8)
+        known_images = _collect_image_paths(content_dir)
+
         # Dispatch to content-type-specific sync
         sync_func = _get_sync_function(source.content_type)
-        stats = sync_func(source, content_dir, commit_sha, sync_log)
+        stats = sync_func(source, content_dir, commit_sha, sync_log,
+                          known_images=known_images)
+
+        # Merge S3 errors into stats
+        all_errors = s3_errors + stats.get('errors', [])
 
         # Update sync log
         sync_log.items_created = stats.get('created', 0)
         sync_log.items_updated = stats.get('updated', 0)
         sync_log.items_deleted = stats.get('deleted', 0)
-        sync_log.errors = stats.get('errors', [])
+        sync_log.errors = all_errors
 
         if sync_log.errors:
             sync_log.status = 'partial'
@@ -448,6 +498,24 @@ def sync_content_source(source, repo_dir=None):
     finally:
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+        # Release sync lock and check for follow-up (Edge Case 9)
+        if use_lock:
+            follow_up = release_sync_lock(source)
+            if follow_up:
+                logger.info(
+                    'Follow-up sync requested for %s, enqueuing.',
+                    source.repo_name,
+                )
+                try:
+                    from django_q.tasks import async_task
+                    async_task(
+                        'integrations.services.github.sync_content_source',
+                        source,
+                        task_name=f'sync-{source.repo_name}-{source.content_type}-followup',
+                    )
+                except ImportError:
+                    sync_content_source(source)
 
     return sync_log
 
@@ -494,12 +562,155 @@ def _parse_yaml_file(filepath):
         return yaml.safe_load(f) or {}
 
 
-def _sync_articles(source, repo_dir, commit_sha, sync_log):
+def _validate_frontmatter(metadata, content_type, filepath):
+    """Validate that required frontmatter fields are present.
+
+    Args:
+        metadata: Parsed frontmatter dict.
+        content_type: Content type key from REQUIRED_FIELDS.
+        filepath: File path for error messages.
+
+    Raises:
+        ValueError: If required fields are missing.
+    """
+    required = REQUIRED_FIELDS.get(content_type, [])
+    missing = [f for f in required if not metadata.get(f)]
+    if missing:
+        raise ValueError(
+            f"Missing required field(s) in {filepath}: {', '.join(missing)}"
+        )
+
+
+def _check_slug_collision(model_class, slug, source_repo, filepath):
+    """Check for slug collision with a different source.
+
+    Returns True if a collision exists (file should be skipped).
+    Returns False if no collision.
+    """
+    existing = model_class.objects.filter(slug=slug).exclude(
+        source_repo=source_repo,
+    ).first()
+    if existing:
+        other_source = existing.source_repo or 'studio'
+        logger.warning(
+            "Slug collision: '%s' already exists from source '%s' "
+            "(source_repo=%s). Skipped %s.",
+            slug, other_source, existing.source_repo, filepath,
+        )
+        return True
+    return False
+
+
+def _collect_image_paths(content_dir):
+    """Return a set of all image file paths relative to content_dir."""
+    image_paths = set()
+    for root, dirs, files in os.walk(content_dir):
+        if '.git' in root:
+            continue
+        for filename in files:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in IMAGE_EXTENSIONS:
+                filepath = os.path.join(root, filename)
+                rel_path = os.path.relpath(filepath, content_dir)
+                image_paths.add(rel_path)
+    return image_paths
+
+
+def _compute_content_hash(text):
+    """Compute MD5 hex digest of text for rename detection."""
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+
+def _count_content_files(content_dir):
+    """Count content files (.md, .yaml, .yml) in a directory tree."""
+    count = 0
+    for root, dirs, files in os.walk(content_dir):
+        if '.git' in root:
+            continue
+        for filename in files:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in CONTENT_EXTENSIONS:
+                count += 1
+            elif ext not in IMAGE_EXTENSIONS and filename != 'README.md':
+                logger.debug(
+                    'Skipping non-content, non-image file: %s',
+                    os.path.join(root, filename),
+                )
+    return count
+
+
+def _check_broken_image_refs(body, rel_path, repo_name, base_dir, known_images, errors):
+    """Check for broken image references in markdown content.
+
+    Logs warnings for images not found in the repo.
+    """
+    # Match markdown image syntax: ![alt](path)
+    md_pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
+    for match in re.finditer(md_pattern, body):
+        img_path = match.group(2)
+        if img_path.startswith(('http://', 'https://')):
+            continue
+        clean_path = img_path.lstrip('/')
+        resolved = os.path.normpath(os.path.join(base_dir, clean_path))
+        if resolved not in known_images:
+            errors.append({
+                'file': rel_path,
+                'error': f'Broken image reference: {img_path} not found in repo',
+            })
+            logger.warning(
+                'Broken image reference in %s: %s not found in repo',
+                rel_path, img_path,
+            )
+
+
+def acquire_sync_lock(source):
+    """Attempt to acquire the sync lock for a ContentSource.
+
+    Uses atomic queryset UPDATE to prevent race conditions. A lock older than
+    SYNC_LOCK_TIMEOUT_MINUTES is considered stale and can be reclaimed.
+
+    Returns:
+        bool: True if lock was acquired, False if already locked.
+    """
+    from django.db.models import Q
+
+    now = timezone.now()
+    stale_threshold = now - timezone.timedelta(minutes=SYNC_LOCK_TIMEOUT_MINUTES)
+
+    updated = ContentSource.objects.filter(
+        pk=source.pk,
+    ).filter(
+        Q(sync_locked_at__isnull=True) | Q(sync_locked_at__lt=stale_threshold),
+    ).update(sync_locked_at=now)
+
+    if updated == 0:
+        return False
+
+    source.refresh_from_db()
+    return True
+
+
+def release_sync_lock(source):
+    """Release the sync lock and check for pending sync requests.
+
+    Returns:
+        bool: True if a follow-up sync was requested.
+    """
+    source.refresh_from_db()
+    was_requested = source.sync_requested
+    source.sync_locked_at = None
+    source.sync_requested = False
+    source.save(update_fields=['sync_locked_at', 'sync_requested', 'updated_at'])
+    return was_requested
+
+
+def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync blog articles from the repo."""
     from content.models import Article
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
     seen_slugs = set()
+    failed_slugs = set()
 
     # Find all .md files (excluding README)
     for root, dirs, files in os.walk(repo_dir):
@@ -512,18 +723,53 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log):
 
             filepath = os.path.join(root, filename)
             rel_path = os.path.relpath(filepath, repo_dir)
+            current_slug = None  # Track slug for error handling
 
             try:
                 metadata, body = _parse_markdown_file(filepath)
-                slug = metadata.get('slug', os.path.splitext(filename)[0])
-                seen_slugs.add(slug)
+
+                # Derive slug before validation so we can track failures
+                current_slug = metadata.get('slug', os.path.splitext(filename)[0])
+
+                # Edge Case 7: Frontmatter validation
+                _validate_frontmatter(metadata, 'article', rel_path)
+
+                # Edge Case 2: Check slug collision across sources
+                if _check_slug_collision(Article, current_slug, source.repo_name, rel_path):
+                    stats['errors'].append({
+                        'file': rel_path,
+                        'error': (
+                            f"Slug collision: '{current_slug}' already exists from a "
+                            f"different source. Skipped."
+                        ),
+                    })
+                    failed_slugs.add(current_slug)
+                    continue
+
+                # Warn on same-source slug collision (last-file-wins)
+                if current_slug in seen_slugs:
+                    logger.warning(
+                        'Same-source slug collision: %s appears multiple '
+                        'times in %s. Last file wins.',
+                        current_slug, source.repo_name,
+                    )
+
+                seen_slugs.add(current_slug)
 
                 # Rewrite image URLs
                 base_dir = os.path.dirname(rel_path)
+
+                # Edge Case 8: Check for broken image references
+                if known_images is not None:
+                    _check_broken_image_refs(
+                        body, rel_path, source.repo_name, base_dir,
+                        known_images, stats['errors'],
+                    )
+
                 body = rewrite_image_urls(body, source.repo_name, base_dir)
 
                 defaults = {
-                    'title': metadata.get('title', slug),
+                    'title': metadata.get('title', current_slug),
                     'description': metadata.get('description', ''),
                     'content_markdown': body,
                     'author': metadata.get('author', ''),
@@ -547,8 +793,10 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log):
                 else:
                     defaults['date'] = timezone.now().date()
 
+                # Edge Case 2: Scope update_or_create to source_repo
                 article, created = Article.objects.update_or_create(
-                    slug=slug,
+                    slug=current_slug,
+                    source_repo=source.repo_name,
                     defaults=defaults,
                 )
                 if created:
@@ -557,17 +805,23 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log):
                     stats['updated'] += 1
 
             except Exception as e:
+                # Track the slug as failed so it's excluded from cleanup.
+                # Use filename-based slug as safe fallback, plus current_slug
+                # if it was derived from metadata before the error.
+                failed_slugs.add(os.path.splitext(filename)[0])
+                if current_slug:
+                    failed_slugs.add(current_slug)
                 stats['errors'].append({
                     'file': rel_path,
                     'error': str(e),
                 })
                 logger.warning('Error syncing article %s: %s', rel_path, e)
 
-    # Soft-delete articles from this repo that are no longer in the repo
+    # Edge Case 3: Exclude failed_slugs from stale-content cleanup
     stale_articles = Article.objects.filter(
         source_repo=source.repo_name,
         published=True,
-    ).exclude(slug__in=seen_slugs)
+    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
 
     deleted_count = stale_articles.count()
     stale_articles.update(published=False, status='draft')
@@ -576,12 +830,13 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log):
     return stats
 
 
-def _sync_courses(source, repo_dir, commit_sha, sync_log):
+def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync courses with modules and units from the repo."""
     from content.models import Course, Module, Unit
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
     seen_course_slugs = set()
+    failed_course_slugs = set()
 
     # Walk top-level directories (each is a course)
     for entry in os.scandir(repo_dir):
@@ -595,8 +850,24 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log):
         try:
             course_data = _parse_yaml_file(course_yaml_path)
             slug = course_data.get('slug', entry.name)
-            seen_course_slugs.add(slug)
             rel_path = os.path.relpath(entry.path, repo_dir)
+
+            # Edge Case 7: Frontmatter validation
+            _validate_frontmatter(course_data, 'course', rel_path)
+
+            # Edge Case 2: Slug collision across sources
+            if _check_slug_collision(Course, slug, source.repo_name, rel_path):
+                stats['errors'].append({
+                    'file': rel_path,
+                    'error': (
+                        f"Slug collision: '{slug}' already exists from a "
+                        f"different source. Skipped."
+                    ),
+                })
+                failed_course_slugs.add(slug)
+                continue
+
+            seen_course_slugs.add(slug)
 
             course_defaults = {
                 'title': course_data.get('title', slug),
@@ -616,6 +887,7 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log):
 
             course, created = Course.objects.update_or_create(
                 slug=slug,
+                source_repo=source.repo_name,
                 defaults=course_defaults,
             )
             if created:
@@ -626,21 +898,26 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log):
             # Sync modules
             _sync_course_modules(
                 course, entry.path, repo_dir, source.repo_name,
-                commit_sha, stats,
+                commit_sha, stats, known_images=known_images,
             )
 
         except Exception as e:
+            try:
+                failed_slug = course_data.get('slug', entry.name)
+            except Exception:
+                failed_slug = entry.name
+            failed_course_slugs.add(failed_slug)
             stats['errors'].append({
                 'file': os.path.relpath(course_yaml_path, repo_dir),
                 'error': str(e),
             })
             logger.warning('Error syncing course %s: %s', entry.name, e)
 
-    # Soft-delete courses from this repo no longer in the repo
+    # Edge Case 3: Exclude failed slugs from stale-content cleanup
     stale_courses = Course.objects.filter(
         source_repo=source.repo_name,
         status='published',
-    ).exclude(slug__in=seen_course_slugs)
+    ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs)
 
     deleted_count = stale_courses.count()
     stale_courses.update(status='draft')
@@ -649,7 +926,8 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log):
     return stats
 
 
-def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats):
+def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
+                         known_images=None):
     """Sync modules and units for a course."""
     from content.models import Module, Unit
 
@@ -666,6 +944,10 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
         try:
             module_data = _parse_yaml_file(module_yaml_path)
             rel_path = os.path.relpath(entry.path, repo_dir)
+
+            # Edge Case 7: Frontmatter validation
+            _validate_frontmatter(module_data, 'module', rel_path)
+
             seen_module_paths.add(rel_path)
 
             module, created = Module.objects.update_or_create(
@@ -686,6 +968,7 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             # Sync units within this module
             _sync_module_units(
                 module, entry.path, repo_dir, repo_name, commit_sha, stats,
+                known_images=known_images,
             )
 
         except Exception as e:
@@ -704,11 +987,14 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
     stats['deleted'] += deleted_count
 
 
-def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stats):
+def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stats,
+                       known_images=None):
     """Sync units (markdown files) within a module directory."""
-    from content.models import Unit
+    from content.models import Unit, UserCourseProgress
 
     seen_unit_paths = set()
+    # Track newly created units with their hashes for rename detection
+    new_unit_hashes = {}
 
     for filename in sorted(os.listdir(module_dir)):
         if not filename.endswith('.md') or filename.upper() == 'README.MD':
@@ -719,10 +1005,25 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
         try:
             metadata, body = _parse_markdown_file(filepath)
+
+            # Edge Case 7: Frontmatter validation
+            _validate_frontmatter(metadata, 'unit', rel_path)
+
             seen_unit_paths.add(rel_path)
+
+            # Edge Case 1: Compute content hash for rename detection
+            content_hash = _compute_content_hash(body)
 
             # Rewrite image URLs
             base_dir = os.path.dirname(rel_path)
+
+            # Edge Case 8: Check broken image references
+            if known_images is not None:
+                _check_broken_image_refs(
+                    body, rel_path, repo_name, base_dir,
+                    known_images, stats.get('errors', []),
+                )
+
             body = rewrite_image_urls(body, repo_name, base_dir)
 
             is_homework = metadata.get('is_homework', False)
@@ -733,6 +1034,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 'video_url': metadata.get('video_url', ''),
                 'timestamps': metadata.get('timestamps', []),
                 'is_preview': metadata.get('is_preview', False),
+                'content_hash': content_hash,
                 'source_repo': repo_name,
                 'source_commit': commit_sha,
             }
@@ -749,6 +1051,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             )
             if created:
                 stats['created'] += 1
+                new_unit_hashes[content_hash] = unit
             else:
                 stats['updated'] += 1
 
@@ -758,17 +1061,34 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 'error': str(e),
             })
 
-    # Remove stale units
+    # Remove stale units, with rename detection (Edge Case 1)
     stale_units = Unit.objects.filter(
         module=module,
         source_repo=repo_name,
     ).exclude(source_path__in=seen_unit_paths)
+
+    for stale_unit in stale_units:
+        # Check if a newly created unit in the same course has the same hash
+        if (stale_unit.content_hash
+                and stale_unit.content_hash in new_unit_hashes):
+            new_unit = new_unit_hashes[stale_unit.content_hash]
+            # Migrate UnitCompletion (UserCourseProgress) records
+            migrated = UserCourseProgress.objects.filter(
+                unit=stale_unit,
+            ).update(unit=new_unit)
+            if migrated:
+                logger.warning(
+                    'Unit appears to have been renamed: %s -> %s, '
+                    'migrated %d completion records.',
+                    stale_unit.source_path, new_unit.source_path, migrated,
+                )
+
     deleted_count = stale_units.count()
     stale_units.delete()
     stats['deleted'] += deleted_count
 
 
-def _sync_resources(source, repo_dir, commit_sha, sync_log):
+def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync resources: recordings, curated links, and downloads."""
     from content.models import CuratedLink, Download, Recording
 
@@ -804,6 +1124,7 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
     from datetime import date as date_type
 
     seen_slugs = set()
+    failed_slugs = set()
 
     for filename in os.listdir(recordings_dir):
         if not filename.endswith('.yaml') and not filename.endswith('.yml'):
@@ -815,6 +1136,22 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
         try:
             data = _parse_yaml_file(filepath)
             slug = data.get('slug', os.path.splitext(filename)[0])
+
+            # Edge Case 7: Frontmatter validation
+            _validate_frontmatter(data, 'recording', rel_path)
+
+            # Edge Case 2: Slug collision across sources
+            if _check_slug_collision(Recording, slug, source.repo_name, rel_path):
+                stats['errors'].append({
+                    'file': rel_path,
+                    'error': (
+                        f"Slug collision: '{slug}' already exists from a "
+                        f"different source. Skipped."
+                    ),
+                })
+                failed_slugs.add(slug)
+                continue
+
             seen_slugs.add(slug)
 
             defaults = {
@@ -842,6 +1179,7 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
 
             recording, created = Recording.objects.update_or_create(
                 slug=slug,
+                source_repo=source.repo_name,
                 defaults=defaults,
             )
             if created:
@@ -850,13 +1188,19 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
                 stats['updated'] += 1
 
         except Exception as e:
+            fallback_slug = os.path.splitext(filename)[0]
+            try:
+                failed_slug = data.get('slug', fallback_slug)
+            except Exception:
+                failed_slug = fallback_slug
+            failed_slugs.add(failed_slug)
             stats['errors'].append({'file': rel_path, 'error': str(e)})
 
-    # Soft-delete stale recordings from this repo
+    # Soft-delete stale recordings, excluding failed slugs
     stale = Recording.objects.filter(
         source_repo=source.repo_name,
         published=True,
-    ).exclude(slug__in=seen_slugs)
+    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count
@@ -877,31 +1221,40 @@ def _sync_curated_links(source, links_file, repo_dir, commit_sha, stats):
             links_data = [links_data]
 
         for idx, link in enumerate(links_data):
-            item_id = link.get('item_id', f'sync-{idx}')
-            seen_item_ids.add(item_id)
+            try:
+                # Edge Case 7: Frontmatter validation
+                _validate_frontmatter(link, 'curated_link', f'{rel_path}[{idx}]')
 
-            defaults = {
-                'title': link.get('title', ''),
-                'description': link.get('description', ''),
-                'url': link.get('url', ''),
-                'category': link.get('category', 'other'),
-                'tags': link.get('tags', []),
-                'sort_order': link.get('sort_order', idx),
-                'required_level': link.get('required_level', 0),
-                'published': True,
-                'source_repo': source.repo_name,
-                'source_path': rel_path,
-                'source_commit': commit_sha,
-            }
+                item_id = link.get('item_id', f'sync-{idx}')
+                seen_item_ids.add(item_id)
 
-            obj, created = CuratedLink.objects.update_or_create(
-                item_id=item_id,
-                defaults=defaults,
-            )
-            if created:
-                stats['created'] += 1
-            else:
-                stats['updated'] += 1
+                defaults = {
+                    'title': link.get('title', ''),
+                    'description': link.get('description', ''),
+                    'url': link.get('url', ''),
+                    'category': link.get('category', 'other'),
+                    'tags': link.get('tags', []),
+                    'sort_order': link.get('sort_order', idx),
+                    'required_level': link.get('required_level', 0),
+                    'published': True,
+                    'source_repo': source.repo_name,
+                    'source_path': rel_path,
+                    'source_commit': commit_sha,
+                }
+
+                obj, created = CuratedLink.objects.update_or_create(
+                    item_id=item_id,
+                    defaults=defaults,
+                )
+                if created:
+                    stats['created'] += 1
+                else:
+                    stats['updated'] += 1
+            except Exception as e:
+                stats['errors'].append({
+                    'file': f'{rel_path}[{idx}]',
+                    'error': str(e),
+                })
 
     except Exception as e:
         stats['errors'].append({'file': rel_path, 'error': str(e)})
@@ -921,6 +1274,7 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
     from content.models import Download
 
     seen_slugs = set()
+    failed_slugs = set()
 
     for filename in os.listdir(downloads_dir):
         if not filename.endswith('.yaml') and not filename.endswith('.yml'):
@@ -932,6 +1286,22 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
         try:
             data = _parse_yaml_file(filepath)
             slug = data.get('slug', os.path.splitext(filename)[0])
+
+            # Edge Case 7: Frontmatter validation
+            _validate_frontmatter(data, 'download', rel_path)
+
+            # Edge Case 2: Slug collision across sources
+            if _check_slug_collision(Download, slug, source.repo_name, rel_path):
+                stats['errors'].append({
+                    'file': rel_path,
+                    'error': (
+                        f"Slug collision: '{slug}' already exists from a "
+                        f"different source. Skipped."
+                    ),
+                })
+                failed_slugs.add(slug)
+                continue
+
             seen_slugs.add(slug)
 
             defaults = {
@@ -951,6 +1321,7 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
 
             download, created = Download.objects.update_or_create(
                 slug=slug,
+                source_repo=source.repo_name,
                 defaults=defaults,
             )
             if created:
@@ -959,25 +1330,32 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
                 stats['updated'] += 1
 
         except Exception as e:
+            fallback_slug = os.path.splitext(filename)[0]
+            try:
+                failed_slug = data.get('slug', fallback_slug)
+            except Exception:
+                failed_slug = fallback_slug
+            failed_slugs.add(failed_slug)
             stats['errors'].append({'file': rel_path, 'error': str(e)})
 
-    # Soft-delete stale downloads
+    # Soft-delete stale downloads, excluding failed slugs
     stale = Download.objects.filter(
         source_repo=source.repo_name,
         published=True,
-    ).exclude(slug__in=seen_slugs)
+    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count
 
 
-def _sync_projects(source, repo_dir, commit_sha, sync_log):
+def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync project markdown files from the repo."""
     from content.models import Project
     from datetime import date as date_type
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
     seen_slugs = set()
+    failed_slugs = set()
 
     for root, dirs, files in os.walk(repo_dir):
         if '.git' in root:
@@ -992,9 +1370,33 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log):
             try:
                 metadata, body = _parse_markdown_file(filepath)
                 slug = metadata.get('slug', os.path.splitext(filename)[0])
+
+                # Edge Case 7: Frontmatter validation
+                _validate_frontmatter(metadata, 'project', rel_path)
+
+                # Edge Case 2: Slug collision across sources
+                if _check_slug_collision(Project, slug, source.repo_name, rel_path):
+                    stats['errors'].append({
+                        'file': rel_path,
+                        'error': (
+                            f"Slug collision: '{slug}' already exists from a "
+                            f"different source. Skipped."
+                        ),
+                    })
+                    failed_slugs.add(slug)
+                    continue
+
                 seen_slugs.add(slug)
 
                 base_dir = os.path.dirname(rel_path)
+
+                # Edge Case 8: Check broken image references
+                if known_images is not None:
+                    _check_broken_image_refs(
+                        body, rel_path, source.repo_name, base_dir,
+                        known_images, stats['errors'],
+                    )
+
                 body = rewrite_image_urls(body, source.repo_name, base_dir)
 
                 defaults = {
@@ -1025,6 +1427,7 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log):
 
                 project, created = Project.objects.update_or_create(
                     slug=slug,
+                    source_repo=source.repo_name,
                     defaults=defaults,
                 )
                 if created:
@@ -1033,14 +1436,20 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log):
                     stats['updated'] += 1
 
             except Exception as e:
+                fallback_slug = os.path.splitext(filename)[0]
+                try:
+                    failed_slug = metadata.get('slug', fallback_slug)
+                except Exception:
+                    failed_slug = fallback_slug
+                failed_slugs.add(failed_slug)
                 stats['errors'].append({'file': rel_path, 'error': str(e)})
                 logger.warning('Error syncing project %s: %s', rel_path, e)
 
-    # Soft-delete stale projects
+    # Soft-delete stale projects, excluding failed slugs
     stale = Project.objects.filter(
         source_repo=source.repo_name,
         published=True,
-    ).exclude(slug__in=seen_slugs)
+    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
     deleted_count = stale.count()
     stale.update(published=False, status='pending_review')
     stats['deleted'] = deleted_count
@@ -1048,7 +1457,7 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log):
     return stats
 
 
-def _sync_interview_questions(source, repo_dir, commit_sha, sync_log):
+def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync interview question categories from markdown files."""
     from content.models import InterviewCategory
 
@@ -1108,7 +1517,7 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log):
     return stats
 
 
-def _sync_learning_paths(source, repo_dir, commit_sha, sync_log):
+def _sync_learning_paths(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync learning paths from YAML data files."""
     from content.models import LearningPath
 

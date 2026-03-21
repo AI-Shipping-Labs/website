@@ -15,8 +15,11 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from django.utils import timezone
+
 from integrations.models import ContentSource, WebhookLog
 from integrations.services.github import (
+    SYNC_LOCK_TIMEOUT_MINUTES,
     find_content_source,
     sync_content_source,
     validate_webhook_signature,
@@ -89,7 +92,28 @@ def github_webhook(request):
     ref = payload.get('ref', '')
     if event_type == 'push' and ref in ('refs/heads/main', 'refs/heads/master'):
         try:
+            now = timezone.now()
+            stale_threshold = now - timezone.timedelta(
+                minutes=SYNC_LOCK_TIMEOUT_MINUTES,
+            )
+
             for source in sources:
+                # Edge Case 9: Update last_webhook_at on every webhook
+                source.last_webhook_at = now
+                source.save(update_fields=['last_webhook_at', 'updated_at'])
+
+                # Edge Case 9: Webhook dedup - if sync is already running,
+                # set sync_requested flag instead of enqueuing
+                if (source.sync_locked_at
+                        and source.sync_locked_at >= stale_threshold):
+                    source.sync_requested = True
+                    source.save(update_fields=['sync_requested', 'updated_at'])
+                    logger.info(
+                        'Sync already running for %s, setting sync_requested flag.',
+                        source.repo_name,
+                    )
+                    continue
+
                 # Try to enqueue as a background job
                 try:
                     from django_q.tasks import async_task

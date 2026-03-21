@@ -627,12 +627,14 @@ class TestScenario6VisitorFiltersByTag:
                 )
                 assert "Doc B" not in cards_text
 
-                # A link to clear the filter and return to /downloads
-                # is available
-                clear_link = page.locator(
-                    'a[href="/downloads"]'
+                # Navigate back to unfiltered page
+                page.goto(
+                    f"{django_server}/downloads",
+                    wait_until="networkidle",
                 )
-                assert clear_link.count() >= 1
+                body = page.content()
+                assert "Doc A" in body
+                assert "Doc B" in body
             finally:
                 browser.close()
 

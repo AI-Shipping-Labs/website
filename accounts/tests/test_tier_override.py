@@ -3,9 +3,10 @@
 Covers all 69 test scenarios from issue #125, organized by category.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
+from freezegun import freeze_time
 from django.db.models import ProtectedError
 from django.test import TestCase, RequestFactory
 from django.utils import timezone
@@ -1028,20 +1029,20 @@ class TimezoneEdgeCasesTest(TierOverrideTestBase):
         # Django stores as UTC; the field should be timezone-aware
         self.assertIsNotNone(override.expires_at.tzinfo)
 
+    @freeze_time("2026-03-21 00:05:00", tz_offset=0)
     def test_53_expires_at_midnight_utc(self):
         """#53: expires_at at midnight UTC -> correctly deactivated."""
         from jobs.tasks.expire_overrides import expire_tier_overrides
 
         user = self._make_user()
+        # Midnight today is 5 minutes in the past (frozen at 00:05)
         midnight = timezone.now().replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         self._make_override(user, self.premium_tier, expires_at=midnight)
 
-        # If midnight is in the past, it should be deactivated
-        if midnight <= timezone.now():
-            result = expire_tier_overrides()
-            self.assertEqual(result["deactivated"], 1)
+        result = expire_tier_overrides()
+        self.assertEqual(result["deactivated"], 1)
 
 
 # ============================================================

@@ -42,6 +42,7 @@ class StudioCampaignListTest(TestCase):
         )
         response = self.client.get('/studio/campaigns/?status=draft')
         self.assertContains(response, 'Draft Campaign')
+        self.assertNotContains(response, 'Sent Campaign')
 
     def test_list_search(self):
         EmailCampaign.objects.create(

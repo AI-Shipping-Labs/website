@@ -981,7 +981,9 @@ class TestScenario10DashboardContinueLearning:
 
                 # The course appears with progress
                 assert "Dashboard Course" in body
-                assert "1" in body  # 1 of 3 or 1/3
+                # Progress indicator shows "1 of 3" or "1/3"
+                progress_text = page.locator("text=/1\\s*(of|\\/)\\s*3/")
+                assert progress_text.count() >= 1, "Expected progress indicator like '1 of 3' or '1/3'"
 
                 # Step 2: Click on the course in the Continue Learning section
                 course_link = page.locator(

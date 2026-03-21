@@ -546,6 +546,10 @@ class CampaignAdminTest(TestCase):
         url = f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/'
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # Draft subject should be in an editable input field
+        self.assertIn('name="subject"', content)
+        self.assertIn('name="body"', content)
 
     def test_sent_campaign_fields_readonly(self):
         """Sent campaigns have readonly fields."""
@@ -554,6 +558,10 @@ class CampaignAdminTest(TestCase):
         url = f'/admin/email_app/emailcampaign/{self.campaign.pk}/change/'
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # Sent campaign subject and body should NOT be editable input fields
+        self.assertNotIn('name="subject"', content)
+        self.assertNotIn('name="body"', content)
 
 
 class CampaignAdminUnauthenticatedTest(TestCase):

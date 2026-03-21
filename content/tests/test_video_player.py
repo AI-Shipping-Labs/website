@@ -484,10 +484,11 @@ class RecordingAdminFormTest(TestCase):
             'outcome': '',
             'related_course': '',
             'published': True,
+            'required_level': 0,
         }
         form = RecordingAdminForm(data=form_data)
-        if form.is_valid():
-            self.assertEqual(form.cleaned_data['timestamps'], [{'time_seconds': 0, 'label': 'Intro'}])
+        self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")
+        self.assertEqual(form.cleaned_data['timestamps'], [{'time_seconds': 0, 'label': 'Intro'}])
 
     def test_admin_form_clean_timestamps_empty(self):
         from content.admin.recording import RecordingAdminForm
@@ -507,10 +508,11 @@ class RecordingAdminFormTest(TestCase):
             'outcome': '',
             'related_course': '',
             'published': True,
+            'required_level': 0,
         }
         form = RecordingAdminForm(data=form_data)
-        if form.is_valid():
-            self.assertEqual(form.cleaned_data['timestamps'], [])
+        self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")
+        self.assertEqual(form.cleaned_data['timestamps'], [])
 
 
 # --- Recording Detail View Integration Tests ---

@@ -729,6 +729,9 @@ class CohortAdminTest(TestCase):
         CohortEnrollment.objects.create(cohort=cohort, user=user)
         response = self.client.get('/admin/content/cohort/')
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Count Cohort')
+        # The enrollment count column should display "1" for this cohort
+        self.assertContains(response, '>1</td>')
 
     def test_admin_unit_has_available_after_days_field(self):
         """Unit admin should show the available_after_days field."""

@@ -37,17 +37,18 @@ class StudioProjectListTest(TestCase):
 
     def test_list_filter_pending(self):
         Project.objects.create(
-            title='Pending', slug='pending',
+            title='Pending Project Alpha', slug='pending',
             date=timezone.now().date(),
             status='pending_review', published=False,
         )
         Project.objects.create(
-            title='Published', slug='published',
+            title='Approved Project Beta', slug='published',
             date=timezone.now().date(),
             status='published', published=True,
         )
         response = self.client.get('/studio/projects/?status=pending_review')
-        self.assertContains(response, 'Pending')
+        self.assertContains(response, 'Pending Project Alpha')
+        self.assertNotContains(response, 'Approved Project Beta')
 
     def test_list_shows_pending_count(self):
         Project.objects.create(
@@ -107,6 +108,12 @@ class StudioProjectReviewTest(TestCase):
         self.assertTrue(self.project.published)
 
     def test_reject_project(self):
+        # First approve the project so reject has an observable effect
+        self.project.approve()
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, 'published')
+        self.assertTrue(self.project.published)
+
         response = self.client.post(
             f'/studio/projects/{self.project.pk}/review',
             {'action': 'reject'},

@@ -430,6 +430,7 @@ class SubscriberAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn("verified@example.com", content)
+        self.assertNotIn("unverified@example.com", content)
 
     def test_subscriber_admin_filter_unsubscribed(self):
         User.objects.create_user(
@@ -445,6 +446,7 @@ class SubscriberAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn("unsub@example.com", content)
+        self.assertNotIn("active@example.com", content)
 
     def test_subscriber_admin_csv_export(self):
         user1 = User.objects.create_user(

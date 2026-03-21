@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Review Submission - {{ course.title }} | {{ site_name }}{% endblock %}
+
+{% block body %}
+<div class="max-w-2xl mx-auto px-4 py-12">
+  <div class="mb-6">
+    <a href="{% url 'peer_review_dashboard' slug=course.slug %}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to Review Dashboard</a>
+  </div>
+
+  <h1 class="text-2xl font-semibold text-foreground mb-2">Peer Review</h1>
+  <p class="text-muted-foreground mb-8">{{ course.title }}</p>
+
+  {% if error %}
+  <div class="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-6">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <!-- Submission details -->
+  <div class="bg-card border border-border rounded-lg p-6 mb-6">
+    <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Submission</h2>
+    <div class="space-y-3">
+      <div>
+        <span class="text-sm text-muted-foreground">Project URL:</span>
+        <a href="{{ submission.project_url }}" target="_blank" rel="noopener" class="text-accent hover:underline text-sm ml-2">{{ submission.project_url }}</a>
+      </div>
+      {% if submission.description %}
+      <div>
+        <span class="text-sm text-muted-foreground">Description:</span>
+        <p class="text-sm text-foreground mt-1">{{ submission.description }}</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Review criteria -->
+  {% if course.peer_review_criteria_html %}
+  <div class="bg-card border border-border rounded-lg p-6 mb-6">
+    <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Review Criteria</h2>
+    <div class="prose prose-invert prose-sm max-w-none">
+      {{ course.peer_review_criteria_html|safe }}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if review.is_complete %}
+  <!-- Read-only completed review -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Your Review (submitted)</h2>
+    {% if review.score %}
+    <div class="mb-3">
+      <span class="text-sm text-muted-foreground">Score:</span>
+      <span class="text-sm text-foreground font-medium ml-2">{{ review.score }}/5</span>
+    </div>
+    {% endif %}
+    <div>
+      <span class="text-sm text-muted-foreground">Feedback:</span>
+      <p class="text-sm text-foreground mt-1">{{ review.feedback }}</p>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Review form -->
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+      <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Your Review</h2>
+
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-2">Score (1-5)</label>
+        <div class="flex space-x-4">
+          {% for i in "12345" %}
+          <label class="flex items-center space-x-1 cursor-pointer">
+            <input type="radio" name="score" value="{{ i }}" class="text-accent focus:ring-accent">
+            <span class="text-sm text-foreground">{{ i }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Feedback</label>
+        <textarea name="feedback" rows="6" required
+                  class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                  placeholder="Provide constructive feedback on the project..."></textarea>
+      </div>
+    </div>
+
+    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Submit Review
+    </button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

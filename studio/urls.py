@@ -17,6 +17,10 @@ from studio.views.projects import project_list, project_review
 from studio.views.tier_overrides import tier_override_page, tier_override_create, tier_override_revoke
 from studio.views.redirects import redirect_list, redirect_create, redirect_edit, redirect_delete, redirect_toggle
 from studio.views.sync import sync_dashboard, sync_history, sync_trigger, sync_all, sync_status
+from studio.views.peer_reviews import (
+    peer_review_management, peer_review_form_batch,
+    peer_review_issue_certificates, peer_review_extend_deadline,
+)
 from studio.views.notifications import (
     notification_log,
     article_notify, article_announce_slack,
@@ -41,6 +45,10 @@ urlpatterns = [
     path('courses/<int:course_id>/notify', course_notify, name='studio_course_notify'),
     path('courses/<int:course_id>/announce-slack', course_announce_slack, name='studio_course_announce_slack'),
     path('courses/<int:course_id>/create-stripe-product', course_create_stripe_product, name='studio_course_create_stripe_product'),
+    path('courses/<int:course_id>/peer-reviews', peer_review_management, name='studio_peer_review_management'),
+    path('courses/<int:course_id>/peer-reviews/form-batch', peer_review_form_batch, name='studio_peer_review_form_batch'),
+    path('courses/<int:course_id>/peer-reviews/issue-certificates', peer_review_issue_certificates, name='studio_peer_review_issue_certificates'),
+    path('courses/<int:course_id>/peer-reviews/extend-deadline', peer_review_extend_deadline, name='studio_peer_review_extend_deadline'),
     path('courses/<int:course_id>/access/', course_access_list, name='studio_course_access_list'),
     path('courses/<int:course_id>/access/grant/', course_access_grant, name='studio_course_access_grant'),
     path('courses/<int:course_id>/access/<int:access_id>/revoke/', course_access_revoke, name='studio_course_access_revoke'),

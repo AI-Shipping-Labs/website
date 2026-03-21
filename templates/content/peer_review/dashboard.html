@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Peer Reviews - {{ course.title }} | {{ site_name }}{% endblock %}
+
+{% block body %}
+<div class="max-w-3xl mx-auto px-4 py-12">
+  <div class="mb-6">
+    <a href="{{ course.get_absolute_url }}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to {{ course.title }}</a>
+  </div>
+
+  <h1 class="text-2xl font-semibold text-foreground mb-8">Peer Review Dashboard</h1>
+
+  {% if certificate %}
+  <!-- Certificate earned -->
+  <div class="bg-purple-500/10 border border-purple-500/30 rounded-lg p-6 mb-8">
+    <h2 class="text-lg font-semibold text-purple-400 mb-2">Certificate Earned</h2>
+    <p class="text-foreground mb-4">Congratulations! You have earned your certificate of completion for {{ course.title }}.</p>
+    <a href="{{ certificate.get_absolute_url }}" class="inline-block bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
+      View Certificate
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- Your Submission -->
+  <div class="bg-card border border-border rounded-lg p-6 mb-8">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Your Submission</h2>
+
+    {% if submission %}
+    <div class="space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-muted-foreground">Status</span>
+        <span class="inline-block px-2 py-1 text-xs rounded
+          {% if submission.status == 'submitted' %}bg-yellow-500/20 text-yellow-400
+          {% elif submission.status == 'in_review' %}bg-blue-500/20 text-blue-400
+          {% elif submission.status == 'review_complete' %}bg-green-500/20 text-green-400
+          {% elif submission.status == 'certified' %}bg-purple-500/20 text-purple-400
+          {% endif %}">
+          {{ submission.get_status_display }}
+        </span>
+      </div>
+      <div>
+        <span class="text-sm text-muted-foreground">Project URL:</span>
+        <a href="{{ submission.project_url }}" target="_blank" rel="noopener" class="text-accent hover:underline text-sm ml-2">{{ submission.project_url }}</a>
+      </div>
+      {% if submission.description %}
+      <div>
+        <span class="text-sm text-muted-foreground">Description:</span>
+        <p class="text-sm text-foreground mt-1">{{ submission.description }}</p>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if waiting_for_batch %}
+    <div class="mt-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 rounded-lg p-4 text-sm">
+      Waiting for enough submissions to form a review group. You will be notified when reviews are ready.
+    </div>
+    {% endif %}
+
+    {% if received_reviews %}
+    <div class="mt-6">
+      <h3 class="text-sm font-semibold text-foreground mb-3">Reviews Received</h3>
+      <div class="space-y-3">
+        {% for review in received_reviews %}
+        <div class="bg-secondary/50 rounded-lg p-4">
+          {% if review.score %}
+          <div class="flex items-center mb-2">
+            <span class="text-sm text-muted-foreground mr-2">Score:</span>
+            <span class="text-sm text-foreground font-medium">{{ review.score }}/5</span>
+          </div>
+          {% endif %}
+          <p class="text-sm text-foreground">{{ review.feedback }}</p>
+          <p class="text-xs text-muted-foreground mt-2">by {{ review.reviewer.email }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <p class="text-muted-foreground text-sm mb-4">You haven't submitted a project yet.</p>
+    <a href="{% url 'project_submit' slug=course.slug %}" class="inline-block bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Submit Project
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Reviews to Complete -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Reviews to Complete</h2>
+
+    {% if assigned_reviews %}
+    <div class="divide-y divide-border">
+      {% for review in assigned_reviews %}
+      <div class="py-3 flex items-center justify-between">
+        <div>
+          <a href="{% url 'peer_review_form' slug=course.slug submission_id=review.submission.pk %}"
+             class="text-sm text-accent hover:underline">
+            {{ review.submission.project_url }}
+          </a>
+          <p class="text-xs text-muted-foreground mt-1">by {{ review.submission.user.email }}</p>
+        </div>
+        <span class="inline-block px-2 py-1 text-xs rounded
+          {% if review.is_complete %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {% if review.is_complete %}Completed{% else %}Pending{% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-muted-foreground">No reviews assigned yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

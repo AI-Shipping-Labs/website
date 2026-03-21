@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Certificate of Completion - {{ course.title }} | {{ site_name }}{% endblock %}
+
+{% block body %}
+<div class="max-w-2xl mx-auto px-4 py-12">
+  <div class="bg-card border border-border rounded-lg p-12 text-center" id="certificate">
+    <div class="mb-8">
+      <h1 class="text-3xl font-semibold text-foreground mb-2">Certificate of Completion</h1>
+      <div class="w-24 h-0.5 bg-accent mx-auto"></div>
+    </div>
+
+    <p class="text-muted-foreground mb-4">This certifies that</p>
+    <h2 class="text-2xl font-semibold text-foreground mb-4">
+      {% if user.get_full_name %}{{ user.get_full_name }}{% else %}{{ user.email }}{% endif %}
+    </h2>
+
+    <p class="text-muted-foreground mb-4">has successfully completed</p>
+    <h3 class="text-xl font-semibold text-accent mb-8">{{ course.title }}</h3>
+
+    <p class="text-sm text-muted-foreground mb-2">
+      Issued on {{ certificate.issued_at|date:"F j, Y" }}
+    </p>
+    <p class="text-xs text-muted-foreground">
+      Certificate ID: {{ certificate.id }}
+    </p>
+  </div>
+</div>
+
+<style>
+@media print {
+  header, footer, nav, .no-print { display: none !important; }
+  body { background: white !important; }
+  #certificate {
+    border: 2px solid #333 !important;
+    background: white !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+  #certificate h1, #certificate h2, #certificate h3, #certificate p {
+    color: #000 !important;
+  }
+}
+</style>
+{% endblock %}

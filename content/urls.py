@@ -20,6 +20,10 @@ from content.views.courses import (
 )
 from content.views.interview import interview_hub, interview_detail
 from content.views.learning_path import learning_path_ai_engineer
+from content.views.peer_review import (
+    project_submit, review_dashboard, review_form, certificate_page,
+    api_submit_project, api_review_dashboard, api_submit_review,
+)
 
 urlpatterns = [
     path('', home, name='home'),
@@ -48,6 +52,12 @@ urlpatterns = [
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),
     path('courses/<slug:slug>/<int:module_sort>/<int:unit_sort>', course_unit_detail, name='course_unit_detail'),
+    # Peer review
+    path('courses/<slug:slug>/submit', project_submit, name='project_submit'),
+    path('courses/<slug:slug>/reviews', review_dashboard, name='peer_review_dashboard'),
+    path('courses/<slug:slug>/reviews/<int:submission_id>', review_form, name='peer_review_form'),
+    # Certificates
+    path('certificates/<uuid:certificate_id>', certificate_page, name='certificate_page'),
     # API endpoints
     path('api/projects/submit', submit_project, name='submit_project'),
     path('api/downloads/<slug:slug>/file', download_file, name='download_file'),
@@ -58,6 +68,9 @@ urlpatterns = [
     path('api/courses/<slug:slug>/cohorts/<int:cohort_id>/enroll', api_cohort_enroll, name='api_cohort_enroll'),
     path('api/courses/<slug:slug>/cohorts/<int:cohort_id>/unenroll', api_cohort_unenroll, name='api_cohort_unenroll'),
     path('api/courses/<slug:slug>/purchase', api_course_purchase, name='api_course_purchase'),
+    path('api/courses/<slug:slug>/submit', api_submit_project, name='api_submit_project'),
+    path('api/courses/<slug:slug>/reviews', api_review_dashboard, name='api_review_dashboard'),
+    path('api/courses/<slug:slug>/reviews/<int:submission_id>', api_submit_review, name='api_submit_review'),
     # Admin API endpoints
     path('api/admin/modules/reorder', reorder_modules, name='reorder_modules'),
     path('api/admin/units/reorder', reorder_units, name='reorder_units'),

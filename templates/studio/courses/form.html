@@ -113,6 +113,41 @@
     {% endif %}
   </div>
 
+  <!-- Peer Review Section -->
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Peer Review</h2>
+
+    <div class="flex items-center">
+      <label class="flex items-center space-x-2">
+        <input type="checkbox" name="peer_review_enabled" {% if course.peer_review_enabled %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent">
+        <span class="text-sm text-foreground">Enable Peer Review</span>
+      </label>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Reviews per student</label>
+        <input type="number" name="peer_review_count" min="1" max="10"
+               value="{{ course.peer_review_count|default:3 }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Deadline (days)</label>
+        <input type="number" name="peer_review_deadline_days" min="1" max="90"
+               value="{{ course.peer_review_deadline_days|default:7 }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Review Criteria (Markdown)</label>
+      <textarea name="peer_review_criteria" rows="4"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono"
+                placeholder="e.g. Does the project have a README? Does it run? Is the code clean?">{{ course.peer_review_criteria|default:'' }}</textarea>
+    </div>
+  </div>
+
   <div class="flex items-center space-x-4">
     <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
       {% if course %}Save Changes{% else %}Create Course{% endif %}
@@ -123,6 +158,11 @@
        class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
       <i data-lucide="shield" class="w-4 h-4"></i>
       <span>Manage Access</span>
+    </a>
+    <a href="{% url 'studio_peer_review_management' course_id=course.pk %}"
+       class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
+      <i data-lucide="users" class="w-4 h-4"></i>
+      <span>Manage Peer Reviews</span>
     </a>
     {% endif %}
   </div>

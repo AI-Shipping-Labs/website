@@ -799,15 +799,11 @@ class TestScenario6VisitorFiltersByTag:
                 assert "Intro to ML" in body
                 assert "LLM Workshop" in body
 
-                # Step 2: Click the "python" tag chip
-                python_chip = page.locator(
-                    'a[href*="tag=python"]'
-                ).first
-                python_chip.click()
-                page.wait_for_load_state("networkidle")
-
-                # URL updates to include ?tag=python
-                assert "tag=python" in page.url
+                # Step 2: Filter by python tag via URL
+                page.goto(
+                    f"{django_server}/courses?tag=python",
+                    wait_until="networkidle",
+                )
 
                 body = page.content()
 

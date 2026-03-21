@@ -1,7 +1,12 @@
 {% extends "base.html" %}
+{% load seo_tags %}
 
 {% block title %}{{ title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ description }}{% endblock %}
+
+{% block structured_data %}
+{% course_learning_path_structured_data title description learning_stages %}
+{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

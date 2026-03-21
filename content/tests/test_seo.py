@@ -400,15 +400,17 @@ class OgTagsTest(TestCase):
         self.assertIn('twitter:image', result)
         self.assertIn('https://example.com/image.jpg', result)
 
-    def test_og_tags_no_image_excludes_image_tags(self):
+    def test_og_tags_no_image_uses_default_fallback(self):
         self.article.cover_image_url = ''
         self.article.save()
         template = Template('{% load seo_tags %}{% og_tags article %}')
         request = self.factory.get('/')
         context = Context({'article': self.article, 'request': request})
         result = template.render(context)
-        self.assertNotIn('og:image', result)
-        self.assertNotIn('twitter:image', result)
+        self.assertIn('og:image', result)
+        self.assertIn('/static/ai-shipping-labs.jpg', result)
+        self.assertIn('og:image:alt', result)
+        self.assertIn('AI Shipping Labs', result)
 
     def test_og_tags_homepage_defaults(self):
         template = Template('{% load seo_tags %}{% og_tags %}')
@@ -925,3 +927,268 @@ class SitemapTagPagesTest(TestCase):
         # Count occurrences of the tag URL
         count = content.count('/tags/duplicate-tag</loc>')
         self.assertEqual(count, 1)
+
+
+class OgTagsImageDimensionsTest(TestCase):
+    """Test og:image:width, og:image:height, og:image:alt in og_tags."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.article = Article.objects.create(
+            title='Image Test',
+            slug='image-test',
+            description='Testing image dimensions.',
+            content_markdown='# Hello',
+            date=date(2025, 6, 15),
+            author='Jane Doe',
+            cover_image_url='https://example.com/cover.jpg',
+            published=True,
+        )
+
+    def test_og_image_dimensions_with_content_image(self):
+        template = Template('{% load seo_tags %}{% og_tags article %}')
+        request = self.factory.get('/')
+        context = Context({'article': self.article, 'request': request})
+        result = template.render(context)
+        self.assertIn('og:image:width', result)
+        self.assertIn('1200', result)
+        self.assertIn('og:image:height', result)
+        self.assertIn('630', result)
+        self.assertIn('og:image:alt', result)
+        self.assertIn('Image Test', result)
+
+    def test_og_image_dimensions_with_fallback(self):
+        self.article.cover_image_url = ''
+        self.article.save()
+        template = Template('{% load seo_tags %}{% og_tags article %}')
+        request = self.factory.get('/')
+        context = Context({'article': self.article, 'request': request})
+        result = template.render(context)
+        self.assertIn('og:image:width', result)
+        self.assertIn('og:image:height', result)
+        self.assertIn('og:image:alt', result)
+
+    def test_twitter_creator_in_og_tags(self):
+        template = Template('{% load seo_tags %}{% og_tags article %}')
+        request = self.factory.get('/')
+        context = Context({'article': self.article, 'request': request})
+        result = template.render(context)
+        self.assertIn('twitter:creator', result)
+        self.assertIn('@Al_Grigor', result)
+
+    def test_twitter_image_always_present(self):
+        template = Template('{% load seo_tags %}{% og_tags %}')
+        request = self.factory.get('/')
+        context = Context({'request': request})
+        result = template.render(context)
+        self.assertIn('twitter:image', result)
+        self.assertIn('/static/ai-shipping-labs.jpg', result)
+
+
+class OrganizationSameAsTest(TestCase):
+    """Test Organization JSON-LD includes sameAs social links."""
+
+    def test_organization_has_same_as(self):
+        template = Template('{% load seo_tags %}{% structured_data %}')
+        context = Context({})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertIn('sameAs', data)
+        self.assertIn('https://twitter.com/Al_Grigor', data['sameAs'])
+        self.assertIn('https://github.com/AI-Shipping-Labs', data['sameAs'])
+
+    def _extract_jsonld(self, html):
+        start = html.index('<script type="application/ld+json">') + len(
+            '<script type="application/ld+json">',
+        )
+        end = html.index('</script>')
+        return json.loads(html[start:end])
+
+
+class FAQPageStructuredDataTest(TestCase):
+    """Test FAQPage JSON-LD generation for interview pages."""
+
+    def test_faqpage_with_questions(self):
+        sections = [
+            {
+                'title': 'Basics',
+                'qa': [
+                    {'question': 'What is AI?', 'answer': 'Artificial Intelligence.'},
+                    {'question': 'What is ML?', 'answer': 'Machine Learning.'},
+                ],
+            },
+            {
+                'title': 'Advanced',
+                'qa': [
+                    {'question': 'What is deep learning?', 'answer': 'A subset of ML.'},
+                ],
+            },
+        ]
+        template = Template('{% load seo_tags %}{% faqpage_structured_data sections %}')
+        context = Context({'sections': sections})
+        result = template.render(context)
+        self.assertIn('application/ld+json', result)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['@type'], 'FAQPage')
+        self.assertEqual(len(data['mainEntity']), 3)
+        self.assertEqual(data['mainEntity'][0]['@type'], 'Question')
+        self.assertEqual(data['mainEntity'][0]['name'], 'What is AI?')
+        self.assertEqual(
+            data['mainEntity'][0]['acceptedAnswer']['text'],
+            'Artificial Intelligence.',
+        )
+
+    def test_faqpage_empty_sections(self):
+        sections = []
+        template = Template('{% load seo_tags %}{% faqpage_structured_data sections %}')
+        context = Context({'sections': sections})
+        result = template.render(context)
+        # Should return empty string when no questions
+        self.assertNotIn('application/ld+json', result)
+
+    def test_faqpage_question_without_answer_uses_question_text(self):
+        sections = [
+            {
+                'title': 'Test',
+                'qa': [
+                    {'question': 'What is AI?'},
+                ],
+            },
+        ]
+        template = Template('{% load seo_tags %}{% faqpage_structured_data sections %}')
+        context = Context({'sections': sections})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(
+            data['mainEntity'][0]['acceptedAnswer']['text'],
+            'What is AI?',
+        )
+
+    def _extract_jsonld(self, html):
+        start = html.index('<script type="application/ld+json">') + len(
+            '<script type="application/ld+json">',
+        )
+        end = html.index('</script>')
+        return json.loads(html[start:end])
+
+
+class CourseLearningPathStructuredDataTest(TestCase):
+    """Test Course JSON-LD generation for learning path pages."""
+
+    def test_course_learning_path_basic(self):
+        template = Template(
+            '{% load seo_tags %}'
+            '{% course_learning_path_structured_data title description stages %}',
+        )
+        context = Context({
+            'title': 'AI Engineer Learning Path',
+            'description': 'A roadmap to become an AI engineer.',
+            'stages': [
+                {'title': 'Stage 1: Foundations', 'items': ['Python', 'Math']},
+                {'title': 'Stage 2: ML Basics', 'items': ['Supervised', 'Unsupervised']},
+            ],
+        })
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['@type'], 'Course')
+        self.assertEqual(data['name'], 'AI Engineer Learning Path')
+        self.assertIn('hasPart', data)
+        self.assertEqual(len(data['hasPart']), 2)
+        self.assertEqual(data['hasPart'][0]['@type'], 'CourseInstance')
+        self.assertEqual(data['hasPart'][0]['name'], 'Stage 1: Foundations')
+        self.assertIn('Python', data['hasPart'][0]['description'])
+
+    def test_course_learning_path_no_stages(self):
+        template = Template(
+            '{% load seo_tags %}'
+            '{% course_learning_path_structured_data title description stages %}',
+        )
+        context = Context({
+            'title': 'AI Engineer',
+            'description': 'A roadmap.',
+            'stages': [],
+        })
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['@type'], 'Course')
+        self.assertNotIn('hasPart', data)
+
+    def test_course_learning_path_has_provider(self):
+        template = Template(
+            '{% load seo_tags %}'
+            '{% course_learning_path_structured_data title description stages %}',
+        )
+        context = Context({
+            'title': 'Path',
+            'description': 'Desc',
+            'stages': [],
+        })
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['provider']['name'], 'AI Shipping Labs')
+
+    def _extract_jsonld(self, html):
+        start = html.index('<script type="application/ld+json">') + len(
+            '<script type="application/ld+json">',
+        )
+        end = html.index('</script>')
+        return json.loads(html[start:end])
+
+
+class BaseHtmlMetaTagsTest(TestCase):
+    """Test meta tags rendered in base.html via homepage."""
+
+    def test_homepage_has_robots_meta(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn(
+            'max-snippet:-1, max-image-preview:large, max-video-preview:-1',
+            content,
+        )
+
+    def test_homepage_has_author_meta(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('<meta name="author" content="Alexey Grigorev">', content)
+
+    def test_homepage_has_twitter_creator(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('twitter:creator', content)
+        self.assertIn('@Al_Grigor', content)
+
+    def test_homepage_has_favicon(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('rel="icon"', content)
+        self.assertIn('rocket-upscale-no-bg-small.png', content)
+
+    def test_homepage_has_apple_touch_icon(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('rel="apple-touch-icon"', content)
+
+    def test_homepage_has_default_og_image(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('og:image', content)
+        self.assertIn('ai-shipping-labs.jpg', content)
+
+    def test_homepage_has_og_image_dimensions(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('og:image:width', content)
+        self.assertIn('og:image:height', content)
+
+    def test_homepage_has_verification_block(self):
+        """The verification block should exist in base.html (empty by default)."""
+        response = self.client.get('/')
+        # The block exists but is empty; just verify the page renders fine
+        self.assertEqual(response.status_code, 200)
+
+    def test_homepage_organization_has_same_as(self):
+        response = self.client.get('/')
+        content = response.content.decode()
+        self.assertIn('sameAs', content)
+        self.assertIn('https://twitter.com/Al_Grigor', content)
+        self.assertIn('https://github.com/AI-Shipping-Labs', content)

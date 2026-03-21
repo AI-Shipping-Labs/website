@@ -7,7 +7,12 @@
   <meta name="description" content="{% block meta_description %}{{ site_description }}{% endblock %}">
   <meta name="keywords" content="AI community, AI engineering, machine learning, data engineering, AI tools, technical community, Alexey Grigorev">
   <meta name="author" content="Alexey Grigorev">
+  <meta name="robots" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1">
   {% block canonical %}<link rel="canonical" href="{{ site_url }}">{% endblock %}
+
+  <!-- Favicon & Apple Touch Icon -->
+  <link rel="icon" href="{% static 'rocket-upscale-no-bg-small.png' %}" type="image/png">
+  <link rel="apple-touch-icon" href="{% static 'rocket-upscale-no-bg-small.png' %}">
 
   <!-- Open Graph & Twitter Card -->
   {% block og_tags %}
@@ -16,10 +21,18 @@
   <meta property="og:url" content="{{ site_url }}">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="{{ site_name }}">
+  <meta property="og:image" content="{{ site_url }}{% static 'ai-shipping-labs.jpg' %}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="AI Shipping Labs">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{ site_name }} | A Technical Community">
   <meta name="twitter:description" content="{{ site_description }}">
+  <meta name="twitter:image" content="{{ site_url }}{% static 'ai-shipping-labs.jpg' %}">
+  <meta name="twitter:creator" content="@Al_Grigor">
   {% endblock %}
+
+  {% block verification %}{% endblock %}
 
   <!-- Blocking theme script: prevents flash of wrong theme -->
   <script>

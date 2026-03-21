@@ -1,7 +1,13 @@
 {% extends "base.html" %}
+{% load seo_tags %}
 
 {% block title %}{{ category.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ category.description }}{% endblock %}
+
+{% block structured_data %}
+{% structured_data %}
+{% faqpage_structured_data sections %}
+{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

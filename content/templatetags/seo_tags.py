@@ -21,6 +21,8 @@ register = template.Library()
 
 
 SITE_NAME = 'AI Shipping Labs'
+DEFAULT_OG_IMAGE_PATH = '/static/ai-shipping-labs.jpg'
+DEFAULT_OG_IMAGE_ALT = 'AI Shipping Labs'
 
 
 def _get_site_url():
@@ -204,6 +206,10 @@ def _build_organization_jsonld():
             '@type': 'Person',
             'name': 'Alexey Grigorev',
         },
+        'sameAs': [
+            'https://twitter.com/Al_Grigor',
+            'https://github.com/AI-Shipping-Labs',
+        ],
     }
 
 
@@ -226,6 +232,66 @@ def _format_datetime(dt):
     if dt:
         return dt.isoformat()
     return ''
+
+
+def build_faqpage_jsonld(sections):
+    """Build FAQPage JSON-LD from interview sections with Q&A items.
+
+    Each section should have a 'qa' list of dicts with 'question' and 'answer' keys.
+    If an item has no 'answer', the question text is used as the answer.
+    """
+    questions = []
+    for section in sections:
+        for item in section.get('qa', []):
+            question_text = item.get('question', '')
+            answer_text = item.get('answer', '') or question_text
+            if question_text:
+                questions.append({
+                    '@type': 'Question',
+                    'name': question_text,
+                    'acceptedAnswer': {
+                        '@type': 'Answer',
+                        'text': answer_text,
+                    },
+                })
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        'mainEntity': questions,
+    }
+
+
+def build_course_learning_path_jsonld(title, description, learning_stages):
+    """Build Course JSON-LD for a learning path page.
+
+    learning_stages is a list of dicts with 'title' and optional 'items'.
+    """
+    site_url = _get_site_url()
+    data = {
+        '@context': 'https://schema.org',
+        '@type': 'Course',
+        'name': title,
+        'description': _truncate_description(description),
+        'provider': {
+            '@type': 'Organization',
+            'name': SITE_NAME,
+            'url': site_url,
+        },
+        'url': f'{site_url}/learning-path/ai-engineer',
+    }
+    if learning_stages:
+        parts = []
+        for stage in learning_stages:
+            part = {
+                '@type': 'CourseInstance',
+                'name': stage.get('title', ''),
+            }
+            items = stage.get('items', [])
+            if items:
+                part['description'] = '; '.join(items)
+            parts.append(part)
+        data['hasPart'] = parts
+    return data
 
 
 JSONLD_BUILDERS = {
@@ -308,24 +374,31 @@ def og_tags(context, content=None):
         canonical_url = f'{site_url}{content.get_absolute_url()}'
         image_url = _get_image_url(content)
 
+    # Use default OG image as fallback when no content-specific image
+    default_image_url = f'{site_url}{DEFAULT_OG_IMAGE_PATH}'
+    effective_image_url = image_url or default_image_url
+    image_alt = _escape_attr(title) if image_url else DEFAULT_OG_IMAGE_ALT
+
     tags = [
         f'<meta property="og:title" content="{_escape_attr(title)}">',
         f'<meta property="og:description" content="{_escape_attr(description)}">',
         f'<meta property="og:url" content="{canonical_url}">',
         f'<meta property="og:type" content="{og_type}">',
         f'<meta property="og:site_name" content="{SITE_NAME}">',
+        f'<meta property="og:image" content="{_escape_attr(effective_image_url)}">',
+        f'<meta property="og:image:width" content="1200">',
+        f'<meta property="og:image:height" content="630">',
+        f'<meta property="og:image:alt" content="{image_alt}">',
     ]
-    if image_url:
-        tags.append(f'<meta property="og:image" content="{_escape_attr(image_url)}">')
 
     # Twitter Card tags
     tags.extend([
         f'<meta name="twitter:card" content="summary_large_image">',
         f'<meta name="twitter:title" content="{_escape_attr(title)}">',
         f'<meta name="twitter:description" content="{_escape_attr(description)}">',
+        f'<meta name="twitter:image" content="{_escape_attr(effective_image_url)}">',
+        f'<meta name="twitter:creator" content="@Al_Grigor">',
     ])
-    if image_url:
-        tags.append(f'<meta name="twitter:image" content="{_escape_attr(image_url)}">')
 
     return mark_safe('\n  '.join(tags))
 
@@ -340,4 +413,34 @@ def _escape_attr(value):
         .replace('"', '&quot;')
         .replace('<', '&lt;')
         .replace('>', '&gt;')
+    )
+
+
+@register.simple_tag
+def faqpage_structured_data(sections):
+    """Generate FAQPage JSON-LD for interview detail pages.
+
+    Usage:
+        {% faqpage_structured_data sections %}
+    """
+    data = build_faqpage_jsonld(sections)
+    if not data['mainEntity']:
+        return ''
+    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+    return mark_safe(
+        f'<script type="application/ld+json">\n{json_str}\n</script>',
+    )
+
+
+@register.simple_tag
+def course_learning_path_structured_data(title, description, learning_stages):
+    """Generate Course JSON-LD for a learning path page.
+
+    Usage:
+        {% course_learning_path_structured_data title description learning_stages %}
+    """
+    data = build_course_learning_path_jsonld(title, description, learning_stages)
+    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+    return mark_safe(
+        f'<script type="application/ld+json">\n{json_str}\n</script>',
     )

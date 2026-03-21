@@ -14,18 +14,35 @@ def _get_content_repo_dir():
     return None
 
 
+def _get_learning_path_from_db(slug):
+    """Load a learning path from the database by slug."""
+    from content.models import LearningPath
+
+    try:
+        return LearningPath.objects.get(slug=slug)
+    except LearningPath.DoesNotExist:
+        return None
+
+
 def learning_path_ai_engineer(request):
     """Visual learning path page for AI engineers."""
-    repo = _get_content_repo_dir()
-    if repo is None:
-        raise Http404("Learning path content not available.")
+    # Try DB first
+    lp = _get_learning_path_from_db('ai-engineer')
 
-    data_path = repo / 'learning-path' / 'ai-engineer' / 'data.yaml'
-    if not data_path.exists():
-        raise Http404("AI engineer learning path data not found.")
+    if lp is not None:
+        data = lp.data_json
+    else:
+        # Fall back to disk
+        repo = _get_content_repo_dir()
+        if repo is None:
+            raise Http404("Learning path content not available.")
 
-    with open(data_path, 'r') as f:
-        data = yaml.safe_load(f)
+        data_path = repo / 'learning-path' / 'ai-engineer' / 'data.yaml'
+        if not data_path.exists():
+            raise Http404("AI engineer learning path data not found.")
+
+        with open(data_path, 'r') as f:
+            data = yaml.safe_load(f)
 
     context = {
         'title': data.get('title', 'AI Engineer Learning Path'),

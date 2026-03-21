@@ -8,6 +8,8 @@ CONTENT_TYPE_CHOICES = [
     ('course', 'Course'),
     ('resource', 'Resource'),
     ('project', 'Project'),
+    ('interview_question', 'Interview Question'),
+    ('learning_path', 'Learning Path'),
 ]
 
 SYNC_STATUS_CHOICES = [
@@ -27,7 +29,7 @@ class ContentSource(models.Model):
         help_text="Full GitHub repo name (e.g. AI-Shipping-Labs/content).",
     )
     content_type = models.CharField(
-        max_length=20, choices=CONTENT_TYPE_CHOICES,
+        max_length=30, choices=CONTENT_TYPE_CHOICES,
         help_text="Type of content this repo contains.",
     )
     content_path = models.CharField(

@@ -53,23 +53,89 @@ INTERVIEW_CATEGORY_ORDER = [
 ]
 
 
+def _get_categories_from_db():
+    """Load interview categories from the database, ordered canonically."""
+    from content.models import InterviewCategory
+
+    all_categories = list(InterviewCategory.objects.all())
+    if not all_categories:
+        return None  # No DB data, fall back to disk
+
+    # Build a lookup by slug
+    by_slug = {cat.slug: cat for cat in all_categories}
+
+    result = []
+    seen = set()
+
+    # Add in canonical order first
+    for slug in INTERVIEW_CATEGORY_ORDER:
+        if slug in by_slug:
+            cat = by_slug[slug]
+            result.append({
+                'slug': cat.slug,
+                'title': cat.title,
+                'description': cat.description,
+                'status': cat.status,
+                'sections': cat.sections_json,
+                'body': cat.body_markdown,
+            })
+            seen.add(slug)
+
+    # Add any remaining categories not in canonical order
+    for cat in all_categories:
+        if cat.slug not in seen:
+            result.append({
+                'slug': cat.slug,
+                'title': cat.title,
+                'description': cat.description,
+                'status': cat.status,
+                'sections': cat.sections_json,
+                'body': cat.body_markdown,
+            })
+
+    return result
+
+
+def _get_category_from_db(slug):
+    """Load a single interview category from the database."""
+    from content.models import InterviewCategory
+
+    try:
+        cat = InterviewCategory.objects.get(slug=slug)
+        return {
+            'slug': cat.slug,
+            'title': cat.title,
+            'description': cat.description,
+            'status': cat.status,
+            'sections': cat.sections_json,
+            'body': cat.body_markdown,
+        }
+    except InterviewCategory.DoesNotExist:
+        return None
+
+
 def interview_hub(request):
     """Hub page listing all interview question categories."""
-    interview_dir = _get_interview_dir()
-    if interview_dir is None:
-        raise Http404("Interview questions content not available.")
+    # Try DB first
+    categories = _get_categories_from_db()
 
-    categories = []
-    for slug in INTERVIEW_CATEGORY_ORDER:
-        filepath = interview_dir / f'{slug}.md'
-        if filepath.exists():
-            categories.append(_parse_interview_file(filepath))
+    if categories is None:
+        # Fall back to disk
+        interview_dir = _get_interview_dir()
+        if interview_dir is None:
+            raise Http404("Interview questions content not available.")
 
-    # Also pick up any files not in the canonical order
-    seen_slugs = set(INTERVIEW_CATEGORY_ORDER)
-    for filepath in sorted(interview_dir.glob('*.md')):
-        if filepath.stem not in seen_slugs:
-            categories.append(_parse_interview_file(filepath))
+        categories = []
+        for slug in INTERVIEW_CATEGORY_ORDER:
+            filepath = interview_dir / f'{slug}.md'
+            if filepath.exists():
+                categories.append(_parse_interview_file(filepath))
+
+        # Also pick up any files not in the canonical order
+        seen_slugs = set(INTERVIEW_CATEGORY_ORDER)
+        for filepath in sorted(interview_dir.glob('*.md')):
+            if filepath.stem not in seen_slugs:
+                categories.append(_parse_interview_file(filepath))
 
     context = {
         'categories': categories,
@@ -93,15 +159,20 @@ def _render_markdown(text):
 
 def interview_detail(request, slug):
     """Detail page for a specific interview question category."""
-    interview_dir = _get_interview_dir()
-    if interview_dir is None:
-        raise Http404("Interview questions content not available.")
+    # Try DB first
+    data = _get_category_from_db(slug)
 
-    filepath = interview_dir / f'{slug}.md'
-    if not filepath.exists():
-        raise Http404(f"Interview category '{slug}' not found.")
+    if data is None:
+        # Fall back to disk
+        interview_dir = _get_interview_dir()
+        if interview_dir is None:
+            raise Http404("Interview questions content not available.")
 
-    data = _parse_interview_file(filepath)
+        filepath = interview_dir / f'{slug}.md'
+        if not filepath.exists():
+            raise Http404(f"Interview category '{slug}' not found.")
+
+        data = _parse_interview_file(filepath)
 
     # If it's a coming-soon page, show 404
     if data['status'] == 'coming-soon':

@@ -7,3 +7,5 @@ from .download import *
 from .course import *
 from .cohort import *
 from .tag_rule import *
+from .interview_category import *
+from .learning_path import *

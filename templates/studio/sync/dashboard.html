@@ -1,0 +1,154 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Content Sync{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Content Sync</h1>
+    <p class="text-muted-foreground mt-1">Manage GitHub content sources and trigger syncs.</p>
+  </div>
+  <form method="post" action="{% url 'studio_sync_all' %}" id="sync-all-form">
+    {% csrf_token %}
+    <button type="submit" id="sync-all-btn"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center space-x-2">
+      <span>Sync All</span>
+    </button>
+  </form>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if sources %}
+<div class="space-y-4">
+  {% for source in sources %}
+  <div class="bg-card border border-border rounded-lg p-6" data-source-id="{{ source.pk }}">
+    <div class="flex items-center justify-between">
+      <div class="flex-1">
+        <div class="flex items-center space-x-3">
+          <h2 class="text-lg font-semibold text-foreground">{{ source.repo_name }}</h2>
+          <span class="px-2 py-0.5 text-xs rounded-full bg-secondary text-muted-foreground">{{ source.content_type }}</span>
+          {% if source.is_private %}
+          <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">Private</span>
+          {% endif %}
+        </div>
+        {% if source.content_path %}
+        <p class="text-sm text-accent mt-1 font-mono">{{ source.content_path }}</p>
+        {% endif %}
+        <div class="flex items-center space-x-4 mt-2 text-sm text-muted-foreground">
+          {% if source.last_synced_at %}
+          <span>Last synced: {{ source.last_synced_at|timesince }} ago</span>
+          {% else %}
+          <span>Never synced</span>
+          {% endif %}
+          <span class="sync-status-badge
+            {% if source.last_sync_status == 'success' %}text-green-400
+            {% elif source.last_sync_status == 'failed' %}text-red-400
+            {% elif source.last_sync_status == 'partial' %}text-yellow-400
+            {% elif source.last_sync_status == 'running' %}text-blue-400
+            {% endif %}">
+            {% if source.last_sync_status %}
+            <span class="inline-flex items-center space-x-1">
+              {% if source.last_sync_status == 'running' %}
+              <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              {% endif %}
+              <span>{{ source.last_sync_status }}</span>
+            </span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <a href="{% url 'studio_sync_history' source.pk %}"
+           class="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
+          History
+        </a>
+        <form method="post" action="{% url 'studio_sync_trigger' source.pk %}" class="sync-form">
+          {% csrf_token %}
+          <button type="submit" class="sync-btn px-3 py-1.5 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 transition-opacity inline-flex items-center space-x-1">
+            <svg class="animate-spin h-3 w-3 hidden sync-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <span class="sync-btn-text">Sync Now</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center">
+  <p class="text-muted-foreground">No content sources configured.</p>
+  <p class="text-sm text-muted-foreground mt-1">Add content sources in Django admin or run <code class="bg-secondary px-1.5 py-0.5 rounded text-xs">manage.py seed_content_sources</code>.</p>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Show spinner on sync button click
+  document.querySelectorAll('.sync-form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+      var btn = form.querySelector('.sync-btn');
+      var spinner = form.querySelector('.sync-spinner');
+      var text = form.querySelector('.sync-btn-text');
+      btn.disabled = true;
+      btn.classList.add('opacity-60');
+      spinner.classList.remove('hidden');
+      text.textContent = 'Syncing...';
+    });
+  });
+
+  // Show spinner on sync all click
+  var syncAllForm = document.getElementById('sync-all-form');
+  if (syncAllForm) {
+    syncAllForm.addEventListener('submit', function() {
+      var btn = document.getElementById('sync-all-btn');
+      btn.disabled = true;
+      btn.classList.add('opacity-60');
+      btn.innerHTML = '<svg class="animate-spin h-4 w-4 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Syncing All...';
+    });
+  }
+
+  // Poll for status updates on sources that are currently running
+  var runningSources = document.querySelectorAll('[data-source-id]');
+  runningSources.forEach(function(card) {
+    var statusBadge = card.querySelector('.sync-status-badge');
+    if (statusBadge && statusBadge.textContent.trim().includes('running')) {
+      var sourceId = card.getAttribute('data-source-id');
+      pollStatus(sourceId, card);
+    }
+  });
+
+  function pollStatus(sourceId, card) {
+    var interval = setInterval(function() {
+      fetch('/studio/sync/' + sourceId + '/status/')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.last_sync_status && data.last_sync_status !== 'running') {
+            clearInterval(interval);
+            // Reload page to show updated status
+            window.location.reload();
+          }
+        })
+        .catch(function() {
+          clearInterval(interval);
+        });
+    }, 3000);
+  }
+});
+</script>
+{% endblock %}

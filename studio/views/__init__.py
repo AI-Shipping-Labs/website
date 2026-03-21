@@ -10,3 +10,4 @@ from .projects import *
 from .notifications import *
 from .tier_overrides import *
 from .redirects import *
+from .sync import *

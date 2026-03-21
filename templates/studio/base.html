@@ -110,6 +110,13 @@
                 <span>Redirects</span>
               </a>
             </li>
+            <li>
+              <a href="{% url 'studio_sync_dashboard' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/sync' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                <span>Content Sync</span>
+              </a>
+            </li>
           </ul>
         </div>
 

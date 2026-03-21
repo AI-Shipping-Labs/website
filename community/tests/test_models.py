@@ -69,8 +69,3 @@ class CommunityAuditLogModelTest(TestCase):
         )
         self.assertEqual(log.details, "")
 
-    def test_cascade_delete_user(self):
-        CommunityAuditLog.objects.create(user=self.user, action="invite")
-        self.assertEqual(CommunityAuditLog.objects.count(), 1)
-        self.user.delete()
-        self.assertEqual(CommunityAuditLog.objects.count(), 0)

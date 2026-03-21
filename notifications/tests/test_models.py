@@ -27,18 +27,6 @@ class NotificationModelTest(TestCase):
         self.assertEqual(n.notification_type, 'new_content')
         self.assertIsNotNone(n.created_at)
 
-    def test_notification_body_default_empty(self):
-        n = Notification.objects.create(user=self.user, title='Test')
-        self.assertEqual(n.body, '')
-
-    def test_notification_url_default_empty(self):
-        n = Notification.objects.create(user=self.user, title='Test')
-        self.assertEqual(n.url, '')
-
-    def test_notification_read_default_false(self):
-        n = Notification.objects.create(user=self.user, title='Test')
-        self.assertFalse(n.read)
-
     def test_notification_type_choices(self):
         for ntype in ('new_content', 'event_reminder', 'announcement'):
             n = Notification.objects.create(
@@ -71,13 +59,6 @@ class NotificationModelTest(TestCase):
             notification_type='new_content',
         )
         self.assertEqual(str(n), 'My Notification (new_content)')
-
-    def test_notification_cascade_delete_user(self):
-        """Notifications should be deleted when user is deleted."""
-        Notification.objects.create(user=self.user, title='Test')
-        self.assertEqual(Notification.objects.count(), 1)
-        self.user.delete()
-        self.assertEqual(Notification.objects.count(), 0)
 
     def test_notification_all_fields(self):
         n = Notification.objects.create(

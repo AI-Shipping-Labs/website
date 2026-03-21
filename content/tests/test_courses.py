@@ -154,11 +154,6 @@ class ModuleModelTest(TestCase):
         self.assertEqual(modules[0].title, 'First')
         self.assertEqual(modules[1].title, 'Second')
 
-    def test_cascade_delete(self):
-        Module.objects.create(course=self.course, title='Del', sort_order=0)
-        self.course.delete()
-        self.assertEqual(Module.objects.count(), 0)
-
 
 class UnitModelTest(TestCase):
     """Test Unit model fields and methods."""
@@ -231,11 +226,6 @@ class UnitModelTest(TestCase):
         units = list(Unit.objects.filter(module=self.module))
         self.assertEqual(units[0].title, 'First')
         self.assertEqual(units[1].title, 'Second')
-
-    def test_cascade_delete_from_module(self):
-        Unit.objects.create(module=self.module, title='Del', sort_order=0)
-        self.module.delete()
-        self.assertEqual(Unit.objects.count(), 0)
 
 
 class UserCourseProgressModelTest(TestCase):
@@ -878,6 +868,3 @@ class CourseAdminTest(TestCase):
         course.refresh_from_db()
         self.assertEqual(course.status, 'draft')
 
-    def test_admin_slug_auto_generated(self):
-        from content.admin.course import CourseAdmin
-        self.assertEqual(CourseAdmin.prepopulated_fields, {'slug': ('title',)})

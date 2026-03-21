@@ -247,69 +247,6 @@ class CancelModalNoBillingDateTest(TestCase):
         self.assertNotIn("billing period (", content)
 
 
-class CancelModalJavaScriptTest(TestCase):
-    """Tests that the JavaScript for the cancel modal is present and correct."""
-
-    def setUp(self):
-        self.main_tier = Tier.objects.get(slug="main")
-        self.user = User.objects.create_user(email="jstest@test.com")
-        self.user.tier = self.main_tier
-        self.user.subscription_id = "sub_jstest"
-        self.user.save(update_fields=["tier", "subscription_id"])
-        self.client.force_login(self.user)
-
-    def test_showCancelConfirm_resets_checkbox(self):
-        """showCancelConfirm function resets the checkbox to unchecked."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        # The JS should reset checkbox.checked = false
-        self.assertIn("checkbox.checked = false", content)
-
-    def test_showCancelConfirm_resets_text_input(self):
-        """showCancelConfirm function resets the text input to empty."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        # The JS should reset textInput.value = ''
-        self.assertIn("textInput.value = ''", content)
-
-    def test_updateCancelButton_function_exists(self):
-        """The updateCancelButton function is defined in the page JavaScript."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn("function updateCancelButton()", content)
-
-    def test_case_insensitive_comparison(self):
-        """The JavaScript compares the confirm text case-insensitively."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn(".toLowerCase()", content)
-        self.assertIn("'confirm'", content)
-
-    def test_checkbox_change_listener(self):
-        """The checkbox has a change event listener attached."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn("addEventListener('change', updateCancelButton)", content)
-
-    def test_text_input_keyup_listener(self):
-        """The text input has a keyup event listener attached."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn("addEventListener('keyup', updateCancelButton)", content)
-
-    def test_doCancel_calls_api(self):
-        """The doCancel function calls /account/api/cancel."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn("fetch('/account/api/cancel'", content)
-
-    def test_doCancel_reloads_on_success(self):
-        """The doCancel function reloads the page on success."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn("window.location.reload()", content)
-
-
 class FreeUserNoCancelButtonTest(TestCase):
     """Tests that free tier users do not see the Cancel Subscription button."""
 

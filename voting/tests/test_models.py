@@ -9,7 +9,7 @@ from django.db import IntegrityError
 from accounts.models import User
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
 from payments.models import Tier
-from voting.models import Poll, PollOption, PollVote, POLL_TYPE_LEVEL_MAP
+from voting.models import Poll, PollOption, PollVote
 
 
 class TierSetupMixin:
@@ -128,10 +128,6 @@ class PollModelTest(TierSetupMixin, TestCase):
         self.assertEqual(polls[0], poll2)
         self.assertEqual(polls[1], poll1)
 
-    def test_poll_type_level_map(self):
-        self.assertEqual(POLL_TYPE_LEVEL_MAP['topic'], 20)
-        self.assertEqual(POLL_TYPE_LEVEL_MAP['course'], 30)
-
 
 class PollOptionModelTest(TierSetupMixin, TestCase):
     """Test PollOption model."""
@@ -171,12 +167,6 @@ class PollOptionModelTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(email='v@test.com')
         PollVote.objects.create(poll=self.poll, option=option, user=user)
         self.assertEqual(option.vote_count, 1)
-
-    def test_cascade_delete_with_poll(self):
-        option = PollOption.objects.create(poll=self.poll, title='Test')
-        option_id = option.id
-        self.poll.delete()
-        self.assertFalse(PollOption.objects.filter(id=option_id).exists())
 
 
 class PollVoteModelTest(TierSetupMixin, TestCase):
@@ -223,17 +213,3 @@ class PollVoteModelTest(TierSetupMixin, TestCase):
         vote = PollVote(user=self.user, option=self.option)
         self.assertEqual(str(vote), f'{self.user} -> {self.option}')
 
-    def test_cascade_delete_with_poll(self):
-        PollVote.objects.create(poll=self.poll, option=self.option, user=self.user)
-        self.poll.delete()
-        self.assertEqual(PollVote.objects.count(), 0)
-
-    def test_cascade_delete_with_option(self):
-        PollVote.objects.create(poll=self.poll, option=self.option, user=self.user)
-        self.option.delete()
-        self.assertEqual(PollVote.objects.count(), 0)
-
-    def test_cascade_delete_with_user(self):
-        PollVote.objects.create(poll=self.poll, option=self.option, user=self.user)
-        self.user.delete()
-        self.assertEqual(PollVote.objects.count(), 0)

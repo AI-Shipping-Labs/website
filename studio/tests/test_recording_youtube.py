@@ -283,69 +283,6 @@ class RecordingYouTubeTemplateTest(TestCase):
         content = response.content.decode()
         self.assertIn('id="youtube-status"', content)
 
-    def test_template_js_disables_button_during_request(self):
-        """The JS code disables the button and changes text to Uploading... during request."""
-        recording = Recording.objects.create(
-            title='Disable Test',
-            slug='disable-test-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('btn.disabled = true', content)
-        self.assertIn("btn.textContent = 'Uploading...'", content)
-
-    def test_template_js_sends_csrf_token(self):
-        """The JS code includes the CSRF token in the POST request."""
-        recording = Recording.objects.create(
-            title='CSRF Test',
-            slug='csrf-test-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('X-CSRFToken', content)
-        self.assertIn('csrfmiddlewaretoken', content)
-
-    def test_template_js_handles_network_error(self):
-        """The JS code has a .catch handler for network errors."""
-        recording = Recording.objects.create(
-            title='Network Test',
-            slug='network-test-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('.catch(', content)
-        self.assertIn('Network error', content)
-
-    def test_template_js_shows_success_message(self):
-        """The JS code shows a queued message on success."""
-        recording = Recording.objects.create(
-            title='Success Test',
-            slug='success-test-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('text-green-500', content)
-
-    def test_template_js_shows_error_message(self):
-        """The JS code shows an error message with red text on failure."""
-        recording = Recording.objects.create(
-            title='Error Test',
-            slug='error-test-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('text-red-500', content)
-
     def test_template_shows_s3_url_value(self):
         """The template shows the S3 URL value for reference."""
         recording = Recording.objects.create(

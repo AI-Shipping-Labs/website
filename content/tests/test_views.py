@@ -48,8 +48,6 @@ class HomeViewTest(TestCase):
     def test_home_contains_content(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('Turn AI ideas into', content)
-        self.assertIn('real projects', content)
         self.assertIn('Test Article', content)
         self.assertIn('Test Recording', content)
         self.assertIn('Test Project', content)
@@ -66,26 +64,6 @@ class HomeViewTest(TestCase):
         self.assertIn('id="collection"', content)
         self.assertIn('id="newsletter"', content)
         self.assertIn('id="faq"', content)
-
-    def test_home_contains_testimonials(self):
-        response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('Rolando', content)
-        self.assertIn('AI Data Scientist', content)
-
-    def test_home_contains_tiers(self):
-        response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('Basic', content)
-        self.assertIn('Main', content)
-        self.assertIn('Premium', content)
-        self.assertIn('Most Popular', content)
-
-    def test_home_contains_faq(self):
-        response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('Who is this community for?', content)
-        self.assertIn('How do I get started?', content)
 
     def test_home_contains_nav(self):
         response = self.client.get('/')

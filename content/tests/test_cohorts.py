@@ -166,15 +166,6 @@ class CohortModelTest(TestCase):
         )
         self.assertIsNone(cohort.spots_remaining)
 
-    def test_cascade_delete_from_course(self):
-        Cohort.objects.create(
-            course=self.course, name='Delete Test',
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
-        )
-        self.course.delete()
-        self.assertEqual(Cohort.objects.count(), 0)
-
 
 # ============================================================
 # CohortEnrollment Model Tests
@@ -227,16 +218,6 @@ class CohortEnrollmentModelTest(TestCase):
         CohortEnrollment.objects.create(cohort=self.cohort, user=self.user)
         CohortEnrollment.objects.create(cohort=cohort2, user=self.user)
         self.assertEqual(CohortEnrollment.objects.filter(user=self.user).count(), 2)
-
-    def test_cascade_delete_from_cohort(self):
-        CohortEnrollment.objects.create(cohort=self.cohort, user=self.user)
-        self.cohort.delete()
-        self.assertEqual(CohortEnrollment.objects.count(), 0)
-
-    def test_cascade_delete_from_user(self):
-        CohortEnrollment.objects.create(cohort=self.cohort, user=self.user)
-        self.user.delete()
-        self.assertEqual(CohortEnrollment.objects.count(), 0)
 
 
 # ============================================================
@@ -718,10 +699,6 @@ class CohortAdminTest(TestCase):
         response = self.client.get('/admin/content/cohort/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Admin Cohort')
-
-    def test_admin_cohort_add_page(self):
-        response = self.client.get('/admin/content/cohort/add/')
-        self.assertEqual(response.status_code, 200)
 
     def test_admin_cohort_change_page(self):
         cohort = Cohort.objects.create(

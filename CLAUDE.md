@@ -32,7 +32,7 @@ Always use `uv` instead of `pip`:
 uv add djangorestframework
 uv run python manage.py makemigrations
 uv run python manage.py migrate
-uv run python manage.py test
+uv run python manage.py test --parallel
 ```
 
 ### File Editing on Windows
@@ -40,6 +40,19 @@ uv run python manage.py test
 When using Edit or MultiEdit tools on Windows, use backslashes (`\`) in file paths.
 
 If you get "File has been unexpectedly modified" — re-read the file immediately before editing.
+
+### Testing Rules
+
+Follow [`_docs/TESTING_GUIDELINES.md`](_docs/TESTING_GUIDELINES.md) when writing or reviewing tests. Key rules:
+
+- Every assertion must fail if the feature is broken (no false positives)
+- Assert on specific elements, not full HTML body strings
+- Do not test Django framework behavior (ORM round-trips, CASCADE, field defaults)
+- Do not test JavaScript by string-matching HTML — use Playwright E2E instead
+- Do not test URL resolution separately — view tests already cover it
+- Use `setUpTestData` for read-only fixtures, not `setUp`
+- Playwright tests test user flows, not implementation details
+- One authoritative test per behavior — pick the right layer
 
 ### Formatting Rules for Documents and Issues
 

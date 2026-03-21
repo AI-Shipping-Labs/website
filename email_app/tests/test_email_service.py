@@ -209,6 +209,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         self.user = User.objects.create_user(email='ses@example.com')
         self.service = EmailService()
 
+    @override_settings(AWS_ACCESS_KEY_ID='', AWS_SECRET_ACCESS_KEY='', AWS_SES_REGION='us-east-1')
     @patch('email_app.services.email_service.boto3')
     def test_ses_client_lazy_init(self, mock_boto3):
         mock_client = MagicMock()

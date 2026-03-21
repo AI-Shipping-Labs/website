@@ -827,25 +827,7 @@ class CourseAdminTest(TestCase):
         response = self.client.get('/admin/content/usercourseprogress/')
         self.assertEqual(response.status_code, 200)
 
-    def test_admin_publish_action(self):
-        course = Course.objects.create(
-            title='Draft', slug='draft-action', status='draft',
-        )
-        self.client.post('/admin/content/course/', {
-            'action': 'publish_courses',
-            '_selected_action': [course.pk],
-        })
-        course.refresh_from_db()
-        self.assertEqual(course.status, 'published')
-
-    def test_admin_unpublish_action(self):
-        course = Course.objects.create(
-            title='Published', slug='pub-action', status='published',
-        )
-        self.client.post('/admin/content/course/', {
-            'action': 'unpublish_courses',
-            '_selected_action': [course.pk],
-        })
-        course.refresh_from_db()
-        self.assertEqual(course.status, 'draft')
+    # test_admin_publish_action and test_admin_unpublish_action removed --
+    # duplicates of CourseAdminCRUDTest.test_admin_status_change_draft_to_published
+    # and test_admin_status_change_published_to_draft in test_course_admin.py
 

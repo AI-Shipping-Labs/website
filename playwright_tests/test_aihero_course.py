@@ -344,52 +344,9 @@ class TestScenario6FreeMemberAccessesDay7:
         assert "Submit" in body or "submit" in body
         assert "review" in body.lower()
 # ---------------------------------------------------------------
-# Scenario 7: Course appears on the authenticated member dashboard
+# Scenario 7: Removed -- duplicate of dashboard "Continue Learning"
+#   tests in playwright_tests/test_dashboard.py (Scenarios 4, 10)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario7DashboardContinueLearning:
-    """Course appears on the authenticated member dashboard."""
-
-    def test_dashboard_shows_aihero_in_continue_learning(
-        self, django_server
-    , browser):
-        """A Free tier user who has completed at least 1 unit sees the
-        AI Hero course in the Continue Learning section on the dashboard."""
-        _ensure_tiers()
-        _ensure_aihero_course()
-        user = _create_user("free-dash@test.com", tier_slug="free")
-
-        # Mark Day 1 as completed
-        from content.models import Unit, Module, Course
-        course = Course.objects.get(slug="aihero")
-        module = Module.objects.get(course=course, title="7-Day AI Agents")
-        day1 = Unit.objects.get(module=module, sort_order=0)
-        _mark_unit_completed(user, day1)
-
-        context = _auth_context(browser, "free-dash@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to dashboard
-        page.goto(
-            f"{django_server}/",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Continue Learning section shows the AI Hero course
-        assert "Continue Learning" in body
-        assert "7-Day AI Agents" in body or "Crash-Course" in body
-
-        # Step 2: Click on the course
-        course_link = page.locator(
-            'a[href="/courses/aihero"]'
-        )
-        assert course_link.count() >= 1
-        course_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Lands on /courses/aihero
-        assert "/courses/aihero" in page.url
 # ---------------------------------------------------------------
 # Scenario 8: Basic member can also access the free course
 # ---------------------------------------------------------------

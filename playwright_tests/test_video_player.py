@@ -478,66 +478,10 @@ class TestScenario4ArticleAutoEmbedYouTube:
         assert "introductory text about AI agents" in body
         assert "follow-up text about next steps" in body
 # ---------------------------------------------------------------
-# Scenario 5: Free member hits paywall on gated recording
+# Scenario 5: Removed -- duplicate of gating tests in
+#   content/tests/test_access_control.py (RecordingDetailAccessControlTest)
+#   and playwright_tests/test_access_control.py (E2E Scenario 7)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario5GatedRecordingPaywall:
-    """Free member hits a paywall on a gated recording."""
-
-    def test_gated_recording_shows_paywall(self, django_server, browser):
-        """Given a Basic-gated recording and a Free member, verify the
-        video player is NOT rendered and a gating overlay with upgrade
-        CTA is shown."""
-        _clear_recordings()
-        _create_user("free-gated@test.com", tier_slug="free")
-        _create_recording(
-            title="Advanced Deployment Patterns",
-            slug="advanced-deployment-patterns",
-            description="Advanced patterns for deploying ML systems.",
-            youtube_url="https://www.youtube.com/watch?v=advXYZ",
-            timestamps=[
-                {"time_seconds": 0, "label": "Start"},
-                {"time_seconds": 600, "label": "Advanced Topics"},
-            ],
-            required_level=10,  # Basic
-        )
-
-        context = _auth_context(browser, "free-gated@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/event-recordings/advanced-deployment-patterns",
-            wait_until="domcontentloaded",
-        )
-
-        body = page.content()
-
-        # Title and description are visible
-        assert "Advanced Deployment Patterns" in body
-        assert "Advanced patterns for deploying ML systems" in body
-
-        # Video player is NOT rendered
-        assert 'data-source="youtube"' not in body
-        assert "video-player" not in body or "video-timestamp" not in body
-
-        # Gating overlay with CTA is shown
-        assert "Upgrade to Basic to watch this recording" in body
-
-        # Blurred placeholder is present
-        assert "blur" in body
-
-        # Click upgrade CTA
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
-        assert pricing_link.count() >= 1
-        pricing_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Lands on /pricing
-        assert "/pricing" in page.url
-
-        context.close()
 # ---------------------------------------------------------------
 # Scenario 6: Recording without a video URL
 # ---------------------------------------------------------------
@@ -660,71 +604,10 @@ class TestScenario7HourLongTimestamps:
         assert ts_btn.count() == 1
         ts_btn.click()
 # ---------------------------------------------------------------
-# Scenario 8: Unauthorized member cannot view gated course unit
+# Scenario 8: Removed -- duplicate of gating tests in
+#   content/tests/test_course_units.py (CourseUnitAccessControlTest)
+#   and playwright_tests/test_access_control.py (E2E Scenario 8)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario8GatedCourseUnit:
-    """Unauthorized member cannot view video content in a gated course."""
-
-    def test_basic_member_blocked_from_premium_course_unit(
-        self, django_server
-    , browser):
-        """Given a Premium-gated course, a Basic member sees the syllabus
-        but gets a gating message when navigating to a unit."""
-        _clear_courses()
-        _create_user("basic-gated@test.com", tier_slug="basic")
-        _create_course_with_unit(
-            course_title="Premium Masterclass",
-            course_slug="premium-masterclass",
-            module_title="Advanced Module",
-            unit_title="Deep Dive",
-            unit_video_url="https://www.youtube.com/watch?v=premium123",
-            unit_timestamps=[
-                {"time_seconds": 0, "label": "Intro"},
-            ],
-            unit_body="# Deep Dive\n\nPremium content.",
-            required_level=30,  # Premium
-        )
-
-        context = _auth_context(browser, "basic-gated@test.com")
-        page = context.new_page()
-        # Navigate to course detail - syllabus visible
-        page.goto(
-            f"{django_server}/courses/premium-masterclass",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-        assert "Premium Masterclass" in body
-        assert "Deep Dive" in body
-
-        # Navigate directly to the unit URL
-        page.goto(
-            f"{django_server}/courses/premium-masterclass/0/0",
-            wait_until="domcontentloaded",
-        )
-
-        body = page.content()
-
-        # Gating message is shown instead of video player
-        assert "Upgrade to Premium to access this lesson" in body
-
-        # Video player is NOT rendered
-        assert 'data-source="youtube"' not in body
-        assert "video-timestamp" not in body
-
-        # CTA link to /pricing is present
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
-        assert pricing_link.count() >= 1
-
-        # Click the CTA
-        pricing_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
-
-        context.close()
 # ---------------------------------------------------------------
 # Scenario 9: Inline YouTube URL NOT auto-embedded
 # ---------------------------------------------------------------
@@ -864,79 +747,7 @@ class TestScenario10AdminTimestampEditor:
         assert "[10:00]" in ts_text
         assert "Live coding" in ts_text
 # ---------------------------------------------------------------
-# Scenario 11: Member completes a course unit after watching video
+# Scenario 11: Removed -- duplicate of unit completion toggling
+#   tests in content/tests/test_course_units.py
+#   (ApiCourseUnitCompleteTest, CourseUnitProgressTest)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario11CourseUnitCompletion:
-    """Member completes a course unit after watching a video lesson."""
-
-    def test_mark_unit_as_completed(self, django_server, browser):
-        """Given a course with a video unit, a Main member marks the unit
-        as completed and sees the status update."""
-        _clear_courses()
-        _create_user("main-course@test.com", tier_slug="main")
-        course, module, unit = _create_course_with_unit(
-            course_title="Intro to ML",
-            course_slug="intro-to-ml",
-            module_title="Foundations",
-            unit_title="Linear Regression",
-            unit_video_url="https://www.youtube.com/watch?v=linreg789",
-            unit_timestamps=[
-                {"time_seconds": 0, "label": "Overview"},
-                {"time_seconds": 300, "label": "Implementation"},
-            ],
-            unit_body="# Linear Regression\n\nLearn about linear regression.",
-            required_level=20,
-        )
-
-        context = _auth_context(browser, "main-course@test.com")
-        page = context.new_page()
-        # Navigate to course and click into unit
-        page.goto(
-            f"{django_server}/courses/intro-to-ml",
-            wait_until="domcontentloaded",
-        )
-        assert "Intro to ML" in page.content()
-
-        page.locator(
-            'a:has-text("Linear Regression")'
-        ).first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        body = page.content()
-
-        # Verify video player with timestamps
-        assert 'data-source="youtube"' in body
-        timestamps = page.locator(".video-timestamp")
-        assert timestamps.count() == 2
-
-        # Verify lesson text
-        assert "Linear Regression" in body
-
-        # Verify "Mark as completed" button
-        complete_btn = page.locator("#mark-complete-btn")
-        assert complete_btn.is_visible()
-        assert "Mark as completed" in complete_btn.inner_text()
-
-        # Click "Mark as completed"
-        complete_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Button should change to show "Completed"
-        btn_text = complete_btn.inner_text()
-        assert "Completed" in btn_text
-
-        # Navigate back to course detail
-        page.goto(
-            f"{django_server}/courses/intro-to-ml",
-            wait_until="domcontentloaded",
-        )
-
-        body = page.content()
-
-        # Progress bar should reflect completion
-        # (1 of 1 unit = 100%)
-        assert "1 of 1 completed" in body or "100%" in body
-
-        context.close()

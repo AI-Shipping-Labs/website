@@ -75,11 +75,8 @@ class AccountPageFreeUserTest(TestCase):
         content = response.content.decode()
         self.assertNotIn('id="downgrade-btn"', content)
 
-    def test_no_cancel_button(self):
-        """Free users do not see 'Cancel Subscription' button."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertNotIn('id="cancel-btn"', content)
+    # test_no_cancel_button removed -- duplicate of
+    # FreeUserNoCancelButtonTest in test_cancel_confirmation.py
 
     def test_no_billing_period_end(self):
         """Free users do not see billing period end date."""

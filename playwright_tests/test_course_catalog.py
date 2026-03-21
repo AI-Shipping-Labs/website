@@ -267,83 +267,10 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         href = back_link.first.get_attribute("href")
         assert href == "/courses"
 # ---------------------------------------------------------------
-# Scenario 2: Anonymous visitor on a paid course sees upgrade CTA
-#              and locked units
+# Scenario 2: Removed -- duplicate of gating tests in
+#   content/tests/test_access_control.py (unit) and
+#   playwright_tests/test_access_control.py (E2E Scenario 8)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario2AnonymousPaidCourseUpgradeCTA:
-    """Anonymous visitor on a paid course sees upgrade CTA and locked units."""
-
-    def test_anonymous_sees_locked_units_and_upgrade_cta(
-        self, django_server
-    , page):
-        """A published paid course with a preview unit. Anonymous
-        visitor sees full syllabus but unit titles are not clickable
-        links. Preview unit has a Preview badge. CTA shows 'Unlock
-        with Main'. No progress section visible."""
-        _clear_courses()
-        _ensure_tiers()
-
-        course = _create_course(
-            title="Advanced MLOps",
-            slug="advanced-mlops",
-            description="Advanced deployment and operations.",
-            required_level=20,  # Main tier
-            instructor_name="John Smith",
-        )
-        mod = _create_module(course, "Deployment", sort_order=1)
-        _create_unit(mod, "Docker Basics", sort_order=1)
-        _create_unit(mod, "Kubernetes Setup", sort_order=2)
-        _create_unit(mod, "Course Intro", sort_order=3, is_preview=True)
-
-        response = page.goto(
-            f"{django_server}/courses/advanced-mlops",
-            wait_until="domcontentloaded",
-        )
-
-        # Page loads (200 status)
-        assert response.status == 200
-
-        body = page.content()
-
-        # Full syllabus visible (for SEO)
-        assert "Deployment" in body
-        assert "Docker Basics" in body
-        assert "Kubernetes Setup" in body
-        assert "Course Intro" in body
-
-        # Unit titles are plain text, not clickable links
-        # The non-accessible units should be <span> not <a>
-        docker_link = page.locator(
-            'a:has-text("Docker Basics")'
-        )
-        assert docker_link.count() == 0
-
-        k8s_link = page.locator(
-            'a:has-text("Kubernetes Setup")'
-        )
-        assert k8s_link.count() == 0
-
-        # "Course Intro" shows a "Preview" badge
-        preview_badge = page.locator(
-            'span:has-text("Preview")'
-        )
-        assert preview_badge.count() >= 1
-
-        # CTA block shows "Unlock with Main"
-        assert "Unlock with Main" in body
-
-        # "View Pricing" button linking to /pricing
-        pricing_btn = page.locator(
-            'a:has-text("View Pricing")'
-        )
-        assert pricing_btn.count() >= 1
-        href = pricing_btn.first.get_attribute("href")
-        assert "/pricing" in href
-
-        # No "Your Progress" section
-        assert "Your Progress" not in body
 # ---------------------------------------------------------------
 # Scenario 3: Free user on a free course can access units and
 #              track progress
@@ -568,78 +495,9 @@ class TestScenario4MainMemberPaidCourseProgress:
         # Progress shows "2 of 2 completed"
         assert "2 of 2 completed" in body
 # ---------------------------------------------------------------
-# Scenario 5: User resumes a course from the dashboard
-#              "Continue Learning" section
+# Scenario 5: Removed -- duplicate of dashboard "Continue Learning"
+#   tests in playwright_tests/test_dashboard.py (Scenarios 4, 10)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario5DashboardContinueLearning:
-    """User resumes a course from the dashboard Continue Learning section."""
-
-    def test_dashboard_shows_in_progress_course_with_continue_button(
-        self, django_server
-    , browser):
-        """A Main-tier user with 1 of 3 units completed sees the
-        course in the Continue Learning section on the dashboard."""
-        _clear_courses()
-        _ensure_tiers()
-        user = _create_user("main-dash@test.com", tier_slug="main")
-
-        course = _create_course(
-            title="Advanced MLOps",
-            slug="advanced-mlops",
-            description="Advanced deployment and operations.",
-            required_level=20,
-        )
-        mod = _create_module(course, "Deployment", sort_order=1)
-        unit1 = _create_unit(mod, "Docker Basics", sort_order=1)
-        _create_unit(mod, "Kubernetes Setup", sort_order=2)
-        _create_unit(mod, "CI/CD Pipelines", sort_order=3)
-
-        # Mark 1 unit as completed
-        _mark_unit_completed(user, unit1)
-
-        context = _auth_context(browser, "main-dash@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to dashboard
-        page.goto(
-            f"{django_server}/",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # "Continue Learning" section shows the course
-        assert "Continue Learning" in body
-        assert "Advanced MLOps" in body
-
-        # Shows "1/3 units completed"
-        assert "1/3 units completed" in body
-
-        # A "Continue" button links to /courses/advanced-mlops
-        continue_btn = page.locator(
-            'a:has-text("Continue")'
-        ).first
-        assert continue_btn.count() >= 1
-        href = continue_btn.get_attribute("href")
-        assert "/courses/advanced-mlops" in href
-
-        # Step 2: Click the "Continue" button
-        continue_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Lands on the course detail page
-        assert "/courses/advanced-mlops" in page.url
-
-        body = page.content()
-
-        # 1 unit checked off in the syllabus
-        check_icons = page.locator(
-            '[data-lucide="check-circle-2"]'
-        )
-        assert check_icons.count() >= 1
-
-        # Progress shows "1 of 3 completed"
-        assert "1 of 3 completed" in body
 # ---------------------------------------------------------------
 # Scenario 6: Visitor filters courses by tag
 # ---------------------------------------------------------------
@@ -744,76 +602,10 @@ class TestScenario7EmptyCatalog:
         heading = page.locator("h1")
         assert "Structured Learning Paths" in heading.inner_text()
 # ---------------------------------------------------------------
-# Scenario 8: Basic member blocked from a Main-required course
-#              sees upgrade path
+# Scenario 8: Removed -- duplicate of gating tests in
+#   content/tests/test_access_control.py (CourseDetailAccessControlTest)
+#   and playwright_tests/test_access_control.py (E2E Scenario 8)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario8BasicMemberBlockedFromMainCourse:
-    """Basic member blocked from a Main-required course sees upgrade path."""
-
-    def test_basic_member_sees_upgrade_cta_on_main_course(
-        self, django_server
-    , browser):
-        """A Basic-tier user on a Main-required course sees the
-        syllabus but unit titles are not clickable. CTA shows
-        'Unlock with Main' and 'View Pricing'. No progress section."""
-        _clear_courses()
-        _ensure_tiers()
-        _create_user("basic-cc@test.com", tier_slug="basic")
-
-        course = _create_course(
-            title="Advanced MLOps",
-            slug="advanced-mlops",
-            description="Advanced deployment and operations.",
-            required_level=20,  # Main
-        )
-        mod = _create_module(course, "Deployment", sort_order=1)
-        _create_unit(mod, "Docker Basics", sort_order=1)
-        _create_unit(mod, "Kubernetes Setup", sort_order=2)
-
-        context = _auth_context(browser, "basic-cc@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/courses/advanced-mlops",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Syllabus visible with all module and unit titles
-        assert "Deployment" in body
-        assert "Docker Basics" in body
-        assert "Kubernetes Setup" in body
-
-        # Unit titles are plain text, not clickable links
-        docker_link = page.locator(
-            'a:has-text("Docker Basics")'
-        )
-        assert docker_link.count() == 0
-
-        # CTA block shows "Unlock with Main"
-        assert "Unlock with Main" in body
-
-        # "View Pricing" button
-        pricing_btn = page.locator(
-            'a:has-text("View Pricing")'
-        )
-        assert pricing_btn.count() >= 1
-
-        # No "Your Progress" section
-        assert "Your Progress" not in body
-
-        # Step 2: Click the "View Pricing" button
-        pricing_btn.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Navigates to /pricing
-        assert "/pricing" in page.url
-
-        body = page.content()
-
-        # Tier options are visible
-        assert "Main" in body
 # ---------------------------------------------------------------
 # Scenario 9: Free course shows "Sign up free" CTA to anonymous
 #              visitor
@@ -886,57 +678,8 @@ class TestScenario9FreeCourseAnonymousSignupCTA:
         assert "Variables" in body
         assert "Functions" in body
 # ---------------------------------------------------------------
-# Scenario 10: Authenticated user toggles unit completion on and off
+# Scenario 10: Removed -- duplicate of unit completion toggling
+#   tests in content/tests/test_course_units.py
+#   (ApiCourseUnitCompleteTest.test_toggle_off_deletes_progress,
+#    test_toggle_on_again, CourseUnitProgressTest)
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario10ToggleUnitCompletion:
-    """Authenticated user toggles unit completion on and off."""
-
-    def test_toggle_unit_completion_on_and_off(
-        self, django_server
-    , browser):
-        """A Free-tier user marks a unit as completed, then toggles
-        it off. The button text changes accordingly."""
-        _clear_courses()
-        _ensure_tiers()
-        _create_user("free-toggle@test.com", tier_slug="free")
-
-        course = _create_course(
-            title="Toggle Course",
-            slug="toggle-course",
-            is_free=True,
-            required_level=0,
-        )
-        mod = _create_module(course, "Module 1", sort_order=1)
-        unit = _create_unit(
-            mod, "Lesson 1", sort_order=1,
-            body="# Lesson\nThis is a lesson.",
-        )
-
-        context = _auth_context(browser, "free-toggle@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to the unit page
-        page.goto(
-            f"{django_server}/courses/toggle-course/1/1",
-            wait_until="domcontentloaded",
-        )
-
-        # "Mark as completed" button visible
-        mark_btn = page.locator("#mark-complete-btn")
-        assert mark_btn.count() >= 1
-        assert "Mark as completed" in mark_btn.inner_text()
-
-        # Step 2: Click "Mark as completed"
-        mark_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Button text changes to "Completed"
-        assert "Completed" in mark_btn.inner_text()
-
-        # Step 3: Click "Completed" again (toggle off)
-        mark_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Button reverts to "Mark as completed"
-        assert "Mark as completed" in mark_btn.inner_text()

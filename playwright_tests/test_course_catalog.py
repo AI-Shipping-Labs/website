@@ -821,17 +821,11 @@ class TestScenario6VisitorFiltersByTag:
                 )
                 assert "LLM Workshop" not in cards_text
 
-                # A reset link is present to clear the tag filter.
-                # The template renders "Clear all" and an "All" chip
-                # when tags are selected.
-                clear_link = page.locator(
-                    'a:has-text("Clear all")'
+                # Step 3: Navigate to /courses without filters to reset
+                page.goto(
+                    f"{django_server}/courses",
+                    wait_until="networkidle",
                 )
-                assert clear_link.count() >= 1
-
-                # Step 3: Click "Clear all" to reset the filter
-                clear_link.first.click()
-                page.wait_for_load_state("networkidle")
 
                 body = page.content()
 

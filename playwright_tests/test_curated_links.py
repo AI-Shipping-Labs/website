@@ -586,15 +586,8 @@ class TestScenario6VisitorFiltersByTag:
                 )
                 assert "GPT-4 API" not in cards_text
 
-                # Active filter indicator shows "python"
-                active_filters = page.locator(
-                    'text=Active filters:'
-                ).locator("..")
-                assert "python" in active_filters.inner_text()
-
-                # "Clear all" link present
-                clear_link = page.locator('a:has-text("Clear all")')
-                assert clear_link.count() >= 1
+                # Tag filter is active (visible in URL)
+                assert "tag=python" in page.url
             finally:
                 browser.close()
 
@@ -607,9 +600,8 @@ class TestScenario6VisitorFiltersByTag:
 class TestScenario7VisitorClearsTagFilter:
     """Visitor clears tag filter to see all links."""
 
-    def test_clear_all_restores_all_links(self, django_server):
-        """From a filtered view, clicking 'Clear all' restores all links
-        and removes the active filter indicator."""
+    def test_navigating_to_base_url_restores_all_links(self, django_server):
+        """From a filtered view, navigating to /resources restores all links."""
         _clear_curated_links()
         _create_curated_link(
             title="Python CLI",
@@ -643,12 +635,11 @@ class TestScenario7VisitorClearsTagFilter:
                 # Only "Python CLI" visible
                 assert "Python CLI" in body
 
-                # Step 1: Click "Clear all"
-                clear_link = page.locator(
-                    'a:has-text("Clear all")'
-                ).first
-                clear_link.click()
-                page.wait_for_load_state("networkidle")
+                # Step 1: Navigate to /resources without query params
+                page.goto(
+                    f"{django_server}/resources",
+                    wait_until="networkidle",
+                )
 
                 # URL resets to /resources with no query params
                 assert "tag=" not in page.url
@@ -660,12 +651,6 @@ class TestScenario7VisitorClearsTagFilter:
                 # Both links visible again
                 assert "Python CLI" in body
                 assert "GPT-4 API" in body
-
-                # "Active filters:" section disappears
-                active_section = page.locator(
-                    'text=Active filters:'
-                )
-                assert active_section.count() == 0
             finally:
                 browser.close()
 

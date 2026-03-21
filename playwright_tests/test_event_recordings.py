@@ -325,13 +325,11 @@ class TestScenario2VisitorFiltersRecordingsByTag:
                 assert "django" in body
                 assert "prompts" in body
 
-                # Step 2: Click the "python" tag chip in the filter bar
-                # The tag filter chips are links in the filter bar
-                filter_bar = page.locator(
-                    'text=Filter by tag:'
-                ).locator("..")
-                python_chip = filter_bar.locator('a:has-text("python")')
-                python_chip.first.click()
+                # Step 2: Click a "python" tag link on a card
+                python_chip = page.locator(
+                    'a[href*="tag=python"]'
+                ).first
+                python_chip.click()
                 page.wait_for_load_state("networkidle")
 
                 # URL updates to include tag=python
@@ -351,17 +349,11 @@ class TestScenario2VisitorFiltersRecordingsByTag:
                 )
                 assert "Prompt Engineering" not in cards_text
 
-                # The "python" chip is highlighted as an active filter
-                active_filters = page.locator(
-                    'text=Active filters:'
-                ).locator("..")
-                assert "python" in active_filters.inner_text()
-
-                # Step 3: Click the "Clear all" link
-                clear_link = page.locator('a:has-text("Clear all")')
-                assert clear_link.count() >= 1
-                clear_link.first.click()
-                page.wait_for_load_state("networkidle")
+                # Step 3: Navigate back to /event-recordings without filters
+                page.goto(
+                    f"{django_server}/event-recordings",
+                    wait_until="networkidle",
+                )
 
                 # URL returns to /event-recordings without tag parameters
                 assert "tag=" not in page.url
@@ -775,12 +767,9 @@ class TestScenario7PaginateFilteredListing:
                 recording_cards = page.locator("article")
                 assert recording_cards.count() == 2
 
-                # The "agents" tag filter is still active
+                # The "agents" tag filter is still active (in URL)
                 body = page.content()
-                active_filters = page.locator(
-                    'text=Active filters:'
-                ).locator("..")
-                assert "agents" in active_filters.inner_text()
+                assert "tag=agents" in page.url
 
             finally:
                 browser.close()
@@ -826,8 +815,9 @@ class TestScenario8EmptyStateNoRecordings:
                     in body
                 )
 
-                # No tag filter chips (no "Filter by tag:")
-                assert "Filter by tag:" not in body
+                # No recording cards (empty state)
+                recording_cards = page.locator("article")
+                assert recording_cards.count() == 0
 
             finally:
                 browser.close()

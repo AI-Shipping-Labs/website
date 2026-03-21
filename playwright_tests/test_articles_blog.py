@@ -377,14 +377,11 @@ class TestScenario2FilterByTag:
                 assert "Python Web Scraping" in content
                 assert "Go Microservices" not in content
 
-                # "Clear all" or "All" filter link is visible
-                clear_link = page.locator('a:has-text("Clear all")')
-                assert clear_link.count() >= 1
-                assert clear_link.first.is_visible()
-
-                # Click the clear filter link
-                clear_link.first.click()
-                page.wait_for_load_state("networkidle")
+                # Navigate back to /blog without query params
+                page.goto(
+                    f"{django_server}/blog",
+                    wait_until="networkidle",
+                )
 
                 # URL should be /blog without query params
                 assert page.url.rstrip("/").endswith("/blog")

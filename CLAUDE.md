@@ -62,5 +62,68 @@ Follow [`_docs/TESTING_GUIDELINES.md`](_docs/TESTING_GUIDELINES.md) when writing
 - Use tables for structured data, not bullet lists of key-value pairs
 - Keep lines concise — one idea per bullet point
 
+## Local Development Setup
+
+### First-time setup
+
+```bash
+uv sync                                    # install dependencies
+uv run python manage.py migrate            # creates DB, seeds tiers
+uv run python manage.py seed_content_sources  # register content sources
+```
+
+### Content sync
+
+All content (articles, courses, projects, recordings, links, interview questions, learning path) lives in the GitHub repo `AI-Shipping-Labs/content`. To populate locally:
+
+Option A — clone and sync from disk:
+```bash
+git clone git@github.com:AI-Shipping-Labs/content.git ~/git/ai-shipping-labs-content
+uv run python manage.py shell -c "
+from integrations.models import ContentSource
+from integrations.services.github import sync_content_source
+for source in ContentSource.objects.all():
+    print(f'Syncing {source.content_type}...')
+    sync_content_source(source, repo_dir='$HOME/git/ai-shipping-labs-content')
+"
+```
+
+Option B — sync via GitHub App (requires credentials in `.env`):
+```bash
+uv run python manage.py shell -c "
+from integrations.models import ContentSource
+from integrations.services.github import sync_content_source
+for source in ContentSource.objects.all():
+    sync_content_source(source)
+"
+```
+
+The interview questions and learning path pages also read from disk as fallback (`CONTENT_REPO_DIR` setting), so Option A works without running a sync.
+
+### Dev seed data (optional)
+
+For fake users, events, polls, and notifications (useful for testing):
+
+```bash
+uv run python manage.py seed_data
+```
+
+This does NOT create content — content only comes from GitHub sync.
+
+### Run tests
+
+```bash
+uv run python manage.py test --parallel     # Django tests (~1 min)
+uv run python -m pytest playwright_tests/   # E2E tests (requires running server)
+```
+
+## Content Architecture
+
+- Content repo: `AI-Shipping-Labs/content` (private, GitHub App auth)
+- Sync pipeline: webhook push → clone → parse markdown/YAML → upload images to S3 → upsert to DB
+- Image CDN: `https://cdn.aishippinglabs.com` (S3 + CloudFront)
+- Content types: `article`, `course`, `resource`, `project`, `interview_question`, `learning_path`
+- Manage sync from Studio: `/studio/sync/`
+
 ## Current Work
 <!-- What are you working on? What's the current context? -->

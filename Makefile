@@ -1,4 +1,4 @@
-.PHONY: run migrate load test coverage playwright lint clean
+.PHONY: run migrate sync seed test coverage playwright lint clean
 
 # Start dev server
 run: migrate
@@ -8,13 +8,19 @@ run: migrate
 migrate:
 	uv run python manage.py migrate
 
-# Load content from reference/ markdown files
-load:
-	uv run python manage.py load_content
+# Sync content from local content repo clone
+# Override repo path: CONTENT_REPO_DIR=/path/to/repo make sync
+sync:
+	uv run python manage.py seed_content_sources
+	uv run python scripts/sync_content.py
+
+# Seed dev-only data (fake users, events, polls, notifications)
+seed:
+	uv run python manage.py seed_data
 
 # Run all Django tests
 test:
-	uv run python manage.py test
+	uv run python manage.py test --parallel
 
 # Run tests with coverage
 coverage:
@@ -28,12 +34,12 @@ playwright:
 # Run all tests (Django + Playwright)
 test-all: test playwright
 
-# Initial setup
+# Initial setup: install deps, migrate, sync content
 setup:
 	uv sync
 	uv run playwright install chromium
 	$(MAKE) migrate
-	$(MAKE) load
+	$(MAKE) sync
 
 # Clean generated files
 clean:

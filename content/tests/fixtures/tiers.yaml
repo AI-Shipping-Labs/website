@@ -1,0 +1,166 @@
+- name: Basic
+  stripe_key: basic
+  tagline: Content only
+  price_monthly: 20
+  price_annual: 200
+  hook: Educational content without community access.
+  description: >
+    Access curated educational content, tutorials, and research.
+    Perfect for self-directed builders who learn at their own pace.
+  positioning: >
+    Best for independent builders who prefer self-paced learning.
+    Upgrade to Main for structure, accountability, and community support.
+  highlighted: false
+  activities:
+    - title: Exclusive Substack Content
+      icon: book-open
+      description: >
+        Full access to premium paywalled articles with practical AI insights,
+        hands-on tutorials with code examples you can implement, and curated
+        breakdowns of new AI tools and workflows to accelerate your projects.
+      features:
+        - Full access to exclusive Substack content
+        - Hands-on tutorials with code examples you can implement
+        - Curated breakdowns of new AI tools and workflows
+    - title: Behind-the-Scenes Research
+      icon: eye
+      description: >
+        Get exclusive access to ongoing research and experiments.
+        See work-in-progress findings and early-stage ideas not available publicly.
+      features:
+        - Behind-the-scenes access to ongoing research and experiments
+    - title: Curated Social Content Collection
+      icon: file-edit
+      description: >
+        Never miss valuable educational posts again. Get a curated collection
+        of evergreen social media content you can reference anytime.
+      features:
+        - Curated collection of valuable social posts you might have missed
+
+- name: Main
+  stripe_key: main
+  tagline: Live learning + community
+  price_monthly: 50
+  price_annual: 500
+  hook: >
+    Build with the community and get the accountability and direction
+    you need to make progress.
+  description: >
+    Everything in Basic, plus the structure, accountability, and peer support
+    to ship your AI projects consistently.
+  positioning: >
+    Best for builders who need structure and accountability to turn project
+    ideas into reality alongside motivated peers.
+  highlighted: true
+  activities:
+    - title: Closed Community Access
+      icon: users
+      description: >
+        Connect with action-oriented builders who are shipping practical AI products.
+        Network with motivated peers, collaborate on projects, and learn from
+        practitioners who convert ideas into tangible contributions.
+      features:
+        - Closed community access to connect and interact with practitioners
+    - title: Collaborative Problem-Solving & Mentorship
+      icon: message-circle-question
+      description: >
+        Get help with implementation challenges and complex issues. Learn from
+        practitioners at various career stages and receive guidance on technical
+        problems you're facing.
+      features:
+        - Collaborative problem-solving and mentorship for implementation challenges
+    - title: Interactive Group Coding Sessions
+      icon: video
+      description: >
+        Join sessions where community members and hosts code live, working through
+        real problems. Watch, participate, and engage with comments as you learn.
+      features:
+        - Interactive group coding sessions led by a host
+    - title: Guided Project-Based Learning
+      icon: folder-kanban
+      description: >
+        Get the structure and direction you need to make consistent progress.
+        Follow curated project frameworks, share your progress with the community,
+        and build practical AI products with clear milestones.
+      features:
+        - Guided project-based learning with curated resources
+    - title: Community Hackathons
+      icon: trophy
+      description: >
+        Turn ideas into shipped projects through focused hackathons. Get gentle
+        external pressure and accountability to build, share your work, and learn
+        from other builders' approaches. Many members emerge from hackathons as
+        active contributors.
+      features:
+        - Community hackathons
+    - title: Career Advancement Discussions
+      icon: briefcase
+      description: >
+        Discuss your career questions and get feedback from experienced practitioners
+        in the community. Share experiences, get advice on job searches, interviews,
+        and career growth.
+      features:
+        - Career advancement discussions and feedback
+    - title: Personal Brand Development
+      icon: star
+      description: >
+        Share your project results publicly and strengthen your professional presence.
+        Get guidance on showcasing your work, building in public, and demonstrating
+        real-world impact. Especially valuable for career transitioners and early
+        career professionals.
+      features:
+        - Personal brand development guidance and content
+    - title: Developer Productivity Tips & Workflows
+      icon: percent
+      description: >
+        Get tips, workflows, and best practices to boost your productivity as a
+        developer. Learn techniques to work more efficiently and effectively.
+      features:
+        - Developer productivity tips and workflows
+    - title: Propose and Vote on Topics
+      icon: file-edit
+      description: >
+        Have a voice in the community's direction. Propose ideas and vote on future
+        topics for content, workshops, and sessions.
+      features:
+        - Propose and vote on future topics
+
+- name: Premium
+  stripe_key: premium
+  tagline: Courses + personalized feedback
+  price_monthly: 100
+  price_annual: 1000
+  hook: Accelerate your growth with structured courses and personalized feedback.
+  description: >
+    Everything in Main, plus structured learning paths through mini-courses
+    and personalized career guidance to accelerate your growth.
+  positioning: >
+    Best for builders seeking structured learning paths to complement hands-on
+    projects, plus personalized career guidance.
+  highlighted: false
+  activities:
+    - title: Mini-Courses on Specialized Topics
+      icon: book-open
+      description: >
+        Access all mini-courses covering specialized topics like Python for Data
+        & AI Engineering, and more. The collection is regularly updated with new
+        courses.
+      features:
+        - Access to all mini-courses on specialized topics
+        - Collection regularly updated with new courses
+        - "Upcoming: Python for Data and AI Engineering"
+    - title: Vote on Course Topics
+      icon: file-edit
+      description: >
+        Have a say in what gets taught next. Propose ideas and vote on upcoming
+        mini-course topics to shape the curriculum.
+      features:
+        - Propose and vote on mini-course topics
+    - title: Profile Teardowns
+      icon: users
+      description: >
+        Get detailed feedback on your resume, LinkedIn, and GitHub profiles.
+        Understand what works, what doesn't, and how to improve your professional
+        presence.
+      features:
+        - "Resume, LinkedIn, and GitHub teardowns"

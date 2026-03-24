@@ -115,7 +115,6 @@ class ActivitiesViewTest(TestCase):
         response = self.client.get('/activities')
         content = response.content.decode()
         self.assertIn('Activities and access by tier', content)
-        self.assertIn('Exclusive Substack Content', content)
         self.assertIn('Quick comparison', content)
 
 

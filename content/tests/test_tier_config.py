@@ -1,11 +1,21 @@
 import os
 import tempfile
+import unittest
 from pathlib import Path
 
 import yaml
+from django.conf import settings
 from django.test import TestCase, override_settings
 
 from content.tier_config import get_tiers, get_tiers_with_features, get_activities
+
+
+def _has_tiers_yaml():
+    """Check if the content repo tiers.yaml is available on disk."""
+    repo_dir = getattr(settings, 'CONTENT_REPO_DIR', None)
+    if not repo_dir or not Path(repo_dir).is_dir():
+        return False
+    return (Path(repo_dir) / 'tiers.yaml').exists()
 
 
 # Minimal valid YAML for tests that need a custom fixture
@@ -304,6 +314,7 @@ class GetActivitiesTest(TierConfigTestMixin, TestCase):
         self.assertEqual(shared[0]['icon'], 'a')  # first occurrence wins
 
 
+@unittest.skipUnless(_has_tiers_yaml(), 'Content repo tiers.yaml not available')
 class ProductionYamlTest(TestCase):
     """Tests that the actual tiers.yaml in the content repo matches expected structure."""
 
@@ -393,6 +404,7 @@ class ProductionYamlTest(TestCase):
         self.assertEqual(tiers[2]['features'][0]['text'], 'Everything in Main')
 
 
+@unittest.skipUnless(_has_tiers_yaml(), 'Content repo tiers.yaml not available')
 class ActivitiesViewIntegrationTest(TestCase):
     """Test that the activities view correctly uses YAML-backed data."""
 
@@ -426,6 +438,7 @@ class ActivitiesViewIntegrationTest(TestCase):
         self.assertContains(response, 'Mini-Courses on Specialized Topics')
 
 
+@unittest.skipUnless(_has_tiers_yaml(), 'Content repo tiers.yaml not available')
 class HomepageTiersIntegrationTest(TestCase):
     """Test that the homepage correctly uses YAML-backed tier data."""
 

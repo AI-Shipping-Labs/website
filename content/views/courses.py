@@ -252,18 +252,31 @@ def course_unit_detail(request, slug, module_sort, unit_sort):
     course, module, unit = _get_unit_or_404(slug, module_sort, unit_sort)
     user = request.user
 
-    # Access check: preview units are open to all; otherwise check tier
-    has_access = unit.is_preview or can_access(user, course)
+    # Access check: preview units are open to all; otherwise must be
+    # signed in and meet the tier requirement
+    if unit.is_preview:
+        has_access = True
+    elif not user.is_authenticated:
+        has_access = False
+    else:
+        has_access = can_access(user, course)
 
     if not has_access:
-        tier_name = get_required_tier_name(course.required_level)
+        if not user.is_authenticated:
+            cta_message = 'Sign in to access this lesson'
+            pricing_url = '/accounts/login/'
+            tier_name = None
+        else:
+            tier_name = get_required_tier_name(course.required_level)
+            cta_message = f'Upgrade to {tier_name} to access this lesson'
+            pricing_url = '/pricing'
         context = {
             'course': course,
             'unit': unit,
             'is_gated': True,
             'required_tier_name': tier_name,
-            'cta_message': f'Upgrade to {tier_name} to access this lesson',
-            'pricing_url': '/pricing',
+            'cta_message': cta_message,
+            'pricing_url': pricing_url,
         }
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
@@ -340,10 +353,17 @@ def api_course_unit_detail(request, slug, unit_id):
     unit = get_object_or_404(Unit, pk=unit_id, module__course=course)
     user = request.user
 
-    # Access check: preview units open to all
-    has_access = unit.is_preview or can_access(user, course)
+    # Access check: preview units open to all; otherwise must be signed in
+    if unit.is_preview:
+        has_access = True
+    elif not user.is_authenticated:
+        has_access = False
+    else:
+        has_access = can_access(user, course)
 
     if not has_access:
+        if not user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
         tier_name = get_required_tier_name(course.required_level)
         return JsonResponse(
             {'error': 'Access denied', 'required_tier_name': tier_name},

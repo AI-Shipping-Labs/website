@@ -105,21 +105,18 @@ class GetTiersTest(TierConfigTestMixin, TestCase):
         self.assertEqual(tiers[1]['name'], 'Main')
         self.assertEqual(tiers[2]['name'], 'Premium')
 
-    def test_raises_when_content_repo_dir_not_configured(self):
+    def test_returns_empty_when_content_repo_dir_not_configured(self):
         with self.settings(CONTENT_REPO_DIR=None):
-            with self.assertRaises(FileNotFoundError):
-                get_tiers()
+            self.assertEqual(get_tiers(), [])
 
-    def test_raises_when_content_repo_dir_is_empty_string(self):
+    def test_returns_empty_when_content_repo_dir_is_empty_string(self):
         with self.settings(CONTENT_REPO_DIR=Path('')):
-            with self.assertRaises(FileNotFoundError):
-                get_tiers()
+            self.assertEqual(get_tiers(), [])
 
-    def test_raises_when_tiers_yaml_missing(self):
+    def test_returns_empty_when_tiers_yaml_missing(self):
         # temp_dir exists but has no tiers.yaml
         with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            with self.assertRaises(FileNotFoundError):
-                get_tiers()
+            self.assertEqual(get_tiers(), [])
 
     def test_result_is_cached(self):
         self._write_yaml(SAMPLE_TIERS_YAML)

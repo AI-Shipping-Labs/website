@@ -112,6 +112,19 @@ def course_edit(request, course_id):
                 pass
         else:
             course.individual_price_eur = None
+        # Peer review fields
+        course.peer_review_enabled = request.POST.get('peer_review_enabled') == 'on'
+        peer_review_count_raw = request.POST.get('peer_review_count', '3').strip()
+        try:
+            course.peer_review_count = int(peer_review_count_raw)
+        except (ValueError, TypeError):
+            course.peer_review_count = 3
+        peer_review_deadline_raw = request.POST.get('peer_review_deadline_days', '7').strip()
+        try:
+            course.peer_review_deadline_days = int(peer_review_deadline_raw)
+        except (ValueError, TypeError):
+            course.peer_review_deadline_days = 7
+        course.peer_review_criteria = request.POST.get('peer_review_criteria', '')
         course.save()
         return redirect('studio_course_edit', course_id=course.pk)
 

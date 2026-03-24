@@ -96,6 +96,11 @@ class CourseAdminCRUDTest(TestCase):
             'cohorts-INITIAL_FORMS': '0',
             'cohorts-MIN_NUM_FORMS': '0',
             'cohorts-MAX_NUM_FORMS': '1000',
+            # Peer review fields
+            'peer_review_enabled': '',
+            'peer_review_count': '3',
+            'peer_review_deadline_days': '7',
+            'peer_review_criteria': '',
         })
         # Should redirect after successful creation
         self.assertEqual(response.status_code, 302)

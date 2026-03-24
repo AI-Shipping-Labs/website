@@ -125,6 +125,13 @@ class CourseAdmin(admin.ModelAdmin):
             'fields': ('individual_price_eur', 'stripe_product_id', 'stripe_price_id'),
             'classes': ('collapse',),
         }),
+        ('Peer Review', {
+            'fields': (
+                'peer_review_enabled', 'peer_review_count',
+                'peer_review_deadline_days', 'peer_review_criteria',
+            ),
+            'classes': ('collapse',),
+        }),
         ('Publishing', {
             'fields': ('status', 'discussion_url'),
         }),

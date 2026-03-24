@@ -6,6 +6,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import get_user_level
 from content.models import Article, Recording, Project, CuratedLink, Course, UserCourseProgress, Unit
+from content.tier_config import get_tiers_with_features
 
 
 TESTIMONIALS = [
@@ -70,68 +71,6 @@ FEATURES = [
     },
 ]
 
-TIERS = [
-    {
-        'name': 'Basic',
-        'stripe_key': 'basic',
-        'tagline': 'Content only',
-        'description': 'Access curated educational content, tutorials, and research. Perfect for self-directed builders who learn at their own pace.',
-        'price_monthly': 20,
-        'price_annual': 200,
-        'hook': 'Educational content without community access.',
-        'features': [
-            {'text': 'Full access to exclusive Substack content', 'included': True},
-            {'text': 'Hands-on tutorials with code examples you can implement', 'included': True},
-            {'text': 'Curated breakdowns of new AI tools and workflows', 'included': True},
-            {'text': 'Behind-the-scenes access to ongoing research and experiments', 'included': True},
-            {'text': 'Curated collection of valuable social posts you might have missed', 'included': True},
-        ],
-        'positioning': 'Best for independent builders who prefer self-paced learning. Upgrade to Main for structure, accountability, and community support.',
-        'highlighted': False,
-    },
-    {
-        'name': 'Main',
-        'stripe_key': 'main',
-        'tagline': 'Live learning + community',
-        'description': 'Everything in Basic, plus the structure, accountability, and peer support to ship your AI projects consistently.',
-        'price_monthly': 50,
-        'price_annual': 500,
-        'hook': 'Build with the community and get the accountability and direction you need to make progress.',
-        'features': [
-            {'text': 'Everything in Basic', 'included': True},
-            {'text': 'Closed community access to connect and interact with practitioners', 'included': True},
-            {'text': 'Collaborative problem-solving and mentorship for implementation challenges', 'included': True},
-            {'text': 'Interactive group coding sessions led by a host', 'included': True},
-            {'text': 'Guided project-based learning with curated resources', 'included': True},
-            {'text': 'Community hackathons', 'included': True},
-            {'text': 'Career advancement discussions and feedback', 'included': True},
-            {'text': 'Personal brand development guidance and content', 'included': True},
-            {'text': 'Developer productivity tips and workflows', 'included': True},
-            {'text': 'Propose and vote on future topics', 'included': True},
-        ],
-        'positioning': 'Best for builders who need structure and accountability to turn project ideas into reality alongside motivated peers.',
-        'highlighted': True,
-    },
-    {
-        'name': 'Premium',
-        'stripe_key': 'premium',
-        'tagline': 'Courses + personalized feedback',
-        'description': 'Everything in Main, plus structured learning paths through mini-courses and personalized career guidance to accelerate your growth.',
-        'price_monthly': 100,
-        'price_annual': 1000,
-        'hook': 'Accelerate your growth with structured courses and personalized feedback.',
-        'features': [
-            {'text': 'Everything in Main', 'included': True},
-            {'text': 'Access to all mini-courses on specialized topics', 'included': True},
-            {'text': 'Collection regularly updated with new courses', 'included': True},
-            {'text': 'Upcoming: Python for Data and AI Engineering', 'included': True},
-            {'text': 'Propose and vote on mini-course topics', 'included': True},
-            {'text': 'Resume, LinkedIn, and GitHub teardowns', 'included': True},
-        ],
-        'positioning': 'Best for builders seeking structured learning paths to complement hands-on projects, plus personalized career guidance.',
-        'highlighted': False,
-    },
-]
 
 FAQ_ITEMS = [
     {
@@ -207,7 +146,7 @@ def _public_home(request):
     # Add payment links to tiers
     stripe_links = settings.STRIPE_PAYMENT_LINKS
     tiers_with_links = []
-    for tier in TIERS:
+    for tier in get_tiers_with_features():
         tier_copy = dict(tier)
         key = tier['stripe_key']
         tier_copy['payment_link_monthly'] = stripe_links.get(key, {}).get('monthly', '#')

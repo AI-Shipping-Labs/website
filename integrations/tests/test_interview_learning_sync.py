@@ -1,4 +1,4 @@
-"""Tests for interview questions and learning path sync pipeline."""
+"""Tests for interview questions sync pipeline."""
 
 import os
 import tempfile
@@ -7,7 +7,7 @@ import shutil
 from django.db import IntegrityError
 from django.test import TestCase
 
-from content.models import InterviewCategory, LearningPath
+from content.models import InterviewCategory
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
@@ -151,133 +151,6 @@ class SyncInterviewQuestionsTest(TestCase):
         )
 
 
-class SyncLearningPathsTest(TestCase):
-    """Test syncing learning paths from a mock repo directory."""
-
-    def setUp(self):
-        self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='learning_path',
-            content_path='learning-path',
-        )
-        self.temp_dir = tempfile.mkdtemp()
-        self.content_dir = os.path.join(self.temp_dir, 'learning-path')
-        os.makedirs(self.content_dir)
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def _write_yaml(self, subdir, filename, content):
-        dirpath = os.path.join(self.content_dir, subdir)
-        os.makedirs(dirpath, exist_ok=True)
-        with open(os.path.join(dirpath, filename), 'w') as f:
-            f.write(content)
-
-    def test_sync_creates_learning_path(self):
-        self._write_yaml('ai-engineer', 'data.yaml', (
-            'title: "AI Engineer Learning Path"\n'
-            'description: "A visual learning path."\n'
-            'skill_categories:\n'
-            '  - id: genai\n'
-            '    label: "GenAI Skills"\n'
-            '    skills:\n'
-            '      - name: "RAG"\n'
-            '        pct: 35.9\n'
-            'learning_stages:\n'
-            '  - stage: "1"\n'
-            '    title: "Python Foundations"\n'
-        ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.status, 'success')
-        self.assertEqual(sync_log.items_created, 1)
-
-        lp = LearningPath.objects.get(slug='ai-engineer')
-        self.assertEqual(lp.title, 'AI Engineer Learning Path')
-        self.assertEqual(lp.description, 'A visual learning path.')
-        self.assertIn('skill_categories', lp.data_json)
-        self.assertEqual(
-            lp.data_json['skill_categories'][0]['label'], 'GenAI Skills'
-        )
-        self.assertEqual(lp.source_repo, 'AI-Shipping-Labs/content')
-
-    def test_sync_updates_existing_path(self):
-        LearningPath.objects.create(
-            slug='ai-engineer',
-            title='Old Title',
-            data_json={'title': 'Old'},
-            source_repo='AI-Shipping-Labs/content',
-        )
-
-        self._write_yaml('ai-engineer', 'data.yaml', (
-            'title: "Updated AI Engineer Path"\n'
-            'description: "Updated description."\n'
-        ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.status, 'success')
-        self.assertEqual(sync_log.items_updated, 1)
-        self.assertEqual(sync_log.items_created, 0)
-
-        lp = LearningPath.objects.get(slug='ai-engineer')
-        self.assertEqual(lp.title, 'Updated AI Engineer Path')
-
-    def test_sync_deletes_stale_paths(self):
-        LearningPath.objects.create(
-            slug='old-path',
-            title='Old Path',
-            data_json={},
-            source_repo='AI-Shipping-Labs/content',
-        )
-
-        self._write_yaml('ai-engineer', 'data.yaml', (
-            'title: "AI Engineer"\n'
-        ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.status, 'success')
-        self.assertEqual(sync_log.items_deleted, 1)
-        self.assertFalse(
-            LearningPath.objects.filter(slug='old-path').exists()
-        )
-
-    def test_sync_multiple_paths(self):
-        for name in ['ai-engineer', 'ml-engineer']:
-            self._write_yaml(name, 'data.yaml', (
-                f'title: "{name.replace("-", " ").title()} Path"\n'
-            ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.status, 'success')
-        self.assertEqual(sync_log.items_created, 2)
-        self.assertEqual(LearningPath.objects.count(), 2)
-
-    def test_sync_ignores_dirs_without_data_yaml(self):
-        # Create a directory without data.yaml
-        os.makedirs(os.path.join(self.content_dir, 'empty-dir'))
-
-        self._write_yaml('ai-engineer', 'data.yaml', (
-            'title: "AI Engineer"\n'
-        ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.items_created, 1)
-
-    def test_sync_data_yml_extension(self):
-        """Also supports .yml extension."""
-        self._write_yaml('ai-engineer', 'data.yml', (
-            'title: "AI Engineer Path"\n'
-            'description: "With .yml extension."\n'
-        ))
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(sync_log.status, 'success')
-        self.assertEqual(sync_log.items_created, 1)
-
-        lp = LearningPath.objects.get(slug='ai-engineer')
-        self.assertEqual(lp.title, 'AI Engineer Path')
-
-
 class InterviewCategoryModelTest(TestCase):
     """Test InterviewCategory model."""
 
@@ -299,20 +172,3 @@ class InterviewCategoryModelTest(TestCase):
             InterviewCategory.objects.create(slug='theory', title='Theory 2')
 
 
-class LearningPathModelTest(TestCase):
-    """Test LearningPath model."""
-
-    def test_create_path(self):
-        lp = LearningPath.objects.create(
-            slug='ai-engineer',
-            title='AI Engineer Learning Path',
-            description='A learning path.',
-            data_json={'skill_categories': []},
-        )
-        self.assertEqual(str(lp), 'AI Engineer Learning Path')
-        self.assertEqual(lp.get_absolute_url(), '/learning-path/ai-engineer')
-
-    def test_slug_unique(self):
-        LearningPath.objects.create(slug='ai-engineer', title='Path 1')
-        with self.assertRaises(IntegrityError):
-            LearningPath.objects.create(slug='ai-engineer', title='Path 2')

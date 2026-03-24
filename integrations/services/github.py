@@ -528,7 +528,6 @@ def _get_sync_function(content_type):
         'resource': _sync_resources,
         'project': _sync_projects,
         'interview_question': _sync_interview_questions,
-        'learning_path': _sync_learning_paths,
     }
     func = sync_functions.get(content_type)
     if not func:
@@ -768,6 +767,10 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
 
                 body = rewrite_image_urls(body, source.repo_name, base_dir)
 
+                # Extract page_type and data from frontmatter
+                page_type = metadata.get('page_type', 'blog')
+                data = metadata.get('data', {})
+
                 defaults = {
                     'title': metadata.get('title', current_slug),
                     'description': metadata.get('description', ''),
@@ -780,6 +783,8 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
                     'source_repo': source.repo_name,
                     'source_path': rel_path,
                     'source_commit': commit_sha,
+                    'page_type': page_type,
+                    'data_json': data,
                 }
 
                 # Parse date
@@ -799,6 +804,13 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
                     source_repo=source.repo_name,
                     defaults=defaults,
                 )
+
+                # Expand widgets after save (save already rendered markdown to HTML)
+                if article.data_json:
+                    from content.utils.widgets import expand_widgets
+                    expanded = expand_widgets(article.content_html, article.data_json)
+                    Article.objects.filter(pk=article.pk).update(content_html=expanded)
+
                 if created:
                     stats['created'] += 1
                 else:
@@ -1517,62 +1529,3 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
     return stats
 
 
-def _sync_learning_paths(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync learning paths from YAML data files."""
-    from content.models import LearningPath
-
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
-    seen_slugs = set()
-
-    # Each subdirectory is a learning path (e.g. ai-engineer/)
-    for entry in os.scandir(repo_dir):
-        if not entry.is_dir() or entry.name.startswith('.'):
-            continue
-
-        data_path = os.path.join(entry.path, 'data.yaml')
-        if not os.path.exists(data_path):
-            # Also try data.yml
-            data_path = os.path.join(entry.path, 'data.yml')
-            if not os.path.exists(data_path):
-                continue
-
-        rel_path = os.path.relpath(data_path, repo_dir)
-
-        try:
-            data = _parse_yaml_file(data_path)
-            slug = entry.name
-            seen_slugs.add(slug)
-
-            defaults = {
-                'title': data.get('title', slug.replace('-', ' ').title()),
-                'description': data.get('description', ''),
-                'data_json': data,
-                'source_repo': source.repo_name,
-                'source_path': rel_path,
-                'source_commit': commit_sha,
-            }
-
-            obj, created = LearningPath.objects.update_or_create(
-                slug=slug,
-                defaults=defaults,
-            )
-            if created:
-                stats['created'] += 1
-            else:
-                stats['updated'] += 1
-
-        except Exception as e:
-            stats['errors'].append({'file': rel_path, 'error': str(e)})
-            logger.warning(
-                'Error syncing learning path %s: %s', rel_path, e,
-            )
-
-    # Delete stale learning paths from this repo
-    stale = LearningPath.objects.filter(
-        source_repo=source.repo_name,
-    ).exclude(slug__in=seen_slugs)
-    deleted_count = stale.count()
-    stale.delete()
-    stats['deleted'] = deleted_count
-
-    return stats

@@ -1,300 +1,302 @@
+"""Tests for learning path rendered as Article with page_type='learning_path'."""
+
+import os
 import tempfile
-from pathlib import Path
+import shutil
+from datetime import date
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from content.models import LearningPath
+from content.models import Article
+from integrations.models import ContentSource
+from integrations.services.github import sync_content_source
 
 
-def _create_temp_learning_path(base_dir):
-    """Create a temporary content repo with learning path data."""
-    lp_dir = base_dir / 'learning-path' / 'ai-engineer'
-    lp_dir.mkdir(parents=True, exist_ok=True)
+class LearningPathArticleModelTest(TestCase):
+    """Test Article model with page_type and data_json fields."""
 
-    (lp_dir / 'data.yaml').write_text(
-        'title: "AI Engineer Learning Path"\n'
-        'description: "A visual learning path for AI engineers."\n'
-        '\n'
-        'skill_categories:\n'
-        '  - id: genai\n'
-        '    label: "GenAI Skills"\n'
-        '    description: "Core AI skills."\n'
-        '    skills:\n'
-        '      - name: "RAG"\n'
-        '        pct: 35.9\n'
-        '        priority: essential\n'
-        '      - name: "Prompt Engineering"\n'
-        '        pct: 29.1\n'
-        '        priority: essential\n'
-        '      - name: "Fine-Tuning"\n'
-        '        pct: 8.5\n'
-        '        priority: nice-to-have\n'
-        '\n'
-        'tool_categories:\n'
-        '  - label: "GenAI Frameworks"\n'
-        '    note: "No single framework dominates."\n'
-        '    tools:\n'
-        '      - name: "LangChain"\n'
-        '        pct: 18.8\n'
-        '      - name: "LlamaIndex"\n'
-        '        pct: 5.8\n'
-        '\n'
-        'responsibilities:\n'
-        '  core:\n'
-        '    - title: "Build AI Systems"\n'
-        '      description: "Design end-to-end LLM applications."\n'
-        '  common:\n'
-        '    - title: "RAG & Retrieval"\n'
-        '      description: "Build retrieval systems."\n'
-        '  secondary:\n'
-        '    - "Frontend / UI development"\n'
-        '    - "Fine-tuning models"\n'
-        '\n'
-        'portfolio_projects:\n'
-        '  - number: "01"\n'
-        '    title: "Production RAG System"\n'
-        '    description: "Build a production-ready RAG system."\n'
-        '    skills: ["RAG", "Vector DB", "Python"]\n'
-        '    difficulty: "Foundational"\n'
-        '  - number: "02"\n'
-        '    title: "Multi-Step AI Agent"\n'
-        '    description: "Build an agent that automates a workflow."\n'
-        '    skills: ["Agents", "LLM APIs"]\n'
-        '    difficulty: "Intermediate"\n'
-        '\n'
-        'learning_stages:\n'
-        '  - stage: "1"\n'
-        '    title: "Python & LLM Foundations"\n'
-        '    items:\n'
-        '      - "Python fluency"\n'
-        '      - "How LLMs work"\n'
-        '  - stage: "2"\n'
-        '    title: "RAG & Retrieval Systems"\n'
-        '    items:\n'
-        '      - "Embeddings and semantic search"\n'
-        '      - "Vector databases"\n'
-    )
+    @classmethod
+    def setUpTestData(cls):
+        cls.article = Article.objects.create(
+            title='AI Engineer Learning Path',
+            slug='ai-engineer-learning-path',
+            description='A visual learning path.',
+            content_markdown='## Stages\n\n<!-- widget:learning_stages data=learning_stages -->',
+            page_type='learning_path',
+            data_json={
+                'learning_stages': [
+                    {'stage': '1', 'title': 'Foundations', 'items': ['Python']},
+                ],
+            },
+            date=date(2026, 1, 15),
+            published=True,
+        )
 
-    return base_dir
+    def test_page_type_stored(self):
+        self.assertEqual(self.article.page_type, 'learning_path')
+
+    def test_data_json_stored(self):
+        self.assertIn('learning_stages', self.article.data_json)
+        self.assertEqual(len(self.article.data_json['learning_stages']), 1)
+
+    def test_default_page_type_is_blog(self):
+        blog = Article.objects.create(
+            title='Regular Post',
+            slug='regular-post',
+            content_markdown='Hello',
+            date=date(2026, 1, 1),
+        )
+        self.assertEqual(blog.page_type, 'blog')
+        self.assertEqual(blog.data_json, {})
 
 
 class LearningPathViewTest(TestCase):
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        self.content_dir = Path(self.temp_dir)
-        _create_temp_learning_path(self.content_dir)
+    """Test view rendering for learning path articles."""
 
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    @override_settings()
-    def test_learning_path_returns_200(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        self.assertEqual(response.status_code, 200)
-
-    @override_settings()
-    def test_learning_path_uses_correct_template(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        self.assertTemplateUsed(response, 'content/learning_path_ai_engineer.html')
-
-    @override_settings()
-    def test_learning_path_shows_title(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('AI Engineer Learning Path', content)
-
-    @override_settings()
-    def test_learning_path_shows_skill_categories(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('GenAI Skills', content)
-        self.assertIn('RAG', content)
-        self.assertIn('Prompt Engineering', content)
-        self.assertIn('35.9%', content)
-
-    @override_settings()
-    def test_learning_path_shows_priority_labels(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('essential', content)
-        self.assertIn('nice-to-have', content)
-
-    @override_settings()
-    def test_learning_path_shows_tool_categories(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('GenAI Frameworks', content)
-        self.assertIn('LangChain', content)
-        self.assertIn('LlamaIndex', content)
-
-    @override_settings()
-    def test_learning_path_shows_responsibilities(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('Build AI Systems', content)
-        self.assertIn('RAG &amp; Retrieval', content)
-        self.assertIn('Frontend / UI development', content)
-
-    @override_settings()
-    def test_learning_path_shows_portfolio_projects(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('Production RAG System', content)
-        self.assertIn('Multi-Step AI Agent', content)
-        self.assertIn('Foundational', content)
-        self.assertIn('Intermediate', content)
-
-    @override_settings()
-    def test_learning_path_shows_learning_stages(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('Python &amp; LLM Foundations', content)
-        self.assertIn('RAG &amp; Retrieval Systems', content)
-        self.assertIn('Python fluency', content)
-        self.assertIn('Embeddings and semantic search', content)
-
-    @override_settings()
-    def test_learning_path_404_when_no_content_repo(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path('/nonexistent/path')
-
-        response = self.client.get('/learning-path/ai-engineer')
-        self.assertEqual(response.status_code, 404)
-
-    @override_settings()
-    def test_learning_path_context_data(self):
-        from django.conf import settings
-        settings.CONTENT_REPO_DIR = Path(self.temp_dir)
-
-        response = self.client.get('/learning-path/ai-engineer')
-        self.assertIn('skill_categories', response.context)
-        self.assertIn('tool_categories', response.context)
-        self.assertIn('responsibilities', response.context)
-        self.assertIn('portfolio_projects', response.context)
-        self.assertIn('learning_stages', response.context)
-        self.assertEqual(len(response.context['skill_categories']), 1)
-        self.assertEqual(len(response.context['tool_categories']), 1)
-        self.assertEqual(len(response.context['portfolio_projects']), 2)
-        self.assertEqual(len(response.context['learning_stages']), 2)
-
-
-class LearningPathDbViewTest(TestCase):
-    """Test learning path reads from the database when data is available."""
-
-    def setUp(self):
-        LearningPath.objects.create(
-            slug='ai-engineer',
+    @classmethod
+    def setUpTestData(cls):
+        cls.article = Article.objects.create(
             title='AI Engineer Learning Path',
+            slug='ai-engineer-learning-path',
             description='A visual learning path for AI engineers.',
+            content_markdown='## Stages\n\nSome learning path content here.',
+            page_type='learning_path',
             data_json={
-                'title': 'AI Engineer Learning Path',
-                'description': 'A visual learning path for AI engineers.',
-                'skill_categories': [
-                    {
-                        'id': 'genai',
-                        'label': 'GenAI Skills',
-                        'description': 'Core AI skills.',
-                        'skills': [
-                            {'name': 'RAG', 'pct': 35.9, 'priority': 'essential'},
-                            {'name': 'Fine-Tuning', 'pct': 8.5, 'priority': 'nice-to-have'},
-                        ],
-                    },
-                ],
-                'tool_categories': [
-                    {
-                        'label': 'GenAI Frameworks',
-                        'note': 'No single framework dominates.',
-                        'tools': [
-                            {'name': 'LangChain', 'pct': 18.8},
-                        ],
-                    },
-                ],
-                'responsibilities': {
-                    'core': [{'title': 'Build AI Systems', 'description': 'Design LLM apps.'}],
-                    'common': [{'title': 'RAG & Retrieval', 'description': 'Build retrieval.'}],
-                    'secondary': ['Frontend / UI development'],
-                },
-                'portfolio_projects': [
-                    {
-                        'number': '01',
-                        'title': 'Production RAG System',
-                        'description': 'Build a RAG system.',
-                        'skills': ['RAG'],
-                        'difficulty': 'Foundational',
-                    },
-                ],
                 'learning_stages': [
-                    {
-                        'stage': '1',
-                        'title': 'Python & LLM Foundations',
-                        'items': ['Python fluency'],
-                    },
+                    {'stage': '1', 'title': 'Foundations', 'items': ['Python']},
                 ],
             },
+            date=date(2026, 1, 15),
+            published=True,
         )
 
-    @override_settings(CONTENT_REPO_DIR=None)
-    def test_learning_path_returns_200_from_db(self):
-        response = self.client.get('/learning-path/ai-engineer')
+    def test_learning_path_returns_200(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
         self.assertEqual(response.status_code, 200)
 
-    @override_settings(CONTENT_REPO_DIR=None)
-    def test_learning_path_uses_correct_template_from_db(self):
-        response = self.client.get('/learning-path/ai-engineer')
-        self.assertTemplateUsed(response, 'content/learning_path_ai_engineer.html')
+    def test_uses_learning_path_template(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
+        self.assertTemplateUsed(response, 'content/learning_path_detail.html')
 
-    @override_settings(CONTENT_REPO_DIR=None)
-    def test_learning_path_shows_title_from_db(self):
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('AI Engineer Learning Path', content)
+    def test_shows_title(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
+        self.assertContains(response, 'AI Engineer Learning Path')
 
-    @override_settings(CONTENT_REPO_DIR=None)
-    def test_learning_path_shows_skills_from_db(self):
-        response = self.client.get('/learning-path/ai-engineer')
-        content = response.content.decode()
-        self.assertIn('GenAI Skills', content)
-        self.assertIn('RAG', content)
-        self.assertIn('35.9%', content)
+    def test_shows_description(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
+        self.assertContains(response, 'A visual learning path for AI engineers.')
 
-    @override_settings(CONTENT_REPO_DIR=None)
-    def test_learning_path_context_from_db(self):
-        response = self.client.get('/learning-path/ai-engineer')
-        self.assertIn('skill_categories', response.context)
-        self.assertIn('tool_categories', response.context)
-        self.assertIn('portfolio_projects', response.context)
-        self.assertIn('learning_stages', response.context)
+    def test_renders_content_html(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
+        self.assertContains(response, 'Some learning path content here.')
 
-    @override_settings(CONTENT_REPO_DIR=None)
-    def test_learning_path_404_when_no_db_and_no_disk(self):
-        LearningPath.objects.all().delete()
+    def test_context_has_learning_stages(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
+        self.assertEqual(len(response.context['learning_stages']), 1)
+
+    def test_has_structured_data(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
+        self.assertContains(response, 'application/ld+json')
+
+    def test_shows_learning_path_label(self):
+        response = self.client.get('/blog/ai-engineer-learning-path')
+        self.assertContains(response, 'Learning Path')
+
+
+class LearningPathRedirectTest(TestCase):
+    """Test that the old URL redirects to the new article URL."""
+
+    def test_old_url_returns_301(self):
         response = self.client.get('/learning-path/ai-engineer')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 301)
+
+    def test_old_url_redirects_to_article(self):
+        response = self.client.get('/learning-path/ai-engineer')
+        self.assertEqual(response['Location'], '/blog/ai-engineer-learning-path')
+
+
+class BlogListExcludesLearningPathTest(TestCase):
+    """Test that blog listing excludes learning_path articles."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.blog_article = Article.objects.create(
+            title='Regular Blog Post',
+            slug='regular-blog',
+            content_markdown='Hello',
+            page_type='blog',
+            date=date(2026, 1, 1),
+            published=True,
+        )
+        cls.lp_article = Article.objects.create(
+            title='AI Engineer Learning Path',
+            slug='ai-engineer-lp',
+            content_markdown='LP content',
+            page_type='learning_path',
+            date=date(2026, 1, 15),
+            published=True,
+        )
+
+    def test_blog_list_shows_blog_articles(self):
+        response = self.client.get('/blog')
+        self.assertContains(response, 'Regular Blog Post')
+
+    def test_blog_list_excludes_learning_path(self):
+        response = self.client.get('/blog')
+        self.assertNotContains(response, 'AI Engineer Learning Path')
+
+
+class RegularBlogUnaffectedTest(TestCase):
+    """Test that regular blog articles still work normally."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.article = Article.objects.create(
+            title='Normal Article',
+            slug='normal-article',
+            content_markdown='# Hello\n\nSome content.',
+            author='Test Author',
+            date=date(2026, 2, 1),
+            published=True,
+        )
+
+    def test_blog_detail_returns_200(self):
+        response = self.client.get('/blog/normal-article')
+        self.assertEqual(response.status_code, 200)
+
+    def test_uses_blog_detail_template(self):
+        response = self.client.get('/blog/normal-article')
+        self.assertTemplateUsed(response, 'content/blog_detail.html')
+
+    def test_page_type_defaults_to_blog(self):
+        self.assertEqual(self.article.page_type, 'blog')
+
+    def test_data_json_defaults_to_empty(self):
+        self.assertEqual(self.article.data_json, {})
+
+
+class SyncLearningPathArticleTest(TestCase):
+    """Test that the sync pipeline handles learning_path page_type articles."""
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            content_path='blog',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+        self.blog_dir = os.path.join(self.temp_dir, 'blog')
+        os.makedirs(self.blog_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_md(self, subdir, filename, content):
+        dirpath = os.path.join(self.blog_dir, subdir)
+        os.makedirs(dirpath, exist_ok=True)
+        with open(os.path.join(dirpath, filename), 'w') as f:
+            f.write(content)
+
+    def test_sync_creates_article_with_page_type(self):
+        self._write_md('ai-engineer-learning-path', 'index.md', (
+            '---\n'
+            'title: "AI Engineer Learning Path"\n'
+            'slug: "ai-engineer-learning-path"\n'
+            'description: "A visual learning path."\n'
+            'date: "2026-01-15"\n'
+            'page_type: learning_path\n'
+            'data:\n'
+            '  learning_stages:\n'
+            '    - stage: "1"\n'
+            '      title: "Foundations"\n'
+            '      items:\n'
+            '        - "Python fluency"\n'
+            '---\n'
+            '\n'
+            '## Learning Stages\n'
+            '\n'
+            '<!-- widget:learning_stages data=learning_stages -->\n'
+        ))
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(sync_log.status, 'success')
+        self.assertEqual(sync_log.items_created, 1)
+
+        article = Article.objects.get(slug='ai-engineer-learning-path')
+        self.assertEqual(article.page_type, 'learning_path')
+        self.assertIn('learning_stages', article.data_json)
+        # Widget should be expanded in content_html
+        self.assertIn('Foundations', article.content_html)
+        self.assertIn('Python fluency', article.content_html)
+        # Widget marker should be replaced
+        self.assertNotIn('<!-- widget:', article.content_html)
+
+    def test_sync_regular_article_unaffected(self):
+        self._write_md('', 'regular.md', (
+            '---\n'
+            'title: "Regular Post"\n'
+            'slug: "regular-post"\n'
+            'date: "2026-02-01"\n'
+            '---\n'
+            '\n'
+            '# Hello\n'
+            '\n'
+            'Normal content.\n'
+        ))
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(sync_log.status, 'success')
+
+        article = Article.objects.get(slug='regular-post')
+        self.assertEqual(article.page_type, 'blog')
+        self.assertEqual(article.data_json, {})
+        self.assertIn('Normal content', article.content_html)
+
+    def test_sync_stores_data_json(self):
+        self._write_md('', 'lp.md', (
+            '---\n'
+            'title: "LP"\n'
+            'slug: "lp-test"\n'
+            'date: "2026-01-15"\n'
+            'page_type: learning_path\n'
+            'data:\n'
+            '  skill_categories:\n'
+            '    - label: "GenAI"\n'
+            '      description: "Core skills"\n'
+            '      skills:\n'
+            '        - name: "RAG"\n'
+            '          pct: 35.9\n'
+            '          priority: essential\n'
+            '---\n'
+            '\n'
+            '## Skills\n'
+            '\n'
+            '<!-- widget:skill_chart data=skill_categories -->\n'
+        ))
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        article = Article.objects.get(slug='lp-test')
+        self.assertEqual(article.data_json['skill_categories'][0]['label'], 'GenAI')
+        self.assertIn('RAG', article.content_html)
+        self.assertIn('35.9%', article.content_html)
+
+    def test_sync_logs_error_for_missing_widget_data_key(self):
+        self._write_md('', 'bad-lp.md', (
+            '---\n'
+            'title: "Bad LP"\n'
+            'slug: "bad-lp"\n'
+            'date: "2026-01-15"\n'
+            'page_type: learning_path\n'
+            'data:\n'
+            '  other_key: []\n'
+            '---\n'
+            '\n'
+            '<!-- widget:skill_chart data=missing_key -->\n'
+        ))
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        # The error should be logged, not silently swallowed
+        self.assertTrue(len(sync_log.errors) > 0)
+        error_text = str(sync_log.errors)
+        self.assertIn('missing_key', error_text)

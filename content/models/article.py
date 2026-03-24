@@ -33,6 +33,11 @@ STATUS_CHOICES = [
     ('published', 'Published'),
 ]
 
+PAGE_TYPE_CHOICES = [
+    ('blog', 'Blog'),
+    ('learning_path', 'Learning Path'),
+]
+
 
 class Article(models.Model):
     """Blog article / post."""
@@ -46,6 +51,14 @@ class Article(models.Model):
     author = models.CharField(max_length=200, blank=True, default='')
     reading_time = models.CharField(max_length=50, blank=True, default='')
     tags = models.JSONField(default=list, blank=True)
+    page_type = models.CharField(
+        max_length=50, choices=PAGE_TYPE_CHOICES, default='blog',
+        help_text="Determines the outer page template.",
+    )
+    data_json = models.JSONField(
+        default=dict, blank=True,
+        help_text="Stores raw frontmatter data dict for widget rendering.",
+    )
     required_level = models.IntegerField(
         default=0,
         choices=VISIBILITY_CHOICES,

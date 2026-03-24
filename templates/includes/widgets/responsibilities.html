@@ -1,0 +1,41 @@
+{% if items.core %}
+<div class="mb-8">
+  <h3 class="text-lg font-semibold text-foreground mb-4">Core Responsibilities</h3>
+  <div class="grid gap-4 sm:grid-cols-2">
+    {% for item in items.core %}
+    <div class="rounded-lg border border-border bg-card p-5">
+      <h4 class="font-semibold text-foreground">{{ item.title }}</h4>
+      <p class="mt-2 text-sm text-muted-foreground">{{ item.description }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if items.common %}
+<div class="mb-8">
+  <h3 class="text-lg font-semibold text-foreground mb-4">Common Responsibilities</h3>
+  <div class="grid gap-4 sm:grid-cols-2">
+    {% for item in items.common %}
+    <div class="rounded-lg border border-border bg-card p-5">
+      <h4 class="font-semibold text-foreground">{{ item.title }}</h4>
+      <p class="mt-2 text-sm text-muted-foreground">{{ item.description }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if items.secondary %}
+<div>
+  <h3 class="text-lg font-semibold text-foreground mb-4">Secondary Responsibilities</h3>
+  <ul class="space-y-2">
+    {% for item in items.secondary %}
+    <li class="flex items-start gap-2 text-sm text-muted-foreground">
+      <i data-lucide="circle" class="h-2 w-2 flex-shrink-0 mt-1.5 fill-current"></i>
+      {{ item }}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 from content.views.home import home
 from content.views.pages import (
     about, activities, blog_list, blog_detail,
@@ -19,7 +20,6 @@ from content.views.courses import (
     api_course_purchase,
 )
 from content.views.interview import interview_hub, interview_detail
-from content.views.learning_path import learning_path_ai_engineer
 from content.views.peer_review import (
     project_submit, review_dashboard, review_form, certificate_page,
     api_submit_project, api_review_dashboard, api_submit_review,
@@ -43,8 +43,8 @@ urlpatterns = [
     # Interview questions
     path('interview', interview_hub, name='interview_hub'),
     path('interview/<slug:slug>', interview_detail, name='interview_detail'),
-    # Learning path
-    path('learning-path/ai-engineer', learning_path_ai_engineer, name='learning_path_ai_engineer'),
+    # Learning path (redirect old URL to article)
+    path('learning-path/ai-engineer', RedirectView.as_view(url='/blog/ai-engineer-learning-path', permanent=True), name='learning_path_ai_engineer_redirect'),
     # Tags
     path('tags', tags_index, name='tags_index'),
     path('tags/<slug:tag>', tags_detail, name='tags_detail'),

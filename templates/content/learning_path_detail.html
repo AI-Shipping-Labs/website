@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load seo_tags %}
+
+{% block title %}{{ title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ description }}{% endblock %}
+
+{% block structured_data %}
+{% course_learning_path_structured_data title description learning_stages %}
+{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-16 lg:py-24">
+    <div class="mx-auto max-w-5xl px-6 lg:px-8">
+      <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to home
+      </a>
+
+      <div class="mb-16">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Learning Path</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          {{ title }}
+        </h1>
+        {% if description %}
+        <p class="mt-4 text-lg text-muted-foreground">{{ description }}</p>
+        {% endif %}
+      </div>
+
+      <div class="prose prose-invert max-w-none">
+        {{ article.content_html|safe }}
+      </div>
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

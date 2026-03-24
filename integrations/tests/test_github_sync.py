@@ -105,7 +105,7 @@ class ContentSourceModelTest(TestCase):
             )
 
     def test_content_type_choices(self):
-        for ct in ['article', 'course', 'resource', 'project', 'interview_question', 'learning_path']:
+        for ct in ['article', 'course', 'resource', 'project', 'interview_question']:
             source = ContentSource.objects.create(
                 repo_name=f'test-org/{ct}-repo',
                 content_type=ct,
@@ -1187,19 +1187,19 @@ class AdminSyncAllTest(TestCase):
 class SeedContentSourcesCommandTest(TestCase):
     """Test the seed_content_sources management command."""
 
-    def test_seeds_six_sources(self):
+    def test_seeds_five_sources(self):
         from django.core.management import call_command
         from io import StringIO
         out = StringIO()
         call_command('seed_content_sources', stdout=out)
-        self.assertEqual(ContentSource.objects.count(), 6)
+        self.assertEqual(ContentSource.objects.count(), 5)
 
     def test_seed_is_idempotent(self):
         from django.core.management import call_command
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 6)
+        self.assertEqual(ContentSource.objects.count(), 5)
 
     def test_seed_creates_expected_repos(self):
         from django.core.management import call_command
@@ -1222,7 +1222,7 @@ class SeedContentSourcesCommandTest(TestCase):
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
         types = set(ContentSource.objects.values_list('content_type', flat=True))
-        self.assertEqual(types, {'article', 'course', 'resource', 'project', 'interview_question', 'learning_path'})
+        self.assertEqual(types, {'article', 'course', 'resource', 'project', 'interview_question'})
 
     def test_content_paths_correct(self):
         from django.core.management import call_command
@@ -1236,7 +1236,6 @@ class SeedContentSourcesCommandTest(TestCase):
         self.assertEqual(paths['resource'], 'resources')
         self.assertEqual(paths['project'], 'projects')
         self.assertEqual(paths['interview_question'], 'interview-questions')
-        self.assertEqual(paths['learning_path'], 'learning-path')
 
 
 # ===========================================================================

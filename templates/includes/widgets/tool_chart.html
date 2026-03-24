@@ -1,0 +1,23 @@
+<div class="space-y-10">
+  {% for category in items %}
+  <div class="rounded-lg border border-border bg-card p-6 lg:p-8">
+    <h3 class="text-lg font-semibold text-foreground">{{ category.label }}</h3>
+    {% if category.note %}
+    <p class="mt-2 text-sm text-muted-foreground">{{ category.note }}</p>
+    {% endif %}
+    <div class="mt-6 space-y-4">
+      {% for tool in category.tools %}
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-sm font-medium text-foreground">{{ tool.name }}</span>
+          <span class="text-xs text-muted-foreground">{{ tool.pct }}%</span>
+        </div>
+        <div class="h-2 rounded-full bg-secondary overflow-hidden">
+          <div class="h-full rounded-full bg-accent" style="width: {{ tool.pct }}%"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>

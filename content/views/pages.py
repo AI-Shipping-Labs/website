@@ -93,7 +93,7 @@ def activities(request):
 
 def blog_list(request):
     """Blog listing page with optional tag filtering."""
-    articles = Article.objects.filter(published=True)
+    articles = Article.objects.filter(published=True, page_type='blog')
     selected_tags = _get_selected_tags(request)
 
     # Collect all tags from published articles for the tag filter UI
@@ -119,6 +119,16 @@ def blog_list(request):
 def blog_detail(request, slug):
     """Blog post detail page with related articles."""
     article = get_object_or_404(Article, slug=slug, published=True)
+
+    if article.page_type == 'learning_path':
+        context = {
+            'article': article,
+            'title': article.title,
+            'description': article.description,
+            'learning_stages': article.data_json.get('learning_stages', []),
+        }
+        return render(request, 'content/learning_path_detail.html', context)
+
     related_articles = article.get_related_articles(limit=3)
     tag_rules = _get_tag_rules_for_tags(article.tags)
     context = {

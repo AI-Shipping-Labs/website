@@ -1,0 +1,24 @@
+<div class="relative">
+  <!-- Vertical connector line -->
+  <div class="absolute left-6 top-0 bottom-0 w-0.5 bg-border hidden sm:block"></div>
+  <div class="space-y-6">
+    {% for stage in items %}
+    <div class="relative flex gap-6">
+      <div class="flex-shrink-0 relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-foreground font-bold text-lg">
+        {{ stage.stage }}
+      </div>
+      <div class="flex-1 rounded-lg border border-border bg-card p-6">
+        <h3 class="text-lg font-semibold text-foreground">{{ stage.title }}</h3>
+        <ul class="mt-3 space-y-2">
+          {% for item in stage.items %}
+          <li class="flex items-start gap-2 text-sm text-muted-foreground">
+            <i data-lucide="check" class="h-4 w-4 flex-shrink-0 text-accent mt-0.5"></i>
+            {{ item }}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>

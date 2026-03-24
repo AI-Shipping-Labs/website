@@ -9,7 +9,6 @@ CONTENT_TYPE_CHOICES = [
     ('resource', 'Resource'),
     ('project', 'Project'),
     ('interview_question', 'Interview Question'),
-    ('learning_path', 'Learning Path'),
 ]
 
 SYNC_STATUS_CHOICES = [

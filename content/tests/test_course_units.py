@@ -199,6 +199,14 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
 
     def test_anonymous_user_sees_gated_message(self):
         response = self.client.get('/courses/test-course/1/1')
+        self.assertContains(response, 'Sign in to access this lesson', status_code=403)
+
+    def test_basic_user_sees_upgrade_message(self):
+        user = User.objects.create_user(email='basic2@test.com', password='testpass')
+        user.tier = self.basic_tier
+        user.save()
+        self.client.login(email='basic2@test.com', password='testpass')
+        response = self.client.get('/courses/test-course/1/1')
         self.assertContains(response, 'Upgrade to Main', status_code=403)
         self.assertContains(response, 'View Pricing', status_code=403)
 
@@ -425,12 +433,19 @@ class ApiCourseUnitDetailTest(CourseUnitSetupMixin, TestCase):
         data = json.loads(response.content)
         self.assertNotIn('is_completed', data)
 
-    def test_unauthorized_gets_403(self):
+    def test_anonymous_gets_401(self):
+        response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
+        self.assertEqual(response.status_code, 401)
+        data = json.loads(response.content)
+        self.assertEqual(data['error'], 'Authentication required')
+
+    def test_unauthorized_user_gets_403_with_tier_name(self):
+        user = User.objects.create_user(email='basic@test.com', password='testpass')
+        user.tier = self.basic_tier
+        user.save()
+        self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         self.assertEqual(response.status_code, 403)
-
-    def test_unauthorized_gets_required_tier_name(self):
-        response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         data = json.loads(response.content)
         self.assertEqual(data['required_tier_name'], 'Main')
 

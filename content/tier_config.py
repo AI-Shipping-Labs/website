@@ -1,25 +1,16 @@
-from functools import lru_cache
-from pathlib import Path
-
-import yaml
-from django.conf import settings
-
-
-@lru_cache(maxsize=1)
 def get_tiers():
-    """Load tier display data from tiers.yaml in the content repo.
+    """Load tier display data from the database.
 
-    Returns the parsed YAML list (one dict per tier: Basic, Main, Premium).
-    Returns an empty list if CONTENT_REPO_DIR is not configured or tiers.yaml is missing.
+    Returns the parsed tier list (one dict per tier: Basic, Main, Premium).
+    Returns an empty list if no tier data has been synced.
     """
-    repo_dir = getattr(settings, 'CONTENT_REPO_DIR', None)
-    if not repo_dir or not Path(repo_dir).is_dir():
+    from content.models import SiteConfig
+
+    try:
+        config = SiteConfig.objects.get(key='tiers')
+        return config.data or []
+    except SiteConfig.DoesNotExist:
         return []
-    path = Path(repo_dir) / 'tiers.yaml'
-    if not path.exists():
-        return []
-    with open(path) as f:
-        return yaml.safe_load(f) or []
 
 
 def get_tiers_with_features():

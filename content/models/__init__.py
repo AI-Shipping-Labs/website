@@ -9,3 +9,4 @@ from .cohort import *
 from .peer_review import *
 from .tag_rule import *
 from .interview_category import *
+from .site_config import *

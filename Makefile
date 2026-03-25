@@ -9,10 +9,11 @@ migrate:
 	uv run python manage.py migrate
 
 # Sync content from local content repo clone
-# Override repo path: CONTENT_REPO_DIR=/path/to/repo make sync
+# Override repo path: make sync CONTENT_REPO=~/other/path
+CONTENT_REPO ?= ~/git/ai-shipping-labs-content
 sync:
 	uv run python manage.py seed_content_sources
-	uv run python scripts/sync_content.py
+	uv run python manage.py sync_content --from-disk $(CONTENT_REPO)
 
 # Seed dev-only data (fake users, events, polls, notifications)
 seed:

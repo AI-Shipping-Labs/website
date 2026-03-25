@@ -74,31 +74,18 @@ uv run python manage.py seed_content_sources  # register content sources
 
 ### Content sync
 
-All content (articles, courses, projects, recordings, links, interview questions, learning path) lives in the GitHub repo `AI-Shipping-Labs/content`. To populate locally:
+All content (articles, courses, projects, recordings, links, interview questions, tier data) lives in the GitHub repo `AI-Shipping-Labs/content`. To populate locally:
 
-Option A — clone and sync from disk:
+Option A — sync from a local clone:
 ```bash
 git clone git@github.com:AI-Shipping-Labs/content.git ~/git/ai-shipping-labs-content
-uv run python manage.py shell -c "
-from integrations.models import ContentSource
-from integrations.services.github import sync_content_source
-for source in ContentSource.objects.all():
-    print(f'Syncing {source.content_type}...')
-    sync_content_source(source, repo_dir='$HOME/git/ai-shipping-labs-content')
-"
+uv run python manage.py sync_content --from-disk ~/git/ai-shipping-labs-content
 ```
 
 Option B — sync via GitHub App (requires credentials in `.env`):
 ```bash
-uv run python manage.py shell -c "
-from integrations.models import ContentSource
-from integrations.services.github import sync_content_source
-for source in ContentSource.objects.all():
-    sync_content_source(source)
-"
+uv run python manage.py sync_content
 ```
-
-The interview questions and learning path pages also read from disk as fallback (`CONTENT_REPO_DIR` setting), so Option A works without running a sync.
 
 ### Dev seed data (optional)
 

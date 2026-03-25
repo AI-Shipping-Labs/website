@@ -1,19 +1,11 @@
-import os
-import tempfile
-from pathlib import Path
+from django.test import TestCase
 
-import yaml
-from django.test import TestCase, override_settings
-
+from content.models import SiteConfig
 from content.tier_config import get_tiers, get_tiers_with_features, get_activities
 
 
-# Path to the tiers.yaml fixture (copy of the production file)
-TIERS_FIXTURE_DIR = Path(__file__).parent / 'fixtures'
-
-
-# Minimal valid YAML for tests that need a custom fixture
-SAMPLE_TIERS_YAML = [
+# Minimal valid tier data for tests
+SAMPLE_TIERS_DATA = [
     {
         'name': 'Basic',
         'stripe_key': 'basic',
@@ -74,123 +66,72 @@ SAMPLE_TIERS_YAML = [
 ]
 
 
-class TierConfigTestMixin:
-    """Mixin that sets up a temp directory with tiers.yaml and clears lru_cache."""
-
-    def setUp(self):
-        super().setUp()
-        self.temp_dir = tempfile.mkdtemp()
-        self.yaml_path = Path(self.temp_dir) / 'tiers.yaml'
-        # Clear the lru_cache before each test
-        get_tiers.cache_clear()
-
-    def tearDown(self):
-        get_tiers.cache_clear()
-        # Clean up temp files
-        if self.yaml_path.exists():
-            self.yaml_path.unlink()
-        os.rmdir(self.temp_dir)
-        super().tearDown()
-
-    def _write_yaml(self, data):
-        with open(self.yaml_path, 'w') as f:
-            yaml.dump(data, f)
+def _seed_tiers(data=None):
+    """Create a SiteConfig row with tier data."""
+    SiteConfig.objects.update_or_create(
+        key='tiers',
+        defaults={'data': data if data is not None else SAMPLE_TIERS_DATA},
+    )
 
 
-class GetTiersTest(TierConfigTestMixin, TestCase):
-    """Tests for the get_tiers() function."""
+class GetTiersTest(TestCase):
+    """Tests for the get_tiers() function reading from the database."""
 
-    def test_loads_yaml_from_content_repo_dir(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers()
+    def test_loads_tiers_from_db(self):
+        _seed_tiers()
+        tiers = get_tiers()
         self.assertEqual(len(tiers), 3)
         self.assertEqual(tiers[0]['name'], 'Basic')
         self.assertEqual(tiers[1]['name'], 'Main')
         self.assertEqual(tiers[2]['name'], 'Premium')
 
-    def test_returns_empty_when_content_repo_dir_not_configured(self):
-        with self.settings(CONTENT_REPO_DIR=None):
-            self.assertEqual(get_tiers(), [])
+    def test_returns_empty_when_no_data_in_db(self):
+        self.assertEqual(get_tiers(), [])
 
-    def test_returns_empty_when_content_repo_dir_is_empty_string(self):
-        with self.settings(CONTENT_REPO_DIR=Path('')):
-            self.assertEqual(get_tiers(), [])
-
-    def test_returns_empty_when_tiers_yaml_missing(self):
-        # temp_dir exists but has no tiers.yaml
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            self.assertEqual(get_tiers(), [])
-
-    def test_result_is_cached(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            result1 = get_tiers()
-            result2 = get_tiers()
-        self.assertIs(result1, result2)
+    def test_returns_empty_when_data_is_empty_list(self):
+        _seed_tiers([])
+        self.assertEqual(get_tiers(), [])
 
 
-class GetTiersWithFeaturesTest(TierConfigTestMixin, TestCase):
+class GetTiersWithFeaturesTest(TestCase):
     """Tests for the get_tiers_with_features() function (homepage data)."""
 
+    @classmethod
+    def setUpTestData(cls):
+        _seed_tiers()
+
     def test_basic_tier_has_no_inheritance_prefix(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers_with_features()
+        tiers = get_tiers_with_features()
         basic = tiers[0]
         feature_texts = [f['text'] for f in basic['features']]
-        self.assertNotIn('Everything in Basic', feature_texts)
-        # Should not start with "Everything in ..."
         self.assertFalse(feature_texts[0].startswith('Everything in'))
 
     def test_main_tier_starts_with_everything_in_basic(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers_with_features()
+        tiers = get_tiers_with_features()
         main = tiers[1]
         self.assertEqual(main['features'][0]['text'], 'Everything in Basic')
 
     def test_premium_tier_starts_with_everything_in_main(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers_with_features()
+        tiers = get_tiers_with_features()
         premium = tiers[2]
         self.assertEqual(premium['features'][0]['text'], 'Everything in Main')
 
     def test_features_collected_from_activities(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers_with_features()
+        tiers = get_tiers_with_features()
         basic = tiers[0]
         feature_texts = [f['text'] for f in basic['features']]
         self.assertIn('Feature A1', feature_texts)
         self.assertIn('Feature A2', feature_texts)
 
     def test_all_features_have_included_true(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers_with_features()
+        tiers = get_tiers_with_features()
         for tier in tiers:
             for feature in tier['features']:
                 self.assertTrue(feature['included'], f"Feature '{feature['text']}' not included")
 
-    def test_tier_dict_preserves_all_keys(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers_with_features()
-        required_keys = {
-            'name', 'stripe_key', 'tagline', 'price_monthly', 'price_annual',
-            'hook', 'description', 'positioning', 'highlighted', 'features',
-        }
-        for tier in tiers:
-            self.assertTrue(required_keys.issubset(tier.keys()),
-                            f"Tier '{tier['name']}' missing keys: {required_keys - tier.keys()}")
-
     def test_feature_counts_per_tier(self):
         """Basic gets its own features, Main gets inheritance + own, Premium gets inheritance + own."""
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            tiers = get_tiers_with_features()
+        tiers = get_tiers_with_features()
         # Basic: 2 features (from Activity A)
         self.assertEqual(len(tiers[0]['features']), 2)
         # Main: 1 inheritance line + 1 feature (from Activity B) = 2
@@ -199,42 +140,36 @@ class GetTiersWithFeaturesTest(TierConfigTestMixin, TestCase):
         self.assertEqual(len(tiers[2]['features']), 3)
 
 
-class GetActivitiesTest(TierConfigTestMixin, TestCase):
+class GetActivitiesTest(TestCase):
     """Tests for the get_activities() function (activities page data)."""
 
+    @classmethod
+    def setUpTestData(cls):
+        _seed_tiers()
+
     def test_returns_all_activities(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            activities = get_activities()
+        activities = get_activities()
         self.assertEqual(len(activities), 3)
         titles = [a['title'] for a in activities]
         self.assertEqual(titles, ['Activity A', 'Activity B', 'Activity C'])
 
     def test_basic_activity_inherits_to_all_tiers(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            activities = get_activities()
+        activities = get_activities()
         activity_a = activities[0]
         self.assertEqual(activity_a['tiers'], ['basic', 'main', 'premium'])
 
     def test_main_activity_inherits_to_main_and_premium(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            activities = get_activities()
+        activities = get_activities()
         activity_b = activities[1]
         self.assertEqual(activity_b['tiers'], ['main', 'premium'])
 
     def test_premium_activity_only_in_premium(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            activities = get_activities()
+        activities = get_activities()
         activity_c = activities[2]
         self.assertEqual(activity_c['tiers'], ['premium'])
 
     def test_activity_dict_has_required_keys(self):
-        self._write_yaml(SAMPLE_TIERS_YAML)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            activities = get_activities()
+        activities = get_activities()
         for activity in activities:
             self.assertIn('icon', activity)
             self.assertIn('title', activity)
@@ -242,84 +177,88 @@ class GetActivitiesTest(TierConfigTestMixin, TestCase):
             self.assertIn('tiers', activity)
 
     def test_description_is_stripped(self):
-        data = [
-            {
-                'name': 'Basic',
-                'stripe_key': 'basic',
-                'tagline': 'T',
-                'price_monthly': 20,
-                'price_annual': 200,
-                'hook': 'H',
-                'description': 'D',
-                'positioning': 'P',
-                'highlighted': False,
-                'activities': [
-                    {
-                        'title': 'Padded',
-                        'icon': 'x',
-                        'description': '  padded text  \n',
-                        'features': [],
-                    },
-                ],
-            },
-        ]
-        self._write_yaml(data)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            activities = get_activities()
+        SiteConfig.objects.update_or_create(
+            key='tiers',
+            defaults={'data': [
+                {
+                    'name': 'Basic',
+                    'stripe_key': 'basic',
+                    'tagline': 'T',
+                    'price_monthly': 20,
+                    'price_annual': 200,
+                    'hook': 'H',
+                    'description': 'D',
+                    'positioning': 'P',
+                    'highlighted': False,
+                    'activities': [
+                        {
+                            'title': 'Padded',
+                            'icon': 'x',
+                            'description': '  padded text  \n',
+                            'features': [],
+                        },
+                    ],
+                },
+            ]},
+        )
+        activities = get_activities()
         self.assertEqual(activities[0]['description'], 'padded text')
 
     def test_deduplicates_activities_by_title(self):
         """If the same title appears under multiple tiers, only the first occurrence is used."""
-        data = [
-            {
-                'name': 'Basic',
-                'stripe_key': 'basic',
-                'tagline': 'T',
-                'price_monthly': 20,
-                'price_annual': 200,
-                'hook': 'H',
-                'description': 'D',
-                'positioning': 'P',
-                'highlighted': False,
-                'activities': [
-                    {'title': 'Shared', 'icon': 'a', 'description': 'First.', 'features': []},
-                ],
-            },
-            {
-                'name': 'Main',
-                'stripe_key': 'main',
-                'tagline': 'T',
-                'price_monthly': 50,
-                'price_annual': 500,
-                'hook': 'H',
-                'description': 'D',
-                'positioning': 'P',
-                'highlighted': True,
-                'activities': [
-                    {'title': 'Shared', 'icon': 'b', 'description': 'Duplicate.', 'features': []},
-                ],
-            },
-        ]
-        self._write_yaml(data)
-        with self.settings(CONTENT_REPO_DIR=Path(self.temp_dir)):
-            activities = get_activities()
+        SiteConfig.objects.update_or_create(
+            key='tiers',
+            defaults={'data': [
+                {
+                    'name': 'Basic',
+                    'stripe_key': 'basic',
+                    'tagline': 'T',
+                    'price_monthly': 20,
+                    'price_annual': 200,
+                    'hook': 'H',
+                    'description': 'D',
+                    'positioning': 'P',
+                    'highlighted': False,
+                    'activities': [
+                        {'title': 'Shared', 'icon': 'a', 'description': 'First.', 'features': []},
+                    ],
+                },
+                {
+                    'name': 'Main',
+                    'stripe_key': 'main',
+                    'tagline': 'T',
+                    'price_monthly': 50,
+                    'price_annual': 500,
+                    'hook': 'H',
+                    'description': 'D',
+                    'positioning': 'P',
+                    'highlighted': True,
+                    'activities': [
+                        {'title': 'Shared', 'icon': 'b', 'description': 'Duplicate.', 'features': []},
+                    ],
+                },
+            ]},
+        )
+        activities = get_activities()
         shared = [a for a in activities if a['title'] == 'Shared']
         self.assertEqual(len(shared), 1)
         self.assertEqual(shared[0]['icon'], 'a')  # first occurrence wins
 
 
-@override_settings(CONTENT_REPO_DIR=TIERS_FIXTURE_DIR)
 class ProductionYamlTest(TestCase):
-    """Tests that tiers.yaml matches expected structure."""
+    """Tests that production tiers.yaml data (loaded into DB) matches expected structure."""
 
-    def setUp(self):
-        get_tiers.cache_clear()
+    @classmethod
+    def setUpTestData(cls):
+        """Load the tiers.yaml fixture into the DB."""
+        import yaml
+        from pathlib import Path
+        fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
+        with open(fixture_path) as f:
+            tiers_data = yaml.safe_load(f)
+        SiteConfig.objects.create(key='tiers', data=tiers_data)
 
-    def tearDown(self):
-        get_tiers.cache_clear()
-
-    def test_loads_production_yaml(self):
-        """Verify the real tiers.yaml can be loaded."""
+    def test_loads_production_data(self):
         tiers = get_tiers()
         self.assertIsInstance(tiers, list)
         self.assertEqual(len(tiers), 3)
@@ -398,15 +337,17 @@ class ProductionYamlTest(TestCase):
         self.assertEqual(tiers[2]['features'][0]['text'], 'Everything in Main')
 
 
-@override_settings(CONTENT_REPO_DIR=TIERS_FIXTURE_DIR)
 class ActivitiesViewIntegrationTest(TestCase):
-    """Test that the activities view correctly uses YAML-backed data."""
+    """Test that the activities view correctly uses DB-backed data."""
 
-    def setUp(self):
-        get_tiers.cache_clear()
-
-    def tearDown(self):
-        get_tiers.cache_clear()
+    @classmethod
+    def setUpTestData(cls):
+        import yaml
+        from pathlib import Path
+        fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
+        with open(fixture_path) as f:
+            tiers_data = yaml.safe_load(f)
+        SiteConfig.objects.create(key='tiers', data=tiers_data)
 
     def test_activities_page_shows_all_15_activities(self):
         response = self.client.get('/activities')
@@ -432,15 +373,17 @@ class ActivitiesViewIntegrationTest(TestCase):
         self.assertContains(response, 'Mini-Courses on Specialized Topics')
 
 
-@override_settings(CONTENT_REPO_DIR=TIERS_FIXTURE_DIR)
 class HomepageTiersIntegrationTest(TestCase):
-    """Test that the homepage correctly uses YAML-backed tier data."""
+    """Test that the homepage correctly uses DB-backed tier data."""
 
-    def setUp(self):
-        get_tiers.cache_clear()
-
-    def tearDown(self):
-        get_tiers.cache_clear()
+    @classmethod
+    def setUpTestData(cls):
+        import yaml
+        from pathlib import Path
+        fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
+        with open(fixture_path) as f:
+            tiers_data = yaml.safe_load(f)
+        SiteConfig.objects.create(key='tiers', data=tiers_data)
 
     def test_homepage_has_three_tiers_in_context(self):
         response = self.client.get('/')

@@ -33,6 +33,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _create_curated_link(
@@ -69,6 +70,7 @@ def _create_curated_link(
         source=source,
     )
     link.save()
+    connection.close()
     return link
 
 
@@ -77,6 +79,7 @@ def _clear_curated_links():
     from content.models import CuratedLink
 
     CuratedLink.objects.all().delete()
+    connection.close()
 
 
 # ---------------------------------------------------------------

@@ -38,6 +38,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _create_article(
@@ -71,6 +72,7 @@ def _create_article(
         date=date,
     )
     article.save()
+    connection.close()
     return article
 
 
@@ -103,6 +105,7 @@ def _create_recording(
         tags=tags,
     )
     recording.save()
+    connection.close()
     return recording
 
 
@@ -137,6 +140,7 @@ def _create_tutorial(
         tags=tags,
     )
     tutorial.save()
+    connection.close()
     return tutorial
 
 
@@ -185,6 +189,7 @@ def _create_project(
         author=author,
     )
     project.save()
+    connection.close()
     return project
 
 
@@ -213,6 +218,7 @@ def _create_course(
         tags=tags,
     )
     course.save()
+    connection.close()
     return course
 
 
@@ -222,6 +228,7 @@ def _create_module(course, title, sort_order=0):
 
     module = Module(course=course, title=title, sort_order=sort_order)
     module.save()
+    connection.close()
     return module
 
 
@@ -237,6 +244,7 @@ def _create_unit(module, title, sort_order=0, body="", video_url=""):
         video_url=video_url,
     )
     unit.save()
+    connection.close()
     return unit
 
 
@@ -267,6 +275,7 @@ def _create_download(
         tags=tags,
     )
     download.save()
+    connection.close()
     return download
 
 
@@ -301,6 +310,7 @@ def _create_event(
         tags=tags,
     )
     event.save()
+    connection.close()
     return event
 
 
@@ -323,6 +333,7 @@ def _clear_all_content():
     Project.objects.all().delete()
     Download.objects.all().delete()
     Event.objects.all().delete()
+    connection.close()
 
 
 # ---------------------------------------------------------------

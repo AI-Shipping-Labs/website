@@ -36,6 +36,7 @@ from playwright_tests.conftest import (
 # Playwright creates an async event loop internally. Django's async safety
 # check detects this and raises SynchronousOnlyOperation when we make ORM
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _clear_articles():
@@ -43,6 +44,7 @@ def _clear_articles():
     from content.models import Article
 
     Article.objects.all().delete()
+    connection.close()
 
 
 def _create_article(
@@ -76,6 +78,7 @@ def _create_article(
         date=date,
     )
     article.save()
+    connection.close()
     return article
 
 
@@ -90,6 +93,7 @@ def _create_user(email, password="testpass123", tier_slug=None):
         tier = Tier.objects.get(slug=tier_slug)
         user.tier = tier
         user.save()
+    connection.close()
     return user
 
 

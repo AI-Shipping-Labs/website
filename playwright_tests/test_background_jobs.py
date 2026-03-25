@@ -37,6 +37,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 ADMIN_PASSWORD = "adminpass123"
@@ -69,6 +70,7 @@ def _clear_django_q_tables():
     Success.objects.all().delete()
     Failure.objects.all().delete()
     Schedule.objects.all().delete()
+    connection.close()
 
 
 def _create_successful_task(func_name, result=None, args=None):
@@ -87,6 +89,7 @@ def _create_successful_task(func_name, result=None, args=None):
         stopped=timezone.now(),
         success=True,
     )
+    connection.close()
     return task
 
 
@@ -106,6 +109,7 @@ def _create_failed_task(func_name, result=None, args=None):
         stopped=timezone.now(),
         success=False,
     )
+    connection.close()
     return task
 
 
@@ -114,6 +118,7 @@ def _clear_content_sources():
     from integrations.models import ContentSource
 
     ContentSource.objects.all().delete()
+    connection.close()
 
 
 def _seed_content_sources():
@@ -152,6 +157,7 @@ def _seed_content_sources():
             },
         )
         created_sources.append(source)
+    connection.close()
     return created_sources
 
 
@@ -171,6 +177,7 @@ def _create_sync_log(source, status="success", items_created=0,
     if status != "running":
         log.finished_at = timezone.now()
         log.save()
+    connection.close()
     return log
 
 
@@ -179,6 +186,7 @@ def _run_setup_schedules():
     from django.core.management import call_command
 
     call_command("setup_schedules")
+    connection.close()
 
 
 # ---------------------------------------------------------------------------

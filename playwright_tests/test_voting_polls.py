@@ -36,6 +36,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _anon_context(browser):
@@ -59,6 +60,7 @@ def _clear_polls():
     PollVote.objects.all().delete()
     PollOption.objects.all().delete()
     Poll.objects.all().delete()
+    connection.close()
 
 
 def _create_poll(
@@ -83,6 +85,7 @@ def _create_poll(
         closes_at=closes_at,
     )
     poll.save()
+    connection.close()
     return poll
 
 
@@ -97,6 +100,7 @@ def _create_option(poll, title, description="", proposed_by=None):
         proposed_by=proposed_by,
     )
     option.save()
+    connection.close()
     return option
 
 
@@ -110,6 +114,7 @@ def _create_vote(poll, option, user):
         user=user,
     )
     vote.save()
+    connection.close()
     return vote
 
 

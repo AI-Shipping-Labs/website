@@ -36,6 +36,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _anon_context(browser):
@@ -66,6 +67,7 @@ def _clear_dashboard_data():
     Course.objects.all().delete()
     Article.objects.all().delete()
     Recording.objects.all().delete()
+    connection.close()
 
 
 def _create_article(
@@ -91,6 +93,7 @@ def _create_article(
         date=date,
     )
     article.save()
+    connection.close()
     return article
 
 
@@ -116,6 +119,7 @@ def _create_recording(
         date=date,
     )
     recording.save()
+    connection.close()
     return recording
 
 
@@ -137,6 +141,7 @@ def _create_course(
         status=status,
     )
     course.save()
+    connection.close()
     return course
 
 
@@ -150,6 +155,7 @@ def _create_module(course, title, sort_order=0):
         sort_order=sort_order,
     )
     module.save()
+    connection.close()
     return module
 
 
@@ -164,6 +170,7 @@ def _create_unit(module, title, sort_order=0):
         body=f"# {title}\n\nLesson content.",
     )
     unit.save()
+    connection.close()
     return unit
 
 
@@ -181,6 +188,7 @@ def _mark_unit_completed(user, unit, completed_at=None):
     if not created:
         progress.completed_at = completed_at
         progress.save()
+    connection.close()
     return progress
 
 
@@ -208,6 +216,7 @@ def _create_event(
         event_type=event_type,
     )
     event.save()
+    connection.close()
     return event
 
 
@@ -219,6 +228,7 @@ def _register_user_for_event(user, event):
         event=event,
         user=user,
     )
+    connection.close()
     return reg
 
 
@@ -244,6 +254,7 @@ def _create_poll(
         closes_at=closes_at,
     )
     poll.save()
+    connection.close()
     return poll
 
 
@@ -257,6 +268,7 @@ def _create_poll_option(poll, title, description=""):
         description=description,
     )
     option.save()
+    connection.close()
     return option
 
 
@@ -271,6 +283,7 @@ def _create_notification(
     """Create a Notification for the given user."""
     from notifications.models import Notification
 
+    connection.close()
     return Notification.objects.create(
         user=user,
         title=title,

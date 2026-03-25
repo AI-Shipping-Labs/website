@@ -38,6 +38,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _create_project(
@@ -95,6 +96,7 @@ def _create_project(
         cover_image_url=cover_image_url,
     )
     project.save()
+    connection.close()
     return project
 
 
@@ -103,6 +105,7 @@ def _clear_all_projects():
     from content.models import Project
 
     Project.objects.all().delete()
+    connection.close()
 
 
 # ---------------------------------------------------------------

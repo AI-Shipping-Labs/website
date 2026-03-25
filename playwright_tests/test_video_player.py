@@ -35,6 +35,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _clear_recordings():
@@ -42,6 +43,7 @@ def _clear_recordings():
     from content.models import Recording
 
     Recording.objects.all().delete()
+    connection.close()
 
 
 def _clear_articles():
@@ -49,6 +51,7 @@ def _clear_articles():
     from content.models import Article
 
     Article.objects.all().delete()
+    connection.close()
 
 
 def _clear_courses():
@@ -56,6 +59,7 @@ def _clear_courses():
     from content.models import Course
 
     Course.objects.all().delete()
+    connection.close()
 
 
 def _create_recording(
@@ -103,6 +107,7 @@ def _create_recording(
         outcome=outcome,
     )
     recording.save()
+    connection.close()
     return recording
 
 
@@ -137,6 +142,7 @@ def _create_article(
         date=date,
     )
     article.save()
+    connection.close()
     return article
 
 
@@ -185,6 +191,7 @@ def _create_course_with_unit(
     )
     unit.save()
 
+    connection.close()
     return course, module, unit
 
 
@@ -204,6 +211,7 @@ def _create_user(email, password="testpass123", tier_slug=None):
         tier = Tier.objects.get(slug=tier_slug)
         user.tier = tier
     user.save()
+    connection.close()
     return user
 
 

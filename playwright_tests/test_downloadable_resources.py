@@ -38,6 +38,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _create_download(
@@ -71,6 +72,7 @@ def _create_download(
         published=published,
     )
     download.save()
+    connection.close()
     return download
 
 
@@ -103,6 +105,7 @@ def _create_article(
     # Skip auto-rendering by setting content_markdown to empty
     # and providing content_html directly
     article.save()
+    connection.close()
     return article
 
 
@@ -111,6 +114,7 @@ def _clear_downloads():
     from content.models import Download
 
     Download.objects.all().delete()
+    connection.close()
 
 
 def _clear_articles():
@@ -118,6 +122,7 @@ def _clear_articles():
     from content.models import Article
 
     Article.objects.all().delete()
+    connection.close()
 
 
 # ---------------------------------------------------------------

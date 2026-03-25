@@ -36,6 +36,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _clear_courses():
@@ -44,6 +45,7 @@ def _clear_courses():
 
     UserCourseProgress.objects.all().delete()
     Course.objects.all().delete()
+    connection.close()
 
 
 def _create_course(
@@ -79,6 +81,7 @@ def _create_course(
         tags=tags,
     )
     course.save()
+    connection.close()
     return course
 
 
@@ -92,6 +95,7 @@ def _create_module(course, title, sort_order=1):
         sort_order=sort_order,
     )
     module.save()
+    connection.close()
     return module
 
 
@@ -117,6 +121,7 @@ def _create_unit(
         is_preview=is_preview,
     )
     unit.save()
+    connection.close()
     return unit
 
 

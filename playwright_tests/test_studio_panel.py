@@ -38,6 +38,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _clear_articles():
@@ -45,6 +46,7 @@ def _clear_articles():
     from content.models import Article
 
     Article.objects.all().delete()
+    connection.close()
 
 
 def _clear_events():
@@ -53,6 +55,7 @@ def _clear_events():
 
     EventRegistration.objects.all().delete()
     Event.objects.all().delete()
+    connection.close()
 
 
 def _clear_courses():
@@ -60,6 +63,7 @@ def _clear_courses():
     from content.models import Course
 
     Course.objects.all().delete()
+    connection.close()
 
 
 def _clear_projects():
@@ -67,6 +71,7 @@ def _clear_projects():
     from content.models import Project
 
     Project.objects.all().delete()
+    connection.close()
 
 
 def _clear_campaigns():
@@ -75,6 +80,7 @@ def _clear_campaigns():
 
     EmailLog.objects.all().delete()
     EmailCampaign.objects.all().delete()
+    connection.close()
 
 
 def _clear_subscribers():
@@ -82,12 +88,14 @@ def _clear_subscribers():
     from email_app.models import NewsletterSubscriber
 
     NewsletterSubscriber.objects.all().delete()
+    connection.close()
 
 
 def _create_article(title, slug, published=True, required_level=0, **kwargs):
     """Create an Article via ORM."""
     from content.models import Article
 
+    connection.close()
     return Article.objects.create(
         title=title,
         slug=slug,
@@ -105,6 +113,7 @@ def _create_event(title, slug, start_datetime=None, **kwargs):
     if start_datetime is None:
         start_datetime = timezone.now() + timedelta(days=7)
 
+    connection.close()
     return Event.objects.create(
         title=title,
         slug=slug,
@@ -117,6 +126,7 @@ def _create_project(title, slug, status="pending_review", published=False, **kwa
     """Create a Project via ORM."""
     from content.models import Project
 
+    connection.close()
     return Project.objects.create(
         title=title,
         slug=slug,
@@ -131,6 +141,7 @@ def _create_subscriber(email, is_active=True):
     """Create a NewsletterSubscriber via ORM."""
     from email_app.models import NewsletterSubscriber
 
+    connection.close()
     return NewsletterSubscriber.objects.create(
         email=email,
         is_active=is_active,

@@ -38,6 +38,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 JWT_ALGORITHM = "HS256"
@@ -120,6 +121,7 @@ def _create_download(
         published=published,
     )
     download.save()
+    connection.close()
     return download
 
 
@@ -128,6 +130,7 @@ def _clear_downloads():
     from content.models import Download
 
     Download.objects.all().delete()
+    connection.close()
 
 
 # ---------------------------------------------------------------

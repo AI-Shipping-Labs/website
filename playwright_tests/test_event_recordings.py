@@ -35,6 +35,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _create_recording(
@@ -74,6 +75,7 @@ def _create_recording(
         date=date,
     )
     recording.save()
+    connection.close()
     return recording
 
 
@@ -82,6 +84,7 @@ def _clear_recordings():
     from content.models import Recording
 
     Recording.objects.all().delete()
+    connection.close()
 
 
 # ---------------------------------------------------------------

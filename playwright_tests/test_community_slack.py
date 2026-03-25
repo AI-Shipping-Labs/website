@@ -28,6 +28,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +91,7 @@ def _ensure_tiers():
         Tier.objects.get_or_create(
             slug=tier_data["slug"], defaults=tier_data
         )
+        connection.close()
 
 
 def _create_user(email, tier_slug="free", password=DEFAULT_PASSWORD):
@@ -107,6 +109,7 @@ def _create_user(email, tier_slug="free", password=DEFAULT_PASSWORD):
     user.tier = tier
     user.email_verified = True
     user.save()
+    connection.close()
     return user
 
 
@@ -115,6 +118,7 @@ def _clear_audit_logs():
     from community.models import CommunityAuditLog
 
     CommunityAuditLog.objects.all().delete()
+    connection.close()
 
 
 # ---------------------------------------------------------------

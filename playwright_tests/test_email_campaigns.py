@@ -43,6 +43,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _clear_campaigns():
@@ -51,6 +52,7 @@ def _clear_campaigns():
 
     EmailLog.objects.all().delete()
     EmailCampaign.objects.all().delete()
+    connection.close()
 
 
 def _create_campaign(subject, body="Test body", target_min_level=0, status="draft"):
@@ -63,6 +65,7 @@ def _create_campaign(subject, body="Test body", target_min_level=0, status="draf
         target_min_level=target_min_level,
         status=status,
     )
+    connection.close()
     return campaign
 
 

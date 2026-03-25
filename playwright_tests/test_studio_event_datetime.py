@@ -28,6 +28,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _clear_events():
@@ -36,6 +37,7 @@ def _clear_events():
 
     EventRegistration.objects.all().delete()
     Event.objects.all().delete()
+    connection.close()
 
 
 def _create_event(title, slug, start_datetime=None, end_datetime=None, **kwargs):
@@ -53,6 +55,7 @@ def _create_event(title, slug, start_datetime=None, end_datetime=None, **kwargs)
         **kwargs,
     )
     event.save()
+    connection.close()
     return event
 
 

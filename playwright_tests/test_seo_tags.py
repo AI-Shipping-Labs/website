@@ -26,6 +26,7 @@ import pytest
 from playwright_tests.conftest import DJANGO_BASE_URL
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 VIEWPORT = {"width": 1280, "height": 720}
@@ -50,6 +51,7 @@ def _clear_all_content():
     Course.objects.all().delete()
     TagRule.objects.all().delete()
     Event.objects.all().delete()
+    connection.close()
 
 
 def _create_article(
@@ -83,6 +85,7 @@ def _create_article(
         date=date,
     )
     article.save()
+    connection.close()
     return article
 
 
@@ -113,6 +116,7 @@ def _create_recording(
         youtube_url=youtube_url,
     )
     recording.save()
+    connection.close()
     return recording
 
 
@@ -141,6 +145,7 @@ def _create_project(
         date=date,
     )
     project.save()
+    connection.close()
     return project
 
 
@@ -175,6 +180,7 @@ def _create_curated_link(
         published=published,
     )
     link.save()
+    connection.close()
     return link
 
 
@@ -201,6 +207,7 @@ def _create_download(
         published=published,
     )
     download.save()
+    connection.close()
     return download
 
 
@@ -225,6 +232,7 @@ def _create_course(
         status=status,
     )
     course.save()
+    connection.close()
     return course
 
 
@@ -247,6 +255,7 @@ def _create_tag_rule(
         position=position,
     )
     rule.save()
+    connection.close()
     return rule
 
 

@@ -37,6 +37,7 @@ from playwright_tests.conftest import (
 
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+from django.db import connection
 
 
 def _anon_context(browser):
@@ -51,6 +52,7 @@ def _clear_notifications():
 
     Notification.objects.all().delete()
     EventReminderLog.objects.all().delete()
+    connection.close()
 
 
 def _create_notification(
@@ -64,6 +66,7 @@ def _create_notification(
     """Create a Notification for the given user."""
     from notifications.models import Notification
 
+    connection.close()
     return Notification.objects.create(
         user=user,
         title=title,
@@ -94,6 +97,7 @@ def _create_article(
         date=datetime.date.today(),
     )
     article.save()
+    connection.close()
     return article
 
 
@@ -116,6 +120,7 @@ def _create_recording(
         date=datetime.date.today(),
     )
     recording.save()
+    connection.close()
     return recording
 
 
@@ -140,6 +145,7 @@ def _create_download(
         published=published,
     )
     download.save()
+    connection.close()
     return download
 
 
@@ -168,6 +174,7 @@ def _create_event(
         event_type=event_type,
     )
     event.save()
+    connection.close()
     return event
 
 
@@ -189,6 +196,7 @@ def _create_course(
         status=status,
     )
     course.save()
+    connection.close()
     return course
 
 
@@ -200,6 +208,7 @@ def _register_user_for_event(user, event):
         event=event,
         user=user,
     )
+    connection.close()
     return reg
 
 

@@ -21,6 +21,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "python-frontmatter>=1.1.0",
     "stripe>=14.3.0",
+    "watchdog>=6.0.0",
 ]
 
 [tool.pytest.ini_options]

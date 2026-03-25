@@ -1012,7 +1012,7 @@ class TestScenario10SyncedCoursesWithModulesAndUnits:
         page = context.new_page()
 
         page.goto(
-            f"{django_server}/courses/python-data-ai/1/1",
+            f"{django_server}/courses/python-data-ai/module-01-setup/unit-01-intro",
             wait_until="domcontentloaded",
         )
         body = page.content()

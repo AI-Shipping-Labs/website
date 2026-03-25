@@ -271,7 +271,7 @@ class TestScenario3AnonymousPreviewDay1:
         # For a free course (required_level=0), the unit URL
         # is /courses/aihero/0/0
         page.goto(
-            f"{django_server}/courses/aihero/0/0",
+            f"{django_server}/courses/aihero/7-day-ai-agents/day-1",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -312,7 +312,7 @@ class TestScenario4FreeMemberDay1ToDay2:
 
         # All 7 units accessible (shown as links, no lock icons)
         day1_link = page.locator(
-            'a[href="/courses/aihero/0/0"]'
+            'a[href="/courses/aihero/7-day-ai-agents/day-1"]'
         )
         assert day1_link.count() >= 1
 
@@ -421,7 +421,7 @@ class TestScenario6FreeMemberAccessesDay7:
 
         # Click on Day 7
         day7_link = page.locator(
-            'a[href="/courses/aihero/0/6"]'
+            'a[href="/courses/aihero/7-day-ai-agents/day-7"]'
         )
         assert day7_link.count() >= 1
         day7_link.first.click()
@@ -470,7 +470,7 @@ class TestScenario8BasicMemberAccessesFree:
 
         # All 7 units accessible
         day4_link = page.locator(
-            'a[href="/courses/aihero/0/3"]'
+            'a[href="/courses/aihero/7-day-ai-agents/day-4"]'
         )
         assert day4_link.count() >= 1
 

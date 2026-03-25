@@ -79,10 +79,12 @@ def _create_course(
 def _create_module(course, title, sort_order=0):
     """Create a Module via ORM."""
     from content.models import Module
+    from django.utils.text import slugify
 
     module = Module(
         course=course,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
     )
     module.save()
@@ -102,6 +104,7 @@ def _create_unit(
 ):
     """Create a Unit via ORM."""
     from content.models import Unit
+    from django.utils.text import slugify
 
     if timestamps is None:
         timestamps = []
@@ -109,6 +112,7 @@ def _create_unit(
     unit = Unit(
         module=module,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
         video_url=video_url,
         body=body,
@@ -199,7 +203,7 @@ class TestScenario1PremiumMemberWorksThrough:
         page.wait_for_load_state("domcontentloaded")
 
         # Verify URL
-        assert "/courses/advanced-ai-patterns/0/0" in page.url
+        assert "/courses/advanced-ai-patterns/module-1/unit-1-intro" in page.url
 
         body = page.content()
 
@@ -235,7 +239,7 @@ class TestScenario1PremiumMemberWorksThrough:
         page.wait_for_load_state("domcontentloaded")
 
         # Verify we are on Unit 2
-        assert "/courses/advanced-ai-patterns/0/1" in page.url
+        assert "/courses/advanced-ai-patterns/module-1/unit-2-deep-dive" in page.url
         body = page.content()
         assert "Deep Dive" in body
 
@@ -280,9 +284,9 @@ class TestScenario2SidebarNavigation:
 
         context = _auth_context(browser, "premium-sb@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /courses/{slug}/0/0 (Unit 1 of Module 1)
+        # Step 1: Navigate to /courses/{slug}/module-1/m1-unit-1 (Unit 1 of Module 1)
         page.goto(
-            f"{django_server}/courses/sidebar-nav-course/0/0",
+            f"{django_server}/courses/sidebar-nav-course/module-1/m1-unit-1",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -310,13 +314,13 @@ class TestScenario2SidebarNavigation:
         page.wait_for_load_state("domcontentloaded")
 
         # Verify URL
-        assert "/courses/sidebar-nav-course/1/0" in page.url
+        assert "/courses/sidebar-nav-course/module-2/m2-unit-1" in page.url
         body = page.content()
         assert "Module 2 unit" in body
 
-        # Step 3: Navigate back to /courses/{slug}/0/0
+        # Step 3: Navigate back to /courses/{slug}/module-1/m1-unit-1
         page.goto(
-            f"{django_server}/courses/sidebar-nav-course/0/0",
+            f"{django_server}/courses/sidebar-nav-course/module-1/m1-unit-1",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -383,7 +387,7 @@ class TestScenario3FreePreviewUnit:
         # course-level access, but preview units are directly
         # accessible via URL)
         page.goto(
-            f"{django_server}/courses/preview-test-course/0/0",
+            f"{django_server}/courses/preview-test-course/module-1/preview-unit",
             wait_until="domcontentloaded",
         )
 
@@ -400,7 +404,7 @@ class TestScenario3FreePreviewUnit:
 
         # Step 3: Navigate to the locked unit
         page.goto(
-            f"{django_server}/courses/preview-test-course/0/1",
+            f"{django_server}/courses/preview-test-course/module-1/locked-unit",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -447,7 +451,7 @@ class TestScenario4FreePaywall:
         page = context.new_page()
         # Step 1: Navigate to the unit
         page.goto(
-            f"{django_server}/courses/main-course/0/0",
+            f"{django_server}/courses/main-course/module-1/lesson-1",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -515,7 +519,7 @@ class TestScenario5AnonymousSyllabus:
         # Unit titles are NOT clickable links (rendered as <span>)
         # Check that there are no <a> tags linking to unit pages
         unit_links = page.locator(
-            'a[href*="/courses/anonymous-test-course/0/"]'
+            'a[href*="/courses/anonymous-test-course/module-1/"]'
         )
         assert unit_links.count() == 0
 
@@ -563,7 +567,7 @@ class TestScenario6ToggleCompletion:
         page = context.new_page()
         # Step 1: Navigate to the unit
         page.goto(
-            f"{django_server}/courses/toggle-course/0/0",
+            f"{django_server}/courses/toggle-course/module-1/toggle-unit",
             wait_until="domcontentloaded",
         )
 
@@ -636,7 +640,7 @@ class TestScenario7ProgressBar:
 
         # Step 2: Complete Unit 1
         page.goto(
-            f"{django_server}/courses/progress-course/0/0",
+            f"{django_server}/courses/progress-course/module-1/p-unit-1",
             wait_until="domcontentloaded",
         )
         complete_btn = page.locator("#mark-complete-btn")
@@ -645,7 +649,7 @@ class TestScenario7ProgressBar:
 
         # Step 3: Complete Unit 2
         page.goto(
-            f"{django_server}/courses/progress-course/0/1",
+            f"{django_server}/courses/progress-course/module-1/p-unit-2",
             wait_until="domcontentloaded",
         )
         complete_btn = page.locator("#mark-complete-btn")
@@ -696,7 +700,7 @@ class TestScenario8LastUnitNoNext:
         page = context.new_page()
         # Step 1: Navigate to the first unit
         page.goto(
-            f"{django_server}/courses/last-unit-course/0/0",
+            f"{django_server}/courses/last-unit-course/module-1/first-unit",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -710,7 +714,7 @@ class TestScenario8LastUnitNoNext:
         page.wait_for_load_state("domcontentloaded")
 
         # Verify URL is the second (last) unit
-        assert "/courses/last-unit-course/0/1" in page.url
+        assert "/courses/last-unit-course/module-1/last-unit" in page.url
 
         body = page.content()
         assert "Last Unit" in body
@@ -752,7 +756,7 @@ class TestScenario9BreadcrumbNavigation:
         page = context.new_page()
         # Navigate to the unit page
         page.goto(
-            f"{django_server}/courses/breadcrumb-course/0/0",
+            f"{django_server}/courses/breadcrumb-course/module-1/bc-unit-1",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -776,7 +780,7 @@ class TestScenario9BreadcrumbNavigation:
 
         # Step 2: Navigate back to the unit page
         page.goto(
-            f"{django_server}/courses/breadcrumb-course/0/0",
+            f"{django_server}/courses/breadcrumb-course/module-1/bc-unit-1",
             wait_until="domcontentloaded",
         )
 
@@ -795,7 +799,7 @@ class TestScenario9BreadcrumbNavigation:
         # Lands on the course detail page
         assert "/courses/breadcrumb-course" in page.url
         # Should NOT be on a unit page
-        assert "/0/" not in page.url
+        assert "/module-1/" not in page.url
 
         context.close()
 # ---------------------------------------------------------------

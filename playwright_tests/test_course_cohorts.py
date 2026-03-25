@@ -85,10 +85,12 @@ def _create_course(
 def _create_module(course, title, sort_order=1):
     """Create a Module within a course."""
     from content.models import Module
+    from django.utils.text import slugify
 
     module = Module(
         course=course,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
     )
     module.save()
@@ -108,10 +110,12 @@ def _create_unit(
 ):
     """Create a Unit within a module."""
     from content.models import Unit
+    from django.utils.text import slugify
 
     unit = Unit(
         module=module,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
         video_url=video_url,
         body=body,
@@ -532,7 +536,7 @@ class TestScenario6DripLockedUnit:
         page = context.new_page()
         # Step 1: Navigate to the drip-locked unit page
         page.goto(
-            f"{django_server}/courses/drip-course/1/1",
+            f"{django_server}/courses/drip-course/module-1/drip-locked-lesson",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -567,7 +571,7 @@ class TestScenario6DripLockedUnit:
         # Then: Returns to the course detail page
         assert "/courses/drip-course" in page.url
         # Make sure we are NOT on a unit page
-        assert "/1/1" not in page.url
+        assert "/module-1/drip-locked-lesson" not in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Enrolled cohort member accesses a unit after the
 #              drip date has passed
@@ -612,7 +616,7 @@ class TestScenario7DripUnlockedUnit:
         page = context.new_page()
         # Step 1: Navigate to the unit page
         page.goto(
-            f"{django_server}/courses/past-drip-course/1/1",
+            f"{django_server}/courses/past-drip-course/module-1/unlocked-lesson",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -684,7 +688,7 @@ class TestScenario8NonCohortMemberAccessesDripUnit:
         page = context.new_page()
         # Step 1: Navigate to the drip-scheduled unit
         page.goto(
-            f"{django_server}/courses/drip-no-cohort-course/1/1",
+            f"{django_server}/courses/drip-no-cohort-course/module-1/drip-unit-no-restriction",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -834,7 +838,7 @@ class TestScenario10NoCohortsSyllabus:
 
         # Then: User can click into individual units
         lesson_link = page.locator(
-            'a[href="/courses/llm-engineering/1/1"]'
+            'a[href="/courses/llm-engineering/module-1/lesson-1"]'
         )
         assert lesson_link.count() >= 1
 
@@ -842,7 +846,7 @@ class TestScenario10NoCohortsSyllabus:
         page.wait_for_load_state("domcontentloaded")
 
         # Navigated to the unit page
-        assert "/courses/llm-engineering/1/1" in page.url
+        assert "/courses/llm-engineering/module-1/lesson-1" in page.url
         body = page.content()
         assert "Lesson 1" in body
 # ---------------------------------------------------------------

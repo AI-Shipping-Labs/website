@@ -117,9 +117,11 @@ def module_create(request, course_id):
         max_order = course.modules.order_by('-sort_order').values_list(
             'sort_order', flat=True,
         ).first() or 0
+        from django.utils.text import slugify
         Module.objects.create(
             course=course,
             title=title,
+            slug=slugify(title),
             sort_order=max_order + 1,
         )
     return redirect('studio_course_edit', course_id=course.pk)
@@ -140,9 +142,11 @@ def unit_create(request, module_id):
         max_order = module.units.order_by('-sort_order').values_list(
             'sort_order', flat=True,
         ).first() or 0
+        from django.utils.text import slugify
         Unit.objects.create(
             module=module,
             title=title,
+            slug=slugify(title),
             sort_order=max_order + 1,
         )
     return redirect('studio_course_edit', course_id=module.course.pk)

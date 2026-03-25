@@ -173,9 +173,12 @@ def _create_course_with_unit(
     )
     course.save()
 
+    from django.utils.text import slugify
+
     module = Module(
         course=course,
         title=module_title,
+        slug=slugify(module_title),
         sort_order=0,
     )
     module.save()
@@ -183,6 +186,7 @@ def _create_course_with_unit(
     unit = Unit(
         module=module,
         title=unit_title,
+        slug=slugify(unit_title),
         sort_order=0,
         video_url=unit_video_url,
         timestamps=unit_timestamps,

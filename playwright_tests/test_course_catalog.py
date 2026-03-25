@@ -86,10 +86,12 @@ def _create_course(
 def _create_module(course, title, sort_order=1):
     """Create a Module within a course."""
     from content.models import Module
+    from django.utils.text import slugify
 
     module = Module(
         course=course,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
     )
     module.save()
@@ -108,10 +110,12 @@ def _create_unit(
 ):
     """Create a Unit within a module."""
     from content.models import Unit
+    from django.utils.text import slugify
 
     unit = Unit(
         module=module,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
         video_url=video_url,
         body=body,
@@ -325,17 +329,17 @@ class TestScenario3FreeUserFreeCourseProgress:
 
         # All unit titles are clickable links
         variables_link = page.locator(
-            'a[href="/courses/python-basics/1/1"]'
+            'a[href="/courses/python-basics/fundamentals/variables"]'
         )
         assert variables_link.count() >= 1
 
         functions_link = page.locator(
-            'a[href="/courses/python-basics/1/2"]'
+            'a[href="/courses/python-basics/fundamentals/functions"]'
         )
         assert functions_link.count() >= 1
 
         classes_link = page.locator(
-            'a[href="/courses/python-basics/1/3"]'
+            'a[href="/courses/python-basics/fundamentals/classes"]'
         )
         assert classes_link.count() >= 1
 
@@ -434,12 +438,12 @@ class TestScenario4MainMemberPaidCourseProgress:
 
         # Both unit titles are clickable links
         docker_link = page.locator(
-            'a[href="/courses/advanced-mlops/1/1"]'
+            'a[href="/courses/advanced-mlops/deployment/docker-basics"]'
         )
         assert docker_link.count() >= 1
 
         k8s_link = page.locator(
-            'a[href="/courses/advanced-mlops/1/2"]'
+            'a[href="/courses/advanced-mlops/deployment/kubernetes-setup"]'
         )
         assert k8s_link.count() >= 1
 

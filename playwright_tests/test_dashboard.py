@@ -148,10 +148,12 @@ def _create_course(
 def _create_module(course, title, sort_order=0):
     """Create a Module within a course."""
     from content.models import Module
+    from django.utils.text import slugify
 
     module = Module(
         course=course,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
     )
     module.save()
@@ -162,10 +164,12 @@ def _create_module(course, title, sort_order=0):
 def _create_unit(module, title, sort_order=0):
     """Create a Unit within a module."""
     from content.models import Unit
+    from django.utils.text import slugify
 
     unit = Unit(
         module=module,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
         body=f"# {title}\n\nLesson content.",
     )

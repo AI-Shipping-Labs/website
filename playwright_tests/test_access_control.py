@@ -225,8 +225,9 @@ def _create_course(
 def _create_module(course, title, sort_order=0):
     """Helper to create a Module."""
     from content.models import Module
+    from django.utils.text import slugify
 
-    module = Module(course=course, title=title, sort_order=sort_order)
+    module = Module(course=course, title=title, slug=slugify(title), sort_order=sort_order)
     module.save()
     connection.close()
     return module
@@ -235,10 +236,12 @@ def _create_module(course, title, sort_order=0):
 def _create_unit(module, title, sort_order=0, body="", video_url=""):
     """Helper to create a Unit."""
     from content.models import Unit
+    from django.utils.text import slugify
 
     unit = Unit(
         module=module,
         title=title,
+        slug=slugify(title),
         sort_order=sort_order,
         body=body,
         video_url=video_url,

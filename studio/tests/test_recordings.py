@@ -49,8 +49,8 @@ class StudioRecordingListTest(TestCase):
         self.assertNotContains(response, 'Java Workshop')
 
 
-class StudioRecordingCreateTest(TestCase):
-    """Test recording creation."""
+class StudioRecordingCreateRemovedTest(TestCase):
+    """Test that recording create URL has been removed."""
 
     def setUp(self):
         self.client = Client()
@@ -59,34 +59,9 @@ class StudioRecordingCreateTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_returns_200(self):
+    def test_create_url_returns_404(self):
         response = self.client.get('/studio/recordings/new')
-        self.assertEqual(response.status_code, 200)
-
-    def test_create_recording_post(self):
-        response = self.client.post('/studio/recordings/new', {
-            'title': 'New Recording',
-            'slug': 'new-rec',
-            'description': 'Test recording',
-            'date': '2024-01-15',
-            'youtube_url': 'https://youtube.com/test',
-            'published': 'on',
-            'required_level': '0',
-        })
-        self.assertEqual(response.status_code, 302)
-        rec = Recording.objects.get(slug='new-rec')
-        self.assertEqual(rec.title, 'New Recording')
-        self.assertTrue(rec.published)
-
-    def test_create_recording_unpublished(self):
-        self.client.post('/studio/recordings/new', {
-            'title': 'Draft Rec',
-            'slug': 'draft-rec',
-            'date': '2024-01-15',
-            'required_level': '0',
-        })
-        rec = Recording.objects.get(slug='draft-rec')
-        self.assertFalse(rec.published)
+        self.assertEqual(response.status_code, 404)
 
 
 class StudioRecordingEditTest(TestCase):

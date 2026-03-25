@@ -59,8 +59,8 @@ class StudioCourseListTest(TestCase):
         self.assertContains(response, 'No courses found')
 
 
-class StudioCourseCreateTest(TestCase):
-    """Test course creation form."""
+class StudioCourseCreateRemovedTest(TestCase):
+    """Test that course create URL has been removed."""
 
     def setUp(self):
         self.client = Client()
@@ -69,74 +69,9 @@ class StudioCourseCreateTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_returns_200(self):
+    def test_create_url_returns_404(self):
         response = self.client.get('/studio/courses/new')
-        self.assertEqual(response.status_code, 200)
-
-    def test_create_form_uses_correct_template(self):
-        response = self.client.get('/studio/courses/new')
-        self.assertTemplateUsed(response, 'studio/courses/form.html')
-
-    def test_create_course_post(self):
-        response = self.client.post('/studio/courses/new', {
-            'title': 'New Course',
-            'slug': 'new-course',
-            'description': 'A test course',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(Course.objects.filter(slug='new-course').exists())
-        course = Course.objects.get(slug='new-course')
-        self.assertEqual(course.title, 'New Course')
-        self.assertEqual(course.status, 'draft')
-
-    def test_create_course_auto_slug(self):
-        """If no slug provided, it's auto-generated from title."""
-        response = self.client.post('/studio/courses/new', {
-            'title': 'Auto Slug Course',
-            'description': '',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(Course.objects.filter(slug='auto-slug-course').exists())
-
-    def test_create_course_with_tags(self):
-        self.client.post('/studio/courses/new', {
-            'title': 'Tagged Course',
-            'slug': 'tagged',
-            'status': 'draft',
-            'required_level': '0',
-            'tags': 'python, django, web',
-        })
-        course = Course.objects.get(slug='tagged')
-        self.assertEqual(len(course.tags), 3)
-        self.assertIn('python', course.tags)
-
-    def test_create_course_redirects_to_edit(self):
-        response = self.client.post('/studio/courses/new', {
-            'title': 'Redirect Test',
-            'slug': 'redirect-test',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        course = Course.objects.get(slug='redirect-test')
-        self.assertRedirects(
-            response, f'/studio/courses/{course.pk}/edit',
-            fetch_redirect_response=False,
-        )
-
-    def test_create_free_course(self):
-        self.client.post('/studio/courses/new', {
-            'title': 'Free Course',
-            'slug': 'free-course',
-            'status': 'draft',
-            'required_level': '0',
-            'is_free': 'on',
-        })
-        course = Course.objects.get(slug='free-course')
-        self.assertTrue(course.is_free)
+        self.assertEqual(response.status_code, 404)
 
 
 class StudioCourseEditTest(TestCase):
@@ -174,7 +109,7 @@ class StudioCourseEditTest(TestCase):
         self.assertEqual(self.course.required_level, 10)
 
     def test_edit_shows_modules(self):
-        Module.objects.create(course=self.course, title='Module 1', slug='module-1', sort_order=0)
+        Module.objects.create(course=self.course, slug='module-1', title='Module 1', sort_order=0)
         response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
         self.assertContains(response, 'Module 1')
 
@@ -207,7 +142,7 @@ class StudioModuleCreateTest(TestCase):
         )
 
     def test_create_module_increments_sort_order(self):
-        Module.objects.create(course=self.course, title='M1', slug='m1', sort_order=0)
+        Module.objects.create(course=self.course, slug='m1', title='M1', sort_order=0)
         self.client.post(
             f'/studio/courses/{self.course.pk}/modules/add',
             {'title': 'M2'},
@@ -239,7 +174,7 @@ class StudioUnitCreateTest(TestCase):
             title='Course', slug='unit-test', status='draft',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=0,
+            course=self.course, slug='module', title='Module', sort_order=0,
         )
 
     def test_create_unit(self):
@@ -275,10 +210,10 @@ class StudioUnitEditTest(TestCase):
             title='Course', slug='unit-edit', status='draft',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=0,
+            course=self.course, slug='module', title='Module', sort_order=0,
         )
         self.unit = Unit.objects.create(
-            module=self.module, title='Unit', slug='unit', sort_order=0,
+            module=self.module, slug='unit', title='Unit', sort_order=0,
         )
 
     def test_edit_unit_form_returns_200(self):
@@ -333,10 +268,10 @@ class StudioModuleReorderTest(TestCase):
             title='Reorder', slug='reorder', status='draft',
         )
         self.m1 = Module.objects.create(
-            course=self.course, title='M1', slug='m1', sort_order=0,
+            course=self.course, slug='m1', title='M1', sort_order=0,
         )
         self.m2 = Module.objects.create(
-            course=self.course, title='M2', slug='m2', sort_order=1,
+            course=self.course, slug='m2', title='M2', sort_order=1,
         )
 
     def test_reorder_modules(self):

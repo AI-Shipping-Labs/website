@@ -1,6 +1,6 @@
 {% extends "studio/base.html" %}
 
-{% block studio_title %}{% if download %}Edit Download{% else %}New Download{% endif %}{% endblock %}
+{% block studio_title %}{% if is_synced %}View Download{% elif download %}Edit Download{% else %}New Download{% endif %}{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
@@ -9,8 +9,10 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{% if download %}{{ download.title }}{% else %}New Download{% endif %}</span>
   </div>
-  <h1 class="text-2xl font-semibold text-foreground">{% if download %}Edit Download{% else %}New Download{% endif %}</h1>
+  <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Download{% elif download %}Edit Download{% else %}New Download{% endif %}</h1>
 </div>
+
+{% include "studio/includes/synced_banner.html" with obj=download %}
 
 <form method="post" class="space-y-6 max-w-3xl">
   {% csrf_token %}
@@ -19,31 +21,36 @@
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Title</label>
       <input type="text" name="title" value="{{ download.title|default:'' }}" required
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
       <input type="text" name="slug" value="{{ download.slug|default:'' }}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Description</label>
       <textarea name="description" rows="4"
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ download.description|default:'' }}</textarea>
+                {% if is_synced %}disabled{% endif %}
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">{{ download.description|default:'' }}</textarea>
     </div>
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">File URL</label>
       <input type="url" name="file_url" value="{{ download.file_url|default:'' }}" required
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">File Type</label>
-        <select name="file_type" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <select name="file_type" {% if is_synced %}disabled{% endif %}
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
           <option value="pdf" {% if download.file_type == 'pdf' %}selected{% endif %}>PDF</option>
           <option value="zip" {% if download.file_type == 'zip' %}selected{% endif %}>ZIP</option>
           <option value="slides" {% if download.file_type == 'slides' %}selected{% endif %}>Slides</option>
@@ -55,20 +62,23 @@
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">File Size (bytes)</label>
         <input type="number" name="file_size_bytes" value="{{ download.file_size_bytes|default:0 }}"
-               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+               {% if is_synced %}disabled{% endif %}
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
       </div>
     </div>
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Cover Image URL</label>
       <input type="url" name="cover_image_url" value="{{ download.cover_image_url|default:'' }}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Required Level</label>
-        <select name="required_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <select name="required_level" {% if is_synced %}disabled{% endif %}
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
           <option value="0" {% if download.required_level == 0 %}selected{% endif %}>Free (0)</option>
           <option value="10" {% if download.required_level == 10 %}selected{% endif %}>Basic (10)</option>
           <option value="20" {% if download.required_level == 20 %}selected{% endif %}>Main (20)</option>
@@ -78,6 +88,7 @@
       <div class="flex items-end">
         <label class="flex items-center space-x-2 px-4 py-2">
           <input type="checkbox" name="published" {% if download.published %}checked{% endif %}
+                 {% if is_synced %}disabled{% endif %}
                  class="rounded border-border text-accent focus:ring-accent">
           <span class="text-sm text-foreground">Published</span>
         </label>
@@ -87,16 +98,19 @@
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
       <input type="text" name="tags" value="{% if download %}{% for tag in download.tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
   </div>
 
+  {% if not is_synced %}
   <div class="flex items-center space-x-4">
     <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
       {% if download %}Save Changes{% else %}Create Download{% endif %}
     </button>
     <a href="{% url 'studio_download_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
+  {% endif %}
 </form>
 
 {% if download and download.published %}

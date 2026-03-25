@@ -1,6 +1,6 @@
 {% extends "studio/base.html" %}
 
-{% block studio_title %}Edit Unit - {{ unit.title }}{% endblock %}
+{% block studio_title %}{% if is_synced %}View{% else %}Edit{% endif %} Unit - {{ unit.title }}{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
@@ -11,8 +11,10 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{{ unit.title }}</span>
   </div>
-  <h1 class="text-2xl font-semibold text-foreground">Edit Unit</h1>
+  <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Unit{% else %}Edit Unit{% endif %}</h1>
 </div>
+
+{% include "studio/includes/synced_banner.html" with obj=course %}
 
 <form method="post" class="space-y-6 max-w-3xl">
   {% csrf_token %}
@@ -21,41 +23,48 @@
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Title</label>
       <input type="text" name="title" value="{{ unit.title }}" required
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Video URL</label>
       <input type="url" name="video_url" value="{{ unit.video_url }}"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+             {% if is_synced %}disabled{% endif %}
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Body (Markdown)</label>
       <textarea name="body" rows="12"
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ unit.body }}</textarea>
+                {% if is_synced %}disabled{% endif %}
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono{% if is_synced %} opacity-60{% endif %}">{{ unit.body }}</textarea>
     </div>
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Homework (Markdown)</label>
       <textarea name="homework" rows="6"
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ unit.homework }}</textarea>
+                {% if is_synced %}disabled{% endif %}
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono{% if is_synced %} opacity-60{% endif %}">{{ unit.homework }}</textarea>
     </div>
 
     <div>
       <label class="flex items-center space-x-2">
         <input type="checkbox" name="is_preview" {% if unit.is_preview %}checked{% endif %}
+               {% if is_synced %}disabled{% endif %}
                class="rounded border-border text-accent focus:ring-accent">
         <span class="text-sm text-foreground">Preview unit (visible to everyone)</span>
       </label>
     </div>
   </div>
 
+  {% if not is_synced %}
   <div class="flex items-center space-x-4">
     <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
       Save Unit
     </button>
     <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
+  {% endif %}
 </form>
 {% endblock %}

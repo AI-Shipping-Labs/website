@@ -1,9 +1,11 @@
 """Studio views for project moderation."""
 
+from django.http import HttpResponseForbidden
 from django.shortcuts import render, redirect, get_object_or_404
 
 from content.models import Project
 from studio.decorators import staff_required
+from studio.utils import is_synced, get_github_edit_url
 
 
 @staff_required
@@ -28,10 +30,15 @@ def project_list(request):
 
 @staff_required
 def project_review(request, project_id):
-    """Review a project submission - approve or reject."""
+    """Review a project submission (read-only for synced items)."""
     project = get_object_or_404(Project, pk=project_id)
+    synced = is_synced(project)
 
     if request.method == 'POST':
+        if synced:
+            return HttpResponseForbidden(
+                'This content is managed in GitHub. Edit it there.'
+            )
         action = request.POST.get('action', '')
         if action == 'approve':
             project.approve()
@@ -41,4 +48,6 @@ def project_review(request, project_id):
 
     return render(request, 'studio/projects/review.html', {
         'project': project,
+        'is_synced': synced,
+        'github_edit_url': get_github_edit_url(project),
     })

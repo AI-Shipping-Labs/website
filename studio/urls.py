@@ -2,17 +2,17 @@ from django.urls import path
 
 from studio.views.dashboard import dashboard
 from studio.views.courses import (
-    course_list, course_create, course_edit,
+    course_list, course_edit,
     module_create, unit_create, unit_edit,
     module_reorder, course_create_stripe_product,
     course_access_list, course_access_grant, course_access_revoke,
 )
-from studio.views.articles import article_list, article_create, article_edit
+from studio.views.articles import article_list, article_edit
 from studio.views.events import event_list, event_create, event_edit, event_create_zoom
-from studio.views.recordings import recording_list, recording_create, recording_edit, recording_publish_youtube
+from studio.views.recordings import recording_list, recording_edit, recording_publish_youtube
 from studio.views.campaigns import campaign_list, campaign_create, campaign_detail
 from studio.views.subscribers import subscriber_list, subscriber_export_csv
-from studio.views.downloads import download_list, download_create, download_edit
+from studio.views.downloads import download_list, download_edit
 from studio.views.projects import project_list, project_review
 from studio.views.tier_overrides import tier_override_page, tier_override_create, tier_override_revoke
 from studio.views.redirects import redirect_list, redirect_create, redirect_edit, redirect_delete, redirect_toggle
@@ -36,7 +36,6 @@ urlpatterns = [
 
     # Courses
     path('courses/', course_list, name='studio_course_list'),
-    path('courses/new', course_create, name='studio_course_create'),
     path('courses/<int:course_id>/edit', course_edit, name='studio_course_edit'),
     path('courses/<int:course_id>/modules/add', module_create, name='studio_module_create'),
     path('courses/<int:course_id>/modules/reorder', module_reorder, name='studio_module_reorder'),
@@ -55,7 +54,6 @@ urlpatterns = [
 
     # Articles
     path('articles/', article_list, name='studio_article_list'),
-    path('articles/new', article_create, name='studio_article_create'),
     path('articles/<int:article_id>/edit', article_edit, name='studio_article_edit'),
     path('articles/<int:article_id>/notify', article_notify, name='studio_article_notify'),
     path('articles/<int:article_id>/announce-slack', article_announce_slack, name='studio_article_announce_slack'),
@@ -70,7 +68,6 @@ urlpatterns = [
 
     # Recordings
     path('recordings/', recording_list, name='studio_recording_list'),
-    path('recordings/new', recording_create, name='studio_recording_create'),
     path('recordings/<int:recording_id>/edit', recording_edit, name='studio_recording_edit'),
     path('recordings/<int:recording_id>/publish-youtube', recording_publish_youtube, name='studio_recording_publish_youtube'),
     path('recordings/<int:recording_id>/notify', recording_notify, name='studio_recording_notify'),
@@ -90,7 +87,6 @@ urlpatterns = [
 
     # Downloads
     path('downloads/', download_list, name='studio_download_list'),
-    path('downloads/new', download_create, name='studio_download_create'),
     path('downloads/<int:download_id>/edit', download_edit, name='studio_download_edit'),
     path('downloads/<int:download_id>/notify', download_notify, name='studio_download_notify'),
     path('downloads/<int:download_id>/announce-slack', download_announce_slack, name='studio_download_announce_slack'),

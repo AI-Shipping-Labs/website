@@ -254,11 +254,10 @@ class StudioArticleFormButtonsTest(TestCase):
         self.assertNotContains(response, 'Notify subscribers')
         self.assertNotContains(response, 'Post to Slack')
 
-    def test_buttons_hidden_on_create_form(self):
-        """New article form does not show notify or slack buttons."""
+    def test_create_url_removed(self):
+        """New article create URL is removed (synced content types)."""
         response = self.client.get('/studio/articles/new')
-        self.assertNotContains(response, 'Notify subscribers')
-        self.assertNotContains(response, 'Post to Slack')
+        self.assertEqual(response.status_code, 404)
 
 
 class StudioRecordingNotifyTest(TestCase):

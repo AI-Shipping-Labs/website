@@ -1,6 +1,6 @@
 {% extends "studio/base.html" %}
 
-{% block studio_title %}Review: {{ project.title }}{% endblock %}
+{% block studio_title %}{% if is_synced %}View{% else %}Review{% endif %}: {{ project.title }}{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
@@ -9,8 +9,10 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{{ project.title }}</span>
   </div>
-  <h1 class="text-2xl font-semibold text-foreground">Review Project</h1>
+  <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Project{% else %}Review Project{% endif %}</h1>
 </div>
+
+{% include "studio/includes/synced_banner.html" with obj=project %}
 
 <div class="max-w-3xl space-y-6">
   <!-- Project Info -->
@@ -63,8 +65,8 @@
     {% endif %}
   </div>
 
-  <!-- Moderation Actions -->
-  {% if project.status == 'pending_review' %}
+  <!-- Moderation Actions (only for non-synced pending projects) -->
+  {% if not is_synced and project.status == 'pending_review' %}
   <div class="bg-card border border-border rounded-lg p-6">
     <h3 class="text-lg font-semibold text-foreground mb-4">Moderation</h3>
     <div class="flex items-center space-x-4">

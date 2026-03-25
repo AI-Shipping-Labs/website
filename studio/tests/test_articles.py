@@ -1,10 +1,11 @@
-"""Tests for studio article CRUD views.
+"""Tests for studio article views.
 
 Verifies:
 - Article list with search and status filter
-- Article create form (GET and POST)
+- Create URL removed (returns 404)
 - Article edit form (GET and POST)
 - Status management (publish/unpublish)
+- Synced articles are read-only
 """
 
 from django.contrib.auth import get_user_model
@@ -75,8 +76,8 @@ class StudioArticleListTest(TestCase):
         self.assertNotContains(response, 'Java Guide')
 
 
-class StudioArticleCreateTest(TestCase):
-    """Test article creation."""
+class StudioArticleCreateRemovedTest(TestCase):
+    """Test that article create URL has been removed."""
 
     def setUp(self):
         self.client = Client()
@@ -85,57 +86,9 @@ class StudioArticleCreateTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_returns_200(self):
+    def test_create_url_returns_404(self):
         response = self.client.get('/studio/articles/new')
-        self.assertEqual(response.status_code, 200)
-
-    def test_create_article_post(self):
-        response = self.client.post('/studio/articles/new', {
-            'title': 'New Article',
-            'slug': 'new-article',
-            'description': 'A test article',
-            'content_markdown': '# Hello World',
-            'author': 'Test Author',
-            'date': '2024-01-15',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        self.assertEqual(response.status_code, 302)
-        article = Article.objects.get(slug='new-article')
-        self.assertEqual(article.title, 'New Article')
-        self.assertFalse(article.published)
-
-    def test_create_published_article(self):
-        self.client.post('/studio/articles/new', {
-            'title': 'Published Art',
-            'slug': 'pub-art',
-            'date': '2024-01-15',
-            'status': 'published',
-            'required_level': '0',
-        })
-        article = Article.objects.get(slug='pub-art')
-        self.assertTrue(article.published)
-
-    def test_create_article_with_tags(self):
-        self.client.post('/studio/articles/new', {
-            'title': 'Tagged Art',
-            'slug': 'tagged-art',
-            'date': '2024-01-15',
-            'status': 'draft',
-            'required_level': '0',
-            'tags': 'python, ml',
-        })
-        article = Article.objects.get(slug='tagged-art')
-        self.assertEqual(len(article.tags), 2)
-
-    def test_create_article_auto_slug(self):
-        self.client.post('/studio/articles/new', {
-            'title': 'Auto Slug Test',
-            'date': '2024-01-15',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        self.assertTrue(Article.objects.filter(slug='auto-slug-test').exists())
+        self.assertEqual(response.status_code, 404)
 
 
 class StudioArticleEditTest(TestCase):

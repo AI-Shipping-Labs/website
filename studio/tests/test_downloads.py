@@ -48,8 +48,8 @@ class StudioDownloadListTest(TestCase):
         self.assertNotContains(response, 'Java Guide')
 
 
-class StudioDownloadCreateTest(TestCase):
-    """Test download creation."""
+class StudioDownloadCreateRemovedTest(TestCase):
+    """Test that download create URL has been removed."""
 
     def setUp(self):
         self.client = Client()
@@ -58,36 +58,9 @@ class StudioDownloadCreateTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_returns_200(self):
+    def test_create_url_returns_404(self):
         response = self.client.get('/studio/downloads/new')
-        self.assertEqual(response.status_code, 200)
-
-    def test_create_download_post(self):
-        response = self.client.post('/studio/downloads/new', {
-            'title': 'New Download',
-            'slug': 'new-dl',
-            'description': 'A test download',
-            'file_url': 'https://example.com/file.pdf',
-            'file_type': 'pdf',
-            'file_size_bytes': '1024',
-            'published': 'on',
-            'required_level': '0',
-        })
-        self.assertEqual(response.status_code, 302)
-        dl = Download.objects.get(slug='new-dl')
-        self.assertEqual(dl.title, 'New Download')
-        self.assertEqual(dl.file_type, 'pdf')
-        self.assertEqual(dl.file_size_bytes, 1024)
-        self.assertTrue(dl.published)
-
-    def test_create_download_auto_slug(self):
-        self.client.post('/studio/downloads/new', {
-            'title': 'Auto Slug Download',
-            'file_url': 'https://example.com/file.pdf',
-            'file_type': 'pdf',
-            'required_level': '0',
-        })
-        self.assertTrue(Download.objects.filter(slug='auto-slug-download').exists())
+        self.assertEqual(response.status_code, 404)
 
 
 class StudioDownloadEditTest(TestCase):

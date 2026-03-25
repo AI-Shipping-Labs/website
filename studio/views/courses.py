@@ -1,11 +1,11 @@
-"""Studio views for course CRUD and access management."""
+"""Studio views for course management and access management."""
 
 import json
 import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils.text import slugify
@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from content.models import Course, Module, Unit, CourseAccess
 from studio.decorators import staff_required
+from studio.utils import is_synced, get_github_edit_url
 
 User = get_user_model()
 
@@ -39,58 +40,17 @@ def course_list(request):
 
 
 @staff_required
-def course_create(request):
-    """Create a new course."""
-    if request.method == 'POST':
-        title = request.POST.get('title', '').strip()
-        slug = request.POST.get('slug', '').strip() or slugify(title)
-        description = request.POST.get('description', '')
-        cover_image_url = request.POST.get('cover_image_url', '')
-        instructor_name = request.POST.get('instructor_name', '')
-        instructor_bio = request.POST.get('instructor_bio', '')
-        status = request.POST.get('status', 'draft')
-        is_free = request.POST.get('is_free') == 'on'
-        required_level = int(request.POST.get('required_level', 0))
-        discussion_url = request.POST.get('discussion_url', '')
-        tags_raw = request.POST.get('tags', '')
-        tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
-        individual_price_raw = request.POST.get('individual_price_eur', '').strip()
-        individual_price_eur = None
-        if individual_price_raw:
-            from decimal import Decimal, InvalidOperation
-            try:
-                individual_price_eur = Decimal(individual_price_raw)
-            except InvalidOperation:
-                pass
-
-        course = Course.objects.create(
-            title=title,
-            slug=slug,
-            description=description,
-            cover_image_url=cover_image_url,
-            instructor_name=instructor_name,
-            instructor_bio=instructor_bio,
-            status=status,
-            is_free=is_free,
-            required_level=required_level,
-            discussion_url=discussion_url,
-            tags=tags,
-            individual_price_eur=individual_price_eur,
-        )
-        return redirect('studio_course_edit', course_id=course.pk)
-
-    return render(request, 'studio/courses/form.html', {
-        'course': None,
-        'form_action': 'create',
-    })
-
-
-@staff_required
 def course_edit(request, course_id):
-    """Edit an existing course with nested module/unit editors."""
+    """Edit an existing course with nested module/unit editors (read-only for synced items)."""
     course = get_object_or_404(Course, pk=course_id)
+    synced = is_synced(course)
 
     if request.method == 'POST':
+        if synced:
+            return HttpResponseForbidden(
+                'This content is managed in GitHub. Edit it there.'
+            )
+
         course.title = request.POST.get('title', '').strip()
         course.slug = request.POST.get('slug', '').strip() or slugify(course.title)
         course.description = request.POST.get('description', '')
@@ -134,6 +94,8 @@ def course_edit(request, course_id):
         'course': course,
         'modules': modules,
         'form_action': 'edit',
+        'is_synced': synced,
+        'github_edit_url': get_github_edit_url(course),
         'notify_url': reverse('studio_course_notify', kwargs={'course_id': course.pk}),
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
         'create_stripe_product_url': reverse('studio_course_create_stripe_product', kwargs={'course_id': course.pk}),
@@ -145,6 +107,11 @@ def module_create(request, course_id):
     """Create a module for a course (AJAX or form POST)."""
     course = get_object_or_404(Course, pk=course_id)
 
+    if is_synced(course):
+        return HttpResponseForbidden(
+            'This content is managed in GitHub. Edit it there.'
+        )
+
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         max_order = course.modules.order_by('-sort_order').values_list(
@@ -153,7 +120,6 @@ def module_create(request, course_id):
         Module.objects.create(
             course=course,
             title=title,
-            slug=slugify(title) or f'module-{max_order + 1}',
             sort_order=max_order + 1,
         )
     return redirect('studio_course_edit', course_id=course.pk)
@@ -164,6 +130,11 @@ def unit_create(request, module_id):
     """Create a unit within a module."""
     module = get_object_or_404(Module, pk=module_id)
 
+    if is_synced(module.course):
+        return HttpResponseForbidden(
+            'This content is managed in GitHub. Edit it there.'
+        )
+
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         max_order = module.units.order_by('-sort_order').values_list(
@@ -172,7 +143,6 @@ def unit_create(request, module_id):
         Unit.objects.create(
             module=module,
             title=title,
-            slug=slugify(title) or f'unit-{max_order + 1}',
             sort_order=max_order + 1,
         )
     return redirect('studio_course_edit', course_id=module.course.pk)
@@ -180,21 +150,30 @@ def unit_create(request, module_id):
 
 @staff_required
 def unit_edit(request, unit_id):
-    """Edit a unit."""
+    """Edit a unit (read-only for synced courses)."""
     unit = get_object_or_404(Unit, pk=unit_id)
+    course = unit.module.course
+    synced = is_synced(course)
 
     if request.method == 'POST':
+        if synced:
+            return HttpResponseForbidden(
+                'This content is managed in GitHub. Edit it there.'
+            )
+
         unit.title = request.POST.get('title', '').strip()
         unit.video_url = request.POST.get('video_url', '')
         unit.body = request.POST.get('body', '')
         unit.homework = request.POST.get('homework', '')
         unit.is_preview = request.POST.get('is_preview') == 'on'
         unit.save()
-        return redirect('studio_course_edit', course_id=unit.module.course.pk)
+        return redirect('studio_course_edit', course_id=course.pk)
 
     return render(request, 'studio/courses/unit_form.html', {
         'unit': unit,
-        'course': unit.module.course,
+        'course': course,
+        'is_synced': synced,
+        'github_edit_url': get_github_edit_url(course),
     })
 
 

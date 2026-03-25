@@ -223,12 +223,10 @@ class RecordingYouTubeTemplateTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_does_not_show_youtube_section(self):
-        """The create form (new recording) should NOT have the YouTube section."""
+    def test_create_url_removed(self):
+        """New recording create URL is removed (synced content types)."""
         response = self.client.get('/studio/recordings/new')
-        content = response.content.decode()
-        self.assertNotIn('id="youtube-upload-section"', content)
-        self.assertNotIn('Publish to YouTube', content)
+        self.assertEqual(response.status_code, 404)
 
     def test_edit_recording_with_s3_url_shows_publish_button(self):
         """Edit form for recording with s3_url but no youtube_url shows Publish button."""

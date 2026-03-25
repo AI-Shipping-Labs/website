@@ -1,8 +1,8 @@
-"""Studio views for recording CRUD."""
+"""Studio views for recording management."""
 
 import logging
 
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 from content.models import Recording
 from jobs.tasks import async_task
 from studio.decorators import staff_required
+from studio.utils import is_synced, get_github_edit_url
 
 logger = logging.getLogger(__name__)
 
@@ -32,51 +33,17 @@ def recording_list(request):
 
 
 @staff_required
-def recording_create(request):
-    """Create a new recording."""
-    if request.method == 'POST':
-        title = request.POST.get('title', '').strip()
-        slug = request.POST.get('slug', '').strip() or slugify(title)
-        description = request.POST.get('description', '')
-        date_str = request.POST.get('date', '')
-        youtube_url = request.POST.get('youtube_url', '')
-        published = request.POST.get('published') == 'on'
-        required_level = int(request.POST.get('required_level', 0))
-        tags_raw = request.POST.get('tags', '')
-        tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
-
-        date = timezone.now().date()
-        if date_str:
-            try:
-                from datetime import datetime
-                date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            except ValueError:
-                pass
-
-        recording = Recording.objects.create(
-            title=title,
-            slug=slug,
-            description=description,
-            date=date,
-            youtube_url=youtube_url,
-            published=published,
-            required_level=required_level,
-            tags=tags,
-        )
-        return redirect('studio_recording_edit', recording_id=recording.pk)
-
-    return render(request, 'studio/recordings/form.html', {
-        'recording': None,
-        'form_action': 'create',
-    })
-
-
-@staff_required
 def recording_edit(request, recording_id):
-    """Edit an existing recording."""
+    """Edit an existing recording (read-only for synced items)."""
     recording = get_object_or_404(Recording, pk=recording_id)
+    synced = is_synced(recording)
 
     if request.method == 'POST':
+        if synced:
+            return HttpResponseForbidden(
+                'This content is managed in GitHub. Edit it there.'
+            )
+
         recording.title = request.POST.get('title', '').strip()
         recording.slug = request.POST.get('slug', '').strip() or slugify(recording.title)
         recording.description = request.POST.get('description', '')
@@ -100,6 +67,8 @@ def recording_edit(request, recording_id):
     context = {
         'recording': recording,
         'form_action': 'edit',
+        'is_synced': synced,
+        'github_edit_url': get_github_edit_url(recording),
         'notify_url': reverse('studio_recording_notify', kwargs={'recording_id': recording.pk}),
         'announce_url': reverse('studio_recording_announce_slack', kwargs={'recording_id': recording.pk}),
     }

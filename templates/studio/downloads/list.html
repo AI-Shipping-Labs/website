@@ -8,9 +8,6 @@
     <h1 class="text-2xl font-semibold text-foreground">Downloads</h1>
     <p class="text-muted-foreground mt-1">Manage downloadable resources.</p>
   </div>
-  <a href="{% url 'studio_download_create' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-    New Download
-  </a>
 </div>
 
 <!-- Search -->
@@ -39,6 +36,7 @@
       <tr class="hover:bg-secondary/50 transition-colors">
         <td class="px-6 py-4">
           <a href="{% url 'studio_download_edit' download_id=download.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ download.title }}</a>
+          {% if download.source_repo %}<span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400" data-testid="synced-badge">synced</span>{% endif %}
         </td>
         <td class="px-6 py-4">
           <span class="text-xs px-2 py-1 rounded-full {{ download.file_type_color }}">{{ download.file_type_label }}</span>
@@ -50,7 +48,7 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ download.download_count }}</td>
         <td class="px-6 py-4 text-right">
-          <a href="{% url 'studio_download_edit' download_id=download.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+          <a href="{% url 'studio_download_edit' download_id=download.pk %}" class="text-sm text-accent hover:underline">{% if download.source_repo %}View{% else %}Edit{% endif %}</a>
         </td>
       </tr>
       {% empty %}

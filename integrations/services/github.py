@@ -37,14 +37,14 @@ GITHUB_API_BASE = 'https://api.github.com'
 
 # Required frontmatter fields per content type
 REQUIRED_FIELDS = {
-    'article': ['title', 'slug'],
-    'course': ['title', 'slug'],
+    'article': ['title'],
+    'course': ['title'],
     'module': ['title', 'sort_order'],
     'unit': ['title', 'sort_order'],
-    'recording': ['title', 'slug', 'video_url'],
-    'project': ['title', 'slug'],
+    'recording': ['title', 'video_url'],
+    'project': ['title'],
     'curated_link': ['title', 'url', 'item_id'],
-    'download': ['title', 'slug'],
+    'download': ['title'],
 }
 
 # Sync lock timeout in minutes
@@ -733,6 +733,14 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
                 # Edge Case 7: Frontmatter validation
                 _validate_frontmatter(metadata, 'article', rel_path)
 
+                # Require content_id in frontmatter
+                content_id = metadata.get('content_id')
+                if not content_id:
+                    msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                    logger.warning(msg)
+                    stats['errors'].append({'file': rel_path, 'error': msg})
+                    continue
+
                 # Edge Case 2: Check slug collision across sources
                 if _check_slug_collision(Article, current_slug, source.repo_name, rel_path):
                     stats['errors'].append({
@@ -785,6 +793,7 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
                     'source_commit': commit_sha,
                     'page_type': page_type,
                     'data_json': data,
+                    'content_id': content_id,
                 }
 
                 # Parse date
@@ -867,6 +876,14 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
             # Edge Case 7: Frontmatter validation
             _validate_frontmatter(course_data, 'course', rel_path)
 
+            # Require content_id in frontmatter
+            course_content_id = course_data.get('content_id')
+            if not course_content_id:
+                msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
+                continue
+
             # Edge Case 2: Slug collision across sources
             if _check_slug_collision(Course, slug, source.repo_name, rel_path):
                 stats['errors'].append({
@@ -895,6 +912,7 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
                 'source_repo': source.repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
+                'content_id': course_content_id,
             }
 
             course, created = Course.objects.update_or_create(
@@ -1021,6 +1039,14 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             # Edge Case 7: Frontmatter validation
             _validate_frontmatter(metadata, 'unit', rel_path)
 
+            # Require content_id in frontmatter
+            unit_content_id = metadata.get('content_id')
+            if not unit_content_id:
+                msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
+                continue
+
             seen_unit_paths.add(rel_path)
 
             # Edge Case 1: Compute content hash for rename detection
@@ -1049,6 +1075,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 'content_hash': content_hash,
                 'source_repo': repo_name,
                 'source_commit': commit_sha,
+                'content_id': unit_content_id,
             }
 
             if is_homework:
@@ -1152,6 +1179,14 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
             # Edge Case 7: Frontmatter validation
             _validate_frontmatter(data, 'recording', rel_path)
 
+            # Require content_id in frontmatter
+            recording_content_id = data.get('content_id')
+            if not recording_content_id:
+                msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
+                continue
+
             # Edge Case 2: Slug collision across sources
             if _check_slug_collision(Recording, slug, source.repo_name, rel_path):
                 stats['errors'].append({
@@ -1178,6 +1213,7 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
                 'source_repo': source.repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
+                'content_id': recording_content_id,
             }
 
             published_at = data.get('published_at')
@@ -1302,6 +1338,14 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
             # Edge Case 7: Frontmatter validation
             _validate_frontmatter(data, 'download', rel_path)
 
+            # Require content_id in frontmatter
+            download_content_id = data.get('content_id')
+            if not download_content_id:
+                msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
+                continue
+
             # Edge Case 2: Slug collision across sources
             if _check_slug_collision(Download, slug, source.repo_name, rel_path):
                 stats['errors'].append({
@@ -1329,6 +1373,7 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
                 'source_repo': source.repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
+                'content_id': download_content_id,
             }
 
             download, created = Download.objects.update_or_create(
@@ -1386,6 +1431,14 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
                 # Edge Case 7: Frontmatter validation
                 _validate_frontmatter(metadata, 'project', rel_path)
 
+                # Require content_id in frontmatter
+                project_content_id = metadata.get('content_id')
+                if not project_content_id:
+                    msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                    logger.warning(msg)
+                    stats['errors'].append({'file': rel_path, 'error': msg})
+                    continue
+
                 # Edge Case 2: Slug collision across sources
                 if _check_slug_collision(Project, slug, source.repo_name, rel_path):
                     stats['errors'].append({
@@ -1426,6 +1479,7 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
                     'source_repo': source.repo_name,
                     'source_path': rel_path,
                     'source_commit': commit_sha,
+                    'content_id': project_content_id,
                 }
 
                 date_val = metadata.get('date')

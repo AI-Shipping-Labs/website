@@ -8,6 +8,8 @@ Usage:
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'website.settings')
@@ -37,11 +39,8 @@ def main():
     for source in sources:
         print(f'Syncing {source.content_type}...')
         result = sync_content_source(source, repo_dir=repo_dir)
-        created = result.get('created', 0)
-        updated = result.get('updated', 0)
-        errors = result.get('errors', [])
-        print(f'  {created} created, {updated} updated')
-        for error in errors:
+        print(f'  {result.items_created} created, {result.items_updated} updated')
+        for error in (result.errors or []):
             print(f'  ERROR: {error}')
 
     print('Done.')

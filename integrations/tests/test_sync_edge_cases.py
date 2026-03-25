@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import tempfile
+import uuid
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -58,6 +59,9 @@ class _ArticleSyncTestBase(TestCase):
     def _write_article(self, filename, metadata, body):
         filepath = os.path.join(self.temp_dir, filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # Auto-generate content_id if not provided
+        if 'content_id' not in metadata:
+            metadata = {**metadata, 'content_id': str(uuid.uuid4())}
         with open(filepath, 'w') as f:
             f.write('---\n')
             for key, value in metadata.items():
@@ -375,15 +379,62 @@ class FrontmatterValidationTest(_ArticleSyncTestBase):
             _validate_frontmatter({'slug': 'test'}, 'article', 'test.md')
         self.assertIn('title', str(ctx.exception))
 
-        # Missing slug
-        with self.assertRaises(ValueError) as ctx:
-            _validate_frontmatter({'title': 'Test'}, 'article', 'test.md')
-        self.assertIn('slug', str(ctx.exception))
+        # Title only is valid (slug derived from filename)
+        _validate_frontmatter(
+            {'title': 'Test'}, 'article', 'test.md',
+        )
 
-        # Valid - should not raise
+        # Title + slug is also valid
         _validate_frontmatter(
             {'title': 'Test', 'slug': 'test'}, 'article', 'test.md',
         )
+
+    def test_slug_not_required_in_frontmatter(self):
+        """Slug is derived from filename when missing from frontmatter.
+        Articles, courses, recordings, projects, and downloads should
+        not require slug in REQUIRED_FIELDS."""
+        from integrations.services.github import REQUIRED_FIELDS
+        for content_type in ['article', 'course', 'recording', 'project', 'download']:
+            self.assertNotIn(
+                'slug', REQUIRED_FIELDS.get(content_type, []),
+                f'{content_type} should not require slug in frontmatter',
+            )
+
+
+# ===========================================================================
+# Scenario: Slug derived from filename when not in frontmatter
+# ===========================================================================
+
+
+class SlugDerivedFromFilenameTest(_ArticleSyncTestBase):
+    """Test that slug is derived from the filename stem when not in frontmatter."""
+
+    def test_article_slug_from_filename(self):
+        """Given a markdown file with title but no slug,
+        then the article slug is derived from the filename stem."""
+        self._write_article('my-great-article.md', {
+            'title': 'My Great Article',
+            'date': '2026-01-01',
+        }, 'Body text.')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        article = Article.objects.get(slug='my-great-article')
+        self.assertEqual(article.title, 'My Great Article')
+
+    def test_explicit_slug_overrides_filename(self):
+        """Given a markdown file with an explicit slug in frontmatter,
+        then the explicit slug is used instead of the filename stem."""
+        self._write_article('some-filename.md', {
+            'title': 'My Article',
+            'slug': 'custom-slug',
+            'date': '2026-01-01',
+        }, 'Body text.')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertTrue(Article.objects.filter(slug='custom-slug').exists())
+        self.assertFalse(Article.objects.filter(slug='some-filename').exists())
 
 
 # ===========================================================================
@@ -501,18 +552,21 @@ class UnitRenameMigrationTest(TestCase):
         os.makedirs(module_dir, exist_ok=True)
 
         # Course yaml
+        course_cid = str(uuid.uuid4())
         with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
-            f.write('title: Test Course\nslug: test-course\n')
+            f.write(f'title: Test Course\nslug: test-course\ncontent_id: {course_cid}\n')
 
         # Module yaml
         with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
             f.write('title: Module 1\nsort_order: 1\n')
 
         # Renamed unit file (same content, different filename)
+        unit_cid = str(uuid.uuid4())
         with open(os.path.join(module_dir, 'intro.md'), 'w') as f:
             f.write('---\n')
             f.write('title: "Intro"\n')
             f.write('sort_order: "1"\n')
+            f.write(f'content_id: "{unit_cid}"\n')
             f.write('---\n')
             f.write(body_text)
 
@@ -711,3 +765,72 @@ class CloneTimeoutConfigTest(TestCase):
         finally:
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# ===========================================================================
+# Scenario: Project sync renders markdown to HTML
+# ===========================================================================
+
+
+class ProjectSyncMarkdownRenderingTest(TestCase):
+    """Test that synced projects have content_html rendered from markdown."""
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='test-org/content',
+            content_type='project',
+            content_path='projects',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+        self.projects_dir = os.path.join(self.temp_dir, 'projects')
+        os.makedirs(self.projects_dir)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_project(self, filename, metadata, body):
+        filepath = os.path.join(self.projects_dir, filename)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        if 'content_id' not in metadata:
+            metadata = {**metadata, 'content_id': str(uuid.uuid4())}
+        with open(filepath, 'w') as f:
+            f.write('---\n')
+            for key, value in metadata.items():
+                if isinstance(value, list):
+                    f.write(f'{key}:\n')
+                    for item in value:
+                        f.write(f'  - {item}\n')
+                else:
+                    f.write(f'{key}: "{value}"\n')
+            f.write('---\n')
+            f.write(body)
+
+    def test_synced_project_has_rendered_html(self):
+        """Given a project markdown file with images and formatting,
+        when synced, then content_html contains rendered HTML."""
+        self._write_project('test-project.md', {
+            'title': 'Test Project',
+            'description': 'A test project',
+        }, '# Overview\n\n![diagram](https://cdn.example.com/img.png)\n\nSome **bold** text.')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        project = Project.objects.get(slug='test-project')
+        self.assertIn('<h1>Overview</h1>', project.content_html)
+        self.assertIn('<img', project.content_html)
+        self.assertIn('<strong>bold</strong>', project.content_html)
+
+    def test_synced_project_with_code_block(self):
+        """Given a project with a code block in markdown,
+        when synced, then content_html contains code element."""
+        self._write_project('code-project.md', {
+            'title': 'Code Project',
+            'description': 'Has code',
+        }, '```python\nprint("hello")\n```')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        project = Project.objects.get(slug='code-project')
+        self.assertIn('<code', project.content_html)
+        self.assertIn('print', project.content_html)

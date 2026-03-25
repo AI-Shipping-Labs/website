@@ -120,6 +120,61 @@ class ProjectNewFieldsTest(TestCase):
             self.assertEqual(project.difficulty, diff)
 
 
+# --- Markdown rendering tests ---
+
+
+class ProjectMarkdownRenderingTest(TestCase):
+    """Test that Project.save() renders content_markdown to content_html."""
+
+    def test_markdown_rendered_to_html_on_save(self):
+        project = Project.objects.create(
+            title='Render Test', slug='render-test', date=date(2025, 1, 1),
+            content_markdown='# Hello\n\nA paragraph.',
+            published=True,
+        )
+        self.assertIn('<h1>Hello</h1>', project.content_html)
+        self.assertIn('<p>A paragraph.</p>', project.content_html)
+
+    def test_image_in_markdown_rendered_to_html(self):
+        project = Project.objects.create(
+            title='Image Test', slug='image-test', date=date(2025, 1, 1),
+            content_markdown='![alt](https://cdn.example.com/image.png)',
+            published=True,
+        )
+        self.assertIn('<img', project.content_html)
+        self.assertIn('https://cdn.example.com/image.png', project.content_html)
+
+    def test_empty_markdown_leaves_html_empty(self):
+        project = Project.objects.create(
+            title='Empty MD', slug='empty-md', date=date(2025, 1, 1),
+            content_markdown='',
+            published=True,
+        )
+        self.assertEqual(project.content_html, '')
+
+    def test_html_updated_when_markdown_changes(self):
+        project = Project.objects.create(
+            title='Update Test', slug='update-test', date=date(2025, 1, 1),
+            content_markdown='# Version 1',
+            published=True,
+        )
+        self.assertIn('Version 1', project.content_html)
+        project.content_markdown = '# Version 2'
+        project.save()
+        project.refresh_from_db()
+        self.assertIn('Version 2', project.content_html)
+        self.assertNotIn('Version 1', project.content_html)
+
+    def test_code_block_in_markdown(self):
+        project = Project.objects.create(
+            title='Code Test', slug='code-test', date=date(2025, 1, 1),
+            content_markdown='```python\nprint("hello")\n```',
+            published=True,
+        )
+        self.assertIn('print', project.content_html)
+        self.assertIn('<code', project.content_html)
+
+
 # --- Status sync tests ---
 
 

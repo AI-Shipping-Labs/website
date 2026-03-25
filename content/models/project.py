@@ -13,6 +13,10 @@ PROJECT_STATUS_CHOICES = [
 
 class Project(models.Model):
     """Project idea / portfolio project."""
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text="Stable UUID from frontmatter for linking user-generated data.",
+    )
     DIFFICULTY_CHOICES = [
         ('beginner', 'Beginner'),
         ('intermediate', 'Intermediate'),
@@ -95,6 +99,13 @@ class Project(models.Model):
         # Normalize tags on save
         from content.utils.tags import normalize_tags
         self.tags = normalize_tags(self.tags)
+
+        # Auto-render markdown to HTML on save
+        if self.content_markdown:
+            from content.models.article import render_markdown
+            from content.templatetags.video_utils import replace_video_urls_in_html
+            html = render_markdown(self.content_markdown)
+            self.content_html = replace_video_urls_in_html(html)
 
         # Keep status in sync with published flag.
         if self.published:

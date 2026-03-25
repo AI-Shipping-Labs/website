@@ -632,3 +632,261 @@ class NextUnitHelperTest(TestCase):
         from content.views.courses import _get_next_unit
         next_unit = _get_next_unit(self.course, self.u3)
         self.assertEqual(next_unit.pk, self.u4.pk)
+
+
+class PrevUnitHelperTest(TestCase):
+    """Test the _get_prev_unit helper function."""
+
+    def setUp(self):
+        self.course = Course.objects.create(
+            title='Nav Course', slug='nav-prev-course', status='published',
+        )
+        self.m1 = Module.objects.create(
+            course=self.course, title='M1', sort_order=0,
+        )
+        self.m2 = Module.objects.create(
+            course=self.course, title='M2', sort_order=1,
+        )
+        self.u1 = Unit.objects.create(module=self.m1, title='U1', sort_order=0)
+        self.u2 = Unit.objects.create(module=self.m1, title='U2', sort_order=1)
+        self.u3 = Unit.objects.create(module=self.m2, title='U3', sort_order=0)
+        self.u4 = Unit.objects.create(module=self.m2, title='U4', sort_order=1)
+
+    def test_first_unit_returns_none(self):
+        from content.views.courses import _get_prev_unit
+        prev_unit = _get_prev_unit(self.course, self.u1)
+        self.assertIsNone(prev_unit)
+
+    def test_prev_within_module(self):
+        from content.views.courses import _get_prev_unit
+        prev_unit = _get_prev_unit(self.course, self.u2)
+        self.assertEqual(prev_unit.pk, self.u1.pk)
+
+    def test_prev_across_module_boundary(self):
+        from content.views.courses import _get_prev_unit
+        prev_unit = _get_prev_unit(self.course, self.u3)
+        self.assertEqual(prev_unit.pk, self.u2.pk)
+
+    def test_last_unit_prev_is_second_to_last(self):
+        from content.views.courses import _get_prev_unit
+        prev_unit = _get_prev_unit(self.course, self.u4)
+        self.assertEqual(prev_unit.pk, self.u3.pk)
+
+    def test_single_unit_course_returns_none(self):
+        from content.views.courses import _get_prev_unit
+        solo_course = Course.objects.create(
+            title='Solo', slug='solo-course', status='published',
+        )
+        solo_module = Module.objects.create(
+            course=solo_course, title='SM', sort_order=0,
+        )
+        solo_unit = Unit.objects.create(
+            module=solo_module, title='SU', sort_order=0,
+        )
+        prev_unit = _get_prev_unit(solo_course, solo_unit)
+        self.assertIsNone(prev_unit)
+
+
+# ============================================================
+# Previous Unit Button Tests (view-level)
+# ============================================================
+
+
+class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
+    """Test the previous unit button in the template."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = User.objects.create_user(email='main@test.com', password='testpass')
+        self.user.tier = self.main_tier
+        self.user.save()
+        self.client.login(email='main@test.com', password='testpass')
+
+    def test_prev_unit_in_context_for_non_first_unit(self):
+        response = self.client.get('/courses/test-course/1/2')
+        self.assertEqual(response.context['prev_unit'].pk, self.unit1.pk)
+
+    def test_prev_unit_none_for_first_unit(self):
+        response = self.client.get('/courses/test-course/1/1')
+        self.assertIsNone(response.context['prev_unit'])
+
+    def test_prev_button_hidden_on_first_unit(self):
+        response = self.client.get('/courses/test-course/1/1')
+        self.assertNotContains(response, 'data-testid="bottom-prev-btn"')
+        self.assertNotContains(response, 'data-testid="top-prev-btn"')
+
+    def test_prev_button_shown_on_second_unit(self):
+        response = self.client.get('/courses/test-course/1/2')
+        self.assertContains(response, 'data-testid="bottom-prev-btn"')
+        self.assertContains(response, 'data-testid="top-prev-btn"')
+
+    def test_prev_button_text_includes_target_title(self):
+        response = self.client.get('/courses/test-course/1/2')
+        self.assertContains(response, self.unit1.title)
+
+    def test_prev_button_links_to_correct_url(self):
+        response = self.client.get('/courses/test-course/1/2')
+        self.assertContains(response, f'href="{self.unit1.get_absolute_url()}"')
+
+    def test_prev_crosses_module_boundary(self):
+        response = self.client.get('/courses/test-course/2/1')
+        # Last unit in module 1 is the preview unit (sort_order=3)
+        self.assertEqual(response.context['prev_unit'].pk, self.preview_unit.pk)
+        self.assertContains(response, self.preview_unit.title)
+
+    def test_last_unit_shows_prev_but_no_next(self):
+        response = self.client.get('/courses/test-course/2/1')
+        self.assertContains(response, 'data-testid="bottom-prev-btn"')
+        self.assertNotContains(response, 'data-testid="bottom-next-btn"')
+
+    def test_next_button_still_works(self):
+        response = self.client.get('/courses/test-course/1/1')
+        self.assertContains(response, 'Next: Lesson 2')
+        self.assertContains(response, f'href="{self.unit2.get_absolute_url()}"')
+
+    def test_single_unit_course_no_nav(self):
+        solo_course = Course.objects.create(
+            title='Solo Course', slug='solo-nav', status='published',
+            required_level=0, is_free=True,
+        )
+        solo_module = Module.objects.create(
+            course=solo_course, title='SM', sort_order=0,
+        )
+        Unit.objects.create(
+            module=solo_module, title='Only Unit', sort_order=0,
+            body='content',
+        )
+        response = self.client.get('/courses/solo-nav/0/0')
+        self.assertNotContains(response, 'data-testid="bottom-prev-btn"')
+        self.assertNotContains(response, 'data-testid="bottom-next-btn"')
+        self.assertNotContains(response, 'data-testid="top-nav-row"')
+
+    def test_preview_unit_shows_prev_to_anonymous(self):
+        """Anonymous user on a preview unit should see Previous if applicable."""
+        self.client.logout()
+        # preview_unit is sort_order=3 in module1 — prev is unit2 (sort_order=2)
+        response = self.client.get('/courses/test-course/1/3')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="top-prev-btn"')
+        self.assertContains(response, self.unit2.title)
+
+    def test_prev_not_in_gated_context(self):
+        """Gated render path should not include prev_unit."""
+        self.client.logout()
+        response = self.client.get('/courses/test-course/1/2')
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn('prev_unit', response.context)
+
+
+# --- Rendered HTML sync tests ---
+
+
+class UnitBodyHtmlSyncTest(TestCase):
+    """Test that body_html stays in sync with body through update_or_create.
+
+    Django's update_or_create passes update_fields to save(), which limits
+    which fields get written to DB. The save() override must ensure derived
+    fields (body_html, homework_html) are included in update_fields.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from content.models import Course, Module
+        cls.course = Course.objects.create(
+            title='Sync Test Course', slug='sync-test-course', status='published',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course, title='Module 1', sort_order=1,
+        )
+
+    def test_update_or_create_renders_body_html(self):
+        """When body is updated via update_or_create, body_html is re-rendered."""
+        from content.models import Unit
+        unit, created = Unit.objects.update_or_create(
+            module=self.module,
+            source_path='test/unit-1.md',
+            defaults={
+                'title': 'Unit 1',
+                'sort_order': 1,
+                'body': '# Hello\n\nFirst version.',
+            },
+        )
+        self.assertTrue(created)
+        self.assertIn('<h1>Hello</h1>', unit.body_html)
+
+        # Update body via update_or_create
+        unit, created = Unit.objects.update_or_create(
+            module=self.module,
+            source_path='test/unit-1.md',
+            defaults={
+                'title': 'Unit 1',
+                'sort_order': 1,
+                'body': '# Updated\n\nSecond version.',
+            },
+        )
+        self.assertFalse(created)
+        unit.refresh_from_db()
+        self.assertIn('<h1>Updated</h1>', unit.body_html)
+        self.assertNotIn('Hello', unit.body_html)
+
+    def test_update_or_create_renders_homework_html(self):
+        """When homework is updated via update_or_create, homework_html is re-rendered."""
+        from content.models import Unit
+        unit, created = Unit.objects.update_or_create(
+            module=self.module,
+            source_path='test/homework.md',
+            defaults={
+                'title': 'Homework',
+                'sort_order': 2,
+                'homework': '- Task A\n- Task B',
+            },
+        )
+        self.assertTrue(created)
+        self.assertIn('Task A', unit.homework_html)
+
+        # Update homework
+        unit, created = Unit.objects.update_or_create(
+            module=self.module,
+            source_path='test/homework.md',
+            defaults={
+                'title': 'Homework',
+                'sort_order': 2,
+                'homework': '- Task C\n- Task D',
+            },
+        )
+        self.assertFalse(created)
+        unit.refresh_from_db()
+        self.assertIn('Task C', unit.homework_html)
+        self.assertNotIn('Task A', unit.homework_html)
+
+    def test_body_html_not_stale_after_content_change(self):
+        """Regression test: body_html must match body after sync update.
+
+        Previously, update_or_create with update_fields would skip body_html
+        because it wasn't in the defaults dict, leaving stale rendered HTML.
+        """
+        from content.models import Unit
+        # Create with old content
+        unit = Unit.objects.create(
+            module=self.module,
+            title='Stale Test',
+            sort_order=3,
+            body='Old content',
+            source_path='test/stale.md',
+        )
+        self.assertIn('Old content', unit.body_html)
+
+        # Simulate sync updating body via update_or_create
+        unit, _ = Unit.objects.update_or_create(
+            module=self.module,
+            source_path='test/stale.md',
+            defaults={
+                'title': 'Stale Test',
+                'sort_order': 3,
+                'body': '# New content\n\nWith **formatting**.',
+            },
+        )
+        unit.refresh_from_db()
+        self.assertIn('<h1>New content</h1>', unit.body_html)
+        self.assertIn('<strong>formatting</strong>', unit.body_html)
+        self.assertNotIn('Old content', unit.body_html)

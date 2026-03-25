@@ -138,6 +138,27 @@ def ensure_tiers():
     connection.close()
 
 
+def ensure_site_config_tiers():
+    """Seed the SiteConfig 'tiers' entry from the tiers.yaml fixture.
+
+    This populates the homepage tier cards and activities page with
+    real tier data (Basic, Main, Premium) so that E2E tests can assert
+    on tier names and activity titles like 'Closed Community Access'.
+    """
+    import yaml
+    from pathlib import Path
+    from django.db import connection
+    from content.models import SiteConfig
+
+    fixture_path = Path(__file__).parent.parent / 'content' / 'tests' / 'fixtures' / 'tiers.yaml'
+    with open(fixture_path) as f:
+        tiers_data = yaml.safe_load(f)
+    SiteConfig.objects.update_or_create(
+        key='tiers', defaults={'data': tiers_data}
+    )
+    connection.close()
+
+
 def create_user(
     email,
     tier_slug="free",

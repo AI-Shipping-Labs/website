@@ -338,62 +338,44 @@ class TestScenario3StaffReviewsDashboard:
 class TestScenario4StaffCreatesArticle:
     """Staff member creates a new article and publishes it to the blog."""
 
-    def test_create_published_article_visible_on_blog(self, django_server, browser):
-        """Given: A user logged in as admin@test.com (is_staff=True)
-        1. Navigate to /studio/articles/
-        2. Click the link/button to create a new article
-        Then: User arrives at /studio/articles/new with an empty article form
-        3. Fill in the title, set status to published, set required_level to 0, submit
-        Then: User is redirected to the edit page for the newly created article
-        4. Navigate to /blog
-        Then: The article appears in the blog listing."""
+    def test_article_create_url_removed_and_article_visible_on_blog(self, django_server, browser):
+        """The /studio/articles/new URL has been removed (#152). Verify it
+        returns 404. Then create an article via ORM and verify it appears
+        on the blog listing."""
         _clear_articles()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /studio/articles/
+
+        # Step 1: Verify /studio/articles/new returns 404
+        response = page.goto(
+            f"{django_server}/studio/articles/new",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 404
+
+        # Step 2: Verify the article list no longer has a "New Article" link
         page.goto(
             f"{django_server}/studio/articles/",
             wait_until="domcontentloaded",
         )
-
-        # Step 2: Click the "New Article" link
         new_link = page.locator('a[href="/studio/articles/new"]')
-        assert new_link.count() >= 1
-        new_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
+        assert new_link.count() == 0
 
-        # Then: User arrives at /studio/articles/new
-        assert "/studio/articles/new" in page.url
-        body = page.content()
-        assert "New Article" in body
-
-        # Step 3: Fill in the form
-        page.fill('input[name="title"]', "Test Studio Article")
-        page.fill('input[name="slug"]', "test-studio-article")
-        page.select_option('select[name="status"]', value="published")
-        page.select_option(
-            'select[name="required_level"]', value="0"
+        # Step 3: Create an article via ORM
+        _create_article(
+            "Test Studio Article", "test-studio-article",
+            published=True, required_level=0,
         )
 
-        # Submit the form
-        page.click('button[type="submit"]')
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Redirected to the edit page
-        assert "/studio/articles/" in page.url
-        assert "/edit" in page.url
-
-        # Step 4: Navigate to /blog
+        # Step 4: Navigate to /blog and verify the article appears
         page.goto(
             f"{django_server}/blog",
             wait_until="domcontentloaded",
         )
         body = page.content()
-
-        # Then: The article appears in the blog listing
         assert "Test Studio Article" in body
 # ---------------------------------------------------------------
 # Scenario 5: Staff member edits an article status from published
@@ -472,48 +454,44 @@ class TestScenario5StaffEditsArticleStatus:
 class TestScenario6StaffCreatesCourse:
     """Staff member creates a course with modules and units for structured learning content."""
 
-    def test_create_course_with_module_and_unit(self, django_server, browser):
-        """Given: A user logged in as admin@test.com (is_staff=True)
-        1. Navigate to /studio/courses/new
-        2. Fill in the course title, set status to published, submit
-        Then: User is redirected to the course edit page
-        3. Add a module titled 'Getting Started'
-        Then: The module appears in the course editor
-        4. Add a unit titled 'Welcome Video' to the 'Getting Started' module
-        Then: The unit appears nested under the module
-        5. Navigate to /courses
-        Then: 'Intro to AI Shipping' appears in the public course listing."""
+    def test_course_create_url_removed_and_course_with_modules_visible(self, django_server, browser):
+        """The /studio/courses/new URL has been removed (#152). Verify it
+        returns 404. Then create a course via ORM, add modules and units
+        via the Studio edit page, and verify it appears publicly."""
         _clear_courses()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /studio/courses/new
-        page.goto(
+
+        # Step 1: Verify /studio/courses/new returns 404
+        response = page.goto(
             f"{django_server}/studio/courses/new",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-        assert "New Course" in body
+        assert response.status == 404
 
-        # Step 2: Fill in course details and submit
-        page.fill('input[name="title"]', "Intro to AI Shipping")
-        page.fill('input[name="slug"]', "intro-to-ai-shipping")
-        page.select_option(
-            'select[name="status"]', value="published"
+        # Step 2: Create a course via ORM
+        from content.models import Course
+        from django.db import connection
+
+        course = Course(
+            title="Intro to AI Shipping",
+            slug="intro-to-ai-shipping",
+            status="published",
         )
+        course.save()
+        connection.close()
 
-        page.click('button[type="submit"]')
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Redirected to course edit page
-        assert "/studio/courses/" in page.url
-        assert "/edit" in page.url
+        # Step 3: Navigate to the course edit page and add a module
+        page.goto(
+            f"{django_server}/studio/courses/{course.pk}/edit",
+            wait_until="domcontentloaded",
+        )
         body = page.content()
         assert "Edit Course" in body
 
-        # Step 3: Add a module titled "Getting Started"
         module_input = page.locator(
             'form[action*="/modules/add"] input[name="title"]'
         )
@@ -524,7 +502,6 @@ class TestScenario6StaffCreatesCourse:
         module_submit.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Then: The module appears in the course editor
         body = page.content()
         assert "Getting Started" in body
 
@@ -540,7 +517,6 @@ class TestScenario6StaffCreatesCourse:
         unit_submit.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Then: The unit appears nested under the module
         body = page.content()
         assert "Welcome Video" in body
 

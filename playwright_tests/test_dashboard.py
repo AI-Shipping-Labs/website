@@ -32,6 +32,7 @@ from playwright_tests.conftest import (
     create_user as _create_user,
     create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
+    ensure_site_config_tiers as _ensure_site_config_tiers,
 )
 
 
@@ -320,6 +321,7 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
         Then: The page scrolls to the tiers section showing Free,
               Basic, Main, and Premium options."""
         _ensure_tiers()
+        _ensure_site_config_tiers()
 
         # Step 1: Navigate to /
         response = page.goto(

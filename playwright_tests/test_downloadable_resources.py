@@ -741,68 +741,44 @@ class TestScenario11StaffCreatesDownloadViaStudio:
     """Staff member creates a new download via Studio and it appears
     on the public listing."""
 
-    def test_staff_creates_download_in_studio(self, django_server, browser):
-        """Staff navigates to Studio, clicks 'New Download', fills in
-        the form, submits, and the download appears on the public
-        /downloads listing."""
+    def test_download_create_url_removed_and_download_visible_publicly(self, django_server, browser):
+        """The /studio/downloads/new URL has been removed (#152). Verify
+        it returns 404. Then create a download via ORM and verify it
+        appears on the public /downloads listing."""
         _clear_downloads()
         _create_staff_user("admin@test.com")
 
-        # Step 1: Navigate to /studio/downloads/
+        # Step 1: Verify /studio/downloads/new returns 404
         staff_ctx = _auth_context(browser, "admin@test.com")
         staff_page = staff_ctx.new_page()
+        response = staff_page.goto(
+            f"{django_server}/studio/downloads/new",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 404
+
+        # Step 2: Verify the downloads list no longer has a "New Download" button
         staff_page.goto(
             f"{django_server}/studio/downloads/",
             wait_until="domcontentloaded",
         )
-
         body = staff_page.content()
         assert "Downloads" in body
-
-        # Step 2: Click "New Download"
-        new_btn = staff_page.locator(
-            'a:has-text("New Download")'
-        )
-        assert new_btn.count() >= 1
-        new_btn.first.click()
-        staff_page.wait_for_load_state("domcontentloaded")
-
-        # Step 3: Fill in the form
-        staff_page.fill(
-            'input[name="title"]', "Test Resource"
-        )
-        staff_page.fill(
-            'input[name="file_url"]',
-            "https://example.com/test.pdf",
-        )
-        staff_page.select_option(
-            'select[name="file_type"]', "pdf"
-        )
-        staff_page.select_option(
-            'select[name="required_level"]', "0"
-        )
-        staff_page.check('input[name="published"]')
-
-        # Step 4: Submit the form
-        staff_page.click(
-            'button:has-text("Create Download")'
-        )
-        staff_page.wait_for_load_state("domcontentloaded")
-
-        # Redirected to the edit page for the newly created
-        # download
-        assert "/studio/downloads/" in staff_page.url
-        assert "/edit" in staff_page.url
-
-        # The edit form is pre-populated with "Test Resource"
-        title_input = staff_page.locator(
-            'input[name="title"]'
-        )
-        assert title_input.input_value() == "Test Resource"
-
+        new_btn = staff_page.locator('a:has-text("New Download")')
+        assert new_btn.count() == 0
         staff_ctx.close()
 
-        # Step 5: Navigate to /downloads as anonymous
+        # Step 3: Create a download via ORM
+        _create_download(
+            title="Test Resource",
+            slug="test-resource",
+            file_url="https://example.com/test.pdf",
+            file_type="pdf",
+            required_level=0,
+            published=True,
+        )
+
+        # Step 4: Navigate to /downloads as anonymous and verify
         anon_ctx = browser.new_context(viewport=VIEWPORT)
         anon_page = anon_ctx.new_page()
         anon_page.goto(
@@ -810,7 +786,6 @@ class TestScenario11StaffCreatesDownloadViaStudio:
             wait_until="domcontentloaded",
         )
 
-        # A card for "Test Resource" appears in the listing
         body = anon_page.content()
         assert "Test Resource" in body
         anon_ctx.close()

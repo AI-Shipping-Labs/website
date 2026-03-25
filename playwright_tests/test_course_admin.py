@@ -138,65 +138,47 @@ def _create_unit(
 class TestScenario1StaffCreatesNewCourse:
     """Staff member creates a new course and finds it in the course list."""
 
-    def test_staff_creates_course_and_sees_it_in_list(
+    def test_studio_course_create_url_removed_and_course_appears_in_list(
         self, django_server
     , browser):
-        """A staff user navigates to /studio/courses/, clicks 'New Course',
-        fills in course details, submits the form, and is redirected to the
-        edit page. Navigating back to the list shows the new course with
-        correct status and access level."""
+        """The /studio/courses/new URL has been removed (#152). Verify it
+        returns 404. Then create a course via ORM and confirm it appears
+        in the Studio course list with correct status and access level."""
         _clear_courses()
         _ensure_tiers()
         _create_staff_user("staff@test.com")
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /studio/courses/
+
+        # Step 1: Verify /studio/courses/new returns 404
+        response = page.goto(
+            f"{django_server}/studio/courses/new",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 404
+
+        # Step 2: Verify the course list page no longer has a "New Course" button
         page.goto(
             f"{django_server}/studio/courses/",
             wait_until="domcontentloaded",
         )
         body = page.content()
         assert "Courses" in body
+        new_btn = page.locator('a:has-text("New Course")')
+        assert new_btn.count() == 0
 
-        # Step 2: Click "New Course"
-        new_btn = page.locator(
-            'a:has-text("New Course")'
+        # Step 3: Create a course via ORM and verify it appears in the list
+        _create_course(
+            title="AI Engineering Fundamentals",
+            slug="ai-engineering-fundamentals",
+            description="Learn to build AI apps",
+            instructor_name="Alexey Grigorev",
+            status="draft",
+            required_level=10,
+            tags=["ai", "engineering"],
         )
-        assert new_btn.count() >= 1
-        new_btn.first.click()
-        page.wait_for_load_state("domcontentloaded")
 
-        # Then: User lands on the course creation form at /studio/courses/new
-        assert "/studio/courses/new" in page.url
-        body = page.content()
-        assert "New Course" in body
-
-        # Step 3: Fill in course details
-        page.fill('input[name="title"]', "AI Engineering Fundamentals")
-        page.fill(
-            'textarea[name="description"]',
-            "Learn to build AI apps",
-        )
-        page.fill(
-            'input[name="instructor_name"]',
-            "Alexey Grigorev",
-        )
-        page.select_option('select[name="status"]', "draft")
-        page.select_option('select[name="required_level"]', "10")
-        page.fill('input[name="tags"]', "ai, engineering")
-
-        # Step 4: Submit the form
-        page.click('button:has-text("Create Course")')
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: User is redirected to the course edit page
-        assert "/studio/courses/" in page.url
-        assert "/edit" in page.url
-        body = page.content()
-        assert "Edit Course" in body
-
-        # Step 5: Navigate back to /studio/courses/
         page.goto(
             f"{django_server}/studio/courses/",
             wait_until="domcontentloaded",
@@ -606,9 +588,8 @@ class TestScenario6StaffFiltersByStatus:
         assert "Draft Course" in body
 
         # Step 2: Select "Draft" from the status filter dropdown
-        page.select_option('select[name="status"]', "draft")
-        # The onchange handler submits the form automatically
-        page.wait_for_load_state("domcontentloaded")
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.select_option('select[name="status"]', "draft")
 
         body = page.content()
 
@@ -709,47 +690,36 @@ class TestScenario8StaffCreatesFreeCourse:
     """Staff member creates a free lead-magnet course accessible
     to all members."""
 
-    def test_staff_creates_free_course_visible_on_public_listing(
+    def test_studio_course_create_url_returns_404_and_free_course_visible(
         self, django_server
     , browser):
-        """A staff user creates a free course with 'Free (lead magnet)'
-        checked, publishes it, and verifies it appears on the public
-        /courses listing."""
+        """The /studio/courses/new URL has been removed (#152). Verify it
+        returns 404. Then create a free course via ORM and verify it
+        appears on the public /courses listing."""
         _clear_courses()
         _ensure_tiers()
         _create_staff_user("staff@test.com")
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /studio/courses/new
-        page.goto(
+
+        # Step 1: Verify /studio/courses/new returns 404
+        response = page.goto(
             f"{django_server}/studio/courses/new",
             wait_until="domcontentloaded",
         )
+        assert response.status == 404
 
-        # Step 2: Fill in course title, set level to Free, check is_free
-        page.fill(
-            'input[name="title"]',
-            "Free AI Starter Kit",
-        )
-        page.select_option(
-            'select[name="required_level"]', "0"
-        )
-        page.check('input[name="is_free"]')
-
-        # Set status to Published
-        page.select_option(
-            'select[name="status"]', "published"
+        # Step 2: Create a free course via ORM
+        _create_course(
+            title="Free AI Starter Kit",
+            slug="free-ai-starter-kit",
+            required_level=0,
+            is_free=True,
+            status="published",
         )
 
-        # Step 3: Submit the form
-        page.click('button:has-text("Create Course")')
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Redirected to the edit page
-        assert "/edit" in page.url
-
-        # Step 4: Navigate to /courses (public listing)
+        # Step 3: Navigate to /courses (public listing)
         page.goto(
             f"{django_server}/courses",
             wait_until="domcontentloaded",
@@ -798,17 +768,14 @@ class TestScenario9NonStaffDeniedAccess:
         assert "New Course" not in body
 
         # Step 2: Try to access /studio/courses/new directly
+        # This URL was removed (#152), so it returns 404 for everyone
         response = page.goto(
             f"{django_server}/studio/courses/new",
             wait_until="domcontentloaded",
         )
 
-        # Then: Access is denied again
-        is_redirected = "/accounts/login" in page.url
-        is_forbidden = response.status == 403
-
-        assert is_redirected or is_forbidden, (
-            f"Expected redirect to login or 403, "
+        assert response.status == 404, (
+            f"Expected 404 for removed URL, "
             f"got status={response.status} url={page.url}"
         )
 # ---------------------------------------------------------------
@@ -824,8 +791,8 @@ class TestScenario10EmptyStateCourseList:
         self, django_server
     , browser):
         """With no courses in the system, a staff user sees the
-        'No courses found' message and the 'New Course' button is
-        still visible."""
+        'No courses found' message. The 'New Course' button has been
+        removed since content creation now happens via GitHub sync (#152)."""
         _clear_courses()
         _ensure_tiers()
         _create_staff_user("staff@test.com")
@@ -842,11 +809,11 @@ class TestScenario10EmptyStateCourseList:
         # Then: "No courses found" message is shown
         assert "No courses found" in body
 
-        # Then: "New Course" button is still visible
+        # Then: "New Course" button is no longer present (#152)
         new_course_btn = page.locator(
             'a:has-text("New Course")'
         )
-        assert new_course_btn.count() >= 1
+        assert new_course_btn.count() == 0
 # ---------------------------------------------------------------
 # Scenario 11: Published course with modules and units is
 #               browsable by a member on the public site

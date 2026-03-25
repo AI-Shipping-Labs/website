@@ -24,6 +24,7 @@ from playwright_tests.conftest import (
     create_staff_user as _create_admin_user,
     create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
+    ensure_site_config_tiers as _ensure_site_config_tiers,
 )
 
 
@@ -222,6 +223,7 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
         or Basic. Click the Membership link in the header to navigate
         to the tiers section."""
         _ensure_tiers()
+        _ensure_site_config_tiers()
         _create_user("free@test.com", tier_slug="free")
 
         context = _auth_context(browser, "free@test.com")

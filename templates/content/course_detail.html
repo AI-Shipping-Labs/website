@@ -57,34 +57,12 @@
         </div>
         {% endif %}
 
-        {% if course.discussion_url %}
-        <div class="mt-4">
-          <a href="{{ course.discussion_url }}" target="_blank" rel="noopener noreferrer"
-             class="inline-flex items-center gap-2 text-sm text-accent hover:underline">
-            <i data-lucide="message-circle" class="h-4 w-4"></i>
-            Join the discussion
-          </a>
-        </div>
-        {% endif %}
       </header>
 
       <!-- Description -->
       {% if course.description_html %}
       <div class="prose mb-12">
         {{ course.description_html|safe }}
-      </div>
-      {% endif %}
-
-      <!-- Progress bar (authorized users only) -->
-      {% if has_access and user_authenticated and total_units > 0 %}
-      <div class="mb-8 rounded-lg border border-border bg-card p-6">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-sm font-medium text-foreground">Your Progress</span>
-          <span class="text-sm text-muted-foreground">{{ completed_units }} of {{ total_units }} completed</span>
-        </div>
-        <div class="w-full bg-muted rounded-full h-2.5">
-          <div class="bg-accent h-2.5 rounded-full transition-all" style="width: {{ progress_pct }}%"></div>
-        </div>
       </div>
       {% endif %}
 
@@ -139,40 +117,73 @@
       {% endif %}
 
       <!-- Syllabus -->
+      <style>
+        .module-details > div {
+          overflow: hidden;
+        }
+        .module-details[open] > div {
+          animation: slideDown 0.2s ease-out;
+        }
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .module-details > summary::-webkit-details-marker,
+        .module-details > summary::marker {
+          display: none;
+        }
+      </style>
       <div class="mb-12">
-        <h2 class="text-2xl font-semibold tracking-tight mb-6">Syllabus</h2>
-        {% for module in modules %}
-        <div class="mb-6">
-          <h3 class="text-lg font-medium text-foreground mb-3 flex items-center gap-2">
-            <span class="flex h-7 w-7 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">{{ forloop.counter }}</span>
-            {{ module.title }}
-          </h3>
-          <div class="ml-9 space-y-1">
-            {% for unit in module.units.all %}
-            <div class="flex items-center gap-3 rounded-lg px-3 py-2 {% if has_access %}hover:bg-muted/50{% endif %} transition-colors">
-              {% if unit.pk in completed_unit_ids %}
-              <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
-              {% elif unit.is_preview %}
-              <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-              {% else %}
-              <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-              {% endif %}
-              {% if has_access %}
-              <a href="{{ unit.get_absolute_url }}" class="text-sm text-foreground hover:text-accent transition-colors">
-                {{ unit.title }}
-              </a>
-              {% else %}
-              <span class="text-sm text-muted-foreground">{{ unit.title }}</span>
-              {% endif %}
-              {% if unit.is_preview and not has_access %}
-              <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
-              {% endif %}
+        <h2 class="text-2xl font-semibold tracking-tight mb-4">Syllabus</h2>
+        <div class="space-y-1">
+          {% for module in modules %}
+          <details class="module-details rounded-lg border border-border bg-card">
+            <summary class="cursor-pointer list-none flex items-center gap-3 px-4 py-3 text-base font-medium text-foreground hover:bg-muted/50 transition-colors">
+              <span class="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent flex-shrink-0">{{ forloop.counter }}</span>
+              <span class="flex-1">{{ module.title }}</span>
+              <span class="text-xs text-muted-foreground mr-2">{{ module.units.count }} lessons</span>
+              <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200 module-chevron flex-shrink-0"></i>
+            </summary>
+            <div class="px-4 pb-3 space-y-1">
+              {% for unit in module.units.all %}
+              <div class="flex items-center gap-3 rounded-lg px-3 py-2 {% if has_access %}hover:bg-muted/50{% endif %} transition-colors">
+                {% if unit.pk in completed_unit_ids %}
+                <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+                {% elif unit.is_preview %}
+                <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+                {% else %}
+                <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+                {% endif %}
+                {% if has_access %}
+                <a href="{{ unit.get_absolute_url }}" class="text-sm text-foreground hover:text-accent transition-colors">
+                  {{ unit.title }}
+                </a>
+                {% else %}
+                <span class="text-sm text-muted-foreground">{{ unit.title }}</span>
+                {% endif %}
+                {% if unit.is_preview and not has_access %}
+                <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
+                {% endif %}
+              </div>
+              {% endfor %}
             </div>
-            {% endfor %}
-          </div>
+          </details>
+          {% endfor %}
         </div>
-        {% endfor %}
       </div>
+
+      <!-- Progress bar (authorized users only) -->
+      {% if has_access and user_authenticated and total_units > 0 %}
+      <div class="mb-8 rounded-lg border border-border bg-card p-6">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-foreground">Your Progress</span>
+          <span class="text-sm text-muted-foreground">{{ completed_units }} of {{ total_units }} completed</span>
+        </div>
+        <div class="w-full bg-muted rounded-full h-2.5">
+          <div class="bg-accent h-2.5 rounded-full transition-all" style="width: {{ progress_pct }}%"></div>
+        </div>
+      </div>
+      {% endif %}
 
       <!-- CTA for unauthorized users -->
       {% if cta_message %}
@@ -259,6 +270,24 @@
         });
       });
     });
+  })();
+
+  // Module chevron rotation
+  (function() {
+    document.addEventListener('toggle', function(e) {
+      var details = e.target;
+      if (!details.classList || !details.classList.contains('module-details')) return;
+      var chevron = details.querySelector('.module-chevron');
+      if (!chevron) return;
+      if (details.open) {
+        chevron.classList.add('rotate-180');
+      } else {
+        chevron.classList.remove('rotate-180');
+      }
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    }, true);
   })();
 
   {% if buy_individual %}

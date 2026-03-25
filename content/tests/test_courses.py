@@ -441,10 +441,10 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'python')
         self.assertContains(response, 'ml')
 
-    def test_shows_discussion_link(self):
+    def test_discussion_link_removed(self):
+        """Discussion link removed from course detail page (see #151)."""
         response = self.client.get('/courses/detail-course')
-        self.assertContains(response, 'https://slack.com/channel')
-        self.assertContains(response, 'Join the discussion')
+        self.assertNotContains(response, 'Join the discussion')
 
     def test_shows_syllabus_module_titles(self):
         response = self.client.get('/courses/detail-course')

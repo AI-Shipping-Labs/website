@@ -822,6 +822,9 @@ class TestScenario10NoCohortsSyllabus:
         # Then: No "Next cohort" section is displayed
         assert "Next cohort" not in body
 
+        # Expand the collapsed module so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
         # Then: User can click into individual units
         lesson_link = page.locator(
             'a[href="/courses/llm-engineering/1/1"]'

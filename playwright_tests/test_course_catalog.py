@@ -253,11 +253,11 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert "python" in body
         assert "ai" in body
 
-        # "Join the discussion" link
+        # "Join the discussion" link removed (see #151)
         discussion_link = page.locator(
             'a:has-text("Join the discussion")'
         )
-        assert discussion_link.count() >= 1
+        assert discussion_link.count() == 0
 
         # "Back to Courses" link pointing to /courses
         back_link = page.locator(
@@ -313,6 +313,9 @@ class TestScenario3FreeUserFreeCourseProgress:
             wait_until="domcontentloaded",
         )
         body = page.content()
+
+        # Expand the collapsed module so the links become visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
 
         # All unit titles are clickable links
         variables_link = page.locator(
@@ -419,6 +422,9 @@ class TestScenario4MainMemberPaidCourseProgress:
             wait_until="domcontentloaded",
         )
         body = page.content()
+
+        # Expand the collapsed module so the links become visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
 
         # Both unit titles are clickable links
         docker_link = page.locator(

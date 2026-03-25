@@ -182,6 +182,9 @@ class TestScenario1PremiumMemberWorksThrough:
         body = page.content()
         assert "Advanced AI Patterns" in body
 
+        # Expand the collapsed module so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
         # Step 2: Click on Unit 1 in the syllabus
         page.locator(
             'a:has-text("Unit 1: Intro")'
@@ -287,6 +290,9 @@ class TestScenario2SidebarNavigation:
         # Unit 1 of Module 1 has a checkmark icon in the sidebar
         checkmark = page.locator('nav [data-lucide="check-circle-2"]')
         assert checkmark.count() >= 1, "Expected a check-circle-2 icon for completed unit"
+
+        # Expand all sidebar modules so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.sidebar-module').forEach(d => d.open = true)")
 
         # Step 2: Click on Module 2 unit in the sidebar
         sidebar_m2_link = page.locator(

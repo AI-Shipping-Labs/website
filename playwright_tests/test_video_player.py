@@ -393,6 +393,9 @@ class TestScenario3SelfHostedCourseUnit:
         assert "AI Fundamentals" in page.content()
         assert "Setting Up Your Environment" in page.content()
 
+        # Expand the collapsed module so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
         # Click into the unit
         page.locator(
             'a:has-text("Setting Up Your Environment")'

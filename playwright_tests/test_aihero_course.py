@@ -311,6 +311,9 @@ class TestScenario4FreeMemberDay1ToDay2:
         )
         assert day1_link.count() >= 1
 
+        # Expand the collapsed module so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
         # Step 2: Click on Day 1
         day1_link.first.click()
         page.wait_for_load_state("domcontentloaded")
@@ -408,6 +411,9 @@ class TestScenario6FreeMemberAccessesDay7:
             wait_until="domcontentloaded",
         )
 
+        # Expand the collapsed module so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
         # Click on Day 7
         day7_link = page.locator(
             'a[href="/courses/aihero/0/6"]'
@@ -453,6 +459,9 @@ class TestScenario8BasicMemberAccessesFree:
             wait_until="domcontentloaded",
         )
         body = page.content()
+
+        # Expand the collapsed module so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
 
         # All 7 units accessible
         day4_link = page.locator(

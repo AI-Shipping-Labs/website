@@ -1005,6 +1005,9 @@ class TestScenario9MainMemberNavigatesCourseReadsUnit:
         assert "Upgrade" not in body
         assert "Unlock" not in body
 
+        # Expand the collapsed module so the link becomes visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
         # Click on Lesson One
         unit_link.first.click()
         page.wait_for_load_state("domcontentloaded")

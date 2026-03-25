@@ -174,6 +174,38 @@ class ProjectMarkdownRenderingTest(TestCase):
         self.assertIn('print', project.content_html)
         self.assertIn('<code', project.content_html)
 
+    def test_update_or_create_renders_html(self):
+        """Regression: update_or_create must re-render content_html.
+
+        Django passes update_fields to save(), which would skip content_html
+        unless the save() override adds it.
+        """
+        project, created = Project.objects.update_or_create(
+            slug='uoc-test',
+            source_repo='test/repo',
+            defaults={
+                'title': 'UOC Test',
+                'content_markdown': '# Old',
+                'date': date(2025, 1, 1),
+                'published': True,
+            },
+        )
+        self.assertIn('<h1>Old</h1>', project.content_html)
+
+        project, created = Project.objects.update_or_create(
+            slug='uoc-test',
+            source_repo='test/repo',
+            defaults={
+                'title': 'UOC Test',
+                'content_markdown': '# New version',
+                'date': date(2025, 1, 1),
+                'published': True,
+            },
+        )
+        project.refresh_from_db()
+        self.assertIn('<h1>New version</h1>', project.content_html)
+        self.assertNotIn('Old', project.content_html)
+
 
 # --- Status sync tests ---
 

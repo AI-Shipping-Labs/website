@@ -115,6 +115,18 @@ class Project(models.Model):
         else:
             if self.status != 'pending_review':
                 self.status = 'pending_review'
+
+        # When save() is called with update_fields (e.g. from update_or_create),
+        # ensure derived fields are included so they get written to DB.
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'content_markdown' in update_fields:
+                update_fields.add('content_html')
+            if 'published' in update_fields:
+                update_fields.update(['status', 'published_at'])
+            kwargs['update_fields'] = list(update_fields)
+
         super().save(*args, **kwargs)
 
     def approve(self):

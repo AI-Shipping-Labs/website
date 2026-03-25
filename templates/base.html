@@ -178,8 +178,8 @@
     .prose ul, .prose ol { margin-top: 1rem; margin-left: 1.5rem; color: hsl(var(--muted-foreground)); list-style: disc; }
     .prose ol { list-style: decimal; }
     .prose li { margin: 0.25rem 0; }
-    .prose code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(var(--accent)); }
-    .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; }
+    .prose code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(var(--accent)); font-variant-ligatures: none; }
+    .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; font-variant-ligatures: none; }
     .prose pre code { background: transparent; padding: 0; color: hsl(var(--muted-foreground)); }
     .dark .prose pre code { color: hsl(0 0% 80%); }
     .prose img { border-radius: 0.5rem; border: 1px solid hsl(var(--border)); width: 100%; margin: 1rem 0; }
@@ -194,7 +194,7 @@
     .prose tbody tr:hover { background: hsl(var(--secondary) / 0.5); }
 
     /* Pygments syntax highlighting (monokai theme for dark, github-like for light) */
-    .prose .codehilite { background: #272822; color: #F8F8F2; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); padding: 1rem; margin-top: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; }
+    .prose .codehilite { background: #272822; color: #F8F8F2; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); padding: 1rem; margin-top: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; font-variant-ligatures: none; }
     :root:not(.dark) .prose .codehilite { background: hsl(0 0% 97%); color: hsl(0 0% 20%); }
     .prose .codehilite pre { margin: 0; padding: 0; border: none; background: transparent; }
     .prose .codehilite code { background: transparent; padding: 0; color: inherit; }

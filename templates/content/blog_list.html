@@ -82,7 +82,7 @@
           No posts yet. Check back soon for articles on AI engineering, MLOps, and production systems.
           {% endif %}
         </p>
-        {% if not selected_tags %}
+        {% if not selected_tags and not user.is_authenticated %}
         <a href="/#newsletter" class="mt-4 inline-flex items-center gap-2 text-accent hover:underline">
           Subscribe to get notified
           <i data-lucide="arrow-right" class="h-4 w-4"></i>

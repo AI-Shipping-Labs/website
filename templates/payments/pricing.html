@@ -98,10 +98,16 @@
           <!-- CTA Button -->
           <div class="mt-auto">
             {% if item.tier.slug == 'free' %}
+            {% if user.is_authenticated %}
+            <span class="block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium bg-secondary/50 text-muted-foreground">
+              You're a member
+            </span>
+            {% else %}
             <a href="/#newsletter"
                class="block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80">
               Subscribe
             </a>
+            {% endif %}
             {% else %}
             <a href="{{ item.payment_link_monthly }}"
                class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors cursor-pointer {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"

@@ -43,7 +43,9 @@ def _create_test_users():
     """
     from accounts.models import User
     from payments.models import Tier
+    from playwright_tests.conftest import ensure_tiers
 
+    ensure_tiers()
     tiers = {t.slug: t for t in Tier.objects.all()}
     users = {}
 
@@ -194,11 +196,18 @@ def _create_test_users():
     return users
 
 
-@pytest.fixture(scope="session")
-def test_users(django_server, django_db_setup, django_db_blocker, browser):
-    """Create test users for account page tests."""
+@pytest.fixture
+def test_users(django_server, django_db_blocker):
+    """Create test users for account page tests.
+
+    Function-scoped because transaction=True tests truncate tables
+    between tests, so users must be recreated each time.
+    """
+    from django.db import connection
     with django_db_blocker.unblock():
-        return _create_test_users()
+        users = _create_test_users()
+        connection.close()
+    return users
 
 
 def _auth_context(browser, email, db_blocker):
@@ -237,7 +246,7 @@ def _go_to_account(page, base_url):
 # Scenario: Anonymous visitor is redirected to login
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioAnonymousRedirectToLogin:
     """Anonymous visitor is redirected to login when trying to manage
     their account."""
@@ -271,7 +280,7 @@ class TestScenarioAnonymousRedirectToLogin:
 # Scenario: Free member visits account page
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioFreeMemberAccountPage:
     """Free member visits account page and sees upgrade options."""
 
@@ -345,7 +354,7 @@ class TestScenarioFreeMemberAccountPage:
 # Scenario: Basic member views subscription details
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioBasicMemberSubscription:
     """Basic member views subscription details and explores upgrade
     options."""
@@ -432,7 +441,7 @@ class TestScenarioBasicMemberSubscription:
 # Scenario: Main member initiates a downgrade
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioMainMemberDowngrade:
     """Main member initiates a downgrade to Basic."""
 
@@ -491,7 +500,7 @@ class TestScenarioMainMemberDowngrade:
 # Scenario: Premium member at highest tier
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioPremiumMemberHighestTier:
     """Premium member sees they are at the highest tier."""
 
@@ -526,7 +535,7 @@ class TestScenarioPremiumMemberHighestTier:
 # Scenario: Pending downgrade notice
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioPendingDowngradeNotice:
     """Main member with pending downgrade sees notice."""
 
@@ -574,7 +583,7 @@ class TestScenarioPendingDowngradeNotice:
 # Scenario: Pending cancellation notice
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioPendingCancellationNotice:
     """Main member with pending cancellation sees notice and no
     subscription actions."""
@@ -613,7 +622,7 @@ class TestScenarioPendingCancellationNotice:
 # Scenario: Cancel subscription confirmation
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioCancelSubscriptionConfirmation:
     """Paid member cancels subscription after reading the
     confirmation."""
@@ -669,7 +678,7 @@ class TestScenarioCancelSubscriptionConfirmation:
 # Scenario: Newsletter toggle
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioNewsletterToggle:
     """Free member toggles newsletter subscription off and back on."""
 
@@ -690,6 +699,8 @@ class TestScenarioNewsletterToggle:
         self, django_server, test_users, django_db_blocker
     , browser):
         """Toggle off shows unsubscribed, toggle on shows subscribed."""
+        from playwright.sync_api import expect
+
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
@@ -700,19 +711,24 @@ class TestScenarioNewsletterToggle:
         status = page.locator("#newsletter-status")
 
         # Ensure starting state is subscribed
+        expect(status).to_contain_text("subscribed", timeout=5000)
         if "unsubscribed" in status.inner_text():
             toggle.click()
-            page.wait_for_load_state("domcontentloaded")
+            expect(status).to_contain_text(
+                "You are subscribed to newsletters.", timeout=5000
+            )
 
         # Toggle off
         toggle.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "You are unsubscribed from newsletters." in status.inner_text()
+        expect(status).to_contain_text(
+            "You are unsubscribed from newsletters.", timeout=5000
+        )
 
         # Toggle back on
         toggle.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "You are subscribed to newsletters." in status.inner_text()
+        expect(status).to_contain_text(
+            "You are subscribed to newsletters.", timeout=5000
+        )
         ctx.close()
     def test_newsletter_persists_after_reload(
         self, django_server, test_users, django_db_blocker
@@ -739,7 +755,7 @@ class TestScenarioNewsletterToggle:
 # Scenario: Change password success
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioChangePasswordSuccess:
     """Member changes their password successfully."""
 
@@ -747,6 +763,8 @@ class TestScenarioChangePasswordSuccess:
         self, django_server, test_users, django_db_blocker
     , browser):
         """Success message appears and form fields are cleared."""
+        from playwright.sync_api import expect
+
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
@@ -757,10 +775,9 @@ class TestScenarioChangePasswordSuccess:
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
         page.click("#change-password-form button[type='submit']")
-        page.wait_for_load_state("domcontentloaded")
 
         success = page.locator("#password-success")
-        assert success.is_visible()
+        expect(success).to_be_visible(timeout=5000)
         assert "password" in success.inner_text().lower()
 
         assert page.locator("#current-password").input_value() == ""
@@ -772,12 +789,15 @@ class TestScenarioChangePasswordSuccess:
         page.fill("#new-password", DEFAULT_PASSWORD)
         page.fill("#confirm-new-password", DEFAULT_PASSWORD)
         page.click("#change-password-form button[type='submit']")
+        expect(success).to_be_visible(timeout=5000)
         ctx.close()
     def test_new_password_works_after_change(
         self, django_server, test_users, django_db_blocker
     , browser):
         """After changing password, a new session can be created
         (verifying the password hash updated)."""
+        from playwright.sync_api import expect
+
         # Change to new password
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
@@ -789,8 +809,7 @@ class TestScenarioChangePasswordSuccess:
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
         page.click("#change-password-form button[type='submit']")
-        page.wait_for_load_state("domcontentloaded")
-        assert page.locator("#password-success").is_visible()
+        expect(page.locator("#password-success")).to_be_visible(timeout=5000)
         ctx.close()
 
         # Verify new session works
@@ -812,13 +831,13 @@ class TestScenarioChangePasswordSuccess:
         page3.fill("#new-password", DEFAULT_PASSWORD)
         page3.fill("#confirm-new-password", DEFAULT_PASSWORD)
         page3.click("#change-password-form button[type='submit']")
-        page3.wait_for_load_state("domcontentloaded")
+        expect(page3.locator("#password-success")).to_be_visible(timeout=5000)
         ctx3.close()
 # ---------------------------------------------------------------
 # Scenario: Change password error
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioChangePasswordError:
     """Member enters wrong current password and sees an error."""
 
@@ -826,6 +845,8 @@ class TestScenarioChangePasswordError:
         self, django_server, test_users, django_db_blocker
     , browser):
         """Wrong current password shows error, no success."""
+        from playwright.sync_api import expect
+
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
@@ -836,15 +857,16 @@ class TestScenarioChangePasswordError:
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
         page.click("#change-password-form button[type='submit']")
-        page.wait_for_load_state("domcontentloaded")
 
-        assert page.locator("#password-error").is_visible()
+        expect(page.locator("#password-error")).to_be_visible(timeout=5000)
         assert page.locator("#password-success").is_hidden()
         ctx.close()
     def test_old_password_still_works_after_failed_change(
         self, django_server, test_users, django_db_blocker
     , browser):
         """After failed change, old password still works."""
+        from playwright.sync_api import expect
+
         # Attempt failed change
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
@@ -856,8 +878,7 @@ class TestScenarioChangePasswordError:
         page.fill("#new-password", "NewSecure456!")
         page.fill("#confirm-new-password", "NewSecure456!")
         page.click("#change-password-form button[type='submit']")
-        page.wait_for_load_state("domcontentloaded")
-        assert page.locator("#password-error").is_visible()
+        expect(page.locator("#password-error")).to_be_visible(timeout=5000)
         ctx.close()
 
         # Verify old password works (create new session)
@@ -872,7 +893,7 @@ class TestScenarioChangePasswordError:
 # Scenario: Email verification banner
 # ---------------------------------------------------------------
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestScenarioEmailVerificationBanner:
     """Member who has not verified their email sees verification
     banner."""

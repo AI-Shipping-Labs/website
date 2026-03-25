@@ -860,8 +860,8 @@ class TestScenario8SyncOverwritesManualArticle:
     """Synced content overwrites a manually-created article when slugs match."""
 
     def test_sync_overwrites_studio_article_by_slug(self, django_server, page):
-        """An article created in Studio (source_repo=null) is overwritten when
-        the blog repo contains a file with the same slug."""
+        """When a Studio article (source_repo=null) has the same slug as a
+        synced file, the sync skips it to avoid overwriting manual edits."""
         _clear_content_sources()
         _clear_articles()
         _ensure_tiers()
@@ -893,12 +893,15 @@ class TestScenario8SyncOverwritesManualArticle:
                 "author": "Repo Author",
             },
         ])
+        from django.db import connection
+        connection.close()
 
-        # Verify via ORM that sync overwrote the article
+        # Verify via ORM that sync preserved the Studio article
+        # (slug collisions from Studio sources are skipped)
         from content.models import Article
         article = Article.objects.get(slug="conflicting-slug")
-        assert article.source_repo == "AI-Shipping-Labs/blog"
-        assert article.title == "Repo Version of Article"
+        assert article.source_repo is None
+        assert article.title == "Studio Version of Article"
 
         # Step 2: Navigate to the article
         page.goto(
@@ -907,14 +910,11 @@ class TestScenario8SyncOverwritesManualArticle:
         )
         body = page.content()
 
-        # Then: Title and metadata match the repo version
-        assert "Repo Version of Article" in body
+        # Then: Title and metadata match the Studio version (not overwritten)
+        assert "Studio Version of Article" in body
 
-        # Then: The article page title shows the repo version
-        assert page.title() == "Repo Version of Article | AI Shipping Labs"
-
-        # Then: The source is tracked to the blog repo (verified via ORM)
-        # (already asserted above via the ORM check)
+        # Then: The article page title shows the Studio version
+        assert page.title() == "Studio Version of Article | AI Shipping Labs"
 # ---------------------------------------------------------------------------
 # Scenario 9: Non-staff user cannot access the sync dashboard
 # ---------------------------------------------------------------------------

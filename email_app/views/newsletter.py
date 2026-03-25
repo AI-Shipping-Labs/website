@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 logger = logging.getLogger(__name__)
@@ -221,6 +222,7 @@ def unsubscribe_api(request):
     )
 
 
+@ensure_csrf_cookie
 def subscribe_page(request):
     """Render the dedicated /subscribe page with the subscribe form."""
     return render(request, "email_app/subscribe.html")

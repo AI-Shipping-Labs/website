@@ -793,7 +793,6 @@ class TestScenario9AnonymousVisitorPromptedToSignIn:
         _create_option(poll, "Option X")
         _create_option(poll, "Option Y")
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /vote
         page.goto(
             f"{django_server}/vote",

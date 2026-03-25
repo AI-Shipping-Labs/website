@@ -151,7 +151,6 @@ class TestScenario1SubscribeFromDedicatedPage:
         Then: The form is available for another visitor."""
         _ensure_tiers()
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /subscribe
         page.goto(
             f"{django_server}/subscribe",
@@ -220,7 +219,6 @@ class TestScenario2SubscribeFromHomepageNewsletter:
         Then: The visitor remains on the homepage (no redirect)."""
         _ensure_tiers()
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /
         page.goto(
             f"{django_server}/",
@@ -278,7 +276,6 @@ class TestScenario3SubscribeFromFooter:
         Then: The visitor remains on /blog (no page navigation)."""
         _ensure_tiers()
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /blog
         page.goto(
             f"{django_server}/blog",
@@ -340,7 +337,6 @@ class TestScenario4NoInformationLeak:
             email_verified=False,
         )
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /subscribe
         page.goto(
             f"{django_server}/subscribe",
@@ -406,7 +402,6 @@ class TestScenario5DoubleOptInVerification:
         # Step 1 & 2: Generate token and visit verification link
         token = _make_verification_token(user.pk)
 
-        context = _anon_context(browser)
         response = page.goto(
             f"{django_server}/api/verify-email?token={token}",
             wait_until="domcontentloaded",
@@ -542,7 +537,7 @@ class TestScenario7LeadMagnetSubscribeFlow:
         )
     def test_lead_magnet_verification_redirects_to_download(
         self, django_server
-    ):
+    , page):
         """After signing up and verifying email via lead magnet flow,
         the subscriber is redirected to the download file URL."""
         _ensure_tiers()
@@ -844,7 +839,6 @@ class TestScenario11InvalidEmailError:
         2. Verify the email field is required (browser validation)."""
         _ensure_tiers()
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /subscribe
         page.goto(
             f"{django_server}/subscribe",
@@ -917,7 +911,6 @@ class TestScenario12DiscoverSubscribeFromPricing:
               homepage (/#newsletter) or /subscribe."""
         _ensure_tiers()
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /pricing
         page.goto(
             f"{django_server}/pricing",

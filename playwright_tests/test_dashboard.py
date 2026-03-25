@@ -304,7 +304,6 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
               Basic, Main, and Premium options."""
         _ensure_tiers()
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /
         response = page.goto(
             f"{django_server}/",

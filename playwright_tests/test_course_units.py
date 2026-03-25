@@ -210,12 +210,11 @@ class TestScenario1PremiumMemberWorksThrough:
         assert complete_btn.is_visible()
         assert "Mark as completed" in complete_btn.inner_text()
 
+        from playwright.sync_api import expect
         complete_btn.click()
-        page.wait_for_load_state("domcontentloaded")
 
-        # Button changes to "Completed"
-        btn_text = complete_btn.inner_text()
-        assert "Completed" in btn_text
+        # Button changes to "Completed" (wait for AJAX)
+        expect(complete_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 4: Click the "Next" button to proceed to Unit 2
         next_btn = page.locator(
@@ -562,20 +561,17 @@ class TestScenario6ToggleCompletion:
         assert "Mark as completed" in complete_btn.inner_text()
 
         # Step 2: Click "Mark as completed"
+        from playwright.sync_api import expect as pw_expect
         complete_btn.click()
-        page.wait_for_load_state("domcontentloaded")
 
-        # Button changes to "Completed"
-        btn_text = complete_btn.inner_text()
-        assert "Completed" in btn_text
+        # Button changes to "Completed" (wait for AJAX)
+        pw_expect(complete_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 3: Click "Completed" to undo
         complete_btn.click()
-        page.wait_for_load_state("domcontentloaded")
 
         # Button reverts to "Mark as completed"
-        btn_text = complete_btn.inner_text()
-        assert "Mark as completed" in btn_text
+        pw_expect(complete_btn).to_contain_text("Mark as completed", timeout=5000)
 
         context.close()
 # ---------------------------------------------------------------

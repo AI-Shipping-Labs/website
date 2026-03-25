@@ -35,12 +35,94 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
 def _ensure_aihero_course():
-    """Ensure the AI Hero course exists by running seed_data if needed."""
-    from content.models import Course
+    """Ensure the AI Hero course exists with 7 day-units.
 
-    if not Course.objects.filter(slug="aihero").exists():
-        from django.core.management import call_command
-        call_command("seed_data", verbosity=0)
+    Creates the course, one module, and seven units directly via ORM.
+    Closes the database connection afterward to release SQLite locks
+    so the server thread can read the newly created data.
+    """
+    from content.models import Course, Module, Unit
+    from django.db import connection
+
+    if Course.objects.filter(slug="aihero").exists():
+        connection.close()
+        return
+
+    course = Course.objects.create(
+        title="7-Day AI Agents Email Crash-Course",
+        slug="aihero",
+        description=(
+            "Build a Production-Ready AI Agent in 7 days. "
+            "Prerequisites: Python basics. "
+            "Certificate of completion available."
+        ),
+        status="published",
+        required_level=0,
+        is_free=True,
+        instructor_name="Alexey Grigorev",
+        instructor_bio="Principal Data Scientist",
+    )
+    module = Module.objects.create(
+        course=course,
+        title="7-Day AI Agents",
+        sort_order=0,
+    )
+    days = [
+        (
+            "Day 1: Ingest and Index Your Data",
+            True,
+            "Learn to extract data from GitHub repositories and index it.",
+            "Fork the GitHub repo and run the ingestion pipeline.",
+        ),
+        (
+            "Day 2: Intelligent Processing for Data",
+            False,
+            "Chunk and process your data intelligently.",
+            "Implement chunking strategies for your data.",
+        ),
+        (
+            "Day 3: Add Search",
+            False,
+            "Add text and vector search capabilities.",
+            "Build a search endpoint for your indexed data.",
+        ),
+        (
+            "Day 4: Agents and Tools",
+            False,
+            "Build agents with Function Calling and tool use using Pydantic AI.",
+            "Create an agent with at least two tools.",
+        ),
+        (
+            "Day 5: Offline Evaluation and Testing",
+            False,
+            "Evaluate your agent with automated tests.",
+            "Write evaluation scripts for your agent.",
+        ),
+        (
+            "Day 6: Publish Your Agent",
+            False,
+            "Deploy your agent and make it accessible.",
+            "Deploy to a cloud platform and share the URL.",
+        ),
+        (
+            "Day 7: Share Results and Peer Review",
+            False,
+            "Submit your project README and review peers' work.",
+            "Submit your project and review three peers.",
+        ),
+    ]
+    for i, (title, is_preview, body_text, hw_text) in enumerate(days):
+        Unit.objects.create(
+            module=module,
+            title=title,
+            sort_order=i,
+            is_preview=is_preview,
+            body=f"# {title}\n\n{body_text}",
+            body_html=f"<h1>{title}</h1><p>{body_text}</p>",
+            homework=hw_text,
+            homework_html=f"<p>{hw_text}</p>",
+        )
+    connection.close()
 
 
 def _mark_unit_completed(user, unit):
@@ -242,13 +324,13 @@ class TestScenario4FreeMemberDay1ToDay2:
         assert "Homework" in body or "homework" in body.lower()
 
         # Step 3: Mark Day 1 as completed
+        from playwright.sync_api import expect
         mark_btn = page.locator("#mark-complete-btn")
         assert mark_btn.count() >= 1
         mark_btn.click()
-        page.wait_for_load_state("domcontentloaded")
 
-        # Button changes to Completed
-        assert "Completed" in mark_btn.inner_text()
+        # Button changes to Completed (wait for AJAX response to update DOM)
+        expect(mark_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 4: Click Next to proceed to Day 2
         next_btn = page.locator('a:has-text("Next:")')

@@ -212,7 +212,7 @@ class TestScenario2AnonymousRedirectedToLogin:
         # CSRF cookie). We verify that once authenticated, the user
         # can access the Studio dashboard.
         session_key = _create_session_for_user("staff-anon@test.com")
-        context.add_cookies([
+        page.context.add_cookies([
             {
                 "name": "sessionid",
                 "value": session_key,

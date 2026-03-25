@@ -626,10 +626,9 @@ class TestScenario7DripUnlockedUnit:
         assert mark_btn.count() >= 1
         assert "Mark as completed" in mark_btn.inner_text()
 
+        from playwright.sync_api import expect
         mark_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        assert "Completed" in mark_btn.inner_text()
+        expect(mark_btn).to_contain_text("Completed", timeout=5000)
 # ---------------------------------------------------------------
 # Scenario 8: Non-cohort member accesses a drip-scheduled unit
 #              without restriction
@@ -696,9 +695,9 @@ class TestScenario8NonCohortMemberAccessesDripUnit:
         assert mark_btn.count() >= 1
         assert "Mark as completed" in mark_btn.inner_text()
 
+        from playwright.sync_api import expect as pw_expect
         mark_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "Completed" in mark_btn.inner_text()
+        pw_expect(mark_btn).to_contain_text("Completed", timeout=5000)
 
         # Then: Can navigate to the next unit
         next_btn = page.locator('a:has-text("Next:")')

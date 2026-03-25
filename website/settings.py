@@ -99,8 +99,23 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 30,
+        },
     }
 }
+
+
+# Enable WAL mode for SQLite to improve concurrency (needed for Playwright E2E
+# tests where the dev server and test process access the same database).
+def _enable_wal_mode(sender, connection, **kwargs):
+    if connection.vendor == 'sqlite':
+        cursor = connection.cursor()
+        cursor.execute('PRAGMA journal_mode=WAL;')
+
+
+from django.db.backends.signals import connection_created  # noqa: E402
+connection_created.connect(_enable_wal_mode)
 
 
 # Password validation

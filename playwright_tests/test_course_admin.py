@@ -611,8 +611,8 @@ class TestScenario6StaffFiltersByStatus:
         assert "Published Course" not in table_text
 
         # Step 3: Select "All statuses" to clear the filter
-        page.select_option('select[name="status"]', "")
-        page.wait_for_load_state("domcontentloaded")
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.select_option('select[name="status"]', "")
 
         body = page.content()
 

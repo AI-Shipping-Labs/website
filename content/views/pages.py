@@ -1,5 +1,6 @@
 from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import build_gating_context, can_access, get_required_tier_name
 from content.models import Article, Recording, Project, Tutorial, CuratedLink, Download, TagRule
@@ -91,6 +92,7 @@ def activities(request):
     return render(request, 'content/activities.html', context)
 
 
+@ensure_csrf_cookie
 def blog_list(request):
     """Blog listing page with optional tag filtering."""
     articles = Article.objects.filter(published=True, page_type='blog')

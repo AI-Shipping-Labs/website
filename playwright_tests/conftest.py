@@ -117,7 +117,12 @@ DEFAULT_PASSWORD = "TestPass123!"
 
 
 def ensure_tiers():
-    """Ensure membership tiers exist in the database."""
+    """Ensure membership tiers exist in the database.
+
+    Closes the database connection afterward to release SQLite locks
+    so the server thread can access the tiers table.
+    """
+    from django.db import connection
     from payments.models import Tier
 
     TIERS = [
@@ -130,6 +135,7 @@ def ensure_tiers():
         Tier.objects.get_or_create(
             slug=tier_data["slug"], defaults=tier_data
         )
+    connection.close()
 
 
 def create_user(
@@ -142,6 +148,7 @@ def create_user(
     first_name="",
 ):
     """Create a user with the given tier and options."""
+    from django.db import connection
     from accounts.models import User
     from payments.models import Tier
 
@@ -159,11 +166,13 @@ def create_user(
     if first_name:
         user.first_name = first_name
     user.save()
+    connection.close()
     return user
 
 
 def create_staff_user(email="admin@test.com", password=DEFAULT_PASSWORD):
     """Create a staff/superuser for admin and studio tests."""
+    from django.db import connection
     from accounts.models import User
 
     ensure_tiers()
@@ -180,17 +189,25 @@ def create_staff_user(email="admin@test.com", password=DEFAULT_PASSWORD):
     user.is_superuser = True
     user.email_verified = True
     user.save()
+    connection.close()
     return user
 
 
 def create_session_for_user(email):
-    """Create a Django session for the given user and return the session key."""
+    """Create a Django session for the given user and return the session key.
+
+    Closes the database connection after creating the session to release
+    any SQLite locks held by the test thread. This prevents
+    ``database table is locked`` errors when the Django server thread
+    (running in the same process) tries to read the session.
+    """
     from django.contrib.sessions.backends.db import SessionStore
     from django.contrib.auth import (
         SESSION_KEY,
         BACKEND_SESSION_KEY,
         HASH_SESSION_KEY,
     )
+    from django.db import connection
     from accounts.models import User
 
     user = User.objects.get(email=email)
@@ -201,7 +218,11 @@ def create_session_for_user(email):
     )
     session[HASH_SESSION_KEY] = user.get_session_auth_hash()
     session.create()
-    return session.session_key
+    session_key = session.session_key
+    # Close the connection to release any SQLite locks before the
+    # server thread tries to access the same tables.
+    connection.close()
+    return session_key
 
 
 def auth_context(browser, email):

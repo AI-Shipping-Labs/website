@@ -836,7 +836,6 @@ class TestScenario7AnonymousRedirectedToLogin:
         """
         _ensure_tiers()
 
-        context = _anon_context(browser)
         # Step 1: Navigate to /notifications
         page.goto(
             f"{django_server}/notifications",

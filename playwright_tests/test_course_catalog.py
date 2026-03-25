@@ -353,12 +353,11 @@ class TestScenario3FreeUserFreeCourseProgress:
         assert "Mark as completed" in mark_btn.inner_text()
 
         # Step 3: Click "Mark as completed"
+        from playwright.sync_api import expect
         mark_btn.click()
-        # Wait for the fetch to complete
-        page.wait_for_load_state("domcontentloaded")
 
-        # Button changes to "Completed"
-        assert "Completed" in mark_btn.inner_text()
+        # Button changes to "Completed" (wait for AJAX)
+        expect(mark_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 4: Navigate back to course detail
         page.goto(
@@ -453,13 +452,13 @@ class TestScenario4MainMemberPaidCourseProgress:
         assert "Kubernetes Setup" in sidebar_text
 
         # Step 3: Click "Mark as completed"
+        from playwright.sync_api import expect as pw_expect
         mark_btn = page.locator("#mark-complete-btn")
         assert "Mark as completed" in mark_btn.inner_text()
         mark_btn.click()
-        page.wait_for_load_state("domcontentloaded")
 
-        # Button changes to "Completed" with green checkmark
-        assert "Completed" in mark_btn.inner_text()
+        # Button changes to "Completed" with green checkmark (wait for AJAX)
+        pw_expect(mark_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 4: Click the "Next" button to go to second unit
         next_btn = page.locator('a:has-text("Next:")')
@@ -482,8 +481,7 @@ class TestScenario4MainMemberPaidCourseProgress:
         # Step 5: Mark second unit as completed
         mark_btn = page.locator("#mark-complete-btn")
         mark_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "Completed" in mark_btn.inner_text()
+        pw_expect(mark_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 6: Navigate back to course detail
         page.goto(

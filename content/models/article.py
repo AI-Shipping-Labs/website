@@ -41,6 +41,10 @@ PAGE_TYPE_CHOICES = [
 
 class Article(models.Model):
     """Blog article / post."""
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text="Stable UUID from frontmatter for linking user-generated data.",
+    )
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, unique=True)
     description = models.TextField(blank=True, default='')
@@ -129,6 +133,17 @@ class Article(models.Model):
                 self.published_at = timezone.now()
         else:
             self.status = 'draft'
+
+        # When save() is called with update_fields (e.g. from update_or_create),
+        # ensure derived fields are included so they get written to DB.
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'content_markdown' in update_fields:
+                update_fields.update(['content_html', 'reading_time'])
+            if 'published' in update_fields:
+                update_fields.update(['status', 'published_at'])
+            kwargs['update_fields'] = list(update_fields)
 
         super().save(*args, **kwargs)
 

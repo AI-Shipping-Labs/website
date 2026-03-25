@@ -243,6 +243,15 @@ def _get_next_unit(course, current_unit):
     return None
 
 
+def _get_prev_unit(course, current_unit):
+    """Find the previous unit in sort order (across module boundaries)."""
+    all_units = _get_all_units_ordered(course)
+    for i, u in enumerate(all_units):
+        if u.pk == current_unit.pk and i > 0:
+            return all_units[i - 1]
+    return None
+
+
 def course_unit_detail(request, slug, module_sort, unit_sort):
     """Unit page: gated by tier level, except for preview units.
 
@@ -326,8 +335,9 @@ def course_unit_detail(request, slug, module_sort, unit_sort):
         )
         is_completed = unit.pk in completed_unit_ids
 
-    # Next unit
+    # Next / previous unit
     next_unit = _get_next_unit(course, unit)
+    prev_unit = _get_prev_unit(course, unit)
 
     context = {
         'course': course,
@@ -339,7 +349,9 @@ def course_unit_detail(request, slug, module_sort, unit_sort):
         'completed_unit_ids': completed_unit_ids,
         'is_completed': is_completed,
         'next_unit': next_unit,
+        'prev_unit': prev_unit,
         'user_authenticated': user.is_authenticated,
+        'unit_content_id': str(unit.content_id) if unit.content_id else '',
     }
     return render(request, 'content/course_unit_detail.html', context)
 

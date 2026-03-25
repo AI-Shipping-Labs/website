@@ -103,6 +103,32 @@
             <span class="text-foreground">{{ unit.title }}</span>
           </div>
 
+          {% if prev_unit or next_unit %}
+          <!-- Top navigation row -->
+          <div class="mb-6 flex items-center justify-between text-sm" data-testid="top-nav-row">
+            {% if prev_unit %}
+            <a href="{{ prev_unit.get_absolute_url }}"
+               class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+               data-testid="top-prev-btn">
+              <i data-lucide="arrow-left" class="h-4 w-4"></i>
+              {{ prev_unit.title }}
+            </a>
+            {% else %}
+            <span></span>
+            {% endif %}
+            {% if next_unit %}
+            <a href="{{ next_unit.get_absolute_url }}"
+               class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+               data-testid="top-next-btn">
+              {{ next_unit.title }}
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            {% else %}
+            <span></span>
+            {% endif %}
+          </div>
+          {% endif %}
+
           <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl mb-8">{{ unit.title }}</h1>
 
           <!-- Video Player -->
@@ -132,8 +158,51 @@
           </div>
           {% endif %}
 
-          <!-- Mark as completed + Next unit -->
+          <!-- Q&A Section -->
+          {% if unit_content_id %}
+          <div class="mb-12" id="qa-section" data-content-id="{{ unit_content_id }}">
+            <h2 class="mb-6 flex items-center gap-2 text-xl font-semibold tracking-tight">
+              <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
+              Questions &amp; Answers (<span id="qa-count">0</span>)
+            </h2>
+
+            {% if user_authenticated %}
+            <div class="mb-8">
+              <textarea
+                id="qa-new-question"
+                rows="3"
+                placeholder="Ask a question about this lesson..."
+                class="w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              ></textarea>
+              <button
+                type="button"
+                id="qa-post-btn"
+                class="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+              >
+                Post Question
+              </button>
+            </div>
+            {% else %}
+            <div class="mb-8 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
+              <a href="/accounts/login/" class="text-accent hover:underline">Sign in</a> to ask questions
+            </div>
+            {% endif %}
+
+            <div id="qa-list"></div>
+          </div>
+          {% endif %}
+
+          <!-- Mark as completed + Previous/Next unit -->
           <div class="flex flex-col sm:flex-row items-center gap-4 border-t border-border pt-8 mt-8">
+            {% if prev_unit %}
+            <a href="{{ prev_unit.get_absolute_url }}"
+               class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+               data-testid="bottom-prev-btn">
+              <i data-lucide="arrow-left" class="h-4 w-4"></i>
+              &larr; {{ prev_unit.title }}
+            </a>
+            {% endif %}
+
             {% if user_authenticated %}
             <button
               type="button"
@@ -155,7 +224,8 @@
 
             {% if next_unit %}
             <a href="{{ next_unit.get_absolute_url }}"
-               class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto">
+               class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto"
+               data-testid="bottom-next-btn">
               Next: {{ next_unit.title }}
               <i data-lucide="arrow-right" class="h-4 w-4"></i>
             </a>
@@ -216,6 +286,198 @@
       }
       return '';
     }
+  })();
+
+  // Q&A Section
+  (function() {
+    var section = document.getElementById('qa-section');
+    if (!section) return;
+
+    var contentId = section.dataset.contentId;
+    var listEl = document.getElementById('qa-list');
+    var countEl = document.getElementById('qa-count');
+    var postBtn = document.getElementById('qa-post-btn');
+    var textarea = document.getElementById('qa-new-question');
+
+    function getCsrfToken() {
+      var cookies = document.cookie.split(';');
+      for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i].trim();
+        if (cookie.startsWith('csrftoken=')) return cookie.substring('csrftoken='.length);
+      }
+      return '';
+    }
+
+    function relativeTime(isoStr) {
+      var date = new Date(isoStr);
+      var now = new Date();
+      var diff = Math.floor((now - date) / 1000);
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff / 60) + ' minutes ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
+      if (diff < 2592000) return Math.floor(diff / 86400) + ' days ago';
+      return date.toLocaleDateString();
+    }
+
+    function escapeHtml(text) {
+      var div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function renderComment(comment) {
+      var votedClass = comment.user_voted
+        ? 'text-accent'
+        : 'text-muted-foreground hover:text-foreground';
+      var votedFill = comment.user_voted ? 'fill-current' : '';
+
+      var repliesHtml = '';
+      if (comment.replies && comment.replies.length > 0) {
+        repliesHtml = '<div class="ml-8 mt-4 space-y-3">';
+        for (var i = 0; i < comment.replies.length; i++) {
+          var r = comment.replies[i];
+          repliesHtml += '<div class="rounded-lg border border-border bg-muted/30 p-3">' +
+            '<div class="mb-1 flex items-center gap-2 text-xs text-muted-foreground">' +
+              '<span class="font-medium text-foreground">' + escapeHtml(r.user_name) + '</span>' +
+              '<span>' + relativeTime(r.created_at) + '</span>' +
+            '</div>' +
+            '<p class="text-sm text-foreground">' + escapeHtml(r.body) + '</p>' +
+          '</div>';
+        }
+        repliesHtml += '</div>';
+      }
+
+      return '<div class="mb-4 rounded-lg border border-border bg-card p-4" data-comment-id="' + comment.id + '">' +
+        '<div class="flex gap-3">' +
+          '<div class="flex flex-col items-center gap-1">' +
+            '<button class="qa-vote-btn transition-colors ' + votedClass + '" data-comment-id="' + comment.id + '" title="Upvote">' +
+              '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="' + votedFill + '"><path d="M12 19V5M5 12l7-7 7 7"/></svg>' +
+            '</button>' +
+            '<span class="qa-vote-count text-sm font-medium">' + comment.vote_count + '</span>' +
+          '</div>' +
+          '<div class="flex-1 min-w-0">' +
+            '<div class="mb-1 flex items-center gap-2 text-xs text-muted-foreground">' +
+              '<span class="font-medium text-foreground">' + escapeHtml(comment.user_name) + '</span>' +
+              '<span>' + relativeTime(comment.created_at) + '</span>' +
+            '</div>' +
+            '<p class="text-sm text-foreground mb-2">' + escapeHtml(comment.body) + '</p>' +
+            '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>' +
+            '<div class="qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
+              '<textarea rows="2" placeholder="Write a reply..." class="w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
+              '<button class="qa-reply-btn mt-1 inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-comment-id="' + comment.id + '">Post Reply</button>' +
+            '</div>' +
+            repliesHtml +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function loadComments() {
+      fetch('/api/comments/' + contentId, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var comments = data.comments || [];
+          countEl.textContent = comments.length;
+          if (comments.length === 0) {
+            listEl.innerHTML = '';
+            return;
+          }
+          var html = '';
+          for (var i = 0; i < comments.length; i++) {
+            html += renderComment(comments[i]);
+          }
+          listEl.innerHTML = html;
+          bindEvents();
+        });
+    }
+
+    function bindEvents() {
+      // Vote buttons
+      var voteBtns = listEl.querySelectorAll('.qa-vote-btn');
+      for (var i = 0; i < voteBtns.length; i++) {
+        voteBtns[i].addEventListener('click', function() {
+          var cid = this.dataset.commentId;
+          var btn = this;
+          fetch('/api/comments/' + cid + '/vote', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.error) return;
+            var card = btn.closest('[data-comment-id]');
+            var countSpan = card.querySelector('.qa-vote-count');
+            countSpan.textContent = data.vote_count;
+            var svg = btn.querySelector('svg');
+            if (data.voted) {
+              btn.className = 'qa-vote-btn transition-colors text-accent';
+              svg.classList.add('fill-current');
+            } else {
+              btn.className = 'qa-vote-btn transition-colors text-muted-foreground hover:text-foreground';
+              svg.classList.remove('fill-current');
+            }
+          });
+        });
+      }
+
+      // Reply toggles
+      var replyToggles = listEl.querySelectorAll('.qa-reply-toggle');
+      for (var i = 0; i < replyToggles.length; i++) {
+        replyToggles[i].addEventListener('click', function() {
+          var cid = this.dataset.commentId;
+          var form = listEl.querySelector('.qa-reply-form[data-comment-id="' + cid + '"]');
+          form.classList.toggle('hidden');
+        });
+      }
+
+      // Reply submit buttons
+      var replyBtns = listEl.querySelectorAll('.qa-reply-btn');
+      for (var i = 0; i < replyBtns.length; i++) {
+        replyBtns[i].addEventListener('click', function() {
+          var cid = this.dataset.commentId;
+          var form = listEl.querySelector('.qa-reply-form[data-comment-id="' + cid + '"]');
+          var ta = form.querySelector('textarea');
+          var body = ta.value.trim();
+          if (!body) return;
+          fetch('/api/comments/' + cid + '/reply', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ body: body }),
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.error) return;
+            ta.value = '';
+            form.classList.add('hidden');
+            loadComments();
+          });
+        });
+      }
+    }
+
+    // Post new question
+    if (postBtn) {
+      postBtn.addEventListener('click', function() {
+        var body = textarea.value.trim();
+        if (!body) return;
+        fetch('/api/comments/' + contentId, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ body: body }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) return;
+          textarea.value = '';
+          loadComments();
+        });
+      });
+    }
+
+    loadComments();
   })();
 </script>
 {% endblock %}

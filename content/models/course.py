@@ -35,6 +35,10 @@ STATUS_CHOICES = [
 class Course(models.Model):
     """Structured course: Course -> Modules -> Units."""
 
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text="Stable UUID from frontmatter for linking user-generated data.",
+    )
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, unique=True)
     description = models.TextField(
@@ -192,6 +196,10 @@ class Module(models.Model):
 class Unit(models.Model):
     """A single lesson unit within a module."""
 
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text="Stable UUID from frontmatter for linking user-generated data.",
+    )
     module = models.ForeignKey(
         Module, on_delete=models.CASCADE, related_name='units',
     )
@@ -254,6 +262,16 @@ class Unit(models.Model):
             self.body_html = render_markdown(self.body)
         if self.homework:
             self.homework_html = render_markdown(self.homework)
+        # When save() is called with update_fields (e.g. from update_or_create),
+        # ensure rendered HTML fields are included so they get written to DB.
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'body' in update_fields:
+                update_fields.add('body_html')
+            if 'homework' in update_fields:
+                update_fields.add('homework_html')
+            kwargs['update_fields'] = list(update_fields)
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):

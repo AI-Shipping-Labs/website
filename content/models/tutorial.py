@@ -5,6 +5,10 @@ from content.access import VISIBILITY_CHOICES
 
 class Tutorial(models.Model):
     """Step-by-step tutorial."""
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text="Stable UUID from frontmatter for linking user-generated data.",
+    )
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, unique=True)
     description = models.TextField(blank=True, default='')

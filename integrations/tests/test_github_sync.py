@@ -18,6 +18,7 @@ import hmac
 import json
 import os
 import tempfile
+import uuid
 from datetime import date
 from unittest.mock import MagicMock, patch
 
@@ -559,6 +560,8 @@ class SyncArticlesTest(TestCase):
         """Helper to write a markdown file with frontmatter."""
         filepath = os.path.join(self.temp_dir, filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        if 'content_id' not in frontmatter_dict:
+            frontmatter_dict['content_id'] = str(uuid.uuid4())
         lines = ['---']
         for key, value in frontmatter_dict.items():
             if isinstance(value, list):
@@ -737,6 +740,7 @@ class SyncProjectsTest(TestCase):
             f.write('description: "A test project"\n')
             f.write('difficulty: "beginner"\n')
             f.write('date: "2026-01-15"\n')
+            f.write('content_id: "11111111-1111-1111-1111-111111111111"\n')
             f.write('---\n')
             f.write('Project content here.\n')
 
@@ -790,6 +794,7 @@ class SyncCoursesTest(TestCase):
             f.write('instructor_name: "Test Instructor"\n')
             f.write('required_level: 0\n')
             f.write('is_free: true\n')
+            f.write('content_id: "22222222-2222-2222-2222-222222222222"\n')
             f.write('tags:\n  - python\n  - data\n')
 
         # module directory
@@ -806,6 +811,7 @@ class SyncCoursesTest(TestCase):
             f.write('title: "Introduction"\n')
             f.write('sort_order: 1\n')
             f.write('is_preview: true\n')
+            f.write('content_id: "33333333-3333-3333-3333-333333333333"\n')
             f.write('---\n')
             f.write('Welcome to the course!\n')
 
@@ -871,6 +877,7 @@ class SyncResourcesTest(TestCase):
             f.write('description: "A great workshop"\n')
             f.write('video_url: "https://youtube.com/watch?v=abc"\n')
             f.write('published_at: "2026-01-15"\n')
+            f.write('content_id: "44444444-4444-4444-4444-444444444444"\n')
             f.write('tags:\n  - workshop\n')
 
         sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
@@ -905,6 +912,7 @@ class SyncResourcesTest(TestCase):
             f.write('file_url: "https://example.com/file.pdf"\n')
             f.write('file_type: "pdf"\n')
             f.write('file_size_bytes: 1024\n')
+            f.write('content_id: "55555555-5555-5555-5555-555555555555"\n')
 
         sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
         self.assertEqual(sync_log.items_created, 1)
@@ -1302,6 +1310,7 @@ class DirectAdminEditFlagTest(TestCase):
                 f.write('title: "Repo Version"\n')
                 f.write('slug: "overwrite-me"\n')
                 f.write('date: "2026-01-15"\n')
+                f.write('content_id: "e5f6a7b8-c9d0-1234-efab-345678901234"\n')
                 f.write('---\n')
                 f.write('Content from repo.\n')
 

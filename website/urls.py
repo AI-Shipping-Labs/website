@@ -27,6 +27,7 @@ urlpatterns = [
     path('', include('content.urls')),
     path('', include('events.urls')),
     path('', include('voting.urls')),
+    path('', include('comments.urls')),
     path('', include('email_app.urls')),
     path('studio/', include('studio.urls')),
 ]

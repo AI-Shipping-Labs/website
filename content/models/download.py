@@ -15,6 +15,10 @@ FILE_TYPE_CHOICES = [
 
 class Download(models.Model):
     """Downloadable resource (PDF, slides, zip, etc.)."""
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text="Stable UUID from frontmatter for linking user-generated data.",
+    )
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, unique=True)
     description = models.TextField(blank=True, default='')

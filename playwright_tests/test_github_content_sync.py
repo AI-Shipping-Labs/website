@@ -22,6 +22,7 @@ Usage:
 import datetime
 import os
 import tempfile
+import uuid
 
 import pytest
 from django.utils import timezone
@@ -187,6 +188,7 @@ def _sync_blog_source_with_articles(source, articles_data):
                 f.write("---\n")
                 f.write(f'title: "{title}"\n')
                 f.write(f'slug: "{slug}"\n')
+                f.write(f'content_id: "{uuid.uuid4()}"\n')
                 f.write(f'description: "{description}"\n')
                 f.write(f'date: "{date}"\n')
                 f.write(f'author: "{author}"\n')
@@ -236,6 +238,7 @@ def _sync_blog_source_with_error(source, good_articles, bad_filename="bad-articl
                 f.write("---\n")
                 f.write(f'title: "{title}"\n')
                 f.write(f'slug: "{slug}"\n')
+                f.write(f'content_id: "{uuid.uuid4()}"\n')
                 f.write(f'date: "2026-02-15"\n')
                 f.write(f'author: "Author"\n')
                 f.write("---\n\n")
@@ -265,6 +268,7 @@ def _sync_courses_source(source):
         with open(os.path.join(course_dir, "course.yaml"), "w") as f:
             f.write('title: "Python for Data AI"\n')
             f.write('slug: "python-data-ai"\n')
+            f.write(f'content_id: "{uuid.uuid4()}"\n')
             f.write('description: "Learn Python for data and AI engineering"\n')
             f.write('instructor_name: "Alexey Grigorev"\n')
             f.write("required_level: 0\n")
@@ -283,6 +287,7 @@ def _sync_courses_source(source):
             f.write('title: "Introduction to the Course"\n')
             f.write("sort_order: 1\n")
             f.write("is_preview: true\n")
+            f.write(f'content_id: "{uuid.uuid4()}"\n')
             f.write("---\n\n")
             f.write("# Introduction\n\nWelcome to Python for Data AI!\n")
 
@@ -290,6 +295,7 @@ def _sync_courses_source(source):
             f.write("---\n")
             f.write('title: "Setting Up Your Environment"\n')
             f.write("sort_order: 2\n")
+            f.write(f'content_id: "{uuid.uuid4()}"\n')
             f.write("---\n\n")
             f.write("# Environment Setup\n\nInstall Python and dependencies.\n")
 

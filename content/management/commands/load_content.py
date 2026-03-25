@@ -3,6 +3,7 @@ Management command to load content from markdown files in reference/content/.
 Reads frontmatter + markdown body, converts to HTML, and populates the database.
 """
 import math
+import uuid
 from pathlib import Path
 
 import frontmatter
@@ -87,7 +88,7 @@ class Command(BaseCommand):
             content_html = replace_video_urls_in_html(content_html)
             reading_time = calculate_reading_time(post.content)
 
-            Article.objects.update_or_create(
+            article, _ = Article.objects.update_or_create(
                 slug=slug,
                 defaults={
                     'title': post.get('title', slug),
@@ -101,6 +102,8 @@ class Command(BaseCommand):
                     'published': True,
                 },
             )
+            if not article.content_id:
+                Article.objects.filter(pk=article.pk).update(content_id=uuid.uuid4())
             count += 1
         self.stdout.write(f'  Loaded {count} articles')
 
@@ -114,7 +117,7 @@ class Command(BaseCommand):
             post = frontmatter.load(str(md_file))
             slug = md_file.stem
 
-            Recording.objects.update_or_create(
+            recording, _ = Recording.objects.update_or_create(
                 slug=slug,
                 defaults={
                     'title': post.get('title', slug),
@@ -133,6 +136,8 @@ class Command(BaseCommand):
                     'published': True,
                 },
             )
+            if not recording.content_id:
+                Recording.objects.filter(pk=recording.pk).update(content_id=uuid.uuid4())
             count += 1
         self.stdout.write(f'  Loaded {count} recordings')
 
@@ -149,7 +154,7 @@ class Command(BaseCommand):
             content_html = replace_video_urls_in_html(content_html)
             reading_time = calculate_reading_time(post.content)
 
-            Project.objects.update_or_create(
+            project, _ = Project.objects.update_or_create(
                 slug=slug,
                 defaults={
                     'title': post.get('title', slug),
@@ -165,6 +170,8 @@ class Command(BaseCommand):
                     'published': True,
                 },
             )
+            if not project.content_id:
+                Project.objects.filter(pk=project.pk).update(content_id=uuid.uuid4())
             count += 1
         self.stdout.write(f'  Loaded {count} projects')
 

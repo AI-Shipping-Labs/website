@@ -91,7 +91,7 @@ Orchestrator picks groomed issue
 
 - Groom any `needs grooming` issues first (launch product-manager in grooming mode)
 - Pick the next groomed issues (2 at a time, in parallel when independent)
-- Launch software engineer with the issue number
+- Launch software engineer with the issue number. When running multiple SWE agents in parallel, use `isolation: "worktree"` to give each agent its own copy of the repo — otherwise concurrent agents overwrite each other's file changes
 - When software engineer reports done, launch tester
 - If tester fails: relay feedback to software engineer, re-launch to fix, then re-launch tester
 - If tester passes: launch product manager for acceptance review
@@ -153,27 +153,10 @@ Some acceptance criteria are marked `[HUMAN]` in issues (OAuth flows, Stripe red
 
 ## Content Management
 
-Content is stored in GitHub repos and synced to the platform:
+All content lives in a single GitHub monorepo and is synced to the platform:
 
 | Repo | Visibility | Content |
 |---|---|---|
-| AI-Shipping-Labs/blog | Public | Blog articles |
-| AI-Shipping-Labs/courses | Private | Course modules and units |
-| AI-Shipping-Labs/resources | Public | Recordings metadata, curated links |
-| AI-Shipping-Labs/projects | Public | Community project showcases |
+| AI-Shipping-Labs/content | Private | Articles, courses, projects, recordings, curated links, interview questions, learning path |
 
-See [spec 14](specs/14-github-content.md) for details.
-
-## Milestones
-
-| # | Milestone | What it delivers |
-|---|---|---|
-| M1 | Django scaffold + existing content | Django project, models, migrate existing content, pages |
-| M2 | Auth + tiers + payments | Registration, login, tiers, Stripe checkout, webhooks |
-| M3 | Access control + gating | Per-item visibility, gated teasers, upgrade CTAs |
-| M4 | Courses | Course/module/unit structure, catalog, progress, GitHub sync |
-| M5 | Community automation | Slack invite/remove/reactivate on tier change |
-| M6 | Events + calendar | Event CRUD, Zoom integration, calendar, registration |
-| M7 | Email | SES, newsletter signup, campaigns, lead magnets |
-| M8 | Video + recordings | Video player, timestamps, downloads |
-| M9 | Notifications + voting | Slack announcements, on-platform notifications, polls |
+The sync pipeline (webhook push or manual `sync_content` command) clones the repo, parses markdown/YAML frontmatter, uploads images to S3, and upserts records to the database. Every content file must have a `content_id` UUID in its frontmatter for stable linking.

@@ -273,12 +273,21 @@ def course_unit_detail(request, slug, module_sort, unit_sort):
     if not has_access:
         if not user.is_authenticated:
             cta_message = 'Sign in to access this lesson'
-            pricing_url = '/accounts/login/'
             tier_name = None
+            if course.required_level == 0:
+                pricing_url = '/accounts/signup/'
+                cta_label = 'Sign Up'
+                cta_description = 'Create a free account to access this course.'
+            else:
+                pricing_url = '/accounts/login/'
+                cta_label = 'View Pricing'
+                cta_description = 'Get full access to this course and more with a membership.'
         else:
             tier_name = get_required_tier_name(course.required_level)
             cta_message = f'Upgrade to {tier_name} to access this lesson'
             pricing_url = '/pricing'
+            cta_label = 'View Pricing'
+            cta_description = 'Get full access to this course and more with a membership.'
         context = {
             'course': course,
             'unit': unit,
@@ -286,6 +295,8 @@ def course_unit_detail(request, slug, module_sort, unit_sort):
             'required_tier_name': tier_name,
             'cta_message': cta_message,
             'pricing_url': pricing_url,
+            'cta_label': cta_label,
+            'cta_description': cta_description,
         }
         return render(request, 'content/course_unit_detail.html', context, status=403)
 

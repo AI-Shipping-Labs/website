@@ -34,7 +34,7 @@
         {% if is_drip_locked %}
         <p class="mt-2 text-sm text-muted-foreground">This lesson will unlock based on your cohort schedule.</p>
         {% else %}
-        <p class="mt-2 text-sm text-muted-foreground">Get full access to this course and more with a membership.</p>
+        <p class="mt-2 text-sm text-muted-foreground">{{ cta_description }}</p>
         {% endif %}
         <a href="{{ pricing_url }}"
            class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
@@ -43,7 +43,7 @@
           Back to Course
           {% else %}
           <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          View Pricing
+          {{ cta_label }}
           {% endif %}
         </a>
       </div>
@@ -63,30 +63,42 @@
               {{ course.title }}
             </a>
 
-            <nav class="mt-4 rounded-lg border border-border bg-card p-4" aria-label="Course navigation">
+            <nav class="mt-4 rounded-lg border border-border bg-card p-2" aria-label="Course navigation">
               <h2 class="sr-only">Course Navigation</h2>
+              <style>
+                .sidebar-module > summary::-webkit-details-marker,
+                .sidebar-module > summary::marker { display: none; }
+                .sidebar-module[open] > div { animation: sidebarSlideDown 0.15s ease-out; }
+                @keyframes sidebarSlideDown {
+                  from { opacity: 0; transform: translateY(-2px); }
+                  to   { opacity: 1; transform: translateY(0); }
+                }
+              </style>
               {% for nav_module in modules %}
-              <div class="{% if not forloop.first %}mt-4{% endif %}">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  {{ nav_module.title }}
-                </h3>
-                <ul class="space-y-1">
-                  {% for nav_unit in nav_module.units.all %}
-                  <li>
-                    <a href="{{ nav_unit.get_absolute_url }}"
-                       class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors
-                              {% if nav_unit.pk == unit.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}">
-                      {% if nav_unit.pk in completed_unit_ids %}
-                      <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
-                      {% else %}
-                      <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 opacity-40"></i>
-                      {% endif %}
-                      <span class="truncate">{{ nav_unit.title }}</span>
-                    </a>
-                  </li>
-                  {% endfor %}
-                </ul>
-              </div>
+              <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_module.pk == unit.module.pk %}open{% endif %}>
+                <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
+                  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
+                  <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ nav_module.title }}</span>
+                </summary>
+                <div>
+                  <ul class="space-y-0.5 mt-1">
+                    {% for nav_unit in nav_module.units.all %}
+                    <li>
+                      <a href="{{ nav_unit.get_absolute_url }}"
+                         class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors
+                                {% if nav_unit.pk == unit.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}">
+                        {% if nav_unit.pk in completed_unit_ids %}
+                        <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+                        {% else %}
+                        <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 opacity-40"></i>
+                        {% endif %}
+                        <span class="truncate">{{ nav_unit.title }}</span>
+                      </a>
+                    </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              </details>
               {% endfor %}
             </nav>
           </div>
@@ -158,40 +170,6 @@
           </div>
           {% endif %}
 
-          <!-- Q&A Section -->
-          {% if unit_content_id %}
-          <div class="mb-12" id="qa-section" data-content-id="{{ unit_content_id }}">
-            <h2 class="mb-6 flex items-center gap-2 text-xl font-semibold tracking-tight">
-              <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
-              Questions &amp; Answers (<span id="qa-count">0</span>)
-            </h2>
-
-            {% if user_authenticated %}
-            <div class="mb-8">
-              <textarea
-                id="qa-new-question"
-                rows="3"
-                placeholder="Ask a question about this lesson..."
-                class="w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-              ></textarea>
-              <button
-                type="button"
-                id="qa-post-btn"
-                class="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-              >
-                Post Question
-              </button>
-            </div>
-            {% else %}
-            <div class="mb-8 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
-              <a href="/accounts/login/" class="text-accent hover:underline">Sign in</a> to ask questions
-            </div>
-            {% endif %}
-
-            <div id="qa-list"></div>
-          </div>
-          {% endif %}
-
           <!-- Mark as completed + Previous/Next unit -->
           <div class="flex flex-col sm:flex-row items-center gap-4 border-t border-border pt-8 mt-8">
             {% if prev_unit %}
@@ -199,7 +177,7 @@
                class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
                data-testid="bottom-prev-btn">
               <i data-lucide="arrow-left" class="h-4 w-4"></i>
-              &larr; {{ prev_unit.title }}
+              {{ prev_unit.title }}
             </a>
             {% endif %}
 
@@ -231,6 +209,40 @@
             </a>
             {% endif %}
           </div>
+
+          <!-- Q&A Section -->
+          {% if unit_content_id %}
+          <div class="mt-12 mb-12" id="qa-section" data-content-id="{{ unit_content_id }}">
+            <h2 class="mb-6 flex items-center gap-2 text-xl font-semibold tracking-tight">
+              <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
+              Questions &amp; Answers (<span id="qa-count">0</span>)
+            </h2>
+
+            {% if user_authenticated %}
+            <div class="mb-8">
+              <textarea
+                id="qa-new-question"
+                rows="3"
+                placeholder="Ask a question about this lesson..."
+                class="w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              ></textarea>
+              <button
+                type="button"
+                id="qa-post-btn"
+                class="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+              >
+                Post Question
+              </button>
+            </div>
+            {% else %}
+            <div class="mb-8 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
+              <a href="/accounts/login/" class="text-accent hover:underline">Sign in</a> to ask questions
+            </div>
+            {% endif %}
+
+            <div id="qa-list"></div>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -242,6 +254,22 @@
 
 {% block extra_scripts %}
 <script>
+  // Sidebar module chevron rotation
+  (function() {
+    document.addEventListener('toggle', function(e) {
+      var details = e.target;
+      if (!details.classList || !details.classList.contains('sidebar-module')) return;
+      var chevron = details.querySelector('.sidebar-chevron');
+      if (!chevron) return;
+      if (details.open) {
+        chevron.style.transform = 'rotate(90deg)';
+      } else {
+        chevron.style.transform = 'rotate(0deg)';
+      }
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }, true);
+  })();
+
   // Mark as completed toggle
   (function() {
     var btn = document.getElementById('mark-complete-btn');

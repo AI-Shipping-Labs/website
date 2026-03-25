@@ -268,6 +268,42 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         response = self.client.get('/courses/free-course/1/1')
         self.assertEqual(response.status_code, 200)
 
+    def test_anonymous_free_course_sees_signup_cta(self):
+        free_course = Course.objects.create(
+            title='Free Course', slug='free-course-cta',
+            status='published', required_level=LEVEL_OPEN, is_free=True,
+        )
+        module = Module.objects.create(
+            course=free_course, title='M1', sort_order=1,
+        )
+        Unit.objects.create(
+            module=module, title='Free Lesson', sort_order=1,
+            body='Free content.',
+        )
+        response = self.client.get('/courses/free-course-cta/1/1')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response,
+            'Create a free account to access this course.',
+            status_code=403,
+        )
+        self.assertContains(response, '/accounts/signup/', status_code=403)
+        self.assertContains(response, 'Sign Up', status_code=403)
+        self.assertNotContains(response, 'View Pricing', status_code=403)
+        self.assertNotContains(response, '/pricing', status_code=403)
+
+    def test_anonymous_paid_course_sees_pricing_cta(self):
+        response = self.client.get('/courses/test-course/1/1')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response,
+            'Get full access to this course and more with a membership.',
+            status_code=403,
+        )
+        self.assertContains(response, 'View Pricing', status_code=403)
+        self.assertNotContains(response, 'Sign Up', status_code=403)
+        self.assertNotContains(response, '/accounts/signup/', status_code=403)
+
     def test_gated_page_shows_lock_icon(self):
         response = self.client.get('/courses/test-course/1/1')
         self.assertContains(response, 'lock', status_code=403)

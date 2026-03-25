@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from content.access import (
-    can_access, get_required_tier_name, get_user_level, LEVEL_TO_TIER_NAME,
+    can_access, get_required_tier_name, get_user_level, LEVEL_MAIN, LEVEL_TO_TIER_NAME,
 )
 from content.models import (
     Course, Module, Unit, UserCourseProgress, Cohort, CohortEnrollment, TagRule,
@@ -112,6 +112,14 @@ def course_detail(request, slug):
             ).values_list('cohort_id', flat=True)
         )
 
+    # Discussion button: visible when discussion_url is set and user meets tier.
+    # Free courses: any authenticated user (links to public forums).
+    # Paid courses: only Main+ tier (links to Slack).
+    show_discussion = bool(course.discussion_url) and (
+        (course.is_free and user.is_authenticated)
+        or get_user_level(user) >= LEVEL_MAIN
+    )
+
     context = {
         'course': course,
         'modules': modules,
@@ -129,6 +137,7 @@ def course_detail(request, slug):
         'buy_individual': buy_individual,
         'buy_individual_price': buy_individual_price,
         'testimonials': course.testimonials,
+        'show_discussion': show_discussion,
     }
     return render(request, 'content/course_detail.html', context)
 
@@ -351,6 +360,12 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     next_unit = _get_next_unit(course, unit)
     prev_unit = _get_prev_unit(course, unit)
 
+    # Discussion link (same logic as course_detail)
+    show_discussion = bool(course.discussion_url) and (
+        (course.is_free and user.is_authenticated)
+        or get_user_level(user) >= LEVEL_MAIN
+    )
+
     context = {
         'course': course,
         'module': module,
@@ -364,6 +379,7 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         'prev_unit': prev_unit,
         'user_authenticated': user.is_authenticated,
         'unit_content_id': str(unit.content_id) if unit.content_id else '',
+        'show_discussion': show_discussion,
     }
     return render(request, 'content/course_unit_detail.html', context)
 

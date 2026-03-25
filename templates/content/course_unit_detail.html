@@ -101,6 +101,16 @@
               </details>
               {% endfor %}
             </nav>
+            {% if show_discussion %}
+            <div class="mt-4 rounded-lg border border-border bg-card p-4">
+              <a href="{{ course.discussion_url }}" target="_blank" rel="noopener noreferrer"
+                 class="inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline">
+                <i data-lucide="message-circle" class="h-4 w-4"></i>
+                Join the discussion
+                <i data-lucide="external-link" class="h-3 w-3"></i>
+              </a>
+            </div>
+            {% endif %}
           </div>
         </aside>
 

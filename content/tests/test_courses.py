@@ -441,8 +441,8 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'python')
         self.assertContains(response, 'ml')
 
-    def test_discussion_link_removed(self):
-        """Discussion link removed from course detail page (see #151)."""
+    def test_discussion_link_hidden_for_anonymous(self):
+        """Anonymous users don't see the discussion link even if URL is set."""
         response = self.client.get('/courses/detail-course')
         self.assertNotContains(response, 'Join the discussion')
 

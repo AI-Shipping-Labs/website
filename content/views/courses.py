@@ -128,6 +128,7 @@ def course_detail(request, slug):
         'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
         'buy_individual': buy_individual,
         'buy_individual_price': buy_individual_price,
+        'testimonials': course.testimonials,
     }
     return render(request, 'content/course_detail.html', context)
 

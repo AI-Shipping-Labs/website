@@ -81,6 +81,10 @@ class Course(models.Model):
         help_text="Stripe price ID for individual purchase.",
     )
     tags = models.JSONField(default=list, blank=True)
+    testimonials = models.JSONField(
+        default=list, blank=True,
+        help_text="List of testimonial objects: {quote, name, role?, company?, source_url?}.",
+    )
     source_repo = models.CharField(
         max_length=300, blank=True, null=True, default=None,
         help_text="GitHub repo this content was synced from.",

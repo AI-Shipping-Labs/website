@@ -831,3 +831,60 @@ class CourseAdminTest(TestCase):
     # duplicates of CourseAdminCRUDTest.test_admin_status_change_draft_to_published
     # and test_admin_status_change_published_to_draft in test_course_admin.py
 
+
+class CourseTestimonialsViewTest(TestCase):
+    """Test testimonials section on course detail page."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
+            title='Testimonial Course', slug='testimonial-course',
+            status='published',
+            testimonials=[
+                {'quote': 'Great course!', 'name': 'Alice', 'role': 'Engineer', 'company': 'Acme'},
+                {'quote': 'Learned a lot.', 'name': 'Bob', 'source_url': 'https://example.com/bob'},
+            ],
+        )
+        cls.module = Module.objects.create(
+            course=cls.course, title='Mod', slug='mod', sort_order=1,
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Unit', slug='unit', sort_order=1,
+        )
+
+    def test_heading_shown(self):
+        response = self.client.get('/courses/testimonial-course')
+        self.assertContains(response, 'What learners say')
+
+    def test_quotes_rendered(self):
+        response = self.client.get('/courses/testimonial-course')
+        self.assertContains(response, 'Great course!')
+        self.assertContains(response, 'Learned a lot.')
+
+    def test_names_rendered(self):
+        response = self.client.get('/courses/testimonial-course')
+        self.assertContains(response, 'Alice')
+        self.assertContains(response, 'Bob')
+
+    def test_role_and_company_rendered(self):
+        response = self.client.get('/courses/testimonial-course')
+        self.assertContains(response, 'Engineer')
+        self.assertContains(response, 'Acme')
+
+    def test_source_url_as_link(self):
+        response = self.client.get('/courses/testimonial-course')
+        self.assertContains(response, 'href="https://example.com/bob"')
+
+    def test_no_section_when_empty(self):
+        course = Course.objects.create(
+            title='No Testimonials', slug='no-testimonials',
+            status='published', testimonials=[],
+        )
+        Module.objects.create(course=course, title='M', slug='m', sort_order=1)
+        response = self.client.get('/courses/no-testimonials')
+        self.assertNotContains(response, 'What learners say')
+
+    def test_context_has_testimonials(self):
+        response = self.client.get('/courses/testimonial-course')
+        self.assertEqual(len(response.context['testimonials']), 2)
+

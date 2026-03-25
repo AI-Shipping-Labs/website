@@ -927,6 +927,7 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
                 'is_free': course_data.get('is_free', False),
                 'discussion_url': course_data.get('discussion_url', ''),
                 'tags': course_data.get('tags', []),
+                'testimonials': course_data.get('testimonials', []),
                 'status': 'published',
                 'source_repo': source.repo_name,
                 'source_path': rel_path,

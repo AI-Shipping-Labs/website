@@ -625,10 +625,10 @@ class StudioCourseFormIndividualPriceTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_shows_individual_price_field(self):
+    def test_create_url_removed(self):
+        """Course create URL removed — content managed via GitHub sync."""
         response = self.client.get('/studio/courses/new')
-        self.assertContains(response, 'individual_price_eur')
-        self.assertContains(response, 'Individual Price (EUR)')
+        self.assertEqual(response.status_code, 404)
 
     def test_edit_form_shows_individual_price_field(self):
         course = Course.objects.create(
@@ -639,26 +639,21 @@ class StudioCourseFormIndividualPriceTest(TestCase):
         self.assertContains(response, 'individual_price_eur')
         self.assertContains(response, '29.99')
 
-    def test_create_course_with_individual_price(self):
-        self.client.post('/studio/courses/new', {
-            'title': 'Priced Course',
-            'slug': 'priced-course',
+    def test_edit_saves_individual_price(self):
+        """Editing a non-synced course still works for individual price."""
+        course = Course.objects.create(
+            title='Price Edit', slug='price-edit', status='draft',
+            required_level=20,
+        )
+        self.client.post(f'/studio/courses/{course.pk}/edit', {
+            'title': 'Price Edit',
+            'slug': 'price-edit',
             'status': 'draft',
             'required_level': '20',
             'individual_price_eur': '49.99',
         })
-        course = Course.objects.get(slug='priced-course')
+        course.refresh_from_db()
         self.assertEqual(course.individual_price_eur, Decimal('49.99'))
-
-    def test_create_course_without_individual_price(self):
-        self.client.post('/studio/courses/new', {
-            'title': 'No Price Course',
-            'slug': 'no-price-course',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        course = Course.objects.get(slug='no-price-course')
-        self.assertIsNone(course.individual_price_eur)
 
     def test_edit_course_update_individual_price(self):
         course = Course.objects.create(

@@ -59,12 +59,12 @@ class SubscriptionDeletedProgressRetentionTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_PREMIUM,
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.units = []
         for i in range(4):
             unit = Unit.objects.create(
-                module=self.module, title=f'Unit {i+1}', sort_order=i,
+                module=self.module, title=f'Unit {i+1}', slug=f'unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
 
@@ -188,12 +188,12 @@ class ResubscriptionProgressRetentionTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_PREMIUM,
         )
         module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.units = []
         for i in range(4):
             unit = Unit.objects.create(
-                module=module, title=f'Unit {i+1}', sort_order=i,
+                module=module, title=f'Unit {i+1}', slug=f'unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
 
@@ -280,12 +280,12 @@ class DashboardProgressCancellationTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_PREMIUM,
         )
         module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.units = []
         for i in range(4):
             unit = Unit.objects.create(
-                module=module, title=f'Unit {i+1}', sort_order=i,
+                module=module, title=f'Unit {i+1}', slug=f'unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
 
@@ -528,12 +528,12 @@ class DowngradeTierProgressFilteringTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_BASIC,
         )
         basic_module = Module.objects.create(
-            course=self.basic_course, title='B Module 1', sort_order=1,
+            course=self.basic_course, title='B Module 1', slug='b-module-1', sort_order=1,
         )
         self.basic_units = []
         for i in range(3):
             unit = Unit.objects.create(
-                module=basic_module, title=f'Basic Unit {i+1}', sort_order=i,
+                module=basic_module, title=f'Basic Unit {i+1}', slug=f'basic-unit-{i+1}', sort_order=i,
             )
             self.basic_units.append(unit)
 
@@ -543,12 +543,12 @@ class DowngradeTierProgressFilteringTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_PREMIUM,
         )
         premium_module = Module.objects.create(
-            course=self.premium_course, title='P Module 1', sort_order=1,
+            course=self.premium_course, title='P Module 1', slug='p-module-1', sort_order=1,
         )
         self.premium_units = []
         for i in range(3):
             unit = Unit.objects.create(
-                module=premium_module, title=f'Prem Unit {i+1}', sort_order=i,
+                module=premium_module, title=f'Prem Unit {i+1}', slug=f'prem-unit-{i+1}', sort_order=i,
             )
             self.premium_units.append(unit)
 
@@ -639,7 +639,7 @@ class DowngradeTierProgressFilteringTest(TierSetupMixin, TestCase):
             'metadata': {'tier_slug': 'basic', 'user_id': str(self.user.pk)},
         })
         # Navigate directly to a Premium course unit page
-        url = f'/courses/premium-deep/1/0'
+        url = f'/courses/premium-deep/p-module-1/prem-unit-1'
         response = self.client_http.get(url)
         # Should return 403 with gating overlay
         self.assertEqual(response.status_code, 403)
@@ -672,12 +672,12 @@ class ResumeCourseAfterResubTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_MAIN,
         )
         module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.units = []
         for i in range(5):
             unit = Unit.objects.create(
-                module=module, title=f'Unit {i+1}', sort_order=i,
+                module=module, title=f'Unit {i+1}', slug=f'unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
 
@@ -775,12 +775,12 @@ class OpenCourseProgressAlwaysVisibleTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_OPEN, is_free=True,
         )
         module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.units = []
         for i in range(3):
             unit = Unit.objects.create(
-                module=module, title=f'Free Unit {i+1}', sort_order=i,
+                module=module, title=f'Free Unit {i+1}', slug=f'free-unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
 

@@ -528,12 +528,12 @@ class UnitRenameMigrationTest(TestCase):
             status='published',
         )
         module = Module.objects.create(
-            course=course, title='Module 1', sort_order=1,
+            course=course, title='Module 1', slug='module-1', sort_order=1,
             source_repo='test-org/courses',
             source_path='test-course/module-01',
         )
         old_unit = Unit.objects.create(
-            module=module, title='Unit 1', sort_order=1,
+            module=module, title='Unit 1', slug='unit-1', sort_order=1,
             body=body_text,
             content_hash=content_hash,
             source_repo='test-org/courses',
@@ -661,10 +661,10 @@ class UnitContentHashTest(TestCase):
             title='Course', slug='course', status='published',
         )
         module = Module.objects.create(
-            course=course, title='Module', sort_order=1,
+            course=course, title='Module', slug='module', sort_order=1,
         )
         unit = Unit.objects.create(
-            module=module, title='Unit', sort_order=1,
+            module=module, title='Unit', slug='unit', sort_order=1,
             body='test content',
             content_hash=_compute_content_hash('test content'),
         )

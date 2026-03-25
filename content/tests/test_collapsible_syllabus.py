@@ -33,16 +33,16 @@ class CollapsibleSyllabusStructureTest(TestCase):
             required_level=LEVEL_OPEN,
         )
         cls.module1 = Module.objects.create(
-            course=cls.course, title="Module Alpha", sort_order=1,
+            course=cls.course, title="Module Alpha", slug="module-alpha", sort_order=1,
         )
         cls.module2 = Module.objects.create(
-            course=cls.course, title="Module Beta", sort_order=2,
+            course=cls.course, title="Module Beta", slug="module-beta", sort_order=2,
         )
         cls.unit1 = Unit.objects.create(
-            module=cls.module1, title="Unit One", sort_order=1,
+            module=cls.module1, title="Unit One", slug="unit-one", sort_order=1,
         )
         cls.unit2 = Unit.objects.create(
-            module=cls.module2, title="Unit Two", sort_order=1,
+            module=cls.module2, title="Unit Two", slug="unit-two", sort_order=1,
         )
 
     def setUp(self):
@@ -102,13 +102,13 @@ class CollapsibleSyllabusAccessControlTest(TierSetupMixin, TestCase):
             required_level=LEVEL_MAIN,
         )
         cls.module = Module.objects.create(
-            course=cls.course, title="Mod 1", sort_order=1,
+            course=cls.course, title="Mod 1", slug="mod-1", sort_order=1,
         )
         cls.unit_normal = Unit.objects.create(
-            module=cls.module, title="Normal Lesson", sort_order=1,
+            module=cls.module, title="Normal Lesson", slug="normal-lesson", sort_order=1,
         )
         cls.unit_preview = Unit.objects.create(
-            module=cls.module, title="Preview Lesson", sort_order=2,
+            module=cls.module, title="Preview Lesson", slug="preview-lesson", sort_order=2,
             is_preview=True,
         )
 
@@ -181,10 +181,10 @@ class CollapsibleSyllabusJSPresenceTest(TestCase):
             status="published",
         )
         cls.module = Module.objects.create(
-            course=cls.course, title="Mod", sort_order=1,
+            course=cls.course, title="Mod", slug="mod", sort_order=1,
         )
         cls.unit = Unit.objects.create(
-            module=cls.module, title="Unit", sort_order=1,
+            module=cls.module, title="Unit", slug="unit", sort_order=1,
         )
 
     def setUp(self):

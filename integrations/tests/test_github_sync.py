@@ -269,7 +269,7 @@ class SourceTrackingFieldsTest(TestCase):
     def test_module_source_fields(self):
         course = Course.objects.create(title='Test', slug='test-c')
         module = Module.objects.create(
-            course=course, title='Module 1',
+            course=course, title='Module 1', slug='module-1',
             source_repo='AI-Shipping-Labs/courses',
             source_path='test-course/module-01',
         )
@@ -277,9 +277,9 @@ class SourceTrackingFieldsTest(TestCase):
 
     def test_unit_source_fields(self):
         course = Course.objects.create(title='Test', slug='test-cu')
-        module = Module.objects.create(course=course, title='M1')
+        module = Module.objects.create(course=course, title='M1', slug='m1')
         unit = Unit.objects.create(
-            module=module, title='Unit 1',
+            module=module, title='Unit 1', slug='unit-1',
             source_repo='AI-Shipping-Labs/courses',
             source_path='test-course/module-01/unit-01.md',
         )

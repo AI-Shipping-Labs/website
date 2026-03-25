@@ -217,11 +217,11 @@ def api_course_detail(request, slug):
 # --- Unit page view ---
 
 
-def _get_unit_or_404(slug, module_sort, unit_sort):
-    """Resolve a unit from course slug, module sort_order, unit sort_order."""
-    course = get_object_or_404(Course, slug=slug, status='published')
-    module = get_object_or_404(Module, course=course, sort_order=module_sort)
-    unit = get_object_or_404(Unit, module=module, sort_order=unit_sort)
+def _get_unit_or_404(course_slug, module_slug, unit_slug):
+    """Resolve a unit from course slug, module slug, unit slug."""
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    module = get_object_or_404(Module, course=course, slug=module_slug)
+    unit = get_object_or_404(Unit, module=module, slug=unit_slug)
     return course, module, unit
 
 
@@ -252,13 +252,13 @@ def _get_prev_unit(course, current_unit):
     return None
 
 
-def course_unit_detail(request, slug, module_sort, unit_sort):
+def course_unit_detail(request, course_slug, module_slug, unit_slug):
     """Unit page: gated by tier level, except for preview units.
 
     Shows video player, lesson text, homework, sidebar navigation,
     mark-complete toggle, and next-unit button.
     """
-    course, module, unit = _get_unit_or_404(slug, module_sort, unit_sort)
+    course, module, unit = _get_unit_or_404(course_slug, module_slug, unit_slug)
     user = request.user
 
     # Access check: preview units are open to all; otherwise must be

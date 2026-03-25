@@ -174,7 +174,7 @@ class StudioCourseEditTest(TestCase):
         self.assertEqual(self.course.required_level, 10)
 
     def test_edit_shows_modules(self):
-        Module.objects.create(course=self.course, title='Module 1', sort_order=0)
+        Module.objects.create(course=self.course, title='Module 1', slug='module-1', sort_order=0)
         response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
         self.assertContains(response, 'Module 1')
 
@@ -207,7 +207,7 @@ class StudioModuleCreateTest(TestCase):
         )
 
     def test_create_module_increments_sort_order(self):
-        Module.objects.create(course=self.course, title='M1', sort_order=0)
+        Module.objects.create(course=self.course, title='M1', slug='m1', sort_order=0)
         self.client.post(
             f'/studio/courses/{self.course.pk}/modules/add',
             {'title': 'M2'},
@@ -239,7 +239,7 @@ class StudioUnitCreateTest(TestCase):
             title='Course', slug='unit-test', status='draft',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=0,
+            course=self.course, title='Module', slug='module', sort_order=0,
         )
 
     def test_create_unit(self):
@@ -275,10 +275,10 @@ class StudioUnitEditTest(TestCase):
             title='Course', slug='unit-edit', status='draft',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=0,
+            course=self.course, title='Module', slug='module', sort_order=0,
         )
         self.unit = Unit.objects.create(
-            module=self.module, title='Unit', sort_order=0,
+            module=self.module, title='Unit', slug='unit', sort_order=0,
         )
 
     def test_edit_unit_form_returns_200(self):
@@ -333,10 +333,10 @@ class StudioModuleReorderTest(TestCase):
             title='Reorder', slug='reorder', status='draft',
         )
         self.m1 = Module.objects.create(
-            course=self.course, title='M1', sort_order=0,
+            course=self.course, title='M1', slug='m1', sort_order=0,
         )
         self.m2 = Module.objects.create(
-            course=self.course, title='M2', sort_order=1,
+            course=self.course, title='M2', slug='m2', sort_order=1,
         )
 
     def test_reorder_modules(self):

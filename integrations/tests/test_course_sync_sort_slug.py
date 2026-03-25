@@ -1,0 +1,170 @@
+"""Tests for sort_order derivation and slug-based URLs in course sync - issue #143.
+
+Covers:
+- extract_sort_order: numeric prefix extraction from filenames/directory names
+- derive_slug: slug derivation from filenames/directory names
+- sort_order removed from REQUIRED_FIELDS for module and unit
+- Module and Unit slug fields
+- Slug-based unit URLs
+- Old numeric URLs return 404
+"""
+
+from django.test import TestCase, Client
+
+from content.models import Course, Module, Unit
+from integrations.services.github import (
+    extract_sort_order, derive_slug, REQUIRED_FIELDS,
+)
+
+
+class ExtractSortOrderTest(TestCase):
+    """Test extract_sort_order helper function."""
+
+    def test_numeric_prefix(self):
+        self.assertEqual(extract_sort_order('01-day-1'), 1)
+
+    def test_two_digit_prefix(self):
+        self.assertEqual(extract_sort_order('02-setup.md'), 2)
+
+    def test_large_prefix(self):
+        self.assertEqual(extract_sort_order('99-final.md'), 99)
+
+    def test_no_prefix_returns_zero(self):
+        self.assertEqual(extract_sort_order('intro.md'), 0)
+
+    def test_no_prefix_directory(self):
+        self.assertEqual(extract_sort_order('appendix'), 0)
+
+    def test_leading_zeros(self):
+        self.assertEqual(extract_sort_order('001-advanced'), 1)
+
+    def test_zero_prefix(self):
+        self.assertEqual(extract_sort_order('00-intro'), 0)
+
+
+class DeriveSlugTest(TestCase):
+    """Test derive_slug helper function."""
+
+    def test_strip_numeric_prefix_from_directory(self):
+        self.assertEqual(derive_slug('01-day-1'), 'day-1')
+
+    def test_strip_numeric_prefix_from_filename(self):
+        self.assertEqual(derive_slug('02-environment.md'), 'environment')
+
+    def test_no_numeric_prefix_filename(self):
+        self.assertEqual(derive_slug('lesson.md'), 'lesson')
+
+    def test_no_numeric_prefix_directory(self):
+        self.assertEqual(derive_slug('appendix'), 'appendix')
+
+    def test_multi_digit_prefix(self):
+        self.assertEqual(derive_slug('123-advanced-topics'), 'advanced-topics')
+
+    def test_no_extension(self):
+        self.assertEqual(derive_slug('01-introduction'), 'introduction')
+
+
+class RequiredFieldsTest(TestCase):
+    """Test that sort_order is no longer required for module and unit."""
+
+    def test_module_required_fields_no_sort_order(self):
+        self.assertNotIn('sort_order', REQUIRED_FIELDS['module'])
+        self.assertIn('title', REQUIRED_FIELDS['module'])
+
+    def test_unit_required_fields_no_sort_order(self):
+        self.assertNotIn('sort_order', REQUIRED_FIELDS['unit'])
+        self.assertIn('title', REQUIRED_FIELDS['unit'])
+
+
+class ModuleSlugFieldTest(TestCase):
+    """Test Module slug field."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(title='Test Course', slug='test-course')
+
+    def test_module_has_slug(self):
+        module = Module.objects.create(
+            course=self.course, title='Intro', slug='intro', sort_order=0,
+        )
+        self.assertEqual(module.slug, 'intro')
+
+    def test_module_slug_unique_per_course(self):
+        from django.db import IntegrityError
+        Module.objects.create(
+            course=self.course, title='M1', slug='same-slug', sort_order=0,
+        )
+        with self.assertRaises(IntegrityError):
+            Module.objects.create(
+                course=self.course, title='M2', slug='same-slug', sort_order=1,
+            )
+
+
+class UnitSlugFieldTest(TestCase):
+    """Test Unit slug field."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(title='Test Course', slug='test-slug-course')
+        cls.module = Module.objects.create(
+            course=cls.course, title='Module', slug='module', sort_order=0,
+        )
+
+    def test_unit_has_slug(self):
+        unit = Unit.objects.create(
+            module=self.module, title='Lesson', slug='lesson', sort_order=0,
+        )
+        self.assertEqual(unit.slug, 'lesson')
+
+    def test_unit_slug_unique_per_module(self):
+        from django.db import IntegrityError
+        Unit.objects.create(
+            module=self.module, title='U1', slug='same-slug', sort_order=0,
+        )
+        with self.assertRaises(IntegrityError):
+            Unit.objects.create(
+                module=self.module, title='U2', slug='same-slug', sort_order=1,
+            )
+
+
+class SlugBasedURLTest(TestCase):
+    """Test slug-based unit URLs."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
+            title='URL Course', slug='url-course', status='published',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course, title='Day 1', slug='day-1', sort_order=1,
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Intro', slug='intro', sort_order=1,
+            is_preview=True, body='Content here.',
+        )
+
+    def test_get_absolute_url_uses_slugs(self):
+        self.assertEqual(
+            self.unit.get_absolute_url(),
+            '/courses/url-course/day-1/intro',
+        )
+
+    def test_slug_url_returns_200(self):
+        client = Client()
+        response = client.get('/courses/url-course/day-1/intro')
+        self.assertEqual(response.status_code, 200)
+
+    def test_old_numeric_url_returns_404(self):
+        client = Client()
+        response = client.get('/courses/url-course/1/1')
+        self.assertEqual(response.status_code, 404)
+
+    def test_nonexistent_module_slug_returns_404(self):
+        client = Client()
+        response = client.get('/courses/url-course/nonexistent/intro')
+        self.assertEqual(response.status_code, 404)
+
+    def test_nonexistent_unit_slug_returns_404(self):
+        client = Client()
+        response = client.get('/courses/url-course/day-1/nonexistent')
+        self.assertEqual(response.status_code, 404)

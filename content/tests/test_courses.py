@@ -116,7 +116,7 @@ class ModuleModelTest(TestCase):
 
     def test_create_module(self):
         module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.assertEqual(module.title, 'Module 1')
         self.assertEqual(module.course, self.course)
@@ -124,13 +124,13 @@ class ModuleModelTest(TestCase):
 
     def test_str(self):
         module = Module.objects.create(
-            course=self.course, title='Intro', sort_order=0,
+            course=self.course, title='Intro', slug='intro', sort_order=0,
         )
         self.assertEqual(str(module), 'Course - Intro')
 
     def test_ordering_by_sort_order(self):
-        Module.objects.create(course=self.course, title='Second', sort_order=2)
-        Module.objects.create(course=self.course, title='First', sort_order=1)
+        Module.objects.create(course=self.course, title='Second', slug='second', sort_order=2)
+        Module.objects.create(course=self.course, title='First', slug='first', sort_order=1)
         modules = list(Module.objects.filter(course=self.course))
         self.assertEqual(modules[0].title, 'First')
         self.assertEqual(modules[1].title, 'Second')
@@ -142,25 +142,25 @@ class UnitModelTest(TestCase):
     def setUp(self):
         self.course = Course.objects.create(title='Course', slug='course')
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
 
     def test_create_unit(self):
         unit = Unit.objects.create(
-            module=self.module, title='Unit 1', sort_order=1,
+            module=self.module, title='Unit 1', slug='unit-1', sort_order=1,
         )
         self.assertEqual(unit.title, 'Unit 1')
         self.assertEqual(unit.module, self.module)
 
     def test_str(self):
         unit = Unit.objects.create(
-            module=self.module, title='Lesson 1', sort_order=1,
+            module=self.module, title='Lesson 1', slug='lesson-1', sort_order=1,
         )
         self.assertEqual(str(unit), 'Module - Lesson 1')
 
     def test_default_values(self):
         unit = Unit.objects.create(
-            module=self.module, title='Defaults', sort_order=0,
+            module=self.module, title='Defaults', slug='defaults', sort_order=0,
         )
         self.assertEqual(unit.video_url, '')
         self.assertEqual(unit.body, '')
@@ -170,7 +170,7 @@ class UnitModelTest(TestCase):
 
     def test_body_markdown_rendered_on_save(self):
         unit = Unit.objects.create(
-            module=self.module, title='MD', sort_order=0,
+            module=self.module, title='MD', slug='md', sort_order=0,
             body='# Lesson\nLearn **this**.',
         )
         self.assertIn('<h1>Lesson</h1>', unit.body_html)
@@ -178,7 +178,7 @@ class UnitModelTest(TestCase):
 
     def test_homework_markdown_rendered_on_save(self):
         unit = Unit.objects.create(
-            module=self.module, title='HW', sort_order=0,
+            module=self.module, title='HW', slug='hw', sort_order=0,
             homework='## Exercise\nDo **that**.',
         )
         self.assertIn('<h2>Exercise</h2>', unit.homework_html)
@@ -186,7 +186,7 @@ class UnitModelTest(TestCase):
 
     def test_timestamps_json_field(self):
         unit = Unit.objects.create(
-            module=self.module, title='TS', sort_order=0,
+            module=self.module, title='TS', slug='ts', sort_order=0,
             timestamps=[
                 {'time_seconds': 120, 'label': 'Setting up'},
                 {'time_seconds': 300, 'label': 'Building'},
@@ -197,13 +197,13 @@ class UnitModelTest(TestCase):
 
     def test_get_absolute_url(self):
         unit = Unit.objects.create(
-            module=self.module, title='URL Test', sort_order=3,
+            module=self.module, title='URL Test', slug='url-test', sort_order=3,
         )
-        self.assertEqual(unit.get_absolute_url(), '/courses/course/1/3')
+        self.assertEqual(unit.get_absolute_url(), '/courses/course/module/url-test')
 
     def test_ordering_by_sort_order(self):
-        Unit.objects.create(module=self.module, title='Second', sort_order=2)
-        Unit.objects.create(module=self.module, title='First', sort_order=1)
+        Unit.objects.create(module=self.module, title='Second', slug='second', sort_order=2)
+        Unit.objects.create(module=self.module, title='First', slug='first', sort_order=1)
         units = list(Unit.objects.filter(module=self.module))
         self.assertEqual(units[0].title, 'First')
         self.assertEqual(units[1].title, 'Second')
@@ -216,10 +216,10 @@ class UserCourseProgressModelTest(TestCase):
         self.user = User.objects.create_user(email='test@example.com')
         self.course = Course.objects.create(title='Course', slug='course')
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
         self.unit = Unit.objects.create(
-            module=self.module, title='Unit', sort_order=1,
+            module=self.module, title='Unit', slug='unit', sort_order=1,
         )
 
     def test_create_progress(self):
@@ -266,16 +266,16 @@ class CourseTotalAndCompletedTest(TestCase):
             title='Progress Course', slug='progress',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
         self.unit1 = Unit.objects.create(
-            module=self.module, title='Unit 1', sort_order=1,
+            module=self.module, title='Unit 1', slug='unit-1', sort_order=1,
         )
         self.unit2 = Unit.objects.create(
-            module=self.module, title='Unit 2', sort_order=2,
+            module=self.module, title='Unit 2', slug='unit-2', sort_order=2,
         )
         self.unit3 = Unit.objects.create(
-            module=self.module, title='Unit 3', sort_order=3,
+            module=self.module, title='Unit 3', slug='unit-3', sort_order=3,
         )
 
     def test_total_units(self):
@@ -392,19 +392,19 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
             discussion_url='https://slack.com/channel',
         )
         self.module1 = Module.objects.create(
-            course=self.course, title='Getting Started', sort_order=1,
+            course=self.course, title='Getting Started', slug='getting-started', sort_order=1,
         )
         self.module2 = Module.objects.create(
-            course=self.course, title='Advanced Topics', sort_order=2,
+            course=self.course, title='Advanced Topics', slug='advanced-topics', sort_order=2,
         )
         self.unit1 = Unit.objects.create(
-            module=self.module1, title='Introduction', sort_order=1,
+            module=self.module1, title='Introduction', slug='introduction', sort_order=1,
         )
         self.unit2 = Unit.objects.create(
-            module=self.module1, title='Setup', sort_order=2,
+            module=self.module1, title='Setup', slug='setup', sort_order=2,
         )
         self.unit3 = Unit.objects.create(
-            module=self.module2, title='Deep Dive', sort_order=1,
+            module=self.module2, title='Deep Dive', slug='deep-dive', sort_order=1,
         )
 
     def test_returns_200(self):
@@ -489,10 +489,10 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_MAIN,
         )
         self.module = Module.objects.create(
-            course=self.paid_course, title='Module 1', sort_order=1,
+            course=self.paid_course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.unit = Unit.objects.create(
-            module=self.module, title='Lesson 1', sort_order=1,
+            module=self.module, title='Lesson 1', slug='lesson-1', sort_order=1,
         )
 
     def test_anonymous_sees_syllabus(self):
@@ -508,7 +508,7 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/paid-course')
         content = response.content.decode()
         # Should not have a link to the unit page
-        self.assertNotIn(f'href="/courses/paid-course/1/1"', content)
+        self.assertNotIn(f'href="/courses/paid-course/module-1/lesson-1"', content)
 
     def test_authorized_user_sees_clickable_links(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
@@ -516,7 +516,7 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/courses/paid-course')
-        self.assertContains(response, 'href="/courses/paid-course/1/1"')
+        self.assertContains(response, 'href="/courses/paid-course/module-1/lesson-1"')
 
     def test_authorized_user_sees_progress_bar(self):
         user = User.objects.create_user(email='main2@test.com', password='testpass')
@@ -545,7 +545,7 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='prem@test.com', password='testpass')
         response = self.client.get('/courses/paid-course')
-        self.assertContains(response, 'href="/courses/paid-course/1/1"')
+        self.assertContains(response, 'href="/courses/paid-course/module-1/lesson-1"')
         self.assertNotContains(response, 'Unlock with Main')
 
 
@@ -559,10 +559,10 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
             status='published', is_free=True, required_level=LEVEL_OPEN,
         )
         self.module = Module.objects.create(
-            course=self.free_course, title='Module', sort_order=1,
+            course=self.free_course, title='Module', slug='module', sort_order=1,
         )
         self.unit = Unit.objects.create(
-            module=self.module, title='Free Lesson', sort_order=1,
+            module=self.module, title='Free Lesson', slug='free-lesson', sort_order=1,
         )
 
     def test_anonymous_sees_signup_cta(self):
@@ -579,7 +579,7 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(email='user2@test.com', password='testpass')
         self.client.login(email='user2@test.com', password='testpass')
         response = self.client.get('/courses/free-course')
-        self.assertContains(response, 'href="/courses/free-course/1/1"')
+        self.assertContains(response, 'href="/courses/free-course/module/free-lesson"')
 
 
 class CourseProgressDisplayTest(TierSetupMixin, TestCase):
@@ -596,16 +596,16 @@ class CourseProgressDisplayTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_OPEN,
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
         self.unit1 = Unit.objects.create(
-            module=self.module, title='Unit 1', sort_order=1,
+            module=self.module, title='Unit 1', slug='unit-1', sort_order=1,
         )
         self.unit2 = Unit.objects.create(
-            module=self.module, title='Unit 2', sort_order=2,
+            module=self.module, title='Unit 2', slug='unit-2', sort_order=2,
         )
         self.unit3 = Unit.objects.create(
-            module=self.module, title='Unit 3', sort_order=3,
+            module=self.module, title='Unit 3', slug='unit-3', sort_order=3,
         )
 
     def test_shows_progress_count(self):
@@ -710,10 +710,10 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
             discussion_url='https://slack.com/test',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Mod 1', sort_order=1,
+            course=self.course, title='Mod 1', slug='mod-1', sort_order=1,
         )
         self.unit = Unit.objects.create(
-            module=self.module, title='Unit 1', sort_order=1,
+            module=self.module, title='Unit 1', slug='unit-1', sort_order=1,
             is_preview=True,
         )
 

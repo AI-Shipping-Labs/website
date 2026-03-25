@@ -39,8 +39,8 @@ GITHUB_API_BASE = 'https://api.github.com'
 REQUIRED_FIELDS = {
     'article': ['title'],
     'course': ['title'],
-    'module': ['title', 'sort_order'],
-    'unit': ['title', 'sort_order'],
+    'module': ['title'],
+    'unit': ['title'],
     'recording': ['title', 'video_url'],
     'project': ['title'],
     'curated_link': ['title', 'url', 'item_id'],
@@ -49,6 +49,25 @@ REQUIRED_FIELDS = {
 
 # Sync lock timeout in minutes
 SYNC_LOCK_TIMEOUT_MINUTES = 10
+
+
+def extract_sort_order(name):
+    """Extract numeric prefix from a filename or directory name.
+    '01-day-1' -> 1, '02-setup.md' -> 2, 'intro.md' -> 0
+    """
+    match = re.match(r'^(\d+)', name)
+    return int(match.group(1)) if match else 0
+
+
+def derive_slug(name):
+    """Derive slug from filename/dirname, stripping numeric prefix.
+    '01-day-1' -> 'day-1'
+    '02-environment.md' -> 'environment'
+    'lesson.md' -> 'lesson'
+    """
+    stem = name.rsplit('.', 1)[0] if '.' in name else name
+    match = re.match(r'^\d+-(.+)', stem)
+    return match.group(1) if match else stem
 
 
 class GitHubSyncError(Exception):
@@ -980,12 +999,19 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
 
             seen_module_paths.add(rel_path)
 
+            # Derive sort_order and slug from directory name
+            sort_order = module_data.get(
+                'sort_order', extract_sort_order(entry.name),
+            )
+            slug = module_data.get('slug', derive_slug(entry.name))
+
             module, created = Module.objects.update_or_create(
                 course=course,
                 source_path=rel_path,
                 defaults={
                     'title': module_data.get('title', entry.name),
-                    'sort_order': module_data.get('sort_order', 0),
+                    'slug': slug,
+                    'sort_order': sort_order,
                     'source_repo': repo_name,
                     'source_commit': commit_sha,
                 },
@@ -1066,9 +1092,16 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
             is_homework = metadata.get('is_homework', False)
 
+            # Derive sort_order and slug from filename
+            sort_order = metadata.get(
+                'sort_order', extract_sort_order(filename),
+            )
+            slug = metadata.get('slug', derive_slug(filename))
+
             defaults = {
                 'title': metadata.get('title', os.path.splitext(filename)[0]),
-                'sort_order': metadata.get('sort_order', 0),
+                'slug': slug,
+                'sort_order': sort_order,
                 'video_url': metadata.get('video_url', ''),
                 'timestamps': metadata.get('timestamps', []),
                 'is_preview': metadata.get('is_preview', False),

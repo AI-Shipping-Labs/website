@@ -51,11 +51,12 @@ urlpatterns = [
     # Courses
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),
-    path('courses/<slug:slug>/<int:module_sort>/<int:unit_sort>', course_unit_detail, name='course_unit_detail'),
-    # Peer review
+    # Peer review (must be before the catch-all slug-based unit URL)
     path('courses/<slug:slug>/submit', project_submit, name='project_submit'),
     path('courses/<slug:slug>/reviews', review_dashboard, name='peer_review_dashboard'),
     path('courses/<slug:slug>/reviews/<int:submission_id>', review_form, name='peer_review_form'),
+    # Course unit detail (three slug segments - must be after more specific patterns)
+    path('courses/<slug:course_slug>/<slug:module_slug>/<slug:unit_slug>', course_unit_detail, name='course_unit_detail'),
     # Certificates
     path('certificates/<uuid:certificate_id>', certificate_page, name='certificate_page'),
     # API endpoints

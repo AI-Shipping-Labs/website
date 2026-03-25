@@ -273,12 +273,12 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
         CourseAccess.objects.create(
             user=user, course=self.course, access_type='purchased',
         )
-        module = Module.objects.create(course=self.course, title='M1', sort_order=1)
-        Unit.objects.create(module=module, title='U1', sort_order=1)
+        module = Module.objects.create(course=self.course, title='M1', slug='m1', sort_order=1)
+        Unit.objects.create(module=module, title='U1', slug='u1', sort_order=1)
         self.client.login(email='purchased@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
         self.assertNotContains(response, 'buy-course-btn')
-        self.assertContains(response, 'href="/courses/buyable-course/1/1"')
+        self.assertContains(response, 'href="/courses/buyable-course/m1/u1"')
 
     def test_buy_button_shows_subscription_cta_alongside(self):
         """The buy button appears alongside the subscription CTA."""
@@ -866,15 +866,15 @@ class CourseUnitAccessWithPurchaseTest(TierSetupMixin, TestCase):
             status='published', required_level=20,
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.unit = Unit.objects.create(
-            module=self.module, title='Lesson 1', sort_order=1,
+            module=self.module, title='Lesson 1', slug='lesson-1', sort_order=1,
         )
 
     def test_free_user_cannot_access_unit(self):
         self.client.login(email='unit@test.com', password='testpass')
-        response = self.client.get('/courses/unit-access/1/1')
+        response = self.client.get('/courses/unit-access/module-1/lesson-1')
         self.assertEqual(response.status_code, 403)
 
     def test_purchased_user_can_access_unit(self):
@@ -882,7 +882,7 @@ class CourseUnitAccessWithPurchaseTest(TierSetupMixin, TestCase):
             user=self.user, course=self.course, access_type='purchased',
         )
         self.client.login(email='unit@test.com', password='testpass')
-        response = self.client.get('/courses/unit-access/1/1')
+        response = self.client.get('/courses/unit-access/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Lesson 1')
 
@@ -891,14 +891,14 @@ class CourseUnitAccessWithPurchaseTest(TierSetupMixin, TestCase):
             user=self.user, course=self.course, access_type='granted',
         )
         self.client.login(email='unit@test.com', password='testpass')
-        response = self.client.get('/courses/unit-access/1/1')
+        response = self.client.get('/courses/unit-access/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
 
     def test_tier_access_still_works_for_units(self):
         self.user.tier = self.main_tier
         self.user.save()
         self.client.login(email='unit@test.com', password='testpass')
-        response = self.client.get('/courses/unit-access/1/1')
+        response = self.client.get('/courses/unit-access/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
 
 

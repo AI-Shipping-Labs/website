@@ -563,8 +563,8 @@ class CertificateEligibilityTest(TestCase):
         self.user2 = _create_user('user2@test.com')
 
         # Create a unit
-        module = Module.objects.create(course=self.course, title='M1', sort_order=0)
-        self.unit = Unit.objects.create(module=module, title='U1', sort_order=0)
+        module = Module.objects.create(course=self.course, title='M1', slug='m1', sort_order=0)
+        self.unit = Unit.objects.create(module=module, title='U1', slug='u1', sort_order=0)
 
     def _setup_complete_scenario(self):
         """Set up a scenario where both students have done everything."""
@@ -1011,9 +1011,9 @@ class PeerReviewNotificationTest(TestCase):
         from notifications.models import Notification
 
         module = Module.objects.create(
-            course=self.course, title='M1', sort_order=0,
+            course=self.course, title='M1', slug='m1', sort_order=0,
         )
-        unit = Unit.objects.create(module=module, title='U1', sort_order=0)
+        unit = Unit.objects.create(module=module, title='U1', slug='u1', sort_order=0)
         UserCourseProgress.objects.create(
             user=self.user1, unit=unit, completed_at=timezone.now(),
         )

@@ -39,13 +39,13 @@ class CourseUnitSetupMixin(TierSetupMixin):
             description='A paid course.',
         )
         self.module1 = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.module2 = Module.objects.create(
-            course=self.course, title='Module 2', sort_order=2,
+            course=self.course, title='Module 2', slug='module-2', sort_order=2,
         )
         self.unit1 = Unit.objects.create(
-            module=self.module1, title='Lesson 1', sort_order=1,
+            module=self.module1, title='Lesson 1', slug='lesson-1', sort_order=1,
             body='# Introduction\nThis is the **first** lesson.',
             homework='## Exercise 1\nDo **this**.',
             video_url='https://www.youtube.com/watch?v=dQw4w9WgXcB',
@@ -55,15 +55,15 @@ class CourseUnitSetupMixin(TierSetupMixin):
             ],
         )
         self.unit2 = Unit.objects.create(
-            module=self.module1, title='Lesson 2', sort_order=2,
+            module=self.module1, title='Lesson 2', slug='lesson-2', sort_order=2,
             body='# Second lesson\nMore content.',
         )
         self.unit3 = Unit.objects.create(
-            module=self.module2, title='Advanced Lesson', sort_order=1,
+            module=self.module2, title='Advanced Lesson', slug='advanced-lesson', sort_order=1,
             body='# Advanced\nDeep dive.',
         )
         self.preview_unit = Unit.objects.create(
-            module=self.module1, title='Preview Lesson', sort_order=3,
+            module=self.module1, title='Preview Lesson', slug='preview-lesson', sort_order=3,
             body='# Preview\nFree to all.',
             is_preview=True,
         )
@@ -86,57 +86,57 @@ class CourseUnitDetailViewTest(CourseUnitSetupMixin, TestCase):
 
     def test_authorized_user_gets_200(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
 
     def test_uses_correct_template(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertTemplateUsed(response, 'content/course_unit_detail.html')
 
     def test_title_tag(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, '<title>Lesson 1 | Test Course | AI Shipping Labs</title>')
 
     def test_shows_unit_title(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Lesson 1')
 
     def test_shows_video_player(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'video-player')
         self.assertContains(response, 'dQw4w9WgXcB')
 
     def test_shows_lesson_text(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, '<h1>Introduction</h1>')
         self.assertContains(response, '<strong>first</strong>')
 
     def test_shows_homework_section(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Homework')
         self.assertContains(response, '<h2>Exercise 1</h2>')
         self.assertContains(response, '<strong>this</strong>')
 
     def test_no_homework_section_when_empty(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         # The homework card with icon should not render for units without homework
         self.assertNotContains(response, 'clipboard-list')
 
     def test_no_video_player_when_no_video_url(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         self.assertNotContains(response, 'video-player')
 
     def test_shows_sidebar_navigation(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Module 1')
         self.assertContains(response, 'Module 2')
         self.assertContains(response, 'Lesson 2')
@@ -144,36 +144,36 @@ class CourseUnitDetailViewTest(CourseUnitSetupMixin, TestCase):
 
     def test_current_unit_highlighted_in_sidebar(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         content = response.content.decode()
         # The current unit should have the accent styling
         self.assertIn('bg-accent/10', content)
 
     def test_shows_breadcrumb(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Courses')
         self.assertContains(response, 'Test Course')
 
     def test_shows_timestamps(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Intro')
         self.assertContains(response, 'Setup')
 
     def test_nonexistent_course_returns_404(self):
         self._login_main_user()
-        response = self.client.get('/courses/nonexistent/1/1')
+        response = self.client.get('/courses/nonexistent/m/u')
         self.assertEqual(response.status_code, 404)
 
     def test_nonexistent_module_returns_404(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/99/1')
+        response = self.client.get('/courses/test-course/nonexistent/lesson-1')
         self.assertEqual(response.status_code, 404)
 
     def test_nonexistent_unit_returns_404(self):
         self._login_main_user()
-        response = self.client.get('/courses/test-course/1/99')
+        response = self.client.get('/courses/test-course/module-1/nonexistent')
         self.assertEqual(response.status_code, 404)
 
     def test_draft_course_returns_404(self):
@@ -181,7 +181,7 @@ class CourseUnitDetailViewTest(CourseUnitSetupMixin, TestCase):
             title='Draft', slug='draft-course', status='draft',
         )
         self._login_main_user()
-        response = self.client.get('/courses/draft-course/1/1')
+        response = self.client.get('/courses/draft-course/m/u')
         self.assertEqual(response.status_code, 404)
 
 
@@ -194,11 +194,11 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
     """Test access control on unit pages."""
 
     def test_anonymous_user_gets_403_for_non_preview(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 403)
 
     def test_anonymous_user_sees_gated_message(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Sign in to access this lesson', status_code=403)
 
     def test_basic_user_sees_upgrade_message(self):
@@ -206,7 +206,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         user.tier = self.basic_tier
         user.save()
         self.client.login(email='basic2@test.com', password='testpass')
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Upgrade to Main', status_code=403)
         self.assertContains(response, 'View Pricing', status_code=403)
 
@@ -215,7 +215,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         user.tier = self.basic_tier
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 403)
 
     def test_main_user_gets_200(self):
@@ -223,7 +223,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         user.tier = self.main_tier
         user.save()
         self.client.login(email='main@test.com', password='testpass')
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
 
     def test_premium_user_gets_200(self):
@@ -231,11 +231,11 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         user.tier = self.premium_tier
         user.save()
         self.client.login(email='prem@test.com', password='testpass')
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
 
     def test_preview_unit_accessible_to_anonymous(self):
-        response = self.client.get('/courses/test-course/1/3')
+        response = self.client.get('/courses/test-course/module-1/preview-lesson')
         self.assertEqual(response.status_code, 200)
 
     def test_preview_unit_accessible_to_basic_user(self):
@@ -243,11 +243,11 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         user.tier = self.basic_tier
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/courses/test-course/1/3')
+        response = self.client.get('/courses/test-course/module-1/preview-lesson')
         self.assertEqual(response.status_code, 200)
 
     def test_preview_unit_shows_content(self):
-        response = self.client.get('/courses/test-course/1/3')
+        response = self.client.get('/courses/test-course/module-1/preview-lesson')
         self.assertContains(response, 'Preview Lesson')
         self.assertContains(response, 'Free to all')
 
@@ -257,15 +257,15 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
             status='published', required_level=LEVEL_OPEN, is_free=True,
         )
         module = Module.objects.create(
-            course=free_course, title='M1', sort_order=1,
+            course=free_course, title='M1', slug='m1', sort_order=1,
         )
         Unit.objects.create(
-            module=module, title='Free Lesson', sort_order=1,
+            module=module, title='Free Lesson', slug='free-lesson', sort_order=1,
             body='Free content.',
         )
         user = User.objects.create_user(email='user@test.com', password='testpass')
         self.client.login(email='user@test.com', password='testpass')
-        response = self.client.get('/courses/free-course/1/1')
+        response = self.client.get('/courses/free-course/m1/free-lesson')
         self.assertEqual(response.status_code, 200)
 
     def test_anonymous_free_course_sees_signup_cta(self):
@@ -274,13 +274,13 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
             status='published', required_level=LEVEL_OPEN, is_free=True,
         )
         module = Module.objects.create(
-            course=free_course, title='M1', sort_order=1,
+            course=free_course, title='M1', slug='m1', sort_order=1,
         )
         Unit.objects.create(
-            module=module, title='Free Lesson', sort_order=1,
+            module=module, title='Free Lesson', slug='free-lesson', sort_order=1,
             body='Free content.',
         )
-        response = self.client.get('/courses/free-course-cta/1/1')
+        response = self.client.get('/courses/free-course-cta/m1/free-lesson')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response,
@@ -293,7 +293,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         self.assertNotContains(response, '/pricing', status_code=403)
 
     def test_anonymous_paid_course_sees_pricing_cta(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response,
@@ -305,7 +305,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         self.assertNotContains(response, '/accounts/signup/', status_code=403)
 
     def test_gated_page_shows_lock_icon(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'lock', status_code=403)
 
 
@@ -325,20 +325,20 @@ class CourseUnitProgressTest(CourseUnitSetupMixin, TestCase):
         self.client.login(email='main@test.com', password='testpass')
 
     def test_shows_mark_as_completed_button(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Mark as completed')
 
     def test_shows_completed_button_when_done(self):
         UserCourseProgress.objects.create(
             user=self.user, unit=self.unit1, completed_at=timezone.now(),
         )
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Completed')
 
     def test_no_mark_complete_for_anonymous(self):
         self.client.logout()
         # Preview unit accessible to anonymous
-        response = self.client.get('/courses/test-course/1/3')
+        response = self.client.get('/courses/test-course/module-1/preview-lesson')
         # The button element itself should not render for anonymous users.
         # The JS script block always has the ID ref but does nothing if button is absent.
         self.assertNotContains(response, 'id="mark-complete-btn"')
@@ -347,13 +347,13 @@ class CourseUnitProgressTest(CourseUnitSetupMixin, TestCase):
         UserCourseProgress.objects.create(
             user=self.user, unit=self.unit1, completed_at=timezone.now(),
         )
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         content = response.content.decode()
         # check-circle-2 icon should appear in sidebar for completed unit
         self.assertIn('check-circle-2', content)
 
     def test_sidebar_shows_circle_for_incomplete(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         content = response.content.decode()
         # circle icon for incomplete units
         self.assertIn('data-lucide="circle"', content)
@@ -375,24 +375,24 @@ class NextUnitButtonTest(CourseUnitSetupMixin, TestCase):
         self.client.login(email='main@test.com', password='testpass')
 
     def test_next_unit_within_module(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Next: Lesson 2')
-        self.assertContains(response, 'href="/courses/test-course/1/2"')
+        self.assertContains(response, 'href="/courses/test-course/module-1/lesson-2"')
 
     def test_next_unit_across_module_boundary(self):
-        response = self.client.get('/courses/test-course/1/3')
+        response = self.client.get('/courses/test-course/module-1/preview-lesson')
         # After the last unit in module 1 (sort_order 3), next is module 2 unit 1
         self.assertContains(response, 'Next: Advanced Lesson')
-        self.assertContains(response, 'href="/courses/test-course/2/1"')
+        self.assertContains(response, 'href="/courses/test-course/module-2/advanced-lesson"')
 
     def test_no_next_unit_on_last_unit(self):
-        response = self.client.get('/courses/test-course/2/1')
+        response = self.client.get('/courses/test-course/module-2/advanced-lesson')
         self.assertNotContains(response, 'Next:')
 
     def test_next_unit_from_first_to_second(self):
         """Verify navigation from unit 1 to unit 2 in same module."""
-        response = self.client.get('/courses/test-course/1/1')
-        self.assertContains(response, '/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
+        self.assertContains(response, '/courses/test-course/module-1/lesson-2')
 
 
 # ============================================================
@@ -514,10 +514,10 @@ class ApiCourseUnitDetailTest(CourseUnitSetupMixin, TestCase):
             title='Other', slug='other-course', status='published',
         )
         other_module = Module.objects.create(
-            course=other_course, title='OM', sort_order=1,
+            course=other_course, title='OM', slug='om', sort_order=1,
         )
         other_unit = Unit.objects.create(
-            module=other_module, title='OU', sort_order=1,
+            module=other_module, title='OU', slug='ou', sort_order=1,
         )
         response = self.client.get(f'/api/courses/test-course/units/{other_unit.pk}')
         self.assertEqual(response.status_code, 404)
@@ -639,15 +639,15 @@ class NextUnitHelperTest(TestCase):
             title='Nav Course', slug='nav-course', status='published',
         )
         self.m1 = Module.objects.create(
-            course=self.course, title='M1', sort_order=1,
+            course=self.course, title='M1', slug='m1', sort_order=1,
         )
         self.m2 = Module.objects.create(
-            course=self.course, title='M2', sort_order=2,
+            course=self.course, title='M2', slug='m2', sort_order=2,
         )
-        self.u1 = Unit.objects.create(module=self.m1, title='U1', sort_order=1)
-        self.u2 = Unit.objects.create(module=self.m1, title='U2', sort_order=2)
-        self.u3 = Unit.objects.create(module=self.m2, title='U3', sort_order=1)
-        self.u4 = Unit.objects.create(module=self.m2, title='U4', sort_order=2)
+        self.u1 = Unit.objects.create(module=self.m1, title='U1', slug='u1', sort_order=1)
+        self.u2 = Unit.objects.create(module=self.m1, title='U2', slug='u2', sort_order=2)
+        self.u3 = Unit.objects.create(module=self.m2, title='U3', slug='u3', sort_order=1)
+        self.u4 = Unit.objects.create(module=self.m2, title='U4', slug='u4', sort_order=2)
 
     def test_next_within_module(self):
         from content.views.courses import _get_next_unit
@@ -678,15 +678,15 @@ class PrevUnitHelperTest(TestCase):
             title='Nav Course', slug='nav-prev-course', status='published',
         )
         self.m1 = Module.objects.create(
-            course=self.course, title='M1', sort_order=0,
+            course=self.course, title='M1', slug='m1', sort_order=0,
         )
         self.m2 = Module.objects.create(
-            course=self.course, title='M2', sort_order=1,
+            course=self.course, title='M2', slug='m2', sort_order=1,
         )
-        self.u1 = Unit.objects.create(module=self.m1, title='U1', sort_order=0)
-        self.u2 = Unit.objects.create(module=self.m1, title='U2', sort_order=1)
-        self.u3 = Unit.objects.create(module=self.m2, title='U3', sort_order=0)
-        self.u4 = Unit.objects.create(module=self.m2, title='U4', sort_order=1)
+        self.u1 = Unit.objects.create(module=self.m1, title='U1', slug='u1', sort_order=0)
+        self.u2 = Unit.objects.create(module=self.m1, title='U2', slug='u2', sort_order=1)
+        self.u3 = Unit.objects.create(module=self.m2, title='U3', slug='u3', sort_order=0)
+        self.u4 = Unit.objects.create(module=self.m2, title='U4', slug='u4', sort_order=1)
 
     def test_first_unit_returns_none(self):
         from content.views.courses import _get_prev_unit
@@ -714,10 +714,10 @@ class PrevUnitHelperTest(TestCase):
             title='Solo', slug='solo-course', status='published',
         )
         solo_module = Module.objects.create(
-            course=solo_course, title='SM', sort_order=0,
+            course=solo_course, title='SM', slug='sm', sort_order=0,
         )
         solo_unit = Unit.objects.create(
-            module=solo_module, title='SU', sort_order=0,
+            module=solo_module, title='SU', slug='su', sort_order=0,
         )
         prev_unit = _get_prev_unit(solo_course, solo_unit)
         self.assertIsNone(prev_unit)
@@ -739,44 +739,44 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
         self.client.login(email='main@test.com', password='testpass')
 
     def test_prev_unit_in_context_for_non_first_unit(self):
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         self.assertEqual(response.context['prev_unit'].pk, self.unit1.pk)
 
     def test_prev_unit_none_for_first_unit(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertIsNone(response.context['prev_unit'])
 
     def test_prev_button_hidden_on_first_unit(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertNotContains(response, 'data-testid="bottom-prev-btn"')
         self.assertNotContains(response, 'data-testid="top-prev-btn"')
 
     def test_prev_button_shown_on_second_unit(self):
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         self.assertContains(response, 'data-testid="bottom-prev-btn"')
         self.assertContains(response, 'data-testid="top-prev-btn"')
 
     def test_prev_button_text_includes_target_title(self):
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         self.assertContains(response, self.unit1.title)
 
     def test_prev_button_links_to_correct_url(self):
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         self.assertContains(response, f'href="{self.unit1.get_absolute_url()}"')
 
     def test_prev_crosses_module_boundary(self):
-        response = self.client.get('/courses/test-course/2/1')
+        response = self.client.get('/courses/test-course/module-2/advanced-lesson')
         # Last unit in module 1 is the preview unit (sort_order=3)
         self.assertEqual(response.context['prev_unit'].pk, self.preview_unit.pk)
         self.assertContains(response, self.preview_unit.title)
 
     def test_last_unit_shows_prev_but_no_next(self):
-        response = self.client.get('/courses/test-course/2/1')
+        response = self.client.get('/courses/test-course/module-2/advanced-lesson')
         self.assertContains(response, 'data-testid="bottom-prev-btn"')
         self.assertNotContains(response, 'data-testid="bottom-next-btn"')
 
     def test_next_button_still_works(self):
-        response = self.client.get('/courses/test-course/1/1')
+        response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Next: Lesson 2')
         self.assertContains(response, f'href="{self.unit2.get_absolute_url()}"')
 
@@ -786,13 +786,13 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
             required_level=0, is_free=True,
         )
         solo_module = Module.objects.create(
-            course=solo_course, title='SM', sort_order=0,
+            course=solo_course, title='SM', slug='sm', sort_order=0,
         )
         Unit.objects.create(
-            module=solo_module, title='Only Unit', sort_order=0,
+            module=solo_module, title='Only Unit', slug='only-unit', sort_order=0,
             body='content',
         )
-        response = self.client.get('/courses/solo-nav/0/0')
+        response = self.client.get('/courses/solo-nav/sm/only-unit')
         self.assertNotContains(response, 'data-testid="bottom-prev-btn"')
         self.assertNotContains(response, 'data-testid="bottom-next-btn"')
         self.assertNotContains(response, 'data-testid="top-nav-row"')
@@ -801,7 +801,7 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
         """Anonymous user on a preview unit should see Previous if applicable."""
         self.client.logout()
         # preview_unit is sort_order=3 in module1 — prev is unit2 (sort_order=2)
-        response = self.client.get('/courses/test-course/1/3')
+        response = self.client.get('/courses/test-course/module-1/preview-lesson')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="top-prev-btn"')
         self.assertContains(response, self.unit2.title)
@@ -809,7 +809,7 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
     def test_prev_not_in_gated_context(self):
         """Gated render path should not include prev_unit."""
         self.client.logout()
-        response = self.client.get('/courses/test-course/1/2')
+        response = self.client.get('/courses/test-course/module-1/lesson-2')
         self.assertEqual(response.status_code, 403)
         self.assertNotIn('prev_unit', response.context)
 
@@ -832,7 +832,7 @@ class UnitBodyHtmlSyncTest(TestCase):
             title='Sync Test Course', slug='sync-test-course', status='published',
         )
         cls.module = Module.objects.create(
-            course=cls.course, title='Module 1', sort_order=1,
+            course=cls.course, title='Module 1', slug='module-1', sort_order=1,
         )
 
     def test_update_or_create_renders_body_html(self):
@@ -906,6 +906,7 @@ class UnitBodyHtmlSyncTest(TestCase):
         unit = Unit.objects.create(
             module=self.module,
             title='Stale Test',
+            slug='stale-test',
             sort_order=3,
             body='Old content',
             source_path='test/stale.md',

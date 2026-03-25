@@ -168,12 +168,12 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
             title='AI Basics', slug='ai-basics', status='published',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         self.units = []
         for i in range(4):
             unit = Unit.objects.create(
-                module=self.module, title=f'Unit {i+1}', sort_order=i,
+                module=self.module, title=f'Unit {i+1}', slug=f'unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
 
@@ -244,13 +244,13 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
             title='ML Advanced', slug='ml-advanced', status='published',
         )
         module2 = Module.objects.create(
-            course=course2, title='Module 2', sort_order=1,
+            course=course2, title='Module 2', slug='module-2', sort_order=1,
         )
         unit_a = Unit.objects.create(
-            module=module2, title='Adv Unit 1', sort_order=0,
+            module=module2, title='Adv Unit 1', slug='adv-unit-1', sort_order=0,
         )
         unit_b = Unit.objects.create(
-            module=module2, title='Adv Unit 2', sort_order=1,
+            module=module2, title='Adv Unit 2', slug='adv-unit-2', sort_order=1,
         )
 
         now = timezone.now()

@@ -214,25 +214,25 @@ class UnitAvailableAfterDaysTest(TestCase):
             title='Drip Course', slug='drip-course', status='published',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
 
     def test_default_is_none(self):
         unit = Unit.objects.create(
-            module=self.module, title='No Drip', sort_order=1,
+            module=self.module, title='No Drip', slug='no-drip', sort_order=1,
         )
         self.assertIsNone(unit.available_after_days)
 
     def test_set_available_after_days(self):
         unit = Unit.objects.create(
-            module=self.module, title='Drip Unit', sort_order=1,
+            module=self.module, title='Drip Unit', slug='drip-unit', sort_order=1,
             available_after_days=7,
         )
         self.assertEqual(unit.available_after_days, 7)
 
     def test_available_after_days_zero(self):
         unit = Unit.objects.create(
-            module=self.module, title='Day Zero', sort_order=1,
+            module=self.module, title='Day Zero', slug='day-zero', sort_order=1,
             available_after_days=0,
         )
         self.assertEqual(unit.available_after_days, 0)
@@ -253,10 +253,10 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_MAIN,
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
         Unit.objects.create(
-            module=self.module, title='Lesson 1', sort_order=1,
+            module=self.module, title='Lesson 1', slug='lesson-1', sort_order=1,
         )
         self.cohort = Cohort.objects.create(
             course=self.course, name='Spring 2026',
@@ -554,16 +554,16 @@ class DripScheduleTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_MAIN,
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=1,
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
         )
         # Unit available immediately (no drip)
         self.unit_no_drip = Unit.objects.create(
-            module=self.module, title='Available Now', sort_order=1,
+            module=self.module, title='Available Now', slug='available-now', sort_order=1,
             body='Immediate content.',
         )
         # Unit with drip schedule
         self.unit_drip = Unit.objects.create(
-            module=self.module, title='Week 2 Lesson', sort_order=2,
+            module=self.module, title='Week 2 Lesson', slug='week-2-lesson', sort_order=2,
             body='Week 2 content.',
             available_after_days=14,
         )
@@ -575,12 +575,12 @@ class DripScheduleTest(TierSetupMixin, TestCase):
 
     def test_no_drip_unit_accessible_without_cohort(self):
         """User not in a cohort can access units with available_after_days=None."""
-        response = self.client.get('/courses/drip-course/1/1')
+        response = self.client.get('/courses/drip-course/module-1/available-now')
         self.assertEqual(response.status_code, 200)
 
     def test_drip_unit_accessible_without_cohort_enrollment(self):
         """User NOT enrolled in any cohort can access drip units (drip only applies to cohort members)."""
-        response = self.client.get('/courses/drip-course/1/2')
+        response = self.client.get('/courses/drip-course/module-1/week-2-lesson')
         self.assertEqual(response.status_code, 200)
 
     def test_drip_unit_locked_when_too_early(self):
@@ -593,7 +593,7 @@ class DripScheduleTest(TierSetupMixin, TestCase):
             is_active=True,
         )
         CohortEnrollment.objects.create(cohort=cohort, user=self.user)
-        response = self.client.get('/courses/drip-course/1/2')
+        response = self.client.get('/courses/drip-course/module-1/week-2-lesson')
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'This lesson will be available on', status_code=403)
 
@@ -607,7 +607,7 @@ class DripScheduleTest(TierSetupMixin, TestCase):
             is_active=True,
         )
         CohortEnrollment.objects.create(cohort=cohort, user=self.user)
-        response = self.client.get('/courses/drip-course/1/2')
+        response = self.client.get('/courses/drip-course/module-1/week-2-lesson')
         self.assertEqual(response.status_code, 200)
 
     def test_drip_does_not_affect_no_drip_unit(self):
@@ -619,7 +619,7 @@ class DripScheduleTest(TierSetupMixin, TestCase):
             is_active=True,
         )
         CohortEnrollment.objects.create(cohort=cohort, user=self.user)
-        response = self.client.get('/courses/drip-course/1/1')
+        response = self.client.get('/courses/drip-course/module-1/available-now')
         self.assertEqual(response.status_code, 200)
 
     def test_drip_locked_shows_clock_icon(self):
@@ -631,13 +631,13 @@ class DripScheduleTest(TierSetupMixin, TestCase):
             is_active=True,
         )
         CohortEnrollment.objects.create(cohort=cohort, user=self.user)
-        response = self.client.get('/courses/drip-course/1/2')
+        response = self.client.get('/courses/drip-course/module-1/week-2-lesson')
         self.assertContains(response, 'clock', status_code=403)
 
     def test_drip_unit_available_after_days_zero(self):
         """Unit with available_after_days=0 is available from day 1."""
         unit_day0 = Unit.objects.create(
-            module=self.module, title='Day Zero', sort_order=3,
+            module=self.module, title='Day Zero', slug='day-zero', sort_order=3,
             body='Day zero content.',
             available_after_days=0,
         )
@@ -649,7 +649,7 @@ class DripScheduleTest(TierSetupMixin, TestCase):
             is_active=True,
         )
         CohortEnrollment.objects.create(cohort=cohort, user=self.user)
-        response = self.client.get('/courses/drip-course/1/3')
+        response = self.client.get('/courses/drip-course/module-1/day-zero')
         self.assertEqual(response.status_code, 200)
 
 
@@ -717,10 +717,10 @@ class CohortAdminTest(TestCase):
     def test_admin_unit_has_available_after_days_field(self):
         """Unit admin should show the available_after_days field."""
         module = Module.objects.create(
-            course=self.course, title='M1', sort_order=1,
+            course=self.course, title='M1', slug='m1', sort_order=1,
         )
         unit = Unit.objects.create(
-            module=module, title='U1', sort_order=1,
+            module=module, title='U1', slug='u1', sort_order=1,
         )
         response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
         self.assertEqual(response.status_code, 200)

@@ -244,11 +244,13 @@ class StructuredDataUnitTest(TestCase):
         self.module = Module.objects.create(
             course=self.course,
             title='Module 1',
+            slug='module-1',
             sort_order=0,
         )
         self.unit = Unit.objects.create(
             module=self.module,
             title='Lesson 1',
+            slug='lesson-1',
             sort_order=0,
             video_url='https://youtube.com/watch?v=xyz',
         )

@@ -153,6 +153,7 @@ def module_create(request, course_id):
         Module.objects.create(
             course=course,
             title=title,
+            slug=slugify(title) or f'module-{max_order + 1}',
             sort_order=max_order + 1,
         )
     return redirect('studio_course_edit', course_id=course.pk)
@@ -171,6 +172,7 @@ def unit_create(request, module_id):
         Unit.objects.create(
             module=module,
             title=title,
+            slug=slugify(title) or f'unit-{max_order + 1}',
             sort_order=max_order + 1,
         )
     return redirect('studio_course_edit', course_id=module.course.pk)

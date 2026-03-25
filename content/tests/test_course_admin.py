@@ -140,13 +140,13 @@ class CourseAdminCRUDTest(TestCase):
             title='Cascade Test', slug='cascade-test',
         )
         module = Module.objects.create(
-            course=course, title='Module 1', sort_order=1,
+            course=course, title='Module 1', slug='module-1', sort_order=1,
         )
         Unit.objects.create(
-            module=module, title='Unit 1', sort_order=1,
+            module=module, title='Unit 1', slug='unit-1', sort_order=1,
         )
         Unit.objects.create(
-            module=module, title='Unit 2', sort_order=2,
+            module=module, title='Unit 2', slug='unit-2', sort_order=2,
         )
 
         self.assertEqual(Module.objects.filter(course=course).count(), 1)
@@ -181,14 +181,14 @@ class ModuleAdminCRUDTest(TestCase):
 
     def test_module_edit_page_loads(self):
         module = Module.objects.create(
-            course=self.course, title='Edit Module', sort_order=1,
+            course=self.course, title='Edit Module', slug='edit-module', sort_order=1,
         )
         response = self.client.get(f'/admin/content/module/{module.pk}/change/')
         self.assertEqual(response.status_code, 200)
 
     def test_module_edit_has_unit_inline(self):
         module = Module.objects.create(
-            course=self.course, title='With Units', sort_order=1,
+            course=self.course, title='With Units', slug='with-units', sort_order=1,
         )
         response = self.client.get(f'/admin/content/module/{module.pk}/change/')
         self.assertContains(response, 'units-')
@@ -207,7 +207,7 @@ class UnitAdminCRUDTest(TestCase):
             title='Unit CRUD Course', slug='unit-crud',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
 
     def test_unit_list_page_loads(self):
@@ -220,14 +220,14 @@ class UnitAdminCRUDTest(TestCase):
 
     def test_unit_edit_page_loads(self):
         unit = Unit.objects.create(
-            module=self.module, title='Edit Unit', sort_order=1,
+            module=self.module, title='Edit Unit', slug='edit-unit', sort_order=1,
         )
         response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
         self.assertEqual(response.status_code, 200)
 
     def test_unit_edit_page_has_timestamps_field(self):
         unit = Unit.objects.create(
-            module=self.module, title='TS Unit', sort_order=1,
+            module=self.module, title='TS Unit', slug='ts-unit', sort_order=1,
             timestamps=[{'time_seconds': 120, 'label': 'Intro'}],
         )
         response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
@@ -236,28 +236,28 @@ class UnitAdminCRUDTest(TestCase):
 
     def test_unit_edit_page_has_body_field(self):
         unit = Unit.objects.create(
-            module=self.module, title='Body Unit', sort_order=1,
+            module=self.module, title='Body Unit', slug='body-unit', sort_order=1,
         )
         response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_body')
 
     def test_unit_edit_page_has_homework_field(self):
         unit = Unit.objects.create(
-            module=self.module, title='HW Unit', sort_order=1,
+            module=self.module, title='HW Unit', slug='hw-unit', sort_order=1,
         )
         response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_homework')
 
     def test_unit_edit_page_has_video_url_field(self):
         unit = Unit.objects.create(
-            module=self.module, title='Video Unit', sort_order=1,
+            module=self.module, title='Video Unit', slug='video-unit', sort_order=1,
         )
         response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_video_url')
 
     def test_unit_edit_page_has_is_preview_field(self):
         unit = Unit.objects.create(
-            module=self.module, title='Preview Unit', sort_order=1,
+            module=self.module, title='Preview Unit', slug='preview-unit', sort_order=1,
         )
         response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_is_preview')
@@ -287,13 +287,13 @@ class ReorderModulesApiTest(TestCase):
             title='Reorder Course', slug='reorder',
         )
         self.mod1 = Module.objects.create(
-            course=self.course, title='Module 1', sort_order=0,
+            course=self.course, title='Module 1', slug='module-1', sort_order=0,
         )
         self.mod2 = Module.objects.create(
-            course=self.course, title='Module 2', sort_order=1,
+            course=self.course, title='Module 2', slug='module-2', sort_order=1,
         )
         self.mod3 = Module.objects.create(
-            course=self.course, title='Module 3', sort_order=2,
+            course=self.course, title='Module 3', slug='module-3', sort_order=2,
         )
 
     def test_reorder_succeeds_for_staff(self):
@@ -475,16 +475,16 @@ class ReorderUnitsApiTest(TestCase):
             title='Unit Reorder Course', slug='unit-reorder',
         )
         self.module = Module.objects.create(
-            course=self.course, title='Module', sort_order=1,
+            course=self.course, title='Module', slug='module', sort_order=1,
         )
         self.unit1 = Unit.objects.create(
-            module=self.module, title='Unit A', sort_order=0,
+            module=self.module, title='Unit A', slug='unit-a', sort_order=0,
         )
         self.unit2 = Unit.objects.create(
-            module=self.module, title='Unit B', sort_order=1,
+            module=self.module, title='Unit B', slug='unit-b', sort_order=1,
         )
         self.unit3 = Unit.objects.create(
-            module=self.module, title='Unit C', sort_order=2,
+            module=self.module, title='Unit C', slug='unit-c', sort_order=2,
         )
 
     def test_reorder_succeeds_for_staff(self):

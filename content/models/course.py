@@ -172,6 +172,7 @@ class Module(models.Model):
         Course, on_delete=models.CASCADE, related_name='modules',
     )
     title = models.CharField(max_length=300)
+    slug = models.SlugField(max_length=300, default='')
     sort_order = models.IntegerField(default=0)
     source_repo = models.CharField(
         max_length=300, blank=True, null=True, default=None,
@@ -188,6 +189,7 @@ class Module(models.Model):
 
     class Meta:
         ordering = ['sort_order']
+        unique_together = [('course', 'slug')]
 
     def __str__(self):
         return f'{self.course.title} - {self.title}'
@@ -204,6 +206,7 @@ class Unit(models.Model):
         Module, on_delete=models.CASCADE, related_name='units',
     )
     title = models.CharField(max_length=300)
+    slug = models.SlugField(max_length=300, default='')
     sort_order = models.IntegerField(default=0)
     video_url = models.URLField(max_length=500, blank=True, default='')
     body = models.TextField(
@@ -253,6 +256,7 @@ class Unit(models.Model):
 
     class Meta:
         ordering = ['sort_order']
+        unique_together = [('module', 'slug')]
 
     def __str__(self):
         return f'{self.module.title} - {self.title}'
@@ -277,7 +281,7 @@ class Unit(models.Model):
     def get_absolute_url(self):
         """Return URL for this unit's page."""
         course = self.module.course
-        return f'/courses/{course.slug}/{self.module.sort_order}/{self.sort_order}'
+        return f'/courses/{course.slug}/{self.module.slug}/{self.slug}'
 
 
 class UserCourseProgress(models.Model):

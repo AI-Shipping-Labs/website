@@ -65,6 +65,7 @@ def _ensure_aihero_course():
     module = Module.objects.create(
         course=course,
         title="7-Day AI Agents",
+        slug="7-day-ai-agents",
         sort_order=0,
     )
     days = [
@@ -111,10 +112,14 @@ def _ensure_aihero_course():
             "Submit your project and review three peers.",
         ),
     ]
+    slugs = [
+        "day-1", "day-2", "day-3", "day-4", "day-5", "day-6", "day-7",
+    ]
     for i, (title, is_preview, body_text, hw_text) in enumerate(days):
         Unit.objects.create(
             module=module,
             title=title,
+            slug=slugs[i],
             sort_order=i,
             is_preview=is_preview,
             body=f"# {title}\n\n{body_text}",

@@ -285,6 +285,33 @@ def rewrite_image_urls(markdown_text, repo_name, base_path=''):
     return result
 
 
+def rewrite_cover_image_url(cover_image, source, rel_path):
+    """Rewrite a cover_image path from frontmatter to a CDN URL if relative.
+
+    Args:
+        cover_image: The cover_image value from frontmatter (may be empty,
+            a relative path, or a full URL).
+        source: ContentSource instance (used for repo_name).
+        rel_path: Relative path of the content file within the repo
+            (used to resolve relative image paths).
+
+    Returns:
+        str: The CDN URL if the path was relative, the original URL if absolute,
+            or empty string if no cover image.
+    """
+    if not cover_image:
+        return ''
+    if cover_image.startswith(('http://', 'https://')):
+        return cover_image
+
+    cdn_base = getattr(settings, 'CONTENT_CDN_BASE', '/static/content-images')
+    repo_short = source.repo_name.split('/')[-1] if '/' in source.repo_name else source.repo_name
+    clean_path = cover_image.lstrip('/')
+    base_dir = os.path.dirname(rel_path)
+    full_path = os.path.normpath(os.path.join(base_dir, clean_path))
+    return f'{cdn_base}/{repo_short}/{full_path}'
+
+
 def _md5_file(filepath, chunk_size=8192):
     """Compute the MD5 hex digest of a file."""
     md5 = hashlib.md5()
@@ -804,7 +831,10 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
                     'content_markdown': body,
                     'author': metadata.get('author', ''),
                     'tags': metadata.get('tags', []),
-                    'cover_image_url': metadata.get('cover_image', ''),
+                    'cover_image_url': rewrite_cover_image_url(
+                        metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
+                        source, rel_path,
+                    ),
                     'required_level': metadata.get('required_level', 0),
                     'published': True,
                     'source_repo': source.repo_name,
@@ -922,7 +952,10 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
                 'description': course_data.get('description', ''),
                 'instructor_name': course_data.get('instructor_name', ''),
                 'instructor_bio': course_data.get('instructor_bio', ''),
-                'cover_image_url': course_data.get('cover_image', ''),
+                'cover_image_url': rewrite_cover_image_url(
+                    course_data.get('cover_image', '') or course_data.get('cover_image_url', ''),
+                    source, os.path.join(rel_path, 'course.yaml'),
+                ),
                 'required_level': course_data.get('required_level', 0),
                 'is_free': course_data.get('is_free', False),
                 'discussion_url': course_data.get('discussion_url', ''),
@@ -1400,7 +1433,10 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
                 'file_url': data.get('file_url', ''),
                 'file_type': data.get('file_type', 'other'),
                 'file_size_bytes': data.get('file_size_bytes', 0),
-                'cover_image_url': data.get('cover_image_url', ''),
+                'cover_image_url': rewrite_cover_image_url(
+                    data.get('cover_image', '') or data.get('cover_image_url', ''),
+                    source, rel_path,
+                ),
                 'tags': data.get('tags', []),
                 'required_level': data.get('required_level', 0),
                 'published': True,
@@ -1507,7 +1543,10 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
                     'difficulty': metadata.get('difficulty', ''),
                     'source_code_url': metadata.get('source_code_url', ''),
                     'demo_url': metadata.get('demo_url', ''),
-                    'cover_image_url': metadata.get('cover_image', ''),
+                    'cover_image_url': rewrite_cover_image_url(
+                        metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
+                        source, rel_path,
+                    ),
                     'required_level': metadata.get('required_level', 0),
                     'published': True,
                     'source_repo': source.repo_name,

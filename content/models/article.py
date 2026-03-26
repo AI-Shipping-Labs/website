@@ -111,8 +111,10 @@ class Article(models.Model):
         # Auto-render markdown to HTML on save
         if self.content_markdown:
             from content.templatetags.video_utils import replace_video_urls_in_html
+            from content.utils.linkify import linkify_urls
             html = render_markdown(self.content_markdown)
-            self.content_html = replace_video_urls_in_html(html)
+            html = replace_video_urls_in_html(html)
+            self.content_html = linkify_urls(html)
 
         # Calculate reading time if not set
         if self.content_markdown and not self.reading_time:

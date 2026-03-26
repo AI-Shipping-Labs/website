@@ -132,13 +132,16 @@ class Course(models.Model):
         return f'/courses/{self.slug}'
 
     def save(self, *args, **kwargs):
+        from content.utils.linkify import linkify_urls
         from content.utils.tags import normalize_tags
         self.tags = normalize_tags(self.tags)
 
         if self.description:
-            self.description_html = render_markdown(self.description)
+            self.description_html = linkify_urls(render_markdown(self.description))
         if self.peer_review_criteria:
-            self.peer_review_criteria_html = render_markdown(self.peer_review_criteria)
+            self.peer_review_criteria_html = linkify_urls(
+                render_markdown(self.peer_review_criteria)
+            )
         super().save(*args, **kwargs)
 
     @property
@@ -266,10 +269,11 @@ class Unit(models.Model):
         return f'{self.module.title} - {self.title}'
 
     def save(self, *args, **kwargs):
+        from content.utils.linkify import linkify_urls
         if self.body:
-            self.body_html = render_markdown(self.body)
+            self.body_html = linkify_urls(render_markdown(self.body))
         if self.homework:
-            self.homework_html = render_markdown(self.homework)
+            self.homework_html = linkify_urls(render_markdown(self.homework))
         # When save() is called with update_fields (e.g. from update_or_create),
         # ensure rendered HTML fields are included so they get written to DB.
         update_fields = kwargs.get('update_fields')

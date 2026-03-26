@@ -162,9 +162,9 @@ COMMENT
 )"
 ```
 
-### 7. Capture Screenshots
+### 7. Capture Screenshots (MANDATORY)
 
-After tests pass, capture screenshots of the feature's key pages and attach them to the issue:
+This step is NOT optional. Screenshots are used by agents to verify pages rendered correctly, not just for human review. After tests pass, capture screenshots of the feature's key pages and attach them to the issue:
 
 ```bash
 uv run python scripts/capture_screenshots.py --urls {relevant URLs} --issue {NUMBER}

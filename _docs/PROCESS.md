@@ -99,8 +99,16 @@ Orchestrator picks groomed issue
 - If PM accepts: tell software engineer to commit and push
 - After pushing, run oncall-engineer to check CI/CD
 - After committing, pick the next two issues (never stop until all issues are done)
+
+### Mandatory Steps (never skip)
+
+- Every issue goes through ALL stages: PM groom → SWE implement → Tester review → PM acceptance → Commit → Oncall CI check
+- Tester must run the full workflow from `.claude/agents/tester.md` including Step 7 (capture screenshots). Screenshots are used by agents to verify pages rendered correctly, not just for human review
 - Tester must actually run all tests — not just review code. Test report must include counts by type
-- Tester must run Playwright visual regression tests, not just verify they exist
+- Tester must capture screenshots of every changed page and read each one to verify it is not a 404, error, or broken layout
+- SWE and tester must update acceptance criteria checkboxes in the issue body (`- [ ]` → `- [x]`)
+- Never commit directly without tester review, even for "simple" changes
+- After push, always run oncall-engineer agent to monitor CI — do not just check manually
 
 ### How to Pick Issues
 

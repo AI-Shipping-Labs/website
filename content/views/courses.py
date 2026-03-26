@@ -112,13 +112,8 @@ def course_detail(request, slug):
             ).values_list('cohort_id', flat=True)
         )
 
-    # Discussion button: visible when discussion_url is set and user meets tier.
-    # Free courses: any authenticated user (links to public forums).
-    # Paid courses: only Main+ tier (links to Slack).
-    show_discussion = bool(course.discussion_url) and (
-        (course.is_free and user.is_authenticated)
-        or get_user_level(user) >= LEVEL_MAIN
-    )
+    # Discussion button: visible only for Main+ tier users with community access.
+    show_discussion = bool(course.discussion_url) and get_user_level(user) >= LEVEL_MAIN
 
     context = {
         'course': course,
@@ -361,10 +356,7 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     prev_unit = _get_prev_unit(course, unit)
 
     # Discussion link (same logic as course_detail)
-    show_discussion = bool(course.discussion_url) and (
-        (course.is_free and user.is_authenticated)
-        or get_user_level(user) >= LEVEL_MAIN
-    )
+    show_discussion = bool(course.discussion_url) and get_user_level(user) >= LEVEL_MAIN
 
     context = {
         'course': course,

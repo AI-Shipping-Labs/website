@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgres:17
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: aishippinglabs
+      POSTGRES_USER: aishippinglabs
+      POSTGRES_PASSWORD: aishippinglabs
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aishippinglabs"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  setup:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://aishippinglabs:aishippinglabs@db:5432/aishippinglabs
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./_content-repo:/app/_content-repo
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "uv run python manage.py migrate &&
+             uv run python manage.py seed_data &&
+             uv run python manage.py seed_content_sources &&
+             uv run python manage.py sync_content --from-disk _content-repo"
+    profiles:
+      - setup
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://aishippinglabs:aishippinglabs@db:5432/aishippinglabs
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "uv run python manage.py migrate &&
+             uv run python manage.py collectstatic --noinput &&
+             uv run gunicorn website.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://aishippinglabs:aishippinglabs@db:5432/aishippinglabs
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uv run python manage.py qcluster
+
+  watcher:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://aishippinglabs:aishippinglabs@db:5432/aishippinglabs
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./_content-repo:/app/_content-repo
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uv run python manage.py watch_content _content-repo
+
+volumes:
+  pgdata:

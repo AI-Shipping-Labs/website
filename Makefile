@@ -4,13 +4,17 @@
 run: migrate
 	uv run python manage.py runserver
 
+# Start dev server on port 8001
+run2: migrate
+	uv run python manage.py runserver 8001
+
 # Run migrations
 migrate:
 	uv run python manage.py migrate
 
 # Sync content from local content repo clone
 # Override repo path: make sync CONTENT_REPO=~/other/path
-CONTENT_REPO ?= ~/git/ai-shipping-labs-content
+CONTENT_REPO ?= _content-repo
 sync:
 	uv run python manage.py seed_content_sources
 	uv run python manage.py sync_content --from-disk $(CONTENT_REPO)
@@ -35,12 +39,9 @@ playwright:
 # Run all tests (Django + Playwright)
 test-all: test playwright
 
-# Initial setup: install deps, migrate, sync content
+# Initial setup: .env, content repo, deps, migrate, sync
 setup:
-	uv sync
-	uv run playwright install chromium
-	$(MAKE) migrate
-	$(MAKE) sync
+	bash scripts/setup.sh
 
 # Clean generated files
 clean:

@@ -1,0 +1,15 @@
+.venv/
+.git/
+.env
+*.sqlite3
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+staticfiles/
+_content-repo/
+.coverage
+htmlcov/
+playwright_tests/
+_docs/
+specs/
+.claude/

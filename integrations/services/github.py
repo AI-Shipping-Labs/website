@@ -590,7 +590,7 @@ def _parse_markdown_file(filepath):
     Returns:
         tuple: (metadata dict, body string)
     """
-    post = frontmatter.load(filepath)
+    post = frontmatter.load(filepath, encoding='utf-8')
     return dict(post.metadata), post.content
 
 
@@ -603,7 +603,7 @@ def _parse_yaml_file(filepath):
     Returns:
         dict: Parsed YAML data.
     """
-    with open(filepath, 'r') as f:
+    with open(filepath, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f) or {}
 
 

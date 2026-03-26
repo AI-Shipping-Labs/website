@@ -1,7 +1,30 @@
-"""Middleware for configurable URL redirects."""
+"""Middleware for URL redirects and trailing slash removal."""
 
 from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 from django.core.cache import cache
+
+
+class RemoveTrailingSlashMiddleware:
+    """Redirect URLs with trailing slashes to the version without.
+
+    Skips the root URL ('/') and paths under prefixes that use trailing slashes
+    (admin, accounts, allauth, studio, Django static/media).
+    """
+
+    SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/studio/', '/static/', '/media/')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        path = request.path
+        if path != '/' and path.endswith('/'):
+            if not any(path.startswith(p) for p in self.SKIP_PREFIXES):
+                new_path = path.rstrip('/')
+                if request.META.get('QUERY_STRING'):
+                    new_path = f'{new_path}?{request.META["QUERY_STRING"]}'
+                return HttpResponsePermanentRedirect(new_path)
+        return self.get_response(request)
 
 REDIRECT_CACHE_KEY = 'active_redirects'
 REDIRECT_CACHE_TIMEOUT = 300  # 5 minutes

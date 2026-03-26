@@ -13,7 +13,13 @@ Django-based community platform for [aishippinglabs.com](https://aishippinglabs.
 make setup
 ```
 
-This installs dependencies, Playwright browsers, runs migrations, and loads content.
+This runs `scripts/setup.sh` which:
+1. Creates `.env` from `.env.example` (edit it with your credentials)
+2. Installs Python dependencies (`uv sync`)
+3. Clones `AI-Shipping-Labs/content` into `_content-repo/`
+4. Runs database migrations
+5. Seeds the database with test users, tiers, and sample data
+6. Syncs content from the local clone
 
 ## Running
 

@@ -19,5 +19,8 @@ htmlcov/
 # OS files
 .DS_Store
 
+# Content repo (local clone)
+_content-repo/
+
 # Playwright
 playwright_tests/screenshots/

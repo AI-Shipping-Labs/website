@@ -74,7 +74,7 @@ class Command(BaseCommand):
             if os.path.isfile(tiers_path):
                 self.stdout.write('Syncing tiers.yaml...')
                 try:
-                    with open(tiers_path) as f:
+                    with open(tiers_path, encoding='utf-8') as f:
                         tiers_data = yaml.safe_load(f) or []
                     SiteConfig.objects.update_or_create(
                         key='tiers',

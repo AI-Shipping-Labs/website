@@ -1,5 +1,5 @@
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from payments.models import Tier
 
@@ -128,6 +128,7 @@ class TierPricingViewTest(TestCase):
         )
         self.assertContains(response, "Subscribe")
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_pricing_page_paid_tiers_have_join_button(self):
         response = self.client.get("/pricing")
         content = response.content.decode()

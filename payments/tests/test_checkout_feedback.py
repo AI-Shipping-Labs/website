@@ -16,13 +16,14 @@ import json
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from payments.models import Tier
 
 User = get_user_model()
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CheckoutSuccessRedirectTest(TestCase):
     """Test that the checkout view redirects to /?checkout=success on success."""
 

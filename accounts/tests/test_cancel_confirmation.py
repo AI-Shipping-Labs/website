@@ -8,13 +8,14 @@ import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import User
 from payments.models import Tier
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CancelModalRenderedTest(TestCase):
     """Tests that the cancel modal renders with the new confirmation elements."""
 
@@ -99,6 +100,7 @@ class CancelModalRenderedTest(TestCase):
         self.assertIn("Keep my plan", content)
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CancelModalFeatureLossTest(TestCase):
     """Tests for the feature loss summary in the cancel modal."""
 
@@ -163,6 +165,7 @@ class CancelModalFeatureLossTest(TestCase):
         self.assertIn("Resume/LinkedIn/GitHub teardowns", content)
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CancelModalEmptyFeaturesTest(TestCase):
     """Tests for the cancel modal when tier has no features."""
 
@@ -216,6 +219,7 @@ class CancelModalEmptyFeaturesTest(TestCase):
         self.assertIsInstance(tier_features, list)
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CancelModalNoBillingDateTest(TestCase):
     """Tests for cancel modal when billing_period_end is not set."""
 
@@ -330,6 +334,7 @@ class CancelAPIStillWorksTest(TestCase):
         self.assertIn("access ends on", content)
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CancelModalBillingDateDisplayTest(TestCase):
     """Tests that the billing period end date is shown in the cancel modal."""
 

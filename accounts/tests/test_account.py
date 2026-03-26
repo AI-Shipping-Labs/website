@@ -3,7 +3,7 @@
 import json
 from unittest.mock import patch, MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -140,18 +140,21 @@ class AccountPagePaidUserTest(TestCase):
         content = response.content.decode()
         self.assertIn("15/03/2026", content)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_shows_upgrade_button_for_non_premium(self):
         """Main-tier users see 'Upgrade' button."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertIn('id="upgrade-btn"', content)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_shows_downgrade_button(self):
         """Main-tier users see 'Downgrade' button."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertIn('id="downgrade-btn"', content)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_shows_cancel_button(self):
         """Paid users see 'Cancel Subscription' button."""
         response = self.client.get("/account/")
@@ -183,18 +186,21 @@ class AccountPagePremiumUserTest(TestCase):
         )
         self.client.force_login(self.user)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_no_upgrade_button_for_premium(self):
         """Premium users do not see 'Upgrade' button (already at highest tier)."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertNotIn('id="upgrade-btn"', content)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_shows_downgrade_button(self):
         """Premium users see 'Downgrade' button."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertIn('id="downgrade-btn"', content)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_shows_cancel_button(self):
         """Premium users see 'Cancel Subscription' button."""
         response = self.client.get("/account/")
@@ -216,18 +222,21 @@ class AccountPageBasicUserTest(TestCase):
         )
         self.client.force_login(self.user)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_shows_upgrade_button(self):
         """Basic users see 'Upgrade' button."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertIn('id="upgrade-btn"', content)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_no_downgrade_button_for_basic(self):
         """Basic users do not see 'Downgrade' button (lowest paid tier)."""
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertNotIn('id="downgrade-btn"', content)
 
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_shows_cancel_button(self):
         """Basic users see 'Cancel Subscription' button."""
         response = self.client.get("/account/")

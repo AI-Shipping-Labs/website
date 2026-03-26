@@ -527,6 +527,13 @@ def api_cohort_unenroll(request, slug, cohort_id):
 @require_POST
 def api_course_purchase(request, slug):
     """POST /api/courses/{slug}/purchase - create a Stripe checkout for one-time course purchase."""
+    from django.conf import settings as django_settings
+    if not django_settings.STRIPE_CHECKOUT_ENABLED:
+        return JsonResponse({
+            'error': 'Checkout is disabled. Use payment links.',
+            'portal_url': django_settings.STRIPE_CUSTOMER_PORTAL_URL,
+        }, status=410)
+
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required'}, status=401)
 

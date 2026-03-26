@@ -12,12 +12,13 @@ Tests cover:
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from accounts.models import User
 from payments.models import Tier
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CreateCheckoutViewTest(TestCase):
     """Tests for the create_checkout view (POST /api/checkout/create)."""
 
@@ -144,6 +145,7 @@ class CreateCheckoutViewTest(TestCase):
         self.assertEqual(call_kwargs["billing_period"], "yearly")
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class UpgradeViewTest(TestCase):
     """Tests for the upgrade view (POST /api/subscription/upgrade)."""
 
@@ -204,6 +206,7 @@ class UpgradeViewTest(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class DowngradeViewTest(TestCase):
     """Tests for the downgrade view (POST /api/subscription/downgrade)."""
 
@@ -274,6 +277,7 @@ class DowngradeViewTest(TestCase):
         self.assertEqual(user.pending_tier, basic_tier)
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CancelViewTest(TestCase):
     """Tests for the cancel view (POST /api/subscription/cancel)."""
 

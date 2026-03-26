@@ -108,10 +108,24 @@
               Subscribe
             </a>
             {% endif %}
-            {% else %}
+            {% elif is_paid_member %}
+            <a href="{{ stripe_customer_portal_url }}"
+               class="block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80"
+               id="manage-subscription-link">
+              Manage Subscription
+            </a>
+            {% elif stripe_checkout_enabled %}
             <a href="{{ item.payment_link_monthly }}"
                class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors cursor-pointer {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-tier="{{ item.tier.slug }}"
+               data-link-monthly="{{ item.payment_link_monthly }}"
+               data-link-annual="{{ item.payment_link_annual }}"
+               {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
+              Join
+            </a>
+            {% else %}
+            <a href="{{ item.payment_link_monthly }}"
+               class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors cursor-pointer {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-link-monthly="{{ item.payment_link_monthly }}"
                data-link-annual="{{ item.payment_link_annual }}"
                {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
@@ -177,7 +191,8 @@ function getCookie(name) {
   return '';
 }
 
-// API checkout for logged-in users
+// API checkout for logged-in users (only when Stripe Checkout is enabled)
+{% if stripe_checkout_enabled %}
 document.querySelectorAll('.tier-cta-link').forEach(function(el) {
   el.addEventListener('click', function(e) {
     var tierSlug = el.dataset.tier;
@@ -216,6 +231,7 @@ document.querySelectorAll('.tier-cta-link').forEach(function(el) {
     });
   });
 });
+{% endif %}
 
 // Checkout cancelled banner
 (function() {

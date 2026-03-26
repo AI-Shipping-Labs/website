@@ -143,6 +143,23 @@
                 Cancel Subscription
               </button>
             {% endif %}
+            {% else %}
+            <!-- Payment links mode: Manage Subscription via Stripe Customer Portal -->
+            {% if has_subscription %}
+            <a href="{{ stripe_customer_portal_url }}"
+               class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+               id="manage-subscription-btn">
+              <i data-lucide="settings" class="h-4 w-4"></i>
+              Manage Subscription
+            </a>
+            {% else %}
+            <a href="/pricing"
+               class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+               id="upgrade-btn">
+              <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
+              Upgrade
+            </a>
+            {% endif %}
             {% endif %}
           {% endif %}
         </div>

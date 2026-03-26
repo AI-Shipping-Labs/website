@@ -116,6 +116,7 @@ def account_view(request):
         "tier_features": tier_features,
         "active_override": active_override,
         "stripe_checkout_enabled": settings.STRIPE_CHECKOUT_ENABLED,
+        "stripe_customer_portal_url": settings.STRIPE_CUSTOMER_PORTAL_URL,
     }
 
     return render(request, "accounts/account.html", context)

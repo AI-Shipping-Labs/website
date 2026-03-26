@@ -312,6 +312,7 @@ class CancelSubscriptionTest(TestCase):
 # ── Stripe Error Handling (view-level) ────────────────────────────────
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CheckoutStripeErrorViewTest(TestCase):
     """Test that Stripe errors during checkout return user-friendly errors, not 500s."""
 
@@ -367,6 +368,7 @@ class CheckoutStripeErrorViewTest(TestCase):
         self.assertNotIn("Traceback", data["error"])
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class UpgradeStripeErrorViewTest(TestCase):
     """Test that Stripe errors during upgrade return user-friendly errors."""
 
@@ -402,6 +404,7 @@ class UpgradeStripeErrorViewTest(TestCase):
         self.assertNotIn("Traceback", data["error"])
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class CancelStripeErrorViewTest(TestCase):
     """Test that Stripe errors during cancel return user-friendly errors."""
 

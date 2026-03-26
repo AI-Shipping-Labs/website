@@ -927,3 +927,51 @@ class UnitBodyHtmlSyncTest(TestCase):
         self.assertIn('<h1>New content</h1>', unit.body_html)
         self.assertIn('<strong>formatting</strong>', unit.body_html)
         self.assertNotIn('Old content', unit.body_html)
+
+
+class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
+    """Test that the discussion button on unit pages respects tier restrictions.
+
+    Covers issue #153: only Main+ tier users see the discussion link on unit pages.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.course = Course.objects.create(
+            title='Disc Course', slug='disc-course',
+            status='published', is_free=True, required_level=LEVEL_OPEN,
+            discussion_url='https://slack.com/disc-channel',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course, title='Mod One', slug='mod-one', sort_order=1,
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Lesson One', slug='lesson-one', sort_order=1,
+        )
+        cls.unit_url = '/courses/disc-course/mod-one/lesson-one'
+
+    def test_free_tier_user_does_not_see_discussion_on_unit(self):
+        user = User.objects.create_user(email='free-unit@test.com', password='testpass')
+        user.tier = self.free_tier
+        user.save()
+        self.client.login(email='free-unit@test.com', password='testpass')
+        response = self.client.get(self.unit_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Join the discussion')
+
+    def test_main_tier_user_sees_discussion_on_unit(self):
+        user = User.objects.create_user(email='main-unit@test.com', password='testpass')
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email='main-unit@test.com', password='testpass')
+        response = self.client.get(self.unit_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Join the discussion')
+
+    def test_anonymous_does_not_see_discussion_on_unit(self):
+        """Anonymous user on a free course with discussion_url set sees no discussion link."""
+        response = self.client.get(self.unit_url)
+        # Anonymous on a free course gets gated (needs signup), so check the
+        # response does not contain discussion regardless of status code.
+        self.assertNotContains(response, 'Join the discussion', status_code=response.status_code)

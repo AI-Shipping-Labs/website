@@ -888,3 +888,88 @@ class CourseTestimonialsViewTest(TestCase):
         response = self.client.get('/courses/testimonial-course')
         self.assertEqual(len(response.context['testimonials']), 2)
 
+
+class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
+    """Test that the discussion button is only visible to Main+ tier users.
+
+    Covers issue #153: free-tier and anonymous users must not see the
+    discussion link, even on courses that have a discussion_url set.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.free_course = Course.objects.create(
+            title='Free With Discussion', slug='free-with-discussion',
+            status='published', is_free=True, required_level=LEVEL_OPEN,
+            discussion_url='https://slack.com/free-channel',
+        )
+        Module.objects.create(
+            course=cls.free_course, title='Mod', slug='mod', sort_order=1,
+        )
+        cls.paid_course = Course.objects.create(
+            title='Paid With Discussion', slug='paid-with-discussion',
+            status='published', required_level=LEVEL_MAIN,
+            discussion_url='https://slack.com/paid-channel',
+        )
+        Module.objects.create(
+            course=cls.paid_course, title='Mod', slug='mod', sort_order=1,
+        )
+
+    def test_anonymous_does_not_see_discussion_on_free_course(self):
+        response = self.client.get('/courses/free-with-discussion')
+        self.assertNotContains(response, 'Join the discussion')
+
+    def test_free_tier_user_does_not_see_discussion(self):
+        user = User.objects.create_user(email='free-disc@test.com', password='testpass')
+        user.tier = self.free_tier
+        user.save()
+        self.client.login(email='free-disc@test.com', password='testpass')
+        response = self.client.get('/courses/free-with-discussion')
+        self.assertNotContains(response, 'Join the discussion')
+
+    def test_basic_tier_user_does_not_see_discussion(self):
+        user = User.objects.create_user(email='basic-disc@test.com', password='testpass')
+        user.tier = self.basic_tier
+        user.save()
+        self.client.login(email='basic-disc@test.com', password='testpass')
+        response = self.client.get('/courses/free-with-discussion')
+        self.assertNotContains(response, 'Join the discussion')
+
+    def test_main_tier_user_sees_discussion(self):
+        user = User.objects.create_user(email='main-disc@test.com', password='testpass')
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email='main-disc@test.com', password='testpass')
+        response = self.client.get('/courses/free-with-discussion')
+        self.assertContains(response, 'Join the discussion')
+
+    def test_premium_tier_user_sees_discussion(self):
+        user = User.objects.create_user(email='prem-disc@test.com', password='testpass')
+        user.tier = self.premium_tier
+        user.save()
+        self.client.login(email='prem-disc@test.com', password='testpass')
+        response = self.client.get('/courses/free-with-discussion')
+        self.assertContains(response, 'Join the discussion')
+
+    def test_main_tier_sees_discussion_on_paid_course(self):
+        user = User.objects.create_user(email='main-paid@test.com', password='testpass')
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email='main-paid@test.com', password='testpass')
+        response = self.client.get('/courses/paid-with-discussion')
+        self.assertContains(response, 'Join the discussion')
+
+    def test_no_discussion_url_hides_button_even_for_main(self):
+        course = Course.objects.create(
+            title='No Discussion', slug='no-discussion',
+            status='published', is_free=True, discussion_url='',
+        )
+        Module.objects.create(course=course, title='M', slug='m', sort_order=1)
+        user = User.objects.create_user(email='main-nodisc@test.com', password='testpass')
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email='main-nodisc@test.com', password='testpass')
+        response = self.client.get('/courses/no-discussion')
+        self.assertNotContains(response, 'Join the discussion')
+

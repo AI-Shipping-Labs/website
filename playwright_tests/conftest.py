@@ -31,6 +31,12 @@ def _start_django_server():
     settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = ''
     settings.SLACK_COMMUNITY_CHANNEL_IDS = []
 
+    # Enable Stripe Checkout so that upgrade/downgrade/cancel buttons and
+    # the JS-based checkout flow are rendered in templates.  The setting
+    # defaults to False (payment-links mode) but E2E tests for the account
+    # page and pricing page expect the full checkout UI.
+    settings.STRIPE_CHECKOUT_ENABLED = True
+
     # Run migrations first (uses in-memory or file-based sqlite)
     call_command("migrate", "--run-syncdb", verbosity=0)
 

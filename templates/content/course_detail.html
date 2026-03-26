@@ -76,38 +76,6 @@
       </div>
       {% endif %}
 
-      <!-- Testimonials -->
-      {% if testimonials %}
-      <div class="mb-12">
-        <h2 class="text-2xl font-semibold tracking-tight mb-6">What learners say</h2>
-        <div class="columns-1 gap-6 sm:columns-2 lg:columns-3">
-          {% for t in testimonials %}
-          <div class="mb-6 break-inside-avoid rounded-xl border border-border bg-background p-6">
-            <i data-lucide="quote" class="h-6 w-6 text-accent/50"></i>
-            <blockquote class="mt-4 text-sm leading-relaxed text-muted-foreground">
-              "{{ t.quote }}"
-            </blockquote>
-            <div class="mt-6 flex items-center gap-3">
-              <div class="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-medium">
-                {{ t.name|first }}
-              </div>
-              <div>
-                {% if t.source_url %}
-                <a href="{{ t.source_url }}" target="_blank" rel="noopener noreferrer" class="font-medium text-sm text-accent hover:underline">{{ t.name }}</a>
-                {% else %}
-                <p class="font-medium text-sm">{{ t.name }}</p>
-                {% endif %}
-                <p class="text-xs text-muted-foreground">
-                  {% if t.role %}{{ t.role }}{% endif %}{% if t.role and t.company %} &middot; {% endif %}{% if t.company %}{{ t.company }}{% endif %}
-                </p>
-              </div>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
       <!-- Active Cohorts -->
       {% if active_cohorts %}
       <div class="mb-8">
@@ -223,6 +191,38 @@
         </div>
         <div class="w-full bg-muted rounded-full h-2.5">
           <div class="bg-accent h-2.5 rounded-full transition-all" style="width: {{ progress_pct }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Testimonials -->
+      {% if testimonials %}
+      <div class="mb-12">
+        <h2 class="text-2xl font-semibold tracking-tight mb-6">What learners say</h2>
+        <div class="columns-1 gap-6 sm:columns-2 lg:columns-3">
+          {% for t in testimonials %}
+          <div class="mb-6 break-inside-avoid rounded-xl border border-border bg-background p-6">
+            <i data-lucide="quote" class="h-6 w-6 text-accent/50"></i>
+            <blockquote class="mt-4 text-sm leading-relaxed text-muted-foreground">
+              "{{ t.quote }}"
+            </blockquote>
+            <div class="mt-6 flex items-center gap-3">
+              <div class="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-medium">
+                {{ t.name|first }}
+              </div>
+              <div>
+                {% if t.source_url %}
+                <a href="{{ t.source_url }}" target="_blank" rel="noopener noreferrer" class="font-medium text-sm text-accent hover:underline">{{ t.name }}</a>
+                {% else %}
+                <p class="font-medium text-sm">{{ t.name }}</p>
+                {% endif %}
+                <p class="text-xs text-muted-foreground">
+                  {% if t.role %}{{ t.role }}{% endif %}{% if t.role and t.company %} &middot; {% endif %}{% if t.company %}{{ t.company }}{% endif %}
+                </p>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
         </div>
       </div>
       {% endif %}

@@ -415,7 +415,7 @@ class TestScenario4StaffEditsUnitWithContent:
         # Breadcrumb navigation shows course title
         assert "Setup Course" in body
 
-        # Step 3: Enter a video URL, body, and homework
+        # Step 3: Enter a video URL and body
         page.fill(
             'input[name="video_url"]',
             "https://www.youtube.com/watch?v=test123",
@@ -423,10 +423,6 @@ class TestScenario4StaffEditsUnitWithContent:
         page.fill(
             'textarea[name="body"]',
             "# Setting Up\nThis is the lesson content for setup.",
-        )
-        page.fill(
-            'textarea[name="homework"]',
-            "# Homework\nComplete the setup exercise.",
         )
 
         # Step 4: Check the "Preview unit" checkbox

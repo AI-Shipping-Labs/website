@@ -42,13 +42,6 @@
     </div>
 
     <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Homework (Markdown)</label>
-      <textarea name="homework" rows="6"
-                {% if is_synced %}disabled{% endif %}
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono{% if is_synced %} opacity-60{% endif %}">{{ unit.homework }}</textarea>
-    </div>
-
-    <div>
       <label class="flex items-center space-x-2">
         <input type="checkbox" name="is_preview" {% if unit.is_preview %}checked{% endif %}
                {% if is_synced %}disabled{% endif %}

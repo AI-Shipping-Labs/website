@@ -3,6 +3,7 @@
 import json
 from datetime import datetime, timezone
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -114,6 +115,7 @@ def account_view(request):
         "newsletter_subscribed": not user.unsubscribed,
         "tier_features": tier_features,
         "active_override": active_override,
+        "stripe_checkout_enabled": settings.STRIPE_CHECKOUT_ENABLED,
     }
 
     return render(request, "accounts/account.html", context)

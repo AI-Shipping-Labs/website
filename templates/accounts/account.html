@@ -110,6 +110,7 @@
               Upgrade
             </a>
           {% else %}
+            {% if stripe_checkout_enabled %}
             {% if not is_premium and not is_pending_cancellation %}
               <!-- Paid users (not premium): Upgrade button -->
               <button type="button"
@@ -141,6 +142,7 @@
                 <i data-lucide="x-circle" class="h-4 w-4"></i>
                 Cancel Subscription
               </button>
+            {% endif %}
             {% endif %}
           {% endif %}
         </div>
@@ -210,6 +212,7 @@
     </div>
   </section>
 
+  {% if stripe_checkout_enabled %}
   <!-- Upgrade Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="upgrade-modal">
     <div class="rounded-2xl border border-border bg-card p-8 max-w-md w-full mx-4">
@@ -324,6 +327,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   {% include "includes/footer.html" %}
 </main>

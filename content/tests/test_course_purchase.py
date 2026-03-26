@@ -17,7 +17,7 @@ from decimal import Decimal
 from unittest.mock import patch, MagicMock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 
 from content.access import can_access, get_user_level
 from content.models import Course, Module, Unit, CourseAccess
@@ -295,6 +295,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
+@override_settings(STRIPE_CHECKOUT_ENABLED=True)
 class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
     """Test POST /api/courses/{slug}/purchase endpoint."""
 

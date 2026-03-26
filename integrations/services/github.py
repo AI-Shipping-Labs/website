@@ -1208,10 +1208,10 @@ def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
         )
 
     # Sync curated links
-    links_file = os.path.join(repo_dir, 'curated-links', 'links.yaml')
-    if os.path.exists(links_file):
+    links_dir = os.path.join(repo_dir, 'curated-links')
+    if os.path.isdir(links_dir):
         _sync_curated_links(
-            source, links_file, repo_dir, commit_sha, stats,
+            source, links_dir, repo_dir, commit_sha, stats,
         )
 
     # Sync downloads
@@ -1321,64 +1321,79 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
     stats['deleted'] += deleted_count
 
 
-def _sync_curated_links(source, links_file, repo_dir, commit_sha, stats):
-    """Sync curated links from a single YAML file."""
+def _sync_curated_links(source, links_dir, repo_dir, commit_sha, stats):
+    """Sync curated links from individual markdown files."""
     from content.models import CuratedLink
 
-    rel_path = os.path.relpath(links_file, repo_dir)
     seen_item_ids = set()
+    failed_item_ids = set()
 
-    try:
-        with open(links_file, 'r') as f:
-            links_data = yaml.safe_load(f) or []
+    for filename in os.listdir(links_dir):
+        if not filename.endswith('.md'):
+            continue
 
-        if not isinstance(links_data, list):
-            links_data = [links_data]
+        filepath = os.path.join(links_dir, filename)
+        rel_path = os.path.relpath(filepath, repo_dir)
 
-        for idx, link in enumerate(links_data):
+        try:
+            metadata, body = _parse_markdown_file(filepath)
+
+            # Edge Case 7: Frontmatter validation
+            # Map content_id to item_id for validation
+            if 'content_id' in metadata and 'item_id' not in metadata:
+                metadata['item_id'] = metadata['content_id']
+
+            _validate_frontmatter(metadata, 'curated_link', rel_path)
+
+            item_id = metadata.get('item_id')
+            if not item_id:
+                msg = f'Skipping {rel_path}: missing content_id/item_id in frontmatter'
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
+                continue
+
+            seen_item_ids.add(item_id)
+
+            # Use body text as description, fall back to frontmatter description
+            description = body.strip() if body.strip() else metadata.get('description', '')
+
+            defaults = {
+                'title': metadata.get('title', ''),
+                'description': description,
+                'url': metadata.get('url', ''),
+                'category': metadata.get('category', 'other'),
+                'tags': metadata.get('tags', []),
+                'sort_order': metadata.get('sort_order', 0),
+                'required_level': metadata.get('required_level', 0),
+                'published': metadata.get('published', True),
+                'source_repo': source.repo_name,
+                'source_path': rel_path,
+                'source_commit': commit_sha,
+            }
+
+            obj, created = CuratedLink.objects.update_or_create(
+                item_id=item_id,
+                defaults=defaults,
+            )
+            if created:
+                stats['created'] += 1
+            else:
+                stats['updated'] += 1
+
+        except Exception as e:
+            fallback_id = os.path.splitext(filename)[0]
             try:
-                # Edge Case 7: Frontmatter validation
-                _validate_frontmatter(link, 'curated_link', f'{rel_path}[{idx}]')
+                failed_id = metadata.get('item_id', fallback_id)
+            except Exception:
+                failed_id = fallback_id
+            failed_item_ids.add(failed_id)
+            stats['errors'].append({'file': rel_path, 'error': str(e)})
 
-                item_id = link.get('item_id', f'sync-{idx}')
-                seen_item_ids.add(item_id)
-
-                defaults = {
-                    'title': link.get('title', ''),
-                    'description': link.get('description', ''),
-                    'url': link.get('url', ''),
-                    'category': link.get('category', 'other'),
-                    'tags': link.get('tags', []),
-                    'sort_order': link.get('sort_order', idx),
-                    'required_level': link.get('required_level', 0),
-                    'published': True,
-                    'source_repo': source.repo_name,
-                    'source_path': rel_path,
-                    'source_commit': commit_sha,
-                }
-
-                obj, created = CuratedLink.objects.update_or_create(
-                    item_id=item_id,
-                    defaults=defaults,
-                )
-                if created:
-                    stats['created'] += 1
-                else:
-                    stats['updated'] += 1
-            except Exception as e:
-                stats['errors'].append({
-                    'file': f'{rel_path}[{idx}]',
-                    'error': str(e),
-                })
-
-    except Exception as e:
-        stats['errors'].append({'file': rel_path, 'error': str(e)})
-
-    # Soft-delete stale links from this repo
+    # Soft-delete stale links from this repo, excluding failed items
     stale = CuratedLink.objects.filter(
         source_repo=source.repo_name,
         published=True,
-    ).exclude(item_id__in=seen_item_ids)
+    ).exclude(item_id__in=seen_item_ids).exclude(item_id__in=failed_item_ids)
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count

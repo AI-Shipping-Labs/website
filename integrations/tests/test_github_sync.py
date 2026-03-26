@@ -886,22 +886,138 @@ class SyncResourcesTest(TestCase):
         self.assertEqual(recording.title, 'My Workshop')
         self.assertEqual(recording.source_repo, 'AI-Shipping-Labs/resources')
 
-    def test_sync_curated_links(self):
+    def test_sync_curated_links_from_markdown_files(self):
         links_dir = os.path.join(self.temp_dir, 'curated-links')
         os.makedirs(links_dir)
-        with open(os.path.join(links_dir, 'links.yaml'), 'w') as f:
-            f.write('- item_id: "link-1"\n')
-            f.write('  title: "Awesome Tool"\n')
-            f.write('  url: "https://example.com"\n')
-            f.write('  category: "tools"\n')
-            f.write('- item_id: "link-2"\n')
-            f.write('  title: "Cool Model"\n')
-            f.write('  url: "https://example.com/model"\n')
-            f.write('  category: "models"\n')
+        with open(os.path.join(links_dir, 'awesome-tool.md'), 'w') as f:
+            f.write('---\n')
+            f.write('content_id: link-1\n')
+            f.write('title: "Awesome Tool"\n')
+            f.write('url: "https://example.com"\n')
+            f.write('category: tools\n')
+            f.write('tags: [ai, tools]\n')
+            f.write('date: 2026-03-15\n')
+            f.write('required_level: 0\n')
+            f.write('sort_order: 0\n')
+            f.write('---\n\n')
+            f.write('A great tool for AI development.\n')
+        with open(os.path.join(links_dir, 'cool-model.md'), 'w') as f:
+            f.write('---\n')
+            f.write('content_id: link-2\n')
+            f.write('title: "Cool Model"\n')
+            f.write('url: "https://example.com/model"\n')
+            f.write('category: models\n')
+            f.write('tags: [models]\n')
+            f.write('date: 2026-03-15\n')
+            f.write('required_level: 0\n')
+            f.write('sort_order: 1\n')
+            f.write('---\n\n')
+            f.write('An impressive open-source model.\n')
 
         sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
         self.assertEqual(sync_log.items_created, 2)
-        self.assertTrue(CuratedLink.objects.filter(item_id='link-1').exists())
+
+        link1 = CuratedLink.objects.get(item_id='link-1')
+        self.assertEqual(link1.title, 'Awesome Tool')
+        self.assertEqual(link1.description, 'A great tool for AI development.')
+        self.assertEqual(link1.category, 'tools')
+        self.assertEqual(link1.url, 'https://example.com')
+
+        link2 = CuratedLink.objects.get(item_id='link-2')
+        self.assertEqual(link2.title, 'Cool Model')
+        self.assertEqual(link2.description, 'An impressive open-source model.')
+
+    def test_sync_curated_links_body_as_description(self):
+        """Body text of the markdown file becomes the link description."""
+        links_dir = os.path.join(self.temp_dir, 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'test-link.md'), 'w') as f:
+            f.write('---\n')
+            f.write('content_id: body-desc\n')
+            f.write('title: "Body Test"\n')
+            f.write('url: "https://example.com"\n')
+            f.write('category: tools\n')
+            f.write('---\n\n')
+            f.write('This description comes from the body.\n')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        link = CuratedLink.objects.get(item_id='body-desc')
+        self.assertEqual(link.description, 'This description comes from the body.')
+
+    def test_sync_curated_links_empty_body_no_description(self):
+        """Empty body results in empty description."""
+        links_dir = os.path.join(self.temp_dir, 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'no-desc.md'), 'w') as f:
+            f.write('---\n')
+            f.write('content_id: no-desc\n')
+            f.write('title: "No Desc"\n')
+            f.write('url: "https://example.com"\n')
+            f.write('category: tools\n')
+            f.write('---\n')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        link = CuratedLink.objects.get(item_id='no-desc')
+        self.assertEqual(link.description, '')
+
+    def test_sync_curated_links_soft_deletes_stale(self):
+        """Links removed from the repo are soft-deleted."""
+        CuratedLink.objects.create(
+            item_id='stale-link', title='Stale',
+            url='https://example.com', category='tools',
+            source_repo='AI-Shipping-Labs/resources', published=True,
+        )
+        links_dir = os.path.join(self.temp_dir, 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'new-link.md'), 'w') as f:
+            f.write('---\n')
+            f.write('content_id: new-link\n')
+            f.write('title: "New"\n')
+            f.write('url: "https://example.com"\n')
+            f.write('category: tools\n')
+            f.write('---\n\n')
+            f.write('New link.\n')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        stale = CuratedLink.objects.get(item_id='stale-link')
+        self.assertFalse(stale.published)
+        new = CuratedLink.objects.get(item_id='new-link')
+        self.assertTrue(new.published)
+
+    def test_sync_curated_links_skips_non_md_files(self):
+        """Non-.md files in the curated-links directory are ignored."""
+        links_dir = os.path.join(self.temp_dir, 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'readme.txt'), 'w') as f:
+            f.write('This is not a link file.\n')
+        with open(os.path.join(links_dir, 'valid-link.md'), 'w') as f:
+            f.write('---\n')
+            f.write('content_id: valid-link\n')
+            f.write('title: "Valid"\n')
+            f.write('url: "https://example.com"\n')
+            f.write('category: tools\n')
+            f.write('---\n\n')
+            f.write('A valid link.\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(CuratedLink.objects.filter(item_id='valid-link').count(), 1)
+        self.assertEqual(sync_log.items_created, 1)
+
+    def test_sync_curated_links_missing_content_id_skipped(self):
+        """Files without content_id are skipped with an error."""
+        links_dir = os.path.join(self.temp_dir, 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'bad-link.md'), 'w') as f:
+            f.write('---\n')
+            f.write('title: "No ID"\n')
+            f.write('url: "https://example.com"\n')
+            f.write('category: tools\n')
+            f.write('---\n\n')
+            f.write('Missing content_id.\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(CuratedLink.objects.count(), 0)
+        self.assertGreater(len(sync_log.errors), 0)
 
     def test_sync_downloads(self):
         dl_dir = os.path.join(self.temp_dir, 'downloads')

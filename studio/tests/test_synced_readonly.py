@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from content.models import Article, Course, Module, Unit, Download, Project
 from events.models import Event
+from integrations.models import ContentSource
 from studio.utils import is_synced, get_github_edit_url
 
 User = get_user_model()
@@ -27,10 +28,15 @@ class SyncedUtilsTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            content_path='blog',
+        )
         cls.synced_article = Article.objects.create(
             title='Synced', slug='synced', date=timezone.now().date(),
             source_repo='AI-Shipping-Labs/content',
-            source_path='blog/synced.md',
+            source_path='synced.md',
             source_commit='abc1234def5678901234567890123456789abcde',
         )
         cls.manual_article = Article.objects.create(
@@ -43,7 +49,7 @@ class SyncedUtilsTest(TestCase):
     def test_is_synced_false_when_source_repo_null(self):
         self.assertFalse(is_synced(self.manual_article))
 
-    def test_github_edit_url_for_synced_item(self):
+    def test_github_edit_url_includes_content_path_prefix(self):
         url = get_github_edit_url(self.synced_article)
         self.assertEqual(
             url,
@@ -63,11 +69,16 @@ class SyncedArticleReadOnlyTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
+        ContentSource.objects.get_or_create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            defaults={'content_path': 'blog'},
+        )
         self.synced = Article.objects.create(
             title='Synced Article', slug='synced-art',
             date=timezone.now().date(), published=True,
             source_repo='AI-Shipping-Labs/content',
-            source_path='blog/synced-art.md',
+            source_path='synced-art.md',
             source_commit='abc1234def5678901234567890123456789abcde',
         )
         self.manual = Article.objects.create(
@@ -97,7 +108,7 @@ class SyncedArticleReadOnlyTest(TestCase):
     def test_synced_article_shows_sync_metadata(self):
         response = self.client.get(f'/studio/articles/{self.synced.pk}/edit')
         self.assertContains(response, 'AI-Shipping-Labs/content')
-        self.assertContains(response, 'blog/synced-art.md')
+        self.assertContains(response, 'synced-art.md')
         # truncatechars:10 gives first 7 chars + ellipsis
         self.assertContains(response, 'abc1234')
 
@@ -199,13 +210,18 @@ class SyncedRecordingReadOnlyTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
+        ContentSource.objects.get_or_create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='event',
+            defaults={'content_path': 'events'},
+        )
         self.synced = Event.objects.create(
             title='Synced Recording', slug='synced-rec',
             start_datetime=timezone.now(), status='completed',
             recording_url='https://youtube.com/watch?v=test',
             published=True,
             source_repo='AI-Shipping-Labs/content',
-            source_path='events/synced-rec.md',
+            source_path='synced-rec.md',
             source_commit='def4567890abcdef1234567890abcdef12345678',
         )
 
@@ -224,7 +240,7 @@ class SyncedRecordingReadOnlyTest(TestCase):
 
     def test_synced_recording_shows_metadata(self):
         response = self.client.get(f'/studio/recordings/{self.synced.pk}/edit')
-        self.assertContains(response, 'events/synced-rec.md')
+        self.assertContains(response, 'synced-rec.md')
 
     def test_synced_recording_hides_save_button(self):
         response = self.client.get(f'/studio/recordings/{self.synced.pk}/edit')
@@ -244,10 +260,15 @@ class SyncedCourseReadOnlyTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
+        ContentSource.objects.get_or_create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            defaults={'content_path': 'courses'},
+        )
         self.synced = Course.objects.create(
             title='Synced Course', slug='synced-course', status='published',
             source_repo='AI-Shipping-Labs/content',
-            source_path='courses/synced-course/meta.yaml',
+            source_path='synced-course/meta.yaml',
             source_commit='abc1234def5678901234567890123456789abcde',
         )
         self.module = Module.objects.create(
@@ -336,6 +357,11 @@ class SyncedDownloadReadOnlyTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
+        ContentSource.objects.get_or_create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='resource',
+            defaults={'content_path': 'resources'},
+        )
         self.synced = Download.objects.create(
             title='Synced Download', slug='synced-dl',
             file_url='https://example.com/file.pdf',
@@ -372,11 +398,16 @@ class SyncedProjectReadOnlyTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
+        ContentSource.objects.get_or_create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            defaults={'content_path': 'projects'},
+        )
         self.synced = Project.objects.create(
             title='Synced Project', slug='synced-proj',
             date=timezone.now().date(), status='published',
             source_repo='AI-Shipping-Labs/content',
-            source_path='projects/synced-proj.md',
+            source_path='synced-proj.md',
         )
 
     def test_synced_project_post_returns_403(self):

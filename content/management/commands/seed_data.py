@@ -1,5 +1,5 @@
 """
-Seed development data (fake users, events, cohorts, polls, notifications, subscribers).
+Seed development data (fake users, cohorts, polls, notifications, subscribers).
 
 Content (articles, courses, recordings, projects, curated links, downloads) now comes
 from GitHub sync (AI-Shipping-Labs/content). Tiers are seeded via migration 0003_seed_tiers.
@@ -24,7 +24,7 @@ from django.utils import timezone
 from allauth.socialaccount.models import SocialApp
 from content.models import Cohort, CohortEnrollment, Course
 from email_app.models import NewsletterSubscriber
-from events.models import Event, EventRegistration
+from events.models import EventRegistration
 from notifications.models import Notification
 from payments.models import Tier
 from voting.models import Poll, PollOption, PollVote
@@ -101,88 +101,6 @@ USERS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Event definitions
-# ---------------------------------------------------------------------------
-EVENTS = [
-    {
-        'slug': 'llm-agents-workshop-march',
-        'title': 'LLM Agents Workshop: Building Your First Agent',
-        'description': (
-            'Hands-on workshop where we build an LLM agent from scratch. '
-            'Bring your laptop and an API key.'
-        ),
-        'event_type': 'live',
-        'status': 'upcoming',
-        'start_offset_days': 14,
-        'duration_hours': 2,
-        'location': 'Zoom',
-        'tags': ['agents', 'workshop', 'hands-on'],
-        'required_level': 0,
-        'max_participants': 50,
-    },
-    {
-        'slug': 'rag-deep-dive-live',
-        'title': 'RAG Deep Dive: Chunking and Retrieval',
-        'description': (
-            'Live session exploring advanced chunking strategies, hybrid retrieval, '
-            'and practical tips for production RAG.'
-        ),
-        'event_type': 'live',
-        'status': 'upcoming',
-        'start_offset_days': 28,
-        'duration_hours': 1.5,
-        'location': 'Zoom',
-        'tags': ['rag', 'retrieval', 'deep-dive'],
-        'required_level': 20,
-    },
-    {
-        'slug': 'community-demo-day-feb',
-        'title': 'Community Demo Day: February Projects',
-        'description': (
-            'Community members showcase their AI projects. '
-            'Five-minute demos followed by Q&A.'
-        ),
-        'event_type': 'live',
-        'status': 'live',
-        'start_offset_days': 0,
-        'duration_hours': 1,
-        'location': 'Zoom',
-        'tags': ['community', 'demo', 'showcase'],
-        'required_level': 10,
-    },
-    {
-        'slug': 'fine-tuning-masterclass-jan',
-        'title': 'Fine-Tuning Masterclass: LoRA and QLoRA',
-        'description': (
-            'Hands-on masterclass covering LoRA, QLoRA, and data preparation '
-            'for fine-tuning open-source models.'
-        ),
-        'event_type': 'live',
-        'status': 'completed',
-        'start_offset_days': -14,
-        'duration_hours': 2,
-        'location': 'Zoom',
-        'tags': ['fine-tuning', 'lora', 'masterclass'],
-        'required_level': 20,
-    },
-    {
-        'slug': 'prompt-engineering-async',
-        'title': 'Async Challenge: Prompt Engineering Tournament',
-        'description': (
-            'Week-long async challenge: solve 10 prompt engineering puzzles. '
-            'Leaderboard and prizes for top scorers.'
-        ),
-        'event_type': 'async',
-        'status': 'completed',
-        'start_offset_days': -30,
-        'duration_hours': 168,
-        'location': 'GitHub',
-        'tags': ['prompt-engineering', 'challenge', 'async'],
-        'required_level': 0,
-    },
-]
-
-# ---------------------------------------------------------------------------
 # Poll definitions
 # ---------------------------------------------------------------------------
 POLLS = [
@@ -244,7 +162,6 @@ class Command(BaseCommand):
         summary = {}
         summary['users'] = self._seed_users()
         summary['cohorts'] = self._seed_cohorts()
-        summary['events'] = self._seed_events()
         summary['polls'] = self._seed_polls()
         summary['notifications'] = self._seed_notifications()
         summary['newsletter_subscribers'] = self._seed_newsletter_subscribers()
@@ -270,7 +187,6 @@ class Command(BaseCommand):
         EventRegistration.objects.all().delete()
         CohortEnrollment.objects.all().delete()
         Cohort.objects.all().delete()
-        Event.objects.all().delete()
         NewsletterSubscriber.objects.all().delete()
         User.objects.filter(email__in=[u['email'] for u in USERS]).delete()
         self.stdout.write('  Flushed.')
@@ -361,42 +277,6 @@ class Command(BaseCommand):
         return count
 
     # ------------------------------------------------------------------
-    # Events
-    # ------------------------------------------------------------------
-    def _seed_events(self):
-        count = 0
-        for event_data in EVENTS:
-            start = now + timedelta(days=event_data['start_offset_days'])
-            end = start + timedelta(hours=event_data.get('duration_hours', 1))
-            _, created = Event.objects.get_or_create(
-                slug=event_data['slug'],
-                defaults={
-                    'title': event_data['title'],
-                    'description': event_data['description'],
-                    'event_type': event_data['event_type'],
-                    'status': event_data['status'],
-                    'start_datetime': start,
-                    'end_datetime': end,
-                    'location': event_data.get('location', ''),
-                    'tags': event_data.get('tags', []),
-                    'required_level': event_data.get('required_level', 0),
-                    'max_participants': event_data.get('max_participants'),
-                },
-            )
-            if created:
-                count += 1
-                # Register some users for upcoming/live events
-                if event_data['status'] in ('upcoming', 'live'):
-                    event = Event.objects.get(slug=event_data['slug'])
-                    for email in ['main@test.com', 'premium@test.com', 'alice@test.com']:
-                        user = User.objects.filter(email=email).first()
-                        if user:
-                            EventRegistration.objects.get_or_create(
-                                event=event, user=user,
-                            )
-        self.stdout.write(f'  Events: {count} created')
-        return count
-
     # ------------------------------------------------------------------
     # Polls
     # ------------------------------------------------------------------

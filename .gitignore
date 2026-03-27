@@ -24,3 +24,5 @@ _content-repo/
 
 # Playwright
 playwright_tests/screenshots/
+*.sqlite3-shm
+*.sqlite3-wal

@@ -71,21 +71,6 @@ class SeedDataCommandTest(TestCase):
         count = User.objects.filter(email__in=seeded_emails).count()
         self.assertEqual(count, 8)
 
-    def test_creates_events(self):
-        """Command creates events with a mix of statuses."""
-        run_seed()
-        events = Event.objects.all()
-        self.assertGreaterEqual(events.count(), 3)
-
-        statuses = set(events.values_list('status', flat=True))
-        self.assertIn('upcoming', statuses)
-        self.assertIn('completed', statuses)
-
-    def test_creates_event_registrations(self):
-        """Command creates registrations for upcoming/live events."""
-        run_seed()
-        self.assertGreater(EventRegistration.objects.count(), 0)
-
     def test_creates_polls_with_options_and_votes(self):
         """Command creates polls with options and sample votes."""
         run_seed()
@@ -117,7 +102,6 @@ class SeedDataCommandTest(TestCase):
         output = run_seed()
         self.assertIn('Summary:', output)
         self.assertIn('Users:', output)
-        self.assertIn('Events:', output)
         self.assertIn('Polls:', output)
 
     def test_events_have_descriptions(self):

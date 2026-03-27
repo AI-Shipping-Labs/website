@@ -1324,19 +1324,19 @@ class AdminSyncAllTest(TestCase):
 class SeedContentSourcesCommandTest(TestCase):
     """Test the seed_content_sources management command."""
 
-    def test_seeds_six_sources(self):
+    def test_seeds_four_sources(self):
         from django.core.management import call_command
         from io import StringIO
         out = StringIO()
         call_command('seed_content_sources', stdout=out)
-        self.assertEqual(ContentSource.objects.count(), 6)
+        self.assertEqual(ContentSource.objects.count(), 4)
 
     def test_seed_is_idempotent(self):
         from django.core.management import call_command
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 6)
+        self.assertEqual(ContentSource.objects.count(), 4)
 
     def test_seed_creates_expected_repos(self):
         from django.core.management import call_command
@@ -1359,7 +1359,7 @@ class SeedContentSourcesCommandTest(TestCase):
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
         types = set(ContentSource.objects.values_list('content_type', flat=True))
-        self.assertEqual(types, {'article', 'course', 'resource', 'project', 'interview_question', 'event'})
+        self.assertEqual(types, {'article', 'course', 'project', 'interview_question'})
 
     def test_content_paths_correct(self):
         from django.core.management import call_command
@@ -1370,10 +1370,8 @@ class SeedContentSourcesCommandTest(TestCase):
         )
         self.assertEqual(paths['article'], 'blog')
         self.assertEqual(paths['course'], 'courses')
-        self.assertEqual(paths['resource'], 'resources')
         self.assertEqual(paths['project'], 'projects')
         self.assertEqual(paths['interview_question'], 'interview-questions')
-        self.assertEqual(paths['event'], 'events')
 
 
 # ===========================================================================

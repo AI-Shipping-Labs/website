@@ -199,8 +199,8 @@ class SeedDataFlushTest(TestCase):
     def test_flush_clears_and_reseeds(self):
         """--flush clears dev data then reseeds everything."""
         run_seed()
-        first_event_count = Event.objects.count()
-        self.assertGreater(first_event_count, 0)
+        first_poll_count = Poll.objects.count()
+        self.assertGreater(first_poll_count, 0)
 
         # Flush and reseed
         output = run_seed(flush=True)
@@ -208,7 +208,7 @@ class SeedDataFlushTest(TestCase):
         self.assertIn('Seed data created successfully', output)
 
         # Counts should be the same as first run
-        self.assertEqual(Event.objects.count(), first_event_count)
+        self.assertEqual(Poll.objects.count(), first_poll_count)
 
     def test_flush_recreates_users(self):
         """--flush removes and recreates seeded users."""

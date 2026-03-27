@@ -42,13 +42,13 @@
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">YouTube URL</label>
-        <input type="url" name="youtube_url" value="{{ recording.youtube_url|default:'' }}"
+        <input type="url" name="youtube_url" value="{{ recording.recording_url|default:'' }}"
                {% if is_synced %}disabled{% endif %}
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
       </div>
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Date</label>
-        <input type="date" name="date" value="{% if recording %}{{ recording.date|date:'Y-m-d' }}{% endif %}"
+        <input type="date" name="date" value="{% if recording %}{{ recording.start_datetime|date:'Y-m-d' }}{% endif %}"
                {% if is_synced %}disabled{% endif %}
                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
       </div>
@@ -97,12 +97,12 @@
 <div class="mt-8 max-w-3xl" id="youtube-upload-section">
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-lg font-medium text-foreground mb-4">YouTube Upload</h2>
-    {% if recording.youtube_url %}
+    {% if recording.recording_url %}
       <div class="space-y-2">
-        <p class="text-sm text-muted-foreground">YouTube URL: <a href="{{ recording.youtube_url }}" target="_blank" class="text-accent hover:underline">{{ recording.youtube_url }}</a></p>
+        <p class="text-sm text-muted-foreground">YouTube URL: <a href="{{ recording.recording_url }}" target="_blank" class="text-accent hover:underline">{{ recording.recording_url }}</a></p>
       </div>
-    {% elif recording.s3_url %}
-      <p class="text-sm text-muted-foreground mb-2">S3 URL: <span class="text-foreground">{{ recording.s3_url }}</span></p>
+    {% elif recording.recording_s3_url %}
+      <p class="text-sm text-muted-foreground mb-2">S3 URL: <span class="text-foreground">{{ recording.recording_s3_url }}</span></p>
       <p class="text-sm text-muted-foreground mb-4">Upload this recording from S3 to YouTube.</p>
       <button type="button" id="publish-youtube-btn"
               onclick="publishToYouTube({{ recording.pk }})"

@@ -307,17 +307,19 @@ JSONLD_BUILDERS = {
 
 
 @register.simple_tag
-def structured_data(content=None):
+def structured_data(content=None, content_type=None):
     """Generate JSON-LD structured data script tag for a content object.
 
     Usage:
         {% structured_data article %}
+        {% structured_data recording "recording" %}
         {% structured_data %}  {# for homepage Organization #}
     """
     if content is None:
         data = _build_organization_jsonld()
     else:
-        content_type = _get_content_type(content)
+        if content_type is None:
+            content_type = _get_content_type(content)
         builder = JSONLD_BUILDERS.get(content_type)
         if builder:
             data = builder(content)

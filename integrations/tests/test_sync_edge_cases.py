@@ -28,7 +28,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from content.models import (
-    Article, Course, Module, Project, Recording, Unit, UserCourseProgress,
+    Article, Course, Module, Project, Unit, UserCourseProgress,
 )
 from integrations.models import ContentSource, SyncLog
 from integrations.services.github import (

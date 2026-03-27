@@ -28,8 +28,9 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from content.models import (
-    Article, Course, CuratedLink, Download, Module, Project, Recording, Unit,
+    Article, Course, CuratedLink, Download, Module, Project, Unit,
 )
+from events.models import Event
 from integrations.models import ContentSource, SyncLog
 from integrations.services.github import (
     GitHubSyncError,
@@ -228,8 +229,8 @@ class SourceTrackingFieldsTest(TestCase):
         self.assertIsNone(article.source_commit)
 
     def test_recording_source_fields(self):
-        recording = Recording.objects.create(
-            title='Test', slug='test-rec', date=date.today(),
+        recording = Event.objects.create(
+            title='Test', slug='test-rec', start_datetime=timezone.now(),
             source_repo='AI-Shipping-Labs/resources',
             source_path='recordings/test.yaml',
             source_commit='def456',
@@ -869,6 +870,12 @@ class SyncResourcesTest(TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_sync_recordings(self):
+        # Recordings are now synced as events via content_type='event'
+        event_source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/resources',
+            content_type='event',
+            content_path='recordings',
+        )
         rec_dir = os.path.join(self.temp_dir, 'recordings')
         os.makedirs(rec_dir)
         with open(os.path.join(rec_dir, 'my-workshop.yaml'), 'w') as f:
@@ -880,9 +887,9 @@ class SyncResourcesTest(TestCase):
             f.write('content_id: "44444444-4444-4444-4444-444444444444"\n')
             f.write('tags:\n  - workshop\n')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_content_source(event_source, repo_dir=self.temp_dir)
         self.assertEqual(sync_log.items_created, 1)
-        recording = Recording.objects.get(slug='my-workshop')
+        recording = Event.objects.get(slug='my-workshop')
         self.assertEqual(recording.title, 'My Workshop')
         self.assertEqual(recording.source_repo, 'AI-Shipping-Labs/resources')
 
@@ -1037,15 +1044,21 @@ class SyncResourcesTest(TestCase):
         self.assertEqual(dl.source_repo, 'AI-Shipping-Labs/resources')
 
     def test_sync_soft_deletes_stale_recordings(self):
-        Recording.objects.create(
-            title='Stale', slug='stale-rec', date=date.today(),
+        # Recordings are now synced as events via content_type='event'
+        event_source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/resources',
+            content_type='event',
+            content_path='recordings',
+        )
+        Event.objects.create(
+            title='Stale', slug='stale-rec', start_datetime=timezone.now(),
             source_repo='AI-Shipping-Labs/resources',
             published=True,
         )
-        # Create an empty recordings directory so the sync runs the recordings path
+        # Create an empty recordings directory so the sync runs the events path
         os.makedirs(os.path.join(self.temp_dir, 'recordings'))
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-        recording = Recording.objects.get(slug='stale-rec')
+        sync_log = sync_content_source(event_source, repo_dir=self.temp_dir)
+        recording = Event.objects.get(slug='stale-rec')
         self.assertFalse(recording.published)
 
 
@@ -1311,19 +1324,19 @@ class AdminSyncAllTest(TestCase):
 class SeedContentSourcesCommandTest(TestCase):
     """Test the seed_content_sources management command."""
 
-    def test_seeds_five_sources(self):
+    def test_seeds_six_sources(self):
         from django.core.management import call_command
         from io import StringIO
         out = StringIO()
         call_command('seed_content_sources', stdout=out)
-        self.assertEqual(ContentSource.objects.count(), 5)
+        self.assertEqual(ContentSource.objects.count(), 6)
 
     def test_seed_is_idempotent(self):
         from django.core.management import call_command
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 5)
+        self.assertEqual(ContentSource.objects.count(), 6)
 
     def test_seed_creates_expected_repos(self):
         from django.core.management import call_command
@@ -1346,7 +1359,7 @@ class SeedContentSourcesCommandTest(TestCase):
         from io import StringIO
         call_command('seed_content_sources', stdout=StringIO())
         types = set(ContentSource.objects.values_list('content_type', flat=True))
-        self.assertEqual(types, {'article', 'course', 'resource', 'project', 'interview_question'})
+        self.assertEqual(types, {'article', 'course', 'resource', 'project', 'interview_question', 'event'})
 
     def test_content_paths_correct(self):
         from django.core.management import call_command
@@ -1360,6 +1373,7 @@ class SeedContentSourcesCommandTest(TestCase):
         self.assertEqual(paths['resource'], 'resources')
         self.assertEqual(paths['project'], 'projects')
         self.assertEqual(paths['interview_question'], 'interview-questions')
+        self.assertEqual(paths['event'], 'events')
 
 
 # ===========================================================================

@@ -152,7 +152,7 @@ class StructuredDataRecordingTest(TestCase):
         )
 
     def test_structured_data_recording_with_video(self):
-        template = Template('{% load seo_tags %}{% structured_data recording %}')
+        template = Template('{% load seo_tags %}{% structured_data recording "recording" %}')
         context = Context({'recording': self.recording})
         result = template.render(context)
         data = self._extract_jsonld(result)
@@ -164,7 +164,7 @@ class StructuredDataRecordingTest(TestCase):
         self.recording.recording_url = ''
         self.recording.recording_embed_url = ''
         self.recording.save()
-        template = Template('{% load seo_tags %}{% structured_data recording %}')
+        template = Template('{% load seo_tags %}{% structured_data recording "recording" %}')
         context = Context({'recording': self.recording})
         result = template.render(context)
         data = self._extract_jsonld(result)
@@ -714,6 +714,7 @@ class SitemapTest(TestCase):
             title='Open Recording',
             slug='open-recording',
             start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 10, 12, 0)), status='completed',
+            recording_url='https://youtube.com/watch?v=open1',
             published=True,
             required_level=0,
         )
@@ -722,6 +723,7 @@ class SitemapTest(TestCase):
             title='Gated Recording',
             slug='gated-recording',
             start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 9, 12, 0)), status='completed',
+            recording_url='https://youtube.com/watch?v=gated1',
             published=True,
             required_level=1,
         )

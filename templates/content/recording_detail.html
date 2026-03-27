@@ -6,7 +6,7 @@
 {% block meta_description %}{{ recording.description|truncatechars:160 }}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ site_url }}{{ recording.get_recording_url }}">{% endblock %}
 {% block og_tags %}{% og_tags recording %}{% endblock %}
-{% block structured_data %}{% structured_data recording %}{% endblock %}
+{% block structured_data %}{% structured_data recording "recording" %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

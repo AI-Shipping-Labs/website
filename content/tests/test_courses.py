@@ -936,20 +936,30 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/free-with-discussion')
         self.assertNotContains(response, 'Join the discussion')
 
-    def test_main_tier_user_sees_discussion(self):
+    def test_main_tier_user_not_on_free_course(self):
+        """Main user does NOT see discussion on free course (Slack is paid-only)."""
         user = User.objects.create_user(email='main-disc@test.com', password='testpass')
         user.tier = self.main_tier
         user.save()
         self.client.login(email='main-disc@test.com', password='testpass')
         response = self.client.get('/courses/free-with-discussion')
+        self.assertNotContains(response, 'Join the discussion')
+
+    def test_main_tier_user_sees_discussion_on_paid(self):
+        """Main user sees discussion on paid course."""
+        user = User.objects.create_user(email='main-disc2@test.com', password='testpass')
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email='main-disc2@test.com', password='testpass')
+        response = self.client.get('/courses/paid-with-discussion')
         self.assertContains(response, 'Join the discussion')
 
-    def test_premium_tier_user_sees_discussion(self):
+    def test_premium_tier_user_sees_discussion_on_paid(self):
         user = User.objects.create_user(email='prem-disc@test.com', password='testpass')
         user.tier = self.premium_tier
         user.save()
         self.client.login(email='prem-disc@test.com', password='testpass')
-        response = self.client.get('/courses/free-with-discussion')
+        response = self.client.get('/courses/paid-with-discussion')
         self.assertContains(response, 'Join the discussion')
 
     def test_main_tier_sees_discussion_on_paid_course(self):

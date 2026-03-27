@@ -940,7 +940,7 @@ class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
         super().setUpTestData()
         cls.course = Course.objects.create(
             title='Disc Course', slug='disc-course',
-            status='published', is_free=True, required_level=LEVEL_OPEN,
+            status='published', required_level=LEVEL_MAIN,
             discussion_url='https://slack.com/disc-channel',
         )
         cls.module = Module.objects.create(
@@ -957,8 +957,8 @@ class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='free-unit@test.com', password='testpass')
         response = self.client.get(self.unit_url)
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Join the discussion')
+        self.assertEqual(response.status_code, 403)
+        self.assertNotContains(response, 'Join the discussion', status_code=403)
 
     def test_main_tier_user_sees_discussion_on_unit(self):
         user = User.objects.create_user(email='main-unit@test.com', password='testpass')

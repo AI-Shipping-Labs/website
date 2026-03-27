@@ -17,6 +17,7 @@ from studio.views.projects import project_list, project_review
 from studio.views.tier_overrides import tier_override_page, tier_override_create, tier_override_revoke
 from studio.views.redirects import redirect_list, redirect_create, redirect_edit, redirect_delete, redirect_toggle
 from studio.views.sync import sync_dashboard, sync_history, sync_trigger, sync_all, sync_status
+from studio.views.worker import worker_status
 from studio.views.peer_reviews import (
     peer_review_management, peer_review_form_batch,
     peer_review_issue_certificates, peer_review_extend_deadline,
@@ -106,6 +107,9 @@ urlpatterns = [
     path('redirects/<int:redirect_id>/edit', redirect_edit, name='studio_redirect_edit'),
     path('redirects/<int:redirect_id>/delete', redirect_delete, name='studio_redirect_delete'),
     path('redirects/<int:redirect_id>/toggle', redirect_toggle, name='studio_redirect_toggle'),
+
+    # Worker Status
+    path('worker/', worker_status, name='studio_worker'),
 
     # Content Sync
     path('sync/', sync_dashboard, name='studio_sync_dashboard'),

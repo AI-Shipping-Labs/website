@@ -17,8 +17,8 @@ from notifications.urls import api_urlpatterns as notification_api_urlpatterns
 from notifications.urls import page_urlpatterns as notification_page_urlpatterns
 
 urlpatterns = [
-    # Health check endpoint for load balancer
-    path('ping/', health_check),
+    # Health check endpoint for load balancer (no trailing slash to avoid redirect)
+    path('ping', health_check),
     # Integrations URLs must come before admin/ to allow /admin/sync/ to resolve
     path('', include('integrations.urls')),
     path('admin/', admin.site.urls),

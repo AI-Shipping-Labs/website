@@ -4,7 +4,7 @@
 
 AI Shipping Labs community platform — a Django-based website replacing the current Next.js static site.
 
-- Product: [`_docs/PRODUCT.md`](_docs/PRODUCT.md) — what the site is, user personas, tiers, feature inventory, terminology
+- Product: [`_docs/product.md`](_docs/product.md) — what the site is, user personas, tiers, feature inventory, terminology
 - Process: [`_docs/PROCESS.md`](_docs/PROCESS.md) — development workflow, agent definitions, issue lifecycle, how to pick issues
 - Specs: `specs/` folder (14 requirement specs with data models, APIs, acceptance criteria)
 - Issues: GitHub Issues on [AI-Shipping-Labs/website](https://github.com/AI-Shipping-Labs/website/issues)
@@ -43,7 +43,7 @@ If you get "File has been unexpectedly modified" — re-read the file immediatel
 
 ### Testing Rules
 
-Follow [`_docs/TESTING_GUIDELINES.md`](_docs/TESTING_GUIDELINES.md) when writing or reviewing tests. Key rules:
+Follow [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) when writing or reviewing tests. Key rules:
 
 - Every assertion must fail if the feature is broken (no false positives)
 - Assert on specific elements, not full HTML body strings

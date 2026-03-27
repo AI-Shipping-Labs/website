@@ -137,6 +137,10 @@ schedule('myapp.tasks.cleanup', cron='0 * * * *', name='hourly-cleanup')
 
 **Monitor jobs** in Django admin at `/admin/django_q/` (queued, successful, failed tasks, and schedules).
 
+## Deployment
+
+See [_docs/setup.md](_docs/setup.md) for infrastructure details, CI/CD, manual deployment, database access, and admin user creation.
+
 ## Project Structure
 
 ```

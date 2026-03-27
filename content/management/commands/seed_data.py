@@ -7,15 +7,21 @@ from GitHub sync (AI-Shipping-Labs/content). Tiers are seeded via migration 0003
 This command creates only dev-only fixtures for testing access control, event pages,
 course flows, voting, notification UI, and email.
 
+Also seeds OAuth social apps (Google, GitHub, Slack) if the corresponding
+client ID / secret environment variables are set in .env.
+
 Idempotent: running twice does not create duplicates.
 """
 
+import os
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from allauth.socialaccount.models import SocialApp
 from content.models import Cohort, CohortEnrollment, Course
 from email_app.models import NewsletterSubscriber
 from events.models import Event, EventRegistration
@@ -242,6 +248,7 @@ class Command(BaseCommand):
         summary['polls'] = self._seed_polls()
         summary['notifications'] = self._seed_notifications()
         summary['newsletter_subscribers'] = self._seed_newsletter_subscribers()
+        summary['social_apps'] = self._seed_social_apps()
 
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('Seed data created successfully.'))
@@ -504,4 +511,53 @@ class Command(BaseCommand):
             if created:
                 count += 1
         self.stdout.write(f'  Newsletter subscribers: {count} created')
+        return count
+
+    # ------------------------------------------------------------------
+    # Social apps (OAuth providers from .env)
+    # ------------------------------------------------------------------
+    SOCIAL_APPS = [
+        {
+            'provider': 'google',
+            'name': 'Google',
+            'client_id_env': 'GOOGLE_OAUTH_CLIENT_ID',
+            'secret_env': 'GOOGLE_OAUTH_CLIENT_SECRET',
+        },
+        {
+            'provider': 'github',
+            'name': 'GitHub',
+            'client_id_env': 'GITHUB_OAUTH_CLIENT_ID',
+            'secret_env': 'GITHUB_OAUTH_CLIENT_SECRET',
+        },
+        {
+            'provider': 'slack',
+            'name': 'Slack',
+            'client_id_env': 'SLACK_OAUTH_CLIENT_ID',
+            'secret_env': 'SLACK_OAUTH_CLIENT_SECRET',
+        },
+    ]
+
+    def _seed_social_apps(self):
+        count = 0
+        site = Site.objects.get_current()
+        for app_def in self.SOCIAL_APPS:
+            client_id = os.environ.get(app_def['client_id_env'], '')
+            secret = os.environ.get(app_def['secret_env'], '')
+            if not client_id or not secret:
+                continue
+            app, created = SocialApp.objects.update_or_create(
+                provider=app_def['provider'],
+                defaults={
+                    'name': app_def['name'],
+                    'client_id': client_id,
+                    'secret': secret,
+                },
+            )
+            app.sites.add(site)
+            if created:
+                count += 1
+                self.stdout.write(f'    Created {app_def["name"]} social app')
+            else:
+                self.stdout.write(f'    Updated {app_def["name"]} social app')
+        self.stdout.write(f'  Social apps: {count} created')
         return count

@@ -4,6 +4,7 @@ from django.conf import settings
 def site_context(request):
     """Add site-wide context variables to all templates."""
     return {
+        'VERSION': settings.VERSION,
         'site_name': settings.SITE_NAME,
         'site_url': settings.SITE_URL,
         'site_description': settings.SITE_DESCRIPTION,

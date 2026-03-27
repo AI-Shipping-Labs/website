@@ -23,6 +23,12 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+
 
 # Application definition
 
@@ -147,6 +153,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Site configuration
+VERSION = os.getenv("VERSION", "N/A")
 SITE_NAME = 'AI Shipping Labs'
 SITE_URL = 'https://aishippinglabs.com'
 SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who want to turn AI ideas into real projects.'
@@ -204,15 +211,34 @@ SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED'
 # Content directory (markdown files from reference)
 CONTENT_DIR = BASE_DIR / 'reference' / 'content'
 
-# GitHub App authentication for private repo access (set via environment variables)
+# GitHub App authentication for private repo access
 GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
+GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')
+
+# Private key: local file → env var → Secrets Manager
 _github_key_path = os.environ.get('GITHUB_APP_PRIVATE_KEY_FILE', '')
 if _github_key_path and os.path.isfile(_github_key_path):
     with open(_github_key_path) as f:
         GITHUB_APP_PRIVATE_KEY = f.read()
 else:
     GITHUB_APP_PRIVATE_KEY = os.environ.get('GITHUB_APP_PRIVATE_KEY', '')
-GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')
+
+
+def _fetch_secret(secret_id, region='eu-west-1'):
+    """Fetch a secret from AWS Secrets Manager."""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        import boto3
+        client = boto3.client('secretsmanager', region_name=region)
+        return client.get_secret_value(SecretId=secret_id)['SecretString']
+    except Exception as e:
+        logger.warning('Failed to fetch secret %s: %s', secret_id, e)
+        return ''
+
+
+if not GITHUB_APP_PRIVATE_KEY:
+    GITHUB_APP_PRIVATE_KEY = _fetch_secret('ai-shipping-labs/github-app-private-key')
 
 # CDN base URL for content images uploaded during sync
 CONTENT_CDN_BASE = os.environ.get('CONTENT_CDN_BASE', '/static/content-images')
@@ -245,29 +271,17 @@ SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 SOCIALACCOUNT_LOGIN_ON_GET = True
 
-# OAuth provider configuration (set via environment variables in production)
+# OAuth provider configuration (credentials managed via Django admin > Social applications)
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'SCOPE': ['profile', 'email'],
         'AUTH_PARAMS': {'access_type': 'online'},
-        'APP': {
-            'client_id': os.environ.get('GOOGLE_OAUTH_CLIENT_ID', ''),
-            'secret': os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', ''),
-        },
     },
     'github': {
         'SCOPE': ['user:email'],
-        'APP': {
-            'client_id': os.environ.get('GITHUB_OAUTH_CLIENT_ID', ''),
-            'secret': os.environ.get('GITHUB_OAUTH_CLIENT_SECRET', ''),
-        },
     },
     'slack': {
         'SCOPE': ['openid', 'profile', 'email'],
-        'APP': {
-            'client_id': os.environ.get('SLACK_OAUTH_CLIENT_ID', ''),
-            'secret': os.environ.get('SLACK_OAUTH_CLIENT_SECRET', ''),
-        },
     },
 }
 

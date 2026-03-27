@@ -20,6 +20,9 @@ COPY . .
 # Collect static files
 RUN uv run python manage.py collectstatic --noinput
 
+RUN chmod +x entrypoint.sh
+
 EXPOSE 8000
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uv", "run", "gunicorn", "website.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]

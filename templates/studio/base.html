@@ -34,6 +34,13 @@
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_project_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'projects' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="folder-kanban" class="w-4 h-4"></i>
+                <span>Projects</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_recording_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'recordings' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="video" class="w-4 h-4"></i>
@@ -50,9 +57,9 @@
           </ul>
         </div>
 
-        <!-- Communications Section -->
+        <!-- Events & Outreach Section -->
         <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Communications</p>
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Events & Outreach</p>
           <ul class="space-y-1">
             <li>
               <a href="{% url 'studio_event_list' %}"
@@ -75,25 +82,18 @@
                 <span>Notifications</span>
               </a>
             </li>
+          </ul>
+        </div>
+
+        <!-- Users Section -->
+        <div>
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Users</p>
+          <ul class="space-y-1">
             <li>
               <a href="{% url 'studio_subscriber_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'subscribers' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="users" class="w-4 h-4"></i>
                 <span>Subscribers</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Community Section -->
-        <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Community</p>
-          <ul class="space-y-1">
-            <li>
-              <a href="{% url 'studio_project_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'projects' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="folder-kanban" class="w-4 h-4"></i>
-                <span>Projects</span>
               </a>
             </li>
             <li>
@@ -103,13 +103,13 @@
                 <span>Tier Overrides</span>
               </a>
             </li>
-            <li>
-              <a href="{% url 'studio_redirect_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'redirects' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="arrow-right-left" class="w-4 h-4"></i>
-                <span>Redirects</span>
-              </a>
-            </li>
+          </ul>
+        </div>
+
+        <!-- System Section -->
+        <div>
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">System</p>
+          <ul class="space-y-1">
             <li>
               <a href="{% url 'studio_sync_dashboard' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/sync' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -122,6 +122,13 @@
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/worker' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="cpu" class="w-4 h-4"></i>
                 <span>Worker</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_redirect_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'redirects' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="arrow-right-left" class="w-4 h-4"></i>
+                <span>Redirects</span>
               </a>
             </li>
           </ul>

@@ -136,8 +136,9 @@ class StudioDashboardTest(TestCase):
         response = self.client.get('/studio/')
         content = response.content.decode()
         self.assertIn('Content', content)
-        self.assertIn('Communications', content)
-        self.assertIn('Community', content)
+        self.assertIn('Events & Outreach', content)
+        self.assertIn('Users', content)
+        self.assertIn('System', content)
 
     def test_dashboard_has_studio_title(self):
         response = self.client.get('/studio/')

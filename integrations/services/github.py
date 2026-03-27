@@ -493,6 +493,9 @@ def sync_content_source(source, repo_dir=None):
             source.repo_name, s3_stats['uploaded'], s3_stats['skipped'],
         )
 
+        # Sync tiers.yaml from repo root into SiteConfig
+        _sync_tiers_yaml(repo_dir)
+
         # Collect known image paths for broken reference checks (Edge Case 8)
         known_images = _collect_image_paths(content_dir)
 
@@ -564,6 +567,25 @@ def sync_content_source(source, repo_dir=None):
                     sync_content_source(source)
 
     return sync_log
+
+
+def _sync_tiers_yaml(repo_dir):
+    """Sync tiers.yaml from the repo root into SiteConfig."""
+    tiers_path = os.path.join(repo_dir, 'tiers.yaml')
+    if not os.path.isfile(tiers_path):
+        return
+    try:
+        import yaml
+        from content.models import SiteConfig
+        with open(tiers_path, encoding='utf-8') as f:
+            tiers_data = yaml.safe_load(f) or []
+        SiteConfig.objects.update_or_create(
+            key='tiers',
+            defaults={'data': tiers_data},
+        )
+        logger.info('tiers.yaml synced to SiteConfig (%d tiers)', len(tiers_data))
+    except Exception as e:
+        logger.warning('Failed to sync tiers.yaml: %s', e)
 
 
 def _get_sync_function(content_type):

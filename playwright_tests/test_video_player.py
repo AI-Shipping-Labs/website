@@ -37,9 +37,9 @@ from django.db import connection
 
 def _clear_recordings():
     """Delete all recordings to ensure a clean state."""
-    from content.models import Recording
+    from events.models import Event
 
-    Recording.objects.all().delete()
+    Event.objects.all().delete()
     connection.close()
 
 
@@ -75,7 +75,7 @@ def _create_recording(
     outcome="",
 ):
     """Create a Recording via ORM."""
-    from content.models import Recording
+    from events.models import Event
 
     if timestamps is None:
         timestamps = []
@@ -88,7 +88,7 @@ def _create_recording(
     if learning_objectives is None:
         learning_objectives = []
 
-    recording = Recording(
+    recording = Event(
         title=title,
         slug=slug,
         description=description,

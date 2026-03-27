@@ -46,7 +46,7 @@ def _create_recording(
     date=None,
 ):
     """Create a Recording via ORM."""
-    from content.models import Recording
+    from events.models import Event
 
     if timestamps is None:
         timestamps = []
@@ -57,7 +57,7 @@ def _create_recording(
     if date is None:
         date = datetime.date.today()
 
-    recording = Recording(
+    recording = Event(
         title=title,
         slug=slug,
         description=description,
@@ -76,9 +76,9 @@ def _create_recording(
 
 def _clear_recordings():
     """Delete all recordings to ensure a clean state."""
-    from content.models import Recording
+    from events.models import Event
 
-    Recording.objects.all().delete()
+    Event.objects.all().delete()
     connection.close()
 
 

@@ -75,7 +75,7 @@ def _clear_dashboard_data():
     Module.objects.all().delete()
     Course.objects.all().delete()
     Article.objects.all().delete()
-    Recording.objects.all().delete()
+    Event.objects.all().delete()
     connection.close()
 
 
@@ -115,11 +115,11 @@ def _create_recording(
     date=None,
 ):
     """Create a Recording via ORM."""
-    from content.models import Recording
+    from events.models import Event
 
     if date is None:
         date = datetime.date.today()
-    recording = Recording(
+    recording = Event(
         title=title,
         slug=slug,
         description=description,

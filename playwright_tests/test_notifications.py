@@ -113,9 +113,9 @@ def _create_recording(
     published=True,
 ):
     """Create a Recording via ORM."""
-    from content.models import Recording
+    from events.models import Event
 
-    recording = Recording(
+    recording = Event(
         title=title,
         slug=slug,
         description=description,

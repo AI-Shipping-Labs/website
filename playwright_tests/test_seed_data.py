@@ -45,7 +45,6 @@ def _flush_all_seed_data():
         Download,
         Module,
         Project,
-        Recording,
         Unit,
     )
     from email_app.models import NewsletterSubscriber
@@ -62,7 +61,7 @@ def _flush_all_seed_data():
     EventRegistration.objects.all().delete()
     CohortEnrollment.objects.all().delete()
     Cohort.objects.all().delete()
-    Recording.objects.all().delete()
+    Event.objects.all().delete()
     Event.objects.all().delete()
     Unit.objects.all().delete()
     Module.objects.all().delete()

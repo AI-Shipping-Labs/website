@@ -47,7 +47,7 @@ def _clear_all_content():
     from events.models import Event
 
     Article.objects.all().delete()
-    Recording.objects.all().delete()
+    Event.objects.all().delete()
     Project.objects.all().delete()
     CuratedLink.objects.all().delete()
     Download.objects.all().delete()
@@ -102,14 +102,14 @@ def _create_recording(
     youtube_url="https://www.youtube.com/watch?v=test",
 ):
     """Helper to create a Recording directly via the ORM."""
-    from content.models import Recording
+    from events.models import Event
 
     if tags is None:
         tags = []
     if date is None:
         date = datetime.date.today()
 
-    recording = Recording(
+    recording = Event(
         title=title,
         slug=slug,
         description=description,

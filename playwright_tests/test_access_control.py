@@ -88,14 +88,14 @@ def _create_recording(
     tags=None,
 ):
     """Helper to create a Recording directly via the ORM."""
-    from content.models import Recording
+    from events.models import Event
 
     if tags is None:
         tags = []
     if date is None:
         date = datetime.date.today()
 
-    recording = Recording(
+    recording = Event(
         title=title,
         slug=slug,
         description=description,
@@ -341,7 +341,7 @@ def _clear_all_content():
     Module.objects.all().delete()
     Course.objects.all().delete()
     Article.objects.all().delete()
-    Recording.objects.all().delete()
+    Event.objects.all().delete()
     Tutorial.objects.all().delete()
     Project.objects.all().delete()
     Download.objects.all().delete()

@@ -109,12 +109,12 @@ def _register_user_for_event(user, event):
 
 def _create_recording(title, slug, date=None):
     """Create a Recording via ORM."""
-    from content.models import Recording
+    from events.models import Event
 
     if date is None:
         date = datetime.date.today()
 
-    recording = Recording(
+    recording = Event(
         title=title,
         slug=slug,
         date=date,

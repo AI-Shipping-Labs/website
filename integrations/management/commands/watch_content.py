@@ -146,11 +146,13 @@ class DebouncedSyncer:
             if not tiers_path.exists():
                 self.stderr.write('tiers.yaml not found, skipping.')
                 return
-            with open(tiers_path) as f:
-                yaml.safe_load(f)
-            # Clear the lru_cache so next access picks up changes
-            from content.tier_config import get_tiers
-            get_tiers.cache_clear()
+            with open(tiers_path, encoding='utf-8') as f:
+                tiers_data = yaml.safe_load(f) or []
+            from content.models import SiteConfig
+            SiteConfig.objects.update_or_create(
+                key='tiers',
+                defaults={'data': tiers_data},
+            )
             self.stdout.write(self.style.SUCCESS('tiers.yaml reloaded.'))
         except Exception as e:
             self.stderr.write(f'Error syncing tiers.yaml: {e}')

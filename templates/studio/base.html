@@ -117,6 +117,13 @@
                 <span>Content Sync</span>
               </a>
             </li>
+            <li>
+              <a href="{% url 'studio_worker' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/worker' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="cpu" class="w-4 h-4"></i>
+                <span>Worker</span>
+              </a>
+            </li>
           </ul>
         </div>
 

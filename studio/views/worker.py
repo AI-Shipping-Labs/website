@@ -1,0 +1,68 @@
+"""Studio view for django-q2 worker status dashboard.
+
+Shows worker health, queue depth, recent tasks, and failed task details.
+"""
+
+from django.shortcuts import render
+from django.utils import timezone
+
+from studio.decorators import staff_required
+
+
+@staff_required
+def worker_status(request):
+    """Display django-q2 worker status and recent task history."""
+    from django_q.models import OrmQ, Task
+
+    now = timezone.now()
+    five_minutes_ago = now - timezone.timedelta(minutes=5)
+
+    # Recent tasks (last 50)
+    recent_tasks = Task.objects.order_by('-started')[:50]
+
+    # Success/failure counts
+    success_count = Task.objects.filter(success=True).count()
+    failure_count = Task.objects.filter(success=False).count()
+
+    # Worker health: any task completed in the last 5 minutes
+    recent_completions = Task.objects.filter(stopped__gte=five_minutes_ago).count()
+    worker_healthy = recent_completions > 0
+
+    # Queue depth
+    queue_depth = OrmQ.objects.count()
+
+    # Failed tasks with error details (last 20)
+    failed_tasks = Task.objects.filter(success=False).order_by('-started')[:20]
+
+    # Compute duration for recent tasks
+    tasks_with_duration = []
+    for task in recent_tasks:
+        duration = None
+        if task.started and task.stopped:
+            duration = task.stopped - task.started
+        error_message = None
+        if not task.success and task.result is not None:
+            error_message = str(task.result)
+        tasks_with_duration.append({
+            'task': task,
+            'duration': duration,
+            'error_message': error_message,
+        })
+
+    failed_with_details = []
+    for task in failed_tasks:
+        error_message = str(task.result) if task.result is not None else 'No error details'
+        failed_with_details.append({
+            'task': task,
+            'error_message': error_message,
+        })
+
+    return render(request, 'studio/worker.html', {
+        'worker_healthy': worker_healthy,
+        'recent_completions': recent_completions,
+        'queue_depth': queue_depth,
+        'success_count': success_count,
+        'failure_count': failure_count,
+        'tasks_with_duration': tasks_with_duration,
+        'failed_with_details': failed_with_details,
+    })

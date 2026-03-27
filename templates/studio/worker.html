@@ -1,0 +1,126 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Worker Status{% endblock %}
+
+{% block studio_content %}
+<div class="space-y-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Worker Status</h1>
+    <p class="text-muted-foreground mt-1">django-q2 task worker health and recent activity</p>
+  </div>
+
+  <!-- Health and Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <!-- Worker Health -->
+    <div class="bg-card border border-border rounded-lg p-4">
+      <div class="flex items-center space-x-3">
+        {% if worker_healthy %}
+          <div class="w-3 h-3 rounded-full bg-green-500" title="Worker active"></div>
+          <div>
+            <p class="text-sm font-medium text-foreground">Worker Active</p>
+            <p class="text-xs text-muted-foreground">{{ recent_completions }} task{{ recent_completions|pluralize }} in last 5 min</p>
+          </div>
+        {% else %}
+          <div class="w-3 h-3 rounded-full bg-red-500" title="Worker inactive"></div>
+          <div>
+            <p class="text-sm font-medium text-foreground">Worker Inactive</p>
+            <p class="text-xs text-muted-foreground">No tasks completed in last 5 min</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Queue Depth -->
+    <div class="bg-card border border-border rounded-lg p-4">
+      <p class="text-sm text-muted-foreground">Queue Depth</p>
+      <p class="text-2xl font-semibold text-foreground mt-1">{{ queue_depth }}</p>
+      <p class="text-xs text-muted-foreground">pending task{{ queue_depth|pluralize }}</p>
+    </div>
+
+    <!-- Success Count -->
+    <div class="bg-card border border-border rounded-lg p-4">
+      <p class="text-sm text-muted-foreground">Successful Tasks</p>
+      <p class="text-2xl font-semibold text-green-600 mt-1">{{ success_count }}</p>
+      <p class="text-xs text-muted-foreground">total completed</p>
+    </div>
+
+    <!-- Failure Count -->
+    <div class="bg-card border border-border rounded-lg p-4">
+      <p class="text-sm text-muted-foreground">Failed Tasks</p>
+      <p class="text-2xl font-semibold text-red-600 mt-1">{{ failure_count }}</p>
+      <p class="text-xs text-muted-foreground">total failed</p>
+    </div>
+  </div>
+
+  <!-- Recent Tasks Table -->
+  <div class="bg-card border border-border rounded-lg">
+    <div class="p-4 border-b border-border">
+      <h2 class="text-lg font-medium text-foreground">Recent Tasks</h2>
+    </div>
+    {% if tasks_with_duration %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border">
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Name</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Started</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Duration</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Status</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in tasks_with_duration %}
+              <tr class="border-b border-border last:border-0 hover:bg-secondary/50">
+                <td class="px-4 py-3 text-foreground">{{ item.task.name }}</td>
+                <td class="px-4 py-3 text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</td>
+                <td class="px-4 py-3 text-muted-foreground">
+                  {% if item.duration %}
+                    {{ item.duration.total_seconds|floatformat:1 }}s
+                  {% else %}
+                    --
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3">
+                  {% if item.task.success %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">Success</span>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">Failed</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 text-red-400 text-xs max-w-xs truncate" title="{{ item.error_message }}">
+                  {{ item.error_message|default:"" }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-8 text-center text-muted-foreground">
+        No tasks recorded yet.
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Failed Tasks Section -->
+  {% if failed_with_details %}
+    <div class="bg-card border border-red-500/20 rounded-lg">
+      <div class="p-4 border-b border-red-500/20">
+        <h2 class="text-lg font-medium text-red-400">Failed Tasks</h2>
+      </div>
+      <div class="divide-y divide-border">
+        {% for item in failed_with_details %}
+          <div class="p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium text-foreground">{{ item.task.name }}</span>
+              <span class="text-xs text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</span>
+            </div>
+            <pre class="text-xs text-red-400 bg-red-500/10 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ item.error_message }}</pre>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

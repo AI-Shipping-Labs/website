@@ -111,7 +111,10 @@ def sync_dashboard(request):
             repo['any_running'] = True
         if source.last_sync_status:
             if source.last_sync_status == 'failed':
-                repo['overall_status'] = 'failed'
+                last_log = SyncLog.objects.filter(source=source).order_by('-started_at').first()
+                log_errors = (last_log.errors if last_log else []) or []
+                if not _is_not_configured_error(log_errors):
+                    repo['overall_status'] = 'failed'
             elif source.last_sync_status == 'partial' and repo['overall_status'] != 'failed':
                 repo['overall_status'] = 'partial'
             elif source.last_sync_status == 'running':

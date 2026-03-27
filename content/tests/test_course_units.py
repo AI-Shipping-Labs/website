@@ -14,10 +14,10 @@ Covers:
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Course, Module, Unit, UserCourseProgress
 from tests.fixtures import TierSetupMixin
 
@@ -263,7 +263,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
             module=module, title='Free Lesson', slug='free-lesson', sort_order=1,
             body='Free content.',
         )
-        user = User.objects.create_user(email='user@test.com', password='testpass')
+        User.objects.create_user(email='user@test.com', password='testpass')
         self.client.login(email='user@test.com', password='testpass')
         response = self.client.get('/courses/free-course/m1/free-lesson')
         self.assertEqual(response.status_code, 200)

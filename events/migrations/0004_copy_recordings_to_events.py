@@ -7,7 +7,6 @@ For each Recording without an event FK: create a new Event with status='complete
 import datetime
 
 from django.db import migrations
-from django.utils import timezone
 
 
 def copy_recordings_to_events(apps, schema_editor):

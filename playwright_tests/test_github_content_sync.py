@@ -28,16 +28,20 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
     VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_staff_user_base,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_staff_user_base,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -169,6 +173,7 @@ def _sync_blog_source_with_articles(source, articles_data):
         SyncLog from the sync.
     """
     import shutil
+
     from integrations.services.github import sync_content_source
 
     temp_dir = tempfile.mkdtemp(prefix="e2e-blog-sync-")
@@ -209,6 +214,7 @@ def _sync_blog_source_with_articles(source, articles_data):
 def _sync_blog_source_empty(source):
     """Simulate a sync with an empty repo (triggers soft-delete of stale content)."""
     import shutil
+
     from integrations.services.github import sync_content_source
 
     temp_dir = tempfile.mkdtemp(prefix="e2e-blog-empty-")
@@ -225,6 +231,7 @@ def _sync_blog_source_with_error(source, good_articles, bad_filename="bad-articl
     Returns the sync log.
     """
     import shutil
+
     from integrations.services.github import sync_content_source
 
     temp_dir = tempfile.mkdtemp(prefix="e2e-blog-err-")
@@ -239,8 +246,8 @@ def _sync_blog_source_with_error(source, good_articles, bad_filename="bad-articl
                 f.write(f'title: "{title}"\n')
                 f.write(f'slug: "{slug}"\n')
                 f.write(f'content_id: "{uuid.uuid4()}"\n')
-                f.write(f'date: "2026-02-15"\n')
-                f.write(f'author: "Author"\n')
+                f.write('date: "2026-02-15"\n')
+                f.write('author: "Author"\n')
                 f.write("---\n\n")
                 f.write(body)
 
@@ -258,6 +265,7 @@ def _sync_blog_source_with_error(source, good_articles, bad_filename="bad-articl
 def _sync_courses_source(source):
     """Simulate a courses sync with one course, one module, two units."""
     import shutil
+
     from integrations.services.github import sync_content_source
 
     temp_dir = tempfile.mkdtemp(prefix="e2e-courses-sync-")
@@ -940,7 +948,7 @@ class TestScenario9NonStaffCannotAccessSyncDashboard:
         context = _auth_context(browser, "member@test.com")
         page = context.new_page()
         # Step 1: Navigate to /admin/sync/
-        response = page.goto(
+        page.goto(
             f"{django_server}/admin/sync/",
             wait_until="domcontentloaded",
         )
@@ -968,7 +976,7 @@ class TestScenario10SyncedCoursesWithModulesAndUnits:
         _clear_courses()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
-        user = _create_user("free-course@test.com", tier_slug="free")
+        _create_user("free-course@test.com", tier_slug="free")
 
         courses_source = _create_content_source(
             "AI-Shipping-Labs/courses", "course", is_private=True

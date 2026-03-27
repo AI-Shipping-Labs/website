@@ -7,11 +7,10 @@ Covers:
 - Campaign status transitions: draft -> sending -> sent
 """
 
-import json
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -26,7 +25,7 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_target_level_choices(self):
         """target_min_level has choices for 0/10/20/30."""
-        campaign = EmailCampaign.objects.create(
+        EmailCampaign.objects.create(
             subject='Test',
             body='Body',
             target_min_level=0,
@@ -660,7 +659,7 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
         )
 
         from email_app.tasks.send_campaign import send_campaign
-        result = send_campaign(campaign.pk, send_delay=0)
+        send_campaign(campaign.pk, send_delay=0)
 
         campaign.refresh_from_db()
         self.assertEqual(campaign.sent_count, 3)

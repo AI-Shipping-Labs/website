@@ -1,7 +1,9 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404, render
 
 from content.access import (
-    build_gating_context, can_access, get_required_tier_name,
+    build_gating_context,
+    can_access,
+    get_required_tier_name,
 )
 from events.models import Event, EventRegistration
 

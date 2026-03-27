@@ -18,7 +18,7 @@ from unittest.mock import patch
 import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 User = get_user_model()
 
@@ -521,7 +521,7 @@ class AccountResubscribeTest(TestCase):
     """Test that the /account page has a toggle to re-subscribe."""
 
     def test_account_page_shows_newsletter_toggle(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email="toggle@example.com",
             password="testpass123",
             unsubscribed=True,

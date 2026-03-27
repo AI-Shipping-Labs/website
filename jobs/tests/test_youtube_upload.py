@@ -9,15 +9,13 @@ Covers:
 """
 
 import os
-import tempfile
-from datetime import date, timedelta
-from unittest.mock import MagicMock, patch, call
+from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from events.models import Event
-
 
 YOUTUBE_TEST_CLIENT_ID = 'test-yt-client-id'
 YOUTUBE_TEST_CLIENT_SECRET = 'test-yt-client-secret'
@@ -165,8 +163,8 @@ class UploadRecordingToYouTubeTest(TestCase):
     @patch('jobs.tasks.youtube_upload.boto3.client')
     def test_temp_file_cleaned_up_on_failure(self, mock_boto_client, mock_upload_video):
         """Temporary file is deleted even when upload fails."""
-        from jobs.tasks.youtube_upload import upload_recording_to_youtube
         from integrations.services.youtube import YouTubeAPIError
+        from jobs.tasks.youtube_upload import upload_recording_to_youtube
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -231,6 +229,7 @@ class UploadRecordingToYouTubeTest(TestCase):
     def test_s3_download_failure_raises(self, mock_boto_client):
         """Task raises on S3 download failure to trigger django-q2 retry."""
         from botocore.exceptions import ClientError
+
         from jobs.tasks.youtube_upload import upload_recording_to_youtube
 
         mock_s3 = MagicMock()
@@ -331,7 +330,7 @@ class BuildDescriptionTest(TestCase):
     def test_description_avoids_duplicate_event_description(self):
         from jobs.tasks.youtube_upload import _build_description
 
-        event = Event.objects.create(
+        Event.objects.create(
             title='Same Desc Event',
             slug='same-desc-event',
             description='Same description text.',

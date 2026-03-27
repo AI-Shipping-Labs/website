@@ -100,7 +100,7 @@ def _verify_signature(payload, cert_url):
     """
     try:
         import requests
-        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.asymmetric import padding
         from cryptography.x509 import load_pem_x509_certificate
 

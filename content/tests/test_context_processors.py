@@ -1,4 +1,5 @@
-from django.test import TestCase, RequestFactory
+from django.test import RequestFactory, TestCase
+
 from website.context_processors import site_context
 
 

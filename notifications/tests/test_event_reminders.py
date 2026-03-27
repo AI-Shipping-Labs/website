@@ -4,7 +4,8 @@ All tests use freezegun to fix the clock so that time-window logic
 (23h45m-24h15m and 45m-1h15m) is deterministic.
 """
 
-from datetime import datetime, timedelta, timezone as dt_tz
+from datetime import datetime, timedelta
+from datetime import timezone as dt_tz
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -12,7 +13,7 @@ from django.test import TestCase
 from freezegun import freeze_time
 
 from events.models import Event, EventRegistration
-from notifications.models import Notification, EventReminderLog
+from notifications.models import EventReminderLog, Notification
 from notifications.services.event_reminders import check_event_reminders
 
 User = get_user_model()

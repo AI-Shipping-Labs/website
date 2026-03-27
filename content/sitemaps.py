@@ -15,7 +15,7 @@ Includes:
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
 
-from content.models import Article, Course, Project, Tutorial, Download
+from content.models import Article, Course, Download, Project, Tutorial
 from events.models import Event
 
 

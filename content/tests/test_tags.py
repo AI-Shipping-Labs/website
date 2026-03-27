@@ -13,13 +13,18 @@ Covers:
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from content.models import (
-    Article, Project, Tutorial, CuratedLink, Download, Course, TagRule,
+    Article,
+    Course,
+    CuratedLink,
+    Download,
+    Project,
+    TagRule,
+    Tutorial,
 )
-from events.models import Event
 from content.utils.tags import normalize_tag, normalize_tags
 from events.models import Event
 
@@ -585,7 +590,7 @@ class TagRuleAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_admin_create_tagrule(self):
-        response = self.client.post('/admin/content/tagrule/add/', {
+        self.client.post('/admin/content/tagrule/add/', {
             'tag': 'ai-engineer',
             'component_type': 'course_promo',
             'component_config': '{"course_slug": "test"}',
@@ -598,7 +603,7 @@ class TagRuleAdminTest(TestCase):
             tag='delete-me', component_type='test',
             component_config={}, position='after_content',
         )
-        response = self.client.post(
+        self.client.post(
             f'/admin/content/tagrule/{rule.pk}/delete/',
             {'post': 'yes'},
         )
@@ -646,7 +651,7 @@ class TagRuleInjectionBlogTest(TestCase):
         self.assertEqual(tag_rules['after_content'][0].tag, 'ai-engineer')
 
     def test_no_tag_rule_when_no_match(self):
-        article = Article.objects.create(
+        Article.objects.create(
             title='Unmatched', slug='unmatched',
             date=date(2025, 6, 14),
             content_markdown='Content.',
@@ -660,7 +665,7 @@ class TagRuleInjectionBlogTest(TestCase):
     def test_tag_rule_not_shown_for_gated_content(self):
         """Gated articles should not show tag rule components (they show the gated CTA instead)."""
         from content.access import LEVEL_BASIC
-        gated = Article.objects.create(
+        Article.objects.create(
             title='Gated AI', slug='gated-ai',
             date=date(2025, 6, 14),
             content_markdown='Secret content.',

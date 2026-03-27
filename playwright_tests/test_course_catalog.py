@@ -23,15 +23,14 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -85,8 +84,9 @@ def _create_course(
 
 def _create_module(course, title, sort_order=1):
     """Create a Module within a course."""
-    from content.models import Module
     from django.utils.text import slugify
+
+    from content.models import Module
 
     module = Module(
         course=course,
@@ -109,8 +109,9 @@ def _create_unit(
     is_preview=False,
 ):
     """Create a Unit within a module."""
-    from content.models import Unit
     from django.utils.text import slugify
+
+    from content.models import Unit
 
     unit = Unit(
         module=module,
@@ -308,7 +309,7 @@ class TestScenario3FreeUserFreeCourseProgress:
             required_level=0,
         )
         mod = _create_module(course, "Fundamentals", sort_order=1)
-        unit1 = _create_unit(
+        _create_unit(
             mod, "Variables", sort_order=1,
             body="# Variables\nLearn about variables.",
         )
@@ -413,13 +414,13 @@ class TestScenario4MainMemberPaidCourseProgress:
             required_level=20,
         )
         mod = _create_module(course, "Deployment", sort_order=1)
-        unit1 = _create_unit(
+        _create_unit(
             mod, "Docker Basics", sort_order=1,
             video_url="https://www.youtube.com/watch?v=test123",
             body="# Docker\nLearn about Docker.",
             homework="# Homework\nBuild a Dockerfile.",
         )
-        unit2 = _create_unit(
+        _create_unit(
             mod, "Kubernetes Setup", sort_order=2,
             body="# Kubernetes\nLearn about K8s.",
         )

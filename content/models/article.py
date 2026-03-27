@@ -1,7 +1,6 @@
 import math
 
 import markdown
-
 from django.db import models
 from django.utils import timezone
 

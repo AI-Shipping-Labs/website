@@ -3,11 +3,10 @@
 import logging
 
 from django.contrib import messages
-from django.http import JsonResponse
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from content.models import Course, ProjectSubmission, PeerReview, CourseCertificate
+from content.models import Course, ProjectSubmission
 from content.services.peer_review_service import PeerReviewService
 from studio.decorators import staff_required
 
@@ -104,7 +103,7 @@ def peer_review_extend_deadline(request, course_id):
     days = int(request.POST.get('days', 7))
 
     from datetime import timedelta
-    from django.utils import timezone
+
 
     updated = 0
     submissions = ProjectSubmission.objects.filter(

@@ -22,19 +22,19 @@ import datetime
 import os
 
 import pytest
-from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_admin_user,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_admin_user,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -42,7 +42,7 @@ from django.db import connection
 
 def _clear_courses():
     """Delete all courses, modules, units, cohorts, enrollments, and progress."""
-    from content.models import Course, UserCourseProgress, Cohort, CohortEnrollment
+    from content.models import Cohort, CohortEnrollment, Course, UserCourseProgress
 
     CohortEnrollment.objects.all().delete()
     UserCourseProgress.objects.all().delete()
@@ -84,8 +84,9 @@ def _create_course(
 
 def _create_module(course, title, sort_order=1):
     """Create a Module within a course."""
-    from content.models import Module
     from django.utils.text import slugify
+
+    from content.models import Module
 
     module = Module(
         course=course,
@@ -109,8 +110,9 @@ def _create_unit(
     available_after_days=None,
 ):
     """Create a Unit within a module."""
-    from content.models import Unit
     from django.utils.text import slugify
+
+    from content.models import Unit
 
     unit = Unit(
         module=module,
@@ -291,7 +293,7 @@ class TestScenario2EnrolledMemberUnenrolls:
             f"{django_server}/courses/llm-engineering",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        page.content()
 
         # Then: The cohort card shows an "Enrolled" button
         enrolled_btn = page.locator(
@@ -310,7 +312,7 @@ class TestScenario2EnrolledMemberUnenrolls:
         )
         enroll_btn.wait_for(state="visible", timeout=10000)
 
-        body = page.content()
+        page.content()
 
         # Then: Button changes back to "Enroll"
         assert enroll_btn.count() >= 1

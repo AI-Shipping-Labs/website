@@ -1,5 +1,4 @@
 import markdown as md_lib
-
 from django.conf import settings
 from django.db import models
 

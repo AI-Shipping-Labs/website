@@ -12,15 +12,14 @@ Covers:
 - Studio "Create Stripe Product" button endpoint
 """
 
-import json
 from decimal import Decimal
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client, override_settings
+from django.test import Client, TestCase, override_settings
 
-from content.access import can_access, get_user_level
-from content.models import Course, Module, Unit, CourseAccess
+from content.access import can_access
+from content.models import Course, CourseAccess, Module, Unit
 from payments.services import handle_checkout_completed
 from tests.fixtures import TierSetupMixin
 
@@ -202,6 +201,7 @@ class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
     def test_course_access_does_not_affect_non_course_content(self):
         """CourseAccess only applies to Course objects, not other content."""
         import datetime
+
         from content.models import Article
         article = Article.objects.create(
             title='Test Article', slug='test-article', required_level=20,
@@ -241,7 +241,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 
     def test_free_user_sees_buy_button(self):
         """A free user who lacks tier access sees the buy button."""
-        user = User.objects.create_user(email='free@test.com', password='testpass')
+        User.objects.create_user(email='free@test.com', password='testpass')
         self.client.login(email='free@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
         self.assertContains(response, 'buy-course-btn')
@@ -258,11 +258,11 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 
     def test_no_buy_button_when_no_individual_price(self):
         """Course without individual_price_eur should not show buy button."""
-        course = Course.objects.create(
+        Course.objects.create(
             title='No Buy', slug='no-buy',
             status='published', required_level=20,
         )
-        user = User.objects.create_user(email='nobuy@test.com', password='testpass')
+        User.objects.create_user(email='nobuy@test.com', password='testpass')
         self.client.login(email='nobuy@test.com', password='testpass')
         response = self.client.get('/courses/no-buy')
         self.assertNotContains(response, 'buy-course-btn')
@@ -282,7 +282,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 
     def test_buy_button_shows_subscription_cta_alongside(self):
         """The buy button appears alongside the subscription CTA."""
-        user = User.objects.create_user(email='both@test.com', password='testpass')
+        User.objects.create_user(email='both@test.com', password='testpass')
         self.client.login(email='both@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
         # Both subscription CTA and buy button should be present
@@ -323,7 +323,7 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
         self.assertIn('already have access', data['error'])
 
     def test_no_individual_price_returns_400(self):
-        course = Course.objects.create(
+        Course.objects.create(
             title='No Price', slug='no-price-api',
             status='published', required_level=20,
         )
@@ -333,7 +333,7 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
         self.assertIn('not available', response.json()['error'])
 
     def test_no_stripe_price_id_returns_400(self):
-        course = Course.objects.create(
+        Course.objects.create(
             title='No Stripe', slug='no-stripe-api',
             status='published', required_level=20,
             individual_price_eur=Decimal('10.00'),
@@ -818,7 +818,7 @@ class StudioCreateStripeProductTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
     def test_non_staff_returns_403(self):
-        regular = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass',
         )
         client = Client()

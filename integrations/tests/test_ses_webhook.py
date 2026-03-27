@@ -255,7 +255,7 @@ class SESWebhookEndpointTest(TestCase):
     def test_subscription_confirmation(self):
         payload = make_subscription_confirmation()
         # Patch the requests.get call for subscription confirmation
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
         with patch('integrations.views.ses_webhook.requests') as mock_requests:
             mock_requests.get.return_value = MagicMock(status_code=200)
             response = self.client.post(

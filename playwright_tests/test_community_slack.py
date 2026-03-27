@@ -12,25 +12,24 @@ Usage:
 
 import json
 import os
-from unittest.mock import patch, MagicMock
 
 import pytest
-from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
     DEFAULT_PASSWORD,
-    create_staff_user as _create_admin_user,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
+)
+from playwright_tests.conftest import (
+    create_staff_user as _create_admin_user,
+)
+from playwright_tests.conftest import (
     ensure_site_config_tiers as _ensure_site_config_tiers,
 )
 
-
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,7 +86,6 @@ def _ensure_tiers():
         },
     ]
     for tier_data in TIERS:
-        from payments.models import Tier
 
         Tier.objects.get_or_create(
             slug=tier_data["slug"], defaults=tier_data
@@ -295,7 +293,7 @@ class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
             f"{django_server}/pricing",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        page.content()
 
         # Step 2: Review the tier comparison grid
         # Get all tier cards
@@ -403,14 +401,14 @@ class TestScenario10AdminReviewsAuditLog:
         response data. The entry is read-only."""
         _ensure_tiers()
         _clear_audit_logs()
-        admin_user = _create_admin_user("admin@test.com")
+        _create_admin_user("admin@test.com")
 
         # Create some audit log entries
         from community.models import CommunityAuditLog
 
         test_user = _create_user("audited@test.com", tier_slug="main")
 
-        log1 = CommunityAuditLog.objects.create(
+        CommunityAuditLog.objects.create(
             user=test_user,
             action="invite",
             details=json.dumps({
@@ -421,7 +419,7 @@ class TestScenario10AdminReviewsAuditLog:
                 ],
             }),
         )
-        log2 = CommunityAuditLog.objects.create(
+        CommunityAuditLog.objects.create(
             user=test_user,
             action="remove",
             details=json.dumps({

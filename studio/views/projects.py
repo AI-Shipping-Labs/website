@@ -1,11 +1,11 @@
 """Studio views for project moderation."""
 
 from django.http import HttpResponseForbidden
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 
 from content.models import Project
 from studio.decorators import staff_required
-from studio.utils import is_synced, get_github_edit_url
+from studio.utils import get_github_edit_url, is_synced
 
 
 @staff_required

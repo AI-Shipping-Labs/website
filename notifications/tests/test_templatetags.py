@@ -1,8 +1,8 @@
 """Tests for notification template tags."""
 
 from django.contrib.auth import get_user_model
-from django.template import Template, Context
-from django.test import TestCase, RequestFactory
+from django.template import Context, Template
+from django.test import RequestFactory, TestCase
 
 from notifications.models import Notification
 

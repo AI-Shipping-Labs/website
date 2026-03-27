@@ -2,7 +2,6 @@ import json
 
 from django import forms
 from django.contrib import admin
-
 from django.utils import timezone
 
 from content.admin.widgets import TimestampEditorWidget

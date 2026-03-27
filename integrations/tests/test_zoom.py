@@ -11,7 +11,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -679,7 +679,7 @@ class EventAdminZoomCreationTest(TestCase):
         (POST /studio/events/<id>/create-zoom), not the admin save.
         """
         start = timezone.now() + timedelta(days=7)
-        response = self.client.post('/admin/events/event/add/', {
+        self.client.post('/admin/events/event/add/', {
             'title': 'Admin Live Event',
             'slug': 'admin-live-event',
             'description': 'Test event from admin',
@@ -716,7 +716,7 @@ class EventAdminZoomCreationTest(TestCase):
     def test_async_event_does_not_create_zoom_meeting(self, mock_post):
         """Creating an async event should not trigger Zoom meeting creation."""
         start = timezone.now() + timedelta(days=7)
-        response = self.client.post('/admin/events/event/add/', {
+        self.client.post('/admin/events/event/add/', {
             'title': 'Admin Async Event',
             'slug': 'admin-async-event',
             'description': 'Async event',
@@ -752,7 +752,7 @@ class EventAdminZoomCreationTest(TestCase):
     def test_live_event_with_existing_zoom_id_not_overwritten(self, mock_post):
         """If zoom_meeting_id already provided, don't create a new meeting."""
         start = timezone.now() + timedelta(days=7)
-        response = self.client.post('/admin/events/event/add/', {
+        self.client.post('/admin/events/event/add/', {
             'title': 'Pre-Zoomed Event',
             'slug': 'pre-zoomed-event',
             'description': 'Already has Zoom',
@@ -784,7 +784,7 @@ class EventAdminZoomCreationTest(TestCase):
     def test_zoom_failure_still_saves_event(self):
         """If Zoom API fails, the event should still be saved."""
         start = timezone.now() + timedelta(days=7)
-        response = self.client.post('/admin/events/event/add/', {
+        self.client.post('/admin/events/event/add/', {
             'title': 'Zoom Fail Event',
             'slug': 'zoom-fail-event',
             'description': 'Zoom will fail',
@@ -836,7 +836,7 @@ class EventAdminZoomCreationTest(TestCase):
         )
 
         start = event.start_datetime
-        response = self.client.post(
+        self.client.post(
             f'/admin/events/event/{event.pk}/change/', {
                 'title': 'Existing Event Updated',
                 'slug': 'existing-event',

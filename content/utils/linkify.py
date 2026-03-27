@@ -1,6 +1,5 @@
 import re
 
-
 # Regex to match bare URLs (http or https) in HTML text content.
 # Handles &amp; as part of URL (common in HTML-encoded query strings).
 _URL_RE = re.compile(

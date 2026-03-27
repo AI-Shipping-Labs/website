@@ -31,7 +31,7 @@ class CourseUnitDetailContentIdTest(TestCase):
         )
 
     def test_unit_with_content_id_passes_it_to_context(self):
-        response = self.client.get(f'/courses/test-course/module-1/unit-1')
+        response = self.client.get('/courses/test-course/module-1/unit-1')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.context['unit_content_id'],
@@ -39,26 +39,26 @@ class CourseUnitDetailContentIdTest(TestCase):
         )
 
     def test_unit_without_content_id_passes_empty_string(self):
-        response = self.client.get(f'/courses/test-course/module-1/unit-2')
+        response = self.client.get('/courses/test-course/module-1/unit-2')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['unit_content_id'], '')
 
     def test_qa_section_rendered_when_content_id_present(self):
-        response = self.client.get(f'/courses/test-course/module-1/unit-1')
+        response = self.client.get('/courses/test-course/module-1/unit-1')
         self.assertContains(response, 'id="qa-section"')
         self.assertContains(response, 'Questions &amp; Answers')
 
     def test_qa_section_not_rendered_when_no_content_id(self):
-        response = self.client.get(f'/courses/test-course/module-1/unit-2')
+        response = self.client.get('/courses/test-course/module-1/unit-2')
         self.assertNotContains(response, 'id="qa-section"')
 
     def test_anonymous_user_sees_sign_in_link(self):
-        response = self.client.get(f'/courses/test-course/module-1/unit-1')
+        response = self.client.get('/courses/test-course/module-1/unit-1')
         self.assertContains(response, '/accounts/login/')
         self.assertContains(response, 'Sign in')
 
     def test_authenticated_user_sees_textarea(self):
         self.client.login(email='test@test.com', password='pass')
-        response = self.client.get(f'/courses/test-course/module-1/unit-1')
+        response = self.client.get('/courses/test-course/module-1/unit-1')
         self.assertContains(response, 'id="qa-new-question"')
         self.assertContains(response, 'Post Question')

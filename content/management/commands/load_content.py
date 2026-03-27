@@ -4,16 +4,15 @@ Reads frontmatter + markdown body, converts to HTML, and populates the database.
 """
 import math
 import uuid
-from pathlib import Path
 
 import frontmatter
 import markdown
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from content.models import Article, Project, Tutorial, CuratedLink
-from events.models import Event
+from content.models import Article, CuratedLink, Project
 from content.templatetags.video_utils import replace_video_urls_in_html
+from events.models import Event
 
 
 def calculate_reading_time(text):
@@ -113,8 +112,9 @@ class Command(BaseCommand):
             self.stdout.write(f'No resources directory found at {directory}')
             return
 
-        from django.utils import timezone as tz
         from datetime import datetime
+
+        from django.utils import timezone as tz
 
         count = 0
         for md_file in sorted(directory.glob('*.md')):

@@ -77,7 +77,7 @@ class CreateCheckoutSessionTest(TestCase):
 
     def test_raises_for_missing_price_id(self):
         """Tier with no Stripe price ID raises ValueError."""
-        free = Tier.objects.get(slug="free")
+        Tier.objects.get(slug="free")
         with self.assertRaises(ValueError) as ctx:
             create_checkout_session(
                 self.user, "free", "monthly",
@@ -112,7 +112,7 @@ class CreateCheckoutSessionTest(TestCase):
         mock_client.checkout.sessions.create.return_value = mock_session
         mock_get_client.return_value = mock_client
 
-        session = create_checkout_session(
+        create_checkout_session(
             self.user, "basic", "yearly",
             "https://example.com/success", "https://example.com/cancel"
         )

@@ -11,14 +11,13 @@ Covers:
 """
 
 import json
-from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Course, Module, Unit, UserCourseProgress
 from tests.fixtures import TierSetupMixin
 
@@ -101,8 +100,8 @@ class CourseModelTest(TestCase):
         self.assertEqual(course.required_tier_name, 'Main')
 
     def test_ordering_by_created_at_desc(self):
-        c1 = Course.objects.create(title='Older', slug='older')
-        c2 = Course.objects.create(title='Newer', slug='newer')
+        Course.objects.create(title='Older', slug='older')
+        Course.objects.create(title='Newer', slug='newer')
         courses = list(Course.objects.all())
         self.assertEqual(courses[0].slug, 'newer')
         self.assertEqual(courses[1].slug, 'older')
@@ -508,7 +507,7 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/paid-course')
         content = response.content.decode()
         # Should not have a link to the unit page
-        self.assertNotIn(f'href="/courses/paid-course/module-1/lesson-1"', content)
+        self.assertNotIn('href="/courses/paid-course/module-1/lesson-1"', content)
 
     def test_authorized_user_sees_clickable_links(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
@@ -570,13 +569,13 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Sign up free to start this course')
 
     def test_authenticated_user_no_cta(self):
-        user = User.objects.create_user(email='user@test.com', password='testpass')
+        User.objects.create_user(email='user@test.com', password='testpass')
         self.client.login(email='user@test.com', password='testpass')
         response = self.client.get('/courses/free-course')
         self.assertNotContains(response, 'Sign up free to start this course')
 
     def test_authenticated_sees_clickable_links(self):
-        user = User.objects.create_user(email='user2@test.com', password='testpass')
+        User.objects.create_user(email='user2@test.com', password='testpass')
         self.client.login(email='user2@test.com', password='testpass')
         response = self.client.get('/courses/free-course')
         self.assertContains(response, 'href="/courses/free-course/module/free-lesson"')
@@ -681,7 +680,7 @@ class ApiCoursesListTest(TierSetupMixin, TestCase):
         self.assertEqual(course['cover_image_url'], 'https://example.com/cover.jpg')
 
     def test_authenticated_user_is_locked_reflects_tier(self):
-        paid_course = Course.objects.create(
+        Course.objects.create(
             title='Main Course', slug='main-api',
             status='published', required_level=LEVEL_MAIN,
         )

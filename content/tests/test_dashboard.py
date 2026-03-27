@@ -16,17 +16,21 @@ Covers:
 from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+from content.access import LEVEL_PREMIUM
 from content.models import (
-    Article, Course, Module, Unit, UserCourseProgress,
+    Article,
+    Course,
+    Module,
+    Unit,
+    UserCourseProgress,
 )
 from events.models import Event, EventRegistration
 from notifications.models import Notification
-from voting.models import Poll, PollOption
 from tests.fixtures import TierSetupMixin
+from voting.models import Poll
 
 User = get_user_model()
 
@@ -84,7 +88,7 @@ class WelcomeBannerTest(TierSetupMixin, TestCase):
     """Test the welcome banner section of the dashboard."""
 
     def test_shows_first_name(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='alice@example.com', password='testpass',
             first_name='Alice',
         )
@@ -93,7 +97,7 @@ class WelcomeBannerTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Welcome back, Alice')
 
     def test_shows_welcome_without_first_name(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='noname@example.com', password='testpass',
         )
         self.client.login(email='noname@example.com', password='testpass')
@@ -103,7 +107,7 @@ class WelcomeBannerTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Welcome back,')
 
     def test_shows_tier_badge_free(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='free@example.com', password='testpass',
         )
         self.client.login(email='free@example.com', password='testpass')
@@ -133,7 +137,7 @@ class WelcomeBannerTest(TierSetupMixin, TestCase):
         self.assertIn('Premium', content)
 
     def test_has_account_link(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='acct@example.com', password='testpass',
         )
         self.client.login(email='acct@example.com', password='testpass')
@@ -141,7 +145,7 @@ class WelcomeBannerTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Account')
 
     def test_has_upgrade_link(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='upgrade@example.com', password='testpass',
         )
         self.client.login(email='upgrade@example.com', password='testpass')
@@ -249,7 +253,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         unit_a = Unit.objects.create(
             module=module2, title='Adv Unit 1', slug='adv-unit-1', sort_order=0,
         )
-        unit_b = Unit.objects.create(
+        Unit.objects.create(
             module=module2, title='Adv Unit 2', slug='adv-unit-2', sort_order=1,
         )
 
@@ -470,7 +474,7 @@ class ActivePollsTest(TierSetupMixin, TestCase):
         self.assertIn('View past polls', content)
 
     def test_shows_open_poll(self):
-        poll = Poll.objects.create(
+        Poll.objects.create(
             title='Favorite Framework', description='Vote here',
             poll_type='topic', status='open',
         )
@@ -478,7 +482,7 @@ class ActivePollsTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Favorite Framework')
 
     def test_does_not_show_closed_poll(self):
-        poll = Poll.objects.create(
+        Poll.objects.create(
             title='Old Poll', poll_type='topic', status='closed',
         )
         response = self.client.get('/')
@@ -486,7 +490,7 @@ class ActivePollsTest(TierSetupMixin, TestCase):
 
     def test_does_not_show_polls_above_user_level(self):
         # Premium poll for Main user
-        poll = Poll.objects.create(
+        Poll.objects.create(
             title='Premium Only Poll',
             poll_type='course',  # This sets required_level to LEVEL_PREMIUM
             status='open',
@@ -507,7 +511,7 @@ class ActivePollsTest(TierSetupMixin, TestCase):
 
     def test_does_not_show_expired_poll(self):
         past = timezone.now() - timedelta(days=1)
-        poll = Poll.objects.create(
+        Poll.objects.create(
             title='Expired Poll', poll_type='topic',
             status='open', closes_at=past,
         )
@@ -524,7 +528,7 @@ class QuickActionsTest(TierSetupMixin, TestCase):
     """Test the quick actions section."""
 
     def test_free_user_sees_browse_courses(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='free@example.com', password='testpass',
         )
         self.client.login(email='free@example.com', password='testpass')
@@ -534,7 +538,7 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Submit Project')
 
     def test_free_user_does_not_see_community(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='free2@example.com', password='testpass',
         )
         self.client.login(email='free2@example.com', password='testpass')

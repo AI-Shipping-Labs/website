@@ -23,19 +23,19 @@ import datetime
 import os
 
 import pytest
-from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
     VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_staff_user,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_staff_user,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -242,7 +242,7 @@ class TestScenario1VisitorBrowsesProjects:
         )
 
         # No gating elements
-        lock_icons = page.locator(
+        page.locator(
             'main [data-lucide="lock"]'
         )
         # The lock icon in the CTA banner should NOT appear
@@ -728,7 +728,7 @@ class TestScenario9StaffApprovesSubmission:
         and it appears on the public listing."""
         _clear_all_projects()
         _create_staff_user("staff@test.com")
-        project = _create_project(
+        _create_project(
             title="Community Bot",
             slug="community-bot",
             description="A community-submitted bot project.",
@@ -818,7 +818,7 @@ class TestScenario10StaffRejectsPublishedProject:
         """
         _clear_all_projects()
         _create_staff_user("staff@test.com")
-        project = _create_project(
+        _create_project(
             title="Bad Project",
             slug="bad-project",
             description="A project that needs to be removed.",

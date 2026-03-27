@@ -30,3 +30,53 @@ dependencies = [
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "website.settings"
 pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.8",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "I", "PLC0415"]
+
+[tool.ruff.lint.per-file-ignores]
+# __init__.py files use wildcard re-exports (standard Django pattern)
+"*/__init__.py" = ["F403", "F401"]
+# Allow inline imports in model save() methods where circular deps require it
+"*/models/*.py" = ["PLC0415"]
+# Django apps.py ready() requires inline imports for signal registration
+"*/apps.py" = ["PLC0415"]
+# Views, services, and admin often use inline imports to avoid circular deps
+"*/views/*.py" = ["PLC0415"]
+"*/services/*.py" = ["PLC0415"]
+"*/admin/*.py" = ["PLC0415"]
+# Tests may use inline imports for setup
+"*/tests/*.py" = ["PLC0415"]
+# Management commands sometimes need inline imports
+"*/management/commands/*.py" = ["PLC0415"]
+# Migrations use inline imports in RunPython operations
+"*/migrations/*.py" = ["PLC0415"]
+# Playwright tests use inline imports in fixtures
+"playwright_tests/*.py" = ["PLC0415"]
+# Scripts and tasks use inline imports for deferred loading
+"scripts/*.py" = ["PLC0415"]
+"*/tasks/*.py" = ["PLC0415"]
+# Templatetags, middleware, decorators, and utility modules
+"*/templatetags/*.py" = ["PLC0415"]
+"*/middleware.py" = ["PLC0415"]
+"*/decorators.py" = ["PLC0415"]
+"*/utils.py" = ["PLC0415"]
+# Project-level files
+"manage.py" = ["PLC0415"]
+"website/settings.py" = ["PLC0415"]
+# Other modules with justified inline imports
+"content/access.py" = ["PLC0415"]
+"content/tier_config.py" = ["PLC0415"]
+"payments/services.py" = ["PLC0415"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["content", "accounts", "payments", "studio", "integrations", "events", "community", "notifications", "voting", "email_app", "jobs"]

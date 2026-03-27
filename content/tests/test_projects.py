@@ -14,10 +14,9 @@ import json
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
-from django.utils import timezone
+from django.test import Client, TestCase
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC
+from content.access import LEVEL_BASIC, LEVEL_OPEN
 from content.models import Project
 
 User = get_user_model()
@@ -494,7 +493,7 @@ class ProjectDetailDisplayTest(TestCase):
         self.assertContains(response, 'mcp')
 
     def test_no_source_code_link_when_empty(self):
-        project = Project.objects.create(
+        Project.objects.create(
             title='No Links', slug='no-links', date=date(2025, 1, 1),
             published=True,
         )
@@ -750,7 +749,7 @@ class ProjectAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_admin_create_project(self):
-        response = self.client.post('/admin/content/project/add/', {
+        self.client.post('/admin/content/project/add/', {
             'title': 'New Project',
             'slug': 'new-project',
             'description': 'A new project',
@@ -781,7 +780,7 @@ class ProjectAdminTest(TestCase):
             title='Delete Me', slug='delete-me', date=date(2025, 8, 10),
             published=True,
         )
-        response = self.client.post(
+        self.client.post(
             f'/admin/content/project/{project.pk}/delete/',
             {'post': 'yes'},
         )
@@ -793,7 +792,7 @@ class ProjectAdminTest(TestCase):
             date=date(2025, 8, 10),
             published=False, status='pending_review',
         )
-        response = self.client.post('/admin/content/project/', {
+        self.client.post('/admin/content/project/', {
             'action': 'approve_projects',
             '_selected_action': [project.pk],
         })
@@ -808,7 +807,7 @@ class ProjectAdminTest(TestCase):
             date=date(2025, 8, 10),
             published=True,
         )
-        response = self.client.post('/admin/content/project/', {
+        self.client.post('/admin/content/project/', {
             'action': 'reject_projects',
             '_selected_action': [project.pk],
         })

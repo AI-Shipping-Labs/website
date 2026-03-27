@@ -5,7 +5,7 @@ import uuid
 
 from django.test import TestCase
 
-from content.models import Article, Course, Unit, Module, Project, Download, Tutorial
+from content.models import Article, Course, Download, Project, Tutorial, Unit
 from events.models import Event
 
 
@@ -53,6 +53,7 @@ class AssignContentIdsScriptTest(TestCase):
 
     def test_assigns_ids_to_files_missing_them(self):
         import frontmatter as fm
+
         from scripts.assign_content_ids import assign_content_ids
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -89,6 +90,7 @@ class SyncPipelineContentIdTest(TestCase):
     def test_sync_articles_skips_without_content_id(self):
         """Articles without content_id in frontmatter are skipped."""
         import frontmatter as fm
+
         from integrations.models import ContentSource, SyncLog
         from integrations.services.github import _sync_articles
 
@@ -116,6 +118,7 @@ class SyncPipelineContentIdTest(TestCase):
     def test_sync_articles_stores_content_id(self):
         """Articles with content_id in frontmatter store it on the model."""
         import frontmatter as fm
+
         from integrations.models import ContentSource, SyncLog
         from integrations.services.github import _sync_articles
 

@@ -15,14 +15,14 @@ Covers:
 - Admin CRUD with status transitions
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from events.models import Event, EventRegistration
 from tests.fixtures import TierSetupMixin
 
@@ -99,11 +99,11 @@ class EventModelFieldsTest(TestCase):
         self.assertEqual(event.get_absolute_url(), '/events/my-event')
 
     def test_ordering_by_start_datetime_desc(self):
-        e1 = Event.objects.create(
+        Event.objects.create(
             title='Old', slug='old',
             start_datetime=timezone.now() - timedelta(days=10),
         )
-        e2 = Event.objects.create(
+        Event.objects.create(
             title='New', slug='new',
             start_datetime=timezone.now(),
         )
@@ -502,7 +502,7 @@ class EventDetailPageTest(TestCase):
             start_datetime=timezone.now() + timedelta(days=7),
             status='draft',
         )
-        admin = User.objects.create_superuser(
+        User.objects.create_superuser(
             email='admin@test.com', password='pass',
         )
         self.client.login(email='admin@test.com', password='pass')
@@ -631,7 +631,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         other_user = User.objects.create_user(email='other@test.com', password='pass')
         EventRegistration.objects.create(event=event, user=other_user)
 
-        user = User.objects.create_user(email='viewer@test.com', password='pass')
+        User.objects.create_user(email='viewer@test.com', password='pass')
         self.client.login(email='viewer@test.com', password='pass')
         response = self.client.get('/events/full-event-detail')
         self.assertContains(response, 'Event is full')
@@ -669,14 +669,14 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'https://zoom.us/j/999999')
 
     def test_zoom_link_not_shown_when_not_registered(self):
-        event = Event.objects.create(
+        Event.objects.create(
             title='Not Reg Event',
             slug='not-reg-event',
             start_datetime=timezone.now() + timedelta(minutes=10),
             status='upcoming',
             zoom_join_url='https://zoom.us/j/111111',
         )
-        user = User.objects.create_user(email='notreg@test.com', password='pass')
+        User.objects.create_user(email='notreg@test.com', password='pass')
         self.client.login(email='notreg@test.com', password='pass')
         response = self.client.get('/events/not-reg-event')
         self.assertNotContains(response, 'https://zoom.us/j/111111')
@@ -699,13 +699,13 @@ class EventDetailRegisteredStatusTest(TierSetupMixin, TestCase):
         self.assertContains(response, "You're registered!")
 
     def test_unregistered_user_sees_register_button(self):
-        event = Event.objects.create(
+        Event.objects.create(
             title='Unreg Event',
             slug='unreg-event',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        user = User.objects.create_user(email='unreg@test.com', password='pass')
+        User.objects.create_user(email='unreg@test.com', password='pass')
         self.client.login(email='unreg@test.com', password='pass')
         response = self.client.get('/events/unreg-event')
         self.assertFalse(response.context['is_registered'])
@@ -749,7 +749,7 @@ class RegisterForEventAPITest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_register_insufficient_tier(self):
-        gated_event = Event.objects.create(
+        Event.objects.create(
             title='Gated API',
             slug='gated-api',
             start_datetime=timezone.now() + timedelta(days=7),
@@ -787,7 +787,7 @@ class RegisterForEventAPITest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_register_draft_event(self):
-        draft = Event.objects.create(
+        Event.objects.create(
             title='Draft API',
             slug='draft-api',
             start_datetime=timezone.now() + timedelta(days=7),
@@ -872,7 +872,7 @@ class EventAdminTest(TestCase):
 
     def test_admin_create_event(self):
         start = timezone.now() + timedelta(days=7)
-        response = self.client.post('/admin/events/event/add/', {
+        self.client.post('/admin/events/event/add/', {
             'title': 'New Event',
             'slug': 'new-event',
             'description': 'A new event',
@@ -901,7 +901,7 @@ class EventAdminTest(TestCase):
             slug='delete-me',
             start_datetime=timezone.now() + timedelta(days=7),
         )
-        response = self.client.post(
+        self.client.post(
             f'/admin/events/event/{event.pk}/delete/',
             {'post': 'yes'},
         )
@@ -1045,7 +1045,7 @@ class EventsListRegisteredBadgeTest(TestCase):
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        user = User.objects.create_user(email='nobadge@test.com', password='pass')
+        User.objects.create_user(email='nobadge@test.com', password='pass')
         self.client.login(email='nobadge@test.com', password='pass')
         response = self.client.get('/events')
         # No registered event IDs in context

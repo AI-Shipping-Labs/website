@@ -2,7 +2,6 @@ import markdown
 from django.http import Http404
 from django.shortcuts import render
 
-
 # Canonical ordering of interview question categories
 INTERVIEW_CATEGORY_ORDER = [
     'theory',

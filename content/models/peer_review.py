@@ -1,11 +1,7 @@
 import uuid
 
-import markdown as md_lib
-
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
-
 
 SUBMISSION_STATUS_CHOICES = [
     ('submitted', 'Submitted'),

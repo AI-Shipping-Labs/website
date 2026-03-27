@@ -12,9 +12,9 @@ Covers:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN
+from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN
 from content.models import CuratedLink
 from tests.fixtures import TierSetupMixin
 
@@ -131,17 +131,17 @@ class CuratedLinkOrderingTest(TestCase):
     """Test that links are ordered by sort_order, then title."""
 
     def test_ordering_by_sort_order(self):
-        link_b = CuratedLink.objects.create(
+        CuratedLink.objects.create(
             item_id='order-b', title='B Link',
             url='https://example.com', category='tools',
             sort_order=2,
         )
-        link_a = CuratedLink.objects.create(
+        CuratedLink.objects.create(
             item_id='order-a', title='A Link',
             url='https://example.com', category='tools',
             sort_order=1,
         )
-        link_c = CuratedLink.objects.create(
+        CuratedLink.objects.create(
             item_id='order-c', title='C Link',
             url='https://example.com', category='tools',
             sort_order=3,
@@ -152,12 +152,12 @@ class CuratedLinkOrderingTest(TestCase):
         self.assertEqual(links[2].item_id, 'order-c')
 
     def test_ordering_by_title_when_same_sort_order(self):
-        link_z = CuratedLink.objects.create(
+        CuratedLink.objects.create(
             item_id='order-z', title='Zebra',
             url='https://example.com', category='tools',
             sort_order=0,
         )
-        link_a = CuratedLink.objects.create(
+        CuratedLink.objects.create(
             item_id='order-alpha', title='Alpha',
             url='https://example.com', category='tools',
             sort_order=0,
@@ -558,7 +558,7 @@ class CuratedLinkAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_admin_create_link(self):
-        response = self.client.post('/admin/content/curatedlink/add/', {
+        self.client.post('/admin/content/curatedlink/add/', {
             'item_id': 'new-link',
             'title': 'New Link',
             'description': 'A new link',
@@ -588,7 +588,7 @@ class CuratedLinkAdminTest(TestCase):
             item_id='delete-link', title='Delete Me',
             url='https://example.com', category='tools',
         )
-        response = self.client.post(
+        self.client.post(
             f'/admin/content/curatedlink/{link.pk}/delete/',
             {'post': 'yes'},
         )

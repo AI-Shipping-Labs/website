@@ -12,7 +12,6 @@ import pytest
 from django.core.management import call_command
 from playwright.sync_api import sync_playwright
 
-
 DJANGO_HOST = "127.0.0.1"
 DJANGO_PORT = 8765
 DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
@@ -20,9 +19,10 @@ DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
 
 def _start_django_server():
     """Start Django dev server in a thread."""
+    import sys
+
     from django.conf import settings
     from django.core.management import execute_from_command_line
-    import sys
 
     # Disable Slack API calls for E2E tests so no real messages are posted.
     # post_slack_announcement() exits early when token/channel are empty (line 102),
@@ -61,8 +61,8 @@ def _start_django_server():
     thread.start()
 
     # Wait for server to be ready
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     for _ in range(30):
         try:
@@ -77,7 +77,7 @@ def _start_django_server():
 def django_server(django_db_setup, django_db_blocker):
     """Start the Django dev server for the test session."""
     with django_db_blocker.unblock():
-        thread = _start_django_server()
+        _start_django_server()
         yield DJANGO_BASE_URL
 
 
@@ -129,6 +129,7 @@ def ensure_tiers():
     so the server thread can access the tiers table.
     """
     from django.db import connection
+
     from payments.models import Tier
 
     TIERS = [
@@ -151,9 +152,11 @@ def ensure_site_config_tiers():
     real tier data (Basic, Main, Premium) so that E2E tests can assert
     on tier names and activity titles like 'Closed Community Access'.
     """
-    import yaml
     from pathlib import Path
+
+    import yaml
     from django.db import connection
+
     from content.models import SiteConfig
 
     fixture_path = Path(__file__).parent.parent / 'content' / 'tests' / 'fixtures' / 'tiers.yaml'
@@ -176,6 +179,7 @@ def create_user(
 ):
     """Create a user with the given tier and options."""
     from django.db import connection
+
     from accounts.models import User
     from payments.models import Tier
 
@@ -200,6 +204,7 @@ def create_user(
 def create_staff_user(email="admin@test.com", password=DEFAULT_PASSWORD):
     """Create a staff/superuser for admin and studio tests."""
     from django.db import connection
+
     from accounts.models import User
 
     ensure_tiers()
@@ -228,13 +233,14 @@ def create_session_for_user(email):
     ``database table is locked`` errors when the Django server thread
     (running in the same process) tries to read the session.
     """
-    from django.contrib.sessions.backends.db import SessionStore
     from django.contrib.auth import (
-        SESSION_KEY,
         BACKEND_SESSION_KEY,
         HASH_SESSION_KEY,
+        SESSION_KEY,
     )
+    from django.contrib.sessions.backends.db import SessionStore
     from django.db import connection
+
     from accounts.models import User
 
     user = User.objects.get(email=email)

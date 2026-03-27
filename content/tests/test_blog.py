@@ -14,10 +14,9 @@ Covers:
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
-from django.utils import timezone
+from django.test import Client, TestCase
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC
+from content.access import LEVEL_BASIC
 from content.models import Article
 from content.models.article import render_markdown
 
@@ -541,7 +540,7 @@ class BlogDetailDisplayTest(TestCase):
         self.assertIn('?tag=tutorial', content)
 
     def test_gated_article_shows_cta(self):
-        gated = Article.objects.create(
+        Article.objects.create(
             title='Gated Detail',
             slug='gated-detail',
             description='Gated description',
@@ -584,7 +583,7 @@ class ArticleAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_admin_create_article(self):
-        response = self.client.post('/admin/content/article/add/', {
+        self.client.post('/admin/content/article/add/', {
             'title': 'New Article',
             'slug': 'new-article',
             'description': 'A new article',
@@ -613,7 +612,7 @@ class ArticleAdminTest(TestCase):
             title='Delete Me', slug='delete-me', date=date(2025, 6, 15),
             published=True,
         )
-        response = self.client.post(
+        self.client.post(
             f'/admin/content/article/{article.pk}/delete/',
             {'post': 'yes'},
         )
@@ -624,7 +623,7 @@ class ArticleAdminTest(TestCase):
             title='Draft', slug='draft-action', date=date(2025, 6, 15),
             published=False,
         )
-        response = self.client.post('/admin/content/article/', {
+        self.client.post('/admin/content/article/', {
             'action': 'publish_articles',
             '_selected_action': [article.pk],
         })
@@ -638,7 +637,7 @@ class ArticleAdminTest(TestCase):
             title='Published', slug='published-action', date=date(2025, 6, 15),
             published=True,
         )
-        response = self.client.post('/admin/content/article/', {
+        self.client.post('/admin/content/article/', {
             'action': 'unpublish_articles',
             '_selected_action': [article.pk],
         })

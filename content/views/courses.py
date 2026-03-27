@@ -1,18 +1,25 @@
 import datetime
-import json
 
 from django.http import JsonResponse
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from content.access import (
-    can_access, get_required_tier_name, get_user_level, LEVEL_MAIN, LEVEL_TO_TIER_NAME,
+    LEVEL_MAIN,
+    can_access,
+    get_required_tier_name,
+    get_user_level,
 )
 from content.models import (
-    Course, Module, Unit, UserCourseProgress, Cohort, CohortEnrollment, TagRule,
+    Cohort,
+    CohortEnrollment,
+    Course,
+    Module,
+    Unit,
+    UserCourseProgress,
 )
-from content.views.pages import _get_selected_tags, _filter_by_tags, _get_tag_rules_for_tags
+from content.views.pages import _filter_by_tags, _get_selected_tags
 
 
 def courses_list(request):

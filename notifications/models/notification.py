@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.db import models
 
-
 NOTIFICATION_TYPE_CHOICES = [
     ('new_content', 'New Content'),
     ('event_reminder', 'Event Reminder'),

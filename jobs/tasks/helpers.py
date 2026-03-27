@@ -17,9 +17,8 @@ Usage:
 import logging
 
 from django.conf import settings
-
-from django_q.tasks import async_task as q_async_task
 from django_q.models import Schedule
+from django_q.tasks import async_task as q_async_task
 
 logger = logging.getLogger(__name__)
 

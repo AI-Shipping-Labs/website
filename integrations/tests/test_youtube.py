@@ -7,10 +7,9 @@ Covers:
 """
 
 import json
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, mock_open, patch
 
 from django.test import TestCase, override_settings
-
 
 YOUTUBE_TEST_CLIENT_ID = 'test-yt-client-id'
 YOUTUBE_TEST_CLIENT_SECRET = 'test-yt-client-secret'

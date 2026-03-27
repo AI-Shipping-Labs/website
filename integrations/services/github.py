@@ -587,6 +587,7 @@ def _sync_tiers_yaml(repo_dir):
         return {'synced': False, 'count': 0}
     try:
         import yaml
+
         from content.models import SiteConfig
         with open(tiers_path, encoding='utf-8') as f:
             tiers_data = yaml.safe_load(f) or []
@@ -952,7 +953,7 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
 
 def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync courses with modules and units from the repo."""
-    from content.models import Course, Module, Unit
+    from content.models import Course
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_course_slugs = set()
@@ -1076,7 +1077,7 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
                          known_images=None):
     """Sync modules and units for a course."""
-    from content.models import Module, Unit
+    from content.models import Module
 
     seen_module_paths = set()
 
@@ -1263,7 +1264,6 @@ def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
 
     Note: recordings are now synced via _sync_events (content_type='event').
     """
-    from content.models import CuratedLink, Download
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
 
@@ -1292,6 +1292,7 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
     by sync if the event already exists.
     """
     import datetime as dt
+
     from events.models import Event
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
@@ -1659,8 +1660,9 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
 
 def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync project markdown files from the repo."""
-    from content.models import Project
     from datetime import date as date_type
+
+    from content.models import Project
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_slugs = set()

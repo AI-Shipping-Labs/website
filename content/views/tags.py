@@ -8,9 +8,8 @@ from collections import Counter
 
 from django.shortcuts import render
 
-from content.models import Article, Project, CuratedLink, Download, Course
+from content.models import Article, Course, Download, Project
 from events.models import Event
-
 
 # Content type configuration: (model_class, published_filter, date_field, type_label, url_func)
 CONTENT_TYPES = [

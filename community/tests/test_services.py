@@ -24,7 +24,6 @@ from community.services.base import CommunityService
 from community.services.slack import SlackAPIError, SlackCommunityService
 from payments.models import Tier
 
-
 MOCK_CHANNELS = ["C001", "C002"]
 
 

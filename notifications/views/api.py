@@ -6,11 +6,10 @@ Notification API endpoints:
 - POST /api/notifications/read-all — mark all as read
 """
 
-import json
 
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
-from django.contrib.auth.decorators import login_required
 
 from notifications.models import Notification
 

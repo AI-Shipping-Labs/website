@@ -2,19 +2,24 @@
 
 from datetime import date
 
-from django.test import TestCase, Client
+from django.test import Client, TestCase
+from django.utils import timezone
 
 from accounts.models import User
 from content.access import (
-    LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM,
-    can_access, get_user_level, get_required_tier_name,
-    get_teaser_text, build_gating_context,
+    LEVEL_BASIC,
+    LEVEL_MAIN,
+    LEVEL_OPEN,
+    LEVEL_PREMIUM,
+    build_gating_context,
+    can_access,
+    get_required_tier_name,
+    get_teaser_text,
+    get_user_level,
 )
-from content.models import Article, Project, Tutorial, CuratedLink
-from django.utils import timezone
+from content.models import Article, CuratedLink, Project, Tutorial
 from events.models import Event
 from tests.fixtures import TierSetupMixin
-
 
 # --- Unit Tests for access.py utilities ---
 
@@ -762,6 +767,7 @@ class AccessTemplateTagsTest(TierSetupMixin, TestCase):
 
     def test_can_access_content_tag_with_anonymous(self):
         from django.contrib.auth.models import AnonymousUser
+
         from content.templatetags.access_tags import can_access_content
         self.assertFalse(can_access_content(AnonymousUser(), self.basic_article))
 

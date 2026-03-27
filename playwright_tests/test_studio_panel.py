@@ -20,22 +20,26 @@ Usage:
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_staff_user,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
+    create_staff_user as _create_staff_user,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -473,8 +477,9 @@ class TestScenario6StaffCreatesCourse:
         assert response.status == 404
 
         # Step 2: Create a course via ORM
-        from content.models import Course
         from django.db import connection
+
+        from content.models import Course
 
         course = Course(
             title="Intro to AI Shipping",
@@ -668,7 +673,6 @@ class TestScenario8StaffModeratesProject:
         body = page.content()
 
         # "My AI Bot" is no longer in pending status -- it has been approved
-        from content.models import Project
         project.refresh_from_db()
         assert project.status == "published"
         assert project.published is True

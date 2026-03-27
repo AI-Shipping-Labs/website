@@ -23,19 +23,19 @@ import datetime
 import os
 
 import pytest
-from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
     VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_staff_user,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_staff_user,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -652,7 +652,7 @@ class TestScenario9AuthenticatedShortcodeDownload:
             f"{django_server}/blog/article-with-download",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        page.content()
 
         # "Download PDF" link pointing to the file endpoint
         download_link = page.locator(

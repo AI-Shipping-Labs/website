@@ -3,7 +3,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from notifications.models import Notification, EventReminderLog
+from notifications.models import EventReminderLog, Notification
 
 User = get_user_model()
 
@@ -81,8 +81,9 @@ class EventReminderLogModelTest(TestCase):
     """Test EventReminderLog model for deduplication."""
 
     def setUp(self):
-        from events.models import Event
         from django.utils import timezone
+
+        from events.models import Event
         self.user = User.objects.create_user(
             email='testuser@example.com', password='testpass123',
         )

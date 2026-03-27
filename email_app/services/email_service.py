@@ -15,12 +15,11 @@ import logging
 from pathlib import Path
 
 import boto3
+import frontmatter
 import markdown
 from django.conf import settings
 from django.template import Context, Template
 from django.template.loader import render_to_string
-
-import frontmatter
 
 logger = logging.getLogger(__name__)
 

@@ -14,10 +14,10 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.models import Article, Download, Course
+from content.models import Article, Course, Download
 from events.models import Event
 from notifications.models import Notification
 
@@ -105,7 +105,7 @@ class StudioNotificationLogTest(TestCase):
     def test_non_staff_redirected_to_login(self):
         """Non-staff users cannot access the notification log."""
         self.client.logout()
-        regular = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')
@@ -158,8 +158,8 @@ class StudioArticleNotifyTest(TestCase):
 
     def test_notify_creates_notifications(self):
         """POST to notify creates notifications for eligible users."""
-        user1 = User.objects.create_user(email='u1@test.com', password='p', is_active=True)
-        user2 = User.objects.create_user(email='u2@test.com', password='p', is_active=True)
+        User.objects.create_user(email='u1@test.com', password='p', is_active=True)
+        User.objects.create_user(email='u2@test.com', password='p', is_active=True)
 
         response = self.client.post(f'/studio/articles/{self.article.pk}/notify')
         self.assertEqual(response.status_code, 200)
@@ -187,7 +187,7 @@ class StudioArticleNotifyTest(TestCase):
     def test_notify_requires_staff(self):
         """Non-staff user is redirected to login."""
         self.client.logout()
-        regular = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')
@@ -218,7 +218,7 @@ class StudioArticleNotifyTest(TestCase):
     def test_announce_slack_requires_staff(self):
         """Non-staff user is rejected."""
         self.client.logout()
-        regular = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')
@@ -278,7 +278,7 @@ class StudioRecordingNotifyTest(TestCase):
         )
 
     def test_notify_creates_notifications(self):
-        user1 = User.objects.create_user(email='u1@test.com', password='p', is_active=True)
+        User.objects.create_user(email='u1@test.com', password='p', is_active=True)
         response = self.client.post(f'/studio/recordings/{self.recording.pk}/notify')
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -320,7 +320,7 @@ class StudioEventNotifyTest(TestCase):
         )
 
     def test_notify_creates_notifications(self):
-        user1 = User.objects.create_user(email='u1@test.com', password='p', is_active=True)
+        User.objects.create_user(email='u1@test.com', password='p', is_active=True)
         response = self.client.post(f'/studio/events/{self.event.pk}/notify')
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -361,7 +361,7 @@ class StudioDownloadNotifyTest(TestCase):
         )
 
     def test_notify_creates_notifications(self):
-        user1 = User.objects.create_user(email='u1@test.com', password='p', is_active=True)
+        User.objects.create_user(email='u1@test.com', password='p', is_active=True)
         response = self.client.post(f'/studio/downloads/{self.download.pk}/notify')
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -401,7 +401,7 @@ class StudioCourseNotifyTest(TestCase):
         )
 
     def test_notify_creates_notifications(self):
-        user1 = User.objects.create_user(email='u1@test.com', password='p', is_active=True)
+        User.objects.create_user(email='u1@test.com', password='p', is_active=True)
         response = self.client.post(f'/studio/courses/{self.course.pk}/notify')
         self.assertEqual(response.status_code, 200)
         data = response.json()

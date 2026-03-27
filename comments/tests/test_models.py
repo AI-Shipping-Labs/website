@@ -3,7 +3,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from comments.models import Comment, CommentVote
+from comments.models import Comment
 
 
 class CommentCleanTest(TestCase):

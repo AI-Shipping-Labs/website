@@ -1,7 +1,5 @@
-import json
 
 import markdown
-
 from django.db import models
 
 

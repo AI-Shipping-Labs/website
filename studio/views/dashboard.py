@@ -9,9 +9,9 @@ from studio.decorators import staff_required
 @staff_required
 def dashboard(request):
     """Studio dashboard with quick stats."""
-    from content.models import Course, Article, Download, Project
+    from content.models import Article, Course, Download, Project
+    from email_app.models import EmailCampaign, NewsletterSubscriber
     from events.models import Event
-    from email_app.models import NewsletterSubscriber, EmailCampaign
 
     stats = {
         'total_courses': Course.objects.count(),

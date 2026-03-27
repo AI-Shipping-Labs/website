@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from notifications.models import Notification, EventReminderLog
+from notifications.models import EventReminderLog, Notification
 
 
 @admin.register(Notification)

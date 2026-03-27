@@ -25,22 +25,23 @@ Usage:
 """
 
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_admin_user,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_admin_user,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -278,7 +279,6 @@ class TestScenario3StaffSendsTestEmail:
             assert "Test email sent to admin@test.com" in msg_text
 
         # Then: The campaign status remains "Draft"
-        from email_app.models import EmailCampaign
 
         campaign.refresh_from_db()
         assert campaign.status == "draft"
@@ -329,12 +329,11 @@ class TestScenario4StaffSendsCampaign:
             mock_ses.return_value = "ses-msg-id"
 
             from email_app.tasks.send_campaign import send_campaign
-            result = send_campaign(
+            send_campaign(
                 campaign_id=campaign.pk, send_delay=0
             )
 
         # Verify the campaign completed
-        from email_app.models import EmailCampaign
 
         campaign.refresh_from_db()
         assert campaign.status == "sent"

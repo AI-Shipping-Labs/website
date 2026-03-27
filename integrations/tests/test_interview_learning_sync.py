@@ -1,8 +1,8 @@
 """Tests for interview questions sync pipeline."""
 
 import os
-import tempfile
 import shutil
+import tempfile
 
 from django.db import IntegrityError
 from django.test import TestCase

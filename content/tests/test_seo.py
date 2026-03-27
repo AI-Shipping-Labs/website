@@ -5,11 +5,11 @@ Tests for SEO features: structured data, meta tags, OpenGraph tags, and sitemap.
 import json
 from datetime import date
 
-from django.test import TestCase, RequestFactory
-from django.template import Template, Context
+from django.template import Context, Template
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from content.models import Article, Course, Module, Unit, Project, Tutorial
+from content.models import Article, Course, Module, Project, Tutorial, Unit
 from events.models import Event
 
 
@@ -626,7 +626,7 @@ class DescriptionTruncationTest(TestCase):
 
     def test_long_description_truncated_in_meta(self):
         long_desc = 'A' * 200
-        article = Article.objects.create(
+        Article.objects.create(
             title='Long Desc',
             slug='long-desc',
             description=long_desc,

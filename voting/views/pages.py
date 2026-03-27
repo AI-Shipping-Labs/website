@@ -1,7 +1,7 @@
 from django.db.models import Count
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404, render
 
-from content.access import get_user_level, get_required_tier_name
+from content.access import get_required_tier_name, get_user_level
 from voting.models import Poll
 
 

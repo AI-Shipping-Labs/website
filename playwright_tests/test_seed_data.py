@@ -12,19 +12,16 @@ Usage:
 
 import io
 import os
-import re
 
 import pytest
 from django.core.management import call_command
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    ensure_tiers as _ensure_tiers,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 ADMIN_EMAIL = "admin@aishippinglabs.com"
@@ -38,9 +35,18 @@ ADMIN_PASSWORD = "admin123"
 def _flush_all_seed_data():
     """Remove all data that the seed_data command creates."""
     from django.contrib.auth import get_user_model
+
     from content.models import (
-        Article, Course, Module, Unit, Cohort, CohortEnrollment,
-        Recording, Project, CuratedLink, Download,
+        Article,
+        Cohort,
+        CohortEnrollment,
+        Course,
+        CuratedLink,
+        Download,
+        Module,
+        Project,
+        Recording,
+        Unit,
     )
     from email_app.models import NewsletterSubscriber
     from events.models import Event, EventRegistration

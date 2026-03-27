@@ -14,7 +14,7 @@ import uuid
 from collections import OrderedDict
 
 from django.contrib import messages
-from django.db.models import Max, Min, Sum, Q
+from django.db.models import Max, Min
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -24,6 +24,17 @@ from integrations.services.github import sync_content_source
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
+
+
+def _is_not_configured_error(errors):
+    """Return True if all errors indicate a missing/not-configured source (e.g. no credentials)."""
+    if not errors:
+        return False
+    not_configured_keywords = ['not configured', 'no credentials', 'not set up', 'missing']
+    return all(
+        any(kw in str(err).lower() for kw in not_configured_keywords)
+        for err in errors
+    )
 
 
 def _aggregate_batch(logs):
@@ -258,7 +269,7 @@ def sync_all(request):
                 )
             except ImportError:
                 sync_content_source(source, batch_id=batch_id)
-        except Exception as e:
+        except Exception:
             logger.exception('Error triggering sync for %s', source.repo_name)
 
     messages.success(request, f'Sync triggered for {count} sources.')

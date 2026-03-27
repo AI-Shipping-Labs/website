@@ -7,10 +7,10 @@ content_path to the object's source_path, producing valid GitHub URLs.
 from django.test import TestCase
 from django.utils import timezone
 
-from content.models import Article, Course, Module, Unit, Download, Project
+from content.models import Article, Course, Module, Project, Unit
 from events.models import Event
 from integrations.models import ContentSource
-from studio.utils import get_github_edit_url, _get_content_path
+from studio.utils import _get_content_path, get_github_edit_url
 
 
 class GitHubEditUrlWithContentPathTest(TestCase):

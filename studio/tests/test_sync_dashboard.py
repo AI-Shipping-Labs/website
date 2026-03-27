@@ -5,7 +5,7 @@ import uuid
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from integrations.models import ContentSource, SyncLog
@@ -185,7 +185,7 @@ class StudioSyncDashboardTest(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_dashboard_non_staff_gets_403(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='user@test.com', password='testpass', is_staff=False,
         )
         client = Client()
@@ -501,7 +501,7 @@ class SyncLogModelTest(TestCase):
 
     def test_batch_id_groups_logs(self):
         batch_id = uuid.uuid4()
-        log1 = SyncLog.objects.create(
+        SyncLog.objects.create(
             source=self.source, batch_id=batch_id, status='success',
         )
         source2 = ContentSource.objects.create(
@@ -509,7 +509,7 @@ class SyncLogModelTest(TestCase):
             content_type='course',
             content_path='courses/',
         )
-        log2 = SyncLog.objects.create(
+        SyncLog.objects.create(
             source=source2, batch_id=batch_id, status='success',
         )
         batch_logs = SyncLog.objects.filter(batch_id=batch_id)

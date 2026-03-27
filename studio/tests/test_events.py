@@ -14,7 +14,7 @@ Verifies:
 from datetime import datetime
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from events.models import Event
@@ -362,7 +362,6 @@ class StudioEventCreateZoomTest(TestCase):
     """Test Studio endpoint for creating Zoom meetings for events."""
 
     def setUp(self):
-        from unittest.mock import MagicMock, patch  # noqa: F811
         self.client = Client()
         self.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
@@ -378,6 +377,7 @@ class StudioEventCreateZoomTest(TestCase):
 
     def test_create_zoom_success(self):
         from unittest.mock import MagicMock, patch
+
         from django.test import override_settings
 
         with override_settings(
@@ -435,8 +435,9 @@ class StudioEventDateTimeParsingTest(TestCase):
     """Test the _parse_event_datetime helper function directly."""
 
     def test_parse_valid_date_time_duration(self):
-        from studio.views.events import _parse_event_datetime
         from django.http import QueryDict
+
+        from studio.views.events import _parse_event_datetime
 
         data = QueryDict(mutable=True)
         data['event_date'] = '15/03/2026'
@@ -448,8 +449,9 @@ class StudioEventDateTimeParsingTest(TestCase):
         self.assertEqual(end_dt, datetime(2026, 3, 15, 16, 30))
 
     def test_parse_empty_duration_defaults_to_1_hour(self):
-        from studio.views.events import _parse_event_datetime
         from django.http import QueryDict
+
+        from studio.views.events import _parse_event_datetime
 
         data = QueryDict(mutable=True)
         data['event_date'] = '20/06/2026'
@@ -461,8 +463,9 @@ class StudioEventDateTimeParsingTest(TestCase):
         self.assertEqual(end_dt, datetime(2026, 6, 20, 10, 0))
 
     def test_parse_fractional_duration(self):
-        from studio.views.events import _parse_event_datetime
         from django.http import QueryDict
+
+        from studio.views.events import _parse_event_datetime
 
         data = QueryDict(mutable=True)
         data['event_date'] = '01/01/2026'

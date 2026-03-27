@@ -17,12 +17,16 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN
+from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import (
-    Course, Module, Unit, Cohort, CohortEnrollment, UserCourseProgress,
+    Cohort,
+    CohortEnrollment,
+    Course,
+    Module,
+    Unit,
 )
 from tests.fixtures import TierSetupMixin
 
@@ -397,7 +401,7 @@ class CohortEnrollApiTest(TierSetupMixin, TestCase):
         existing_user = User.objects.create_user(email='existing@test.com')
         CohortEnrollment.objects.create(cohort=self.cohort, user=existing_user)
 
-        user = self._login_main_user()
+        self._login_main_user()
         response = self.client.post(
             f'/api/courses/api-course/cohorts/{self.cohort.pk}/enroll',
         )
@@ -448,7 +452,7 @@ class CohortEnrollApiTest(TierSetupMixin, TestCase):
     def test_enroll_unlimited_cohort(self):
         self.cohort.max_participants = None
         self.cohort.save()
-        user = self._login_main_user()
+        self._login_main_user()
         response = self.client.post(
             f'/api/courses/api-course/cohorts/{self.cohort.pk}/enroll',
         )
@@ -468,7 +472,7 @@ class CohortEnrollApiTest(TierSetupMixin, TestCase):
             end_date=datetime.date(2026, 6, 1),
             is_active=True,
         )
-        user = User.objects.create_user(email='freeuser@test.com', password='testpass')
+        User.objects.create_user(email='freeuser@test.com', password='testpass')
         self.client.login(email='freeuser@test.com', password='testpass')
         response = self.client.post(
             f'/api/courses/free-course/cohorts/{cohort.pk}/enroll',
@@ -636,7 +640,7 @@ class DripScheduleTest(TierSetupMixin, TestCase):
 
     def test_drip_unit_available_after_days_zero(self):
         """Unit with available_after_days=0 is available from day 1."""
-        unit_day0 = Unit.objects.create(
+        Unit.objects.create(
             module=self.module, title='Day Zero', slug='day-zero', sort_order=3,
             body='Day zero content.',
             available_after_days=0,

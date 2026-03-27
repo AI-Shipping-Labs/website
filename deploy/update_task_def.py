@@ -1,5 +1,5 @@
-import sys
 import json
+import sys
 
 
 def update_task_definition(input_file, new_tag, output_file):

@@ -13,14 +13,13 @@ Tests cover:
 """
 
 import json
-from datetime import date
 
 from django.template import Context, Template
-from django.test import TestCase, Client
-
-from content.models import Article
+from django.test import Client, TestCase
 from django.utils import timezone
-from events.models import Event
+
+from content.admin.widgets import TimestampEditorWidget
+from content.models import Article
 from content.templatetags.video_utils import (
     detect_video_source,
     format_timestamp,
@@ -30,8 +29,7 @@ from content.templatetags.video_utils import (
     prepare_video_context,
     replace_video_urls_in_html,
 )
-from content.admin.widgets import TimestampEditorWidget
-
+from events.models import Event
 
 # --- Video Source Detection Tests ---
 
@@ -528,7 +526,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.client = Client()
 
     def test_youtube_video_player_in_recording_detail(self):
-        recording = Event.objects.create(
+        Event.objects.create(
             title='YT Recording',
             slug='yt-recording',
             description='A recording with YouTube',
@@ -553,7 +551,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.assertIn('Main Content', content)
 
     def test_recording_without_youtube_no_player(self):
-        recording = Event.objects.create(
+        Event.objects.create(
             title='No Video Recording',
             slug='no-video',
             description='Recording without video',
@@ -568,7 +566,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
 
     def test_recording_with_google_embed_fallback(self):
         """Google embed URLs should still use basic iframe (not video player)."""
-        recording = Event.objects.create(
+        Event.objects.create(
             title='Google Recording',
             slug='google-recording',
             description='Recording with google embed',
@@ -582,7 +580,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.assertIn('drive.google.com', content)
 
     def test_recording_youtube_with_hour_long_timestamps(self):
-        recording = Event.objects.create(
+        Event.objects.create(
             title='Long Recording',
             slug='long-recording',
             description='An hour-long recording',
@@ -648,7 +646,7 @@ class ContentPipelineVideoEmbedTest(TestCase):
         content_html = md_to_html(markdown_body)
         content_html = replace_video_urls_in_html(content_html)
 
-        article = Article.objects.create(
+        Article.objects.create(
             title='Video Article',
             slug='video-article',
             description='Article with embedded video',

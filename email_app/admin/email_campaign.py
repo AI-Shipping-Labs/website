@@ -1,12 +1,10 @@
 """Admin for EmailCampaign with custom actions for test send and campaign send."""
 
-import json
 import logging
 
-from django.contrib import admin, messages
+from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import path, reverse
-from django.utils.html import format_html
 
 from email_app.models import EmailCampaign
 
@@ -95,6 +93,7 @@ class EmailCampaignAdmin(admin.ModelAdmin):
         try:
             import markdown as md
             from django.template.loader import render_to_string
+
             from email_app.services.email_service import EmailService, EmailServiceError
 
             service = EmailService()

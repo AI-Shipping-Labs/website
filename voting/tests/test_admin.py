@@ -1,10 +1,10 @@
 """Tests for voting admin configuration."""
 
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
 from accounts.models import User
 from tests.fixtures import TierSetupMixin
-from voting.models import Poll, PollOption, PollVote
+from voting.models import Poll
 
 
 class PollAdminTest(TierSetupMixin, TestCase):
@@ -12,7 +12,7 @@ class PollAdminTest(TierSetupMixin, TestCase):
 
     def test_admin_can_access_poll_list(self):
         """Admin user can access the poll changelist."""
-        admin_user = User.objects.create_superuser(
+        User.objects.create_superuser(
             email='admin@test.com', password='adminpass',
         )
         client = Client()
@@ -21,7 +21,7 @@ class PollAdminTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_admin_can_access_poll_add(self):
-        admin_user = User.objects.create_superuser(
+        User.objects.create_superuser(
             email='admin2@test.com', password='adminpass',
         )
         client = Client()
@@ -30,7 +30,7 @@ class PollAdminTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_admin_can_create_poll(self):
-        admin_user = User.objects.create_superuser(
+        User.objects.create_superuser(
             email='admin3@test.com', password='adminpass',
         )
         client = Client()
@@ -53,7 +53,7 @@ class PollAdminTest(TierSetupMixin, TestCase):
         self.assertTrue(Poll.objects.filter(title='Admin Poll').exists())
 
     def test_admin_can_delete_poll(self):
-        admin_user = User.objects.create_superuser(
+        User.objects.create_superuser(
             email='admin4@test.com', password='adminpass',
         )
         poll = Poll.objects.create(title='To Delete', poll_type='topic')

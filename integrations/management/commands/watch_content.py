@@ -6,7 +6,6 @@ Usage:
 """
 
 import os
-import sys
 import threading
 import time
 from pathlib import Path
@@ -230,10 +229,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Content file watcher'))
         self.stdout.write(f'  Repo: {repo_dir}')
         self.stdout.write(f'  Debounce: {debounce}s')
-        self.stdout.write(f'  Content types:')
+        self.stdout.write('  Content types:')
         for content_path, source in sorted(path_to_source.items()):
             self.stdout.write(f'    {content_path}/ -> {source.content_type}')
-        self.stdout.write(f'    tiers.yaml -> tiers config')
+        self.stdout.write('    tiers.yaml -> tiers config')
         self.stdout.write('')
 
         # Create debounced syncer

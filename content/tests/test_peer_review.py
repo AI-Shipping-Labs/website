@@ -23,17 +23,21 @@ from io import StringIO
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import IntegrityError
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from content.models import (
-    Course, Module, Unit, UserCourseProgress,
-    ProjectSubmission, PeerReview, CourseCertificate,
     Cohort,
+    Course,
+    CourseCertificate,
+    Module,
+    PeerReview,
+    ProjectSubmission,
+    Unit,
+    UserCourseProgress,
 )
 from content.models.cohort import CohortEnrollment
 from content.services.peer_review_service import PeerReviewService
-from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
 
@@ -306,7 +310,7 @@ class ReviewDashboardViewTest(TestCase):
 
     def test_dashboard_shows_assigned_reviews(self):
         # Create submissions and assignments
-        sub = ProjectSubmission.objects.create(
+        ProjectSubmission.objects.create(
             user=self.user, course=self.course,
             project_url='https://github.com/test/myproject',
             status='in_review',
@@ -394,7 +398,7 @@ class ReviewFormViewTest(TestCase):
         self.assertIsNotNone(self.review.completed_at)
 
     def test_403_if_not_assigned(self):
-        other = _create_user('other@test.com')
+        _create_user('other@test.com')
         self.client.login(email='other@test.com', password='testpass123')
         response = self.client.get(
             f'/courses/test-course/reviews/{self.submission.pk}'
@@ -705,7 +709,7 @@ class SubmissionStatusUpdateTest(TestCase):
         )
 
     def test_status_changes_to_review_complete(self):
-        review = PeerReview.objects.create(
+        PeerReview.objects.create(
             submission=self.sub, reviewer=self.user2,
             is_complete=True, feedback='Good', completed_at=timezone.now(),
         )
@@ -840,7 +844,7 @@ class APISubmitReviewTest(TestCase):
         self.assertTrue(data['is_complete'])
 
     def test_403_if_not_assigned(self):
-        other = _create_user('other@test.com')
+        _create_user('other@test.com')
         self.client.login(email='other@test.com', password='testpass123')
         response = self.client.post(
             f'/api/courses/test-course/reviews/{self.submission.pk}',
@@ -917,7 +921,7 @@ class StudioPeerReviewViewTest(TestCase):
 
     def test_non_staff_redirected(self):
         self.client.logout()
-        non_staff = _create_user('nostaff@test.com')
+        _create_user('nostaff@test.com')
         self.client.login(email='nostaff@test.com', password='testpass123')
         response = self.client.get(
             f'/studio/courses/{self.course.pk}/peer-reviews'
@@ -996,7 +1000,7 @@ class PeerReviewNotificationTest(TestCase):
             project_url='https://github.com/user1/project',
             status='in_review',
         )
-        review = PeerReview.objects.create(
+        PeerReview.objects.create(
             submission=sub, reviewer=self.user2,
             is_complete=True, feedback='Good', completed_at=timezone.now(),
         )

@@ -5,17 +5,16 @@ from datetime import timedelta
 
 from django.core.paginator import Paginator
 from django.http import JsonResponse
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from content.models import Article, Download, Course
+from content.models import Article, Course, Download
 from events.models import Event
 from notifications.models import Notification
 from notifications.services import NotificationService, post_slack_announcement
 from notifications.services.notification_service import (
     CONTENT_TYPE_CONFIG,
-    _get_content_object,
 )
 from studio.decorators import staff_required
 

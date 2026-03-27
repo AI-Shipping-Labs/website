@@ -61,6 +61,7 @@ def _get_override_level(user):
     Returns None if no active override exists.
     """
     from django.utils import timezone
+
     from accounts.models import TierOverride
 
     override = (
@@ -83,6 +84,7 @@ def get_active_override(user):
     if user is None or not user.is_authenticated:
         return None
     from django.utils import timezone
+
     from accounts.models import TierOverride
 
     return (

@@ -125,6 +125,7 @@ def _enable_wal_mode(sender, connection, **kwargs):
 
 
 from django.db.backends.signals import connection_created  # noqa: E402
+
 connection_created.connect(_enable_wal_mode)
 
 
@@ -287,6 +288,7 @@ SOCIALACCOUNT_PROVIDERS = {
 
 # Slack community integration (set via environment variables in production)
 import sys
+
 TESTING = 'test' in sys.argv
 SLACK_BOT_TOKEN = '' if TESTING else os.environ.get('SLACK_BOT_TOKEN', '')
 SLACK_COMMUNITY_CHANNEL_IDS = [] if TESTING else [

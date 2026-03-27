@@ -28,9 +28,14 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from content.models import (
-    Article, Course, Module, Project, Unit, UserCourseProgress,
+    Article,
+    Course,
+    Module,
+    Project,
+    Unit,
+    UserCourseProgress,
 )
-from integrations.models import ContentSource, SyncLog
+from integrations.models import ContentSource
 from integrations.services.github import (
     _compute_content_hash,
     _validate_frontmatter,
@@ -145,7 +150,7 @@ class SlugCollisionSameRepoTest(_ArticleSyncTestBase):
             'date': '2026-01-02',
         }, 'Second body.')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_content_source(self.source, repo_dir=self.temp_dir)
 
         # Only one article with this slug should exist for this source
         articles = Article.objects.filter(

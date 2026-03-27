@@ -3,23 +3,23 @@
 Covers all 69 test scenarios from issue #125, organized by category.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
-from freezegun import freeze_time
 from django.db.models import ProtectedError
-from django.test import TestCase, RequestFactory
+from django.test import TestCase
 from django.utils import timezone
+from freezegun import freeze_time
 
-from accounts.models import User, TierOverride
+from accounts.models import TierOverride, User
 from content.access import (
-    get_user_level,
-    can_access,
-    get_active_override,
-    LEVEL_OPEN,
     LEVEL_BASIC,
     LEVEL_MAIN,
+    LEVEL_OPEN,
     LEVEL_PREMIUM,
+    can_access,
+    get_active_override,
+    get_user_level,
 )
 from payments.models import Tier
 
@@ -1005,7 +1005,7 @@ class ConcurrentOperationsTest(TierOverrideTestBase):
         override.save(update_fields=["is_active"])
 
         # Expiry job runs (override already deactivated)
-        result = expire_tier_overrides()
+        expire_tier_overrides()
         # No error, and the override stays inactive
         override.refresh_from_db()
         self.assertFalse(override.is_active)
@@ -1066,6 +1066,7 @@ class PerformanceTest(TierOverrideTestBase):
         """#55: Expiry job uses bulk queryset.update() for efficiency.
         Verified by checking the function source uses .update()."""
         import inspect
+
         from jobs.tasks.expire_overrides import expire_tier_overrides
         source = inspect.getsource(expire_tier_overrides)
         self.assertIn(".update(is_active=False)", source)
@@ -1088,7 +1089,7 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
 
     def test_56_search_user_by_email(self):
         """#56: Admin searches user by email -> user found with tier."""
-        target = self._make_user(email="target56@example.com")
+        self._make_user(email="target56@example.com")
 
         response = self.client.get(
             "/studio/users/tier-override/",
@@ -1218,7 +1219,7 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
 
     def test_63_no_active_override_no_revoke_button(self):
         """#63: User has no active override -> revoke button not shown."""
-        target = self._make_user(email="target63@example.com")
+        self._make_user(email="target63@example.com")
 
         response = self.client.get(
             "/studio/users/tier-override/",
@@ -1230,7 +1231,7 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
 
     def test_64_non_staff_cannot_access(self):
         """#64: Non-staff user cannot access tier override page."""
-        regular = User.objects.create_user(
+        User.objects.create_user(
             email="regular@example.com", password="testpass"
         )
         self.client.login(email="regular@example.com", password="testpass")
@@ -1240,7 +1241,7 @@ class StudioTierOverrideViewTest(TierOverrideTestBase):
 
     def test_65_premium_user_shows_already_highest(self):
         """#65: User is already Premium -> UI shows 'already at highest tier'."""
-        target = self._make_user(
+        self._make_user(
             email="target65@example.com", tier=self.premium_tier,
         )
 
@@ -1410,6 +1411,7 @@ class SetupSchedulesTest(TestCase):
     def test_expire_tier_overrides_schedule_registered(self):
         """setup_schedules registers expire-tier-overrides."""
         import inspect
+
         from jobs.management.commands.setup_schedules import Command
         source = inspect.getsource(Command.handle)
         self.assertIn("expire-tier-overrides", source)

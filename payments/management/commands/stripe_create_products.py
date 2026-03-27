@@ -7,10 +7,9 @@ Usage:
     uv run python manage.py stripe_create_products
 """
 
+import stripe
 from django.conf import settings
 from django.core.management.base import BaseCommand
-
-import stripe
 
 from payments.models import Tier
 

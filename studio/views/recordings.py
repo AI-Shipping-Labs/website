@@ -3,16 +3,15 @@
 import logging
 
 from django.http import HttpResponseForbidden, JsonResponse
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from events.models import Event
 from jobs.tasks import async_task
 from studio.decorators import staff_required
-from studio.utils import is_synced, get_github_edit_url
+from studio.utils import get_github_edit_url, is_synced
 
 logger = logging.getLogger(__name__)
 

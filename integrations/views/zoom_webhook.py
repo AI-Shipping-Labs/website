@@ -13,7 +13,6 @@ import json
 import logging
 
 from django.http import JsonResponse
-from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
@@ -61,6 +60,7 @@ def zoom_webhook(request):
         if plain_token:
             import hashlib
             import hmac
+
             from django.conf import settings
             secret = settings.ZOOM_WEBHOOK_SECRET_TOKEN
             encrypted_token = hmac.new(

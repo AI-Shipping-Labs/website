@@ -23,14 +23,12 @@ import datetime
 import os
 
 import pytest
-from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    ensure_tiers as _ensure_tiers,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
 )
 
 # Playwright creates an async event loop internally. Django's async safety

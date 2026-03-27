@@ -12,13 +12,10 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
 
-from content.models import Cohort, CohortEnrollment
 from email_app.models import NewsletterSubscriber
-from events.models import Event, EventRegistration
+from events.models import Event
 from notifications.models import Notification
-from payments.models import Tier
 from voting.models import Poll, PollOption, PollVote
-
 
 User = get_user_model()
 

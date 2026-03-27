@@ -6,14 +6,14 @@ import logging
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseForbidden, JsonResponse
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
-from content.models import Course, Module, Unit, CourseAccess
+from content.models import Course, CourseAccess, Module, Unit
 from studio.decorators import staff_required
-from studio.utils import is_synced, get_github_edit_url
+from studio.utils import get_github_edit_url, is_synced
 
 User = get_user_model()
 

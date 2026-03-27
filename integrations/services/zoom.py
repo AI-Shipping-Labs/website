@@ -8,7 +8,6 @@ Handles:
 
 import hashlib
 import hmac
-import json
 import logging
 import time
 from urllib.parse import urljoin

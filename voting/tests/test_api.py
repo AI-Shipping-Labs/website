@@ -2,10 +2,10 @@
 
 import json
 import uuid
-
-from django.test import TestCase, Client
-from django.utils import timezone
 from datetime import timedelta
+
+from django.test import Client, TestCase
+from django.utils import timezone
 
 from accounts.models import User
 from tests.fixtures import TierSetupMixin

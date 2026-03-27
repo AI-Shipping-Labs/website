@@ -1,7 +1,7 @@
 """Tests for studio subscriber management views."""
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
 from email_app.models import NewsletterSubscriber
 
@@ -110,7 +110,7 @@ class StudioSubscriberExportTest(TestCase):
 
     def test_export_non_staff_forbidden(self):
         """Non-staff users cannot export subscribers."""
-        regular_user = User.objects.create_user(
+        User.objects.create_user(
             email='user@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='user@test.com', password='testpass')

@@ -11,10 +11,10 @@ Covers:
 import re
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_MAIN
+from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Course, Module, Unit, UserCourseProgress
 from tests.fixtures import TierSetupMixin
 

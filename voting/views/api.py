@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
 
-from content.access import can_access, get_user_level
+from content.access import get_user_level
 from voting.models import Poll, PollOption, PollVote
 
 

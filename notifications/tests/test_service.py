@@ -4,12 +4,12 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 
 from content.models import Article, Course, Download
-from events.models import Event, EventRegistration
-from notifications.models import Notification, EventReminderLog
+from events.models import Event
+from notifications.models import EventReminderLog, Notification
 from notifications.services.notification_service import NotificationService
 from voting.models import Poll
 

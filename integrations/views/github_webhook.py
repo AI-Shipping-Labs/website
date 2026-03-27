@@ -12,12 +12,11 @@ import json
 import logging
 
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from django.utils import timezone
-
-from integrations.models import ContentSource, WebhookLog
+from integrations.models import WebhookLog
 from integrations.services.github import (
     SYNC_LOCK_TIMEOUT_MINUTES,
     find_content_source,

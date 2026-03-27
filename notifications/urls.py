@@ -1,10 +1,10 @@
 from django.urls import path
 
 from notifications.views.api import (
+    api_mark_all_read,
+    api_mark_read,
     api_notification_list,
     api_unread_count,
-    api_mark_read,
-    api_mark_all_read,
 )
 from notifications.views.pages import notification_list_page
 

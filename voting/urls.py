@@ -1,7 +1,7 @@
 from django.urls import path
 
-from voting.views.pages import poll_list, poll_detail
-from voting.views.api import vote_toggle, propose_option
+from voting.views.api import propose_option, vote_toggle
+from voting.views.pages import poll_detail, poll_list
 
 urlpatterns = [
     # Page views

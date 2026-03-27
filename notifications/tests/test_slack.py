@@ -1,14 +1,14 @@
 """Tests for Slack announcement posting."""
 
 from datetime import date
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from content.models import Article
 from notifications.services.slack_announcements import (
-    post_slack_announcement,
     _build_slack_blocks,
+    post_slack_announcement,
 )
 
 

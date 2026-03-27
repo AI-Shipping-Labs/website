@@ -1,4 +1,3 @@
-from allauth.socialaccount.signals import social_account_added, pre_social_login
 
 
 def mark_email_verified_on_social_login(sender, request, sociallogin, **kwargs):

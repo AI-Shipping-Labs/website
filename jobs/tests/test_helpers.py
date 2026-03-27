@@ -2,10 +2,9 @@
 Tests for the jobs.tasks helper functions (async_task, schedule).
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from django.test import TestCase, override_settings
-
+from django.test import TestCase
 from django_q.models import Schedule
 
 from jobs.tasks.helpers import async_task, schedule

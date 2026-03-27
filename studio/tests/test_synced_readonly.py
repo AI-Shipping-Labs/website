@@ -12,13 +12,13 @@ Verifies:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.models import Article, Course, Module, Unit, Download, Project
+from content.models import Article, Course, Download, Module, Project, Unit
 from events.models import Event
 from integrations.models import ContentSource
-from studio.utils import is_synced, get_github_edit_url
+from studio.utils import get_github_edit_url, is_synced
 
 User = get_user_model()
 

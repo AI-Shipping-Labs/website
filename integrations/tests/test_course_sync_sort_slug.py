@@ -9,11 +9,13 @@ Covers:
 - Old numeric URLs return 404
 """
 
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
 from content.models import Course, Module, Unit
 from integrations.services.github import (
-    extract_sort_order, derive_slug, REQUIRED_FIELDS,
+    REQUIRED_FIELDS,
+    derive_slug,
+    extract_sort_order,
 )
 
 

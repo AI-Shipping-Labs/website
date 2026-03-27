@@ -1,4 +1,4 @@
-.PHONY: run migrate sync seed test coverage playwright lint clean
+.PHONY: run migrate sync seed test coverage playwright lint lint-fix clean
 
 # Start dev server
 run: migrate
@@ -42,6 +42,14 @@ test-all: test playwright
 # Initial setup: .env, content repo, deps, migrate, sync
 setup:
 	bash scripts/setup.sh
+
+# Run ruff linter
+lint:
+	uv run ruff check .
+
+# Run ruff linter with auto-fix
+lint-fix:
+	uv run ruff check --fix .
 
 # Clean generated files
 clean:

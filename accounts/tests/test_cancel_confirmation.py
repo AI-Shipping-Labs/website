@@ -4,7 +4,6 @@ Tests verify the multi-step cancel confirmation modal: feature loss display,
 checkbox, text input, disabled/enabled button states, and form reset behavior.
 """
 
-import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 

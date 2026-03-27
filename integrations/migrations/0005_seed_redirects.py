@@ -2,7 +2,6 @@
 
 from django.db import migrations
 
-
 SEED_REDIRECTS = [
     ('/ai-engineer-resources', '/interview', 301),
     ('/ai-engineer-interview-questions', '/interview', 301),

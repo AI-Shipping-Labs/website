@@ -1,7 +1,7 @@
 """Tests for studio download management views."""
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
 from content.models import Download
 

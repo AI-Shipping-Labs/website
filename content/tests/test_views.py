@@ -1,7 +1,8 @@
 from datetime import date
-from django.test import TestCase, Client
-from django.urls import reverse
-from content.models import Article, Project, Tutorial, CuratedLink
+
+from django.test import Client, TestCase
+
+from content.models import Article, CuratedLink, Project, Tutorial
 from events.models import Event
 
 

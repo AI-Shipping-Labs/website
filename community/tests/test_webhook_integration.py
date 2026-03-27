@@ -4,8 +4,7 @@ Verifies that community invite/remove/reactivate are triggered
 correctly from payment service functions when tier changes occur.
 """
 
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase
 

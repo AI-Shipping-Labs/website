@@ -22,15 +22,11 @@ import os
 import pytest
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -78,8 +74,9 @@ def _create_course(
 
 def _create_module(course, title, sort_order=0):
     """Create a Module via ORM."""
-    from content.models import Module
     from django.utils.text import slugify
+
+    from content.models import Module
 
     module = Module(
         course=course,
@@ -103,8 +100,9 @@ def _create_unit(
     is_preview=False,
 ):
     """Create a Unit via ORM."""
-    from content.models import Unit
     from django.utils.text import slugify
+
+    from content.models import Unit
 
     if timestamps is None:
         timestamps = []
@@ -128,6 +126,7 @@ def _create_unit(
 def _mark_unit_completed(user_email, unit):
     """Create a UserCourseProgress record marking a unit as completed."""
     from django.utils import timezone
+
     from accounts.models import User
     from content.models import UserCourseProgress
 

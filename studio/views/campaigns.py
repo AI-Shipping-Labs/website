@@ -1,6 +1,6 @@
 """Studio views for email campaign management."""
 
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 
 from email_app.models import EmailCampaign
 from studio.decorators import staff_required
@@ -33,7 +33,7 @@ def campaign_create(request):
         body = request.POST.get('body', '')
         target_min_level = int(request.POST.get('target_min_level', 0))
 
-        campaign = EmailCampaign.objects.create(
+        EmailCampaign.objects.create(
             subject=subject,
             body=body,
             target_min_level=target_min_level,

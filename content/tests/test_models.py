@@ -1,6 +1,8 @@
 from datetime import date
+
 from django.test import TestCase
-from content.models import Article, Project, Tutorial, CuratedLink
+
+from content.models import Article, CuratedLink, Project, Tutorial
 from events.models import Event
 
 

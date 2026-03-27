@@ -15,10 +15,10 @@ Covers:
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+from content.access import LEVEL_MAIN, LEVEL_OPEN
 from events.models import Event
 from tests.fixtures import TierSetupMixin
 

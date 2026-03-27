@@ -1,7 +1,7 @@
 """Middleware for URL redirects and trailing slash removal."""
 
-from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 from django.core.cache import cache
+from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 
 
 class RemoveTrailingSlashMiddleware:

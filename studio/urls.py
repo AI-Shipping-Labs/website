@@ -1,35 +1,48 @@
 from django.urls import path
 
-from studio.views.dashboard import dashboard
+from studio.views.articles import article_edit, article_list
+from studio.views.campaigns import campaign_create, campaign_detail, campaign_list
 from studio.views.courses import (
-    course_list, course_edit,
-    module_create, unit_create, unit_edit,
-    module_reorder, course_create_stripe_product,
-    course_access_list, course_access_grant, course_access_revoke,
+    course_access_grant,
+    course_access_list,
+    course_access_revoke,
+    course_create_stripe_product,
+    course_edit,
+    course_list,
+    module_create,
+    module_reorder,
+    unit_create,
+    unit_edit,
 )
-from studio.views.articles import article_list, article_edit
-from studio.views.events import event_list, event_create, event_edit, event_create_zoom
-from studio.views.recordings import recording_list, recording_edit, recording_publish_youtube
-from studio.views.campaigns import campaign_list, campaign_create, campaign_detail
-from studio.views.subscribers import subscriber_list, subscriber_export_csv
-from studio.views.downloads import download_list, download_edit
-from studio.views.projects import project_list, project_review
-from studio.views.tier_overrides import tier_override_page, tier_override_create, tier_override_revoke
-from studio.views.redirects import redirect_list, redirect_create, redirect_edit, redirect_delete, redirect_toggle
-from studio.views.sync import sync_dashboard, sync_history, sync_trigger, sync_all, sync_status
-from studio.views.worker import worker_status
-from studio.views.peer_reviews import (
-    peer_review_management, peer_review_form_batch,
-    peer_review_issue_certificates, peer_review_extend_deadline,
-)
+from studio.views.dashboard import dashboard
+from studio.views.downloads import download_edit, download_list
+from studio.views.events import event_create, event_create_zoom, event_edit, event_list
 from studio.views.notifications import (
+    article_announce_slack,
+    article_notify,
+    course_announce_slack,
+    course_notify,
+    download_announce_slack,
+    download_notify,
+    event_announce_slack,
+    event_notify,
     notification_log,
-    article_notify, article_announce_slack,
-    recording_notify, recording_announce_slack,
-    event_notify, event_announce_slack,
-    download_notify, download_announce_slack,
-    course_notify, course_announce_slack,
+    recording_announce_slack,
+    recording_notify,
 )
+from studio.views.peer_reviews import (
+    peer_review_extend_deadline,
+    peer_review_form_batch,
+    peer_review_issue_certificates,
+    peer_review_management,
+)
+from studio.views.projects import project_list, project_review
+from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
+from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
+from studio.views.subscribers import subscriber_export_csv, subscriber_list
+from studio.views.sync import sync_all, sync_dashboard, sync_history, sync_status, sync_trigger
+from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
+from studio.views.worker import worker_status
 
 urlpatterns = [
     # Dashboard

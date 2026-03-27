@@ -15,9 +15,9 @@ Covers:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+from content.access import LEVEL_BASIC, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Download
 from tests.fixtures import TierSetupMixin
 
@@ -85,11 +85,11 @@ class DownloadModelFieldsTest(TestCase):
             )
 
     def test_ordering_by_created_at_desc(self):
-        dl1 = Download.objects.create(
+        Download.objects.create(
             title='Old', slug='old',
             file_url='https://example.com/old.pdf',
         )
-        dl2 = Download.objects.create(
+        Download.objects.create(
             title='New', slug='new',
             file_url='https://example.com/new.pdf',
         )
@@ -373,7 +373,7 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Upgrade to Basic to download')
 
     def test_authenticated_sees_download_button_for_free_resource(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='free@test.com', password='testpass',
         )
         self.client.login(email='free@test.com', password='testpass')
@@ -382,7 +382,7 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Download')
 
     def test_basic_user_sees_download_for_basic_resource(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='basic@test.com', password='testpass',
             tier=self.basic_tier,
         )
@@ -393,7 +393,7 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         self.assertIn('/api/downloads/basic-resource/file', content)
 
     def test_free_user_sees_upgrade_for_basic_resource(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='freeuser@test.com', password='testpass',
             tier=self.free_tier,
         )
@@ -444,7 +444,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         )
 
     def test_authenticated_user_can_download_free_resource(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_auth@test.com', password='testpass',
         )
         self.client.login(email='dl_auth@test.com', password='testpass')
@@ -453,7 +453,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(response['Location'], 'https://example.com/files/free.pdf')
 
     def test_download_increments_count(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_count@test.com', password='testpass',
         )
         self.client.login(email='dl_count@test.com', password='testpass')
@@ -462,7 +462,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(self.free_download.download_count, 1)
 
     def test_multiple_downloads_increment_count(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_multi@test.com', password='testpass',
         )
         self.client.login(email='dl_multi@test.com', password='testpass')
@@ -481,7 +481,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
 
     def test_unauthorized_user_gets_403(self):
         """User without sufficient tier gets 403."""
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_noauth@test.com', password='testpass',
             tier=self.free_tier,
         )
@@ -490,7 +490,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_basic_user_can_download_basic_resource(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_basic@test.com', password='testpass',
             tier=self.basic_tier,
         )
@@ -500,7 +500,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(response['Location'], 'https://example.com/files/basic.pdf')
 
     def test_basic_user_cannot_download_premium_resource(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_basic2@test.com', password='testpass',
             tier=self.basic_tier,
         )
@@ -509,7 +509,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_premium_user_can_download_premium_resource(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_premium@test.com', password='testpass',
             tier=self.premium_tier,
         )
@@ -519,7 +519,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(response['Location'], 'https://example.com/files/premium.pdf')
 
     def test_nonexistent_download_returns_404(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_404@test.com', password='testpass',
         )
         self.client.login(email='dl_404@test.com', password='testpass')
@@ -533,7 +533,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
             file_url='https://example.com/unpublished.pdf',
             published=False,
         )
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_unpub@test.com', password='testpass',
         )
         self.client.login(email='dl_unpub@test.com', password='testpass')
@@ -552,7 +552,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
 
     def test_403_never_exposes_file_url(self):
         """Verify the file URL is not in the 403 response body."""
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='dl_nourl@test.com', password='testpass',
             tier=self.free_tier,
         )
@@ -663,8 +663,8 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
 
     def _render_shortcode(self, shortcode_text, user=None):
         """Helper: render shortcode using the template tag filter."""
-        import re
         from django.test import RequestFactory
+
         from content.templatetags.download_tags import render_download_shortcodes
 
         factory = RequestFactory()

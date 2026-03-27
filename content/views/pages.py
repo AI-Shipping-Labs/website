@@ -1,9 +1,9 @@
 from django.core.paginator import Paginator
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import build_gating_context, can_access, get_required_tier_name
-from content.models import Article, Project, Tutorial, CuratedLink, Download, TagRule
+from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
 from content.tier_config import get_activities
 from events.models import Event
 

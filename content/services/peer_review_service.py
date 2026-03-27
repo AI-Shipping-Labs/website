@@ -3,14 +3,16 @@
 import logging
 from datetime import timedelta
 
-from django.db.models import Count, Q
 from django.utils import timezone
 
 from content.models import (
-    Course, ProjectSubmission, PeerReview, CourseCertificate,
-    UserCourseProgress, Unit, Cohort,
+    Cohort,
+    CourseCertificate,
+    PeerReview,
+    ProjectSubmission,
+    Unit,
+    UserCourseProgress,
 )
-from content.models.cohort import CohortEnrollment
 
 logger = logging.getLogger(__name__)
 

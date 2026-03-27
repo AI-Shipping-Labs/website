@@ -16,19 +16,18 @@ Idempotent: running twice does not create duplicates.
 import os
 from datetime import timedelta
 
+from allauth.socialaccount.models import SocialApp
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from allauth.socialaccount.models import SocialApp
 from content.models import Cohort, CohortEnrollment, Course
 from email_app.models import NewsletterSubscriber
 from events.models import EventRegistration
 from notifications.models import Notification
 from payments.models import Tier
 from voting.models import Poll, PollOption, PollVote
-
 
 User = get_user_model()
 

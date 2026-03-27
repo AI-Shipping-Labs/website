@@ -25,16 +25,20 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
     VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_staff_user,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_staff_user,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -48,7 +52,7 @@ def _anon_context(browser):
 
 def _clear_notifications():
     """Delete all notifications and reminder logs."""
-    from notifications.models import Notification, EventReminderLog
+    from notifications.models import EventReminderLog, Notification
 
     Notification.objects.all().delete()
     EventReminderLog.objects.all().delete()
@@ -235,7 +239,7 @@ class TestScenario1CheckUnreadNotificationsViaBell:
         _clear_notifications()
         user = _create_user("free@test.com", tier_slug="free")
 
-        article = _create_article(
+        _create_article(
             title="Test Article for Notif",
             slug="test-article-notif",
         )
@@ -309,7 +313,7 @@ class TestScenario1CheckUnreadNotificationsViaBell:
 
         # Then: Navigates to the article detail page
         page.wait_for_url(
-            f"**/blog/test-article-notif**",
+            "**/blog/test-article-notif**",
             timeout=10000,
         )
         assert "/blog/test-article-notif" in page.url
@@ -633,9 +637,9 @@ class TestScenario5NotificationOnArticlePublish:
         _ensure_tiers()
         _clear_notifications()
 
-        admin_user = _create_staff_user("admin@test.com")
-        basic_user = _create_user("basic@test.com", tier_slug="basic")
-        free_user = _create_user("free@test.com", tier_slug="free")
+        _create_staff_user("admin@test.com")
+        _create_user("basic@test.com", tier_slug="basic")
+        _create_user("free@test.com", tier_slug="free")
 
         # Create an unpublished article with required_level=10
         article = _create_article(
@@ -763,7 +767,7 @@ class TestScenario6FreeSeesOpenNotGated:
         user = _create_user("free@test.com", tier_slug="free")
 
         # Create an open article and its notification
-        open_article = _create_article(
+        _create_article(
             title="Open Article for All",
             slug="open-article-for-all",
             required_level=0,
@@ -855,7 +859,7 @@ class TestScenario7AnonymousRedirectedToLogin:
         assert "/accounts/login/" in page.url
 
         # Step 2: Try /api/notifications/unread-count
-        response = page.goto(
+        page.goto(
             f"{django_server}/api/notifications/unread-count",
             wait_until="domcontentloaded",
         )
@@ -886,17 +890,17 @@ class TestScenario8NotificationLinksToCorrectContent:
         user = _create_user("main@test.com", tier_slug="main")
 
         # Create the content objects
-        article = _create_article(
+        _create_article(
             title="Article for Main",
             slug="article-for-main",
             required_level=0,
         )
-        course = _create_course(
+        _create_course(
             title="Course for Main",
             slug="course-for-main",
             required_level=0,
         )
-        event = _create_event(
+        _create_event(
             title="Event for Main",
             slug="event-for-main",
             required_level=0,
@@ -1151,7 +1155,7 @@ class TestScenario10EventReminderNotification:
 
         # Step 2: Click the reminder notification
         event_link = page.locator(
-            f'#notification-list a[href="/events/ai-workshop-tomorrow"]'
+            '#notification-list a[href="/events/ai-workshop-tomorrow"]'
         )
         assert event_link.count() >= 1
         event_link.first.click()

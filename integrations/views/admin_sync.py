@@ -96,7 +96,7 @@ def admin_sync_all(request):
                 )
             except ImportError:
                 sync_content_source(source)
-        except Exception as e:
+        except Exception:
             logger.exception('Error triggering sync for %s', source.repo_name)
 
     if request.headers.get('Accept') == 'application/json':

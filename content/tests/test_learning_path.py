@@ -1,8 +1,8 @@
 """Tests for learning path rendered as Article with page_type='learning_path'."""
 
 import os
-import tempfile
 import shutil
+import tempfile
 from datetime import date
 
 from django.test import TestCase

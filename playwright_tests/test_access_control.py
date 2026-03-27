@@ -26,16 +26,17 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
     VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_staff_user,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_staff_user,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -224,8 +225,9 @@ def _create_course(
 
 def _create_module(course, title, sort_order=0):
     """Helper to create a Module."""
-    from content.models import Module
     from django.utils.text import slugify
+
+    from content.models import Module
 
     module = Module(course=course, title=title, slug=slugify(title), sort_order=sort_order)
     module.save()
@@ -235,8 +237,9 @@ def _create_module(course, title, sort_order=0):
 
 def _create_unit(module, title, sort_order=0, body="", video_url=""):
     """Helper to create a Unit."""
-    from content.models import Unit
     from django.utils.text import slugify
+
+    from content.models import Unit
 
     unit = Unit(
         module=module,
@@ -320,8 +323,15 @@ def _create_event(
 def _clear_all_content():
     """Delete all test content to ensure a clean state."""
     from content.models import (
-        Article, Recording, Tutorial, Project, Download,
-        Course, Module, Unit, UserCourseProgress,
+        Article,
+        Course,
+        Download,
+        Module,
+        Project,
+        Recording,
+        Tutorial,
+        Unit,
+        UserCourseProgress,
     )
     from events.models import Event, EventRegistration
 

@@ -1,8 +1,9 @@
-from django.test import TestCase
-from django.core.management import call_command
 from io import StringIO
 
-from content.models import Article, Project, CuratedLink
+from django.core.management import call_command
+from django.test import TestCase
+
+from content.models import Article, CuratedLink, Project
 from events.models import Event
 
 

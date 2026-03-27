@@ -1,14 +1,13 @@
 """Studio views for article management."""
 
 from django.http import HttpResponseForbidden
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.text import slugify
 
 from content.models import Article
 from studio.decorators import staff_required
-from studio.utils import is_synced, get_github_edit_url
+from studio.utils import get_github_edit_url, is_synced
 
 
 @staff_required

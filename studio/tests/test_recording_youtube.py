@@ -15,12 +15,11 @@ Covers:
 - Template: Button not on create form
 """
 
-from datetime import date
 from unittest.mock import patch
-from django.utils import timezone
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
+from django.utils import timezone
 
 from events.models import Event
 
@@ -196,7 +195,7 @@ class RecordingPublishYouTubeAccessControlTest(TestCase):
 
     def test_non_staff_user_returns_403(self):
         """A non-staff authenticated user gets 403 via staff_required decorator."""
-        regular_user = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')

@@ -21,18 +21,13 @@ import datetime
 import os
 
 import pytest
-from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -633,7 +628,7 @@ class TestScenario7PaginateFilteredListing:
         assert recording_cards.count() == 2
 
         # The "agents" tag filter is still active (in URL)
-        body = page.content()
+        page.content()
         assert "tag=agents" in page.url
 # ---------------------------------------------------------------
 # Scenario 8: Empty state when no recordings exist

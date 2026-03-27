@@ -22,18 +22,19 @@ Usage:
 import os
 
 import pytest
-from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
     VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -55,7 +56,7 @@ def _anon_context(browser):
 
 def _clear_polls():
     """Delete all polls, options, and votes to ensure clean state."""
-    from voting.models import PollVote, PollOption, Poll
+    from voting.models import Poll, PollOption, PollVote
 
     PollVote.objects.all().delete()
     PollOption.objects.all().delete()
@@ -154,7 +155,7 @@ class TestScenario1MainMemberBrowsesAndVotes:
         )
         opt1 = _create_option(poll, "LangChain Deep Dive")
         opt2 = _create_option(poll, "RAG Pipelines")
-        opt3 = _create_option(poll, "Fine-tuning Models")
+        _create_option(poll, "Fine-tuning Models")
 
         context = _auth_context(browser, "main@test.com")
         page = context.new_page()
@@ -276,7 +277,7 @@ class TestScenario2MainMemberUnvotes:
             f"{django_server}/vote/{poll.id}",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        page.content()
 
         # Then: "LangChain Deep Dive" shows as already voted
         vote_btn = page.locator(
@@ -347,7 +348,7 @@ class TestScenario3MaxVotesLimit:
         opt2 = _create_option(poll, "Option B")
         opt3 = _create_option(poll, "Option C")
         opt4 = _create_option(poll, "Option D")
-        opt5 = _create_option(poll, "Option E")
+        _create_option(poll, "Option E")
 
         # User has already voted on 3 options
         _create_vote(poll, opt1, user)
@@ -653,9 +654,9 @@ class TestScenario7PremiumMemberVotesOnCoursePoll:
             max_votes_per_user=2,
         )
         opt1 = _create_option(poll, "AI Agents")
-        opt2 = _create_option(poll, "MLOps")
-        opt3 = _create_option(poll, "Computer Vision")
-        opt4 = _create_option(poll, "NLP Fundamentals")
+        _create_option(poll, "MLOps")
+        _create_option(poll, "Computer Vision")
+        _create_option(poll, "NLP Fundamentals")
 
         context = _auth_context(browser, "premium@test.com")
         page = context.new_page()
@@ -736,7 +737,7 @@ class TestScenario8ClosedPollReadOnly:
         )
         opt1 = _create_option(poll, "Option Alpha")
         opt2 = _create_option(poll, "Option Beta")
-        opt3 = _create_option(poll, "Option Gamma")
+        _create_option(poll, "Option Gamma")
 
         # Add some votes
         _create_vote(poll, opt1, user)

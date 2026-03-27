@@ -2,7 +2,7 @@
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
-from django.test import TestCase, Client, override_settings
+from django.test import Client, TestCase
 
 from integrations.middleware import clear_redirect_cache
 from integrations.models import Redirect
@@ -159,7 +159,7 @@ class StudioRedirectListTest(TestCase):
 
     def test_non_staff_gets_403(self):
         client = Client()
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='user@test.com', password='testpass', is_staff=False,
         )
         client.login(email='user@test.com', password='testpass')

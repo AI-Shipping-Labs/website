@@ -1,7 +1,7 @@
 from django.urls import path
 
-from events.views.pages import events_list, event_detail
 from events.views.api import register_for_event, unregister_from_event
+from events.views.pages import event_detail, events_list
 
 urlpatterns = [
     path('events', events_list, name='events_list'),

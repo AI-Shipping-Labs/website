@@ -2,7 +2,6 @@ import uuid
 
 from django.db import models
 
-
 POSITION_CHOICES = [
     ('after_content', 'After Content'),
     ('sidebar', 'Sidebar'),

@@ -1,4 +1,5 @@
 from django.test import TestCase
+
 from payments.models import StripePaymentLink
 
 
@@ -23,7 +24,7 @@ class StripePaymentLinkModelTest(TestCase):
             )
 
     def test_different_period_allowed(self):
-        link = StripePaymentLink.objects.create(
+        StripePaymentLink.objects.create(
             tier_name='basic',
             billing_period='annual',
             url='https://buy.stripe.com/test789',

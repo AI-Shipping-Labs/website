@@ -5,7 +5,6 @@ and markdown video embed processing.
 
 import re
 
-
 # Patterns for detecting video sources
 YOUTUBE_PATTERNS = [
     re.compile(r'https?://(?:www\.)?youtube\.com/watch\?v=([a-zA-Z0-9_-]+)'),

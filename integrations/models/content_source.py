@@ -2,7 +2,6 @@ import uuid
 
 from django.db import models
 
-
 CONTENT_TYPE_CHOICES = [
     ('article', 'Article'),
     ('course', 'Course'),

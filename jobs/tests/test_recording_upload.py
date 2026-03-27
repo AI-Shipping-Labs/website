@@ -8,20 +8,17 @@ Covers:
 - Recording model: s3_url field, video_url property priority
 """
 
-import io
-import json
 import hashlib
 import hmac
+import json
 import time
-from datetime import date, timedelta
-from unittest.mock import MagicMock, patch, call
+from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from events.models import Event
-from integrations.models import WebhookLog
-
 
 ZOOM_TEST_SECRET = 'test-zoom-webhook-secret'
 ZOOM_TEST_CLIENT_ID = 'test-client-id'
@@ -219,7 +216,7 @@ class UploadRecordingToS3Test(TestCase):
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
 
-        result = upload_recording_to_s3(
+        upload_recording_to_s3(
             self.recording.id,
             'https://zoom.us/rec/download/abc',
         )
@@ -254,8 +251,9 @@ class UploadRecordingToS3Test(TestCase):
     @patch('integrations.services.zoom.requests.post')
     def test_download_failure_raises(self, mock_zoom_post, mock_requests_get):
         """Task raises on download failure to trigger django-q2 retry."""
-        from jobs.tasks.recording_upload import upload_recording_to_s3
         import requests as req
+
+        from jobs.tasks.recording_upload import upload_recording_to_s3
 
         # Mock Zoom token
         token_response = MagicMock()
@@ -283,6 +281,7 @@ class UploadRecordingToS3Test(TestCase):
     def test_s3_upload_failure_raises(self, mock_zoom_post, mock_requests_get, mock_boto_client):
         """Task raises on S3 upload failure to trigger django-q2 retry."""
         from botocore.exceptions import ClientError
+
         from jobs.tasks.recording_upload import upload_recording_to_s3
 
         # Mock Zoom token

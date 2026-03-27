@@ -12,7 +12,7 @@ Covers:
 """
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -219,7 +219,7 @@ class PricingPageFlagOffTest(TierSetupMixin, TestCase):
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=False)
     def test_logged_in_user_gets_prefilled_email(self):
-        user = User.objects.create_user(email="prefill@test.com", password="testpass123")
+        User.objects.create_user(email="prefill@test.com", password="testpass123")
         self.client.login(email="prefill@test.com", password="testpass123")
         response = self.client.get("/pricing")
         self.assertContains(response, "prefilled_email=prefill@test.com")
@@ -236,7 +236,7 @@ class PricingPageFlagOffTest(TierSetupMixin, TestCase):
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=False)
     def test_free_user_does_not_see_manage_subscription(self):
-        user = User.objects.create_user(email="free@test.com", password="testpass123")
+        User.objects.create_user(email="free@test.com", password="testpass123")
         self.client.login(email="free@test.com", password="testpass123")
         response = self.client.get("/pricing")
         self.assertFalse(response.context["is_paid_member"])
@@ -261,7 +261,7 @@ class PricingPageFlagOnTest(TierSetupMixin, TestCase):
     @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_no_prefilled_email_when_checkout_enabled(self):
         """When checkout is enabled, payment links are not used so no prefilled_email."""
-        user = User.objects.create_user(email="nopre@test.com", password="testpass123")
+        User.objects.create_user(email="nopre@test.com", password="testpass123")
         self.client.login(email="nopre@test.com", password="testpass123")
         response = self.client.get("/pricing")
         self.assertNotContains(response, "prefilled_email")

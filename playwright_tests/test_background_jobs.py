@@ -25,20 +25,20 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_staff_user as _create_staff_user_base,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_staff_user as _create_staff_user_base,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
-
 
 ADMIN_PASSWORD = "adminpass123"
 
@@ -64,7 +64,7 @@ def _login_admin_via_browser(page, base_url, email, password=ADMIN_PASSWORD):
 
 def _clear_django_q_tables():
     """Clear all Django-Q task tables (OrmQ, Success, Failure, Schedule)."""
-    from django_q.models import OrmQ, Success, Failure, Schedule
+    from django_q.models import Failure, OrmQ, Schedule, Success
 
     OrmQ.objects.all().delete()
     Success.objects.all().delete()
@@ -494,7 +494,7 @@ class TestScenario5StaffTriggersManualSync:
         _clear_content_sources()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
-        sources = _seed_content_sources()
+        _seed_content_sources()
 
         _login_admin_via_browser(page, django_server, "admin@test.com")
 

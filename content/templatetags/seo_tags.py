@@ -359,7 +359,7 @@ def og_tags(context, content=None):
         {% og_tags article %}
         {% og_tags %}  {# for homepage #}
     """
-    request = context.get('request')
+    context.get('request')
     site_url = _get_site_url()
 
     if content is None:
@@ -389,18 +389,18 @@ def og_tags(context, content=None):
         f'<meta property="og:type" content="{og_type}">',
         f'<meta property="og:site_name" content="{SITE_NAME}">',
         f'<meta property="og:image" content="{_escape_attr(effective_image_url)}">',
-        f'<meta property="og:image:width" content="1200">',
-        f'<meta property="og:image:height" content="630">',
+        '<meta property="og:image:width" content="1200">',
+        '<meta property="og:image:height" content="630">',
         f'<meta property="og:image:alt" content="{image_alt}">',
     ]
 
     # Twitter Card tags
     tags.extend([
-        f'<meta name="twitter:card" content="summary_large_image">',
+        '<meta name="twitter:card" content="summary_large_image">',
         f'<meta name="twitter:title" content="{_escape_attr(title)}">',
         f'<meta name="twitter:description" content="{_escape_attr(description)}">',
         f'<meta name="twitter:image" content="{_escape_attr(effective_image_url)}">',
-        f'<meta name="twitter:creator" content="@Al_Grigor">',
+        '<meta name="twitter:creator" content="@Al_Grigor">',
     ])
 
     return mark_safe('\n  '.join(tags))

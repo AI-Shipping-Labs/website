@@ -25,12 +25,12 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
     DEFAULT_PASSWORD,
+    VIEWPORT,
+)
+from playwright_tests.conftest import (
     create_session_for_user as _create_session_for_user,
 )
-
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 

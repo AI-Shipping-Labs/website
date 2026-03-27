@@ -1,12 +1,12 @@
 import json
 
-from django.http import JsonResponse, HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils.text import slugify
-from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.http import require_GET, require_POST
 
-from content.access import can_access, get_user_level
-from content.models import Project, Download
+from content.access import can_access
+from content.models import Download, Project
 
 
 @require_POST

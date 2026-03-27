@@ -21,15 +21,14 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
-    VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_session_for_user as _create_session_for_user,
     auth_context as _auth_context,
 )
-
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -41,8 +40,9 @@ def _ensure_aihero_course():
     Closes the database connection afterward to release SQLite locks
     so the server thread can read the newly created data.
     """
-    from content.models import Course, Module, Unit
     from django.db import connection
+
+    from content.models import Course, Module, Unit
 
     if Course.objects.filter(slug="aihero").exists():
         connection.close()
@@ -365,7 +365,7 @@ class TestScenario5FreeMemberTracksProgress:
         user = _create_user("free-prog@test.com", tier_slug="free")
 
         # Mark Day 1 and Day 2 as completed
-        from content.models import Unit, Module, Course
+        from content.models import Course, Module, Unit
         course = Course.objects.get(slug="aihero")
         module = Module.objects.get(course=course, title="7-Day AI Agents")
         day1 = Unit.objects.get(module=module, sort_order=0)

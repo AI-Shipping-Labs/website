@@ -12,7 +12,7 @@ Verifies:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
 from content.models import Course, CourseAccess
 
@@ -332,7 +332,7 @@ class StudioCourseAccessPermissionTest(TestCase):
         self.assertIn('/accounts/login/', response.url)
 
     def test_non_staff_access_list_forbidden(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')
@@ -340,7 +340,7 @@ class StudioCourseAccessPermissionTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_non_staff_grant_forbidden(self):
-        user = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')
@@ -361,7 +361,7 @@ class StudioCourseAccessPermissionTest(TestCase):
             user=target, course=self.course,
             access_type='granted', granted_by=staff,
         )
-        regular = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')

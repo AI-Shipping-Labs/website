@@ -7,12 +7,12 @@ Verifies that:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.models import Article, Course, Download, Project
+from content.models import Article, Course, Project
+from email_app.models import NewsletterSubscriber
 from events.models import Event
-from email_app.models import NewsletterSubscriber, EmailCampaign
 
 User = get_user_model()
 

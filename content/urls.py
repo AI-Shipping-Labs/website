@@ -1,29 +1,46 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from content.views.home import home
-from content.views.pages import (
-    about, activities, blog_list, blog_detail,
-    recordings_list, recording_detail,
-    projects_list, project_detail,
-    collection_list,
-    tutorials_list, tutorial_detail,
-    downloads_list,
-)
-from content.views.api import submit_project, download_file
+
 from content.views.admin_api import reorder_modules, reorder_units
-from content.views.tags import tags_index, tags_detail
+from content.views.api import download_file, submit_project
 from content.views.courses import (
-    courses_list, course_detail, course_unit_detail,
-    api_courses_list, api_course_detail,
-    api_course_unit_detail, api_course_unit_complete,
-    api_cohort_enroll, api_cohort_unenroll,
+    api_cohort_enroll,
+    api_cohort_unenroll,
+    api_course_detail,
     api_course_purchase,
+    api_course_unit_complete,
+    api_course_unit_detail,
+    api_courses_list,
+    course_detail,
+    course_unit_detail,
+    courses_list,
 )
-from content.views.interview import interview_hub, interview_detail
+from content.views.home import home
+from content.views.interview import interview_detail, interview_hub
+from content.views.pages import (
+    about,
+    activities,
+    blog_detail,
+    blog_list,
+    collection_list,
+    downloads_list,
+    project_detail,
+    projects_list,
+    recording_detail,
+    recordings_list,
+    tutorial_detail,
+    tutorials_list,
+)
 from content.views.peer_review import (
-    project_submit, review_dashboard, review_form, certificate_page,
-    api_submit_project, api_review_dashboard, api_submit_review,
+    api_review_dashboard,
+    api_submit_project,
+    api_submit_review,
+    certificate_page,
+    project_submit,
+    review_dashboard,
+    review_form,
 )
+from content.views.tags import tags_detail, tags_index
 
 urlpatterns = [
     path('', home, name='home'),

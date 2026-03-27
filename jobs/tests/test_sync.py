@@ -6,10 +6,8 @@ which is ideal for testing that the full pipeline works.
 """
 
 from django.test import TestCase, override_settings
-
-from django_q.tasks import async_task as q_async_task
 from django_q.models import Task
-
+from django_q.tasks import async_task as q_async_task
 
 # Override Q_CLUSTER to use sync mode for these tests
 Q_CLUSTER_SYNC = {

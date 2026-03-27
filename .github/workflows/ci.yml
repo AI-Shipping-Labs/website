@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
       - name: Run migrations
         run: uv run python manage.py migrate
 

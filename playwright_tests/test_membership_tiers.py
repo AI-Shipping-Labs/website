@@ -14,13 +14,9 @@ Usage:
     uv run pytest playwright_tests/test_membership_tiers.py -v --timeout=30
 """
 
-import re
 
 import pytest
 from django.conf import settings
-
-from playwright_tests.conftest import DJANGO_BASE_URL
-
 
 VIEWPORT = {"width": 1280, "height": 720}
 

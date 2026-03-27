@@ -2,8 +2,7 @@ from django import forms
 from django.contrib import admin
 
 from content.admin.widgets import TimestampEditorWidget
-from content.models import Course, Module, Unit, UserCourseProgress, Cohort, CourseAccess
-
+from content.models import Cohort, Course, CourseAccess, Module, Unit, UserCourseProgress
 
 # ---------------------------------------------------------------------------
 # Unit form with all fields including timestamps widget

@@ -12,7 +12,6 @@ import logging
 
 import boto3
 import requests
-from botocore.exceptions import ClientError
 from django.conf import settings
 
 logger = logging.getLogger(__name__)

@@ -8,7 +8,6 @@ from django.core.management.base import BaseCommand
 
 from integrations.models import ContentSource
 
-
 DEFAULT_SOURCES = [
     {
         'repo_name': 'AI-Shipping-Labs/content',

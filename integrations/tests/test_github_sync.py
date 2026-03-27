@@ -28,7 +28,13 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from content.models import (
-    Article, Course, CuratedLink, Download, Module, Project, Unit,
+    Article,
+    Course,
+    CuratedLink,
+    Download,
+    Module,
+    Project,
+    Unit,
 )
 from events.models import Event
 from integrations.models import ContentSource, SyncLog
@@ -194,7 +200,7 @@ class SyncLogModelTest(TestCase):
         self.assertEqual(SyncLog.objects.count(), 0)
 
     def test_sync_log_ordering(self):
-        log1 = SyncLog.objects.create(source=self.source, status='success')
+        SyncLog.objects.create(source=self.source, status='success')
         log2 = SyncLog.objects.create(source=self.source, status='failed')
         logs = list(SyncLog.objects.all())
         # Most recent first
@@ -348,12 +354,12 @@ class FindContentSourceTest(TestCase):
         self.assertEqual(found.first().pk, source.pk)
 
     def test_find_multiple_sources_for_monorepo(self):
-        s1 = ContentSource.objects.create(
+        ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             content_type='article',
             content_path='blog',
         )
-        s2 = ContentSource.objects.create(
+        ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             content_type='course',
             content_path='courses',
@@ -632,7 +638,7 @@ class SyncArticlesTest(TestCase):
             source_repo=None,
             published=True,
         )
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_content_source(self.source, repo_dir=self.temp_dir)
         article = Article.objects.get(slug='admin-article')
         self.assertTrue(article.published)
 
@@ -845,7 +851,7 @@ class SyncCoursesTest(TestCase):
             source_repo='AI-Shipping-Labs/courses',
             status='published',
         )
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_content_source(self.source, repo_dir=self.temp_dir)
         course = Course.objects.get(slug='stale-course')
         self.assertEqual(course.status, 'draft')
 
@@ -1057,7 +1063,7 @@ class SyncResourcesTest(TestCase):
         )
         # Create an empty recordings directory so the sync runs the events path
         os.makedirs(os.path.join(self.temp_dir, 'recordings'))
-        sync_log = sync_content_source(event_source, repo_dir=self.temp_dir)
+        sync_content_source(event_source, repo_dir=self.temp_dir)
         recording = Event.objects.get(slug='stale-rec')
         self.assertFalse(recording.published)
 
@@ -1325,45 +1331,51 @@ class SeedContentSourcesCommandTest(TestCase):
     """Test the seed_content_sources management command."""
 
     def test_seeds_four_sources(self):
-        from django.core.management import call_command
         from io import StringIO
+
+        from django.core.management import call_command
         out = StringIO()
         call_command('seed_content_sources', stdout=out)
         self.assertEqual(ContentSource.objects.count(), 4)
 
     def test_seed_is_idempotent(self):
-        from django.core.management import call_command
         from io import StringIO
+
+        from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         call_command('seed_content_sources', stdout=StringIO())
         self.assertEqual(ContentSource.objects.count(), 4)
 
     def test_seed_creates_expected_repos(self):
-        from django.core.management import call_command
         from io import StringIO
+
+        from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         repos = set(ContentSource.objects.values_list('repo_name', flat=True))
         expected = {'AI-Shipping-Labs/content'}
         self.assertEqual(repos, expected)
 
     def test_all_sources_are_private(self):
-        from django.core.management import call_command
         from io import StringIO
+
+        from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         self.assertTrue(
             all(s.is_private for s in ContentSource.objects.all())
         )
 
     def test_content_types_correct(self):
-        from django.core.management import call_command
         from io import StringIO
+
+        from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         types = set(ContentSource.objects.values_list('content_type', flat=True))
         self.assertEqual(types, {'article', 'course', 'project', 'interview_question'})
 
     def test_content_paths_correct(self):
-        from django.core.management import call_command
         from io import StringIO
+
+        from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         paths = dict(
             ContentSource.objects.values_list('content_type', 'content_path')

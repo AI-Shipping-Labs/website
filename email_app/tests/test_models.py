@@ -1,4 +1,5 @@
 from django.test import TestCase
+
 from email_app.models import NewsletterSubscriber
 
 

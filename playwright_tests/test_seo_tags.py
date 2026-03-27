@@ -23,11 +23,8 @@ import os
 
 import pytest
 
-from playwright_tests.conftest import DJANGO_BASE_URL
-
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
-
 
 VIEWPORT = {"width": 1280, "height": 720}
 
@@ -39,7 +36,13 @@ VIEWPORT = {"width": 1280, "height": 720}
 def _clear_all_content():
     """Delete all content to ensure a clean state for each test."""
     from content.models import (
-        Article, Recording, Project, CuratedLink, Download, Course, TagRule,
+        Article,
+        Course,
+        CuratedLink,
+        Download,
+        Project,
+        Recording,
+        TagRule,
     )
     from events.models import Event
 

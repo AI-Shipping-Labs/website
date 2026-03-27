@@ -4,7 +4,6 @@ from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
 
-
 PROJECT_STATUS_CHOICES = [
     ('pending_review', 'Pending Review'),
     ('published', 'Published'),

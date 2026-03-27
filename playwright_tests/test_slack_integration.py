@@ -20,7 +20,6 @@ from django.conf import settings
 
 from notifications.services.slack_announcements import post_slack_announcement
 
-
 SLACK_TEST_CHANNEL = "C0AHN84QNP3"
 
 # Skip the entire module if SLACK_BOT_TOKEN is not available in env

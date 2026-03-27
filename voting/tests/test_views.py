@@ -2,11 +2,10 @@
 
 from datetime import timedelta
 
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from accounts.models import User
-from content.access import LEVEL_MAIN, LEVEL_PREMIUM
 from tests.fixtures import TierSetupMixin
 from voting.models import Poll, PollOption, PollVote
 
@@ -65,7 +64,7 @@ class PollListViewTest(TierSetupMixin, TestCase):
 
     def test_expired_poll_not_shown(self):
         """Polls past their closes_at are not shown in list."""
-        expired = Poll.objects.create(
+        Poll.objects.create(
             title='Expired Poll',
             poll_type='topic',
             closes_at=timezone.now() - timedelta(hours=1),

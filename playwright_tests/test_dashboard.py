@@ -25,16 +25,20 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import (
-    DJANGO_BASE_URL,
     VIEWPORT,
-    DEFAULT_PASSWORD,
-    ensure_tiers as _ensure_tiers,
-    create_user as _create_user,
-    create_session_for_user as _create_session_for_user,
+)
+from playwright_tests.conftest import (
     auth_context as _auth_context,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+from playwright_tests.conftest import (
     ensure_site_config_tiers as _ensure_site_config_tiers,
 )
-
+from playwright_tests.conftest import (
+    ensure_tiers as _ensure_tiers,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -49,12 +53,16 @@ def _anon_context(browser):
 def _clear_dashboard_data():
     """Delete data that affects the dashboard to ensure clean state."""
     from content.models import (
-        Article, Recording, Course, Module, Unit,
+        Article,
+        Course,
+        Module,
+        Recording,
+        Unit,
         UserCourseProgress,
     )
     from events.models import Event, EventRegistration
-    from voting.models import PollVote, PollOption, Poll
     from notifications.models import Notification
+    from voting.models import Poll, PollOption, PollVote
 
     Notification.objects.all().delete()
     PollVote.objects.all().delete()
@@ -148,8 +156,9 @@ def _create_course(
 
 def _create_module(course, title, sort_order=0):
     """Create a Module within a course."""
-    from content.models import Module
     from django.utils.text import slugify
+
+    from content.models import Module
 
     module = Module(
         course=course,
@@ -164,8 +173,9 @@ def _create_module(course, title, sort_order=0):
 
 def _create_unit(module, title, sort_order=0):
     """Create a Unit within a module."""
-    from content.models import Unit
     from django.utils.text import slugify
+
+    from content.models import Unit
 
     unit = Unit(
         module=module,
@@ -725,21 +735,21 @@ class TestScenario7GatedContentInRecentContent:
         _create_user("free@test.com", tier_slug="free")
 
         # Create 3 open articles
-        open1 = _create_article(
+        _create_article(
             title="Getting Started with Python",
             slug="getting-started-python",
             description="A beginner guide to Python.",
             required_level=0,
             date=datetime.date(2026, 2, 25),
         )
-        open2 = _create_article(
+        _create_article(
             title="Intro to Machine Learning",
             slug="intro-ml",
             description="Machine learning basics.",
             required_level=0,
             date=datetime.date(2026, 2, 24),
         )
-        open3 = _create_article(
+        _create_article(
             title="Data Cleaning Tips",
             slug="data-cleaning-tips",
             description="Tips for cleaning datasets.",
@@ -748,14 +758,14 @@ class TestScenario7GatedContentInRecentContent:
         )
 
         # Create 2 gated articles (Basic)
-        gated1 = _create_article(
+        _create_article(
             title="Advanced RAG Techniques",
             slug="advanced-rag-techniques",
             description="Deep dive into RAG patterns.",
             required_level=10,
             date=datetime.date(2026, 2, 26),
         )
-        gated2 = _create_article(
+        _create_article(
             title="Fine-tuning LLMs Guide",
             slug="fine-tuning-llms",
             description="How to fine-tune language models.",
@@ -770,7 +780,7 @@ class TestScenario7GatedContentInRecentContent:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        page.content()
 
         # Then: Recent Content shows only open articles
         # The dashboard "Recent Content" section filters by
@@ -803,7 +813,7 @@ class TestScenario7GatedContentInRecentContent:
             f"{django_server}/blog",
             wait_until="domcontentloaded",
         )
-        blog_body = page.content()
+        page.content()
 
         # Gated articles have lock icons
         gated_card = page.locator(
@@ -961,7 +971,7 @@ class TestScenario9MemberReadsNotificationFromDashboard:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        page.content()
 
         # Then: Notifications section shows the 3 notifications
         notif_section = page.locator(
@@ -1063,7 +1073,7 @@ class TestScenario10CompletedCourseNotInContinueLearning:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        page.content()
 
         # Then: Continue Learning shows Python Fundamentals
         learning_section = page.locator(

@@ -28,7 +28,6 @@ from payments.services import (
     record_processed_event,
 )
 
-
 WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
 
@@ -95,7 +94,7 @@ class WebhookSignatureValidationTest(TestCase):
         """Request with a valid signature and known event type returns 200."""
         # Build a valid event that will be processed
         user = User.objects.create_user(email="sig@test.com")
-        tier = Tier.objects.get(slug="basic")
+        Tier.objects.get(slug="basic")
 
         event_data = _make_event_payload(
             "evt_sig_test_1",
@@ -371,7 +370,6 @@ class SubscriptionUpdatedHandlerTest(TestCase):
 
     def test_cancel_at_period_end_saves_billing_period_end(self):
         """billing_period_end is saved when cancel_at_period_end is True."""
-        from django.utils import timezone as django_tz
 
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="cancel_billing@test.com")
@@ -573,7 +571,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
     @patch("payments.services.send_mail")
     def test_lookup_by_email_when_no_customer_id(self, mock_send_mail):
         """User is found by email when stripe_customer_id doesn't match."""
-        user = User.objects.create_user(email="byemail@test.com")
+        User.objects.create_user(email="byemail@test.com")
 
         invoice_data = {
             "customer": "cus_unknown",

@@ -2,7 +2,6 @@ from django.db import models
 
 from content.access import VISIBILITY_CHOICES
 
-
 FILE_TYPE_CHOICES = [
     ('pdf', 'PDF'),
     ('zip', 'ZIP'),

@@ -15,10 +15,10 @@ Covers:
 - Template: Error status span uses red text class
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from events.models import Event
@@ -181,7 +181,7 @@ class EventCreateZoomAccessControlTest(TestCase):
 
     def test_non_staff_user_redirected_to_login(self):
         """A non-staff authenticated user gets redirected (via staff_required decorator)."""
-        regular_user = User.objects.create_user(
+        User.objects.create_user(
             email='regular@test.com', password='testpass', is_staff=False,
         )
         self.client.login(email='regular@test.com', password='testpass')

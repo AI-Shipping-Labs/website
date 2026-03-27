@@ -11,18 +11,16 @@ Tests cover:
 - Email verification banner on account page
 """
 
-import json
 import datetime
+import json
 from unittest.mock import patch
 
 import jwt
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from accounts.models import User
-
 
 JWT_ALGORITHM = "HS256"
 

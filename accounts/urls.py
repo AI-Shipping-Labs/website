@@ -1,21 +1,21 @@
-from django.urls import path, include
+from django.urls import include, path
 
-from accounts.views.auth import (
-    login_view,
-    logout_view,
-    register_view,
-    register_api,
-    login_api,
-    verify_email_api,
-    password_reset_request_api,
-    password_reset_api,
-    change_password_api,
-)
 from accounts.views.account import (
     account_view,
     cancel_subscription_view,
     email_preferences_view,
     theme_preference_view,
+)
+from accounts.views.auth import (
+    change_password_api,
+    login_api,
+    login_view,
+    logout_view,
+    password_reset_api,
+    password_reset_request_api,
+    register_api,
+    register_view,
+    verify_email_api,
 )
 
 urlpatterns = [

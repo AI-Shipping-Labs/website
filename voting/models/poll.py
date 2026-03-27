@@ -6,7 +6,6 @@ from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
 
-
 POLL_TYPE_CHOICES = [
     ('topic', 'Topic'),
     ('course', 'Mini-course'),

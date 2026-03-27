@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from content.models import ProjectSubmission, PeerReview, CourseCertificate
+from content.models import CourseCertificate, PeerReview, ProjectSubmission
 
 
 @admin.register(ProjectSubmission)

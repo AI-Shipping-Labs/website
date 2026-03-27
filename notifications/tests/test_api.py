@@ -3,7 +3,7 @@
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 
 from notifications.models import Notification
 

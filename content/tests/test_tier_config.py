@@ -1,8 +1,7 @@
 from django.test import TestCase
 
 from content.models import SiteConfig
-from content.tier_config import get_tiers, get_tiers_with_features, get_activities
-
+from content.tier_config import get_activities, get_tiers, get_tiers_with_features
 
 # Minimal valid tier data for tests
 SAMPLE_TIERS_DATA = [
@@ -251,8 +250,9 @@ class ProductionYamlTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Load the tiers.yaml fixture into the DB."""
-        import yaml
         from pathlib import Path
+
+        import yaml
         fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
         with open(fixture_path) as f:
             tiers_data = yaml.safe_load(f)
@@ -342,8 +342,9 @@ class ActivitiesViewIntegrationTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        import yaml
         from pathlib import Path
+
+        import yaml
         fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
         with open(fixture_path) as f:
             tiers_data = yaml.safe_load(f)
@@ -378,8 +379,9 @@ class HomepageTiersIntegrationTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        import yaml
         from pathlib import Path
+
+        import yaml
         fixture_path = Path(__file__).parent / 'fixtures' / 'tiers.yaml'
         with open(fixture_path) as f:
             tiers_data = yaml.safe_load(f)

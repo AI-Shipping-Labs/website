@@ -2,14 +2,17 @@
 
 import json
 
-from django.http import JsonResponse, Http404, HttpResponseForbidden
-from django.shortcuts import render, get_object_or_404, redirect
+from django.http import Http404, HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from content.access import can_access
 from content.models import (
-    Course, ProjectSubmission, PeerReview, CourseCertificate,
+    Course,
+    CourseCertificate,
+    PeerReview,
+    ProjectSubmission,
 )
 from content.models.cohort import CohortEnrollment
 from content.services.peer_review_service import PeerReviewService

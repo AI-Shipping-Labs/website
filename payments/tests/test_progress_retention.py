@@ -19,12 +19,16 @@ Covers:
 from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
+from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import (
-    Course, Module, Unit, UserCourseProgress, Project,
+    Course,
+    Module,
+    Project,
+    Unit,
+    UserCourseProgress,
 )
 from events.models import Event, EventRegistration
 from payments.services import handle_checkout_completed, handle_subscription_deleted
@@ -639,7 +643,7 @@ class DowngradeTierProgressFilteringTest(TierSetupMixin, TestCase):
             'metadata': {'tier_slug': 'basic', 'user_id': str(self.user.pk)},
         })
         # Navigate directly to a Premium course unit page
-        url = f'/courses/premium-deep/p-module-1/prem-unit-1'
+        url = '/courses/premium-deep/p-module-1/prem-unit-1'
         response = self.client_http.get(url)
         # Should return 403 with gating overlay
         self.assertEqual(response.status_code, 403)

@@ -12,9 +12,9 @@ from datetime import date
 
 from django.test import TestCase
 
-from content.utils.linkify import linkify_urls
 from content.models.article import render_markdown as article_render_markdown
 from content.models.course import render_markdown as course_render_markdown
+from content.utils.linkify import linkify_urls
 
 
 class LinkifyUrlsTest(TestCase):

@@ -17,8 +17,9 @@ from django.test import TestCase, Client
 from django.utils import timezone
 
 from content.models import (
-    Article, Recording, Project, Tutorial, CuratedLink, Download, Course, TagRule,
+    Article, Project, Tutorial, CuratedLink, Download, Course, TagRule,
 )
+from events.models import Event
 from content.utils.tags import normalize_tag, normalize_tags
 from events.models import Event
 
@@ -118,8 +119,8 @@ class RecordingTagNormalizationTest(TestCase):
     """Test that Recording normalizes tags on save."""
 
     def test_tags_normalized_on_save(self):
-        recording = Recording.objects.create(
-            title='Test', slug='test-rec-norm', date=date(2025, 1, 1),
+        recording = Event.objects.create(
+            title='Test', slug='test-rec-norm', start_datetime=timezone.make_aware(timezone.datetime(2025, 1, 1, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['Data Science', 'AI Engineering'],
             published=True,
         )
@@ -216,8 +217,8 @@ class TagsIndexViewTest(TestCase):
             title='A2', slug='a2', date=date(2025, 1, 2),
             tags=['python'], published=True,
         )
-        Recording.objects.create(
-            title='R1', slug='r1', date=date(2025, 1, 1),
+        Event.objects.create(
+            title='R1', slug='r1', start_datetime=timezone.make_aware(timezone.datetime(2025, 1, 1, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['ai', 'workshop'], published=True,
         )
 
@@ -253,7 +254,7 @@ class TagsIndexViewTest(TestCase):
 
     def test_no_tags_shows_empty_message(self):
         Article.objects.all().delete()
-        Recording.objects.all().delete()
+        Event.objects.all().delete()
         response = self.client.get('/tags')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'No tags yet')
@@ -272,8 +273,8 @@ class TagsDetailViewTest(TestCase):
             tags=['python', 'tutorial'], published=True,
             description='Python article description',
         )
-        self.recording = Recording.objects.create(
-            title='Python Workshop', slug='python-ws', date=date(2025, 6, 10),
+        self.recording = Event.objects.create(
+            title='Python Workshop', slug='python-ws', start_datetime=timezone.make_aware(timezone.datetime(2025, 6, 10, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['python', 'workshop'], published=True,
             description='Workshop description',
         )
@@ -299,12 +300,18 @@ class TagsDetailViewTest(TestCase):
     def test_shows_content_type_badges(self):
         response = self.client.get('/tags/python')
         self.assertContains(response, 'Article')
-        self.assertContains(response, 'Recording')
+        self.assertContains(response, 'Event')
 
     def test_results_sorted_by_date_descending(self):
+        import datetime as dt
         response = self.client.get('/tags/python')
         results = response.context['results']
-        dates = [r['date'] for r in results]
+        # Normalize dates for comparison (mix of date and datetime)
+        def _norm(val):
+            if isinstance(val, dt.datetime):
+                return val
+            return dt.datetime.combine(val, dt.time.min, tzinfo=dt.timezone.utc)
+        dates = [_norm(r['date']) for r in results]
         self.assertEqual(dates, sorted(dates, reverse=True))
 
     def test_shows_result_count(self):
@@ -386,12 +393,12 @@ class MultiTagFilteringRecordingsTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        Recording.objects.create(
-            title='Both R', slug='both-r', date=date(2025, 1, 1),
+        Event.objects.create(
+            title='Both R', slug='both-r', start_datetime=timezone.make_aware(timezone.datetime(2025, 1, 1, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['python', 'workshop'], published=True,
         )
-        Recording.objects.create(
-            title='Python R', slug='python-r', date=date(2025, 1, 2),
+        Event.objects.create(
+            title='Python R', slug='python-r', start_datetime=timezone.make_aware(timezone.datetime(2025, 1, 2, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['python'], published=True,
         )
 
@@ -701,9 +708,9 @@ class TagRuleInjectionRecordingTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='AI Recording', slug='ai-recording',
-            date=date(2025, 6, 15),
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 6, 15, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['ai-engineer'],
             published=True,
         )

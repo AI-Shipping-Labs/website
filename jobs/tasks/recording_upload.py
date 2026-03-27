@@ -4,7 +4,7 @@ Background task for downloading Zoom recordings and uploading to S3.
 Flow:
 1. Download recording file from Zoom (authenticated with access token)
 2. Upload to S3 at recordings/{year}/{event-slug}.mp4
-3. Store S3 URL on Recording record
+3. Store S3 URL on Event record
 """
 
 import io
@@ -18,11 +18,11 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def upload_recording_to_s3(recording_id, download_url):
+def upload_recording_to_s3(event_id, download_url):
     """Download a recording from Zoom and upload it to S3.
 
     Args:
-        recording_id: ID of the Recording model instance.
+        event_id: ID of the Event model instance.
         download_url: Zoom download URL for the recording file.
 
     Returns:
@@ -31,31 +31,31 @@ def upload_recording_to_s3(recording_id, download_url):
     Raises:
         Exception: If download or upload fails (will trigger retry via django-q2).
     """
-    from content.models import Recording
+    from events.models import Event
 
     try:
-        recording = Recording.objects.get(id=recording_id)
-    except Recording.DoesNotExist:
-        logger.error('Recording %s not found, skipping upload', recording_id)
-        return {'status': 'error', 'message': f'Recording {recording_id} not found'}
+        event = Event.objects.get(id=event_id)
+    except Event.DoesNotExist:
+        logger.error('Event %s not found, skipping upload', event_id)
+        return {'status': 'error', 'message': f'Event {event_id} not found'}
 
     bucket = settings.AWS_S3_RECORDINGS_BUCKET
     region = settings.AWS_S3_RECORDINGS_REGION
 
     if not bucket:
         logger.error(
-            'AWS_S3_RECORDINGS_BUCKET not configured, skipping upload for recording %s',
-            recording_id,
+            'AWS_S3_RECORDINGS_BUCKET not configured, skipping upload for event %s',
+            event_id,
         )
         return {'status': 'error', 'message': 'S3 bucket not configured'}
 
     # Build S3 key: recordings/{year}/{event-slug}.mp4
-    year = recording.date.year
-    s3_key = f'recordings/{year}/{recording.slug}.mp4'
+    year = event.start_datetime.year
+    s3_key = f'recordings/{year}/{event.slug}.mp4'
 
     logger.info(
-        'Starting download of recording "%s" from Zoom: %s',
-        recording.title, download_url,
+        'Starting download of recording for event "%s" from Zoom: %s',
+        event.title, download_url,
     )
 
     # Download from Zoom with access token
@@ -63,23 +63,23 @@ def upload_recording_to_s3(recording_id, download_url):
     file_data = _download_from_zoom(zoom_download_url)
 
     logger.info(
-        'Downloaded %d bytes for recording "%s", uploading to S3 bucket %s at %s',
-        len(file_data), recording.title, bucket, s3_key,
+        'Downloaded %d bytes for event "%s", uploading to S3 bucket %s at %s',
+        len(file_data), event.title, bucket, s3_key,
     )
 
     # Upload to S3
     s3_url = _upload_to_s3(file_data, bucket, s3_key, region)
 
-    # Store S3 URL on recording
-    recording.s3_url = s3_url
-    recording.save(update_fields=['s3_url', 'updated_at'])
+    # Store S3 URL on event
+    event.recording_s3_url = s3_url
+    event.save(update_fields=['recording_s3_url', 'updated_at'])
 
     logger.info(
-        'Successfully uploaded recording "%s" to S3: %s',
-        recording.title, s3_url,
+        'Successfully uploaded recording for event "%s" to S3: %s',
+        event.title, s3_url,
     )
 
-    return {'status': 'ok', 's3_url': s3_url, 'recording_id': recording_id}
+    return {'status': 'ok', 's3_url': s3_url, 'event_id': event_id}
 
 
 def _build_authenticated_download_url(download_url):

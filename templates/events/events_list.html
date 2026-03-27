@@ -139,8 +139,8 @@
                   <span class="text-sm text-muted-foreground">{{ event.short_date }}</span>
                 </div>
                 <div class="flex items-center gap-3">
-                  {% if event.recording %}
-                  <a href="/event-recordings/{{ event.recording.slug }}" class="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/30 transition-colors" onclick="event.stopPropagation();">
+                  {% if event.has_recording %}
+                  <a href="/event-recordings/{{ event.slug }}" class="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/30 transition-colors" onclick="event.stopPropagation();">
                     <i data-lucide="play" class="h-3 w-3"></i>
                     Watch recording
                   </a>

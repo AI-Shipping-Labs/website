@@ -40,6 +40,12 @@ DEFAULT_SOURCES = [
         'content_path': 'interview-questions',
         'is_private': True,
     },
+    {
+        'repo_name': 'AI-Shipping-Labs/content',
+        'content_type': 'event',
+        'content_path': 'events',
+        'is_private': True,
+    },
 ]
 
 

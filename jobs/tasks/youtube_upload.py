@@ -4,7 +4,7 @@ Background task for downloading a recording from S3 and uploading to YouTube.
 Flow:
 1. Download recording file from S3
 2. Upload to YouTube via the YouTube Data API v3 (resumable upload)
-3. Store YouTube URL on the Recording record
+3. Store YouTube URL on the Event record
 """
 
 import logging
@@ -18,11 +18,11 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def upload_recording_to_youtube(recording_id):
+def upload_recording_to_youtube(event_id):
     """Download a recording from S3 and upload it to YouTube.
 
     Args:
-        recording_id: ID of the Recording model instance.
+        event_id: ID of the Event model instance.
 
     Returns:
         dict with status and youtube_url on success.
@@ -30,40 +30,40 @@ def upload_recording_to_youtube(recording_id):
     Raises:
         Exception: If download or upload fails (will trigger retry via django-q2).
     """
-    from content.models import Recording
+    from events.models import Event
 
     try:
-        recording = Recording.objects.get(id=recording_id)
-    except Recording.DoesNotExist:
-        logger.error('Recording %s not found, skipping YouTube upload', recording_id)
-        return {'status': 'error', 'message': f'Recording {recording_id} not found'}
+        event = Event.objects.get(id=event_id)
+    except Event.DoesNotExist:
+        logger.error('Event %s not found, skipping YouTube upload', event_id)
+        return {'status': 'error', 'message': f'Event {event_id} not found'}
 
-    if not recording.s3_url:
+    if not event.recording_s3_url:
         logger.error(
-            'Recording %s has no S3 URL, skipping YouTube upload',
-            recording_id,
+            'Event %s has no S3 URL, skipping YouTube upload',
+            event_id,
         )
-        return {'status': 'error', 'message': 'Recording has no S3 URL'}
+        return {'status': 'error', 'message': 'Event has no S3 URL'}
 
-    if recording.youtube_url:
+    if event.recording_url:
         logger.warning(
-            'Recording %s already has a YouTube URL: %s',
-            recording_id, recording.youtube_url,
+            'Event %s already has a recording URL: %s',
+            event_id, event.recording_url,
         )
-        return {'status': 'skipped', 'message': 'Recording already has YouTube URL'}
+        return {'status': 'skipped', 'message': 'Event already has recording URL'}
 
-    # Build video metadata from recording and linked event
-    title = recording.title
-    description = _build_description(recording)
-    tags = recording.tags if recording.tags else []
+    # Build video metadata from event
+    title = event.title
+    description = _build_description(event)
+    tags = event.tags if event.tags else []
 
     logger.info(
-        'Starting YouTube upload for recording "%s" (id=%s)',
-        recording.title, recording_id,
+        'Starting YouTube upload for event "%s" (id=%s)',
+        event.title, event_id,
     )
 
     # Download from S3 to a temp file
-    temp_path = _download_from_s3(recording)
+    temp_path = _download_from_s3(event)
 
     try:
         # Upload to YouTube
@@ -77,20 +77,20 @@ def upload_recording_to_youtube(recording_id):
             privacy='unlisted',
         )
 
-        # Store YouTube URL on recording
-        recording.youtube_url = result['youtube_url']
-        recording.save(update_fields=['youtube_url', 'updated_at'])
+        # Store YouTube URL on event
+        event.recording_url = result['youtube_url']
+        event.save(update_fields=['recording_url', 'updated_at'])
 
         logger.info(
-            'Successfully uploaded recording "%s" to YouTube: %s',
-            recording.title, result['youtube_url'],
+            'Successfully uploaded event "%s" to YouTube: %s',
+            event.title, result['youtube_url'],
         )
 
         return {
             'status': 'ok',
             'youtube_url': result['youtube_url'],
             'video_id': result['video_id'],
-            'recording_id': recording_id,
+            'event_id': event_id,
         }
     finally:
         # Clean up temp file
@@ -99,31 +99,26 @@ def upload_recording_to_youtube(recording_id):
             logger.debug('Cleaned up temp file: %s', temp_path)
 
 
-def _build_description(recording):
-    """Build a YouTube video description from the recording and event metadata.
+def _build_description(event):
+    """Build a YouTube video description from the event metadata.
 
     Args:
-        recording: Recording model instance.
+        event: Event model instance.
 
     Returns:
         str: Video description text.
     """
     parts = []
 
-    if recording.description:
-        parts.append(recording.description)
+    if event.description:
+        parts.append(event.description)
 
-    if recording.event:
-        event = recording.event
-        if event.description and event.description != recording.description:
-            parts.append(event.description)
+    parts.append(f'Date: {event.formatted_date()}')
 
-    parts.append(f'Date: {recording.formatted_date()}')
-
-    if recording.learning_objectives:
+    if event.learning_objectives:
         parts.append('')
         parts.append('What you will learn:')
-        for obj in recording.learning_objectives:
+        for obj in event.learning_objectives:
             parts.append(f'- {obj}')
 
     parts.append('')
@@ -132,11 +127,11 @@ def _build_description(recording):
     return '\n'.join(parts)
 
 
-def _download_from_s3(recording):
+def _download_from_s3(event):
     """Download the recording file from S3 to a temporary file.
 
     Args:
-        recording: Recording model instance with s3_url set.
+        event: Event model instance with recording_s3_url set.
 
     Returns:
         str: Path to the temporary file.
@@ -151,8 +146,7 @@ def _download_from_s3(recording):
         raise ValueError('AWS_S3_RECORDINGS_BUCKET not configured')
 
     # Extract S3 key from the URL
-    # URL format: https://{bucket}.s3.{region}.amazonaws.com/{key}
-    s3_key = _extract_s3_key(recording.s3_url, bucket, region)
+    s3_key = _extract_s3_key(event.recording_s3_url, bucket, region)
 
     s3_client = boto3.client(
         's3',
@@ -174,8 +168,8 @@ def _download_from_s3(recording):
 
     file_size = os.path.getsize(temp_path)
     logger.info(
-        'Downloaded %d bytes from S3 for recording "%s"',
-        file_size, recording.title,
+        'Downloaded %d bytes from S3 for event "%s"',
+        file_size, event.title,
     )
 
     return temp_path

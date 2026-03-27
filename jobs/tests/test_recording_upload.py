@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch, call
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from content.models import Recording
 from events.models import Event
 from integrations.models import WebhookLog
 
@@ -49,35 +48,35 @@ class RecordingS3UrlFieldTest(TestCase):
 
     def test_s3_url_field_exists(self):
         """Recording model has an s3_url field."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='S3 Test',
             slug='s3-test',
-            date=date.today(),
+            start_datetime=timezone.now(), status='completed',
         )
-        self.assertEqual(recording.s3_url, '')
+        self.assertEqual(recording.recording_s3_url, '')
 
     def test_s3_url_stored(self):
         """s3_url can be set and retrieved."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='S3 Test',
             slug='s3-test-stored',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
         )
         recording.refresh_from_db()
         self.assertEqual(
-            recording.s3_url,
+            recording.recording_s3_url,
             'https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
         )
 
     def test_video_url_prefers_s3_url(self):
         """video_url property returns s3_url when available."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Priority Test',
             slug='priority-test',
-            date=date.today(),
-            youtube_url='https://zoom.us/rec/play/abc',
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://zoom.us/rec/play/abc',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
         )
         self.assertEqual(
             recording.video_url,
@@ -86,24 +85,24 @@ class RecordingS3UrlFieldTest(TestCase):
 
     def test_video_url_falls_back_to_youtube_url(self):
         """video_url property returns youtube_url when s3_url is empty."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Fallback Test',
             slug='fallback-test',
-            date=date.today(),
-            youtube_url='https://zoom.us/rec/play/abc',
-            s3_url='',
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://zoom.us/rec/play/abc',
+            recording_s3_url='',
         )
         self.assertEqual(recording.video_url, 'https://zoom.us/rec/play/abc')
 
     def test_video_url_falls_back_to_google_embed(self):
         """video_url falls back to google_embed_url when s3_url and youtube_url are empty."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Google Fallback Test',
             slug='google-fallback-test',
-            date=date.today(),
-            google_embed_url='https://slides.google.com/embed/test',
-            s3_url='',
-            youtube_url='',
+            start_datetime=timezone.now(), status='completed',
+            recording_embed_url='https://slides.google.com/embed/test',
+            recording_s3_url='',
+            recording_url='',
         )
         self.assertEqual(recording.video_url, 'https://slides.google.com/embed/test')
 
@@ -136,16 +135,11 @@ class UploadRecordingToS3Test(TestCase):
             timezone='Europe/Berlin',
             zoom_meeting_id='12345678901',
             status='completed',
-        )
-        self.recording = Recording.objects.create(
-            title='Test Workshop',
-            slug='test-workshop',
-            date=self.event.start_datetime.date(),
-            event=self.event,
-            youtube_url='https://zoom.us/rec/play/abc123',
+            recording_url='https://zoom.us/rec/play/abc123',
             required_level=0,
             published=False,
         )
+        self.recording = self.event
 
     @patch('jobs.tasks.recording_upload.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
@@ -186,7 +180,7 @@ class UploadRecordingToS3Test(TestCase):
         # Check the bucket
         self.assertEqual(upload_call[0][1], 'test-recordings-bucket')
         # Check the key format: recordings/{year}/{slug}.mp4
-        year = self.recording.date.year
+        year = self.recording.start_datetime.date().year
         expected_key = f'recordings/{year}/test-workshop.mp4'
         self.assertEqual(upload_call[0][2], expected_key)
         # Check content type
@@ -197,7 +191,7 @@ class UploadRecordingToS3Test(TestCase):
         # Verify s3_url stored on recording
         self.recording.refresh_from_db()
         expected_url = f'https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/recordings/{year}/test-workshop.mp4'
-        self.assertEqual(self.recording.s3_url, expected_url)
+        self.assertEqual(self.recording.recording_s3_url, expected_url)
 
     @patch('jobs.tasks.recording_upload.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
@@ -233,7 +227,7 @@ class UploadRecordingToS3Test(TestCase):
         # Verify key structure
         upload_call = mock_s3.upload_fileobj.call_args
         key = upload_call[0][2]
-        year = self.recording.date.year
+        year = self.recording.start_datetime.date().year
         self.assertEqual(key, f'recordings/{year}/test-workshop.mp4')
 
     def test_missing_recording(self):
@@ -322,7 +316,7 @@ class UploadRecordingToS3Test(TestCase):
 
         # s3_url should NOT be set on the recording
         self.recording.refresh_from_db()
-        self.assertEqual(self.recording.s3_url, '')
+        self.assertEqual(self.recording.recording_s3_url, '')
 
     @patch('jobs.tasks.recording_upload.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
@@ -456,7 +450,7 @@ class WebhookTriggersS3UploadJobTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
         # Recording should be created
-        recording = Recording.objects.filter(slug='upload-workshop').first()
+        recording = Event.objects.filter(slug='upload-workshop').first()
         self.assertIsNotNone(recording)
 
         # Background job should have been enqueued
@@ -499,9 +493,9 @@ class WebhookTriggersS3UploadJobTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
         # Recording should still be created (with share_url as fallback)
-        recording = Recording.objects.filter(slug='upload-workshop').first()
+        recording = Event.objects.filter(slug='upload-workshop').first()
         self.assertIsNotNone(recording)
-        self.assertEqual(recording.youtube_url, 'https://zoom.us/rec/share/test')
+        self.assertEqual(recording.recording_url, 'https://zoom.us/rec/share/test')
 
         # But no S3 upload job should be enqueued
         mock_q_async.assert_not_called()

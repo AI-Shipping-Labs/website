@@ -1,6 +1,7 @@
 from datetime import date
 from django.test import TestCase
-from content.models import Article, Recording, Project, Tutorial, CuratedLink
+from content.models import Article, Project, Tutorial, CuratedLink
+from events.models import Event
 
 
 class ArticleModelTest(TestCase):
@@ -60,16 +61,19 @@ class ArticleModelTest(TestCase):
             )
 
 
-class RecordingModelTest(TestCase):
+class EventRecordingModelTest(TestCase):
+    """Test recording fields on the unified Event model."""
+
     def setUp(self):
-        self.recording = Recording.objects.create(
+        from django.utils import timezone as tz
+        self.recording = Event.objects.create(
             title='Test Recording',
             slug='test-recording',
             description='A test recording',
-            date=date(2025, 7, 20),
+            start_datetime=tz.make_aware(tz.datetime(2025, 7, 20, 12, 0)),
+            status='completed',
             tags=['workshop', 'agents'],
-            level='Beginner',
-            youtube_url='https://youtube.com/watch?v=test',
+            recording_url='https://youtube.com/watch?v=test',
             timestamps=[{'time': '00:00', 'title': 'Intro'}],
             materials=[{'title': 'Slides', 'url': 'https://example.com/slides', 'type': 'slides'}],
             core_tools=['Python', 'Django'],
@@ -82,7 +86,10 @@ class RecordingModelTest(TestCase):
         self.assertEqual(str(self.recording), 'Test Recording')
 
     def test_get_absolute_url(self):
-        self.assertEqual(self.recording.get_absolute_url(), '/event-recordings/test-recording')
+        self.assertEqual(self.recording.get_absolute_url(), '/events/test-recording')
+
+    def test_get_recording_url(self):
+        self.assertEqual(self.recording.get_recording_url(), '/event-recordings/test-recording')
 
     def test_formatted_date(self):
         self.assertEqual(self.recording.formatted_date(), 'July 20, 2025')
@@ -98,17 +105,17 @@ class RecordingModelTest(TestCase):
         self.assertEqual(len(self.recording.learning_objectives), 1)
 
     def test_default_values(self):
-        rec = Recording.objects.create(
+        from django.utils import timezone as tz
+        rec = Event.objects.create(
             title='Minimal',
             slug='minimal-recording',
-            date=date(2025, 1, 1),
+            start_datetime=tz.now(),
         )
         self.assertEqual(rec.tags, [])
         self.assertEqual(rec.timestamps, [])
         self.assertEqual(rec.materials, [])
         self.assertEqual(rec.core_tools, [])
         self.assertEqual(rec.learning_objectives, [])
-        self.assertEqual(rec.level, '')
         self.assertEqual(rec.outcome, '')
 
 

@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from content.models import Article, Course, Recording, Download
+from content.models import Article, Course, Download
 from events.models import Event, EventRegistration
 from notifications.models import Notification, EventReminderLog
 from notifications.services.notification_service import NotificationService
@@ -112,10 +112,11 @@ class NotificationServiceNotifyTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_notify_recording(self, mock_slack):
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Test Recording', slug='test-recording',
-            date=date(2025, 1, 1), published=True,
-            required_level=0,
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=test',
+            published=True, required_level=0,
         )
         NotificationService.notify('recording', recording.pk)
         self.assertEqual(Notification.objects.count(), 3)

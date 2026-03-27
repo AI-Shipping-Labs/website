@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
 from content.models import (
-    Article, Recording, Course, Module, Unit, UserCourseProgress,
+    Article, Course, Module, Unit, UserCourseProgress,
 )
 from events.models import Event, EventRegistration
 from notifications.models import Notification
@@ -386,9 +386,9 @@ class RecentContentTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'New Article')
 
     def test_shows_published_recordings(self):
-        Recording.objects.create(
+        Event.objects.create(
             title='New Recording', slug='new-recording',
-            description='Recording desc', date=date.today(),
+            description='Recording desc', start_datetime=timezone.now(), status='completed', recording_url='https://youtube.com/watch?v=test',
             published=True,
         )
         response = self.client.get('/')
@@ -435,9 +435,9 @@ class RecentContentTest(TierSetupMixin, TestCase):
             description='Desc', date=date.today() - timedelta(days=5),
             published=True,
         )
-        Recording.objects.create(
+        Event.objects.create(
             title='Newer Recording', slug='newer-recording',
-            description='Desc', date=date.today(),
+            description='Desc', start_datetime=timezone.now(), status='completed', recording_url='https://youtube.com/watch?v=test',
             published=True,
         )
         response = self.client.get('/')

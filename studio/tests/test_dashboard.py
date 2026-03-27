@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.utils import timezone
 
-from content.models import Article, Course, Recording, Download, Project
+from content.models import Article, Course, Download, Project
 from events.models import Event
 from email_app.models import NewsletterSubscriber, EmailCampaign
 

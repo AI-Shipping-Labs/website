@@ -9,7 +9,7 @@ from django.test import TestCase, RequestFactory
 from django.template import Template, Context
 from django.utils import timezone
 
-from content.models import Article, Course, Module, Unit, Recording, Project, Tutorial
+from content.models import Article, Course, Module, Unit, Project, Tutorial
 from events.models import Event
 
 
@@ -141,12 +141,12 @@ class StructuredDataRecordingTest(TestCase):
     """Test JSON-LD structured data generation for recordings."""
 
     def setUp(self):
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='AI Agents Workshop',
             slug='ai-agents-workshop',
             description='Workshop on building AI agents.',
-            date=date(2025, 5, 10),
-            youtube_url='https://youtube.com/watch?v=abc123',
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 10, 12, 0)), status='completed',
+            recording_url='https://youtube.com/watch?v=abc123',
             published=True,
             required_level=0,
         )
@@ -161,8 +161,8 @@ class StructuredDataRecordingTest(TestCase):
         self.assertEqual(data['embedUrl'], 'https://youtube.com/watch?v=abc123')
 
     def test_structured_data_recording_without_video(self):
-        self.recording.youtube_url = ''
-        self.recording.google_embed_url = ''
+        self.recording.recording_url = ''
+        self.recording.recording_embed_url = ''
         self.recording.save()
         template = Template('{% load seo_tags %}{% structured_data recording %}')
         context = Context({'recording': self.recording})
@@ -542,12 +542,12 @@ class RecordingDetailSEOTest(TestCase):
     """Test SEO meta tags on recording detail page."""
 
     def setUp(self):
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='AI Agents Workshop',
             slug='ai-agents-workshop',
             description='Building AI agents with tools.',
-            date=date(2025, 5, 10),
-            youtube_url='https://youtube.com/watch?v=abc123',
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 10, 12, 0)), status='completed',
+            recording_url='https://youtube.com/watch?v=abc123',
             published=True,
             required_level=0,
         )
@@ -710,18 +710,18 @@ class SitemapTest(TestCase):
             status='draft',
         )
         # Open recording
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='Open Recording',
             slug='open-recording',
-            date=date(2025, 5, 10),
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 10, 12, 0)), status='completed',
             published=True,
             required_level=0,
         )
         # Gated recording
-        self.gated_recording = Recording.objects.create(
+        self.gated_recording = Event.objects.create(
             title='Gated Recording',
             slug='gated-recording',
-            date=date(2025, 5, 9),
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 9, 12, 0)), status='completed',
             published=True,
             required_level=1,
         )
@@ -895,10 +895,10 @@ class SitemapTagPagesTest(TestCase):
             required_level=0,
             tags=['shared-tag'],
         )
-        Recording.objects.create(
+        Event.objects.create(
             title='Recording With Tag',
             slug='recording-tag',
-            date=date(2025, 5, 10),
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 10, 12, 0)), status='completed',
             published=True,
             required_level=0,
             tags=['recording-only-tag'],
@@ -917,10 +917,10 @@ class SitemapTagPagesTest(TestCase):
             published=True,
             tags=['duplicate-tag'],
         )
-        Recording.objects.create(
+        Event.objects.create(
             title='Recording A',
             slug='recording-a',
-            date=date(2025, 5, 10),
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 10, 12, 0)), status='completed',
             published=True,
             tags=['duplicate-tag'],
         )

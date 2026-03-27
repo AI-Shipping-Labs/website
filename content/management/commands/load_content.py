@@ -11,7 +11,8 @@ import markdown
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from content.models import Article, Recording, Project, Tutorial, CuratedLink
+from content.models import Article, Project, Tutorial, CuratedLink
+from events.models import Event
 from content.templatetags.video_utils import replace_video_urls_in_html
 
 
@@ -112,21 +113,30 @@ class Command(BaseCommand):
             self.stdout.write(f'No resources directory found at {directory}')
             return
 
+        from django.utils import timezone as tz
+        from datetime import datetime
+
         count = 0
         for md_file in sorted(directory.glob('*.md')):
             post = frontmatter.load(str(md_file))
             slug = md_file.stem
 
-            recording, _ = Recording.objects.update_or_create(
+            date_val = post.get('date', '2025-01-01')
+            if isinstance(date_val, str):
+                start_dt = tz.make_aware(datetime.fromisoformat(date_val))
+            else:
+                start_dt = tz.make_aware(datetime.combine(date_val, datetime.min.time()))
+
+            event, _ = Event.objects.update_or_create(
                 slug=slug,
                 defaults={
                     'title': post.get('title', slug),
                     'description': post.get('description', ''),
-                    'date': post.get('date', '2025-01-01'),
+                    'start_datetime': start_dt,
+                    'status': 'completed',
                     'tags': post.get('tags', []),
-                    'level': post.get('level', ''),
-                    'google_embed_url': post.get('googleEmbedUrl', ''),
-                    'youtube_url': post.get('youtubeUrl', ''),
+                    'recording_embed_url': post.get('googleEmbedUrl', ''),
+                    'recording_url': post.get('youtubeUrl', ''),
                     'timestamps': post.get('timestamps', []),
                     'materials': post.get('materials', []),
                     'core_tools': post.get('coreTools', []),
@@ -136,8 +146,8 @@ class Command(BaseCommand):
                     'published': True,
                 },
             )
-            if not recording.content_id:
-                Recording.objects.filter(pk=recording.pk).update(content_id=uuid.uuid4())
+            if not event.content_id:
+                Event.objects.filter(pk=event.pk).update(content_id=uuid.uuid4())
             count += 1
         self.stdout.write(f'  Loaded {count} recordings')
 

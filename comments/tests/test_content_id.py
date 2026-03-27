@@ -5,7 +5,8 @@ import uuid
 
 from django.test import TestCase
 
-from content.models import Article, Course, Unit, Module, Recording, Project, Download, Tutorial
+from content.models import Article, Course, Unit, Module, Project, Download, Tutorial
+from events.models import Event
 
 
 class ContentIdFieldExistsTest(TestCase):
@@ -26,8 +27,8 @@ class ContentIdFieldExistsTest(TestCase):
         self.assertTrue(field.unique)
         self.assertTrue(field.null)
 
-    def test_recording_has_content_id(self):
-        field = Recording._meta.get_field('content_id')
+    def test_event_has_content_id(self):
+        field = Event._meta.get_field('content_id')
         self.assertTrue(field.unique)
         self.assertTrue(field.null)
 

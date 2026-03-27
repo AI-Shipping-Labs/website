@@ -47,7 +47,11 @@ EVENT_PLATFORM_CHOICES = [
 
 
 class Event(models.Model):
-    """Event for live or async community activities."""
+    """Event for live or async community activities.
+
+    Also stores recording data inline (previously in a separate Recording model).
+    Completed events with a recording_url are shown on /event-recordings.
+    """
 
     slug = models.SlugField(max_length=300, unique=True)
     title = models.CharField(max_length=300)
@@ -108,13 +112,89 @@ class Event(models.Model):
         choices=EVENT_STATUS_CHOICES,
         default='draft',
     )
-    recording = models.ForeignKey(
-        'content.Recording',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='events',
-        help_text='Link to the recording after event completion.',
+
+    # --- Recording fields (previously on content.Recording) ---
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text='Stable UUID from frontmatter for linking user-generated data.',
     )
+    recording_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='Primary video URL (YouTube, S3, etc.).',
+    )
+    recording_s3_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='S3 raw recording file URL.',
+    )
+    recording_embed_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='Legacy Google Drive embed URL.',
+    )
+    transcript_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='URL to the VTT transcript file.',
+    )
+    transcript_text = models.TextField(
+        blank=True, default='',
+        help_text='Plain-text transcript content for display and search.',
+    )
+    timestamps = models.JSONField(
+        default=list, blank=True,
+        help_text='JSON list of {time_seconds, label}.',
+    )
+    materials = models.JSONField(
+        default=list, blank=True,
+        help_text='JSON list of {title, url, type}.',
+    )
+    core_tools = models.JSONField(
+        default=list, blank=True,
+        help_text='JSON list of tool names.',
+    )
+    learning_objectives = models.JSONField(
+        default=list, blank=True,
+        help_text='JSON list of objective strings.',
+    )
+    outcome = models.TextField(
+        blank=True, default='',
+        help_text='Text describing expected outcome.',
+    )
+    related_course = models.CharField(
+        max_length=300, blank=True, default='',
+        help_text='Slug of a related course.',
+    )
+    published = models.BooleanField(
+        default=True,
+        help_text='Controls visibility on the recordings page.',
+    )
+    published_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Datetime of first publish.',
+    )
+    speaker_name = models.CharField(
+        max_length=300, blank=True, default='',
+        help_text='Speaker name from content repo frontmatter.',
+    )
+    speaker_bio = models.TextField(
+        blank=True, default='',
+        help_text='Speaker bio from content repo frontmatter.',
+    )
+    cover_image_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='Cover image URL from content repo.',
+    )
+    source_repo = models.CharField(
+        max_length=300, blank=True, null=True, default=None,
+        help_text='GitHub repo this content was synced from.',
+    )
+    source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+        help_text='File path within the source repo.',
+    )
+    source_commit = models.CharField(
+        max_length=40, blank=True, null=True, default=None,
+        help_text='Git commit SHA of the last sync.',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -127,13 +207,34 @@ class Event(models.Model):
     def get_absolute_url(self):
         return f'/events/{self.slug}'
 
+    def get_recording_url(self):
+        """Return the URL for the recording detail page."""
+        return f'/event-recordings/{self.slug}'
+
     def save(self, *args, **kwargs):
         from content.utils.tags import normalize_tags
         self.tags = normalize_tags(self.tags)
 
         if self.description:
             self.description_html = render_markdown(self.description)
+
+        # Sync published_at with published flag
+        if self.published and not self.published_at:
+            self.published_at = timezone.now()
+        elif not self.published:
+            self.published_at = None
+
         super().save(*args, **kwargs)
+
+    @property
+    def video_url(self):
+        """Return the primary video URL (s3, recording_url, or embed)."""
+        return self.recording_s3_url or self.recording_url or self.recording_embed_url
+
+    @property
+    def has_recording(self):
+        """Return True if this event has a recording."""
+        return bool(self.video_url)
 
     @property
     def is_upcoming(self):
@@ -172,6 +273,10 @@ class Event(models.Model):
     def formatted_start(self):
         """Return a formatted start datetime string."""
         return self.start_datetime.strftime('%B %d, %Y at %H:%M UTC')
+
+    def formatted_date(self):
+        """Return a formatted date string."""
+        return self.start_datetime.strftime('%B %d, %Y')
 
     def short_date(self):
         return self.start_datetime.strftime('%b %d, %Y')

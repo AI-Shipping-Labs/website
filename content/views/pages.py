@@ -3,8 +3,9 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import build_gating_context, can_access, get_required_tier_name
-from content.models import Article, Recording, Project, Tutorial, CuratedLink, Download, TagRule
+from content.models import Article, Project, Tutorial, CuratedLink, Download, TagRule
 from content.tier_config import get_activities
+from events.models import Event
 
 
 def _get_selected_tags(request):
@@ -143,11 +144,20 @@ def blog_detail(request, slug):
 
 
 def recordings_list(request):
-    """Event recordings listing page with tag filtering and pagination."""
-    recordings = Recording.objects.filter(published=True)
+    """Event recordings listing page with tag filtering and pagination.
+
+    Shows completed events that have a recording_url set.
+    """
+    recordings = Event.objects.filter(
+        published=True,
+    ).exclude(
+        recording_url='',
+    ).exclude(
+        recording_url__isnull=True,
+    )
     selected_tags = _get_selected_tags(request)
 
-    # Collect all tags from published recordings for the tag filter UI
+    # Collect all tags from recordings for the tag filter UI
     all_tags = set()
     for recording in recordings:
         if recording.tags:
@@ -175,8 +185,17 @@ def recordings_list(request):
 
 
 def recording_detail(request, slug):
-    """Event recording detail page."""
-    recording = get_object_or_404(Recording, slug=slug, published=True)
+    """Event recording detail page.
+
+    Looks up an Event by slug that is published and has a recording.
+    """
+    recording = get_object_or_404(
+        Event, slug=slug, published=True,
+    )
+    # Require the event to have a recording
+    if not recording.has_recording and not recording.recording_url:
+        from django.http import Http404
+        raise Http404
     tag_rules = _get_tag_rules_for_tags(recording.tags)
     context = {'recording': recording, 'tag_rules': tag_rules}
     context.update(build_gating_context(request.user, recording, 'recording'))

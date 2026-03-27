@@ -16,7 +16,6 @@ from unittest.mock import MagicMock, patch, call
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from content.models import Recording
 from events.models import Event
 
 
@@ -51,18 +50,12 @@ class UploadRecordingToYouTubeTest(TestCase):
             timezone='Europe/Berlin',
             zoom_meeting_id='12345678901',
             status='completed',
-        )
-        self.recording = Recording.objects.create(
-            title='Test Workshop Recording',
-            slug='test-workshop-recording',
-            description='Recording of the test workshop.',
-            date=self.event.start_datetime.date(),
-            event=self.event,
-            s3_url='https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test-workshop-recording.mp4',
+            recording_s3_url='https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test-workshop.mp4',
             tags=['testing', 'workshop'],
             required_level=0,
             published=True,
         )
+        self.recording = self.event
 
     @patch('integrations.services.youtube.upload_video')
     @patch('jobs.tasks.youtube_upload.boto3.client')
@@ -89,7 +82,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         # Verify YouTube URL stored on recording
         self.recording.refresh_from_db()
         self.assertEqual(
-            self.recording.youtube_url,
+            self.recording.recording_url,
             'https://www.youtube.com/watch?v=yt-vid-123',
         )
 
@@ -111,8 +104,8 @@ class UploadRecordingToYouTubeTest(TestCase):
 
         mock_upload_video.assert_called_once()
         call_kwargs = mock_upload_video.call_args.kwargs
-        self.assertEqual(call_kwargs['title'], 'Test Workshop Recording')
-        self.assertIn('Recording of the test workshop.', call_kwargs['description'])
+        self.assertEqual(call_kwargs['title'], 'Test Workshop')
+        self.assertIn('Learn about testing.', call_kwargs['description'])
         self.assertEqual(call_kwargs['tags'], ['testing', 'workshop'])
         self.assertEqual(call_kwargs['privacy'], 'unlisted')
 
@@ -138,7 +131,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         self.assertEqual(download_call[0][0], 'test-recordings-bucket')
         self.assertEqual(
             download_call[0][1],
-            'recordings/2026/test-workshop-recording.mp4',
+            'recordings/2026/test-workshop.mp4',
         )
 
     @patch('integrations.services.youtube.upload_video')
@@ -208,8 +201,8 @@ class UploadRecordingToYouTubeTest(TestCase):
         """Task handles recording without S3 URL."""
         from jobs.tasks.youtube_upload import upload_recording_to_youtube
 
-        self.recording.s3_url = ''
-        self.recording.save(update_fields=['s3_url'])
+        self.recording.recording_s3_url = ''
+        self.recording.save(update_fields=['recording_s3_url'])
 
         result = upload_recording_to_youtube(self.recording.id)
         self.assertEqual(result['status'], 'error')
@@ -219,8 +212,8 @@ class UploadRecordingToYouTubeTest(TestCase):
         """Task skips recording that already has a YouTube URL."""
         from jobs.tasks.youtube_upload import upload_recording_to_youtube
 
-        self.recording.youtube_url = 'https://www.youtube.com/watch?v=existing'
-        self.recording.save(update_fields=['youtube_url'])
+        self.recording.recording_url = 'https://www.youtube.com/watch?v=existing'
+        self.recording.save(update_fields=['recording_url'])
 
         result = upload_recording_to_youtube(self.recording.id)
         self.assertEqual(result['status'], 'skipped')
@@ -267,7 +260,7 @@ class UploadRecordingToYouTubeTest(TestCase):
 
         # youtube_url should NOT be set on the recording
         self.recording.refresh_from_db()
-        self.assertEqual(self.recording.youtube_url, '')
+        self.assertEqual(self.recording.recording_url, '')
 
 
 class BuildDescriptionTest(TestCase):
@@ -276,42 +269,35 @@ class BuildDescriptionTest(TestCase):
     def test_description_includes_recording_description(self):
         from jobs.tasks.youtube_upload import _build_description
 
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Desc Test',
             slug='desc-test',
-            date=date.today(),
+            start_datetime=timezone.now(), status='completed',
             description='My recording description.',
         )
         desc = _build_description(recording)
         self.assertIn('My recording description.', desc)
 
     def test_description_includes_event_description(self):
+        """The description includes the event's own description."""
         from jobs.tasks.youtube_upload import _build_description
 
         event = Event.objects.create(
             title='Event Desc Test',
             slug='event-desc-test',
             description='Event details here.',
-            start_datetime=timezone.now(),
+            start_datetime=timezone.now(), status='completed',
         )
-        recording = Recording.objects.create(
-            title='Desc Test 2',
-            slug='desc-test-2',
-            date=date.today(),
-            description='Recording desc.',
-            event=event,
-        )
-        desc = _build_description(recording)
-        self.assertIn('Recording desc.', desc)
+        desc = _build_description(event)
         self.assertIn('Event details here.', desc)
 
     def test_description_includes_date(self):
         from jobs.tasks.youtube_upload import _build_description
 
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Date Test',
             slug='date-test',
-            date=date(2026, 3, 15),
+            start_datetime=timezone.make_aware(timezone.datetime(2026, 3, 15, 12, 0)), status='completed',
         )
         desc = _build_description(recording)
         self.assertIn('March 15, 2026', desc)
@@ -319,10 +305,10 @@ class BuildDescriptionTest(TestCase):
     def test_description_includes_learning_objectives(self):
         from jobs.tasks.youtube_upload import _build_description
 
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Objectives Test',
             slug='objectives-test',
-            date=date.today(),
+            start_datetime=timezone.now(), status='completed',
             learning_objectives=['Build an AI agent', 'Deploy to production'],
         )
         desc = _build_description(recording)
@@ -333,10 +319,10 @@ class BuildDescriptionTest(TestCase):
     def test_description_includes_site_link(self):
         from jobs.tasks.youtube_upload import _build_description
 
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Link Test',
             slug='link-test',
-            date=date.today(),
+            start_datetime=timezone.now(), status='completed',
         )
         desc = _build_description(recording)
         self.assertIn('AI Shipping Labs', desc)
@@ -351,12 +337,12 @@ class BuildDescriptionTest(TestCase):
             description='Same description text.',
             start_datetime=timezone.now(),
         )
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Same Desc Recording',
             slug='same-desc-recording',
-            date=date.today(),
+            start_datetime=timezone.now(), status='completed',
             description='Same description text.',
-            event=event,
+            
         )
         desc = _build_description(recording)
         # Should only appear once

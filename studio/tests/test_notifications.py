@@ -17,7 +17,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.utils import timezone
 
-from content.models import Article, Recording, Download, Course
+from content.models import Article, Download, Course
 from events.models import Event
 from notifications.models import Notification
 
@@ -269,10 +269,10 @@ class StudioRecordingNotifyTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='Published Recording',
             slug='published-recording',
-            date=timezone.now().date(),
+            start_datetime=timezone.now(), status='completed',
             published=True,
             required_level=0,
         )
@@ -435,9 +435,9 @@ class StudioNotifyDoubleGuardTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_duplicate_guard_recording(self):
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Test Rec', slug='test-rec',
-            date=timezone.now().date(), published=True, required_level=0,
+            start_datetime=timezone.now(), status='completed', published=True, required_level=0,
         )
         # First notify
         self.client.post(f'/studio/recordings/{recording.pk}/notify')

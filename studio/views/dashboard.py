@@ -9,7 +9,7 @@ from studio.decorators import staff_required
 @staff_required
 def dashboard(request):
     """Studio dashboard with quick stats."""
-    from content.models import Course, Article, Download, Project, Recording
+    from content.models import Course, Article, Download, Project
     from events.models import Event
     from email_app.models import NewsletterSubscriber, EmailCampaign
 
@@ -25,7 +25,9 @@ def dashboard(request):
             start_datetime__gte=timezone.now(),
         ).count(),
         'total_events': Event.objects.count(),
-        'total_recordings': Recording.objects.count(),
+        'total_recordings': Event.objects.filter(
+            recording_url__isnull=False,
+        ).exclude(recording_url='').count(),
         'total_downloads': Download.objects.count(),
         'pending_projects': Project.objects.filter(status='pending_review').count(),
         'total_campaigns': EmailCampaign.objects.count(),

@@ -9,7 +9,7 @@ from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from content.models import Article, Recording, Download, Course
+from content.models import Article, Download, Course
 from events.models import Event
 from notifications.models import Notification
 from notifications.services import NotificationService, post_slack_announcement
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Map content_type string to (model_class, id_kwarg)
 CONTENT_TYPE_MAP = {
     'article': (Article, 'article_id'),
-    'recording': (Recording, 'recording_id'),
+    'recording': (Event, 'recording_id'),
     'event': (Event, 'event_id'),
     'download': (Download, 'download_id'),
     'course': (Course, 'course_id'),

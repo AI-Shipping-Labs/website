@@ -1,7 +1,8 @@
 from datetime import date
 from django.test import TestCase, Client
 from django.urls import reverse
-from content.models import Article, Recording, Project, Tutorial, CuratedLink
+from content.models import Article, Project, Tutorial, CuratedLink
+from events.models import Event
 
 
 class HomeViewTest(TestCase):
@@ -14,11 +15,14 @@ class HomeViewTest(TestCase):
             date=date(2025, 6, 15),
             published=True,
         )
-        self.recording = Recording.objects.create(
+        from django.utils import timezone
+        self.recording = Event.objects.create(
             title='Test Recording',
             slug='test-recording',
             description='Workshop desc',
-            date=date(2025, 7, 20),
+            start_datetime=timezone.now(),
+            status='completed',
+            recording_url='https://youtube.com/watch?v=test',
             published=True,
         )
         self.project = Project.objects.create(
@@ -195,11 +199,14 @@ class BlogDetailViewTest(TestCase):
 
 class RecordingsListViewTest(TestCase):
     def setUp(self):
-        self.recording = Recording.objects.create(
+        from django.utils import timezone
+        self.recording = Event.objects.create(
             title='Workshop 1',
             slug='workshop-1',
             description='First workshop',
-            date=date(2025, 7, 20),
+            start_datetime=timezone.now(),
+            status='completed',
+            recording_url='https://youtube.com/watch?v=test',
             tags=['agents'],
             published=True,
         )
@@ -217,21 +224,22 @@ class RecordingsListViewTest(TestCase):
         self.assertContains(response, 'Workshop 1')
 
     def test_recordings_list_empty(self):
-        Recording.objects.all().delete()
+        Event.objects.all().delete()
         response = self.client.get('/event-recordings')
         self.assertContains(response, 'No resources yet')
 
 
 class RecordingDetailViewTest(TestCase):
     def setUp(self):
-        self.recording = Recording.objects.create(
+        from django.utils import timezone
+        self.recording = Event.objects.create(
             title='Workshop Detail',
             slug='workshop-detail',
             description='Workshop description',
-            date=date(2025, 7, 20),
-            level='Beginner',
+            start_datetime=timezone.now(),
+            status='completed',
             tags=['ai'],
-            youtube_url='https://youtube.com/watch?v=test',
+            recording_url='https://youtube.com/watch?v=test',
             timestamps=[{'time': '00:00', 'title': 'Intro', 'description': 'Introduction'}],
             materials=[{'title': 'Slides', 'url': 'https://example.com/slides', 'type': 'slides'}],
             core_tools=['Python'],
@@ -253,7 +261,6 @@ class RecordingDetailViewTest(TestCase):
         content = response.content.decode()
         self.assertIn('Workshop Detail', content)
         self.assertIn('Workshop description', content)
-        self.assertIn('Beginner', content)
         self.assertIn('Core Tools', content)
         self.assertIn('Python', content)
         self.assertIn('Learn basics', content)

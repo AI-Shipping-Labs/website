@@ -4,7 +4,7 @@
 
 {% block title %}{{ recording.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ recording.description|truncatechars:160 }}{% endblock %}
-{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ recording.get_absolute_url }}">{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ recording.get_recording_url }}">{% endblock %}
 {% block og_tags %}{% og_tags recording %}{% endblock %}
 {% block structured_data %}{% structured_data recording %}{% endblock %}
 
@@ -36,8 +36,8 @@
             <i data-lucide="calendar" class="h-4 w-4"></i>
             {{ recording.formatted_date }}
           </span>
-          {% if recording.level %}
-          <span class="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">{{ recording.level }}</span>
+          {% if recording.required_level %}
+          <span class="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">Level {{ recording.required_level }}</span>
           {% endif %}
         </div>
 
@@ -54,11 +54,11 @@
         {% include "includes/content_gated.html" %}
       {% else %}
       <!-- Video Player -->
-      {% if recording.youtube_url %}
-        {% video_player video_url=recording.youtube_url timestamps=recording.timestamps %}
-      {% elif recording.google_embed_url %}
+      {% if recording.recording_url %}
+        {% video_player video_url=recording.recording_url timestamps=recording.timestamps %}
+      {% elif recording.recording_embed_url %}
       <div class="mb-12 aspect-video rounded-lg overflow-hidden border border-border">
-        <iframe src="{{ recording.google_embed_url }}" class="w-full h-full" allowfullscreen></iframe>
+        <iframe src="{{ recording.recording_embed_url }}" class="w-full h-full" allowfullscreen></iframe>
       </div>
       {% endif %}
 

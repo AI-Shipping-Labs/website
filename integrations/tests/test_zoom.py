@@ -18,7 +18,6 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from content.models import Recording
 from events.models import Event
 from integrations.models import WebhookLog
 
@@ -514,34 +513,28 @@ class ZoomRecordingCompletedTest(TestCase):
             HTTP_X_ZM_SIGNATURE=signature,
         )
 
-    def test_creates_recording_from_webhook(self):
+    def test_sets_recording_fields_on_event(self):
+        """recording.completed webhook sets recording fields on the matched Event."""
         payload = make_recording_completed_payload('12345678901')
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
 
-        # Verify Recording was created
-        recording = Recording.objects.filter(
-            slug='workshop-building-ai-agents',
-        ).first()
-        self.assertIsNotNone(recording)
-        self.assertEqual(recording.title, 'Workshop: Building AI Agents')
-        self.assertEqual(recording.description, 'Learn how to build AI agents.')
-        self.assertEqual(recording.tags, ['ai', 'agents'])
-        self.assertEqual(recording.required_level, 10)
-        self.assertFalse(recording.published)  # Needs admin review
+        # Verify Event was updated with recording fields
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.has_recording)
+        self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
+        self.assertEqual(self.event.status, 'completed')
+        self.assertFalse(self.event.published)  # Needs admin review
 
-    def test_recording_linked_to_event(self):
+    def test_recording_fields_set_on_event(self):
+        """Recording fields are set directly on the matched Event."""
         payload = make_recording_completed_payload('12345678901')
         self._post_webhook(payload)
 
-        recording = Recording.objects.get(slug='workshop-building-ai-agents')
-
-        # Recording has FK to event
-        self.assertEqual(recording.event, self.event)
-
-        # Event has FK to recording
         self.event.refresh_from_db()
-        self.assertEqual(self.event.recording, recording)
+        self.assertTrue(self.event.has_recording)
+        self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
+        self.assertEqual(self.event.status, 'completed')
 
     def test_event_status_set_to_completed(self):
         payload = make_recording_completed_payload('12345678901')
@@ -555,8 +548,8 @@ class ZoomRecordingCompletedTest(TestCase):
         payload = make_recording_completed_payload('12345678901')
         self._post_webhook(payload)
 
-        recording = Recording.objects.get(slug='workshop-building-ai-agents')
-        self.assertEqual(recording.youtube_url, 'https://zoom.us/rec/play/abc123')
+        recording = Event.objects.get(slug='workshop-building-ai-agents')
+        self.assertEqual(recording.recording_url, 'https://zoom.us/rec/play/abc123')
 
     def test_recording_falls_back_to_share_url(self):
         """Falls back to share_url when no preferred recording type found."""
@@ -577,15 +570,17 @@ class ZoomRecordingCompletedTest(TestCase):
         }
         self._post_webhook(payload)
 
-        recording = Recording.objects.get(slug='workshop-building-ai-agents')
-        self.assertEqual(recording.youtube_url, 'https://zoom.us/rec/share/fallback')
+        recording = Event.objects.get(slug='workshop-building-ai-agents')
+        self.assertEqual(recording.recording_url, 'https://zoom.us/rec/share/fallback')
 
     def test_no_matching_event_ignored(self):
-        """Webhook for unknown meeting ID is logged but no recording created."""
+        """Webhook for unknown meeting ID is logged but event not updated."""
         payload = make_recording_completed_payload('99999999999')
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(Recording.objects.count(), 0)
+        # The existing event should NOT have been updated with recording fields
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.has_recording)
 
     def test_webhook_log_marked_processed(self):
         payload = make_recording_completed_payload('12345678901')
@@ -598,30 +593,24 @@ class ZoomRecordingCompletedTest(TestCase):
         self.assertIsNotNone(log)
         self.assertTrue(log.processed)
 
-    def test_duplicate_slug_handled(self):
-        """If recording slug already exists, a suffix is added."""
-        # Create a recording with the same slug first
-        Recording.objects.create(
-            title='Existing',
-            slug='workshop-building-ai-agents',
-            date=date.today(),
-        )
-
+    def test_recording_fields_updated_on_existing_event(self):
+        """Webhook updates existing event rather than creating new row."""
+        event_count_before = Event.objects.count()
         payload = make_recording_completed_payload('12345678901')
         self._post_webhook(payload)
 
-        # Should have created with suffix
-        recording = Recording.objects.filter(
-            slug='workshop-building-ai-agents-1',
-        ).first()
-        self.assertIsNotNone(recording)
+        # No new event should be created
+        self.assertEqual(Event.objects.count(), event_count_before)
+        # Existing event should be updated
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.has_recording)
 
     def test_recording_date_from_event_start(self):
         payload = make_recording_completed_payload('12345678901')
         self._post_webhook(payload)
 
-        recording = Recording.objects.get(slug='workshop-building-ai-agents')
-        self.assertEqual(recording.date, self.event.start_datetime.date())
+        recording = Event.objects.get(slug='workshop-building-ai-agents')
+        self.assertEqual(recording.start_datetime.date(), self.event.start_datetime.date())
 
     def test_transcript_url_stored_when_present(self):
         """When webhook includes an audio_transcript file, transcript_url is stored."""
@@ -631,7 +620,7 @@ class ZoomRecordingCompletedTest(TestCase):
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
 
-        recording = Recording.objects.get(slug='workshop-building-ai-agents')
+        recording = Event.objects.get(slug='workshop-building-ai-agents')
         self.assertEqual(
             recording.transcript_url,
             'https://zoom.us/rec/download/transcript123.vtt',
@@ -645,7 +634,7 @@ class ZoomRecordingCompletedTest(TestCase):
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
 
-        recording = Recording.objects.get(slug='workshop-building-ai-agents')
+        recording = Event.objects.get(slug='workshop-building-ai-agents')
         self.assertEqual(recording.transcript_url, '')
 
     def test_recording_created_normally_without_transcript(self):
@@ -655,7 +644,7 @@ class ZoomRecordingCompletedTest(TestCase):
         )
         self._post_webhook(payload)
 
-        recording = Recording.objects.get(slug='workshop-building-ai-agents')
+        recording = Event.objects.get(slug='workshop-building-ai-agents')
         self.assertEqual(recording.title, 'Workshop: Building AI Agents')
         self.assertEqual(recording.transcript_url, '')
         self.assertEqual(recording.transcript_text, '')
@@ -908,44 +897,32 @@ class ZoomSettingsTest(TestCase):
 # --- Recording Model Event FK Test ---
 
 
-class RecordingEventFKTest(TestCase):
-    """Test that Recording model has event FK field."""
+class EventRecordingFieldsTest(TestCase):
+    """Test that Event model has recording fields (merged from Recording)."""
 
-    def test_recording_event_fk(self):
+    def test_event_has_recording_url(self):
         event = Event.objects.create(
-            title='FK Test Event',
-            slug='fk-test-event',
-            start_datetime=timezone.now(),
+            title='Recording Fields Test',
+            slug='rec-fields-test',
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=test',
         )
-        recording = Recording.objects.create(
-            title='FK Test Recording',
-            slug='fk-test-recording',
-            date=date.today(),
-            event=event,
-        )
-        self.assertEqual(recording.event, event)
-        self.assertIn(recording, event.recordings.all())
+        self.assertTrue(event.has_recording)
 
-    def test_recording_event_nullable(self):
-        recording = Recording.objects.create(
-            title='No Event Recording',
-            slug='no-event-recording',
-            date=date.today(),
-        )
-        self.assertIsNone(recording.event)
-
-    def test_event_deletion_sets_null(self):
+    def test_event_without_recording(self):
         event = Event.objects.create(
-            title='Delete Me Event',
-            slug='delete-me-event',
-            start_datetime=timezone.now(),
+            title='No Recording Test',
+            slug='no-rec-test',
+            start_datetime=timezone.now(), status='completed',
         )
-        recording = Recording.objects.create(
-            title='Orphaned Recording',
-            slug='orphaned-recording',
-            date=date.today(),
-            event=event,
+        self.assertFalse(event.has_recording)
+
+    def test_video_url_property(self):
+        event = Event.objects.create(
+            title='Video URL Test',
+            slug='video-url-test',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://s3.example.com/vid.mp4',
+            recording_url='https://youtube.com/watch?v=test',
         )
-        event.delete()
-        recording.refresh_from_db()
-        self.assertIsNone(recording.event)
+        self.assertEqual(event.video_url, 'https://s3.example.com/vid.mp4')

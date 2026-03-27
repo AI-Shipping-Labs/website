@@ -2,7 +2,8 @@ from django.test import TestCase
 from django.core.management import call_command
 from io import StringIO
 
-from content.models import Article, Recording, Project, CuratedLink
+from content.models import Article, Project, CuratedLink
+from events.models import Event
 
 
 class LoadContentCommandTest(TestCase):
@@ -16,7 +17,7 @@ class LoadContentCommandTest(TestCase):
 
         # Check that content was loaded
         self.assertGreater(Article.objects.count(), 0)
-        self.assertGreater(Recording.objects.count(), 0)
+        self.assertGreater(Event.objects.filter(recording_url__gt='').count(), 0)
         self.assertGreater(Project.objects.count(), 0)
         self.assertGreater(CuratedLink.objects.count(), 0)
 

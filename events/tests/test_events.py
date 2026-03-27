@@ -23,7 +23,6 @@ from django.test import TestCase, Client
 from django.utils import timezone
 
 from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
-from content.models import Recording
 from events.models import Event, EventRegistration
 from tests.fixtures import TierSetupMixin
 
@@ -50,7 +49,7 @@ class EventModelFieldsTest(TestCase):
         self.assertEqual(event.tags, [])
         self.assertEqual(event.required_level, 0)
         self.assertIsNone(event.max_participants)
-        self.assertIsNone(event.recording)
+        self.assertFalse(event.has_recording)
         self.assertIsNotNone(event.created_at)
         self.assertIsNotNone(event.updated_at)
 
@@ -400,25 +399,19 @@ class EventsListSpotsRemainingTest(TestCase):
 
 
 class EventsListRecordingLinkTest(TestCase):
-    """Test past events show recording link if recording is set."""
+    """Test past events show recording link if has_recording is True."""
 
     def test_completed_event_with_recording_shows_link(self):
-        recording = Recording.objects.create(
-            title='Event Recording',
-            slug='event-recording',
-            date=date(2025, 7, 1),
-            published=True,
-        )
         Event.objects.create(
             title='Recorded Event',
             slug='recorded-event',
             start_datetime=timezone.now() - timedelta(days=7),
             status='completed',
-            recording=recording,
+            recording_url='https://youtube.com/watch?v=test',
         )
         response = self.client.get('/events')
         self.assertContains(response, 'Watch recording')
-        self.assertContains(response, '/event-recordings/event-recording')
+        self.assertContains(response, '/event-recordings/recorded-event')
 
     def test_completed_event_without_recording_no_link(self):
         Event.objects.create(
@@ -530,22 +523,16 @@ class EventDetailRecordingLinkTest(TestCase):
     """Test completed event shows recording link on detail page."""
 
     def test_completed_with_recording_shows_link(self):
-        recording = Recording.objects.create(
-            title='Event Rec',
-            slug='event-rec',
-            date=date(2025, 7, 1),
-            published=True,
-        )
-        event = Event.objects.create(
+        Event.objects.create(
             title='Completed Event',
             slug='completed-event',
             start_datetime=timezone.now() - timedelta(days=7),
             status='completed',
-            recording=recording,
+            recording_url='https://youtube.com/watch?v=test',
         )
         response = self.client.get('/events/completed-event')
         self.assertContains(response, 'Watch the recording')
-        self.assertContains(response, '/event-recordings/event-rec')
+        self.assertContains(response, '/event-recordings/completed-event')
 
     def test_completed_without_recording_no_link(self):
         Event.objects.create(

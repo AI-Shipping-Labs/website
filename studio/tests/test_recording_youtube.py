@@ -17,11 +17,12 @@ Covers:
 
 from datetime import date
 from unittest.mock import patch
+from django.utils import timezone
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 
-from content.models import Recording
+from events.models import Event
 
 User = get_user_model()
 
@@ -35,11 +36,11 @@ class RecordingPublishYouTubeSuccessTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='S3 Recording',
             slug='s3-recording',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/s3-recording.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/s3-recording.mp4',
         )
 
     @patch('studio.views.recordings.async_task')
@@ -89,11 +90,11 @@ class RecordingPublishYouTubeNoS3Test(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='No S3',
             slug='no-s3',
-            date=date.today(),
-            s3_url='',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='',
         )
 
     def test_returns_400(self):
@@ -120,12 +121,12 @@ class RecordingPublishYouTubeAlreadyHasURLTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='Has YT',
             slug='has-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/has-yt.mp4',
-            youtube_url='https://www.youtube.com/watch?v=existing123',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/has-yt.mp4',
+            recording_url='https://www.youtube.com/watch?v=existing123',
         )
 
     def test_returns_400(self):
@@ -167,11 +168,11 @@ class RecordingPublishYouTube405Test(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='Method Test',
             slug='method-test-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/method-test.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/method-test.mp4',
         )
 
     def test_get_returns_405(self):
@@ -186,11 +187,11 @@ class RecordingPublishYouTubeAccessControlTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='Access Test',
             slug='access-test-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/access-test.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/access-test.mp4',
         )
 
     def test_non_staff_user_returns_403(self):
@@ -230,11 +231,11 @@ class RecordingYouTubeTemplateTest(TestCase):
 
     def test_edit_recording_with_s3_url_shows_publish_button(self):
         """Edit form for recording with s3_url but no youtube_url shows Publish button."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Ready for YT',
             slug='ready-for-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/ready.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/ready.mp4',
         )
         response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
         content = response.content.decode()
@@ -244,11 +245,11 @@ class RecordingYouTubeTemplateTest(TestCase):
 
     def test_edit_recording_with_youtube_url_shows_url(self):
         """Edit form for recording with youtube_url shows the URL, not the button."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Has YouTube',
             slug='has-youtube',
-            date=date.today(),
-            youtube_url='https://www.youtube.com/watch?v=abc123',
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://www.youtube.com/watch?v=abc123',
         )
         response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
         content = response.content.decode()
@@ -258,10 +259,10 @@ class RecordingYouTubeTemplateTest(TestCase):
 
     def test_edit_recording_without_s3_or_youtube_shows_message(self):
         """Edit form for recording without s3_url or youtube_url shows info message."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='No URLs',
             slug='no-urls',
-            date=date.today(),
+            start_datetime=timezone.now(), status='completed',
         )
         response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
         content = response.content.decode()
@@ -271,11 +272,11 @@ class RecordingYouTubeTemplateTest(TestCase):
 
     def test_template_has_status_span(self):
         """The template includes a status span for upload status messages."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Status Span',
             slug='status-span-yt',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
         )
         response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
         content = response.content.decode()
@@ -283,11 +284,11 @@ class RecordingYouTubeTemplateTest(TestCase):
 
     def test_template_shows_s3_url_value(self):
         """The template shows the S3 URL value for reference."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='S3 URL Show',
             slug='s3-url-show',
-            date=date.today(),
-            s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/s3-show.mp4',
+            start_datetime=timezone.now(), status='completed',
+            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/s3-show.mp4',
         )
         response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
         content = response.content.decode()

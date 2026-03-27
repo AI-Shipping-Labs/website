@@ -1,6 +1,10 @@
+import json
+
+from django import forms
 from django.contrib import admin
 from django.utils import timezone
 
+from content.admin.widgets import TimestampEditorWidget
 from events.models import Event, EventRegistration
 
 
@@ -43,6 +47,53 @@ def make_cancelled(modeladmin, request, queryset):
 make_cancelled.short_description = 'Cancel selected events'
 
 
+def publish_recordings(modeladmin, request, queryset):
+    """Publish selected events as recordings and send notifications."""
+    queryset.update(published=True, published_at=timezone.now())
+    for event in queryset:
+        try:
+            from notifications.services import NotificationService
+            NotificationService.notify('recording', event.pk)
+        except Exception:
+            pass
+
+
+publish_recordings.short_description = 'Publish selected as recordings'
+
+
+def unpublish_recordings(modeladmin, request, queryset):
+    """Unpublish selected events as recordings."""
+    queryset.update(published=False, published_at=None)
+
+
+unpublish_recordings.short_description = 'Unpublish selected recordings'
+
+
+class EventAdminForm(forms.ModelForm):
+    """Custom form for Event that uses the TimestampEditorWidget."""
+
+    class Meta:
+        model = Event
+        fields = '__all__'
+        widgets = {
+            'timestamps': TimestampEditorWidget(),
+        }
+
+    def clean_timestamps(self):
+        """Parse the JSON string back into a Python list."""
+        value = self.cleaned_data.get('timestamps', '[]')
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return []
+
+
 class EventRegistrationInline(admin.TabularInline):
     model = EventRegistration
     extra = 0
@@ -52,14 +103,19 @@ class EventRegistrationInline(admin.TabularInline):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
+    form = EventAdminForm
     list_display = [
         'title', 'slug', 'event_type', 'platform', 'status',
-        'start_datetime', 'required_level', 'registration_count_display',
+        'start_datetime', 'required_level', 'has_recording_display',
+        'registration_count_display',
     ]
-    list_filter = ['status', 'event_type', 'platform', 'required_level']
+    list_filter = ['status', 'event_type', 'platform', 'required_level', 'published']
     search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
-    actions = [make_upcoming, make_live, make_completed, make_cancelled]
+    actions = [
+        make_upcoming, make_live, make_completed, make_cancelled,
+        publish_recordings, unpublish_recordings,
+    ]
     inlines = [EventRegistrationInline]
 
     fieldsets = (
@@ -80,10 +136,36 @@ class EventAdmin(admin.ModelAdmin):
         ('Access & Capacity', {
             'fields': ('tags', 'required_level', 'max_participants'),
         }),
-        ('Status & Recording', {
-            'fields': ('status', 'recording'),
+        ('Status', {
+            'fields': ('status',),
+        }),
+        ('Recording', {
+            'fields': (
+                'recording_url', 'recording_s3_url', 'recording_embed_url',
+                'transcript_url', 'transcript_text',
+                'timestamps', 'materials', 'core_tools',
+                'learning_objectives', 'outcome',
+                'speaker_name', 'speaker_bio', 'cover_image_url',
+                'published', 'published_at',
+            ),
+            'classes': ('collapse',),
+        }),
+        ('Content Sync', {
+            'fields': (
+                'content_id', 'source_repo', 'source_path', 'source_commit',
+                'related_course',
+            ),
+            'classes': ('collapse',),
         }),
     )
+
+    readonly_fields = ['published_at']
+
+    def has_recording_display(self, obj):
+        return bool(obj.recording_url)
+
+    has_recording_display.short_description = 'Recording'
+    has_recording_display.boolean = True
 
     def registration_count_display(self, obj):
         count = obj.registration_count

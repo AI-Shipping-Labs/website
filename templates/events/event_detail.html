@@ -169,13 +169,13 @@
       {% endif %}
 
       <!-- Completed event with recording -->
-      {% if event.status == 'completed' and event.recording %}
+      {% if event.status == 'completed' and event.has_recording %}
       <div class="mb-12 rounded-lg border border-accent/30 bg-accent/5 p-6">
         <div class="flex items-center gap-3">
           <i data-lucide="play-circle" class="h-6 w-6 text-accent"></i>
           <div>
             <p class="font-semibold text-foreground">This event has been recorded</p>
-            <a href="/event-recordings/{{ event.recording.slug }}" class="text-accent hover:underline">
+            <a href="/event-recordings/{{ event.slug }}" class="text-accent hover:underline">
               Watch the recording
             </a>
           </div>

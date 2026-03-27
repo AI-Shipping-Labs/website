@@ -107,34 +107,35 @@ def _build_course_jsonld(course):
     return data
 
 
-def _build_recording_jsonld(recording):
-    """Build JSON-LD for a Recording (VideoObject or LearningResource)."""
+def _build_recording_jsonld(event):
+    """Build JSON-LD for a recording (Event with recording, VideoObject or LearningResource)."""
     site_url = _get_site_url()
-    video_url = getattr(recording, 'youtube_url', '') or getattr(
-        recording, 'google_embed_url', '',
+    video_url = getattr(event, 'recording_url', '') or getattr(
+        event, 'recording_embed_url', '',
     )
+    recording_page_url = event.get_recording_url() if hasattr(event, 'get_recording_url') else event.get_absolute_url()
 
     if video_url:
         data = {
             '@context': 'https://schema.org',
             '@type': 'VideoObject',
-            'name': recording.title,
+            'name': event.title,
             'description': _truncate_description(
-                getattr(recording, 'description', ''),
+                getattr(event, 'description', ''),
             ),
             'embedUrl': video_url,
-            'uploadDate': _format_date(recording),
-            'url': f'{site_url}{recording.get_absolute_url()}',
+            'uploadDate': _format_date(event),
+            'url': f'{site_url}{recording_page_url}',
         }
     else:
         data = {
             '@context': 'https://schema.org',
             '@type': 'LearningResource',
-            'name': recording.title,
+            'name': event.title,
             'description': _truncate_description(
-                getattr(recording, 'description', ''),
+                getattr(event, 'description', ''),
             ),
-            'url': f'{site_url}{recording.get_absolute_url()}',
+            'url': f'{site_url}{recording_page_url}',
         }
     return data
 

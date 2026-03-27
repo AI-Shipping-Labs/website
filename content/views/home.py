@@ -5,8 +5,9 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import get_user_level
-from content.models import Article, Recording, Project, CuratedLink, Course, UserCourseProgress, Unit
+from content.models import Article, Project, CuratedLink, Course, UserCourseProgress, Unit
 from content.tier_config import get_tiers_with_features
+from events.models import Event
 
 
 TESTIMONIALS = [
@@ -139,7 +140,13 @@ def home(request):
 def _public_home(request):
     """Render the public marketing homepage for anonymous users."""
     articles = Article.objects.filter(published=True)[:3]
-    recordings = Recording.objects.filter(published=True)[:3]
+    recordings = Event.objects.filter(
+        published=True,
+    ).exclude(
+        recording_url='',
+    ).exclude(
+        recording_url__isnull=True,
+    ).order_by('-start_datetime')[:3]
     projects = Project.objects.filter(published=True)[:3]
     curated_links = CuratedLink.objects.filter(published=True)[:6]
 
@@ -317,12 +324,16 @@ def _get_recent_content(user_level):
         ).order_by('-date')[:5]
     )
 
-    # Get accessible recordings
+    # Get accessible recordings (events with recording_url)
     recordings = list(
-        Recording.objects.filter(
+        Event.objects.filter(
             published=True,
             required_level__lte=user_level,
-        ).order_by('-date')[:5]
+        ).exclude(
+            recording_url='',
+        ).exclude(
+            recording_url__isnull=True,
+        ).order_by('-start_datetime')[:5]
     )
 
     # Merge and sort by date, take top 5
@@ -341,12 +352,20 @@ def _get_recent_content(user_level):
             'type': 'recording',
             'title': recording.title,
             'description': recording.description,
-            'url': recording.get_absolute_url(),
-            'date': recording.date,
+            'url': recording.get_recording_url(),
+            'date': recording.start_datetime.date(),
             'icon': 'video',
         })
 
-    combined.sort(key=lambda x: x['date'], reverse=True)
+    import datetime as dt
+    def _sort_key(x):
+        val = x['date']
+        if isinstance(val, dt.datetime):
+            return val
+        if isinstance(val, dt.date):
+            return dt.datetime.combine(val, dt.time.min, tzinfo=dt.timezone.utc)
+        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    combined.sort(key=_sort_key, reverse=True)
     return combined[:5]
 
 

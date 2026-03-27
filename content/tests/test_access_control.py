@@ -10,7 +10,9 @@ from content.access import (
     can_access, get_user_level, get_required_tier_name,
     get_teaser_text, build_gating_context,
 )
-from content.models import Article, Recording, Project, Tutorial, CuratedLink
+from content.models import Article, Project, Tutorial, CuratedLink
+from django.utils import timezone
+from events.models import Event
 from tests.fixtures import TierSetupMixin
 
 
@@ -308,8 +310,8 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
         self.assertFalse(ctx['is_gated'])
 
     def test_recording_cta_message(self):
-        recording = Recording.objects.create(
-            title='Gated Recording', slug='gated-rec', date=date(2025, 1, 1),
+        recording = Event.objects.create(
+            title='Gated Recording', slug='gated-rec', start_datetime=timezone.make_aware(timezone.datetime(2025, 1, 1, 12, 0)), status='completed',
             description='Recording desc', required_level=LEVEL_MAIN,
         )
         from django.contrib.auth.models import AnonymousUser
@@ -330,8 +332,8 @@ class RequiredLevelFieldTest(TestCase):
         self.assertEqual(article.required_level, 0)
 
     def test_recording_default_level(self):
-        recording = Recording.objects.create(
-            title='Test', slug='test-rl', date=date(2025, 1, 1),
+        recording = Event.objects.create(
+            title='Test', slug='test-rl', start_datetime=timezone.make_aware(timezone.datetime(2025, 1, 1, 12, 0)), status='completed',
         )
         self.assertEqual(recording.required_level, 0)
 
@@ -494,11 +496,11 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.gated_recording = Recording.objects.create(
+        self.gated_recording = Event.objects.create(
             title='Gated Recording', slug='gated-recording',
             description='Recording description',
-            youtube_url='https://youtube.com/watch?v=test',
-            date=date(2025, 7, 20), published=True,
+            recording_url='https://youtube.com/watch?v=test',
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)), status='completed', published=True,
             required_level=LEVEL_MAIN,
         )
 
@@ -674,9 +676,10 @@ class RecordingsListLockIconTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.gated_recording = Recording.objects.create(
+        self.gated_recording = Event.objects.create(
             title='Gated Rec', slug='gated-rec',
-            description='Gated', date=date(2025, 7, 20),
+            description='Gated', start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)), status='completed',
+            recording_url='https://youtube.com/watch?v=test',
             published=True, required_level=LEVEL_MAIN,
         )
 

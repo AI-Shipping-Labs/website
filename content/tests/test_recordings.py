@@ -1,181 +1,149 @@
-"""Tests for Event Recordings - issue #74.
+"""Tests for Event Recordings - updated for unified Event model (issue #158).
 
 Covers:
-- Recording model fields (published_at, video_url property, etc.)
+- Event recording fields (published_at, video_url property, has_recording, etc.)
 - Published_at sync with published flag
 - Tag filtering on /event-recordings via ?tag=X
 - Pagination (20 recordings per page)
 - Detail page: video player for authorized, gated CTA for unauthorized
 - Detail page: materials listed as links
-- Admin CRUD for recordings
 - Lock icon on listing for gated recordings
 - Clickable tags in listing and detail
 - Title tag format on detail page
 """
 
-from datetime import date
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.utils import timezone
 
 from content.access import LEVEL_OPEN, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM
-from content.models import Recording
+from events.models import Event
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
 
 
+def _create_recording_event(slug, **kwargs):
+    """Helper to create an Event that acts as a recording."""
+    defaults = {
+        'title': slug.replace('-', ' ').title(),
+        'slug': slug,
+        'start_datetime': timezone.now() - timedelta(days=7),
+        'status': 'completed',
+        'recording_url': 'https://youtube.com/watch?v=test',
+        'published': True,
+    }
+    defaults.update(kwargs)
+    return Event.objects.create(**defaults)
+
+
 # --- Model field tests ---
 
 
-class RecordingPublishedAtTest(TestCase):
-    """Test published_at field and sync with published flag."""
+class EventRecordingPublishedAtTest(TestCase):
+    """Test published_at field and sync with published flag on Event."""
 
     def test_published_at_set_when_published_true(self):
-        rec = Recording.objects.create(
-            title='Test', slug='pub-at-test', date=date(2025, 7, 1),
-            published=True,
-        )
-        self.assertIsNotNone(rec.published_at)
+        event = _create_recording_event('pub-at-test', published=True)
+        self.assertIsNotNone(event.published_at)
 
     def test_published_at_null_when_published_false(self):
-        rec = Recording.objects.create(
-            title='Test', slug='pub-at-false', date=date(2025, 7, 1),
-            published=False,
-        )
-        self.assertIsNone(rec.published_at)
+        event = _create_recording_event('pub-at-false', published=False)
+        self.assertIsNone(event.published_at)
 
     def test_published_at_cleared_on_unpublish(self):
-        rec = Recording.objects.create(
-            title='Test', slug='clear-pub-at', date=date(2025, 7, 1),
-            published=True,
-        )
-        self.assertIsNotNone(rec.published_at)
-        rec.published = False
-        rec.save()
-        rec.refresh_from_db()
-        self.assertIsNone(rec.published_at)
+        event = _create_recording_event('clear-pub-at', published=True)
+        self.assertIsNotNone(event.published_at)
+        event.published = False
+        event.save()
+        event.refresh_from_db()
+        self.assertIsNone(event.published_at)
 
     def test_published_at_not_overwritten_on_re_save(self):
-        rec = Recording.objects.create(
-            title='Test', slug='no-overwrite', date=date(2025, 7, 1),
-            published=True,
+        event = _create_recording_event('no-overwrite', published=True)
+        original_published_at = event.published_at
+        event.title = 'Updated Title'
+        event.save()
+        event.refresh_from_db()
+        self.assertEqual(event.published_at, original_published_at)
+
+
+class EventVideoUrlPropertyTest(TestCase):
+    """Test video_url property on Event."""
+
+    def test_video_url_returns_recording_url(self):
+        event = Event(recording_url='https://youtube.com/watch?v=test')
+        self.assertEqual(event.video_url, 'https://youtube.com/watch?v=test')
+
+    def test_video_url_returns_embed_if_no_recording_url(self):
+        event = Event(
+            recording_url='',
+            recording_embed_url='https://docs.google.com/presentation/embed/123',
         )
-        original_published_at = rec.published_at
-        rec.title = 'Updated Title'
-        rec.save()
-        rec.refresh_from_db()
-        self.assertEqual(rec.published_at, original_published_at)
-
-
-class RecordingVideoUrlPropertyTest(TestCase):
-    """Test video_url property."""
-
-    def test_video_url_returns_youtube_url(self):
-        rec = Recording(youtube_url='https://youtube.com/watch?v=test')
-        self.assertEqual(rec.video_url, 'https://youtube.com/watch?v=test')
-
-    def test_video_url_returns_google_embed_if_no_youtube(self):
-        rec = Recording(
-            youtube_url='',
-            google_embed_url='https://docs.google.com/presentation/embed/123',
-        )
-        self.assertEqual(rec.video_url, 'https://docs.google.com/presentation/embed/123')
+        self.assertEqual(event.video_url, 'https://docs.google.com/presentation/embed/123')
 
     def test_video_url_empty_when_both_empty(self):
-        rec = Recording(youtube_url='', google_embed_url='')
-        self.assertEqual(rec.video_url, '')
+        event = Event(recording_url='', recording_embed_url='')
+        self.assertEqual(event.video_url, '')
 
-    def test_video_url_prefers_youtube_over_google(self):
-        rec = Recording(
-            youtube_url='https://youtube.com/watch?v=test',
-            google_embed_url='https://docs.google.com/embed/123',
+    def test_video_url_prefers_s3_over_recording_url(self):
+        event = Event(
+            recording_s3_url='https://s3.example.com/vid.mp4',
+            recording_url='https://youtube.com/watch?v=test',
         )
-        self.assertEqual(rec.video_url, 'https://youtube.com/watch?v=test')
+        self.assertEqual(event.video_url, 'https://s3.example.com/vid.mp4')
+
+    def test_has_recording_true_with_url(self):
+        event = Event(recording_url='https://youtube.com/watch?v=test')
+        self.assertTrue(event.has_recording)
+
+    def test_has_recording_false_without_url(self):
+        event = Event(recording_url='', recording_s3_url='', recording_embed_url='')
+        self.assertFalse(event.has_recording)
 
 
-class RecordingModelFieldsTest(TestCase):
-    """Test all Recording model fields exist and have correct defaults."""
+class EventRecordingFieldsTest(TestCase):
+    """Test recording-related fields on Event model."""
 
-    def test_slug_unique(self):
-        from django.db import IntegrityError
-        Recording.objects.create(
-            title='First', slug='unique-slug', date=date(2025, 7, 1),
-        )
-        with self.assertRaises(IntegrityError):
-            Recording.objects.create(
-                title='Second', slug='unique-slug', date=date(2025, 7, 2),
-            )
-
-    def test_all_fields_exist(self):
-        rec = Recording.objects.create(
-            title='Full Recording',
-            slug='full-recording',
+    def test_all_recording_fields_exist(self):
+        event = _create_recording_event(
+            'full-recording',
             description='A full recording description',
-            date=date(2025, 7, 20),
             tags=['agents', 'python'],
-            level='Intermediate',
-            youtube_url='https://youtube.com/watch?v=abc',
+            recording_url='https://youtube.com/watch?v=abc',
             timestamps=[{'time_seconds': 0, 'label': 'Intro'}],
             materials=[{'title': 'Slides', 'url': 'https://example.com/slides'}],
             core_tools=['Python', 'Django'],
             learning_objectives=['Learn Django'],
             outcome='Build an app',
             required_level=LEVEL_MAIN,
-            published=True,
         )
-        self.assertEqual(rec.title, 'Full Recording')
-        self.assertEqual(rec.slug, 'full-recording')
-        self.assertEqual(rec.description, 'A full recording description')
-        self.assertEqual(rec.tags, ['agents', 'python'])
-        self.assertEqual(len(rec.timestamps), 1)
-        self.assertEqual(len(rec.materials), 1)
-        self.assertEqual(rec.required_level, LEVEL_MAIN)
-        self.assertTrue(rec.published)
-        self.assertIsNotNone(rec.published_at)
-        self.assertIsNotNone(rec.created_at)
+        self.assertEqual(event.title, 'Full Recording')
+        self.assertEqual(event.slug, 'full-recording')
+        self.assertEqual(event.description, 'A full recording description')
+        self.assertEqual(event.tags, ['agents', 'python'])
+        self.assertEqual(len(event.timestamps), 1)
+        self.assertEqual(len(event.materials), 1)
+        self.assertEqual(event.required_level, LEVEL_MAIN)
+        self.assertTrue(event.published)
+        self.assertIsNotNone(event.published_at)
+        self.assertIsNotNone(event.created_at)
 
-    def test_default_values(self):
-        rec = Recording.objects.create(
-            title='Minimal', slug='minimal', date=date(2025, 1, 1),
-        )
-        self.assertEqual(rec.description, '')
-        self.assertEqual(rec.tags, [])
-        self.assertEqual(rec.timestamps, [])
-        self.assertEqual(rec.materials, [])
-        self.assertEqual(rec.core_tools, [])
-        self.assertEqual(rec.learning_objectives, [])
-        self.assertEqual(rec.outcome, '')
-        self.assertEqual(rec.required_level, 0)
-        self.assertTrue(rec.published)
-
-    def test_ordering_by_date_desc(self):
-        rec1 = Recording.objects.create(
-            title='Old', slug='old', date=date(2025, 1, 1),
-        )
-        rec2 = Recording.objects.create(
-            title='New', slug='new', date=date(2025, 7, 1),
-        )
-        recordings = list(Recording.objects.all())
-        self.assertEqual(recordings[0].slug, 'new')
-        self.assertEqual(recordings[1].slug, 'old')
-
-    def test_get_absolute_url(self):
-        rec = Recording(slug='my-recording')
-        self.assertEqual(rec.get_absolute_url(), '/event-recordings/my-recording')
+    def test_get_recording_url(self):
+        event = Event(slug='my-recording')
+        self.assertEqual(event.get_recording_url(), '/event-recordings/my-recording')
 
     def test_formatted_date(self):
-        rec = Recording(date=date(2025, 7, 20))
-        self.assertEqual(rec.formatted_date(), 'July 20, 2025')
-
-    def test_short_date(self):
-        rec = Recording(date=date(2025, 7, 20))
-        self.assertEqual(rec.short_date(), 'Jul 20, 2025')
+        event = Event(start_datetime=timezone.make_aware(
+            timezone.datetime(2025, 7, 20, 12, 0),
+        ))
+        self.assertEqual(event.formatted_date(), 'July 20, 2025')
 
     def test_str(self):
-        rec = Recording(title='My Recording')
-        self.assertEqual(str(rec), 'My Recording')
+        event = Event(title='My Recording')
+        self.assertEqual(str(event), 'My Recording')
 
 
 # --- Tag filtering tests ---
@@ -184,31 +152,25 @@ class RecordingModelFieldsTest(TestCase):
 class RecordingsListTagFilteringTest(TestCase):
     """Test tag filtering on /event-recordings via ?tag=X query param."""
 
-    def setUp(self):
-        self.client = Client()
-        self.agents_recording = Recording.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.agents_recording = _create_recording_event(
+            'agent-workshop',
             title='Agent Workshop',
-            slug='agent-workshop',
             description='Learn agents',
-            date=date(2025, 7, 20),
             tags=['agents', 'python'],
-            published=True,
         )
-        self.django_recording = Recording.objects.create(
+        cls.django_recording = _create_recording_event(
+            'django-workshop',
             title='Django Workshop',
-            slug='django-workshop',
             description='Learn Django',
-            date=date(2025, 7, 15),
             tags=['django', 'python'],
-            published=True,
         )
-        self.mcp_recording = Recording.objects.create(
+        cls.mcp_recording = _create_recording_event(
+            'mcp-workshop',
             title='MCP Workshop',
-            slug='mcp-workshop',
             description='Learn MCP',
-            date=date(2025, 7, 10),
             tags=['mcp', 'agents'],
-            published=True,
         )
 
     def test_no_filter_shows_all(self):
@@ -265,16 +227,14 @@ class RecordingsListTagFilteringTest(TestCase):
 class RecordingsListPaginationTest(TestCase):
     """Test pagination on /event-recordings (20 per page)."""
 
-    def setUp(self):
-        self.client = Client()
+    @classmethod
+    def setUpTestData(cls):
         # Create 25 recordings to test pagination
         for i in range(25):
-            Recording.objects.create(
+            _create_recording_event(
+                f'recording-{i:02d}',
                 title=f'Recording {i:02d}',
-                slug=f'recording-{i:02d}',
                 description=f'Description {i}',
-                date=date(2025, 7, 1),
-                published=True,
             )
 
     def test_first_page_has_20_items(self):
@@ -301,37 +261,26 @@ class RecordingsListPaginationTest(TestCase):
         self.assertIn('Previous', content)
 
     def test_no_pagination_when_under_20(self):
-        Recording.objects.all().delete()
+        Event.objects.all().delete()
         for i in range(5):
-            Recording.objects.create(
-                title=f'Small Recording {i}',
-                slug=f'small-recording-{i}',
-                date=date(2025, 7, 1),
-                published=True,
-            )
+            _create_recording_event(f'small-recording-{i}')
         response = self.client.get('/event-recordings')
         self.assertFalse(response.context['is_paginated'])
 
     def test_pagination_preserves_tag_filter(self):
-        # Delete existing and create 25 tagged recordings
-        Recording.objects.all().delete()
+        Event.objects.all().delete()
         for i in range(25):
-            Recording.objects.create(
-                title=f'Tagged Rec {i:02d}',
-                slug=f'tagged-rec-{i:02d}',
-                date=date(2025, 7, 1),
+            _create_recording_event(
+                f'tagged-rec-{i:02d}',
                 tags=['python'],
-                published=True,
             )
         response = self.client.get('/event-recordings?tag=python')
         content = response.content.decode()
-        # The next page link should preserve the tag filter
         self.assertIn('tag=python', content)
 
     def test_invalid_page_number_shows_last(self):
         response = self.client.get('/event-recordings?page=999')
         self.assertEqual(response.status_code, 200)
-        # Paginator.get_page returns the last page for out-of-range
         page_obj = response.context['page_obj']
         self.assertEqual(page_obj.number, 2)
 
@@ -342,15 +291,14 @@ class RecordingsListPaginationTest(TestCase):
 class RecordingsListDisplayTest(TestCase):
     """Test that recordings listing shows required fields."""
 
-    def setUp(self):
-        self.client = Client()
-        self.recording = Recording.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.recording = _create_recording_event(
+            'workshop-display',
             title='Workshop Display Test',
-            slug='workshop-display',
             description='Workshop description here',
-            date=date(2025, 7, 20),
             tags=['agents', 'python'],
-            published=True,
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)),
         )
 
     def test_shows_title(self):
@@ -377,49 +325,36 @@ class RecordingsListDisplayTest(TestCase):
         self.assertIn('href="/event-recordings?tag=python"', content)
 
     def test_gated_recording_shows_lock_icon(self):
-        Recording.objects.create(
-            title='Gated Recording',
-            slug='gated-display',
-            date=date(2025, 7, 15),
+        _create_recording_event(
+            'gated-display',
             required_level=LEVEL_MAIN,
-            published=True,
         )
         response = self.client.get('/event-recordings')
         self.assertContains(response, 'data-lucide="lock"')
 
     def test_open_recording_no_lock_icon(self):
-        # Only open recordings, no lock
         response = self.client.get('/event-recordings')
         content = response.content.decode()
         self.assertNotIn('data-lucide="lock"', content)
 
     def test_empty_list_message(self):
-        Recording.objects.all().delete()
+        Event.objects.all().delete()
         response = self.client.get('/event-recordings')
         self.assertContains(response, 'No resources yet')
 
     def test_unpublished_not_shown(self):
-        Recording.objects.create(
-            title='Draft Recording',
-            slug='draft-recording',
-            date=date(2025, 7, 10),
-            published=False,
-        )
+        _create_recording_event('draft-recording', published=False)
         response = self.client.get('/event-recordings')
         self.assertNotContains(response, 'Draft Recording')
 
-    def test_sorting_by_date_desc(self):
-        Recording.objects.create(
-            title='Older Workshop',
-            slug='older-workshop',
-            date=date(2025, 1, 1),
-            published=True,
+    def test_event_without_recording_not_shown(self):
+        Event.objects.create(
+            title='No Recording Event', slug='no-rec-event',
+            start_datetime=timezone.now(), status='completed',
+            recording_url='', published=True,
         )
         response = self.client.get('/event-recordings')
-        content = response.content.decode()
-        new_pos = content.index('Workshop Display Test')
-        old_pos = content.index('Older Workshop')
-        self.assertLess(new_pos, old_pos)
+        self.assertNotContains(response, 'No Recording Event')
 
 
 # --- Recording detail display tests ---
@@ -428,16 +363,14 @@ class RecordingsListDisplayTest(TestCase):
 class RecordingDetailDisplayTest(TestCase):
     """Test recording detail page shows all required elements."""
 
-    def setUp(self):
-        self.client = Client()
-        self.recording = Recording.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.recording = _create_recording_event(
+            'detail-workshop',
             title='Detail Workshop',
-            slug='detail-workshop',
             description='Workshop for detail testing',
-            date=date(2025, 7, 20),
-            level='Intermediate',
             tags=['python', 'agents'],
-            youtube_url='https://youtube.com/watch?v=test123',
+            recording_url='https://youtube.com/watch?v=test123',
             timestamps=[
                 {'time_seconds': 0, 'label': 'Introduction'},
                 {'time_seconds': 125, 'label': 'Setting up'},
@@ -449,7 +382,7 @@ class RecordingDetailDisplayTest(TestCase):
             core_tools=['Python', 'Django'],
             learning_objectives=['Build an API', 'Deploy to production'],
             outcome='A working API deployment',
-            published=True,
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)),
         )
 
     def test_status_code_200(self):
@@ -471,10 +404,6 @@ class RecordingDetailDisplayTest(TestCase):
     def test_shows_date(self):
         response = self.client.get('/event-recordings/detail-workshop')
         self.assertContains(response, 'July 20, 2025')
-
-    def test_shows_level(self):
-        response = self.client.get('/event-recordings/detail-workshop')
-        self.assertContains(response, 'Intermediate')
 
     def test_shows_tags(self):
         response = self.client.get('/event-recordings/detail-workshop')
@@ -521,10 +450,7 @@ class RecordingDetailDisplayTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_404_for_unpublished(self):
-        Recording.objects.create(
-            title='Draft', slug='draft-detail',
-            date=date(2025, 7, 1), published=False,
-        )
+        _create_recording_event('draft-detail', published=False)
         response = self.client.get('/event-recordings/draft-detail')
         self.assertEqual(response.status_code, 404)
 
@@ -540,32 +466,28 @@ class RecordingDetailDisplayTest(TestCase):
 class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test recording detail view access control."""
 
-    def setUp(self):
-        self.client = Client()
-        self.open_recording = Recording.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.open_recording = _create_recording_event(
+            'open-recording',
             title='Open Recording',
-            slug='open-recording',
             description='Open description',
-            youtube_url='https://youtube.com/watch?v=open',
-            date=date(2025, 7, 20),
-            published=True,
+            recording_url='https://youtube.com/watch?v=open',
             required_level=LEVEL_OPEN,
         )
-        self.gated_recording = Recording.objects.create(
+        cls.gated_recording = _create_recording_event(
+            'gated-recording',
             title='Gated Recording',
-            slug='gated-recording',
             description='Gated description',
-            youtube_url='https://youtube.com/watch?v=gated',
+            recording_url='https://youtube.com/watch?v=gated',
             materials=[{'title': 'Secret Slides', 'url': 'https://example.com/secret'}],
-            date=date(2025, 7, 20),
-            published=True,
             required_level=LEVEL_MAIN,
         )
 
     def test_anonymous_sees_open_recording_video(self):
         response = self.client.get('/event-recordings/open-recording')
         self.assertEqual(response.status_code, 200)
-        # Should not be gated
         self.assertFalse(response.context['is_gated'])
 
     def test_anonymous_sees_gated_recording_title_and_description(self):
@@ -576,9 +498,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
 
     def test_anonymous_does_not_see_gated_video(self):
         response = self.client.get('/event-recordings/gated-recording')
-        # Video embed should not be present
         self.assertNotContains(response, 'youtube.com/embed')
-        # CTA should be present
         self.assertContains(response, 'Upgrade to Main to watch this recording')
 
     def test_anonymous_does_not_see_gated_materials(self):
@@ -625,83 +545,3 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
     def test_gated_recording_shows_pricing_link(self):
         response = self.client.get('/event-recordings/gated-recording')
         self.assertContains(response, '/pricing')
-
-
-# --- Admin tests ---
-
-
-class RecordingAdminTest(TestCase):
-    """Test admin CRUD for recordings."""
-
-    def setUp(self):
-        self.client = Client()
-        self.admin_user = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
-
-    def test_admin_recording_list(self):
-        Recording.objects.create(
-            title='Admin Recording', slug='admin-rec', date=date(2025, 7, 20),
-            published=True,
-        )
-        response = self.client.get('/admin/content/recording/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Admin Recording')
-
-    def test_admin_create_recording(self):
-        response = self.client.post('/admin/content/recording/add/', {
-            'title': 'New Recording',
-            'slug': 'new-recording',
-            'description': 'A new recording',
-            'date': '2025-07-20',
-            'tags': '[]',
-            'level': '',
-            'google_embed_url': '',
-            'youtube_url': 'https://youtube.com/watch?v=new',
-            'timestamps': '[]',
-            'materials': '[]',
-            'core_tools': '[]',
-            'learning_objectives': '[]',
-            'outcome': '',
-            'related_course': '',
-            'required_level': 0,
-            'published': True,
-        })
-        self.assertEqual(Recording.objects.filter(slug='new-recording').count(), 1)
-        rec = Recording.objects.get(slug='new-recording')
-        self.assertEqual(rec.title, 'New Recording')
-
-    def test_admin_delete_recording(self):
-        rec = Recording.objects.create(
-            title='Delete Me', slug='delete-me', date=date(2025, 7, 20),
-            published=True,
-        )
-        response = self.client.post(
-            f'/admin/content/recording/{rec.pk}/delete/',
-            {'post': 'yes'},
-        )
-        self.assertEqual(Recording.objects.filter(slug='delete-me').count(), 0)
-
-    def test_admin_slug_auto_generated(self):
-        """Verify prepopulated_fields config for slug from title."""
-        from content.admin.recording import RecordingAdmin
-        self.assertEqual(RecordingAdmin.prepopulated_fields, {'slug': ('title',)})
-
-    def test_admin_search(self):
-        Recording.objects.create(
-            title='Searchable Recording', slug='searchable-rec',
-            description='find me recording', date=date(2025, 7, 20),
-            published=True,
-        )
-        response = self.client.get('/admin/content/recording/?q=Searchable')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Searchable Recording')
-
-    def test_admin_published_at_in_list_display(self):
-        from content.admin.recording import RecordingAdmin
-        self.assertIn('published_at', RecordingAdmin.list_display)
-
-    def test_admin_published_at_readonly(self):
-        from content.admin.recording import RecordingAdmin
-        self.assertIn('published_at', RecordingAdmin.readonly_fields)

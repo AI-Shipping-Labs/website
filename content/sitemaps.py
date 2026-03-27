@@ -15,7 +15,7 @@ Includes:
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
 
-from content.models import Article, Course, Recording, Project, Tutorial, Download
+from content.models import Article, Course, Project, Tutorial, Download
 from events.models import Event
 
 
@@ -72,21 +72,25 @@ class EventSitemap(Sitemap):
 
 
 class RecordingSitemap(Sitemap):
-    """Sitemap for published, open recordings."""
+    """Sitemap for published, open recordings (events with recordings)."""
     changefreq = 'weekly'
     priority = 0.7
 
     def items(self):
-        return Recording.objects.filter(
+        return Event.objects.filter(
             published=True,
             required_level=0,
-        ).order_by('-date')
+        ).exclude(
+            recording_url='',
+        ).exclude(
+            recording_url__isnull=True,
+        ).order_by('-start_datetime')
 
     def lastmod(self, obj):
         return obj.updated_at
 
     def location(self, obj):
-        return obj.get_absolute_url()
+        return obj.get_recording_url()
 
 
 class ProjectSitemap(Sitemap):
@@ -158,7 +162,6 @@ def _collect_all_tags():
     # Content types with their published filters
     content_configs = [
         (Article, {'published': True}),
-        (Recording, {'published': True}),
         (Project, {'published': True}),
         (Tutorial, {'published': True}),
         (Course, {'status': 'published'}),

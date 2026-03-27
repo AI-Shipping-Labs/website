@@ -1,10 +1,10 @@
-"""Tests for studio recording CRUD views."""
+"""Tests for studio recording CRUD views (now using Event model)."""
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.utils import timezone
 
-from content.models import Recording
+from events.models import Event
 
 User = get_user_model()
 
@@ -28,21 +28,24 @@ class StudioRecordingListTest(TestCase):
         self.assertTemplateUsed(response, 'studio/recordings/list.html')
 
     def test_list_shows_recordings(self):
-        Recording.objects.create(
+        Event.objects.create(
             title='Test Recording', slug='test-rec',
-            date=timezone.now().date(),
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=test',
         )
         response = self.client.get('/studio/recordings/')
         self.assertContains(response, 'Test Recording')
 
     def test_list_search(self):
-        Recording.objects.create(
+        Event.objects.create(
             title='Python Workshop', slug='python',
-            date=timezone.now().date(),
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=python',
         )
-        Recording.objects.create(
+        Event.objects.create(
             title='Java Workshop', slug='java',
-            date=timezone.now().date(),
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=java',
         )
         response = self.client.get('/studio/recordings/?q=Python')
         self.assertContains(response, 'Python Workshop')
@@ -73,9 +76,10 @@ class StudioRecordingEditTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-        self.recording = Recording.objects.create(
+        self.recording = Event.objects.create(
             title='Edit Rec', slug='edit-rec',
-            date=timezone.now().date(),
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=edit',
         )
 
     def test_edit_form_returns_200(self):
@@ -86,14 +90,13 @@ class StudioRecordingEditTest(TestCase):
         self.client.post(f'/studio/recordings/{self.recording.pk}/edit', {
             'title': 'Updated Rec',
             'slug': 'edit-rec',
-            'date': '2024-06-01',
-            'youtube_url': 'https://youtube.com/updated',
+            'recording_url': 'https://youtube.com/updated',
             'published': 'on',
             'required_level': '10',
         })
         self.recording.refresh_from_db()
         self.assertEqual(self.recording.title, 'Updated Rec')
-        self.assertEqual(self.recording.youtube_url, 'https://youtube.com/updated')
+        self.assertEqual(self.recording.recording_url, 'https://youtube.com/updated')
         self.assertTrue(self.recording.published)
 
     def test_edit_nonexistent_recording_returns_404(self):

@@ -15,7 +15,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.utils import timezone
 
-from content.models import Article, Recording, Course, Module, Unit, Download, Project
+from content.models import Article, Course, Module, Unit, Download, Project
+from events.models import Event
 from studio.utils import is_synced, get_github_edit_url
 
 User = get_user_model()
@@ -190,7 +191,7 @@ class SyncedArticleListTest(TestCase):
 
 
 class SyncedRecordingReadOnlyTest(TestCase):
-    """Test that synced recordings are read-only in Studio."""
+    """Test that synced recordings (events with recordings) are read-only in Studio."""
 
     def setUp(self):
         self.client = Client()
@@ -198,18 +199,20 @@ class SyncedRecordingReadOnlyTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-        self.synced = Recording.objects.create(
+        self.synced = Event.objects.create(
             title='Synced Recording', slug='synced-rec',
-            date=timezone.now().date(), published=True,
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=test',
+            published=True,
             source_repo='AI-Shipping-Labs/content',
-            source_path='recordings/synced-rec.md',
+            source_path='events/synced-rec.md',
             source_commit='def4567890abcdef1234567890abcdef12345678',
         )
 
     def test_synced_recording_post_returns_403(self):
         response = self.client.post(f'/studio/recordings/{self.synced.pk}/edit', {
             'title': 'Hacked', 'slug': 'synced-rec',
-            'date': '2024-01-01', 'required_level': '0',
+            'required_level': '0',
         })
         self.assertEqual(response.status_code, 403)
         self.synced.refresh_from_db()
@@ -221,7 +224,7 @@ class SyncedRecordingReadOnlyTest(TestCase):
 
     def test_synced_recording_shows_metadata(self):
         response = self.client.get(f'/studio/recordings/{self.synced.pk}/edit')
-        self.assertContains(response, 'recordings/synced-rec.md')
+        self.assertContains(response, 'events/synced-rec.md')
 
     def test_synced_recording_hides_save_button(self):
         response = self.client.get(f'/studio/recordings/{self.synced.pk}/edit')

@@ -1,4 +1,4 @@
-"""Studio views for recording management."""
+"""Studio views for recording management (now using Event model)."""
 
 import logging
 
@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
-from content.models import Recording
+from events.models import Event
 from jobs.tasks import async_task
 from studio.decorators import staff_required
 from studio.utils import is_synced, get_github_edit_url
@@ -19,10 +19,12 @@ logger = logging.getLogger(__name__)
 
 @staff_required
 def recording_list(request):
-    """List all recordings."""
+    """List all events that have recordings."""
     search = request.GET.get('q', '')
 
-    recordings = Recording.objects.all()
+    recordings = Event.objects.filter(
+        recording_url__isnull=False,
+    ).exclude(recording_url='')
     if search:
         recordings = recordings.filter(title__icontains=search)
 
@@ -34,8 +36,8 @@ def recording_list(request):
 
 @staff_required
 def recording_edit(request, recording_id):
-    """Edit an existing recording (read-only for synced items)."""
-    recording = get_object_or_404(Recording, pk=recording_id)
+    """Edit recording fields on an event (read-only for synced items)."""
+    recording = get_object_or_404(Event, pk=recording_id)
     synced = is_synced(recording)
 
     if request.method == 'POST':
@@ -47,19 +49,11 @@ def recording_edit(request, recording_id):
         recording.title = request.POST.get('title', '').strip()
         recording.slug = request.POST.get('slug', '').strip() or slugify(recording.title)
         recording.description = request.POST.get('description', '')
-        recording.youtube_url = request.POST.get('youtube_url', '')
+        recording.recording_url = request.POST.get('recording_url', '') or request.POST.get('youtube_url', '')
         recording.published = request.POST.get('published') == 'on'
         recording.required_level = int(request.POST.get('required_level', 0))
         tags_raw = request.POST.get('tags', '')
         recording.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
-
-        date_str = request.POST.get('date', '')
-        if date_str:
-            try:
-                from datetime import datetime
-                recording.date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            except ValueError:
-                pass
 
         recording.save()
         return redirect('studio_recording_edit', recording_id=recording.pk)
@@ -79,15 +73,15 @@ def recording_edit(request, recording_id):
 @require_POST
 def recording_publish_youtube(request, recording_id):
     """Enqueue a background job to upload a recording from S3 to YouTube."""
-    recording = get_object_or_404(Recording, pk=recording_id)
+    recording = get_object_or_404(Event, pk=recording_id)
 
-    if not recording.s3_url:
+    if not recording.recording_s3_url:
         return JsonResponse(
             {'error': 'Recording has no S3 URL. Upload to S3 first.'},
             status=400,
         )
 
-    if recording.youtube_url:
+    if recording.recording_url:
         return JsonResponse(
             {'error': 'Recording already has a YouTube URL.'},
             status=400,
@@ -100,7 +94,7 @@ def recording_publish_youtube(request, recording_id):
             max_retries=3,
         )
         logger.info(
-            'Enqueued YouTube upload for recording %s (task_id=%s)',
+            'Enqueued YouTube upload for event %s (task_id=%s)',
             recording.pk, task_id,
         )
         return JsonResponse({
@@ -110,6 +104,6 @@ def recording_publish_youtube(request, recording_id):
         })
     except Exception as e:
         logger.exception(
-            'Failed to enqueue YouTube upload for recording %s', recording.pk,
+            'Failed to enqueue YouTube upload for event %s', recording.pk,
         )
         return JsonResponse({'error': str(e)}, status=500)

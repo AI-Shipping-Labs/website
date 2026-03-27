@@ -18,7 +18,9 @@ from datetime import date
 from django.template import Context, Template
 from django.test import TestCase, Client
 
-from content.models import Article, Recording
+from content.models import Article
+from django.utils import timezone
+from events.models import Event
 from content.templatetags.video_utils import (
     detect_video_source,
     format_timestamp,
@@ -458,16 +460,16 @@ class TimestampEditorWidgetTest(TestCase):
 
 # --- Recording Admin Form Tests ---
 
-class RecordingAdminFormTest(TestCase):
-    """Test the RecordingAdminForm with TimestampEditorWidget."""
+class EventAdminFormTest(TestCase):
+    """Test the EventAdminForm with TimestampEditorWidget."""
 
     def test_admin_form_has_timestamp_widget(self):
-        from content.admin.recording import RecordingAdminForm
-        form = RecordingAdminForm()
+        from events.admin.event import EventAdminForm
+        form = EventAdminForm()
         self.assertIsInstance(form.fields['timestamps'].widget, TimestampEditorWidget)
 
     def test_admin_form_clean_timestamps_valid_json(self):
-        from content.admin.recording import RecordingAdminForm
+        from events.admin.event import EventAdminForm
         form_data = {
             'title': 'Test',
             'slug': 'test',
@@ -486,12 +488,12 @@ class RecordingAdminFormTest(TestCase):
             'published': True,
             'required_level': 0,
         }
-        form = RecordingAdminForm(data=form_data)
+        form = EventAdminForm(data=form_data)
         self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")
         self.assertEqual(form.cleaned_data['timestamps'], [{'time_seconds': 0, 'label': 'Intro'}])
 
     def test_admin_form_clean_timestamps_empty(self):
-        from content.admin.recording import RecordingAdminForm
+        from events.admin.event import EventAdminForm
         form_data = {
             'title': 'Test',
             'slug': 'test',
@@ -510,7 +512,7 @@ class RecordingAdminFormTest(TestCase):
             'published': True,
             'required_level': 0,
         }
-        form = RecordingAdminForm(data=form_data)
+        form = EventAdminForm(data=form_data)
         self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")
         self.assertEqual(form.cleaned_data['timestamps'], [])
 
@@ -524,12 +526,12 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.client = Client()
 
     def test_youtube_video_player_in_recording_detail(self):
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='YT Recording',
             slug='yt-recording',
             description='A recording with YouTube',
-            date=date(2025, 7, 20),
-            youtube_url='https://www.youtube.com/watch?v=testVidId',
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)), status='completed',
+            recording_url='https://www.youtube.com/watch?v=testVidId',
             timestamps=[
                 {'time_seconds': 0, 'label': 'Intro'},
                 {'time_seconds': 300, 'label': 'Main Content'},
@@ -549,11 +551,11 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.assertIn('Main Content', content)
 
     def test_recording_without_youtube_no_player(self):
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='No Video Recording',
             slug='no-video',
             description='Recording without video',
-            date=date(2025, 7, 20),
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)), status='completed',
             published=True,
         )
         response = self.client.get('/event-recordings/no-video')
@@ -563,12 +565,12 @@ class RecordingDetailVideoPlayerTest(TestCase):
 
     def test_recording_with_google_embed_fallback(self):
         """Google embed URLs should still use basic iframe (not video player)."""
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Google Recording',
             slug='google-recording',
             description='Recording with google embed',
-            date=date(2025, 7, 20),
-            google_embed_url='https://drive.google.com/file/d/abc/preview',
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)), status='completed',
+            recording_embed_url='https://drive.google.com/file/d/abc/preview',
             published=True,
         )
         response = self.client.get('/event-recordings/google-recording')
@@ -577,12 +579,12 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.assertIn('drive.google.com', content)
 
     def test_recording_youtube_with_hour_long_timestamps(self):
-        recording = Recording.objects.create(
+        recording = Event.objects.create(
             title='Long Recording',
             slug='long-recording',
             description='An hour-long recording',
-            date=date(2025, 7, 20),
-            youtube_url='https://www.youtube.com/watch?v=longVid',
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)), status='completed',
+            recording_url='https://www.youtube.com/watch?v=longVid',
             timestamps=[
                 {'time_seconds': 0, 'label': 'Start'},
                 {'time_seconds': 3600, 'label': 'Hour Mark'},

@@ -45,8 +45,8 @@ CONTENT_TYPE_CONFIG = {
         'published_filter': {'status': 'upcoming'},
     },
     'recording': {
-        'app_label': 'content',
-        'model_name': 'Recording',
+        'app_label': 'events',
+        'model_name': 'Event',
         'title_template': 'New recording: {title}',
         'level_field': 'required_level',
         'published_filter': {'published': True},

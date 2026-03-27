@@ -41,7 +41,7 @@ REQUIRED_FIELDS = {
     'course': ['title'],
     'module': ['title'],
     'unit': ['title'],
-    'recording': ['title', 'video_url'],
+    'event': ['title'],
     'project': ['title'],
     'curated_link': ['title', 'url', 'item_id'],
     'download': ['title'],
@@ -574,6 +574,7 @@ def _get_sync_function(content_type):
         'resource': _sync_resources,
         'project': _sync_projects,
         'interview_question': _sync_interview_questions,
+        'event': _sync_events,
     }
     func = sync_functions.get(content_type)
     if not func:
@@ -1195,17 +1196,13 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
 
 def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync resources: recordings, curated links, and downloads."""
-    from content.models import CuratedLink, Download, Recording
+    """Sync resources: curated links and downloads.
+
+    Note: recordings are now synced via _sync_events (content_type='event').
+    """
+    from content.models import CuratedLink, Download
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
-
-    # Sync recordings
-    recordings_dir = os.path.join(repo_dir, 'recordings')
-    if os.path.isdir(recordings_dir):
-        _sync_recordings(
-            source, recordings_dir, repo_dir, commit_sha, stats,
-        )
 
     # Sync curated links
     links_dir = os.path.join(repo_dir, 'curated-links')
@@ -1224,38 +1221,50 @@ def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
     return stats
 
 
-def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
-    """Sync recording YAML files."""
-    from content.models import Recording
-    from datetime import date as date_type
+def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
+    """Sync event YAML/markdown files from the events/ directory.
 
+    Upserts into the Event model. Only updates content fields; operational
+    fields (start_datetime, zoom_join_url, status, etc.) are never overwritten
+    by sync if the event already exists.
+    """
+    import datetime as dt
+    from events.models import Event
+
+    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
     seen_slugs = set()
     failed_slugs = set()
 
-    for filename in os.listdir(recordings_dir):
-        if not filename.endswith('.yaml') and not filename.endswith('.yml'):
+    events_dir = repo_dir  # content_path already resolved by caller
+
+    for filename in os.listdir(events_dir):
+        if not (filename.endswith('.yaml') or filename.endswith('.yml') or filename.endswith('.md')):
             continue
 
-        filepath = os.path.join(recordings_dir, filename)
+        filepath = os.path.join(events_dir, filename)
         rel_path = os.path.relpath(filepath, repo_dir)
 
         try:
-            data = _parse_yaml_file(filepath)
+            # Parse YAML or markdown with frontmatter
+            if filename.endswith('.md'):
+                data, body = _parse_markdown_file(filepath)
+                if body and body.strip():
+                    data['description'] = body.strip()
+            else:
+                data = _parse_yaml_file(filepath)
+
             slug = data.get('slug', os.path.splitext(filename)[0])
 
-            # Edge Case 7: Frontmatter validation
-            _validate_frontmatter(data, 'recording', rel_path)
-
-            # Require content_id in frontmatter
-            recording_content_id = data.get('content_id')
-            if not recording_content_id:
+            # Require content_id
+            event_content_id = data.get('content_id')
+            if not event_content_id:
                 msg = f'Skipping {rel_path}: missing content_id in frontmatter'
                 logger.warning(msg)
                 stats['errors'].append({'file': rel_path, 'error': msg})
                 continue
 
-            # Edge Case 2: Slug collision across sources
-            if _check_slug_collision(Recording, slug, source.repo_name, rel_path):
+            # Slug collision check
+            if _check_slug_collision(Event, slug, source.repo_name, rel_path):
                 stats['errors'].append({
                     'file': rel_path,
                     'error': (
@@ -1268,39 +1277,85 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
 
             seen_slugs.add(slug)
 
-            defaults = {
+            # Content fields that sync always updates
+            content_defaults = {
                 'title': data.get('title', slug),
                 'description': data.get('description', ''),
-                'youtube_url': data.get('video_url', ''),
+                'recording_url': data.get('recording_url', '') or data.get('video_url', ''),
+                'recording_embed_url': data.get('google_embed_url', ''),
+                'transcript_url': data.get('transcript_url', ''),
                 'timestamps': data.get('timestamps', []),
                 'materials': data.get('materials', []),
+                'core_tools': data.get('core_tools', []),
+                'learning_objectives': data.get('learning_objectives', []),
+                'outcome': data.get('outcome', ''),
                 'tags': data.get('tags', []),
                 'required_level': data.get('required_level', 0),
-                'published': True,
+                'speaker_name': data.get('speaker_name', ''),
+                'speaker_bio': data.get('speaker_bio', ''),
+                'related_course': data.get('related_course', ''),
+                'published': data.get('published', True),
+                'content_id': event_content_id,
                 'source_repo': source.repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
-                'content_id': recording_content_id,
             }
 
+            # Handle cover_image
+            cover_image = data.get('cover_image', '')
+            if cover_image:
+                content_defaults['cover_image_url'] = rewrite_cover_image_url(
+                    cover_image, source, rel_path,
+                )
+
+            # Handle published_at
             published_at = data.get('published_at')
             if published_at:
                 if isinstance(published_at, str):
-                    defaults['date'] = date_type.fromisoformat(published_at)
-                elif isinstance(published_at, date_type):
-                    defaults['date'] = published_at
-            else:
-                defaults['date'] = timezone.now().date()
+                    content_defaults['published_at'] = dt.datetime.combine(
+                        dt.date.fromisoformat(published_at),
+                        dt.time.min,
+                        tzinfo=dt.timezone.utc,
+                    )
+                elif isinstance(published_at, (dt.date, dt.datetime)):
+                    if isinstance(published_at, dt.date) and not isinstance(published_at, dt.datetime):
+                        content_defaults['published_at'] = dt.datetime.combine(
+                            published_at, dt.time.min, tzinfo=dt.timezone.utc,
+                        )
+                    else:
+                        content_defaults['published_at'] = published_at
 
-            recording, created = Recording.objects.update_or_create(
-                slug=slug,
-                source_repo=source.repo_name,
-                defaults=defaults,
-            )
-            if created:
-                stats['created'] += 1
-            else:
+            # Try to find existing event by slug + source_repo
+            try:
+                event = Event.objects.get(slug=slug, source_repo=source.repo_name)
+                # Update only content fields, not operational fields
+                for key, value in content_defaults.items():
+                    setattr(event, key, value)
+                event.save()
                 stats['updated'] += 1
+            except Event.DoesNotExist:
+                # Create new event with status='completed' (content-repo events
+                # are assumed to be past events with recordings)
+                start_dt_value = published_at
+                if isinstance(start_dt_value, str):
+                    start_dt_value = dt.date.fromisoformat(start_dt_value)
+                if isinstance(start_dt_value, dt.date) and not isinstance(start_dt_value, dt.datetime):
+                    start_dt_value = dt.datetime.combine(
+                        start_dt_value, dt.time.min, tzinfo=dt.timezone.utc,
+                    )
+                if not start_dt_value:
+                    start_dt_value = timezone.now()
+
+                event = Event(
+                    slug=slug,
+                    start_datetime=start_dt_value,
+                    status='completed',
+                    event_type='live',
+                    platform='zoom',
+                    **content_defaults,
+                )
+                event.save()
+                stats['created'] += 1
 
         except Exception as e:
             fallback_slug = os.path.splitext(filename)[0]
@@ -1311,14 +1366,16 @@ def _sync_recordings(source, recordings_dir, repo_dir, commit_sha, stats):
             failed_slugs.add(failed_slug)
             stats['errors'].append({'file': rel_path, 'error': str(e)})
 
-    # Soft-delete stale recordings, excluding failed slugs
-    stale = Recording.objects.filter(
+    # Soft-delete: if a synced event file is removed, set published=False
+    stale = Event.objects.filter(
         source_repo=source.repo_name,
         published=True,
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count
+
+    return stats
 
 
 def _sync_curated_links(source, links_dir, repo_dir, commit_sha, stats):

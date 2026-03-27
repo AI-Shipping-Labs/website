@@ -8,7 +8,7 @@ from collections import Counter
 
 from django.shortcuts import render
 
-from content.models import Article, Recording, Project, CuratedLink, Download, Course
+from content.models import Article, Project, CuratedLink, Download, Course
 from events.models import Event
 
 
@@ -21,14 +21,6 @@ CONTENT_TYPES = [
         'type_label': 'Article',
         'type_color': 'bg-blue-500/20 text-blue-400',
         'url_func': lambda obj: f'/blog/{obj.slug}',
-    },
-    {
-        'model': Recording,
-        'filter': {'published': True},
-        'date_field': 'date',
-        'type_label': 'Recording',
-        'type_color': 'bg-purple-500/20 text-purple-400',
-        'url_func': lambda obj: f'/event-recordings/{obj.slug}',
     },
     {
         'model': Project,
@@ -60,7 +52,7 @@ CONTENT_TYPES = [
         'date_field': 'start_datetime',
         'type_label': 'Event',
         'type_color': 'bg-yellow-500/20 text-yellow-400',
-        'url_func': lambda obj: f'/events/{obj.slug}',
+        'url_func': lambda obj: f'/event-recordings/{obj.slug}' if obj.has_recording else f'/events/{obj.slug}',
     },
 ]
 
@@ -121,8 +113,16 @@ def tags_detail(request, tag):
                     'tags': obj.tags,
                 })
 
-    # Sort by date descending
-    results.sort(key=lambda x: x['date'], reverse=True)
+    # Sort by date descending (normalize date/datetime for comparison)
+    import datetime as dt
+    def _sort_key(x):
+        val = x['date']
+        if isinstance(val, dt.datetime):
+            return val
+        if isinstance(val, dt.date):
+            return dt.datetime.combine(val, dt.time.min, tzinfo=dt.timezone.utc)
+        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    results.sort(key=_sort_key, reverse=True)
 
     context = {
         'tag': tag,

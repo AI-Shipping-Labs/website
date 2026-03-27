@@ -97,6 +97,10 @@ class SyncLog(models.Model):
     source = models.ForeignKey(
         ContentSource, on_delete=models.CASCADE, related_name='sync_logs',
     )
+    batch_id = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text="Shared UUID grouping SyncLogs from the same Sync All action.",
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
@@ -105,6 +109,18 @@ class SyncLog(models.Model):
     items_created = models.IntegerField(default=0)
     items_updated = models.IntegerField(default=0)
     items_deleted = models.IntegerField(default=0)
+    items_detail = models.JSONField(
+        default=list, blank=True,
+        help_text="List of changed items: [{title, slug, action, content_type, url}, ...]",
+    )
+    tiers_synced = models.BooleanField(
+        default=False,
+        help_text="Whether tiers.yaml was synced during this operation.",
+    )
+    tiers_count = models.IntegerField(
+        default=0,
+        help_text="Number of tiers found in tiers.yaml.",
+    )
     errors = models.JSONField(
         default=list, blank=True,
         help_text="List of error objects: [{file, error}, ...]",

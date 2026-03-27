@@ -410,7 +410,7 @@ def upload_images_to_s3(content_dir, source):
     return stats
 
 
-def sync_content_source(source, repo_dir=None):
+def sync_content_source(source, repo_dir=None, batch_id=None):
     """Sync content from a GitHub repo into the database.
 
     This is the main sync function that:
@@ -423,6 +423,7 @@ def sync_content_source(source, repo_dir=None):
     Args:
         source: ContentSource instance.
         repo_dir: Optional pre-cloned repo directory (for testing).
+        batch_id: Optional UUID to group logs from the same "Sync All" action.
 
     Returns:
         SyncLog: The sync log entry.
@@ -436,6 +437,7 @@ def sync_content_source(source, repo_dir=None):
         )
         sync_log = SyncLog.objects.create(
             source=source,
+            batch_id=batch_id,
             status='skipped',
             finished_at=timezone.now(),
             errors=[{'file': '', 'error': 'Sync already in progress, skipped.'}],
@@ -444,6 +446,7 @@ def sync_content_source(source, repo_dir=None):
 
     sync_log = SyncLog.objects.create(
         source=source,
+        batch_id=batch_id,
         status='running',
     )
 
@@ -494,7 +497,7 @@ def sync_content_source(source, repo_dir=None):
         )
 
         # Sync tiers.yaml from repo root into SiteConfig
-        _sync_tiers_yaml(repo_dir)
+        tiers_result = _sync_tiers_yaml(repo_dir)
 
         # Collect known image paths for broken reference checks (Edge Case 8)
         known_images = _collect_image_paths(content_dir)
@@ -511,6 +514,9 @@ def sync_content_source(source, repo_dir=None):
         sync_log.items_created = stats.get('created', 0)
         sync_log.items_updated = stats.get('updated', 0)
         sync_log.items_deleted = stats.get('deleted', 0)
+        sync_log.items_detail = stats.get('items_detail', [])
+        sync_log.tiers_synced = tiers_result.get('synced', False)
+        sync_log.tiers_count = tiers_result.get('count', 0)
         sync_log.errors = all_errors
 
         if sync_log.errors:
@@ -570,10 +576,15 @@ def sync_content_source(source, repo_dir=None):
 
 
 def _sync_tiers_yaml(repo_dir):
-    """Sync tiers.yaml from the repo root into SiteConfig."""
+    """Sync tiers.yaml from the repo root into SiteConfig.
+
+    Returns:
+        dict with keys ``synced`` (bool) and ``count`` (int), or
+        ``synced=False, count=0`` when the file is absent or fails.
+    """
     tiers_path = os.path.join(repo_dir, 'tiers.yaml')
     if not os.path.isfile(tiers_path):
-        return
+        return {'synced': False, 'count': 0}
     try:
         import yaml
         from content.models import SiteConfig
@@ -584,8 +595,10 @@ def _sync_tiers_yaml(repo_dir):
             defaults={'data': tiers_data},
         )
         logger.info('tiers.yaml synced to SiteConfig (%d tiers)', len(tiers_data))
+        return {'synced': True, 'count': len(tiers_data)}
     except Exception as e:
         logger.warning('Failed to sync tiers.yaml: %s', e)
+        return {'synced': False, 'count': 0}
 
 
 def _get_sync_function(content_type):
@@ -776,7 +789,7 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync blog articles from the repo."""
     from content.models import Article
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
+    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_slugs = set()
     failed_slugs = set()
 
@@ -892,10 +905,17 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
                     expanded = expand_widgets(article.content_html, article.data_json)
                     Article.objects.filter(pk=article.pk).update(content_html=expanded)
 
+                action = 'created' if created else 'updated'
                 if created:
                     stats['created'] += 1
                 else:
                     stats['updated'] += 1
+                stats['items_detail'].append({
+                    'title': defaults['title'],
+                    'slug': current_slug,
+                    'action': action,
+                    'content_type': 'article',
+                })
 
             except Exception as e:
                 # Track the slug as failed so it's excluded from cleanup.
@@ -916,6 +936,13 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
         published=True,
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
 
+    for article in stale_articles:
+        stats['items_detail'].append({
+            'title': article.title,
+            'slug': article.slug,
+            'action': 'deleted',
+            'content_type': 'article',
+        })
     deleted_count = stale_articles.count()
     stale_articles.update(published=False, status='draft')
     stats['deleted'] = deleted_count
@@ -927,7 +954,7 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync courses with modules and units from the repo."""
     from content.models import Course, Module, Unit
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
+    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_course_slugs = set()
     failed_course_slugs = set()
 
@@ -996,10 +1023,17 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
                 source_repo=source.repo_name,
                 defaults=course_defaults,
             )
+            action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
             else:
                 stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': course_defaults.get('title', slug),
+                'slug': slug,
+                'action': action,
+                'content_type': 'course',
+            })
 
             # Sync modules
             _sync_course_modules(
@@ -1025,6 +1059,13 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
         status='published',
     ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs)
 
+    for course in stale_courses:
+        stats['items_detail'].append({
+            'title': course.title,
+            'slug': course.slug,
+            'action': 'deleted',
+            'content_type': 'course',
+        })
     deleted_count = stale_courses.count()
     stale_courses.update(status='draft')
     stats['deleted'] += deleted_count
@@ -1224,7 +1265,7 @@ def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
     """
     from content.models import CuratedLink, Download
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
+    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
 
     # Sync curated links
     links_dir = os.path.join(repo_dir, 'curated-links')
@@ -1253,7 +1294,7 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
     import datetime as dt
     from events.models import Event
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
+    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_slugs = set()
     failed_slugs = set()
 
@@ -1355,6 +1396,12 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
                     setattr(event, key, value)
                 event.save()
                 stats['updated'] += 1
+                stats['items_detail'].append({
+                    'title': content_defaults.get('title', slug),
+                    'slug': slug,
+                    'action': 'updated',
+                    'content_type': 'event',
+                })
             except Event.DoesNotExist:
                 # Create new event with status='completed' (content-repo events
                 # are assumed to be past events with recordings)
@@ -1378,6 +1425,12 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
                 )
                 event.save()
                 stats['created'] += 1
+                stats['items_detail'].append({
+                    'title': content_defaults.get('title', slug),
+                    'slug': slug,
+                    'action': 'created',
+                    'content_type': 'event',
+                })
 
         except Exception as e:
             fallback_slug = os.path.splitext(filename)[0]
@@ -1393,6 +1446,13 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
         source_repo=source.repo_name,
         published=True,
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
+    for ev in stale:
+        stats['items_detail'].append({
+            'title': ev.title,
+            'slug': ev.slug,
+            'action': 'deleted',
+            'content_type': 'event',
+        })
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count
@@ -1454,10 +1514,17 @@ def _sync_curated_links(source, links_dir, repo_dir, commit_sha, stats):
                 item_id=item_id,
                 defaults=defaults,
             )
+            action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
             else:
                 stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': defaults['title'],
+                'slug': item_id,
+                'action': action,
+                'content_type': 'resource',
+            })
 
         except Exception as e:
             fallback_id = os.path.splitext(filename)[0]
@@ -1473,6 +1540,13 @@ def _sync_curated_links(source, links_dir, repo_dir, commit_sha, stats):
         source_repo=source.repo_name,
         published=True,
     ).exclude(item_id__in=seen_item_ids).exclude(item_id__in=failed_item_ids)
+    for link in stale:
+        stats['items_detail'].append({
+            'title': link.title,
+            'slug': link.item_id,
+            'action': 'deleted',
+            'content_type': 'resource',
+        })
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count
@@ -1545,10 +1619,17 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
                 source_repo=source.repo_name,
                 defaults=defaults,
             )
+            action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
             else:
                 stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': defaults['title'],
+                'slug': slug,
+                'action': action,
+                'content_type': 'resource',
+            })
 
         except Exception as e:
             fallback_slug = os.path.splitext(filename)[0]
@@ -1564,6 +1645,13 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
         source_repo=source.repo_name,
         published=True,
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
+    for dl in stale:
+        stats['items_detail'].append({
+            'title': dl.title,
+            'slug': dl.slug,
+            'action': 'deleted',
+            'content_type': 'resource',
+        })
     deleted_count = stale.count()
     stale.update(published=False)
     stats['deleted'] += deleted_count
@@ -1574,7 +1662,7 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
     from content.models import Project
     from datetime import date as date_type
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
+    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_slugs = set()
     failed_slugs = set()
 
@@ -1663,10 +1751,17 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
                     source_repo=source.repo_name,
                     defaults=defaults,
                 )
+                action = 'created' if created else 'updated'
                 if created:
                     stats['created'] += 1
                 else:
                     stats['updated'] += 1
+                stats['items_detail'].append({
+                    'title': defaults['title'],
+                    'slug': slug,
+                    'action': action,
+                    'content_type': 'project',
+                })
 
             except Exception as e:
                 fallback_slug = os.path.splitext(filename)[0]
@@ -1683,6 +1778,13 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
         source_repo=source.repo_name,
         published=True,
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
+    for proj in stale:
+        stats['items_detail'].append({
+            'title': proj.title,
+            'slug': proj.slug,
+            'action': 'deleted',
+            'content_type': 'project',
+        })
     deleted_count = stale.count()
     stale.update(published=False, status='pending_review')
     stats['deleted'] = deleted_count
@@ -1694,7 +1796,7 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
     """Sync interview question categories from markdown files."""
     from content.models import InterviewCategory
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': []}
+    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_slugs = set()
 
     # Walk for all .md files (excluding README)
@@ -1728,10 +1830,17 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
                     slug=slug,
                     defaults=defaults,
                 )
+                action = 'created' if created else 'updated'
                 if created:
                     stats['created'] += 1
                 else:
                     stats['updated'] += 1
+                stats['items_detail'].append({
+                    'title': defaults['title'],
+                    'slug': slug,
+                    'action': action,
+                    'content_type': 'interview_question',
+                })
 
             except Exception as e:
                 stats['errors'].append({'file': rel_path, 'error': str(e)})
@@ -1743,6 +1852,13 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
     stale = InterviewCategory.objects.filter(
         source_repo=source.repo_name,
     ).exclude(slug__in=seen_slugs)
+    for cat in stale:
+        stats['items_detail'].append({
+            'title': cat.title,
+            'slug': cat.slug,
+            'action': 'deleted',
+            'content_type': 'interview_question',
+        })
     deleted_count = stale.count()
     stale.delete()
     stats['deleted'] = deleted_count

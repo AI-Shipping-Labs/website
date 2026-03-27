@@ -1,92 +1,129 @@
 {% extends "studio/base.html" %}
 
-{% block studio_title %}Sync History: {{ source.repo_name }}{% endblock %}
+{% block studio_title %}Sync History{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
   <a href="{% url 'studio_sync_dashboard' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">&larr; Back to Content Sync</a>
-  <h1 class="text-2xl font-semibold text-foreground mt-4">{{ source.repo_name }}</h1>
-  {% if source.content_path %}
-  <p class="text-accent font-mono text-sm mt-1">{{ source.content_path }}</p>
-  {% endif %}
-  <p class="text-muted-foreground mt-1">Sync history and details.</p>
+  <h1 class="text-2xl font-semibold text-foreground mt-4">Sync History</h1>
+  <p class="text-muted-foreground mt-1">Aggregated results per sync action.</p>
 </div>
 
-<!-- Source Info -->
-<div class="bg-card border border-border rounded-lg p-6 mb-8">
-  <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-    <div>
-      <p class="text-xs text-muted-foreground uppercase tracking-wider">Content Type</p>
-      <p class="text-foreground font-medium mt-1">{{ source.content_type }}</p>
-    </div>
-    <div>
-      <p class="text-xs text-muted-foreground uppercase tracking-wider">Content Path</p>
-      <p class="text-foreground font-medium mt-1 font-mono">{{ source.content_path|default:"(root)" }}</p>
-    </div>
-    <div>
-      <p class="text-xs text-muted-foreground uppercase tracking-wider">Visibility</p>
-      <p class="text-foreground font-medium mt-1">{% if source.is_private %}Private{% else %}Public{% endif %}</p>
-    </div>
-    <div>
-      <p class="text-xs text-muted-foreground uppercase tracking-wider">Last Synced</p>
-      <p class="text-foreground font-medium mt-1">{% if source.last_synced_at %}{{ source.last_synced_at|timesince }} ago{% else %}Never{% endif %}</p>
-    </div>
-    <div>
-      <p class="text-xs text-muted-foreground uppercase tracking-wider">Last Status</p>
-      <p class="font-medium mt-1 {% if source.last_sync_status == 'success' %}text-green-400{% elif source.last_sync_status == 'failed' %}text-red-400{% elif source.last_sync_status == 'running' %}text-blue-400{% else %}text-yellow-400{% endif %}">
-        {{ source.last_sync_status|default:"N/A" }}
-      </p>
-    </div>
-  </div>
-</div>
-
-<!-- Actions -->
-<div class="flex items-center justify-between mb-6">
-  <h2 class="text-xl font-semibold text-foreground">Sync History</h2>
-  <form method="post" action="{% url 'studio_sync_trigger' source.pk %}" class="sync-form">
-    {% csrf_token %}
-    <button type="submit" class="sync-btn px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center space-x-1">
-      <svg class="animate-spin h-3 w-3 hidden sync-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-      </svg>
-      <span class="sync-btn-text">Sync Now</span>
-    </button>
-  </form>
-</div>
-
-<div class="space-y-3">
-  {% for log in logs %}
+<div class="space-y-4">
+  {% for batch in batches %}
   <div class="bg-card border border-border rounded-lg p-4">
-    <div class="flex items-center justify-between">
+    <!-- Batch header -->
+    <div class="flex items-center justify-between batch-header cursor-pointer" data-batch-idx="{{ forloop.counter }}">
       <div class="flex items-center space-x-4">
-        <span class="w-2 h-2 rounded-full {% if log.status == 'success' %}bg-green-400{% elif log.status == 'failed' %}bg-red-400{% elif log.status == 'running' %}bg-blue-400{% else %}bg-yellow-400{% endif %}"></span>
-        <span class="text-sm text-foreground font-medium">{{ log.status }}</span>
-        <span class="text-sm text-muted-foreground">{{ log.started_at }}</span>
-        {% if log.duration_seconds %}
-        <span class="text-xs text-muted-foreground">({{ log.duration_seconds|floatformat:1 }}s)</span>
+        <span class="w-2 h-2 rounded-full flex-shrink-0
+          {% if batch.overall_status == 'success' %}bg-green-400
+          {% elif batch.overall_status == 'failed' %}bg-red-400
+          {% elif batch.overall_status == 'running' %}bg-blue-400
+          {% else %}bg-yellow-400{% endif %}"></span>
+        <span class="text-sm text-foreground font-medium">{{ batch.overall_status }}</span>
+        <span class="text-sm text-muted-foreground">{{ batch.started_at }}</span>
+        {% if batch.log_count > 1 %}
+        <span class="text-xs text-muted-foreground">({{ batch.log_count }} sources)</span>
         {% endif %}
       </div>
       <div class="flex items-center space-x-4 text-sm text-muted-foreground">
-        {% if log.items_created %}
-        <span class="text-green-400">+{{ log.items_created }} created</span>
+        {% if batch.total_created %}
+        <span class="text-green-400">+{{ batch.total_created }} created</span>
         {% endif %}
-        {% if log.items_updated %}
-        <span class="text-blue-400">{{ log.items_updated }} updated</span>
+        {% if batch.total_updated %}
+        <span class="text-blue-400">{{ batch.total_updated }} updated</span>
         {% endif %}
-        {% if log.items_deleted %}
-        <span class="text-red-400">-{{ log.items_deleted }} deleted</span>
+        {% if batch.total_deleted %}
+        <span class="text-red-400">-{{ batch.total_deleted }} deleted</span>
         {% endif %}
+        {% if batch.tiers_synced %}
+        <span class="text-green-400">tiers synced</span>
+        {% endif %}
+        <svg class="w-4 h-4 transition-transform batch-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </div>
     </div>
-    {% if log.errors %}
-    <div class="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-      <p class="text-xs text-red-400 font-medium mb-1">Errors ({{ log.errors|length }})</p>
-      {% for error in log.errors %}
-      <p class="text-xs text-red-300 font-mono">{{ error.file }}: {{ error.error }}</p>
-      {% endfor %}
+
+    <!-- Expandable detail -->
+    <div class="batch-detail hidden mt-4 border-t border-border pt-4" data-batch-idx="{{ forloop.counter }}">
+      <!-- Per content type breakdown -->
+      <table class="w-full text-sm mb-3">
+        <thead>
+          <tr class="text-left text-xs text-muted-foreground uppercase tracking-wider">
+            <th class="pb-2 pr-4">Content Type</th>
+            <th class="pb-2 pr-4 text-right">Created</th>
+            <th class="pb-2 pr-4 text-right">Updated</th>
+            <th class="pb-2 pr-4 text-right">Deleted</th>
+            <th class="pb-2 pr-4">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {% for ct in batch.per_type %}
+          <tr class="hist-type-row cursor-pointer hover:bg-secondary/50 transition-colors" data-batch="{{ forloop.parentloop.counter }}" data-type="{{ ct.content_type }}">
+            <td class="py-2 pr-4 text-foreground font-medium">
+              <span class="inline-flex items-center space-x-1">
+                {% if ct.items_detail %}
+                <svg class="w-3 h-3 text-muted-foreground transition-transform hist-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                {% endif %}
+                <span>{{ ct.display_name }}</span>
+              </span>
+            </td>
+            <td class="py-2 pr-4 text-right {% if ct.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ ct.created }}</td>
+            <td class="py-2 pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ ct.updated }}</td>
+            <td class="py-2 pr-4 text-right {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ ct.deleted }}</td>
+            <td class="py-2 pr-4">
+              <span class="text-xs {% if ct.status == 'success' %}text-green-400{% elif ct.status == 'failed' %}text-red-400{% else %}text-yellow-400{% endif %}">{{ ct.status }}</span>
+            </td>
+          </tr>
+          {% if ct.items_detail %}
+          <tr class="hist-type-detail hidden" data-batch="{{ forloop.parentloop.counter }}" data-type="{{ ct.content_type }}">
+            <td colspan="5" class="py-2 pl-8">
+              <div class="space-y-1">
+                {% for item in ct.items_detail %}
+                <div class="flex items-center space-x-3 text-xs">
+                  <span class="w-16 {% if item.action == 'created' %}text-green-400{% elif item.action == 'updated' %}text-blue-400{% else %}text-red-400{% endif %}">{{ item.action }}</span>
+                  {% if item.content_type == 'article' %}
+                  <a href="/blog/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% elif item.content_type == 'course' %}
+                  <a href="/courses/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% elif item.content_type == 'project' %}
+                  <a href="/projects/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% elif item.content_type == 'event' %}
+                  <a href="/events/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% elif item.content_type == 'interview_question' %}
+                  <a href="/interview/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% else %}
+                  <span class="text-foreground">{{ item.title }}</span>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+
+          {% if batch.tiers_synced %}
+          <tr>
+            <td class="py-2 pr-4 text-foreground font-medium">Tiers</td>
+            <td class="py-2 pr-4 text-right text-muted-foreground">-</td>
+            <td class="py-2 pr-4 text-right text-blue-400">{{ batch.tiers_count }} tier{{ batch.tiers_count|pluralize }}</td>
+            <td class="py-2 pr-4 text-right text-muted-foreground">-</td>
+            <td class="py-2 pr-4"><span class="text-xs text-green-400">synced</span></td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+      <!-- Errors -->
+      {% if batch.errors %}
+      <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+        <p class="text-xs text-red-400 font-medium mb-1">Errors ({{ batch.errors|length }})</p>
+        {% for error in batch.errors %}
+        <p class="text-xs text-red-300 font-mono">{{ error.file }}: {{ error.error }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
   </div>
   {% empty %}
   <div class="bg-card border border-border rounded-lg p-8 text-center">
@@ -97,15 +134,35 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.sync-form').forEach(function(form) {
-    form.addEventListener('submit', function() {
-      var btn = form.querySelector('.sync-btn');
-      var spinner = form.querySelector('.sync-spinner');
-      var text = form.querySelector('.sync-btn-text');
-      btn.disabled = true;
-      btn.classList.add('opacity-60');
-      spinner.classList.remove('hidden');
-      text.textContent = 'Syncing...';
+  // Toggle batch detail
+  document.querySelectorAll('.batch-header').forEach(function(header) {
+    header.addEventListener('click', function() {
+      var idx = header.getAttribute('data-batch-idx');
+      var detail = document.querySelector('.batch-detail[data-batch-idx="' + idx + '"]');
+      var chevron = header.querySelector('.batch-chevron');
+      if (detail) {
+        detail.classList.toggle('hidden');
+        if (chevron) {
+          chevron.style.transform = detail.classList.contains('hidden') ? '' : 'rotate(90deg)';
+        }
+      }
+    });
+  });
+
+  // Toggle item detail within batch
+  document.querySelectorAll('.hist-type-row').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var batch = row.getAttribute('data-batch');
+      var type = row.getAttribute('data-type');
+      var detail = document.querySelector('.hist-type-detail[data-batch="' + batch + '"][data-type="' + type + '"]');
+      var chevron = row.querySelector('.hist-chevron');
+      if (detail) {
+        detail.classList.toggle('hidden');
+        if (chevron) {
+          chevron.style.transform = detail.classList.contains('hidden') ? '' : 'rotate(90deg)';
+        }
+      }
     });
   });
 });

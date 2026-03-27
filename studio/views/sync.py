@@ -1,16 +1,20 @@
 """Studio views for content sync management.
 
 Provides:
-- /studio/sync/ - Content sources list with sync status and controls
-- /studio/sync/<source_id>/ - Sync history for a source
+- /studio/sync/ - Unified sync dashboard with repo-level card and results
+- /studio/sync/history/ - Aggregated sync history per batch
 - /studio/sync/<source_id>/trigger/ - Trigger sync for a single source
-- /studio/sync/all/ - Trigger sync for all sources
+- /studio/sync/all/ - Trigger sync for all sources (with batch_id)
 - /studio/sync/<source_id>/status/ - JSON endpoint for polling sync status
 """
 
+import datetime
 import logging
+import uuid
+from collections import OrderedDict
 
 from django.contrib import messages
+from django.db.models import Max, Min, Sum, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -22,23 +26,176 @@ from studio.decorators import staff_required
 logger = logging.getLogger(__name__)
 
 
+def _aggregate_batch(logs):
+    """Aggregate a queryset of SyncLog entries into a batch summary dict."""
+    total_created = 0
+    total_updated = 0
+    total_deleted = 0
+    all_errors = []
+    per_type = OrderedDict()
+    tiers_synced = False
+    tiers_count = 0
+    overall_status = 'success'
+
+    for log in logs:
+        ct = log.source.get_content_type_display()
+        if ct not in per_type:
+            per_type[ct] = {
+                'content_type': log.source.content_type,
+                'display_name': ct,
+                'created': 0,
+                'updated': 0,
+                'deleted': 0,
+                'status': log.status,
+                'items_detail': [],
+            }
+        entry = per_type[ct]
+        entry['created'] += log.items_created
+        entry['updated'] += log.items_updated
+        entry['deleted'] += log.items_deleted
+        entry['items_detail'].extend(log.items_detail or [])
+        if log.status == 'failed':
+            entry['status'] = 'failed'
+        elif log.status == 'partial' and entry['status'] != 'failed':
+            entry['status'] = 'partial'
+
+        total_created += log.items_created
+        total_updated += log.items_updated
+        total_deleted += log.items_deleted
+        all_errors.extend(log.errors or [])
+
+        if log.tiers_synced:
+            tiers_synced = True
+            tiers_count = log.tiers_count
+
+        if log.status == 'failed':
+            overall_status = 'failed'
+        elif log.status == 'partial' and overall_status != 'failed':
+            overall_status = 'partial'
+
+    return {
+        'total_created': total_created,
+        'total_updated': total_updated,
+        'total_deleted': total_deleted,
+        'errors': all_errors,
+        'per_type': list(per_type.values()),
+        'tiers_synced': tiers_synced,
+        'tiers_count': tiers_count,
+        'overall_status': overall_status,
+    }
+
+
 @staff_required
 def sync_dashboard(request):
-    """Display all content sources with their sync status."""
+    """Display unified sync dashboard with one card per repo."""
     sources = ContentSource.objects.all()
+
+    # Group sources by repo_name
+    repos = OrderedDict()
+    for source in sources:
+        if source.repo_name not in repos:
+            repos[source.repo_name] = {
+                'repo_name': source.repo_name,
+                'sources': [],
+                'is_private': source.is_private,
+                'last_synced_at': None,
+                'any_running': False,
+                'overall_status': None,
+            }
+        repo = repos[source.repo_name]
+        repo['sources'].append(source)
+        if source.last_synced_at:
+            if repo['last_synced_at'] is None or source.last_synced_at > repo['last_synced_at']:
+                repo['last_synced_at'] = source.last_synced_at
+        if source.last_sync_status == 'running':
+            repo['any_running'] = True
+        if source.last_sync_status:
+            if source.last_sync_status == 'failed':
+                repo['overall_status'] = 'failed'
+            elif source.last_sync_status == 'partial' and repo['overall_status'] != 'failed':
+                repo['overall_status'] = 'partial'
+            elif source.last_sync_status == 'running':
+                repo['overall_status'] = 'running'
+            elif repo['overall_status'] is None:
+                repo['overall_status'] = source.last_sync_status
+
+    # Get the most recent batch of sync logs for each repo
+    for repo in repos.values():
+        source_ids = [s.pk for s in repo['sources']]
+        latest_logs = SyncLog.objects.filter(
+            source_id__in=source_ids,
+        ).exclude(status='running').order_by('-started_at')
+
+        # Find the most recent batch_id or timestamp cluster
+        if latest_logs.exists():
+            newest = latest_logs.first()
+            if newest.batch_id:
+                batch_logs = SyncLog.objects.filter(batch_id=newest.batch_id)
+            else:
+                # Fall back to logs from the same source started within 60s
+                batch_logs = SyncLog.objects.filter(
+                    source_id__in=source_ids,
+                    started_at__gte=newest.started_at - datetime.timedelta(seconds=60),
+                    started_at__lte=newest.started_at + datetime.timedelta(seconds=60),
+                ).exclude(status='running')
+            repo['last_batch'] = _aggregate_batch(batch_logs)
+        else:
+            repo['last_batch'] = None
+
     return render(request, 'studio/sync/dashboard.html', {
+        'repos': list(repos.values()),
         'sources': sources,
     })
 
 
 @staff_required
-def sync_history(request, source_id):
-    """Display sync history for a specific content source."""
-    source = get_object_or_404(ContentSource, pk=source_id)
-    logs = SyncLog.objects.filter(source=source)[:50]
+def sync_history(request, source_id=None):
+    """Display aggregated sync history per batch."""
+    sources = ContentSource.objects.all()
+    source_ids = [s.pk for s in sources]
+
+    # Get all sync logs, grouped by batch
+    all_logs = SyncLog.objects.filter(
+        source_id__in=source_ids,
+    ).select_related('source').order_by('-started_at')[:200]
+
+    # Group by batch_id or by timestamp proximity
+    batches = []
+    seen_batch_ids = set()
+    seen_log_ids = set()
+
+    for log in all_logs:
+        if log.pk in seen_log_ids:
+            continue
+
+        if log.batch_id and log.batch_id not in seen_batch_ids:
+            seen_batch_ids.add(log.batch_id)
+            batch_logs = SyncLog.objects.filter(
+                batch_id=log.batch_id,
+            ).select_related('source')
+            for bl in batch_logs:
+                seen_log_ids.add(bl.pk)
+            agg = _aggregate_batch(batch_logs)
+            agg['started_at'] = batch_logs.aggregate(
+                min_start=Min('started_at'),
+            )['min_start']
+            agg['finished_at'] = batch_logs.aggregate(
+                max_finish=Max('finished_at'),
+            )['max_finish']
+            agg['batch_id'] = str(log.batch_id)
+            agg['log_count'] = batch_logs.count()
+            batches.append(agg)
+        elif not log.batch_id:
+            seen_log_ids.add(log.pk)
+            agg = _aggregate_batch([log])
+            agg['started_at'] = log.started_at
+            agg['finished_at'] = log.finished_at
+            agg['batch_id'] = None
+            agg['log_count'] = 1
+            batches.append(agg)
+
     return render(request, 'studio/sync/history.html', {
-        'source': source,
-        'logs': logs,
+        'batches': batches[:50],
     })
 
 
@@ -81,9 +238,10 @@ def sync_trigger(request, source_id):
 @staff_required
 @require_POST
 def sync_all(request):
-    """Trigger sync for all content sources."""
+    """Trigger sync for all content sources with a shared batch_id."""
     sources = ContentSource.objects.all()
     count = sources.count()
+    batch_id = uuid.uuid4()
 
     for source in sources:
         try:
@@ -92,10 +250,11 @@ def sync_all(request):
                 async_task(
                     'integrations.services.github.sync_content_source',
                     source,
-                    task_name=f'sync-{source.repo_name}',
+                    batch_id=batch_id,
+                    task_name=f'sync-{source.repo_name}-{source.content_type}',
                 )
             except ImportError:
-                sync_content_source(source)
+                sync_content_source(source, batch_id=batch_id)
         except Exception as e:
             logger.exception('Error triggering sync for %s', source.repo_name)
 

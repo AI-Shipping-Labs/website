@@ -24,12 +24,6 @@ DEFAULT_SOURCES = [
     },
     {
         'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'resource',
-        'content_path': 'resources',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
         'content_type': 'project',
         'content_path': 'projects',
         'is_private': True,
@@ -38,12 +32,6 @@ DEFAULT_SOURCES = [
         'repo_name': 'AI-Shipping-Labs/content',
         'content_type': 'interview_question',
         'content_path': 'interview-questions',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'event',
-        'content_path': 'events',
         'is_private': True,
     },
 ]

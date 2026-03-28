@@ -26,6 +26,7 @@ import yaml
 from django.conf import settings
 from django.utils import timezone
 
+from integrations.config import get_config
 from integrations.models import ContentSource, SyncLog
 
 logger = logging.getLogger(__name__)
@@ -140,9 +141,9 @@ def generate_github_app_token():
     Raises:
         GitHubSyncError: If credentials are missing or token generation fails.
     """
-    app_id = getattr(settings, 'GITHUB_APP_ID', '')
-    private_key = getattr(settings, 'GITHUB_APP_PRIVATE_KEY', '')
-    installation_id = getattr(settings, 'GITHUB_APP_INSTALLATION_ID', '')
+    app_id = get_config('GITHUB_APP_ID')
+    private_key = get_config('GITHUB_APP_PRIVATE_KEY')
+    installation_id = get_config('GITHUB_APP_INSTALLATION_ID')
 
     if not all([app_id, private_key, installation_id]):
         raise GitHubSyncError(
@@ -251,7 +252,7 @@ def rewrite_image_urls(markdown_text, repo_name, base_path=''):
     Returns:
         str: Markdown with rewritten image URLs.
     """
-    cdn_base = getattr(settings, 'CONTENT_CDN_BASE', '/static/content-images')
+    cdn_base = get_config('CONTENT_CDN_BASE', '/static/content-images')
     repo_short = repo_name.split('/')[-1] if '/' in repo_name else repo_name
 
     def _rewrite_path(path):
@@ -304,7 +305,7 @@ def rewrite_cover_image_url(cover_image, source, rel_path):
     if cover_image.startswith(('http://', 'https://')):
         return cover_image
 
-    cdn_base = getattr(settings, 'CONTENT_CDN_BASE', '/static/content-images')
+    cdn_base = get_config('CONTENT_CDN_BASE', '/static/content-images')
     repo_short = source.repo_name.split('/')[-1] if '/' in source.repo_name else source.repo_name
     clean_path = cover_image.lstrip('/')
     base_dir = os.path.dirname(rel_path)
@@ -337,8 +338,8 @@ def upload_images_to_s3(content_dir, source):
     Returns:
         dict: {'uploaded': int, 'skipped': int, 'errors': list}
     """
-    bucket = getattr(settings, 'AWS_S3_CONTENT_BUCKET', '')
-    region = getattr(settings, 'AWS_S3_CONTENT_REGION', 'eu-central-1')
+    bucket = get_config('AWS_S3_CONTENT_BUCKET')
+    region = get_config('AWS_S3_CONTENT_REGION', 'eu-central-1')
 
     if not bucket:
         logger.info('AWS_S3_CONTENT_BUCKET not configured, skipping image upload')
@@ -351,8 +352,8 @@ def upload_images_to_s3(content_dir, source):
         s3 = boto3.client(
             's3',
             region_name=region,
-            aws_access_key_id=getattr(settings, 'AWS_ACCESS_KEY_ID', ''),
-            aws_secret_access_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', ''),
+            aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
         )
     except Exception as e:
         logger.warning('Failed to create S3 client: %s', e)

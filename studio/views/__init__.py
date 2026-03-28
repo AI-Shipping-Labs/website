@@ -4,10 +4,12 @@ from .courses import *
 from .dashboard import *
 from .downloads import *
 from .events import *
+from .impersonate import *
 from .notifications import *
 from .projects import *
 from .recordings import *
 from .redirects import *
+from .settings import *
 from .subscribers import *
 from .sync import *
 from .tier_overrides import *

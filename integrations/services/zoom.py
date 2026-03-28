@@ -13,7 +13,8 @@ import time
 from urllib.parse import urljoin
 
 import requests
-from django.conf import settings
+
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,9 @@ def get_access_token():
     if _token_cache['access_token'] and _token_cache['expires_at'] > now + 60:
         return _token_cache['access_token']
 
-    client_id = settings.ZOOM_CLIENT_ID
-    client_secret = settings.ZOOM_CLIENT_SECRET
-    account_id = settings.ZOOM_ACCOUNT_ID
+    client_id = get_config('ZOOM_CLIENT_ID')
+    client_secret = get_config('ZOOM_CLIENT_SECRET')
+    account_id = get_config('ZOOM_ACCOUNT_ID')
 
     if not all([client_id, client_secret, account_id]):
         raise ZoomAPIError(
@@ -176,7 +177,7 @@ def validate_webhook_signature(request):
     Returns:
         bool: True if the signature is valid, False otherwise.
     """
-    secret_token = settings.ZOOM_WEBHOOK_SECRET_TOKEN
+    secret_token = get_config('ZOOM_WEBHOOK_SECRET_TOKEN')
     if not secret_token:
         logger.warning('ZOOM_WEBHOOK_SECRET_TOKEN not configured')
         return False

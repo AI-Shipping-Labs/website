@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Subscribers{% endblock %}
 
@@ -53,6 +54,7 @@
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscribed At</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
@@ -65,10 +67,20 @@
           </span>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ sub.subscribed_at|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4">
+          {% with user_id=email_to_user_id|dict_get:sub.email %}
+          {% if user_id %}
+          <form method="post" action="{% url 'studio_impersonate' user_id %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="text-xs text-blue-400 hover:text-blue-300" title="Login as this user">Login as</button>
+          </form>
+          {% endif %}
+          {% endwith %}
+        </td>
       </tr>
       {% empty %}
       <tr>
-        <td colspan="3" class="px-6 py-8 text-center text-sm text-muted-foreground">No subscribers found.</td>
+        <td colspan="4" class="px-6 py-8 text-center text-sm text-muted-foreground">No subscribers found.</td>
       </tr>
       {% endfor %}
     </tbody>

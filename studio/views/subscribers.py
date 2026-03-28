@@ -2,11 +2,14 @@
 
 import csv
 
+from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.shortcuts import render
 
 from email_app.models import NewsletterSubscriber
 from studio.decorators import staff_required
+
+User = get_user_model()
 
 
 @staff_required
@@ -23,8 +26,15 @@ def subscriber_list(request):
     if search:
         subscribers = subscribers.filter(email__icontains=search)
 
+    # Build a mapping of subscriber emails to User IDs for the "Login as" button
+    subscriber_emails = list(subscribers.values_list('email', flat=True))
+    email_to_user_id = dict(
+        User.objects.filter(email__in=subscriber_emails).values_list('email', 'pk')
+    )
+
     return render(request, 'studio/subscribers/list.html', {
         'subscribers': subscribers,
+        'email_to_user_id': email_to_user_id,
         'status_filter': status_filter,
         'search': search,
         'total_count': NewsletterSubscriber.objects.count(),

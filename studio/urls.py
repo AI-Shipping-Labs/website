@@ -17,6 +17,7 @@ from studio.views.courses import (
 from studio.views.dashboard import dashboard
 from studio.views.downloads import download_edit, download_list
 from studio.views.events import event_create_zoom, event_edit, event_list
+from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.notifications import (
     article_announce_slack,
     article_notify,
@@ -39,6 +40,7 @@ from studio.views.peer_reviews import (
 from studio.views.projects import project_list, project_review
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
+from studio.views.settings import settings_dashboard, settings_save_group
 from studio.views.subscribers import subscriber_export_csv, subscriber_list
 from studio.views.sync import sync_all, sync_dashboard, sync_history, sync_status, sync_trigger
 from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
@@ -95,6 +97,10 @@ urlpatterns = [
     path('subscribers/', subscriber_list, name='studio_subscriber_list'),
     path('subscribers/export', subscriber_export_csv, name='studio_subscriber_export'),
 
+    # Impersonate
+    path('impersonate/<int:user_id>/', impersonate_user, name='studio_impersonate'),
+    path('impersonate/stop/', stop_impersonation, name='studio_stop_impersonate'),
+
     # Notifications
     path('notifications/', notification_log, name='studio_notification_log'),
 
@@ -119,6 +125,10 @@ urlpatterns = [
     path('redirects/<int:redirect_id>/edit', redirect_edit, name='studio_redirect_edit'),
     path('redirects/<int:redirect_id>/delete', redirect_delete, name='studio_redirect_delete'),
     path('redirects/<int:redirect_id>/toggle', redirect_toggle, name='studio_redirect_toggle'),
+
+    # Settings
+    path('settings/', settings_dashboard, name='studio_settings'),
+    path('settings/<str:group_name>/save/', settings_save_group, name='studio_settings_save'),
 
     # Worker Status
     path('worker/', worker_status, name='studio_worker'),

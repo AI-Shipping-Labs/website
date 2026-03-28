@@ -19,11 +19,11 @@ import json
 import logging
 
 import requests
-from django.conf import settings
 from django.core.mail import send_mail
 
 from community.models import CommunityAuditLog
 from community.services.base import CommunityService
+from integrations.config import get_config, is_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -47,15 +47,17 @@ class SlackCommunityService(CommunityService):
     """
 
     def __init__(self, bot_token=None, channel_ids=None):
-        self.bot_token = bot_token or getattr(settings, "SLACK_BOT_TOKEN", "")
-        self.channel_ids = channel_ids or getattr(
-            settings, "SLACK_COMMUNITY_CHANNEL_IDS", []
-        )
-
-    def _check_enabled(self):
-        """Raise if Slack integration is disabled."""
-        if not getattr(settings, 'SLACK_ENABLED', False):
-            raise SlackAPIError('Slack integration is disabled (SLACK_ENABLED is not true)')
+        self.bot_token = bot_token or get_config('SLACK_BOT_TOKEN')
+        if channel_ids is not None:
+            self.channel_ids = channel_ids
+        else:
+            raw = get_config('SLACK_COMMUNITY_CHANNEL_IDS')
+            if isinstance(raw, list):
+                self.channel_ids = raw
+            else:
+                self.channel_ids = [
+                    cid.strip() for cid in raw.split(',') if cid.strip()
+                ]
 
     def _api_call(self, method, **kwargs):
         """Make a Slack Web API call.
@@ -70,7 +72,9 @@ class SlackCommunityService(CommunityService):
         Raises:
             SlackAPIError: If the API call fails or returns ok=False.
         """
-        self._check_enabled()
+        if not is_enabled('SLACK_ENABLED'):
+            raise SlackAPIError('Slack integration is disabled (SLACK_ENABLED is not true)')
+
         url = f"{SLACK_API_BASE}{method}"
         headers = {
             "Authorization": f"Bearer {self.bot_token}",
@@ -316,7 +320,7 @@ class SlackCommunityService(CommunityService):
         Args:
             user: User model instance.
         """
-        slack_invite_url = getattr(settings, "SLACK_INVITE_URL", "")
+        slack_invite_url = get_config('SLACK_INVITE_URL')
         try:
             send_mail(
                 subject="Welcome to AI Shipping Labs community!",

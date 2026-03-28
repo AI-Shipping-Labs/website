@@ -5,7 +5,7 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
-  <div class="mx-auto max-w-7xl px-6 py-12 lg:px-8 lg:py-16">
+  <div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
 
     <!-- Checkout Success Banner (shown via JS when ?checkout=success is present) -->
     <div id="checkout-success-banner" class="mb-6 hidden rounded-xl border border-green-500/30 bg-green-500/10 p-4" role="alert">
@@ -22,7 +22,7 @@
 
     <!-- Welcome Banner -->
     <section class="mb-10">
-      <div class="rounded-2xl border border-border bg-card p-8">
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -52,12 +52,12 @@
               {% endif %}
             </div>
           </div>
-          <div class="flex flex-wrap gap-3">
-            <a href="{% url 'account' %}" class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <a href="{% url 'account' %}" class="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
               <i data-lucide="settings" class="h-4 w-4"></i>
               Account
             </a>
-            <a href="/pricing" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            <a href="/pricing" class="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>
@@ -102,18 +102,18 @@
     </section>
     {% endif %}
 
-    <div class="grid gap-8 lg:grid-cols-3">
+    <div class="grid gap-10 lg:gap-8 lg:grid-cols-3">
       <!-- Main content: 2 columns wide -->
       <div class="lg:col-span-2 space-y-8">
 
         <!-- Continue Learning -->
         <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
-              <i data-lucide="book-open" class="h-5 w-5 text-accent"></i>
+          <div class="flex items-center justify-between gap-2 mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+              <i data-lucide="book-open" class="h-5 w-5 shrink-0 text-accent"></i>
               Continue Learning
             </h2>
-            <a href="/courses" class="text-sm text-accent hover:underline">View all courses</a>
+            <a href="/courses" class="shrink-0 text-sm text-accent hover:underline">View all courses</a>
           </div>
           {% if in_progress_courses %}
           <div class="space-y-4">
@@ -155,12 +155,12 @@
 
         <!-- Upcoming Events -->
         <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
-              <i data-lucide="calendar" class="h-5 w-5 text-accent"></i>
+          <div class="flex items-center justify-between gap-2 mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+              <i data-lucide="calendar" class="h-5 w-5 shrink-0 text-accent"></i>
               Upcoming Events
             </h2>
-            <a href="/events" class="text-sm text-accent hover:underline">View all events</a>
+            <a href="/events" class="shrink-0 text-sm text-accent hover:underline">View all events</a>
           </div>
           {% if upcoming_events %}
           <div class="space-y-4">
@@ -198,12 +198,12 @@
 
         <!-- Recent Content -->
         <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
-              <i data-lucide="sparkles" class="h-5 w-5 text-accent"></i>
+          <div class="flex items-center justify-between gap-2 mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+              <i data-lucide="sparkles" class="h-5 w-5 shrink-0 text-accent"></i>
               Recent Content
             </h2>
-            <a href="/blog" class="text-sm text-accent hover:underline">View all</a>
+            <a href="/blog" class="shrink-0 text-sm text-accent hover:underline">View all</a>
           </div>
           {% if recent_content %}
           <div class="space-y-3">
@@ -289,12 +289,12 @@
 
         <!-- Notifications -->
         <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2">
-              <i data-lucide="bell" class="h-5 w-5 text-accent"></i>
+          <div class="flex items-center justify-between gap-2 mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+              <i data-lucide="bell" class="h-5 w-5 shrink-0 text-accent"></i>
               Notifications
             </h2>
-            <a href="/notifications" class="text-sm text-accent hover:underline">View all</a>
+            <a href="/notifications" class="shrink-0 text-sm text-accent hover:underline">View all</a>
           </div>
           {% if notifications %}
           <div class="space-y-3">

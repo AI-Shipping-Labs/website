@@ -128,8 +128,8 @@ class MobileTypographyAndSpacingTest(TestCase):
         """Hero section inner div should use py-16 sm:py-24 lg:py-32 pattern."""
         response = self.client.get("/")
         content = response.content.decode()
-        # The hero section has relative mx-auto... px-6 py-16 sm:py-24 lg:px-8 lg:py-32
-        self.assertIn("py-16 sm:py-24 lg:px-8 lg:py-32", content)
+        # The hero section has relative mx-auto... px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32
+        self.assertIn("px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32", content)
 
     def test_login_uses_reduced_mobile_padding(self):
         """Login page should use reduced padding on mobile."""

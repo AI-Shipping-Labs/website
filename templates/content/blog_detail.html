@@ -57,7 +57,7 @@
         {% if article.tags %}
         <div class="mt-4 flex flex-wrap gap-2">
           {% for tag in article.tags %}
-          <a href="/blog?tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
+          <a href="/blog?tag={{ tag }}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]">{{ tag }}</a>
           {% endfor %}
         </div>
         {% endif %}

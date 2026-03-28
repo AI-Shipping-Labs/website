@@ -43,7 +43,7 @@
                 {% if recording.tags %}
                 <div class="mt-3 flex flex-wrap gap-2">
                   {% for tag in recording.tags %}
-                  <a href="{% tag_add_url base_path selected_tags tag %}" class="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors" onclick="event.stopPropagation();">{{ tag }}</a>
+                  <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]" onclick="event.stopPropagation();">{{ tag }}</a>
                   {% endfor %}
                 </div>
                 {% endif %}

@@ -26,7 +26,7 @@
         <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
           <a href="/event-recordings/{{ recording.slug }}">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div class="flex-1">
+              <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 mb-2">
                   <i data-lucide="video" class="h-5 w-5 text-accent"></i>
                   <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
@@ -48,7 +48,7 @@
                 </div>
                 {% endif %}
               </div>
-              <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+              <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
             </div>
           </a>
         </article>
@@ -56,10 +56,10 @@
       </div>
 
       {% if is_paginated %}
-      <nav class="mt-12 flex items-center justify-center gap-2" aria-label="Pagination">
+      <nav class="mt-12 flex flex-wrap items-center justify-center gap-2" aria-label="Pagination">
         {% if page_obj.has_previous %}
         <a href="?{% for tag in selected_tags %}tag={{ tag }}&{% endfor %}page={{ page_obj.previous_page_number }}"
-           class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground">
+           class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground min-h-[44px]">
           <i data-lucide="chevron-left" class="h-4 w-4"></i>
           Previous
         </a>
@@ -71,7 +71,7 @@
 
         {% if page_obj.has_next %}
         <a href="?{% for tag in selected_tags %}tag={{ tag }}&{% endfor %}page={{ page_obj.next_page_number }}"
-           class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground">
+           class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground min-h-[44px]">
           Next
           <i data-lucide="chevron-right" class="h-4 w-4"></i>
         </a>

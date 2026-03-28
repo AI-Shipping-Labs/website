@@ -60,10 +60,25 @@
           <div class="lg:sticky lg:top-28">
             <a href="/courses/{{ course.slug }}" class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
               <i data-lucide="arrow-left" class="h-4 w-4"></i>
-              {{ course.title }}
+              <span class="truncate">{{ course.title }}</span>
             </a>
 
-            <nav class="mt-4 rounded-lg border border-border bg-card p-2" aria-label="Course navigation">
+            <!-- Mobile toggle for course nav -->
+            <button
+              type="button"
+              id="sidebar-toggle-btn"
+              class="lg:hidden mt-4 w-full flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              aria-expanded="false"
+              aria-controls="sidebar-nav"
+            >
+              <span class="flex items-center gap-2">
+                <i data-lucide="list" class="h-4 w-4"></i>
+                Course Navigation
+              </span>
+              <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200" id="sidebar-toggle-chevron"></i>
+            </button>
+
+            <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block" aria-label="Course navigation">
               <h2 class="sr-only">Course Navigation</h2>
               <style>
                 .sidebar-module > summary::-webkit-details-marker,
@@ -102,7 +117,7 @@
               {% endfor %}
             </nav>
             {% if show_discussion %}
-            <div class="mt-4 rounded-lg border border-border bg-card p-4">
+            <div id="sidebar-discussion" class="mt-4 rounded-lg border border-border bg-card p-4 hidden lg:block">
               <a href="{{ course.discussion_url }}" target="_blank" rel="noopener noreferrer"
                  class="inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline">
                 <i data-lucide="message-circle" class="h-4 w-4"></i>
@@ -117,33 +132,34 @@
         <!-- Main content -->
         <div class="flex-1 min-w-0 order-1 lg:order-2">
           <!-- Breadcrumb -->
-          <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-            <a href="/courses" class="hover:text-foreground transition-colors">Courses</a>
-            <i data-lucide="chevron-right" class="h-3 w-3"></i>
-            <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors">{{ course.title }}</a>
-            <i data-lucide="chevron-right" class="h-3 w-3"></i>
-            <span class="text-foreground">{{ unit.title }}</span>
+          <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden">
+            <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
+            <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+            <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate hidden sm:inline" data-testid="breadcrumb-course">{{ course.title }}</a>
+            <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors sm:hidden flex-shrink-0" data-testid="breadcrumb-course-short">...</a>
+            <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+            <span class="text-foreground truncate">{{ unit.title }}</span>
           </div>
 
           {% if prev_unit or next_unit %}
           <!-- Top navigation row -->
-          <div class="mb-6 flex items-center justify-between text-sm" data-testid="top-nav-row">
+          <div class="mb-6 flex items-center justify-between text-sm gap-4" data-testid="top-nav-row">
             {% if prev_unit %}
             <a href="{{ prev_unit.get_absolute_url }}"
-               class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+               class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground min-w-0 max-w-[40vw]"
                data-testid="top-prev-btn">
-              <i data-lucide="arrow-left" class="h-4 w-4"></i>
-              {{ prev_unit.title }}
+              <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+              <span class="truncate">{{ prev_unit.title }}</span>
             </a>
             {% else %}
             <span></span>
             {% endif %}
             {% if next_unit %}
             <a href="{{ next_unit.get_absolute_url }}"
-               class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+               class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground min-w-0 max-w-[40vw]"
                data-testid="top-next-btn">
-              {{ next_unit.title }}
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+              <span class="truncate">{{ next_unit.title }}</span>
+              <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
             </a>
             {% else %}
             <span></span>
@@ -181,13 +197,13 @@
           {% endif %}
 
           <!-- Mark as completed + Previous/Next unit -->
-          <div class="flex flex-col sm:flex-row items-center gap-4 border-t border-border pt-8 mt-8">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 border-t border-border pt-8 mt-8">
             {% if prev_unit %}
             <a href="{{ prev_unit.get_absolute_url }}"
-               class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+               class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted min-w-0"
                data-testid="bottom-prev-btn">
-              <i data-lucide="arrow-left" class="h-4 w-4"></i>
-              {{ prev_unit.title }}
+              <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+              <span class="truncate">{{ prev_unit.title }}</span>
             </a>
             {% endif %}
 
@@ -197,7 +213,7 @@
               id="mark-complete-btn"
               data-unit-id="{{ unit.pk }}"
               data-course-slug="{{ course.slug }}"
-              class="inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors
+              class="inline-flex items-center justify-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors flex-shrink-0
                      {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20{% else %}border-border bg-card text-foreground hover:bg-muted{% endif %}"
             >
               {% if is_completed %}
@@ -212,10 +228,10 @@
 
             {% if next_unit %}
             <a href="{{ next_unit.get_absolute_url }}"
-               class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto"
+               class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0"
                data-testid="bottom-next-btn">
-              Next: {{ next_unit.title }}
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+              <span class="truncate">Next: {{ next_unit.title }}</span>
+              <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
             </a>
             {% endif %}
           </div>
@@ -264,6 +280,30 @@
 
 {% block extra_scripts %}
 <script>
+  // Sidebar mobile toggle
+  (function() {
+    var toggleBtn = document.getElementById('sidebar-toggle-btn');
+    var nav = document.getElementById('sidebar-nav');
+    var chevron = document.getElementById('sidebar-toggle-chevron');
+    var discussion = document.getElementById('sidebar-discussion');
+    if (!toggleBtn || !nav) return;
+
+    toggleBtn.addEventListener('click', function() {
+      var isHidden = nav.classList.contains('hidden');
+      if (isHidden) {
+        nav.classList.remove('hidden');
+        if (discussion) discussion.classList.remove('hidden');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+      } else {
+        nav.classList.add('hidden');
+        if (discussion) discussion.classList.add('hidden');
+        toggleBtn.setAttribute('aria-expanded', 'false');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+      }
+    });
+  })();
+
   // Sidebar module chevron rotation
   (function() {
     document.addEventListener('toggle', function(e) {
@@ -371,7 +411,7 @@
 
       var repliesHtml = '';
       if (comment.replies && comment.replies.length > 0) {
-        repliesHtml = '<div class="ml-8 mt-4 space-y-3">';
+        repliesHtml = '<div class="ml-4 sm:ml-8 mt-4 space-y-3">';
         for (var i = 0; i < comment.replies.length; i++) {
           var r = comment.replies[i];
           repliesHtml += '<div class="rounded-lg border border-border bg-muted/30 p-3">' +

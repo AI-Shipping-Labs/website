@@ -27,7 +27,7 @@
       {% endif %}
 
       <!-- Membership Section -->
-      <div class="rounded-2xl border border-border bg-card p-8 mb-8">
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-8">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="crown" class="h-5 w-5 text-accent"></i>
           Membership
@@ -102,7 +102,7 @@
         {% endif %}
 
         <!-- Action Buttons -->
-        <div class="flex flex-wrap gap-3 mt-6">
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-6">
           {% if is_free %}
             <!-- Free users: Upgrade button links to /pricing -->
             <a href="/pricing" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" id="upgrade-btn">
@@ -166,7 +166,7 @@
       </div>
 
       <!-- Email Preferences Section -->
-      <div class="rounded-2xl border border-border bg-card p-8" id="email-preferences-section">
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8" id="email-preferences-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="mail" class="h-5 w-5 text-accent"></i>
           Email Preferences
@@ -194,7 +194,7 @@
       </div>
 
       <!-- Change Password Section -->
-      <div class="rounded-2xl border border-border bg-card p-8 mt-8" id="change-password-section">
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mt-8" id="change-password-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="lock" class="h-5 w-5 text-accent"></i>
           Change Password
@@ -204,19 +204,19 @@
           <div>
             <label for="current-password" class="block text-sm font-medium text-foreground mb-1">Current Password</label>
             <input type="password" id="current-password" name="current_password"
-                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                    placeholder="Enter current password">
           </div>
           <div>
             <label for="new-password" class="block text-sm font-medium text-foreground mb-1">New Password</label>
             <input type="password" id="new-password" name="new_password" required minlength="8"
-                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                    placeholder="At least 8 characters">
           </div>
           <div>
             <label for="confirm-new-password" class="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
             <input type="password" id="confirm-new-password" name="confirm_new_password" required minlength="8"
-                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                   class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                    placeholder="Confirm new password">
           </div>
           <div id="password-error" class="text-sm text-red-400 hidden"></div>
@@ -234,7 +234,7 @@
   {% if stripe_checkout_enabled %}
   <!-- Upgrade Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="upgrade-modal">
-    <div class="rounded-2xl border border-border bg-card p-8 max-w-md w-full mx-4">
+    <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 max-w-md w-full mx-4">
       <h3 class="text-xl font-semibold mb-4">Upgrade Your Plan</h3>
       <p class="text-sm text-muted-foreground mb-6">Choose a tier to upgrade to. You will be redirected to Stripe Checkout.</p>
       <div class="space-y-3" id="upgrade-tiers">
@@ -258,7 +258,7 @@
 
   <!-- Downgrade Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="downgrade-modal">
-    <div class="rounded-2xl border border-border bg-card p-8 max-w-md w-full mx-4">
+    <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 max-w-md w-full mx-4">
       <h3 class="text-xl font-semibold mb-4">Downgrade Your Plan</h3>
       <p class="text-sm text-muted-foreground mb-6">
         Select a lower tier. The change will take effect at the end of your current billing period.
@@ -284,7 +284,7 @@
 
   <!-- Cancel Confirmation Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="cancel-modal">
-    <div class="rounded-2xl border border-border bg-card p-8 max-w-md w-full mx-4">
+    <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 max-w-md w-full mx-4">
       <div class="flex items-center gap-3 mb-4">
         <i data-lucide="alert-triangle" class="h-6 w-6 text-red-400"></i>
         <h3 class="text-xl font-semibold">Cancel Subscription</h3>
@@ -313,9 +313,9 @@
 
       <!-- Checkbox confirmation -->
       <div class="mb-4">
-        <label class="flex items-start gap-3 cursor-pointer">
+        <label class="flex items-start gap-3 cursor-pointer min-h-[44px] py-1">
           <input type="checkbox" id="cancel-confirm-checkbox"
-                 class="mt-0.5 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent">
+                 class="mt-0.5 h-5 w-5 min-w-[20px] rounded border-border bg-background text-accent focus:ring-accent">
           <span class="text-sm text-foreground">I understand I will lose access to paid features at the end of my billing period</span>
         </label>
       </div>
@@ -323,13 +323,13 @@
       <!-- Text confirmation -->
       <div class="mb-6">
         <input type="text" id="cancel-confirm-text"
-               class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+               class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                placeholder="Type confirm to proceed"
                autocomplete="off">
       </div>
 
       <!-- Action buttons -->
-      <div class="flex gap-3">
+      <div class="flex flex-col-reverse sm:flex-row gap-3">
         <button type="button"
                 class="flex-1 rounded-md bg-red-500/50 px-4 py-2.5 text-sm font-medium text-white/50 cursor-not-allowed transition-colors"
                 id="confirm-cancel-btn"

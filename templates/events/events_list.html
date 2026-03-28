@@ -32,7 +32,7 @@
           <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
             <a href="/events/{{ event.slug }}">
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex-1">
+                <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2 mb-2 flex-wrap">
                     <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
                       {% if event.event_type == 'live' %}<i data-lucide="radio" class="h-3 w-3"></i>{% else %}<i data-lucide="clock" class="h-3 w-3"></i>{% endif %}
@@ -48,6 +48,12 @@
                     <span class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-400">
                       <i data-lucide="radio" class="h-3 w-3"></i>
                       Live Now
+                    </span>
+                    {% endif %}
+                    {% if event.id in registered_event_ids %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
+                      <i data-lucide="check" class="h-3 w-3"></i>
+                      Registered
                     </span>
                     {% endif %}
                   </div>
@@ -87,15 +93,7 @@
                   </div>
                   {% endif %}
                 </div>
-                <div class="flex items-center gap-2">
-                  {% if event.id in registered_event_ids %}
-                  <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-3 py-1 text-xs font-medium text-green-400">
-                    <i data-lucide="check" class="h-3 w-3"></i>
-                    Registered
-                  </span>
-                  {% endif %}
-                  <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
-                </div>
+                <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
               </div>
             </a>
           </article>
@@ -122,7 +120,7 @@
           <article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
             <a href="/events/{{ event.slug }}">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div class="flex-1">
+                <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2 mb-1 flex-wrap">
                     <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
                       {{ event.get_event_type_display }}
@@ -140,12 +138,12 @@
                 </div>
                 <div class="flex items-center gap-3">
                   {% if event.has_recording %}
-                  <a href="/event-recordings/{{ event.slug }}" class="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/30 transition-colors" onclick="event.stopPropagation();">
+                  <a href="/event-recordings/{{ event.slug }}" class="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/30 transition-colors min-h-[44px] min-w-[44px] justify-center" onclick="event.stopPropagation();">
                     <i data-lucide="play" class="h-3 w-3"></i>
                     Watch recording
                   </a>
                   {% endif %}
-                  <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+                  <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
                 </div>
               </div>
             </a>

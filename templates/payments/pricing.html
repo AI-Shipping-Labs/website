@@ -8,22 +8,22 @@
   {% include "includes/header.html" %}
 
   <!-- Checkout Cancelled Banner (shown via JS when ?checkout=cancelled is present) -->
-  <div id="checkout-cancelled-banner" class="hidden mx-auto max-w-7xl px-6 lg:px-8 pt-28" role="alert">
-    <div class="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <i data-lucide="info" class="h-5 w-5 text-blue-400"></i>
+  <div id="checkout-cancelled-banner" class="hidden mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-28" role="alert">
+    <div class="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 sm:p-4">
+      <div class="flex items-start sm:items-center justify-between gap-3">
+        <div class="flex items-start sm:items-center gap-2 sm:gap-3">
+          <i data-lucide="info" class="h-5 w-5 shrink-0 text-blue-400 mt-0.5 sm:mt-0"></i>
           <p class="text-sm font-medium text-blue-300">Checkout was cancelled. You can try again anytime.</p>
         </div>
-        <button type="button" id="dismiss-cancelled-banner" class="text-blue-400 hover:text-blue-300 transition-colors" aria-label="Dismiss">
+        <button type="button" id="dismiss-cancelled-banner" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors" aria-label="Dismiss">
           <i data-lucide="x" class="h-4 w-4"></i>
         </button>
       </div>
     </div>
   </div>
 
-  <section class="pt-32 pb-24 lg:pb-32" id="pricing-section">
-    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+  <section class="pt-32 pb-16 sm:pb-24 lg:pb-32" id="pricing-section">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
@@ -39,21 +39,21 @@
         <div class="mt-8 flex items-center justify-center gap-4">
           <span class="text-sm text-foreground" id="monthly-label">Monthly</span>
           <button type="button" id="billing-toggle"
-                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors"
+                  class="relative inline-flex h-8 w-14 sm:h-6 sm:w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors min-w-[44px] min-h-[44px] items-center"
                   aria-label="Toggle annual pricing">
-            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-0" id="billing-toggle-dot"></span>
+            <span class="pointer-events-none inline-block h-6 w-6 sm:h-5 sm:w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-0.5 sm:translate-x-0" id="billing-toggle-dot"></span>
           </button>
           <span class="text-sm text-muted-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
         </div>
       </div>
 
       <!-- Tier Grid: 4 columns on desktop, stack on mobile -->
-      <div class="mx-auto mt-16 grid max-w-7xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="mx-auto mt-16 grid max-w-7xl gap-8 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {% for item in tiers_data %}
-        <div class="relative flex flex-col rounded-xl border p-8 transition-all {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20{% else %}border-border bg-background{% endif %}" {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
+        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0{% else %}border-border bg-background{% endif %}" {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
           {% if item.tier.slug == 'main' %}
-          <div class="absolute -top-3 left-1/2 -translate-x-1/2">
-            <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+            <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground whitespace-nowrap">
               <i data-lucide="star" class="h-3 w-3"></i>
               Most Popular
             </span>
@@ -99,24 +99,24 @@
           <div class="mt-auto">
             {% if item.tier.slug == 'free' %}
             {% if user.is_authenticated %}
-            <span class="block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium bg-secondary/50 text-muted-foreground">
+            <span class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium bg-secondary/50 text-muted-foreground min-h-[44px] flex items-center justify-center">
               You're a member
             </span>
             {% else %}
             <a href="/#newsletter"
-               class="block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80">
+               class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center">
               Subscribe
             </a>
             {% endif %}
             {% elif is_paid_member %}
             <a href="{{ stripe_customer_portal_url }}"
-               class="block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80"
+               class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center"
                id="manage-subscription-link">
               Manage Subscription
             </a>
             {% elif stripe_checkout_enabled %}
             <a href="{{ item.payment_link_monthly }}"
-               class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors cursor-pointer {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               class="tier-cta-link block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors cursor-pointer min-h-[44px] flex items-center justify-center {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-tier="{{ item.tier.slug }}"
                data-link-monthly="{{ item.payment_link_monthly }}"
                data-link-annual="{{ item.payment_link_annual }}"
@@ -125,7 +125,7 @@
             </a>
             {% else %}
             <a href="{{ item.payment_link_monthly }}"
-               class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors cursor-pointer {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               class="tier-cta-link block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors cursor-pointer min-h-[44px] flex items-center justify-center {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-link-monthly="{{ item.payment_link_monthly }}"
                data-link-annual="{{ item.payment_link_annual }}"
                {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
@@ -154,16 +154,21 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
   var monthlyLabel = document.getElementById('monthly-label');
   var annualLabel = document.getElementById('annual-label');
 
+  var isMobile = window.innerWidth < 640;
   if (isAnnual) {
-    dot.classList.add('translate-x-5');
-    dot.classList.remove('translate-x-0');
+    dot.classList.add(isMobile ? 'translate-x-7' : 'translate-x-5');
+    dot.classList.remove('translate-x-0', 'translate-x-0.5');
+    if (!isMobile) dot.classList.remove('translate-x-7');
+    if (isMobile) dot.classList.remove('translate-x-5');
     toggleBtn.classList.add('bg-accent');
     toggleBtn.classList.remove('bg-secondary');
     monthlyLabel.className = 'text-sm text-muted-foreground';
     annualLabel.className = 'text-sm text-foreground';
   } else {
-    dot.classList.remove('translate-x-5');
-    dot.classList.add('translate-x-0');
+    dot.classList.remove('translate-x-5', 'translate-x-7');
+    dot.classList.add(isMobile ? 'translate-x-0.5' : 'translate-x-0');
+    if (!isMobile) dot.classList.remove('translate-x-0.5');
+    if (isMobile) dot.classList.remove('translate-x-0');
     toggleBtn.classList.remove('bg-accent');
     toggleBtn.classList.add('bg-secondary');
     monthlyLabel.className = 'text-sm text-foreground';

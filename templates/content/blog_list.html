@@ -29,7 +29,7 @@
               {% if article.cover_image_url %}
               <div class="sm:w-48 sm:flex-shrink-0">
                 <img src="{{ article.cover_image_url }}" alt="{{ article.title }}"
-                     class="w-full h-32 object-cover rounded-lg border border-border">
+                     class="w-full aspect-video sm:aspect-auto sm:h-32 object-cover rounded-lg border border-border">
               </div>
               {% endif %}
               <div class="flex-1">
@@ -66,7 +66,7 @@
                 </div>
                 {% endif %}
               </div>
-              <i data-lucide="arrow-right" class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+              <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
             </div>
           </a>
         </article>

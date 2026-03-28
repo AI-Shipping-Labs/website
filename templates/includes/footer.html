@@ -1,5 +1,5 @@
 <footer class="border-t border-border bg-card">
-  <div class="mx-auto max-w-7xl px-6 py-8 sm:py-16 lg:px-8 lg:py-24">
+  <div class="mx-auto max-w-7xl px-6 py-10 sm:py-16 lg:px-8 lg:py-24">
     {% if not user.is_authenticated %}
     <div class="mx-auto max-w-2xl">
       <div class="rounded-2xl border border-border bg-background p-6 sm:p-8 text-center">
@@ -41,18 +41,18 @@
 
       <div>
         <h3 class="text-sm font-semibold text-foreground">Community</h3>
-        <ul class="mt-4 space-y-3">
+        <ul class="mt-4 space-y-1">
           <li>
-            <a href="/about" class="text-sm text-muted-foreground transition-colors hover:text-foreground">About</a>
+            <a href="/about" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">About</a>
           </li>
           <li>
-            <a href="/#tiers" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Membership Tiers</a>
+            <a href="/#tiers" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Membership Tiers</a>
           </li>
           <li>
-            <a href="/#faq" class="text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+            <a href="/#faq" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
           </li>
           <li>
-            <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Manage Subscription</a>
+            <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Manage Subscription</a>
           </li>
         </ul>
       </div>

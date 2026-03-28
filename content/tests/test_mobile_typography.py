@@ -141,7 +141,7 @@ class MobileTypographyAndSpacingTest(TestCase):
         """Footer should use reduced padding on mobile."""
         response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn("py-8 sm:py-16", content)
+        self.assertIn("py-10 sm:py-16", content)
 
     # ── Prose tables still scrollable ──
 

@@ -128,7 +128,7 @@
               </div>
             </div>
             <button onclick="unregisterFromEvent('{{ event.slug }}')"
-                    class="rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400"
+                    class="w-full sm:w-auto rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400"
                     id="unregister-btn">
               Cancel Registration
             </button>
@@ -152,14 +152,14 @@
         {% else %}
           <!-- Can register -->
           <div class="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-            <div>
+            <div class="w-full sm:w-auto text-center sm:text-left">
               <p class="font-semibold text-foreground">Register for this event</p>
               {% if event.spots_remaining is not None %}
               <p class="text-sm text-muted-foreground">{{ event.spots_remaining }} spot{{ event.spots_remaining|pluralize }} remaining</p>
               {% endif %}
             </div>
             <button onclick="registerForEvent('{{ event.slug }}')"
-                    class="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                    class="w-full sm:w-auto rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                     id="register-btn">
               Register
             </button>

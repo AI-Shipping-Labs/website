@@ -23,12 +23,12 @@
       </div>
       {% endif %}
 
-      <header class="mb-12">
+      <header class="mb-12 break-words">
         <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
           <i data-lucide="rocket" class="h-4 w-4"></i>
           Project
         </div>
-        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance; overflow-wrap: break-word;">
           {{ project.title }}
         </h1>
         {% if project.author %}

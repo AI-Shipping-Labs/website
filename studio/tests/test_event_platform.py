@@ -271,7 +271,8 @@ class CustomURLPublicEventDetailTest(TestCase):
 
         response = self.client.get('/events/youtube-event')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'https://youtube.com/live/abc123')
+        # Join link now uses /events/{slug}/join redirect instead of raw URL
+        self.assertContains(response, '/events/youtube-event/join')
 
     def test_custom_url_event_join_link_works(self):
         """The join link on a custom URL event points to the custom URL."""
@@ -288,7 +289,8 @@ class CustomURLPublicEventDetailTest(TestCase):
 
         response = self.client.get('/events/discord-event-public')
         content = response.content.decode()
-        self.assertIn('href="https://discord.gg/abc"', content)
+        # Join link now uses /events/{slug}/join redirect instead of raw URL
+        self.assertIn('/events/discord-event-public/join', content)
 
     def test_zoom_event_still_works(self):
         """Standard Zoom events still display correctly."""
@@ -305,4 +307,5 @@ class CustomURLPublicEventDetailTest(TestCase):
         self.client.login(email='user3@test.com', password='pass')
 
         response = self.client.get('/events/zoom-detail-event')
-        self.assertContains(response, 'https://zoom.us/j/99999')
+        # Join link now uses /events/{slug}/join redirect instead of raw URL
+        self.assertContains(response, '/events/zoom-detail-event/join')

@@ -486,6 +486,7 @@ class EventAdminFormTest(TestCase):
             'related_course': '',
             'published': True,
             'required_level': 0,
+            'ics_sequence': 0,
         }
         form = EventAdminForm(data=form_data)
         self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")
@@ -511,6 +512,7 @@ class EventAdminFormTest(TestCase):
             'related_course': '',
             'published': True,
             'required_level': 0,
+            'ics_sequence': 0,
         }
         form = EventAdminForm(data=form_data)
         self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")

@@ -652,7 +652,7 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='soon@test.com', password='pass')
         response = self.client.get('/events/soon-event')
-        self.assertContains(response, 'https://zoom.us/j/123456')
+        self.assertContains(response, '/events/soon-event/join')
 
     def test_zoom_link_not_shown_when_far_from_start(self):
         event = Event.objects.create(
@@ -666,7 +666,7 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='far@test.com', password='pass')
         response = self.client.get('/events/far-event')
-        self.assertNotContains(response, 'https://zoom.us/j/999999')
+        self.assertNotContains(response, '/events/far-event/join')
 
     def test_zoom_link_not_shown_when_not_registered(self):
         Event.objects.create(

@@ -1,9 +1,13 @@
+import logging
+
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods, require_POST
 
 from content.access import can_access
 from events.models import Event, EventRegistration
+
+logger = logging.getLogger(__name__)
 
 
 @require_POST
@@ -55,6 +59,16 @@ def register_for_event(request, slug):
     registration = EventRegistration.objects.create(
         event=event, user=request.user,
     )
+
+    # Send confirmation email with calendar invite (non-blocking)
+    try:
+        from events.services.registration_email import send_registration_confirmation
+        send_registration_confirmation(registration)
+    except Exception:
+        logger.exception(
+            'Failed to send registration email for event "%s" to user %s',
+            event.slug, request.user.email,
+        )
 
     return JsonResponse({
         'status': 'registered',

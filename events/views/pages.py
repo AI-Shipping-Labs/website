@@ -1,11 +1,105 @@
-from django.shortcuts import get_object_or_404, render
+import calendar as cal_module
+from datetime import date
+
+from django.contrib.auth.decorators import login_required
+from django.http import Http404
+from django.shortcuts import get_object_or_404, redirect, render
 
 from content.access import (
     build_gating_context,
     can_access,
     get_required_tier_name,
 )
-from events.models import Event, EventRegistration
+from events.models import Event, EventJoinClick, EventRegistration
+
+
+def events_calendar(request, year=None, month=None):
+    """Monthly calendar grid view for events."""
+    today = date.today()
+    year = year or today.year
+    month = month or today.month
+
+    # Clamp month to valid range
+    if month < 1 or month > 12:
+        from django.http import Http404
+        raise Http404
+
+    # Build calendar grid (Monday start)
+    cal = cal_module.Calendar(firstweekday=0)
+    month_days = cal.monthdayscalendar(year, month)
+
+    # Get events for this month (non-draft)
+    month_start = date(year, month, 1)
+    if month == 12:
+        month_end = date(year + 1, 1, 1)
+    else:
+        month_end = date(year, month + 1, 1)
+
+    events = Event.objects.filter(
+        start_datetime__date__gte=month_start,
+        start_datetime__date__lt=month_end,
+    ).exclude(status='draft').order_by('start_datetime')
+
+    # Map events to days
+    events_by_day = {}
+    for event in events:
+        day = event.start_datetime.date().day
+        events_by_day.setdefault(day, []).append(event)
+
+    # Build grid with events
+    weeks = []
+    for week in month_days:
+        week_data = []
+        for day in week:
+            if day == 0:
+                week_data.append({'day': 0, 'events': [], 'is_today': False})
+            else:
+                week_data.append({
+                    'day': day,
+                    'events': events_by_day.get(day, []),
+                    'is_today': (
+                        day == today.day
+                        and month == today.month
+                        and year == today.year
+                    ),
+                })
+        weeks.append(week_data)
+
+    # Navigation
+    if month == 1:
+        prev_year, prev_month = year - 1, 12
+    else:
+        prev_year, prev_month = year, month - 1
+    if month == 12:
+        next_year, next_month = year + 1, 1
+    else:
+        next_year, next_month = year, month + 1
+
+    month_name = cal_module.month_name[month]
+
+    # Build agenda list for mobile: only days with events, sorted
+    agenda_days = []
+    for day_num in sorted(events_by_day.keys()):
+        agenda_days.append({
+            'day': day_num,
+            'date': date(year, month, day_num),
+            'events': events_by_day[day_num],
+        })
+
+    context = {
+        'weeks': weeks,
+        'month_name': month_name,
+        'year': year,
+        'month': month,
+        'prev_year': prev_year,
+        'prev_month': prev_month,
+        'next_year': next_year,
+        'next_month': next_month,
+        'today': today,
+        'events_list': events,
+        'agenda_days': agenda_days,
+    }
+    return render(request, 'events/events_calendar.html', context)
 
 
 def events_list(request):
@@ -37,6 +131,45 @@ def events_list(request):
         'registered_event_ids': registered_event_ids,
     }
     return render(request, 'events/events_list.html', context)
+
+
+@login_required
+def event_join_redirect(request, slug):
+    """Redirect registered users to the event join URL, tracking each click."""
+    event = get_object_or_404(Event, slug=slug)
+
+    # Draft events return 404 for non-staff users
+    if event.status == 'draft' and not request.user.is_staff:
+        raise Http404
+
+    # User must be registered for the event
+    is_registered = EventRegistration.objects.filter(
+        event=event, user=request.user,
+    ).exists()
+    if not is_registered:
+        return redirect('event_detail', slug=event.slug)
+
+    # Past events show an unavailable page
+    if event.status in ('completed', 'cancelled'):
+        recording_url = ''
+        if event.has_recording:
+            recording_url = event.get_recording_url()
+        return render(request, 'events/join_unavailable.html', {
+            'event': event,
+            'reason': 'past',
+            'recording_url': recording_url,
+        })
+
+    # No join URL yet
+    if not event.zoom_join_url:
+        return render(request, 'events/join_unavailable.html', {
+            'event': event,
+            'reason': 'no_url',
+        })
+
+    # Record click and redirect
+    EventJoinClick.objects.create(event=event, user=request.user)
+    return redirect(event.zoom_join_url)
 
 
 def event_detail(request, slug):

@@ -141,9 +141,9 @@
               <i data-lucide="video" class="h-5 w-5 text-accent"></i>
               <div>
                 <p class="font-semibold text-foreground">Join the event</p>
-                <a href="{{ event.zoom_join_url }}" target="_blank" rel="noopener noreferrer"
+                <a href="{% url 'event_join' event.slug %}" target="_blank" rel="noopener noreferrer"
                    class="text-accent hover:underline">
-                  {{ event.zoom_join_url }}
+                  Click here to join
                 </a>
               </div>
             </div>

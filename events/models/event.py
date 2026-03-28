@@ -192,6 +192,10 @@ class Event(models.Model):
         max_length=40, blank=True, null=True, default=None,
         help_text='Git commit SHA of the last sync.',
     )
+    ics_sequence = models.PositiveIntegerField(
+        default=0,
+        help_text='Sequence number for .ics calendar invite updates.',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -259,6 +263,11 @@ class Event(models.Model):
         if self.max_participants is None:
             return False
         return self.registration_count >= self.max_participants
+
+    @property
+    def join_click_count(self):
+        """Return the total number of join clicks for this event."""
+        return self.join_clicks.count()
 
     def can_show_zoom_link(self):
         """Return True if the Zoom join link should be shown (within 15 min of start)."""

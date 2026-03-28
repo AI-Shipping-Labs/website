@@ -35,6 +35,7 @@ TRANSACTIONAL_TYPES = {
     'event_reminder',
     'email_verification',
     'password_reset',
+    'event_registration',
 }
 
 

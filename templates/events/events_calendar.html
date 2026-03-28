@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% load access_tags %}
+
+{% block title %}Events Calendar - {{ month_name }} {{ year }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}Monthly calendar view of community events and workshops.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-5xl px-6 lg:px-8">
+      <div class="mb-12">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Events</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Community Events & Workshops
+        </h1>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Join live workshops, coding sessions, and community activities. Register for upcoming events or watch recordings of past ones.
+        </p>
+      </div>
+
+      <!-- View Toggle -->
+      <div class="flex gap-2 mb-6">
+        <a href="{% url 'events_list' %}" class="px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors">List</a>
+        <a href="{% url 'events_calendar' %}" class="px-3 py-1 rounded bg-accent text-white text-sm">Calendar</a>
+      </div>
+
+      <!-- Month Navigation -->
+      <div class="flex items-center justify-between mb-6">
+        <a href="/events/calendar/{{ prev_year }}/{{ prev_month }}"
+           class="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+           aria-label="Previous month">
+          <i data-lucide="chevron-left" class="h-4 w-4"></i>
+          <span class="hidden sm:inline">Prev</span>
+        </a>
+        <div class="flex items-center gap-3">
+          <h2 class="text-xl font-semibold tracking-tight" data-testid="calendar-heading">{{ month_name }} {{ year }}</h2>
+          <a href="{% url 'events_calendar' %}"
+             class="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+            Today
+          </a>
+        </div>
+        <a href="/events/calendar/{{ next_year }}/{{ next_month }}"
+           class="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+           aria-label="Next month">
+          <span class="hidden sm:inline">Next</span>
+          <i data-lucide="chevron-right" class="h-4 w-4"></i>
+        </a>
+      </div>
+
+      <!-- Desktop Calendar Grid -->
+      <div class="hidden sm:block">
+        <!-- Day Headers -->
+        <div class="grid grid-cols-7 border-b border-border mb-1">
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Mon</div>
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Tue</div>
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Wed</div>
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Thu</div>
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Fri</div>
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Sat</div>
+          <div class="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">Sun</div>
+        </div>
+
+        <!-- Calendar Weeks -->
+        {% for week in weeks %}
+        <div class="grid grid-cols-7 border-b border-border/50">
+          {% for cell in week %}
+          <div class="min-h-[5rem] p-1.5 {% if cell.day == 0 %}bg-secondary/30{% endif %} {% if cell.is_today %}bg-accent/10 ring-1 ring-inset ring-accent/40{% endif %}"
+               {% if cell.events %}data-calendar-day="{{ cell.day }}" onclick="toggleDayEvents({{ cell.day }})" role="button" tabindex="0"{% endif %}>
+            {% if cell.day != 0 %}
+            <div class="flex items-start justify-between">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs {% if cell.is_today %}bg-accent text-white font-bold{% else %}text-muted-foreground{% endif %}">
+                {{ cell.day }}
+              </span>
+              {% if cell.events %}
+              <span class="flex items-center gap-1">
+                <span class="h-2 w-2 rounded-full bg-accent" data-testid="event-dot"></span>
+                {% if cell.events|length > 1 %}
+                <span class="text-xs text-accent font-medium">{{ cell.events|length }}</span>
+                {% endif %}
+              </span>
+              {% endif %}
+            </div>
+            {% if cell.events %}
+            <div class="mt-1 space-y-0.5">
+              {% for event in cell.events %}
+              <div class="truncate text-xs text-muted-foreground">{{ event.title }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+
+        <!-- Day Events Panel (expanded on click) -->
+        {% for week in weeks %}
+        {% for cell in week %}
+        {% if cell.day != 0 and cell.events %}
+        <div id="day-events-{{ cell.day }}" class="hidden border border-border rounded-lg bg-card p-4 mt-2 mb-2" data-day-panel="{{ cell.day }}">
+          <h3 class="text-sm font-semibold text-foreground mb-3">{{ month_name }} {{ cell.day }}, {{ year }}</h3>
+          <div class="space-y-3">
+            {% for event in cell.events %}
+            <a href="/events/{{ event.slug }}" class="block rounded-lg border border-border bg-secondary/50 p-3 hover:border-accent/50 transition-colors">
+              <div class="flex items-center gap-2 mb-1 flex-wrap">
+                <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+                  {% if event.event_type == 'live' %}<i data-lucide="radio" class="h-3 w-3"></i>{% else %}<i data-lucide="clock" class="h-3 w-3"></i>{% endif %}
+                  {{ event.get_event_type_display }}
+                </span>
+                {% if event.required_level > 0 %}
+                <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
+                  <i data-lucide="lock" class="h-3 w-3"></i>
+                  {{ event.required_level|required_tier_name }}
+                </span>
+                {% endif %}
+              </div>
+              <div class="font-medium text-foreground">{{ event.title }}</div>
+              <div class="text-xs text-muted-foreground mt-1">{{ event.formatted_time }}</div>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
+
+        {% if not events_list %}
+        <div class="rounded-lg border border-border bg-card p-8 text-center mt-4">
+          <i data-lucide="calendar" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+          <p class="mt-4 text-muted-foreground">No events scheduled this month.</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Mobile Agenda View -->
+      <div class="sm:hidden">
+        {% if agenda_days %}
+        <div class="space-y-6">
+          {% for day_info in agenda_days %}
+          <div>
+            <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 border-b border-border pb-2">
+              {{ day_info.date|date:"l, F j" }}
+            </h3>
+            <div class="space-y-3">
+              {% for event in day_info.events %}
+              <a href="/events/{{ event.slug }}" class="block rounded-lg border border-border bg-card p-4 hover:border-accent/50 transition-colors">
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                  <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+                    {% if event.event_type == 'live' %}<i data-lucide="radio" class="h-3 w-3"></i>{% else %}<i data-lucide="clock" class="h-3 w-3"></i>{% endif %}
+                    {{ event.get_event_type_display }}
+                  </span>
+                  {% if event.required_level > 0 %}
+                  <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
+                    <i data-lucide="lock" class="h-3 w-3"></i>
+                    {{ event.required_level|required_tier_name }}
+                  </span>
+                  {% endif %}
+                </div>
+                <div class="font-medium text-foreground">{{ event.title }}</div>
+                <div class="text-xs text-muted-foreground mt-1">{{ event.formatted_time }}</div>
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="rounded-lg border border-border bg-card p-8 text-center">
+          <i data-lucide="calendar" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+          <p class="mt-4 text-muted-foreground">No events scheduled this month.</p>
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<script>
+function toggleDayEvents(day) {
+  // Hide all day panels first
+  document.querySelectorAll('[data-day-panel]').forEach(function(panel) {
+    if (panel.dataset.dayPanel !== String(day)) {
+      panel.classList.add('hidden');
+    }
+  });
+  // Toggle the clicked day's panel
+  var panel = document.getElementById('day-events-' + day);
+  if (panel) {
+    panel.classList.toggle('hidden');
+  }
+}
+</script>
+
+{% include "includes/footer.html" %}
+{% endblock %}

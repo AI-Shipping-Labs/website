@@ -182,6 +182,24 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 {% if event %}
+<div class="mt-8 max-w-3xl">
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-medium text-foreground mb-4">Event Stats</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <p class="text-sm text-muted-foreground">Registrations</p>
+        <p class="text-2xl font-semibold text-foreground" data-testid="registration-count">{{ event.registration_count }}</p>
+      </div>
+      <div>
+        <p class="text-sm text-muted-foreground">Join clicks</p>
+        <p class="text-2xl font-semibold text-foreground" data-testid="join-click-count">{{ event.join_click_count }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if event %}
 <div class="mt-8 max-w-3xl" id="zoom-meeting-section">
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-lg font-medium text-foreground mb-4">Zoom Meeting</h2>

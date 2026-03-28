@@ -54,7 +54,8 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ course.instructor_name|default:"-" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{% if course.is_free %}Free{% else %}Level {{ course.required_level }}{% endif %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ course.updated_at|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right">
+        <td class="px-6 py-4 text-right space-x-3">
+          <a href="{{ course.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
           <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="text-sm text-accent hover:underline">{% if course.source_repo %}View{% else %}Edit{% endif %}</a>
         </td>
       </tr>

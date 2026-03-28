@@ -56,7 +56,8 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ project.author|default:"-" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ project.date|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right">
+        <td class="px-6 py-4 text-right space-x-3">
+          <a href="{{ project.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
           <a href="{% url 'studio_project_review' project_id=project.pk %}" class="text-sm text-accent hover:underline">{% if project.source_repo %}View{% else %}Review{% endif %}</a>
         </td>
       </tr>

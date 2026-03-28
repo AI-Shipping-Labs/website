@@ -51,7 +51,8 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ article.author|default:"-" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ article.date|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right">
+        <td class="px-6 py-4 text-right space-x-3">
+          <a href="{{ article.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
           <a href="{% url 'studio_article_edit' article_id=article.pk %}" class="text-sm text-accent hover:underline">{% if article.source_repo %}View{% else %}Edit{% endif %}</a>
         </td>
       </tr>

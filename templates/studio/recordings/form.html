@@ -9,7 +9,15 @@
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">{% if recording %}{{ recording.title }}{% else %}New Recording{% endif %}</span>
   </div>
-  <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Recording{% elif recording %}Edit Recording{% else %}New Recording{% endif %}</h1>
+  <div class="flex items-center space-x-4">
+    <h1 class="text-2xl font-semibold text-foreground">{% if is_synced %}View Recording{% elif recording %}Edit Recording{% else %}New Recording{% endif %}</h1>
+    {% if recording %}
+    <a href="{{ recording.get_recording_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground flex items-center space-x-1" data-testid="view-on-site">
+      <i data-lucide="external-link" class="w-4 h-4"></i>
+      <span>View on site</span>
+    </a>
+    {% endif %}
+  </div>
 </div>
 
 {% include "studio/includes/synced_banner.html" with obj=recording %}

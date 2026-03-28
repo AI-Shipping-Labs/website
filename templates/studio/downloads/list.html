@@ -47,7 +47,8 @@
           </span>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ download.download_count }}</td>
-        <td class="px-6 py-4 text-right">
+        <td class="px-6 py-4 text-right space-x-3">
+          <a href="{{ download.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
           <a href="{% url 'studio_download_edit' download_id=download.pk %}" class="text-sm text-accent hover:underline">{% if download.source_repo %}View{% else %}Edit{% endif %}</a>
         </td>
       </tr>

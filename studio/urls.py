@@ -16,7 +16,7 @@ from studio.views.courses import (
 )
 from studio.views.dashboard import dashboard
 from studio.views.downloads import download_edit, download_list
-from studio.views.events import event_create, event_create_zoom, event_edit, event_list
+from studio.views.events import event_create_zoom, event_edit, event_list
 from studio.views.notifications import (
     article_announce_slack,
     article_notify,
@@ -74,7 +74,6 @@ urlpatterns = [
 
     # Events
     path('events/', event_list, name='studio_event_list'),
-    path('events/new', event_create, name='studio_event_create'),
     path('events/<int:event_id>/edit', event_edit, name='studio_event_edit'),
     path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
     path('events/<int:event_id>/notify', event_notify, name='studio_event_notify'),

@@ -430,8 +430,8 @@ class SyncedProjectReadOnlyTest(TestCase):
         self.assertNotContains(response, 'Reject')
 
 
-class EventStillEditableTest(TestCase):
-    """Test that events remain fully editable (not synced content type)."""
+class EventNoCreateTest(TestCase):
+    """Test that events no longer have a create button or URL (managed via content repo)."""
 
     def setUp(self):
         self.client = Client()
@@ -440,13 +440,13 @@ class EventStillEditableTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_event_list_has_new_button(self):
+    def test_event_list_has_no_new_button(self):
         response = self.client.get('/studio/events/')
-        self.assertContains(response, 'New Event')
+        self.assertNotContains(response, 'New Event')
 
-    def test_event_create_url_returns_200(self):
+    def test_event_create_url_returns_404(self):
         response = self.client.get('/studio/events/new')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 404)
 
 
 class DashboardSyncSectionTest(TestCase):

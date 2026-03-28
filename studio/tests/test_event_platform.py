@@ -65,110 +65,31 @@ class EventPlatformModelTest(TestCase):
         self.assertEqual(event.platform, 'zoom')
 
 
-class StudioEventCreatePlatformTest(TestCase):
-    """Test creating events with different platforms via Studio."""
+class StudioEventCreatePlatformURLRemovedTest(TestCase):
+    """Test that event creation URL is removed (events come from content repo)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
 
     def setUp(self):
         self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_has_platform_dropdown(self):
+    def test_create_url_returns_404(self):
         response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertIn('name="platform"', content)
-        self.assertIn('id="platform-select"', content)
-        self.assertIn('Zoom', content)
-        self.assertIn('Custom URL', content)
+        self.assertEqual(response.status_code, 404)
 
-    def test_create_form_has_custom_url_input(self):
-        response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertIn('name="custom_url"', content)
-        self.assertIn('id="custom-url-input"', content)
-
-    def test_create_form_custom_url_section_hidden_by_default(self):
-        """Custom URL section is hidden by default (Zoom is the default)."""
-        response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertIn('id="custom-url-section"', content)
-        # The section should have display:none initially
-        self.assertIn('style="display: none;"', content)
-
-    def test_create_zoom_event(self):
-        """Creating an event with platform=zoom sets platform field correctly."""
-        self.client.post('/studio/events/new', {
-            'title': 'Zoom Workshop',
-            'slug': 'zoom-workshop',
-            'event_type': 'live',
-            'platform': 'zoom',
-            'event_date': '15/03/2026',
-            'event_time': '14:00',
-            'duration_hours': '2',
-            'timezone': 'Europe/Berlin',
-            'status': 'upcoming',
-            'required_level': '0',
+    def test_create_post_returns_404(self):
+        response = self.client.post('/studio/events/new', {
+            'title': 'Test', 'slug': 'test',
+            'event_date': '15/03/2026', 'event_time': '14:00',
+            'duration_hours': '1', 'timezone': 'Europe/Berlin',
+            'status': 'draft', 'required_level': '0',
         })
-        event = Event.objects.get(slug='zoom-workshop')
-        self.assertEqual(event.platform, 'zoom')
-        # zoom_join_url should not be set (it's set by create-zoom endpoint)
-        self.assertEqual(event.zoom_join_url, '')
-
-    def test_create_custom_url_event(self):
-        """Creating with platform=custom stores custom_url in zoom_join_url."""
-        self.client.post('/studio/events/new', {
-            'title': 'YouTube Live Event',
-            'slug': 'youtube-live',
-            'event_type': 'live',
-            'platform': 'custom',
-            'custom_url': 'https://youtube.com/live/abc123',
-            'event_date': '15/03/2026',
-            'event_time': '14:00',
-            'duration_hours': '2',
-            'timezone': 'Europe/Berlin',
-            'status': 'upcoming',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='youtube-live')
-        self.assertEqual(event.platform, 'custom')
-        self.assertEqual(event.zoom_join_url, 'https://youtube.com/live/abc123')
-        self.assertEqual(event.zoom_meeting_id, '')
-
-    def test_create_custom_event_clears_zoom_meeting_id(self):
-        """Creating with platform=custom clears zoom_meeting_id."""
-        self.client.post('/studio/events/new', {
-            'title': 'Discord Event',
-            'slug': 'discord-event',
-            'event_type': 'live',
-            'platform': 'custom',
-            'custom_url': 'https://discord.gg/xyz',
-            'event_date': '15/03/2026',
-            'event_time': '14:00',
-            'duration_hours': '1',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='discord-event')
-        self.assertEqual(event.zoom_meeting_id, '')
-
-    def test_default_platform_when_not_specified(self):
-        """When platform is not in POST data, default to zoom."""
-        self.client.post('/studio/events/new', {
-            'title': 'No Platform',
-            'slug': 'no-platform',
-            'event_type': 'live',
-            'event_date': '15/03/2026',
-            'event_time': '14:00',
-            'duration_hours': '1',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='no-platform')
-        self.assertEqual(event.platform, 'zoom')
+        self.assertEqual(response.status_code, 404)
 
 
 class StudioEventEditPlatformTest(TestCase):
@@ -315,13 +236,6 @@ class StudioEventFormPlatformJSTest(TestCase):
             email='staff@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
-
-    def test_create_form_has_platform_toggle_js(self):
-        """Create form includes JavaScript for platform visibility toggle."""
-        response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertIn('updatePlatformVisibility', content)
-        self.assertIn("platformSelect.addEventListener('change'", content)
 
     def test_edit_form_has_platform_toggle_js(self):
         """Edit form includes JavaScript for platform visibility toggle."""

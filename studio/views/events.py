@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timedelta
 
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 from events.models import Event
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
+from studio.utils import get_github_edit_url, is_synced
 
 logger = logging.getLogger(__name__)
 
@@ -89,93 +90,57 @@ def event_list(request):
 
 
 @staff_required
-def event_create(request):
-    """Create a new event."""
-    if request.method == 'POST':
-        title = request.POST.get('title', '').strip()
-        slug = request.POST.get('slug', '').strip() or slugify(title)
-        description = request.POST.get('description', '')
-        event_type = request.POST.get('event_type', 'live')
-        start_dt, end_dt = _parse_event_datetime(request.POST)
-        tz = request.POST.get('timezone', 'Europe/Berlin')
-        location = request.POST.get('location', '')
-        max_participants = request.POST.get('max_participants', '') or None
-        status = request.POST.get('status', 'draft')
-        required_level = int(request.POST.get('required_level', 0))
-        tags_raw = request.POST.get('tags', '')
-        tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
-
-        if max_participants:
-            max_participants = int(max_participants)
-
-        platform = request.POST.get('platform', 'zoom')
-
-        # Build kwargs for event creation
-        create_kwargs = dict(
-            title=title,
-            slug=slug,
-            description=description,
-            event_type=event_type,
-            platform=platform,
-            start_datetime=start_dt,
-            end_datetime=end_dt,
-            timezone=tz,
-            location=location,
-            max_participants=max_participants,
-            status=status,
-            required_level=required_level,
-            tags=tags,
-        )
-
-        # When platform is 'custom', store custom_url in zoom_join_url
-        # and clear zoom_meeting_id
-        if platform == 'custom':
-            create_kwargs['zoom_join_url'] = request.POST.get('custom_url', '').strip()
-            create_kwargs['zoom_meeting_id'] = ''
-
-        event = Event.objects.create(**create_kwargs)
-        return redirect('studio_event_edit', event_id=event.pk)
-
-    context = _event_form_context(None)
-    context['form_action'] = 'create'
-    return render(request, 'studio/events/form.html', context)
-
-
-@staff_required
 def event_edit(request, event_id):
-    """Edit an existing event."""
+    """Edit an existing event (read-only for synced content fields)."""
     event = get_object_or_404(Event, pk=event_id)
+    synced = is_synced(event)
 
     if request.method == 'POST':
-        event.title = request.POST.get('title', '').strip()
-        event.slug = request.POST.get('slug', '').strip() or slugify(event.title)
-        event.description = request.POST.get('description', '')
-        event.event_type = request.POST.get('event_type', 'live')
-        platform = request.POST.get('platform', 'zoom')
-        event.platform = platform
-        start_dt, end_dt = _parse_event_datetime(request.POST)
-        event.start_datetime = start_dt
-        event.end_datetime = end_dt
-        event.timezone = request.POST.get('timezone', 'Europe/Berlin')
-        event.location = request.POST.get('location', '')
-        max_p = request.POST.get('max_participants', '')
-        event.max_participants = int(max_p) if max_p else None
-        event.status = request.POST.get('status', 'draft')
-        event.required_level = int(request.POST.get('required_level', 0))
-        tags_raw = request.POST.get('tags', '')
-        event.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+        if synced:
+            # Synced events: only allow operational fields
+            max_p = request.POST.get('max_participants', '')
+            event.max_participants = int(max_p) if max_p else None
+            event.status = request.POST.get('status', event.status)
 
-        # When platform is 'custom', store custom_url in zoom_join_url
-        # and clear zoom_meeting_id
-        if platform == 'custom':
-            event.zoom_join_url = request.POST.get('custom_url', '').strip()
-            event.zoom_meeting_id = ''
+            platform = request.POST.get('platform', event.platform)
+            event.platform = platform
+            if platform == 'custom':
+                event.zoom_join_url = request.POST.get('custom_url', '').strip()
+                event.zoom_meeting_id = ''
 
-        event.save()
+            event.save()
+        else:
+            event.title = request.POST.get('title', '').strip()
+            event.slug = request.POST.get('slug', '').strip() or slugify(event.title)
+            event.description = request.POST.get('description', '')
+            event.event_type = request.POST.get('event_type', 'live')
+            platform = request.POST.get('platform', 'zoom')
+            event.platform = platform
+            start_dt, end_dt = _parse_event_datetime(request.POST)
+            event.start_datetime = start_dt
+            event.end_datetime = end_dt
+            event.timezone = request.POST.get('timezone', 'Europe/Berlin')
+            event.location = request.POST.get('location', '')
+            max_p = request.POST.get('max_participants', '')
+            event.max_participants = int(max_p) if max_p else None
+            event.status = request.POST.get('status', 'draft')
+            event.required_level = int(request.POST.get('required_level', 0))
+            tags_raw = request.POST.get('tags', '')
+            event.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+
+            # When platform is 'custom', store custom_url in zoom_join_url
+            # and clear zoom_meeting_id
+            if platform == 'custom':
+                event.zoom_join_url = request.POST.get('custom_url', '').strip()
+                event.zoom_meeting_id = ''
+
+            event.save()
         return redirect('studio_event_edit', event_id=event.pk)
 
     context = _event_form_context(event)
     context['form_action'] = 'edit'
+    context['is_synced'] = synced
+    context['github_edit_url'] = get_github_edit_url(event)
     context['notify_url'] = reverse('studio_event_notify', kwargs={'event_id': event.pk})
     context['announce_url'] = reverse('studio_event_announce_slack', kwargs={'event_id': event.pk})
     return render(request, 'studio/events/form.html', context)

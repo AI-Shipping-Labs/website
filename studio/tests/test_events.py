@@ -1,9 +1,10 @@
-"""Tests for studio event CRUD views.
+"""Tests for studio event views.
 
 Verifies:
-- Event list with search and status filter
-- Event create form (GET and POST) with separate date/time/duration fields
+- Event list with search and status filter (no create button)
+- Event create URL returns 404
 - Event edit form (GET and POST) with pre-populated date/time/duration
+- Synced events: description read-only, operational fields editable, GitHub link shown
 - Status transitions
 - Date/time picker UX: separate Date, Time, Duration fields
 - end_datetime computed from start_datetime + duration
@@ -25,11 +26,14 @@ User = get_user_model()
 class StudioEventListTest(TestCase):
     """Test event list view."""
 
-    def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
+
+    def setUp(self):
+        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_list_returns_200(self):
@@ -47,6 +51,10 @@ class StudioEventListTest(TestCase):
         )
         response = self.client.get('/studio/events/')
         self.assertContains(response, 'Test Event')
+
+    def test_list_has_no_create_button(self):
+        response = self.client.get('/studio/events/')
+        self.assertNotContains(response, 'New Event')
 
     def test_list_filter_by_status(self):
         Event.objects.create(
@@ -75,49 +83,27 @@ class StudioEventListTest(TestCase):
         self.assertNotContains(response, 'Java Workshop')
 
 
-class StudioEventCreateTest(TestCase):
-    """Test event creation with separate date/time/duration fields."""
+class StudioEventCreateURLTest(TestCase):
+    """Test that the event create URL returns 404."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
 
     def setUp(self):
         self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_form_returns_200(self):
+    def test_create_url_get_returns_404(self):
         response = self.client.get('/studio/events/new')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 404)
 
-    def test_create_form_has_separate_date_time_duration_fields(self):
-        """The create form must have separate Date, Time, Duration fields."""
-        response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertIn('name="event_date"', content)
-        self.assertIn('name="event_time"', content)
-        self.assertIn('name="duration_hours"', content)
-
-    def test_create_form_has_no_datetime_local_input(self):
-        """The old datetime-local inputs must be removed."""
-        response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertNotIn('type="datetime-local"', content)
-        self.assertNotIn('name="start_datetime"', content)
-        self.assertNotIn('name="end_datetime"', content)
-
-    def test_create_form_has_flatpickr_assets(self):
-        """The form must include flatpickr CSS and JS from CDN."""
-        response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertIn('flatpickr', content)
-
-    def test_create_event_post(self):
-        """Create an event using the new date/time/duration fields."""
+    def test_create_url_post_returns_404(self):
         response = self.client.post('/studio/events/new', {
             'title': 'New Event',
             'slug': 'new-event',
-            'description': 'Test event',
-            'event_type': 'live',
             'event_date': '01/12/2024',
             'event_time': '10:00',
             'duration_hours': '2',
@@ -125,123 +111,20 @@ class StudioEventCreateTest(TestCase):
             'status': 'draft',
             'required_level': '0',
         })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(Event.objects.filter(slug='new-event').exists())
-
-    def test_create_event_saves_correct_start_datetime(self):
-        """Submitting date=15/03/2026, time=14:30 saves start_datetime correctly."""
-        self.client.post('/studio/events/new', {
-            'title': 'Datetime Test',
-            'slug': 'datetime-test',
-            'event_type': 'live',
-            'event_date': '15/03/2026',
-            'event_time': '14:30',
-            'duration_hours': '2',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='datetime-test')
-        self.assertEqual(event.start_datetime.year, 2026)
-        self.assertEqual(event.start_datetime.month, 3)
-        self.assertEqual(event.start_datetime.day, 15)
-        self.assertEqual(event.start_datetime.hour, 14)
-        self.assertEqual(event.start_datetime.minute, 30)
-
-    def test_create_event_computes_end_datetime(self):
-        """end_datetime is computed as start_datetime + duration."""
-        self.client.post('/studio/events/new', {
-            'title': 'End DT Test',
-            'slug': 'end-dt-test',
-            'event_type': 'live',
-            'event_date': '15/03/2026',
-            'event_time': '14:30',
-            'duration_hours': '2',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='end-dt-test')
-        self.assertEqual(event.end_datetime.hour, 16)
-        self.assertEqual(event.end_datetime.minute, 30)
-        self.assertEqual(event.end_datetime.day, 15)
-
-    def test_create_event_duration_default_1_hour(self):
-        """Leaving duration blank defaults to 1 hour."""
-        self.client.post('/studio/events/new', {
-            'title': 'Default Duration',
-            'slug': 'default-duration',
-            'event_type': 'live',
-            'event_date': '20/06/2026',
-            'event_time': '09:00',
-            'duration_hours': '',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='default-duration')
-        self.assertEqual(event.start_datetime.hour, 9)
-        self.assertEqual(event.start_datetime.minute, 0)
-        self.assertEqual(event.end_datetime.hour, 10)
-        self.assertEqual(event.end_datetime.minute, 0)
-
-    def test_create_event_half_hour_duration(self):
-        """Duration of 0.5 hours computes end_datetime correctly."""
-        self.client.post('/studio/events/new', {
-            'title': 'Half Hour',
-            'slug': 'half-hour',
-            'event_type': 'live',
-            'event_date': '10/01/2026',
-            'event_time': '15:00',
-            'duration_hours': '0.5',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='half-hour')
-        self.assertEqual(event.end_datetime.hour, 15)
-        self.assertEqual(event.end_datetime.minute, 30)
-
-    def test_create_event_with_capacity(self):
-        self.client.post('/studio/events/new', {
-            'title': 'Limited Event',
-            'slug': 'limited',
-            'event_type': 'live',
-            'event_date': '01/12/2024',
-            'event_time': '10:00',
-            'duration_hours': '1',
-            'timezone': 'Europe/Berlin',
-            'status': 'upcoming',
-            'required_level': '0',
-            'max_participants': '50',
-        })
-        event = Event.objects.get(slug='limited')
-        self.assertEqual(event.max_participants, 50)
-
-    def test_create_event_unlimited_capacity(self):
-        self.client.post('/studio/events/new', {
-            'title': 'Unlimited',
-            'slug': 'unlimited',
-            'event_type': 'live',
-            'event_date': '01/12/2024',
-            'event_time': '10:00',
-            'duration_hours': '1',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
-        })
-        event = Event.objects.get(slug='unlimited')
-        self.assertIsNone(event.max_participants)
+        self.assertEqual(response.status_code, 404)
 
 
 class StudioEventEditTest(TestCase):
     """Test event editing with pre-populated date/time/duration fields."""
 
-    def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
+
+    def setUp(self):
+        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
         self.event = Event.objects.create(
             title='Edit Event', slug='edit-event',
@@ -266,21 +149,18 @@ class StudioEventEditTest(TestCase):
         """Edit form pre-populates Date field from stored start_datetime."""
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         content = response.content.decode()
-        # event_date should be 01/06/2026
         self.assertIn('01/06/2026', content)
 
     def test_edit_form_prepopulates_time(self):
         """Edit form pre-populates Time field from stored start_datetime."""
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         content = response.content.decode()
-        # event_time should be 10:00
         self.assertIn('value="10:00"', content)
 
     def test_edit_form_prepopulates_duration(self):
         """Edit form pre-populates Duration from end - start (1.5 hours)."""
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         content = response.content.decode()
-        # duration_hours should be 1.5
         self.assertIn('value="1.5"', content)
 
     def test_edit_form_prepopulates_duration_default_1_when_no_end(self):
@@ -358,14 +238,135 @@ class StudioEventEditTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class StudioEventCreateZoomTest(TestCase):
-    """Test Studio endpoint for creating Zoom meetings for events."""
+class StudioEventSyncedTest(TestCase):
+    """Test that synced events show GitHub link and have read-only content fields."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
 
     def setUp(self):
         self.client = Client()
-        self.staff = User.objects.create_user(
+        self.client.login(email='staff@test.com', password='testpass')
+        self.event = Event.objects.create(
+            title='Synced Event', slug='synced-event',
+            description='Original description',
+            start_datetime=datetime(2026, 6, 1, 10, 0),
+            end_datetime=datetime(2026, 6, 1, 11, 0),
+            status='draft',
+            max_participants=100,
+            source_repo='AI-Shipping-Labs/content',
+            source_path='my-event.md',
+        )
+
+    def test_synced_event_shows_github_banner(self):
+        """Synced events display the synced-from-GitHub banner."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        self.assertContains(response, 'data-testid="synced-banner"')
+
+    def test_synced_event_shows_edit_on_github_link(self):
+        """Synced events show an 'Edit on GitHub' link."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        self.assertContains(response, 'Edit on GitHub')
+
+    def test_synced_event_description_is_disabled(self):
+        """Description field is disabled for synced events."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        content = response.content.decode()
+        # The description textarea should have the disabled attribute
+        # Find the description textarea and check it has disabled
+        self.assertIn('name="description"', content)
+        # Check that there is a disabled textarea for description
+        import re
+        desc_match = re.search(
+            r'<textarea[^>]*name="description"[^>]*>', content
+        )
+        self.assertIsNotNone(desc_match)
+        self.assertIn('disabled', desc_match.group(0))
+
+    def test_synced_event_title_is_disabled(self):
+        """Title field is disabled for synced events."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        content = response.content.decode()
+        import re
+        title_match = re.search(
+            r'<input[^>]*name="title"[^>]*>', content
+        )
+        self.assertIsNotNone(title_match)
+        self.assertIn('disabled', title_match.group(0))
+
+    def test_synced_event_status_is_editable(self):
+        """Status field remains editable for synced events."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        content = response.content.decode()
+        import re
+        status_match = re.search(
+            r'<select[^>]*name="status"[^>]*>', content
+        )
+        self.assertIsNotNone(status_match)
+        self.assertNotIn('disabled', status_match.group(0))
+
+    def test_synced_event_max_participants_is_editable(self):
+        """Max participants field remains editable for synced events."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        content = response.content.decode()
+        import re
+        mp_match = re.search(
+            r'<input[^>]*name="max_participants"[^>]*>', content
+        )
+        self.assertIsNotNone(mp_match)
+        self.assertNotIn('disabled', mp_match.group(0))
+
+    def test_synced_event_post_updates_operational_fields(self):
+        """POST to synced event updates status and max_participants but not description."""
+        self.client.post(f'/studio/events/{self.event.pk}/edit', {
+            'status': 'upcoming',
+            'max_participants': '50',
+        })
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.status, 'upcoming')
+        self.assertEqual(self.event.max_participants, 50)
+        # Description should not change
+        self.assertEqual(self.event.description, 'Original description')
+
+    def test_synced_event_post_does_not_change_title(self):
+        """POST to synced event does not change the title."""
+        self.client.post(f'/studio/events/{self.event.pk}/edit', {
+            'title': 'Hacked Title',
+            'status': 'draft',
+        })
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Synced Event')
+
+    def test_synced_event_shows_view_event_title(self):
+        """Synced event page shows 'View Event' instead of 'Edit Event'."""
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+        self.assertContains(response, 'View Event')
+
+    def test_non_synced_event_has_no_synced_banner(self):
+        """Non-synced events do not show the synced banner."""
+        event = Event.objects.create(
+            title='Local Event', slug='local-event',
+            start_datetime=datetime(2026, 6, 1, 10, 0),
+            status='draft',
+        )
+        response = self.client.get(f'/studio/events/{event.pk}/edit')
+        self.assertNotContains(response, 'data-testid="synced-banner"')
+
+
+class StudioEventCreateZoomTest(TestCase):
+    """Test Studio endpoint for creating Zoom meetings for events."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
+
+    def setUp(self):
+        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
         self.event = Event.objects.create(
             title='Live Event', slug='live-event',

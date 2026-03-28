@@ -96,6 +96,10 @@ def post_slack_announcement(content_type, content):
     Returns:
         True if posted successfully, False otherwise.
     """
+    if not getattr(settings, 'SLACK_ENABLED', False):
+        logger.debug('Skipping Slack announcement: SLACK_ENABLED is False')
+        return False
+
     bot_token = getattr(settings, 'SLACK_BOT_TOKEN', '')
     channel_id = _get_announcements_channel_id()
 

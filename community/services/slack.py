@@ -52,6 +52,11 @@ class SlackCommunityService(CommunityService):
             settings, "SLACK_COMMUNITY_CHANNEL_IDS", []
         )
 
+    def _check_enabled(self):
+        """Raise if Slack integration is disabled."""
+        if not getattr(settings, 'SLACK_ENABLED', False):
+            raise SlackAPIError('Slack integration is disabled (SLACK_ENABLED is not true)')
+
     def _api_call(self, method, **kwargs):
         """Make a Slack Web API call.
 
@@ -65,6 +70,7 @@ class SlackCommunityService(CommunityService):
         Raises:
             SlackAPIError: If the API call fails or returns ok=False.
         """
+        self._check_enabled()
         url = f"{SLACK_API_BASE}{method}"
         headers = {
             "Authorization": f"Bearer {self.bot_token}",

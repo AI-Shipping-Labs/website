@@ -62,6 +62,7 @@ def test_post_slack_announcement_real():
         return response
 
     try:
+        settings.SLACK_ENABLED = True
         settings.SLACK_BOT_TOKEN = env_token
         settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = SLACK_TEST_CHANNEL
 
@@ -118,5 +119,6 @@ def test_post_slack_announcement_real():
 
     finally:
         # Restore original settings
+        settings.SLACK_ENABLED = False
         settings.SLACK_BOT_TOKEN = original_token
         settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = original_channel

@@ -39,6 +39,7 @@ class CommunityServiceInterfaceTest(TestCase):
         self.assertIsInstance(service, SlackCommunityService)
 
 
+@override_settings(SLACK_ENABLED=True)
 class SlackAPICallTest(TestCase):
     """Tests for the Slack API call mechanism."""
 
@@ -80,6 +81,7 @@ class SlackAPICallTest(TestCase):
         self.assertEqual(ctx.exception.error_code, "channel_not_found")
 
 
+@override_settings(SLACK_ENABLED=True)
 class LookupUserByEmailTest(TestCase):
     """Tests for lookup_user_by_email."""
 
@@ -113,6 +115,7 @@ class LookupUserByEmailTest(TestCase):
         self.assertIsNone(result)
 
 
+@override_settings(SLACK_ENABLED=True)
 class AddToChannelsTest(TestCase):
     """Tests for add_to_channels."""
 
@@ -146,6 +149,7 @@ class AddToChannelsTest(TestCase):
         self.assertTrue(all(r.get("already_in") for r in results))
 
 
+@override_settings(SLACK_ENABLED=True)
 class RemoveFromChannelsTest(TestCase):
     """Tests for remove_from_channels."""
 
@@ -178,6 +182,7 @@ class RemoveFromChannelsTest(TestCase):
 
 
 @override_settings(
+    SLACK_ENABLED=True,
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001", "C002"],
 )
@@ -277,6 +282,7 @@ class InviteServiceTest(TestCase):
 
 
 @override_settings(
+    SLACK_ENABLED=True,
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001", "C002"],
 )
@@ -318,6 +324,7 @@ class RemoveServiceTest(TestCase):
 
 
 @override_settings(
+    SLACK_ENABLED=True,
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001", "C002"],
 )

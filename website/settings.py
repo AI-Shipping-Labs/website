@@ -288,17 +288,23 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 # Slack community integration (set via environment variables in production)
+# SLACK_ENABLED must be explicitly set to 'true' — off by default to prevent
+# dev/test environments from posting to real Slack channels.
 import sys
 
 TESTING = 'test' in sys.argv
-SLACK_BOT_TOKEN = '' if TESTING else os.environ.get('SLACK_BOT_TOKEN', '')
-SLACK_COMMUNITY_CHANNEL_IDS = [] if TESTING else [
+SLACK_ENABLED = (
+    not TESTING
+    and os.environ.get('SLACK_ENABLED', 'false').lower() == 'true'
+)
+SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '') if SLACK_ENABLED else ''
+SLACK_COMMUNITY_CHANNEL_IDS = [
     cid.strip()
     for cid in os.environ.get('SLACK_COMMUNITY_CHANNEL_IDS', '').split(',')
     if cid.strip()
-]
+] if SLACK_ENABLED else []
 SLACK_INVITE_URL = os.environ.get('SLACK_INVITE_URL', '')
-SLACK_ANNOUNCEMENTS_CHANNEL_ID = '' if TESTING else os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID', '')
+SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 
 # Django-Q2 task queue configuration
 Q_CLUSTER = {

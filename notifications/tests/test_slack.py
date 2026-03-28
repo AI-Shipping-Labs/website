@@ -3,7 +3,7 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from content.models import Article
 from notifications.services.slack_announcements import (
@@ -59,6 +59,7 @@ class BuildSlackBlocksTest(TestCase):
         self.assertIn('...', text)
 
 
+@override_settings(SLACK_ENABLED=True)
 class PostSlackAnnouncementTest(TestCase):
     """Tests for the post_slack_announcement function."""
 

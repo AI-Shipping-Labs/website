@@ -281,7 +281,7 @@
 </head>
 <body class="font-sans antialiased">
   {% if is_impersonating %}
-  <div class="bg-yellow-500 text-black text-center py-2 px-4 text-sm font-medium">
+  <div class="bg-yellow-500 text-black text-center py-2 px-4 text-sm font-medium sticky top-0 z-[60]">
     You are logged in as {{ request.user.email }}
     <form method="post" action="{% url 'studio_stop_impersonate' %}" class="inline ml-2">
       {% csrf_token %}

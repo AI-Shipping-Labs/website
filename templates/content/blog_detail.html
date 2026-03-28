@@ -12,7 +12,7 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
-  <article class="py-16 lg:py-24">
+  <article class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-3xl px-6 lg:px-8">
       <a href="/blog" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
@@ -80,7 +80,7 @@
   </article>
 
   {% if related_articles %}
-  <section class="border-t border-border py-16">
+  <section class="border-t border-border py-8 sm:py-16">
     <div class="mx-auto max-w-3xl px-6 lg:px-8">
       <h2 class="text-2xl font-semibold tracking-tight mb-8">Related Articles</h2>
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

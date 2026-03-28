@@ -26,7 +26,7 @@
   <!-- Hero Section -->
   <section class="relative min-h-screen overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-7xl px-6 py-24 lg:px-8 lg:py-32">
+    <div class="relative mx-auto max-w-7xl px-6 py-16 sm:py-24 lg:px-8 lg:py-32">
       <div class="mx-auto max-w-3xl text-center">
         <p class="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-sm text-muted-foreground">
           <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
@@ -72,7 +72,7 @@
   </section>
 
   <!-- About / Philosophy Section -->
-  <section id="about" class="border-t border-border bg-background py-24 lg:py-32">
+  <section id="about" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Philosophy</p>
@@ -99,7 +99,7 @@
   </section>
 
   <!-- Pricing / Tiers Section -->
-  <section id="tiers" class="border-t border-border bg-card py-24 lg:py-32">
+  <section id="tiers" class="border-t border-border bg-card py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
@@ -113,11 +113,13 @@
 
         <div class="mt-8 flex items-center justify-center gap-4">
           <span class="text-sm text-muted-foreground" id="monthly-label">Monthly</span>
-          <button type="button" id="billing-toggle"
-                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors"
-                  aria-label="Toggle annual pricing">
-            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
-          </button>
+          <div class="touch-target-toggle">
+            <button type="button" id="billing-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors"
+                    aria-label="Toggle annual pricing">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
+            </button>
+          </div>
           <span class="text-sm text-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
         </div>
       </div>
@@ -216,7 +218,7 @@
   </section>
 
   <!-- Event Recordings / Resources Section -->
-  <section id="resources" class="border-t border-border bg-background py-24 lg:py-32">
+  <section id="resources" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -277,7 +279,7 @@
   </section>
 
   <!-- Blog Section -->
-  <section id="blog" class="border-t border-border bg-background py-24 lg:py-32">
+  <section id="blog" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -347,7 +349,7 @@
   </section>
 
   <!-- Projects Section -->
-  <section id="projects" class="border-t border-border bg-card py-24 lg:py-32">
+  <section id="projects" class="border-t border-border bg-card py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -421,7 +423,7 @@
   </section>
 
   <!-- Collection / Curated Links Section -->
-  <section id="collection" class="border-t border-border bg-background py-24 lg:py-32">
+  <section id="collection" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -470,7 +472,7 @@
   </section>
 
   <!-- Newsletter Section -->
-  <section id="newsletter" class="border-t border-border bg-card py-24 lg:py-32">
+  <section id="newsletter" class="border-t border-border bg-card py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
       <div class="mx-auto max-w-2xl">
         {% include "includes/subscribe_form.html" with heading="Ready to turn your AI ideas into real projects?" description="Subscribe to the free newsletter and get notified when the community opens. Join action-oriented builders who are shipping practical AI products." only %}
@@ -479,7 +481,7 @@
   </section>
 
   <!-- FAQ Section -->
-  <section id="faq" class="border-t border-border bg-background py-24 lg:py-32">
+  <section id="faq" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-3xl px-6 lg:px-8">
       <div class="text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">FAQ</p>

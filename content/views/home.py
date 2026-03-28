@@ -1,11 +1,11 @@
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
-from content.access import get_user_level
-from content.models import Article, CuratedLink, Project, UserCourseProgress
+from content.access import get_active_override, get_user_level
+from content.models import Article, Course, CuratedLink, Project, UserCourseProgress
 from content.tier_config import get_tiers_with_features
 from events.models import Event
 
@@ -175,13 +175,18 @@ def _public_home(request):
 
 def _dashboard(request):
     """Render the personalized dashboard for authenticated users."""
-    user = request.user
-    user_level = get_user_level(user)
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    # Re-fetch user with select_related('tier') to avoid a lazy-load query
+    # every time user.tier.name or user.tier.level is accessed.
+    user = User.objects.select_related('tier').get(pk=request.user.pk)
 
     # --- Welcome banner ---
-    # Check for active tier override to display the correct badge
-    from content.access import get_active_override
+    # Fetch active tier override once; pass it to get_user_level to avoid a
+    # duplicate DB query (get_user_level internally queries for the override too).
     active_override = get_active_override(user)
+    user_level = get_user_level(user, active_override=active_override)
 
     tier_name = ''
     if user.tier_id:
@@ -197,7 +202,7 @@ def _dashboard(request):
     # and compute completion percentage + last accessed unit.
     # A course is "in progress" if the user has at least one completed unit
     # but has not completed all units.
-    in_progress_courses = _get_in_progress_courses(user)
+    in_progress_courses = _get_in_progress_courses(user, user_level)
 
     # --- Upcoming events ---
     upcoming_events = _get_upcoming_events(user)
@@ -241,16 +246,18 @@ def _dashboard(request):
     return render(request, 'content/dashboard.html', context)
 
 
-def _get_in_progress_courses(user):
+def _get_in_progress_courses(user, user_level):
     """Return courses the user has started but not finished, most recently accessed first.
 
     Only includes courses the user currently has access to based on their
     tier level.  Progress records for inaccessible courses are preserved in
     the database but excluded from the dashboard until the user's tier
     qualifies again.
-    """
-    user_level = get_user_level(user)
 
+    Args:
+        user: The authenticated user.
+        user_level: Pre-computed access level (avoids duplicate get_user_level call).
+    """
     # Get all courses where user has at least one completed unit
     progress_qs = UserCourseProgress.objects.filter(
         user=user,
@@ -274,6 +281,18 @@ def _get_in_progress_courses(user):
             course_data[cid]['last_completed_at'] = prog.completed_at
             course_data[cid]['last_unit'] = prog.unit
 
+    if not course_data:
+        return []
+
+    # Batch-fetch total unit counts for all relevant courses in a single query
+    # instead of calling course.total_units() per course (N+1).
+    course_ids = list(course_data.keys())
+    unit_counts = dict(
+        Course.objects.filter(id__in=course_ids).annotate(
+            unit_count=Count('modules__units')
+        ).values_list('id', 'unit_count')
+    )
+
     # Build result list, filtering out fully completed courses
     # and courses the user can no longer access at their current tier level
     result = []
@@ -282,7 +301,7 @@ def _get_in_progress_courses(user):
         # Skip courses whose required_level exceeds the user's current tier
         if course.required_level > user_level:
             continue
-        total = course.total_units()
+        total = unit_counts.get(cid, 0)
         completed = data['completed_count']
         if total == 0 or completed >= total:
             continue  # Skip fully completed courses

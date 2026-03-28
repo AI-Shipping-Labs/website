@@ -27,8 +27,11 @@ LEVEL_TO_TIER_NAME = {
     LEVEL_PREMIUM: 'Premium',
 }
 
+# Sentinel to distinguish "caller didn't pass active_override" from "caller passed None"
+_SENTINEL = object()
 
-def get_user_level(user):
+
+def get_user_level(user, active_override=_SENTINEL):
     """Return the access level for a user.
 
     Anonymous users and users without a tier are treated as level 0.
@@ -37,6 +40,13 @@ def get_user_level(user):
     If the user has an active TierOverride (is_active=True and not yet
     expired), returns ``max(user.tier.level, override.override_tier.level)``
     so the override only ever grants MORE access, never less.
+
+    Args:
+        user: The request user (may be AnonymousUser or None).
+        active_override: Optional pre-fetched TierOverride (or None).
+            When provided, skips the DB query for the override.
+            Pass ``None`` explicitly to indicate "no override exists".
+            Omit (or pass the default sentinel) to auto-query.
     """
     if user is None or not user.is_authenticated:
         return 0
@@ -48,7 +58,14 @@ def get_user_level(user):
         base_level = user.tier.level
 
     # Check for active tier override
-    override_level = _get_override_level(user)
+    if active_override is _SENTINEL:
+        # Caller did not provide an override — query the DB
+        override_level = _get_override_level(user)
+    elif active_override is not None:
+        override_level = active_override.override_tier.level
+    else:
+        override_level = None
+
     if override_level is not None:
         return max(base_level, override_level)
 

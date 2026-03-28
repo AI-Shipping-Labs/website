@@ -8,7 +8,7 @@
 
   <section class="relative min-h-screen overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-3xl px-6 py-24 lg:px-8 lg:py-32">
+    <div class="relative mx-auto max-w-3xl px-6 py-16 sm:py-24 lg:px-8 lg:py-32">
 
       <h1 class="text-3xl font-semibold tracking-tight mb-2">Account</h1>
       <p class="text-muted-foreground mb-10">Manage your membership and preferences</p>
@@ -177,13 +177,15 @@
             <p class="text-foreground font-medium">Newsletter</p>
             <p class="text-sm text-muted-foreground mt-1">Receive email updates about new content and community events</p>
           </div>
-          <button type="button"
-                  id="newsletter-toggle"
-                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if newsletter_subscribed %}bg-accent{% else %}bg-secondary{% endif %}"
-                  onclick="toggleNewsletter()"
-                  aria-label="Toggle newsletter subscription">
-            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform {% if newsletter_subscribed %}translate-x-5{% else %}translate-x-0{% endif %}" id="newsletter-toggle-dot"></span>
-          </button>
+          <div class="touch-target-toggle">
+            <button type="button"
+                    id="newsletter-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if newsletter_subscribed %}bg-accent{% else %}bg-secondary{% endif %}"
+                    onclick="toggleNewsletter()"
+                    aria-label="Toggle newsletter subscription">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform {% if newsletter_subscribed %}translate-x-5{% else %}translate-x-0{% endif %}" id="newsletter-toggle-dot"></span>
+            </button>
+          </div>
         </div>
 
         <p class="text-xs text-muted-foreground mt-4" id="newsletter-status">

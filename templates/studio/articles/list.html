@@ -11,10 +11,10 @@
 </div>
 
 <!-- Filters -->
-<div class="flex items-center space-x-4 mb-6">
-  <form method="get" class="flex items-center space-x-4 flex-1">
+<div class="mb-6">
+  <form method="get" class="flex flex-wrap items-center gap-3">
     <input type="text" name="q" value="{{ search }}" placeholder="Search articles..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
     <select name="status" onchange="this.form.submit()"
             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="">All statuses</option>
@@ -26,7 +26,7 @@
 </div>
 
 <!-- Article List -->
-<div class="bg-card border border-border rounded-lg overflow-hidden">
+<div class="bg-card border border-border rounded-lg overflow-x-auto">
   <table class="w-full">
     <thead class="bg-secondary">
       <tr>

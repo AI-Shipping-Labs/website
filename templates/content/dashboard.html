@@ -5,7 +5,7 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
-  <div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+  <div class="mx-auto max-w-7xl px-3 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
 
     <!-- Checkout Success Banner (shown via JS when ?checkout=success is present) -->
     <div id="checkout-success-banner" class="mb-6 hidden rounded-xl border border-green-500/30 bg-green-500/10 p-4" role="alert">
@@ -22,10 +22,10 @@
 
     <!-- Welcome Banner -->
     <section class="mb-10">
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8">
+      <div class="w-full rounded-2xl border border-border bg-card p-4 sm:p-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <div class="min-w-0">
+            <h1 class="text-xl font-semibold tracking-tight sm:text-3xl">
               Welcome back{% if user.first_name %}, {{ user.first_name }}{% endif %}
             </h1>
             <div class="mt-2 flex items-center gap-3">
@@ -52,12 +52,12 @@
               {% endif %}
             </div>
           </div>
-          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <a href="{% url 'account' %}" class="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          <div class="flex gap-3 sm:flex-row sm:flex-wrap">
+            <a href="{% url 'account' %}" class="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
               <i data-lucide="settings" class="h-4 w-4"></i>
               Account
             </a>
-            <a href="/pricing" class="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            <a href="/pricing" class="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>
@@ -102,13 +102,13 @@
     </section>
     {% endif %}
 
-    <div class="grid gap-10 lg:gap-8 lg:grid-cols-3">
+    <div class="grid gap-10 lg:gap-8 lg:grid-cols-3 overflow-hidden">
       <!-- Main content: 2 columns wide -->
-      <div class="lg:col-span-2 space-y-8">
+      <div class="lg:col-span-2 space-y-8 min-w-0">
 
         <!-- Continue Learning -->
         <section>
-          <div class="flex items-center justify-between gap-2 mb-4">
+          <div class="flex items-center justify-between gap-3 mb-4">
             <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
               <i data-lucide="book-open" class="h-5 w-5 shrink-0 text-accent"></i>
               Continue Learning
@@ -155,7 +155,7 @@
 
         <!-- Upcoming Events -->
         <section>
-          <div class="flex items-center justify-between gap-2 mb-4">
+          <div class="flex items-center justify-between gap-3 mb-4">
             <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
               <i data-lucide="calendar" class="h-5 w-5 shrink-0 text-accent"></i>
               Upcoming Events
@@ -198,7 +198,7 @@
 
         <!-- Recent Content -->
         <section>
-          <div class="flex items-center justify-between gap-2 mb-4">
+          <div class="flex items-center justify-between gap-3 mb-4">
             <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
               <i data-lucide="sparkles" class="h-5 w-5 shrink-0 text-accent"></i>
               Recent Content
@@ -289,7 +289,7 @@
 
         <!-- Notifications -->
         <section>
-          <div class="flex items-center justify-between gap-2 mb-4">
+          <div class="flex items-center justify-between gap-3 mb-4">
             <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
               <i data-lucide="bell" class="h-5 w-5 shrink-0 text-accent"></i>
               Notifications

@@ -4,8 +4,17 @@
 
 {% block body %}
 <div class="flex min-h-screen">
-  <!-- Sidebar -->
-  <aside class="w-64 bg-card border-r border-border flex-shrink-0 fixed h-full overflow-y-auto">
+  <!-- Mobile sidebar toggle -->
+  <button id="studio-sidebar-toggle" class="md:hidden fixed top-3 left-3 z-50 p-2 bg-gray-800 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition-colors" aria-label="Toggle sidebar">
+    <svg id="sidebar-icon-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    <svg id="sidebar-icon-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+  </button>
+
+  <!-- Backdrop -->
+  <div id="studio-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden" onclick="toggleStudioSidebar()"></div>
+
+  <!-- Sidebar: hidden on mobile, visible on md+ -->
+  <aside id="studio-sidebar" class="hidden md:block w-64 bg-card border-r border-border flex-shrink-0 fixed h-full overflow-y-auto z-40">
     <div class="p-6">
       <a href="{% url 'studio_dashboard' %}" class="flex items-center space-x-2 mb-8">
         <div class="w-8 h-8 bg-accent rounded flex items-center justify-center">
@@ -154,10 +163,45 @@
   </aside>
 
   <!-- Main content -->
-  <main class="flex-1 ml-64">
-    <div class="p-8">
+  <main class="flex-1 ml-0 md:ml-64 min-w-0 overflow-hidden">
+    <div class="p-4 pt-14 md:pt-8 md:p-8">
       {% block studio_content %}{% endblock %}
     </div>
   </main>
 </div>
+
+<script>
+function toggleStudioSidebar() {
+  var sidebar = document.getElementById('studio-sidebar');
+  var backdrop = document.getElementById('studio-backdrop');
+  var iconOpen = document.getElementById('sidebar-icon-open');
+  var iconClose = document.getElementById('sidebar-icon-close');
+  var isOpen = !sidebar.classList.contains('hidden');
+
+  if (isOpen) {
+    sidebar.classList.add('hidden');
+    sidebar.classList.remove('block');
+    backdrop.classList.add('hidden');
+    iconOpen.classList.remove('hidden');
+    iconClose.classList.add('hidden');
+  } else {
+    sidebar.classList.remove('hidden');
+    sidebar.classList.add('block');
+    backdrop.classList.remove('hidden');
+    iconOpen.classList.add('hidden');
+    iconClose.classList.remove('hidden');
+  }
+}
+
+document.getElementById('studio-sidebar-toggle').addEventListener('click', toggleStudioSidebar);
+
+// Close sidebar on navigation for mobile
+document.querySelectorAll('#studio-sidebar a').forEach(function(link) {
+  link.addEventListener('click', function() {
+    if (window.innerWidth < 768) {
+      toggleStudioSidebar();
+    }
+  });
+});
+</script>
 {% endblock %}

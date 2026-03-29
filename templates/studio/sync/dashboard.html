@@ -3,12 +3,12 @@
 {% block studio_title %}Content Sync{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8 flex items-center justify-between">
+<div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
   <div>
     <h1 class="text-2xl font-semibold text-foreground">Content Sync</h1>
     <p class="text-muted-foreground mt-1">Sync content from GitHub repositories.</p>
   </div>
-  <div class="flex items-center space-x-3">
+  <div class="flex items-center gap-3 shrink-0">
     <a href="{% url 'studio_sync_history' %}"
        class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
       History
@@ -39,9 +39,9 @@
   {% for repo in repos %}
   <div class="bg-card border border-border rounded-lg p-6">
     <!-- Repo header -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex-1">
-        <div class="flex items-center space-x-3">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-lg font-semibold text-foreground">{{ repo.repo_name }}</h2>
           {% if repo.is_private %}
           <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">Private</span>
@@ -93,7 +93,7 @@
       <h3 class="text-sm font-medium text-muted-foreground mb-3">Last Sync Results</h3>
 
       <!-- Summary counts -->
-      <div class="flex items-center space-x-6 mb-4 text-sm">
+      <div class="flex flex-wrap items-center gap-3 sm:gap-6 mb-4 text-sm">
         {% if repo.last_batch.total_created %}
         <span class="text-green-400">+{{ repo.last_batch.total_created }} created</span>
         {% endif %}
@@ -113,11 +113,11 @@
         <table class="w-full text-sm">
           <thead>
             <tr class="text-left text-xs text-muted-foreground uppercase tracking-wider">
-              <th class="pb-2 pr-4">Content Type</th>
-              <th class="pb-2 pr-4 text-right">Created</th>
-              <th class="pb-2 pr-4 text-right">Updated</th>
-              <th class="pb-2 pr-4 text-right">Deleted</th>
-              <th class="pb-2 pr-4">Status</th>
+              <th class="pb-2 pr-2 sm:pr-4">Content Type</th>
+              <th class="pb-2 pr-2 sm:pr-4 text-right">Created</th>
+              <th class="pb-2 pr-2 sm:pr-4 text-right">Updated</th>
+              <th class="pb-2 pr-2 sm:pr-4 text-right hidden sm:table-cell">Deleted</th>
+              <th class="pb-2 pr-2 sm:pr-4">Status</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border">
@@ -129,10 +129,10 @@
                   <span>{{ ct.display_name }}</span>
                 </span>
               </td>
-              <td class="py-2 pr-4 text-right {% if ct.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ ct.created }}</td>
-              <td class="py-2 pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ ct.updated }}</td>
-              <td class="py-2 pr-4 text-right {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ ct.deleted }}</td>
-              <td class="py-2 pr-4">
+              <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ ct.created }}</td>
+              <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ ct.updated }}</td>
+              <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ ct.deleted }}</td>
+              <td class="py-2 pr-2 sm:pr-4">
                 <span class="text-xs {% if ct.status == 'success' %}text-green-400{% elif ct.status == 'failed' %}text-red-400{% else %}text-yellow-400{% endif %}">{{ ct.status }}</span>
               </td>
             </tr>

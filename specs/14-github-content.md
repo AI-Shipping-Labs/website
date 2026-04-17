@@ -105,7 +105,6 @@ instructor_name: "Alexey Grigorev"
 instructor_bio: "ML engineer and founder of AI Shipping Labs"
 cover_image: "images/cover.png"
 required_level: 3            # Premium only
-is_free: false
 discussion_url: "https://ai-shipping-labs.slack.com/archives/C0XXXXX"
 tags: ["python", "data-engineering", "ai"]
 ```

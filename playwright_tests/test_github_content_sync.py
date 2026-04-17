@@ -280,7 +280,6 @@ def _sync_courses_source(source):
             f.write('description: "Learn Python for data and AI engineering"\n')
             f.write('instructor_name: "Alexey Grigorev"\n')
             f.write("required_level: 0\n")
-            f.write("is_free: true\n")
             f.write("tags:\n  - python\n  - data\n")
 
         module_dir = os.path.join(course_dir, "module-01-setup")

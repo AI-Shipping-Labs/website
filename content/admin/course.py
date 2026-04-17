@@ -98,10 +98,10 @@ class CourseAdmin(admin.ModelAdmin):
 
     list_display = [
         'title', 'slug', 'status', 'instructor_name',
-        'required_level', 'is_free', 'created_at', 'updated_at',
+        'required_level', 'created_at', 'updated_at',
     ]
     list_display_links = ['title']
-    list_filter = ['status', 'required_level', 'is_free']
+    list_filter = ['status', 'required_level']
     search_fields = ['title', 'description', 'instructor_name']
     prepopulated_fields = {'slug': ('title',)}
     actions = [publish_courses, unpublish_courses]
@@ -118,7 +118,7 @@ class CourseAdmin(admin.ModelAdmin):
             ),
         }),
         ('Tags & Visibility', {
-            'fields': ('tags', 'required_level', 'is_free'),
+            'fields': ('tags', 'required_level'),
         }),
         ('Individual Purchase', {
             'fields': ('individual_price_eur', 'stripe_product_id', 'stripe_price_id'),

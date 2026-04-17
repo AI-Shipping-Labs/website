@@ -800,7 +800,6 @@ class SyncCoursesTest(TestCase):
             f.write('description: "Learn Python"\n')
             f.write('instructor_name: "Test Instructor"\n')
             f.write('required_level: 0\n')
-            f.write('is_free: true\n')
             f.write('content_id: "22222222-2222-2222-2222-222222222222"\n')
             f.write('tags:\n  - python\n  - data\n')
 
@@ -855,6 +854,46 @@ class SyncCoursesTest(TestCase):
         course = Course.objects.get(slug='stale-course')
         self.assertEqual(course.status, 'draft')
 
+    def test_sync_ignores_legacy_is_free_key_in_yaml(self):
+        """A leftover `is_free` key in course.yaml must not break sync.
+
+        The field was removed in favor of deriving from `required_level`,
+        but older content YAML may still contain the key. The parser must
+        silently ignore it.
+        """
+        course_dir = os.path.join(self.temp_dir, 'legacy-course')
+        os.makedirs(course_dir)
+        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Legacy Course"\n')
+            f.write('slug: "legacy-course"\n')
+            f.write('description: "Has leftover is_free key."\n')
+            f.write('instructor_name: "Test"\n')
+            f.write('required_level: 0\n')
+            # Deprecated key that must be silently ignored by sync.
+            f.write('is_free: true\n')
+            f.write('content_id: "44444444-4444-4444-4444-444444444444"\n')
+
+        module_dir = os.path.join(course_dir, 'module-01')
+        os.makedirs(module_dir)
+        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
+            f.write('title: "Intro"\n')
+            f.write('sort_order: 1\n')
+        with open(os.path.join(module_dir, 'unit-01.md'), 'w') as f:
+            f.write('---\n')
+            f.write('title: "Unit 1"\n')
+            f.write('sort_order: 1\n')
+            f.write('content_id: "55555555-5555-5555-5555-555555555555"\n')
+            f.write('---\n')
+            f.write('Body.\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertIn(sync_log.status, ('success', 'partial'))
+        course = Course.objects.get(slug='legacy-course')
+        self.assertEqual(course.required_level, 0)
+        # The property derives from required_level, not from the YAML key.
+        self.assertTrue(course.is_free)
+
 
 # ===========================================================================
 # Content Sync Tests (Single-Course Repo)
@@ -891,7 +930,6 @@ class SyncSingleCourseRepoTest(TestCase):
             f.write('description: "Learn Python from scratch."\n')
             f.write('instructor_name: "Alexey Grigorev"\n')
             f.write('required_level: 20\n')
-            f.write('is_free: false\n')
             f.write(f'content_id: "{content_id}"\n')
             f.write('tags:\n  - python\n  - fundamentals\n')
 

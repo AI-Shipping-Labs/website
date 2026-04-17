@@ -91,14 +91,6 @@
           <option value="30" {% if course.required_level == 30 %}selected{% endif %}>Premium (30)</option>
         </select>
       </div>
-      <div class="flex items-end">
-        <label class="flex items-center space-x-2 px-4 py-2">
-          <input type="checkbox" name="is_free" {% if course.is_free %}checked{% endif %}
-                 {% if is_synced %}disabled{% endif %}
-                 class="rounded border-border text-accent focus:ring-accent">
-          <span class="text-sm text-foreground">Free (lead magnet)</span>
-        </label>
-      </div>
     </div>
 
     <div>

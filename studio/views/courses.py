@@ -58,7 +58,6 @@ def course_edit(request, course_id):
         course.instructor_name = request.POST.get('instructor_name', '')
         course.instructor_bio = request.POST.get('instructor_bio', '')
         course.status = request.POST.get('status', 'draft')
-        course.is_free = request.POST.get('is_free') == 'on'
         course.required_level = int(request.POST.get('required_level', 0))
         course.discussion_url = request.POST.get('discussion_url', '')
         tags_raw = request.POST.get('tags', '')

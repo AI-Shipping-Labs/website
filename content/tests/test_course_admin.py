@@ -83,7 +83,6 @@ class CourseAdminCRUDTest(TestCase):
             'instructor_bio': 'An expert.',
             'tags': '["python", "django"]',
             'required_level': 0,
-            'is_free': 'on',
             'status': 'draft',
             'discussion_url': 'https://github.com/test',
             # Module inline management form
@@ -108,7 +107,7 @@ class CourseAdminCRUDTest(TestCase):
         course = Course.objects.get(slug='new-course')
         self.assertEqual(course.title, 'New Course')
         self.assertEqual(course.instructor_name, 'Test Author')
-        self.assertTrue(course.is_free)
+        self.assertEqual(course.required_level, 0)
 
     def test_admin_status_change_draft_to_published(self):
         course = Course.objects.create(

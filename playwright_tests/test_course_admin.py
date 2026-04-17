@@ -58,7 +58,6 @@ def _create_course(
     instructor_bio="",
     required_level=0,
     status="published",
-    is_free=False,
     discussion_url="",
     tags=None,
 ):
@@ -77,7 +76,6 @@ def _create_course(
         instructor_bio=instructor_bio,
         required_level=required_level,
         status=status,
-        is_free=is_free,
         discussion_url=discussion_url,
         tags=tags,
     )
@@ -714,7 +712,6 @@ class TestScenario8StaffCreatesFreeCourse:
             title="Free AI Starter Kit",
             slug="free-ai-starter-kit",
             required_level=0,
-            is_free=True,
             status="published",
         )
 

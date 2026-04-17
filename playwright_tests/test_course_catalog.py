@@ -54,7 +54,6 @@ def _create_course(
     instructor_bio="",
     required_level=0,
     status="published",
-    is_free=False,
     discussion_url="",
     tags=None,
 ):
@@ -73,7 +72,6 @@ def _create_course(
         instructor_bio=instructor_bio,
         required_level=required_level,
         status=status,
-        is_free=is_free,
         discussion_url=discussion_url,
         tags=tags,
     )
@@ -169,7 +167,6 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
             cover_image_url="https://example.com/intro-ml.jpg",
             instructor_name="Jane Doe",
             instructor_bio="ML researcher and educator",
-            is_free=True,
             tags=["python", "ai"],
             discussion_url="https://github.com/example/intro-ml/discussions",
         )
@@ -305,7 +302,6 @@ class TestScenario3FreeUserFreeCourseProgress:
             title="Python Basics",
             slug="python-basics",
             description="Learn Python from scratch.",
-            is_free=True,
             required_level=0,
         )
         mod = _create_module(course, "Fundamentals", sort_order=1)
@@ -644,7 +640,6 @@ class TestScenario9FreeCourseAnonymousSignupCTA:
             title="Python Basics",
             slug="python-basics",
             description="Learn Python from scratch.",
-            is_free=True,
             required_level=0,
         )
         mod = _create_module(course, "Fundamentals", sort_order=1)

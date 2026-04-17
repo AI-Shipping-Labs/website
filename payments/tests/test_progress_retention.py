@@ -776,7 +776,7 @@ class OpenCourseProgressAlwaysVisibleTest(TierSetupMixin, TestCase):
         # Create a free course
         self.course = Course.objects.create(
             title='Free Course', slug='free-course',
-            status='published', required_level=LEVEL_OPEN, is_free=True,
+            status='published', required_level=LEVEL_OPEN,
         )
         module = Module.objects.create(
             course=self.course, title='Module 1', slug='module-1', sort_order=1,

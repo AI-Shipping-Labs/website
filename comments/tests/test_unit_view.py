@@ -16,7 +16,7 @@ class CourseUnitDetailContentIdTest(TestCase):
     def setUpTestData(cls):
         cls.user = User.objects.create_user(email='test@test.com', password='pass')
         cls.course = Course.objects.create(
-            title='Test Course', slug='test-course', status='published', is_free=True,
+            title='Test Course', slug='test-course', status='published',
         )
         cls.module = Module.objects.create(
             course=cls.course, title='Module 1', slug='module-1', sort_order=1,

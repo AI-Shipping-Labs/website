@@ -254,7 +254,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
     def test_free_course_accessible_to_all_authenticated(self):
         free_course = Course.objects.create(
             title='Free Course', slug='free-course',
-            status='published', required_level=LEVEL_OPEN, is_free=True,
+            status='published', required_level=LEVEL_OPEN,
         )
         module = Module.objects.create(
             course=free_course, title='M1', slug='m1', sort_order=1,
@@ -271,7 +271,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
     def test_anonymous_free_course_sees_signup_cta(self):
         free_course = Course.objects.create(
             title='Free Course', slug='free-course-cta',
-            status='published', required_level=LEVEL_OPEN, is_free=True,
+            status='published', required_level=LEVEL_OPEN,
         )
         module = Module.objects.create(
             course=free_course, title='M1', slug='m1', sort_order=1,
@@ -783,7 +783,7 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
     def test_single_unit_course_no_nav(self):
         solo_course = Course.objects.create(
             title='Solo Course', slug='solo-nav', status='published',
-            required_level=0, is_free=True,
+            required_level=0,
         )
         solo_module = Module.objects.create(
             course=solo_course, title='SM', slug='sm', sort_order=0,

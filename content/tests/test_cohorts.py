@@ -464,7 +464,7 @@ class CohortEnrollApiTest(TierSetupMixin, TestCase):
         """Any authenticated user can enroll in a free course cohort."""
         free_course = Course.objects.create(
             title='Free', slug='free-course',
-            status='published', required_level=LEVEL_OPEN, is_free=True,
+            status='published', required_level=LEVEL_OPEN,
         )
         cohort = Cohort.objects.create(
             course=free_course, name='Free Cohort',

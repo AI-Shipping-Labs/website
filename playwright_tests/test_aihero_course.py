@@ -58,7 +58,6 @@ def _ensure_aihero_course():
         ),
         status="published",
         required_level=0,
-        is_free=True,
         instructor_name="Alexey Grigorev",
         instructor_bio="Principal Data Scientist",
     )

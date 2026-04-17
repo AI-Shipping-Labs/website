@@ -9,6 +9,7 @@ from django.template import Context, Template
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
+from content.access import LEVEL_BASIC
 from content.models import Article, Course, Module, Project, Tutorial, Unit
 from events.models import Event
 
@@ -91,7 +92,6 @@ class StructuredDataCourseTest(TestCase):
             slug='ai-engineering',
             description='Learn AI engineering from scratch.',
             status='published',
-            is_free=True,
             cover_image_url='https://example.com/course.jpg',
         )
 
@@ -121,7 +121,7 @@ class StructuredDataCourseTest(TestCase):
         self.assertEqual(data['offers']['priceCurrency'], 'EUR')
 
     def test_structured_data_paid_course_no_offers(self):
-        self.course.is_free = False
+        self.course.required_level = LEVEL_BASIC
         self.course.save()
         template = Template('{% load seo_tags %}{% structured_data course %}')
         context = Context({'course': self.course})
@@ -515,7 +515,6 @@ class CourseDetailSEOTest(TestCase):
             slug='python-for-ai',
             description='Learn Python for AI engineering.',
             status='published',
-            is_free=True,
         )
 
     def test_course_detail_has_title_format(self):

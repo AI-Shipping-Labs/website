@@ -1084,7 +1084,6 @@ def _sync_single_course(
                 source, os.path.join(rel_path, 'course.yaml'),
             ),
             'required_level': course_data.get('required_level', 0),
-            'is_free': course_data.get('is_free', False),
             'discussion_url': course_data.get('discussion_url', ''),
             'tags': course_data.get('tags', []),
             'testimonials': course_data.get('testimonials', []),

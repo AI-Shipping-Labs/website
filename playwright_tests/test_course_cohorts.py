@@ -57,7 +57,6 @@ def _create_course(
     description="",
     required_level=0,
     status="published",
-    is_free=False,
     instructor_name="",
     tags=None,
 ):
@@ -73,7 +72,6 @@ def _create_course(
         description=description,
         required_level=required_level,
         status=status,
-        is_free=is_free,
         instructor_name=instructor_name,
         tags=tags,
     )
@@ -737,7 +735,6 @@ class TestScenario9FreeCourseEnrollment:
             slug="intro-to-ai",
             description="Introduction to AI.",
             required_level=0,
-            is_free=True,
         )
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Intro\nWelcome.")

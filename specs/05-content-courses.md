@@ -17,7 +17,6 @@ Course:
   instructor_bio: string | null
   required_level: int             # 0-3, see spec 03. 0 = free course
   status: enum                    # "draft", "published"
-  is_free: bool                   # true for lead-magnet courses (required_level = 0)
   discussion_url: string | null   # Slack channel URL for paid courses, GitHub URL for free courses
   tags: string[]
   created_at: datetime
@@ -69,7 +68,7 @@ CohortEnrollment:
 
 ### `/courses` — Course catalog
 
-- Grid of all published courses. Each card: title, cover image, instructor, tag badges, "Free" badge if `is_free`, required tier badge otherwise
+- Grid of all published courses. Each card: title, cover image, instructor, tag badges, required tier badge based on `required_level`
 - Visible to everyone (no gating on the catalog page itself)
 
 ### `/courses/{slug}` — Course detail
@@ -77,7 +76,7 @@ CohortEnrollment:
 - Always visible to everyone (for SEO). Shows: title, description, instructor bio, full syllabus (module titles + unit titles), tag badges, discussion link
 - If user has access: each unit title in the syllabus is a clickable link to the unit page. Shows progress bar (X of Y units completed).
 - If user does not have access: unit titles are visible but not clickable. CTA button: "Unlock with {tier_name} — {price}/year" linking to `/pricing`
-- If `is_free` and user is not registered: CTA button "Sign up free to start this course" linking to registration
+- If `required_level == 0` and user is not registered: CTA button "Sign up free to start this course" linking to registration
 
 ### `/courses/{slug}/{module_sort}/{unit_sort}` — Unit page
 
@@ -95,7 +94,7 @@ CohortEnrollment:
 
 ### `/admin/courses/new` and `/admin/courses/{id}/edit`
 
-- Course form: title, slug, description, cover image, instructor name/bio, tags, visibility dropdown, is_free checkbox, discussion_url, status
+- Course form: title, slug, description, cover image, instructor name/bio, tags, visibility dropdown, discussion_url, status
 - Below the course form: module editor. Add/reorder/delete modules. Within each module: add/reorder/delete units.
 - Unit form (inline or modal): title, video_url, body (markdown), homework (markdown), timestamps (list of time + label pairs), is_preview checkbox
 

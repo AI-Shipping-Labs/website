@@ -59,10 +59,6 @@ class Course(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default='draft',
     )
-    is_free = models.BooleanField(
-        default=False,
-        help_text="True for lead-magnet courses (required_level = 0).",
-    )
     discussion_url = models.URLField(
         max_length=500, blank=True, default='',
         help_text="Slack channel URL for paid courses, GitHub URL for free courses.",
@@ -146,6 +142,11 @@ class Course(models.Model):
     @property
     def is_published(self):
         return self.status == 'published'
+
+    @property
+    def is_free(self) -> bool:
+        """True when the course has no tier requirement (lead magnet)."""
+        return self.required_level == 0
 
     @property
     def required_tier_name(self):

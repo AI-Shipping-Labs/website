@@ -63,7 +63,6 @@ class CourseModelTest(TestCase):
         self.assertEqual(course.instructor_bio, '')
         self.assertEqual(course.required_level, 0)
         self.assertEqual(course.status, 'draft')
-        self.assertFalse(course.is_free)
         self.assertEqual(course.discussion_url, '')
         self.assertEqual(course.tags, [])
 
@@ -315,7 +314,7 @@ class CoursesListViewTest(TestCase):
         self.published = Course.objects.create(
             title='Published Course', slug='published-course',
             status='published', instructor_name='Test Instructor',
-            is_free=True, tags=['python', 'ai'],
+            tags=['python', 'ai'],
         )
         self.draft = Course.objects.create(
             title='Draft Course', slug='draft-course',
@@ -555,7 +554,7 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
         self.client = Client()
         self.free_course = Course.objects.create(
             title='Free Course', slug='free-course',
-            status='published', is_free=True, required_level=LEVEL_OPEN,
+            status='published', required_level=LEVEL_OPEN,
         )
         self.module = Module.objects.create(
             course=self.free_course, title='Module', slug='module', sort_order=1,
@@ -637,7 +636,7 @@ class ApiCoursesListTest(TierSetupMixin, TestCase):
         self.course = Course.objects.create(
             title='API Course', slug='api-course',
             status='published', instructor_name='API Instructor',
-            tags=['test'], is_free=True,
+            tags=['test'],
             cover_image_url='https://example.com/cover.jpg',
         )
         Course.objects.create(
@@ -704,7 +703,7 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
             description='A detailed course.',
             status='published', instructor_name='Detail Instructor',
             instructor_bio='Bio here.',
-            tags=['python'], is_free=False,
+            tags=['python'],
             required_level=LEVEL_MAIN,
             discussion_url='https://slack.com/test',
         )
@@ -900,7 +899,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
         super().setUpTestData()
         cls.free_course = Course.objects.create(
             title='Free With Discussion', slug='free-with-discussion',
-            status='published', is_free=True, required_level=LEVEL_OPEN,
+            status='published', required_level=LEVEL_OPEN,
             discussion_url='https://slack.com/free-channel',
         )
         Module.objects.create(
@@ -972,7 +971,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
     def test_no_discussion_url_hides_button_even_for_main(self):
         course = Course.objects.create(
             title='No Discussion', slug='no-discussion',
-            status='published', is_free=True, discussion_url='',
+            status='published', discussion_url='',
         )
         Module.objects.create(course=course, title='M', slug='m', sort_order=1)
         user = User.objects.create_user(email='main-nodisc@test.com', password='testpass')
@@ -982,3 +981,22 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/no-discussion')
         self.assertNotContains(response, 'Join the discussion')
 
+
+class CourseIsFreePropertyTests(TestCase):
+    """`Course.is_free` is derived from `required_level == 0`."""
+
+    def test_required_level_zero_is_free(self):
+        course = Course(required_level=0)
+        self.assertTrue(course.is_free)
+
+    def test_required_level_basic_is_not_free(self):
+        course = Course(required_level=10)
+        self.assertFalse(course.is_free)
+
+    def test_required_level_main_is_not_free(self):
+        course = Course(required_level=20)
+        self.assertFalse(course.is_free)
+
+    def test_required_level_premium_is_not_free(self):
+        course = Course(required_level=30)
+        self.assertFalse(course.is_free)

@@ -225,6 +225,12 @@ YOUTUBE_REFRESH_TOKEN = os.environ.get('YOUTUBE_REFRESH_TOKEN', '')
 SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', 'community@aishippinglabs.com')
 SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
 
+# Email campaign chunking: number of recipients per chunked send_campaign_batch task.
+# At ~0.05s/email + SES network latency, a 200-recipient batch finishes in roughly
+# 10-30s, well under the 300s Q_CLUSTER worker timeout, while keeping the queue
+# row count manageable (5000 recipients => 25 chunks).
+EMAIL_BATCH_SIZE = int(os.environ.get('EMAIL_BATCH_SIZE', 200))
+
 # Content directory (markdown files from reference)
 CONTENT_DIR = BASE_DIR / 'reference' / 'content'
 

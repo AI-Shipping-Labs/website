@@ -320,17 +320,28 @@ class TestScenario4StaffSendsCampaign:
             status="draft",
         )
 
-        # Run the send_campaign task directly (mocking SES) instead
-        # of relying on the background job system, which may not run
-        # in the test environment.
+        # send_campaign is now a fan-out: it enqueues one
+        # send_campaign_batch task per chunk. In the test environment
+        # we drive the full pipeline manually by calling
+        # send_campaign_batch with the entire eligible recipient list
+        # so we don't depend on a running worker.
         with patch(
             "email_app.services.email_service.EmailService._send_ses"
         ) as mock_ses:
             mock_ses.return_value = "ses-msg-id"
 
-            from email_app.tasks.send_campaign import send_campaign
-            send_campaign(
-                campaign_id=campaign.pk, send_delay=0
+            from email_app.tasks.send_campaign import send_campaign_batch
+            campaign.status = "sending"
+            campaign.save(update_fields=["status"])
+            user_ids = list(
+                campaign.get_eligible_recipients().values_list(
+                    "pk", flat=True,
+                )
+            )
+            send_campaign_batch(
+                campaign_id=campaign.pk,
+                user_ids=user_ids,
+                send_delay=0,
             )
 
         # Verify the campaign completed

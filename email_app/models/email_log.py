@@ -44,6 +44,17 @@ class EmailLog(models.Model):
 
     class Meta:
         ordering = ['-sent_at']
+        constraints = [
+            # Per-recipient idempotency for campaign sends:
+            # one EmailLog per (campaign, user) when campaign is set.
+            # Transactional emails (campaign IS NULL) are unaffected;
+            # a partial index allows multiple null-campaign rows per user.
+            models.UniqueConstraint(
+                fields=['campaign', 'user'],
+                condition=models.Q(campaign__isnull=False),
+                name='unique_campaign_recipient',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.email_type} to {self.user} at {self.sent_at}'

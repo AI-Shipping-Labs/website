@@ -857,6 +857,231 @@ class SyncCoursesTest(TestCase):
 
 
 # ===========================================================================
+# Content Sync Tests (Single-Course Repo)
+# ===========================================================================
+
+
+class SyncSingleCourseRepoTest(TestCase):
+    """Test syncing a single-course repo where course.yaml lives at root.
+
+    This covers issue #197 - support for repos that contain exactly one
+    course at the root (e.g. AI-Shipping-Labs/python-course), as opposed
+    to the existing multi-course layout used by the content monorepo's
+    courses/ subtree.
+    """
+
+    def setUp(self):
+        # ContentSource with content_path='' - root of repo is the course root.
+        self.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            content_path='',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_root_course_yaml(self, content_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+                                slug='python-course'):
+        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Python Course"\n')
+            f.write(f'slug: "{slug}"\n')
+            f.write('description: "Learn Python from scratch."\n')
+            f.write('instructor_name: "Alexey Grigorev"\n')
+            f.write('required_level: 20\n')
+            f.write('is_free: false\n')
+            f.write(f'content_id: "{content_id}"\n')
+            f.write('tags:\n  - python\n  - fundamentals\n')
+
+    def _write_module(self, dirname, title, content_id, sort_order=None):
+        module_dir = os.path.join(self.temp_dir, dirname)
+        os.makedirs(module_dir, exist_ok=True)
+        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
+            f.write(f'title: "{title}"\n')
+            f.write(f'content_id: "{content_id}"\n')
+            if sort_order is not None:
+                f.write(f'sort_order: {sort_order}\n')
+        return module_dir
+
+    def _write_unit(self, module_dir, filename, title, content_id, body='Body text.\n'):
+        with open(os.path.join(module_dir, filename), 'w') as f:
+            f.write('---\n')
+            f.write(f'title: "{title}"\n')
+            f.write(f'content_id: "{content_id}"\n')
+            f.write('---\n')
+            f.write(body)
+
+    def test_root_course_yaml_creates_single_course(self):
+        """A course.yaml at the root is treated as one course; modules are children."""
+        self._write_root_course_yaml()
+        module_dir = self._write_module(
+            '01-intro', 'Introduction',
+            'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        )
+        self._write_unit(
+            module_dir, '01-why-python.md', 'Why Python',
+            'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertIn(sync_log.status, ('success', 'partial'),
+                      msg=f'Errors: {sync_log.errors}')
+        # 1 course + 1 module + 1 unit = 3 created
+        self.assertEqual(sync_log.items_created, 3)
+        self.assertEqual(Course.objects.filter(
+            source_repo='AI-Shipping-Labs/python-course',
+        ).count(), 1)
+
+        course = Course.objects.get(slug='python-course')
+        self.assertEqual(course.title, 'Python Course')
+        # Single-course mode: source_path is '.' (course root == repo content root)
+        self.assertEqual(course.source_path, '.')
+        self.assertEqual(course.required_level, 20)
+
+        module = Module.objects.get(course=course)
+        self.assertEqual(module.title, 'Introduction')
+        # Module source_path is the module dir relative to content root.
+        self.assertEqual(module.source_path, '01-intro')
+        # sort_order derived from numeric "01-" prefix.
+        self.assertEqual(module.sort_order, 1)
+
+        unit = Unit.objects.get(module=module)
+        self.assertEqual(unit.title, 'Why Python')
+        self.assertEqual(unit.sort_order, 1)
+
+    def test_no_root_course_yaml_falls_back_to_multi_course_walk(self):
+        """Without root course.yaml, each child dir with course.yaml is its own course (regression guard)."""
+        # Two child course dirs, each with their own course.yaml + module + unit.
+        for idx, slug in enumerate(['course-a', 'course-b'], start=1):
+            cdir = os.path.join(self.temp_dir, slug)
+            os.makedirs(cdir)
+            with open(os.path.join(cdir, 'course.yaml'), 'w') as f:
+                f.write(f'title: "Course {slug}"\n')
+                f.write(f'slug: "{slug}"\n')
+                f.write(f'content_id: "1{idx:07d}-1111-1111-1111-111111111111"\n')
+
+            mdir = os.path.join(cdir, '01-mod')
+            os.makedirs(mdir)
+            with open(os.path.join(mdir, 'module.yaml'), 'w') as f:
+                f.write('title: "Module 1"\n')
+
+            with open(os.path.join(mdir, '01-intro.md'), 'w') as f:
+                f.write('---\n')
+                f.write('title: "Intro"\n')
+                f.write(f'content_id: "2{idx:07d}-2222-2222-2222-222222222222"\n')
+                f.write('---\n')
+                f.write('Body.\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertIn(sync_log.status, ('success', 'partial'),
+                      msg=f'Errors: {sync_log.errors}')
+        # 2 courses + 2 modules + 2 units = 6 created.
+        self.assertEqual(sync_log.items_created, 6)
+        slugs = set(Course.objects.filter(
+            source_repo='AI-Shipping-Labs/python-course',
+        ).values_list('slug', flat=True))
+        self.assertEqual(slugs, {'course-a', 'course-b'})
+
+    def test_root_course_yaml_wins_over_child_course_dirs(self):
+        """If root course.yaml exists AND a child has course.yaml, only the root course is created."""
+        self._write_root_course_yaml()
+        # Child dir with its own course.yaml that should be IGNORED as a
+        # standalone course; without a module.yaml, the child dir is just
+        # skipped by _sync_course_modules.
+        child = os.path.join(self.temp_dir, 'child-course')
+        os.makedirs(child)
+        with open(os.path.join(child, 'course.yaml'), 'w') as f:
+            f.write('title: "Child Course"\n')
+            f.write('slug: "child-course"\n')
+            f.write('content_id: "dddddddd-dddd-dddd-dddd-dddddddddddd"\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertIn(sync_log.status, ('success', 'partial'),
+                      msg=f'Errors: {sync_log.errors}')
+        courses = list(Course.objects.filter(
+            source_repo='AI-Shipping-Labs/python-course',
+        ))
+        self.assertEqual(len(courses), 1)
+        self.assertEqual(courses[0].slug, 'python-course')
+        # The child dir has no module.yaml so it produces no Module either.
+        self.assertEqual(Module.objects.filter(course=courses[0]).count(), 0)
+
+    def test_stale_cleanup_in_single_course_mode_demotes_other_courses(self):
+        """When a root course.yaml is synced, other published courses for the same repo become drafts."""
+        # Pre-existing course from same source_repo with a different slug.
+        Course.objects.create(
+            title='Old Python Course',
+            slug='old-python-course',
+            source_repo='AI-Shipping-Labs/python-course',
+            status='published',
+        )
+        self._write_root_course_yaml()
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertIn(sync_log.status, ('success', 'partial'),
+                      msg=f'Errors: {sync_log.errors}')
+
+        # New course present, old course demoted.
+        new_course = Course.objects.get(slug='python-course')
+        self.assertEqual(new_course.status, 'published')
+        old_course = Course.objects.get(slug='old-python-course')
+        self.assertEqual(old_course.status, 'draft')
+
+    def test_root_course_yaml_missing_content_id_is_rejected(self):
+        """Single-course mode still enforces content_id validation."""
+        # Write a course.yaml WITHOUT content_id.
+        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Python Course"\n')
+            f.write('slug: "python-course"\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(
+            Course.objects.filter(slug='python-course').count(), 0,
+        )
+        # Sync should record an error mentioning content_id.
+        self.assertTrue(any(
+            'content_id' in err.get('error', '')
+            for err in sync_log.errors
+        ), msg=f'Expected content_id error in {sync_log.errors}')
+
+    def test_empty_module_dir_with_only_module_yaml_does_not_error(self):
+        """Modules with module.yaml but no unit .md files sync as empty modules without crashing."""
+        self._write_root_course_yaml()
+        # Module 1: has a unit.
+        m1 = self._write_module(
+            '01-intro', 'Intro',
+            'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        )
+        self._write_unit(
+            m1, '01-why-python.md', 'Why Python',
+            'ffffffff-ffff-ffff-ffff-ffffffffffff',
+        )
+        # Module 2: just module.yaml, no units (scaffolding for future content).
+        self._write_module(
+            '06-data-processing', 'Data Processing',
+            '11111111-2222-3333-4444-555555555555',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        # No errors, both modules created.
+        self.assertEqual(sync_log.errors, [])
+        course = Course.objects.get(slug='python-course')
+        modules = Module.objects.filter(course=course).order_by('sort_order')
+        self.assertEqual([m.title for m in modules], ['Intro', 'Data Processing'])
+        self.assertEqual([m.sort_order for m in modules], [1, 6])
+        # The empty module has zero units.
+        empty_module = modules.get(sort_order=6)
+        self.assertEqual(Unit.objects.filter(module=empty_module).count(), 0)
+
+
+# ===========================================================================
 # Content Sync Tests (Resources)
 # ===========================================================================
 
@@ -1330,13 +1555,15 @@ class AdminSyncAllTest(TestCase):
 class SeedContentSourcesCommandTest(TestCase):
     """Test the seed_content_sources management command."""
 
-    def test_seeds_four_sources(self):
+    def test_seeds_default_sources(self):
         from io import StringIO
 
         from django.core.management import call_command
         out = StringIO()
         call_command('seed_content_sources', stdout=out)
-        self.assertEqual(ContentSource.objects.count(), 4)
+        # 4 entries from the AI-Shipping-Labs/content monorepo
+        # + 1 entry for AI-Shipping-Labs/python-course (single-course repo)
+        self.assertEqual(ContentSource.objects.count(), 5)
 
     def test_seed_is_idempotent(self):
         from io import StringIO
@@ -1344,7 +1571,7 @@ class SeedContentSourcesCommandTest(TestCase):
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 4)
+        self.assertEqual(ContentSource.objects.count(), 5)
 
     def test_seed_creates_expected_repos(self):
         from io import StringIO
@@ -1352,7 +1579,10 @@ class SeedContentSourcesCommandTest(TestCase):
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         repos = set(ContentSource.objects.values_list('repo_name', flat=True))
-        expected = {'AI-Shipping-Labs/content'}
+        expected = {
+            'AI-Shipping-Labs/content',
+            'AI-Shipping-Labs/python-course',
+        }
         self.assertEqual(repos, expected)
 
     def test_all_sources_are_private(self):
@@ -1377,13 +1607,23 @@ class SeedContentSourcesCommandTest(TestCase):
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        paths = dict(
-            ContentSource.objects.values_list('content_type', 'content_path')
+        # Two sources have content_type='course' (the monorepo's courses/
+        # subtree and the standalone python-course repo). Look them up by
+        # (repo_name, content_type) instead.
+        paths = {
+            (s.repo_name, s.content_type): s.content_path
+            for s in ContentSource.objects.all()
+        }
+        self.assertEqual(paths[('AI-Shipping-Labs/content', 'article')], 'blog')
+        self.assertEqual(paths[('AI-Shipping-Labs/content', 'course')], 'courses')
+        self.assertEqual(paths[('AI-Shipping-Labs/content', 'project')], 'projects')
+        self.assertEqual(
+            paths[('AI-Shipping-Labs/content', 'interview_question')],
+            'interview-questions',
         )
-        self.assertEqual(paths['article'], 'blog')
-        self.assertEqual(paths['course'], 'courses')
-        self.assertEqual(paths['project'], 'projects')
-        self.assertEqual(paths['interview_question'], 'interview-questions')
+        self.assertEqual(
+            paths[('AI-Shipping-Labs/python-course', 'course')], '',
+        )
 
 
 # ===========================================================================

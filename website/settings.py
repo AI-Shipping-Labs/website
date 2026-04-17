@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'notifications',
     'studio',
     'comments',
+    'analytics',
 ]
 
 MIDDLEWARE = [
@@ -75,6 +76,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'analytics.middleware.CampaignTrackingMiddleware',
     'integrations.middleware.RedirectMiddleware',
 ]
 
@@ -155,6 +157,14 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Analytics / UTM tracking
+# Salt for SHA-256-hashing client IPs in CampaignVisit.ip_hash. If unset
+# (empty string), `ip_hash` is left blank — we never store raw IPs.
+IP_HASH_SALT = os.environ.get('IP_HASH_SALT', '')
+# Optional: scope analytics cookies (aslab_aid, aslab_ft) to a specific
+# domain. Defaults to SESSION_COOKIE_DOMAIN (Django's session cookie scope).
+ANALYTICS_COOKIE_DOMAIN = os.environ.get('ANALYTICS_COOKIE_DOMAIN', '') or None
 
 # Site configuration
 VERSION = os.getenv("VERSION", "N/A")

@@ -184,6 +184,16 @@
             <i data-lucide="arrow-left" class="w-4 h-4"></i>
             <span>Back to site</span>
           </a>
+          <button type="button"
+                  data-testid="theme-toggle"
+                  aria-label="Switch to light mode"
+                  onclick="window.themeToggle.toggle()"
+                  class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <svg class="theme-icon-sun w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            <svg class="theme-icon-moon w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            <span class="theme-label-dark">Light mode</span>
+            <span class="theme-label-light hidden">Dark mode</span>
+          </button>
           <p class="px-3 mt-3 text-xs text-muted-foreground">v{{ VERSION }}</p>
         </div>
       </nav>

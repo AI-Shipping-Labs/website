@@ -160,7 +160,13 @@ def sync_dashboard(request):
         if latest_logs.exists():
             newest = latest_logs.first()
             if newest.batch_id:
-                batch_logs = SyncLog.objects.filter(batch_id=newest.batch_id)
+                # Scope by repo's sources too — a Sync-All batch shares one
+                # batch_id across every repo, so without this filter we'd
+                # mis-attribute other repos' logs to this card.
+                batch_logs = SyncLog.objects.filter(
+                    batch_id=newest.batch_id,
+                    source_id__in=source_ids,
+                )
             else:
                 # Fall back to logs from the same source started within 60s
                 batch_logs = SyncLog.objects.filter(

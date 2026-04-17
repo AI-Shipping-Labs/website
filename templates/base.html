@@ -352,6 +352,12 @@
               btn.setAttribute('aria-label', 'Switch to dark mode');
             }
           }
+          var labelDark = btn.querySelector('.theme-label-dark');
+          var labelLight = btn.querySelector('.theme-label-light');
+          if (labelDark && labelLight) {
+            labelDark.classList.toggle('hidden', !isDark);
+            labelLight.classList.toggle('hidden', isDark);
+          }
         });
       },
 

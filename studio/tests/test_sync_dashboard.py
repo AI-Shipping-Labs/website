@@ -155,6 +155,51 @@ class StudioSyncDashboardTest(TestCase):
         self.assertContains(response, 'Tiers')
         self.assertContains(response, '3 tiers')
 
+    def test_dashboard_does_not_leak_other_repos_logs_via_batch_id(self):
+        """A Sync All batch shares one batch_id across repos. Each card must
+        only show its own repo's per-type rows, not the other repo's.
+        """
+        batch_id = uuid.uuid4()
+
+        course_src = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=course_src,
+            batch_id=batch_id,
+            status='success',
+            items_updated=10,
+            finished_at=timezone.now(),
+        )
+
+        content_project_src = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=content_project_src,
+            batch_id=batch_id,
+            status='success',
+            items_updated=10,
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get('/studio/sync/')
+        repos = {repo['repo_name']: repo for repo in response.context['repos']}
+
+        course_card = repos['AI-Shipping-Labs/python-course']
+        course_types = [row['content_type'] for row in course_card['last_batch']['per_type']]
+        self.assertEqual(course_types, ['course'])
+
+        content_card = repos['AI-Shipping-Labs/content']
+        content_types = [row['content_type'] for row in content_card['last_batch']['per_type']]
+        self.assertEqual(content_types, ['project'])
+
     def test_dashboard_shows_items_detail(self):
         """Changed items are listed with links."""
         source = ContentSource.objects.create(

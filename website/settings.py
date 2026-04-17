@@ -322,9 +322,16 @@ SLACK_INVITE_URL = os.environ.get('SLACK_INVITE_URL', '')
 SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 
 # Django-Q2 task queue configuration
+# Default workers=1 on SQLite — concurrent writers serialise on the file lock
+# and surface as "database is locked" during bulk syncs. Override with
+# Q_WORKERS=N on Postgres deployments.
+if 'sqlite' in DATABASES['default']['ENGINE']:
+    _default_q_workers = 1
+else:
+    _default_q_workers = 2
 Q_CLUSTER = {
     'name': 'ai-shipping-labs',
-    'workers': int(os.environ.get('Q_WORKERS', 2)),
+    'workers': int(os.environ.get('Q_WORKERS', _default_q_workers)),
     'timeout': 300,           # Task timeout in seconds (5 min)
     'retry': 360,             # Retry timeout in seconds (6 min, must be > timeout)
     'max_attempts': 3,        # Default max attempts (1 initial + 2 retries)

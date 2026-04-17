@@ -16,7 +16,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_MAIN, LEVEL_OPEN
+from content.access import LEVEL_MAIN
 from content.models import Course, Module, Unit
 from content.models.cohort import Cohort
 from tests.fixtures import TierSetupMixin

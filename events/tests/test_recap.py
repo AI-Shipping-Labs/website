@@ -528,6 +528,7 @@ class SyncEventsRecapTest(TestCase):
 
     def test_sync_persists_recap_dict(self):
         import tempfile
+
         from integrations.services.github import _sync_events
         recap = {'hero': {'title': 'My Event'}}
         with tempfile.TemporaryDirectory() as tmp:
@@ -542,6 +543,7 @@ class SyncEventsRecapTest(TestCase):
 
     def test_sync_with_no_recap_leaves_field_empty(self):
         import tempfile
+
         from integrations.services.github import _sync_events
         with tempfile.TemporaryDirectory() as tmp:
             events_dir = self._write_event_yaml(tmp, recap_block=None)
@@ -555,6 +557,7 @@ class SyncEventsRecapTest(TestCase):
         """If recap is not a dict, the sync logs an error but the event still syncs."""
         import os
         import tempfile
+
         from integrations.services.github import _sync_events
 
         with tempfile.TemporaryDirectory() as tmp:

@@ -6,7 +6,6 @@ from django.test import TestCase
 from analytics.models import CampaignVisit
 from integrations.models import UtmCampaign
 
-
 User = get_user_model()
 
 

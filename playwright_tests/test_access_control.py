@@ -328,7 +328,6 @@ def _clear_all_content():
         Download,
         Module,
         Project,
-        Recording,
         Tutorial,
         Unit,
         UserCourseProgress,

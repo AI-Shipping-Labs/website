@@ -56,7 +56,6 @@ def _clear_dashboard_data():
         Article,
         Course,
         Module,
-        Recording,
         Unit,
         UserCourseProgress,
     )

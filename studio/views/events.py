@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timedelta
 
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify

@@ -11,10 +11,10 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_OPEN, get_active_override, get_user_level
+from content.access import get_active_override, get_user_level
 from content.models import (
     Article,
     Course,
@@ -228,8 +228,8 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         # We use assertLess instead of assertNumQueries to allow for
         # template-level queries (poll counts, etc.) while still catching
         # regressions like N+1.
-        from django.test.utils import CaptureQueriesContext
         from django.db import connection
+        from django.test.utils import CaptureQueriesContext
 
         with CaptureQueriesContext(connection) as ctx:
             response = self.client.get('/')

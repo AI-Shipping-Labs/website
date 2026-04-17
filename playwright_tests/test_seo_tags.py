@@ -41,7 +41,6 @@ def _clear_all_content():
         CuratedLink,
         Download,
         Project,
-        Recording,
         TagRule,
     )
     from events.models import Event

@@ -4,6 +4,9 @@ import logging
 
 from django.core.cache import cache
 
+from analytics.models import CampaignVisit
+from integrations.models import UtmCampaign
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +36,6 @@ def _resolve_campaign_id(utm_campaign_slug):
     if cached is not None:
         return cached
     # Cache miss — query the DB
-    from integrations.models import UtmCampaign
     campaign_id = (
         UtmCampaign.objects
         .filter(slug=utm_campaign_slug)
@@ -65,8 +67,6 @@ def record_visit(
     All positional/keyword arguments are JSON-serializable so django-q2 can
     pickle them across processes.
     """
-    from analytics.models import CampaignVisit
-
     campaign_id = _resolve_campaign_id(utm_campaign)
     visit = CampaignVisit.objects.create(
         campaign_id=campaign_id,

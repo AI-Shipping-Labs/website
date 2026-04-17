@@ -5,7 +5,6 @@ from django.test import TestCase
 
 from analytics.models import CampaignVisit
 from analytics.tasks import (
-    CAMPAIGN_CACHE_KEY,
     _resolve_campaign_id,
     record_visit,
 )

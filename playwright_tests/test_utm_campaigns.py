@@ -37,7 +37,6 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
 
-
 LAUNCH_URLS = [
     "https://aishippinglabs.com/events/ai-shipping-labs-launch-recap"
     "?utm_source=newsletter&utm_medium=email"

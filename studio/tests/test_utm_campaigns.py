@@ -49,9 +49,9 @@ class UtmCampaignAccessTest(TestCase):
 
     def _all_paths(self):
         return [
-            ('GET', f'/studio/utm-campaigns/'),
-            ('GET', f'/studio/utm-campaigns/new'),
-            ('GET', f'/studio/utm-campaigns/import'),
+            ('GET', '/studio/utm-campaigns/'),
+            ('GET', '/studio/utm-campaigns/new'),
+            ('GET', '/studio/utm-campaigns/import'),
             ('GET', f'/studio/utm-campaigns/{self.campaign.pk}/'),
             ('GET', f'/studio/utm-campaigns/{self.campaign.pk}/edit'),
             ('GET', f'/studio/utm-campaigns/{self.campaign.pk}/links/{self.link.pk}/edit'),
@@ -385,7 +385,6 @@ class UtmCampaignImporterTest(TestCase):
         self.assertEqual(UtmCampaignLink.objects.count(), before_links)
 
     def test_import_csv_file_produces_same_result_as_paste(self):
-        from io import BytesIO
         csv_bytes = ('url\n' + '\n'.join(LAUNCH_URLS)).encode('utf-8')
         response = self.client.post(
             '/studio/utm-campaigns/import',

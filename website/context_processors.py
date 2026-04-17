@@ -1,5 +1,7 @@
 from django.conf import settings
 
+from integrations.middleware import get_announcement_banner
+
 
 def site_context(request):
     """Add site-wide context variables to all templates."""
@@ -31,8 +33,6 @@ def announcement_banner_context(request):
     path = request.path or ''
     if path.startswith('/studio/') or path.startswith('/admin/'):
         return {'announcement_banner': None}
-
-    from integrations.middleware import get_announcement_banner
 
     banner = get_announcement_banner()
     if banner is None or not banner.is_enabled:

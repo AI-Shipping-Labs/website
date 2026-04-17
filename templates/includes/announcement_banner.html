@@ -1,0 +1,74 @@
+{% if announcement_banner %}
+{# Site-wide announcement banner (rendered above <nav> in header.html). #}
+{# Cookie name is keyed by version so editing the banner re-shows it. #}
+{% with version=announcement_banner.version %}
+<div id="announcement-banner-wrapper" data-version="{{ version }}" data-dismissible="{% if announcement_banner.is_dismissible %}1{% else %}0{% endif %}">
+  {% if announcement_banner.link_url %}
+  <a href="{{ announcement_banner.link_url }}"
+     class="announcement-banner relative flex items-center justify-center gap-2 border-b border-border/70 bg-accent/10 px-4 py-2 text-center text-xs font-medium text-foreground transition-colors hover:bg-accent/20 sm:text-sm"
+     data-testid="announcement-banner">
+    <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+    <span>{{ announcement_banner.message }}</span>
+    <span class="text-accent underline underline-offset-4">{{ announcement_banner.link_label|default:"Read more" }}</span>
+    {% if announcement_banner.is_dismissible %}
+    <button type="button"
+            id="announcement-banner-close"
+            aria-label="Dismiss announcement"
+            class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors">
+      <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+    {% endif %}
+  </a>
+  {% else %}
+  <div class="announcement-banner relative flex items-center justify-center gap-2 border-b border-border/70 bg-accent/10 px-4 py-2 text-center text-xs font-medium text-foreground sm:text-sm"
+       data-testid="announcement-banner">
+    <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+    <span>{{ announcement_banner.message }}</span>
+    {% if announcement_banner.is_dismissible %}
+    <button type="button"
+            id="announcement-banner-close"
+            aria-label="Dismiss announcement"
+            class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors">
+      <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+<script>
+  (function() {
+    var wrapper = document.getElementById('announcement-banner-wrapper');
+    if (!wrapper) return;
+    var version = wrapper.getAttribute('data-version');
+    var dismissible = wrapper.getAttribute('data-dismissible') === '1';
+    var cookieName = 'asl_announcement_dismissed_v' + version;
+
+    function readCookie(name) {
+      var match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.$?*|{}()[\]\\\/+^]/g, '\\$&') + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    function setCookie(name, value, days) {
+      var d = new Date();
+      d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+      document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax';
+    }
+
+    if (dismissible && readCookie(cookieName)) {
+      wrapper.style.display = 'none';
+      return;
+    }
+
+    var closeBtn = document.getElementById('announcement-banner-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setCookie(cookieName, '1', 365);
+        wrapper.style.display = 'none';
+      });
+    }
+  })();
+</script>
+{% endwith %}
+{% endif %}

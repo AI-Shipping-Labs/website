@@ -1,5 +1,6 @@
 from django.urls import path
 
+from studio.views.announcement import announcement_banner_edit
 from studio.views.articles import article_edit, article_list
 from studio.views.campaigns import campaign_create, campaign_detail, campaign_list
 from studio.views.courses import (
@@ -118,6 +119,9 @@ urlpatterns = [
     path('users/tier-override/', tier_override_page, name='studio_tier_override'),
     path('users/tier-override/create', tier_override_create, name='studio_tier_override_create'),
     path('users/tier-override/revoke', tier_override_revoke, name='studio_tier_override_revoke'),
+
+    # Announcement banner
+    path('announcement/', announcement_banner_edit, name='studio_announcement_banner'),
 
     # Redirects
     path('redirects/', redirect_list, name='studio_redirect_list'),

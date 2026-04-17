@@ -1,0 +1,131 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Announcement Banner{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold text-foreground">Announcement Banner</h1>
+  <p class="text-muted-foreground mt-1">A site-wide banner shown above the navigation on every public page.</p>
+</div>
+
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# Live preview rendered server-side from the current saved values. #}
+<div class="mb-6 max-w-3xl">
+  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Preview</p>
+  <div class="rounded-lg border border-border overflow-hidden">
+    {% if preview.message %}
+      {% if preview.link_url %}
+      <a href="{{ preview.link_url }}"
+         class="announcement-banner-preview relative flex items-center justify-center gap-2 bg-accent/10 px-4 py-2 text-center text-xs font-medium text-foreground transition-colors hover:bg-accent/20 sm:text-sm"
+         data-testid="announcement-banner-preview"
+         onclick="event.preventDefault();">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+        <span>{{ preview.message }}</span>
+        <span class="text-accent underline underline-offset-4">{{ preview.link_label|default:"Read more" }}</span>
+        {% if preview.is_dismissible %}
+        <span class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground" aria-hidden="true">
+          <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        {% endif %}
+      </a>
+      {% else %}
+      <div class="announcement-banner-preview relative flex items-center justify-center gap-2 bg-accent/10 px-4 py-2 text-center text-xs font-medium text-foreground sm:text-sm"
+           data-testid="announcement-banner-preview">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+        <span>{{ preview.message }}</span>
+        {% if preview.is_dismissible %}
+        <span class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground" aria-hidden="true">
+          <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        {% endif %}
+      </div>
+      {% endif %}
+    {% else %}
+      <div class="px-4 py-6 text-center text-sm text-muted-foreground bg-secondary/40">
+        No message set yet. Enter one below to preview the banner.
+      </div>
+    {% endif %}
+  </div>
+  <p class="text-xs text-muted-foreground mt-2">
+    {% if preview.is_enabled %}
+      <span class="inline-flex items-center gap-1 text-green-400"><span class="h-1.5 w-1.5 rounded-full bg-green-400"></span> Enabled</span> &mdash; the banner is currently visible to all visitors.
+    {% else %}
+      <span class="inline-flex items-center gap-1 text-muted-foreground"><span class="h-1.5 w-1.5 rounded-full bg-muted-foreground"></span> Disabled</span> &mdash; the banner is hidden from visitors.
+    {% endif %}
+  </p>
+</div>
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <p class="text-xs text-muted-foreground mb-4">
+    Saving while enabled will immediately show the banner on the public site.
+    Editing the message re-shows it to users who previously dismissed it.
+  </p>
+
+  <form method="post" action="{% url 'studio_announcement_banner' %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label for="banner-message" class="block text-sm font-medium text-foreground mb-1">Message</label>
+      <textarea id="banner-message" name="message" rows="2" maxlength="200" required
+                placeholder="Spring cohort registrations close Friday"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ preview.message }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">Plain text only, max 200 characters.</p>
+    </div>
+
+    <div class="mb-6">
+      <label for="banner-link-url" class="block text-sm font-medium text-foreground mb-1">Link URL <span class="text-muted-foreground font-normal">(optional)</span></label>
+      <input id="banner-link-url" type="text" name="link_url" maxlength="500"
+             value="{{ preview.link_url }}"
+             placeholder="/events/launch-recap or https://example.com"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">If blank, the banner is not clickable.</p>
+    </div>
+
+    <div class="mb-6">
+      <label for="banner-link-label" class="block text-sm font-medium text-foreground mb-1">Link label</label>
+      <input id="banner-link-label" type="text" name="link_label" maxlength="60"
+             value="{{ preview.link_label }}"
+             placeholder="Read more"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Only shown when a link URL is set. Defaults to <code>Read more</code>.</p>
+    </div>
+
+    <div class="mb-4">
+      <label class="flex items-center space-x-2 cursor-pointer">
+        <input type="checkbox" name="is_enabled" {% if preview.is_enabled %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent">
+        <span class="text-sm text-foreground">Enabled (show on public pages)</span>
+      </label>
+    </div>
+
+    <div class="mb-6">
+      <label class="flex items-center space-x-2 cursor-pointer">
+        <input type="checkbox" name="is_dismissible" {% if preview.is_dismissible %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent">
+        <span class="text-sm text-foreground">Dismissible (show an X close button)</span>
+      </label>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Save Banner
+      </button>
+    </div>
+  </form>
+
+  <div class="mt-6 pt-4 border-t border-border text-xs text-muted-foreground space-y-1">
+    <p>Last updated: <span class="text-foreground">{{ banner.updated_at|date:"Y-m-d H:i" }}</span></p>
+    <p>Current version: <span class="text-foreground">{{ banner.version }}</span></p>
+  </div>
+</div>
+{% endblock %}

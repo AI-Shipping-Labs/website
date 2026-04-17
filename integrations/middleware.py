@@ -26,6 +26,31 @@ class RemoveTrailingSlashMiddleware:
                 return HttpResponsePermanentRedirect(new_path)
         return self.get_response(request)
 
+# --- Announcement banner in-process cache --------------------------------
+# Keep a module-level reference to the singleton so we don't hit the DB on
+# every request. Cleared after the banner is saved in the studio view.
+_ANNOUNCEMENT_BANNER_CACHE: dict = {'value': None, 'loaded': False}
+
+
+def get_announcement_banner():
+    """Return the AnnouncementBanner singleton or None if no row exists.
+
+    The result is cached in-process. Call ``clear_announcement_banner_cache``
+    after saving the banner to invalidate.
+    """
+    if not _ANNOUNCEMENT_BANNER_CACHE['loaded']:
+        from integrations.models import AnnouncementBanner
+        _ANNOUNCEMENT_BANNER_CACHE['value'] = AnnouncementBanner.objects.filter(pk=1).first()
+        _ANNOUNCEMENT_BANNER_CACHE['loaded'] = True
+    return _ANNOUNCEMENT_BANNER_CACHE['value']
+
+
+def clear_announcement_banner_cache():
+    """Clear the in-process announcement banner cache."""
+    _ANNOUNCEMENT_BANNER_CACHE['value'] = None
+    _ANNOUNCEMENT_BANNER_CACHE['loaded'] = False
+
+
 REDIRECT_CACHE_KEY = 'active_redirects'
 REDIRECT_CACHE_TIMEOUT = 300  # 5 minutes
 

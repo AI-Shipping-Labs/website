@@ -9,6 +9,16 @@
     <p class="text-muted-foreground mt-1">django-q2 task worker health and recent activity</p>
   </div>
 
+  {% if messages %}
+    <div class="space-y-2">
+      {% for message in messages %}
+        <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'info' %}bg-blue-500/20 text-blue-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <!-- Worker liveness banner -->
   {% if worker_info.alive %}
     <div class="bg-card border border-green-500/30 rounded-lg p-4">
@@ -81,6 +91,46 @@
     </div>
   </div>
 
+  <!-- Queue Actions -->
+  <div class="bg-card border border-border rounded-lg p-4 space-y-3" id="queue-actions">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h2 class="text-lg font-medium text-foreground">Queue Actions</h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          Operational controls for the django-q queue. Destructive actions require confirmation.
+        </p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        {% if queue_depth > 0 %}
+          <form method="post" action="{% url 'studio_worker_drain_queue' %}"
+                onsubmit="return confirm('Delete {{ queue_depth }} pending task{{ queue_depth|pluralize }}? This cannot be undone.');">
+            {% csrf_token %}
+            <button type="submit"
+                    class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                    data-action="drain-queue">
+              Drain queue ({{ queue_depth }})
+            </button>
+          </form>
+        {% endif %}
+        <form method="post" action="{% url 'studio_worker_run_sync_now' %}"
+              onsubmit="return confirm('Run sync now (synchronously, bypassing the queue)? This will block until done.');">
+          {% csrf_token %}
+          <button type="submit"
+                  class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-amber-500/15 text-amber-200 border border-amber-500/30 hover:bg-amber-500/25"
+                  data-action="run-sync-now"
+                  title="Bypass the queue and run sync_content_source for every source in-process. Use when worker is down.">
+            Run sync now (sync)
+          </button>
+        </form>
+      </div>
+    </div>
+    <p class="text-xs text-muted-foreground">
+      <span class="font-medium text-amber-200">Run sync now:</span>
+      bypasses the queue and runs every content source sync in-process.
+      Use when the worker is down and you need content to sync immediately.
+    </p>
+  </div>
+
   <!-- Active Clusters -->
   {% if worker_info.clusters %}
     <div class="bg-card border border-border rounded-lg">
@@ -111,6 +161,53 @@
                 </td>
                 <td class="px-4 py-3 text-muted-foreground">
                   {% if c.uptime is not None %}{{ c.uptime|floatformat:0 }}s{% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Pending / Queued Tasks -->
+  {% if queued_tasks %}
+    <div class="bg-card border border-border rounded-lg">
+      <div class="p-4 border-b border-border">
+        <h2 class="text-lg font-medium text-foreground">Pending Tasks ({{ queue_depth }})</h2>
+        <p class="text-xs text-muted-foreground mt-1">
+          Tasks queued but not yet picked up by a worker.
+        </p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border">
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Name</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Func</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Age</th>
+              <th class="text-right px-4 py-3 text-muted-foreground font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for q in queued_tasks %}
+              <tr class="border-b border-border last:border-0 hover:bg-secondary/50" data-queued-task-id="{{ q.id }}">
+                <td class="px-4 py-3 text-foreground">{{ q.name|default:"—" }}</td>
+                <td class="px-4 py-3 text-muted-foreground font-mono text-xs">{{ q.func|default:"—"|truncatechars:60 }}</td>
+                <td class="px-4 py-3 text-muted-foreground">
+                  {% if q.age_seconds is not None %}{{ q.age_seconds|floatformat:0 }}s{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <a href="{% url 'studio_worker_inspect_task' q.id %}"
+                     class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 mr-1"
+                     data-action="inspect">Inspect</a>
+                  <form method="post" action="{% url 'studio_worker_delete_queued' q.id %}" class="inline"
+                        onsubmit="return confirm('Delete queued task {{ q.name|default:q.id|escapejs }}?');">
+                    {% csrf_token %}
+                    <button type="submit"
+                            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                            data-action="delete-queued">Delete</button>
+                  </form>
                 </td>
               </tr>
             {% endfor %}
@@ -174,15 +271,58 @@
   <!-- Failed Tasks Section -->
   {% if failed_with_details %}
     <div class="bg-card border border-red-500/20 rounded-lg">
-      <div class="p-4 border-b border-red-500/20">
-        <h2 class="text-lg font-medium text-red-400">Failed Tasks</h2>
+      <div class="p-4 border-b border-red-500/20 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 class="text-lg font-medium text-red-400">Failed Tasks</h2>
+          <p class="text-xs text-muted-foreground mt-1">
+            {{ failure_count }} total failure{{ failure_count|pluralize }}.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <form method="post" action="{% url 'studio_worker_bulk_retry_failed' %}"
+                onsubmit="return confirm('Re-queue {{ failure_count }} failed task{{ failure_count|pluralize }}?');">
+            {% csrf_token %}
+            <button type="submit"
+                    class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-blue-500/15 text-blue-200 border border-blue-500/30 hover:bg-blue-500/25"
+                    data-action="bulk-retry">
+              Retry all ({{ failure_count }})
+            </button>
+          </form>
+          <form method="post" action="{% url 'studio_worker_bulk_delete_failed' %}"
+                onsubmit="return confirm('Delete {{ failure_count }} failed task{{ failure_count|pluralize }}? This cannot be undone.');">
+            {% csrf_token %}
+            <button type="submit"
+                    class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                    data-action="bulk-delete">
+              Delete all ({{ failure_count }})
+            </button>
+          </form>
+        </div>
       </div>
       <div class="divide-y divide-border">
         {% for item in failed_with_details %}
-          <div class="p-4">
-            <div class="flex items-center justify-between mb-2">
-              <span class="font-medium text-foreground">{{ item.task.name }}</span>
-              <span class="text-xs text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</span>
+          <div class="p-4" data-failed-task-id="{{ item.task.id }}">
+            <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+              <div>
+                <span class="font-medium text-foreground">{{ item.task.name }}</span>
+                <span class="text-xs text-muted-foreground ml-2">{{ item.task.started|date:"Y-m-d H:i:s" }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <form method="post" action="{% url 'studio_worker_retry_failed' item.task.id %}" class="inline"
+                      onsubmit="return confirm('Re-queue failed task {{ item.task.name|escapejs }}?');">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-500/15 text-blue-200 border border-blue-500/30 hover:bg-blue-500/25"
+                          data-action="retry-failed">Retry</button>
+                </form>
+                <form method="post" action="{% url 'studio_worker_delete_failed' item.task.id %}" class="inline"
+                      onsubmit="return confirm('Delete failed task {{ item.task.name|escapejs }}?');">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                          data-action="delete-failed">Delete</button>
+                </form>
+              </div>
             </div>
             <pre class="text-xs text-red-400 bg-red-500/10 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ item.error_message }}</pre>
           </div>

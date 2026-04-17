@@ -70,7 +70,17 @@ from studio.views.utm_campaigns import (
     utm_link_create,
     utm_link_edit,
 )
-from studio.views.worker import worker_status
+from studio.views.worker import (
+    worker_bulk_delete_failed,
+    worker_bulk_retry_failed,
+    worker_delete_failed,
+    worker_delete_queued,
+    worker_drain_queue,
+    worker_inspect_task,
+    worker_retry_failed,
+    worker_run_sync_now,
+    worker_status,
+)
 
 urlpatterns = [
     # Dashboard
@@ -186,6 +196,46 @@ urlpatterns = [
 
     # Worker Status
     path('worker/', worker_status, name='studio_worker'),
+    path(
+        'worker/queue/drain/',
+        worker_drain_queue,
+        name='studio_worker_drain_queue',
+    ),
+    path(
+        'worker/queue/<int:ormq_id>/inspect/',
+        worker_inspect_task,
+        name='studio_worker_inspect_task',
+    ),
+    path(
+        'worker/queue/<int:ormq_id>/delete/',
+        worker_delete_queued,
+        name='studio_worker_delete_queued',
+    ),
+    path(
+        'worker/failed/<str:task_id>/retry/',
+        worker_retry_failed,
+        name='studio_worker_retry_failed',
+    ),
+    path(
+        'worker/failed/<str:task_id>/delete/',
+        worker_delete_failed,
+        name='studio_worker_delete_failed',
+    ),
+    path(
+        'worker/failed/bulk-retry/',
+        worker_bulk_retry_failed,
+        name='studio_worker_bulk_retry_failed',
+    ),
+    path(
+        'worker/failed/bulk-delete/',
+        worker_bulk_delete_failed,
+        name='studio_worker_bulk_delete_failed',
+    ),
+    path(
+        'worker/run-sync-now/',
+        worker_run_sync_now,
+        name='studio_worker_run_sync_now',
+    ),
 
     # Content Sync
     path('sync/', sync_dashboard, name='studio_sync_dashboard'),

@@ -1,0 +1,90 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Inspect Queued Task{% endblock %}
+
+{% block studio_content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold text-foreground">Inspect Queued Task</h1>
+      <p class="text-muted-foreground mt-1">Pickled payload of a single django-q queued task.</p>
+    </div>
+    <a href="{% url 'studio_worker' %}"
+       class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-secondary text-foreground hover:bg-secondary/70">
+      Back to worker
+    </a>
+  </div>
+
+  {% if messages %}
+    <div class="space-y-2">
+      {% for message in messages %}
+        <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'info' %}bg-blue-500/20 text-blue-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="bg-card border border-border rounded-lg divide-y divide-border">
+    <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">OrmQ ID</p>
+        <p class="text-foreground font-mono">{{ task.id }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Task ID</p>
+        <p class="text-foreground font-mono break-all">{{ task.task_id|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Cluster Key</p>
+        <p class="text-foreground font-mono">{{ task.key|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Name</p>
+        <p class="text-foreground">{{ task.name|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Group</p>
+        <p class="text-foreground">{{ task.group|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Age</p>
+        <p class="text-foreground">
+          {% if task.age_seconds is not None %}{{ task.age_seconds|floatformat:0 }}s{% else %}—{% endif %}
+          {% if task.lock %}<span class="text-muted-foreground text-xs">(queued at {{ task.lock|date:"Y-m-d H:i:s" }})</span>{% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-muted-foreground uppercase mb-1">Function</p>
+      <pre class="text-sm text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto">{{ task.func|default:"—" }}</pre>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-muted-foreground uppercase mb-1">Args</p>
+      <pre class="text-sm text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ task.args|default:"—" }}</pre>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-muted-foreground uppercase mb-1">Kwargs</p>
+      <pre class="text-sm text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ task.kwargs|default:"—" }}</pre>
+    </div>
+    {% if task.q_options %}
+      <div class="p-4">
+        <p class="text-xs text-muted-foreground uppercase mb-1">Q Options</p>
+        <pre class="text-sm text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ task.q_options }}</pre>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="flex items-center justify-end gap-2">
+    <form method="post" action="{% url 'studio_worker_delete_queued' task.id %}"
+          onsubmit="return confirm('Delete queued task {{ task.name|default:task.id|escapejs }}?');">
+      {% csrf_token %}
+      <button type="submit"
+              class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+              data-action="delete-queued">
+        Delete this task
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

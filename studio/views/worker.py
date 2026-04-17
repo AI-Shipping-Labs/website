@@ -1,17 +1,77 @@
 """Studio view for django-q2 worker status dashboard.
 
-Shows worker health, queue depth, recent tasks, and failed task details.
+Shows worker health, queue depth, recent tasks, and failed task details, and
+exposes operational actions for queue/task recovery.
 
 Liveness is determined by ``django_q.status.Stat.get_all()`` (cluster
 heartbeat), not by recent task activity — see ``studio.worker_health`` for
 the rationale.
+
+Operational actions:
+
+* Drain the queue (delete every pending ``OrmQ`` row).
+* Inspect / delete a single queued task.
+* Retry / delete a single failed task.
+* Bulk retry / bulk delete failed tasks.
+* Run a content sync synchronously, bypassing the queue (useful when the
+  worker process is down).
 """
 
-from django.shortcuts import render
-from django_q.models import OrmQ, Task
+import logging
 
+from django.contrib import messages
+from django.http import Http404
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+from django_q.models import OrmQ, Task
+from django_q.tasks import async_task
+
+from integrations.models import ContentSource
+from integrations.services.github import sync_content_source
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_task_field(ormq, attr, default=None):
+    """Return ``ormq.<attr>()`` swallowing pickle/signing errors.
+
+    ``OrmQ.task`` decodes the signed pickle payload. If the SECRET_KEY rotated
+    or the row is malformed, ``OrmQ.task`` returns ``{"id": "*<ExceptionName>"}``
+    and field accessors return ``None``. We keep the dashboard rendering even
+    in that edge case.
+    """
+    try:
+        value = getattr(ormq, attr)
+        return value() if callable(value) else value
+    except Exception:  # pragma: no cover - defensive
+        logger.exception('Failed to read OrmQ.%s for row id=%s', attr, ormq.pk)
+        return default
+
+
+def _ormq_summary(ormq, now=None):
+    """Build a serialisable summary dict for a queued task."""
+    now = now or timezone.now()
+    age_seconds = None
+    if ormq.lock is not None:
+        # ``lock`` is set when the row is first written by the broker, so it
+        # doubles as a "queued at" timestamp. When unset, we report ``None``.
+        age_seconds = (now - ormq.lock).total_seconds()
+    return {
+        'id': ormq.pk,
+        'key': ormq.key,
+        'task_id': _safe_task_field(ormq, 'task_id'),
+        'name': _safe_task_field(ormq, 'name'),
+        'func': _safe_task_field(ormq, 'func'),
+        'group': _safe_task_field(ormq, 'group'),
+        'args': _safe_task_field(ormq, 'args'),
+        'kwargs': _safe_task_field(ormq, 'kwargs'),
+        'q_options': _safe_task_field(ormq, 'q_options'),
+        'lock': ormq.lock,
+        'age_seconds': age_seconds,
+    }
 
 
 @staff_required
@@ -26,8 +86,11 @@ def worker_status(request):
     success_count = Task.objects.filter(success=True).count()
     failure_count = Task.objects.filter(success=False).count()
 
-    # Queue depth
-    queue_depth = OrmQ.objects.count()
+    # Queue depth + per-task summaries for the inspect / delete UI
+    queued = OrmQ.objects.all().order_by('pk')
+    queue_depth = queued.count()
+    now = timezone.now()
+    queued_summaries = [_ormq_summary(q, now=now) for q in queued]
 
     # Failed tasks with error details (last 20)
     failed_tasks = Task.objects.filter(success=False).order_by('-started')[:20]
@@ -63,8 +126,188 @@ def worker_status(request):
         'last_heartbeat_age': worker_info['last_heartbeat_age'],
         'cluster_count': worker_info['cluster_count'],
         'queue_depth': queue_depth,
+        'queued_tasks': queued_summaries,
         'success_count': success_count,
         'failure_count': failure_count,
         'tasks_with_duration': tasks_with_duration,
         'failed_with_details': failed_with_details,
     })
+
+
+@staff_required
+def worker_inspect_task(request, ormq_id):
+    """Show func/args/kwargs/age for a single queued task."""
+    ormq = get_object_or_404(OrmQ, pk=ormq_id)
+    summary = _ormq_summary(ormq)
+    return render(request, 'studio/worker_inspect.html', {
+        'task': summary,
+    })
+
+
+@staff_required
+@require_POST
+def worker_drain_queue(request):
+    """Delete every pending ``OrmQ`` row.
+
+    Used when the queue piled up with stale duplicates and we want a clean
+    slate. Reports the number of rows that were deleted in the flash message.
+    """
+    deleted, _ = OrmQ.objects.all().delete()
+    if deleted:
+        messages.success(
+            request,
+            f'Drained queue: deleted {deleted} pending task'
+            f'{"" if deleted == 1 else "s"}.',
+        )
+    else:
+        messages.info(request, 'Queue is already empty.')
+    return redirect('studio_worker')
+
+
+@staff_required
+@require_POST
+def worker_delete_queued(request, ormq_id):
+    """Delete a single queued ``OrmQ`` row."""
+    ormq = get_object_or_404(OrmQ, pk=ormq_id)
+    name = _safe_task_field(ormq, 'name') or f'#{ormq.pk}'
+    ormq.delete()
+    messages.success(request, f'Deleted queued task: {name}.')
+    return redirect('studio_worker')
+
+
+def _resubmit_failed(task):
+    """Re-enqueue a failed Task with the same func/args/kwargs.
+
+    Mirrors django-q's own admin ``resubmit_task`` action: enqueues a fresh
+    job with the same func/args/kwargs, then deletes the failed Task row so
+    it doesn't keep reappearing in the failed list.
+    """
+    async_task(
+        task.func,
+        *(task.args or ()),
+        hook=task.hook,
+        group=task.group,
+        cluster=task.cluster,
+        **(task.kwargs or {}),
+    )
+    task.delete()
+
+
+@staff_required
+@require_POST
+def worker_retry_failed(request, task_id):
+    """Re-enqueue a single failed task and delete the failure row."""
+    task = Task.objects.filter(pk=task_id, success=False).first()
+    if task is None:
+        raise Http404('Failed task not found')
+    name = task.name or task_id
+    try:
+        _resubmit_failed(task)
+    except Exception as exc:
+        logger.exception('Retry failed for task %s', task_id)
+        messages.error(request, f'Could not retry {name}: {exc}')
+        return redirect('studio_worker')
+    messages.success(request, f'Re-queued failed task: {name}.')
+    return redirect('studio_worker')
+
+
+@staff_required
+@require_POST
+def worker_delete_failed(request, task_id):
+    """Delete a single failed task row."""
+    task = Task.objects.filter(pk=task_id, success=False).first()
+    if task is None:
+        raise Http404('Failed task not found')
+    name = task.name or task_id
+    task.delete()
+    messages.success(request, f'Deleted failed task: {name}.')
+    return redirect('studio_worker')
+
+
+@staff_required
+@require_POST
+def worker_bulk_retry_failed(request):
+    """Re-enqueue every failed task and delete the corresponding failure rows."""
+    failed = list(Task.objects.filter(success=False))
+    if not failed:
+        messages.info(request, 'No failed tasks to retry.')
+        return redirect('studio_worker')
+    requeued = 0
+    errors = 0
+    for task in failed:
+        try:
+            _resubmit_failed(task)
+            requeued += 1
+        except Exception:
+            logger.exception('Bulk retry failed for task %s', task.pk)
+            errors += 1
+    if errors:
+        messages.warning(
+            request,
+            f'Re-queued {requeued} failed task'
+            f'{"" if requeued == 1 else "s"}; {errors} could not be re-queued.',
+        )
+    else:
+        messages.success(
+            request,
+            f'Re-queued {requeued} failed task'
+            f'{"" if requeued == 1 else "s"}.',
+        )
+    return redirect('studio_worker')
+
+
+@staff_required
+@require_POST
+def worker_bulk_delete_failed(request):
+    """Delete every failed task row."""
+    deleted, _ = Task.objects.filter(success=False).delete()
+    if deleted:
+        messages.success(
+            request,
+            f'Deleted {deleted} failed task'
+            f'{"" if deleted == 1 else "s"}.',
+        )
+    else:
+        messages.info(request, 'No failed tasks to delete.')
+    return redirect('studio_worker')
+
+
+@staff_required
+@require_POST
+def worker_run_sync_now(request):
+    """Run ``sync_content_source`` for every ContentSource synchronously.
+
+    Bypasses the queue. Useful when the worker is down and the operator wants
+    to actually see content sync without waiting for the cluster to come back.
+    """
+    sources = list(ContentSource.objects.all())
+    if not sources:
+        messages.info(request, 'No content sources are configured.')
+        return redirect('studio_worker')
+
+    succeeded = 0
+    failed = 0
+    for source in sources:
+        try:
+            sync_content_source(source)
+            succeeded += 1
+        except Exception as exc:
+            failed += 1
+            logger.exception('Synchronous sync failed for %s', source.repo_name)
+            messages.error(
+                request,
+                f'Sync failed for {source.repo_name}: {exc}',
+            )
+
+    if failed == 0:
+        messages.success(
+            request,
+            f'Ran sync synchronously for {succeeded} source'
+            f'{"" if succeeded == 1 else "s"}.',
+        )
+    elif succeeded:
+        messages.warning(
+            request,
+            f'Ran sync synchronously: {succeeded} succeeded, {failed} failed.',
+        )
+    return redirect('studio_sync_history')

@@ -1031,108 +1031,153 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
     return stats
 
 
+def _sync_single_course(
+    course_dir, repo_dir, source, commit_sha, stats,
+    seen_course_slugs, failed_course_slugs, known_images=None,
+):
+    """Parse one course.yaml + module dirs into a Course with Modules/Units.
+
+    Used by both multi-course mode (each child dir is its own course) and
+    single-course mode (the resolved content_dir is the course root).
+    """
+    from content.models import Course
+
+    course_yaml_path = os.path.join(course_dir, 'course.yaml')
+    course_data = None
+    try:
+        course_data = _parse_yaml_file(course_yaml_path)
+        slug = course_data.get('slug', os.path.basename(course_dir.rstrip(os.sep)))
+        rel_path = os.path.relpath(course_dir, repo_dir)
+
+        # Edge Case 7: Frontmatter validation
+        _validate_frontmatter(course_data, 'course', rel_path)
+
+        # Require content_id in frontmatter
+        course_content_id = course_data.get('content_id')
+        if not course_content_id:
+            msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+            logger.warning(msg)
+            stats['errors'].append({'file': rel_path, 'error': msg})
+            return
+
+        # Edge Case 2: Slug collision across sources
+        if _check_slug_collision(Course, slug, source.repo_name, rel_path):
+            stats['errors'].append({
+                'file': rel_path,
+                'error': (
+                    f"Slug collision: '{slug}' already exists from a "
+                    f"different source. Skipped."
+                ),
+            })
+            failed_course_slugs.add(slug)
+            return
+
+        seen_course_slugs.add(slug)
+
+        course_defaults = {
+            'title': course_data.get('title', slug),
+            'description': course_data.get('description', ''),
+            'instructor_name': course_data.get('instructor_name', ''),
+            'instructor_bio': course_data.get('instructor_bio', ''),
+            'cover_image_url': rewrite_cover_image_url(
+                course_data.get('cover_image', '') or course_data.get('cover_image_url', ''),
+                source, os.path.join(rel_path, 'course.yaml'),
+            ),
+            'required_level': course_data.get('required_level', 0),
+            'is_free': course_data.get('is_free', False),
+            'discussion_url': course_data.get('discussion_url', ''),
+            'tags': course_data.get('tags', []),
+            'testimonials': course_data.get('testimonials', []),
+            'status': 'published',
+            'source_repo': source.repo_name,
+            'source_path': rel_path,
+            'source_commit': commit_sha,
+            'content_id': course_content_id,
+        }
+
+        course, created = Course.objects.update_or_create(
+            slug=slug,
+            source_repo=source.repo_name,
+            defaults=course_defaults,
+        )
+        action = 'created' if created else 'updated'
+        if created:
+            stats['created'] += 1
+        else:
+            stats['updated'] += 1
+        stats['items_detail'].append({
+            'title': course_defaults.get('title', slug),
+            'slug': slug,
+            'action': action,
+            'content_type': 'course',
+        })
+
+        # Sync modules (immediate child directories of course_dir)
+        _sync_course_modules(
+            course, course_dir, repo_dir, source.repo_name,
+            commit_sha, stats, known_images=known_images,
+        )
+
+    except Exception as e:
+        try:
+            failed_slug = (course_data or {}).get(
+                'slug', os.path.basename(course_dir.rstrip(os.sep)),
+            )
+        except Exception:
+            failed_slug = os.path.basename(course_dir.rstrip(os.sep))
+        failed_course_slugs.add(failed_slug)
+        stats['errors'].append({
+            'file': os.path.relpath(course_yaml_path, repo_dir),
+            'error': str(e),
+        })
+        logger.warning(
+            'Error syncing course %s: %s',
+            os.path.basename(course_dir.rstrip(os.sep)), e,
+        )
+
+
 def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync courses with modules and units from the repo."""
+    """Sync courses with modules and units from the repo.
+
+    Two modes:
+
+    - Single-course mode: if ``course.yaml`` exists at ``repo_dir`` root, the
+      whole repo_dir is treated as one course. Modules are immediate child
+      directories. This wins over multi-course mode if both shapes are
+      present (any child course.yaml files are ignored - those child dirs
+      are interpreted as modules, and skipped if they have no module.yaml).
+    - Multi-course mode: otherwise, each child directory containing a
+      ``course.yaml`` is processed as its own course (legacy behavior used
+      by the AI-Shipping-Labs/content monorepo's ``courses/`` subtree).
+    """
     from content.models import Course
 
     stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
     seen_course_slugs = set()
     failed_course_slugs = set()
 
-    # Walk top-level directories (each is a course)
-    for entry in os.scandir(repo_dir):
-        if not entry.is_dir() or entry.name.startswith('.'):
-            continue
-
-        course_yaml_path = os.path.join(entry.path, 'course.yaml')
-        if not os.path.exists(course_yaml_path):
-            continue
-
-        try:
-            course_data = _parse_yaml_file(course_yaml_path)
-            slug = course_data.get('slug', entry.name)
-            rel_path = os.path.relpath(entry.path, repo_dir)
-
-            # Edge Case 7: Frontmatter validation
-            _validate_frontmatter(course_data, 'course', rel_path)
-
-            # Require content_id in frontmatter
-            course_content_id = course_data.get('content_id')
-            if not course_content_id:
-                msg = f'Skipping {rel_path}: missing content_id in frontmatter'
-                logger.warning(msg)
-                stats['errors'].append({'file': rel_path, 'error': msg})
+    root_course_yaml = os.path.join(repo_dir, 'course.yaml')
+    if os.path.exists(root_course_yaml):
+        # Single-course mode: repo_dir IS the course directory.
+        _sync_single_course(
+            repo_dir, repo_dir, source, commit_sha, stats,
+            seen_course_slugs, failed_course_slugs, known_images=known_images,
+        )
+    else:
+        # Multi-course mode: each child dir with course.yaml is a course.
+        for entry in os.scandir(repo_dir):
+            if not entry.is_dir() or entry.name.startswith('.'):
                 continue
 
-            # Edge Case 2: Slug collision across sources
-            if _check_slug_collision(Course, slug, source.repo_name, rel_path):
-                stats['errors'].append({
-                    'file': rel_path,
-                    'error': (
-                        f"Slug collision: '{slug}' already exists from a "
-                        f"different source. Skipped."
-                    ),
-                })
-                failed_course_slugs.add(slug)
+            course_yaml_path = os.path.join(entry.path, 'course.yaml')
+            if not os.path.exists(course_yaml_path):
                 continue
 
-            seen_course_slugs.add(slug)
-
-            course_defaults = {
-                'title': course_data.get('title', slug),
-                'description': course_data.get('description', ''),
-                'instructor_name': course_data.get('instructor_name', ''),
-                'instructor_bio': course_data.get('instructor_bio', ''),
-                'cover_image_url': rewrite_cover_image_url(
-                    course_data.get('cover_image', '') or course_data.get('cover_image_url', ''),
-                    source, os.path.join(rel_path, 'course.yaml'),
-                ),
-                'required_level': course_data.get('required_level', 0),
-                'is_free': course_data.get('is_free', False),
-                'discussion_url': course_data.get('discussion_url', ''),
-                'tags': course_data.get('tags', []),
-                'testimonials': course_data.get('testimonials', []),
-                'status': 'published',
-                'source_repo': source.repo_name,
-                'source_path': rel_path,
-                'source_commit': commit_sha,
-                'content_id': course_content_id,
-            }
-
-            course, created = Course.objects.update_or_create(
-                slug=slug,
-                source_repo=source.repo_name,
-                defaults=course_defaults,
+            _sync_single_course(
+                entry.path, repo_dir, source, commit_sha, stats,
+                seen_course_slugs, failed_course_slugs,
+                known_images=known_images,
             )
-            action = 'created' if created else 'updated'
-            if created:
-                stats['created'] += 1
-            else:
-                stats['updated'] += 1
-            stats['items_detail'].append({
-                'title': course_defaults.get('title', slug),
-                'slug': slug,
-                'action': action,
-                'content_type': 'course',
-            })
-
-            # Sync modules
-            _sync_course_modules(
-                course, entry.path, repo_dir, source.repo_name,
-                commit_sha, stats, known_images=known_images,
-            )
-
-        except Exception as e:
-            try:
-                failed_slug = course_data.get('slug', entry.name)
-            except Exception:
-                failed_slug = entry.name
-            failed_course_slugs.add(failed_slug)
-            stats['errors'].append({
-                'file': os.path.relpath(course_yaml_path, repo_dir),
-                'error': str(e),
-            })
-            logger.warning('Error syncing course %s: %s', entry.name, e)
 
     # Edge Case 3: Exclude failed slugs from stale-content cleanup
     stale_courses = Course.objects.filter(

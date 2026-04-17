@@ -33,6 +33,12 @@ DEFAULT_SOURCES = [
         'content_path': 'interview-questions',
         'is_private': True,
     },
+    {
+        'repo_name': 'AI-Shipping-Labs/python-course',
+        'content_type': 'course',
+        'content_path': '',
+        'is_private': True,
+    },
 ]
 
 

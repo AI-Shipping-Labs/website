@@ -1,0 +1,78 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Edit Link{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to {{ campaign.name }}
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">Edit link</h1>
+  <p class="text-sm text-muted-foreground mt-1">Campaign: <code class="font-mono">{{ campaign.slug }}</code></p>
+</div>
+
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post" action="{% url 'studio_utm_link_edit' campaign_id=campaign.pk link_id=link.pk %}">
+    {% csrf_token %}
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1"><code>utm_content</code></label>
+      <input type="text" name="utm_content" value="{{ form_data.utm_content }}" required
+             pattern="[a-z0-9_]+"
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Label</label>
+      <input type="text" name="label" value="{{ form_data.label }}"
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Destination</label>
+      <input type="text" name="destination" value="{{ form_data.destination }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1"><code>utm_term</code></label>
+        <input type="text" name="utm_term" value="{{ form_data.utm_term }}"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_source</code></label>
+        <input type="text" name="utm_source" value="{{ form_data.utm_source }}"
+               placeholder="{{ campaign.default_utm_source }}"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_medium</code></label>
+        <input type="text" name="utm_medium" value="{{ form_data.utm_medium }}"
+               placeholder="{{ campaign.default_utm_medium }}"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Save Changes
+      </button>
+      <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

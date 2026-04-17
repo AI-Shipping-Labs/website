@@ -1,0 +1,93 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}UTM Campaigns{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">UTM Campaigns</h1>
+    <p class="text-muted-foreground mt-1">Mint, store, and share canonical tracking URLs for outbound campaigns.</p>
+  </div>
+  <div class="flex items-center space-x-2">
+    <a href="{% url 'studio_utm_campaign_import' %}"
+       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+      Import
+    </a>
+    <a href="{% url 'studio_utm_campaign_create' %}"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Add Campaign
+    </a>
+  </div>
+</div>
+
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="mb-4 flex items-center space-x-2">
+  {% if show_archived %}
+    <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-accent hover:underline">Show active</a>
+    <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Showing archived</span>
+  {% else %}
+    <a href="?archived=1" class="text-sm text-accent hover:underline">Show archived</a>
+  {% endif %}
+</div>
+
+{% if campaigns %}
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Slug</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source / Medium</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Links</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for campaign in campaigns %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm">
+          <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="text-foreground hover:text-accent font-medium">{{ campaign.name }}</a>
+          {% if campaign.is_archived %}
+          <span class="ml-2 text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Archived</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm font-mono text-muted-foreground">{{ campaign.slug }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.default_utm_source }} / {{ campaign.default_utm_medium }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.links.count }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-right">
+          <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-accent hover:underline">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center">
+  <p class="text-muted-foreground mb-4">
+    {% if show_archived %}
+      No archived UTM campaigns.
+    {% else %}
+      No UTM campaigns yet. Create one or import existing tracking links to get started.
+    {% endif %}
+  </p>
+  {% if not show_archived %}
+  <div class="flex items-center justify-center space-x-3">
+    <a href="{% url 'studio_utm_campaign_create' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Add Campaign</a>
+    <a href="{% url 'studio_utm_campaign_import' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Import</a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

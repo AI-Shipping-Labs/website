@@ -1,0 +1,55 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Import UTM Links{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to UTM Campaigns
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">Import tracking links</h1>
+  <p class="text-muted-foreground mt-1 text-sm">Paste URLs (one per line) or upload a CSV with a <code>url</code> header. Importer is idempotent — running it twice creates no duplicates.</p>
+</div>
+
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <form method="post" enctype="multipart/form-data" action="{% url 'studio_utm_campaign_import' %}">
+    {% csrf_token %}
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">URLs</label>
+      <textarea name="urls" rows="10"
+                placeholder="https://aishippinglabs.com/path?utm_source=newsletter&amp;utm_medium=email&amp;utm_campaign=campaign_slug&amp;utm_content=audience_tag"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent"></textarea>
+      <p class="text-xs text-muted-foreground mt-1">One URL per line. Each URL must include <code>utm_source</code>, <code>utm_medium</code>, <code>utm_campaign</code>, and <code>utm_content</code>.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">CSV file (optional)</label>
+      <input type="file" name="csv_file" accept=".csv"
+             class="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-accent file:text-accent-foreground hover:file:opacity-90">
+      <p class="text-xs text-muted-foreground mt-1">Single column named <code>url</code> (with header row). Merged with paste-box content.</p>
+    </div>
+
+    <div class="bg-secondary border border-border rounded-lg p-4 mb-6">
+      <p class="text-xs text-muted-foreground uppercase tracking-wider mb-2">Example</p>
+      <pre class="text-xs text-foreground font-mono whitespace-pre-wrap">https://aishippinglabs.com/events/launch?utm_source=newsletter&amp;utm_medium=email&amp;utm_campaign=launch_april&amp;utm_content=ai_hero_list
+https://aishippinglabs.com/events/launch?utm_source=newsletter&amp;utm_medium=email&amp;utm_campaign=launch_april&amp;utm_content=maven_list</pre>
+    </div>
+
+    <button type="submit"
+            class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Parse and import
+    </button>
+  </form>
+</div>
+{% endblock %}

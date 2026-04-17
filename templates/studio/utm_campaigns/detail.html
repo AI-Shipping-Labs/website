@@ -1,0 +1,213 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{{ campaign.name }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to UTM Campaigns
+  </a>
+</div>
+
+<div class="mb-8 flex items-start justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">
+      {{ campaign.name }}
+      {% if campaign.is_archived %}
+      <span class="ml-2 align-middle text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Archived</span>
+      {% endif %}
+    </h1>
+    <p class="text-sm text-muted-foreground mt-1">
+      Slug: <code class="font-mono">{{ campaign.slug }}</code>
+      &middot; Default source: <code class="font-mono">{{ campaign.default_utm_source }}</code>
+      &middot; Default medium: <code class="font-mono">{{ campaign.default_utm_medium }}</code>
+    </p>
+    {% if campaign.notes %}
+    <p class="mt-3 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 max-w-2xl whitespace-pre-line">{{ campaign.notes }}</p>
+    {% endif %}
+  </div>
+  <div class="flex items-center space-x-2">
+    <a href="{% url 'studio_utm_campaign_edit' campaign_id=campaign.pk %}"
+       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+      Edit
+    </a>
+    {% if campaign.is_archived %}
+      <form method="post" action="{% url 'studio_utm_campaign_unarchive' campaign_id=campaign.pk %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Unarchive</button>
+      </form>
+    {% else %}
+      <form method="post" action="{% url 'studio_utm_campaign_archive' campaign_id=campaign.pk %}" class="inline"
+            onsubmit="return confirm('Archive this campaign?');">
+        {% csrf_token %}
+        <button type="submit" class="bg-secondary border border-border text-red-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Archive</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2 class="text-lg font-semibold text-foreground mb-3">Tracked links</h2>
+
+{% if links %}
+<div class="bg-card border border-border rounded-lg overflow-hidden mb-6">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Label</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">utm_content</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">URL</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for link in links %}
+      {% with full_url=link.build_url %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-link-row="{{ link.pk }}">
+        <td class="px-6 py-4 text-sm text-foreground align-top">{{ link.label|default:"—" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground align-top font-mono">{{ link.utm_content }}</td>
+        <td class="px-6 py-4 align-top">
+          <div class="flex items-start space-x-2">
+            <code class="font-mono text-xs bg-secondary border border-border rounded px-2 py-1 break-all flex-1" data-utm-url>{{ full_url }}</code>
+            <button type="button" class="utm-copy-btn text-xs bg-accent text-accent-foreground rounded px-3 py-1 hover:opacity-90"
+                    data-url="{{ full_url }}">Copy</button>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right align-top space-x-2">
+          <a href="{% url 'studio_utm_link_edit' campaign_id=campaign.pk link_id=link.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+          <form method="post" action="{% url 'studio_utm_link_archive' campaign_id=campaign.pk link_id=link.pk %}" class="inline"
+                onsubmit="return confirm('Archive this link?');">
+            {% csrf_token %}
+            <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline">Archive</button>
+          </form>
+        </td>
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-8 text-center mb-6">
+  <p class="text-muted-foreground">No tracked links yet. Add one below.</p>
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <h3 class="text-md font-semibold text-foreground mb-3">Add link</h3>
+  <form method="post" action="{% url 'studio_utm_link_create' campaign_id=campaign.pk %}">
+    {% csrf_token %}
+
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1"><code>utm_content</code></label>
+        <input type="text" name="utm_content" required
+               pattern="[a-z0-9_]+"
+               placeholder="ai_hero_list"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Label</label>
+        <input type="text" name="label"
+               placeholder="AI Hero newsletter list"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Destination</label>
+      <input type="text" name="destination" required
+             placeholder="/events/ai-shipping-labs-launch-recap"
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Either a path (will be prefixed with the site base URL) or a full URL.</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1"><code>utm_term</code> (optional)</label>
+        <input type="text" name="utm_term"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_source</code></label>
+        <input type="text" name="utm_source"
+               placeholder="{{ campaign.default_utm_source }}"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Override <code>utm_medium</code></label>
+        <input type="text" name="utm_medium"
+               placeholder="{{ campaign.default_utm_medium }}"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <button type="submit"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Add link
+    </button>
+  </form>
+</div>
+
+{% if archived_links %}
+<div class="mt-8">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Archived links</h2>
+  <div class="bg-card border border-border rounded-lg overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Label</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">utm_content</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">URL</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for link in archived_links %}
+        <tr class="opacity-60">
+          <td class="px-6 py-4 text-sm text-foreground">{{ link.label|default:"—" }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground font-mono">{{ link.utm_content }}</td>
+          <td class="px-6 py-4 text-xs text-muted-foreground font-mono break-all">{{ link.build_url }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+(function() {
+  document.querySelectorAll('.utm-copy-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var url = btn.getAttribute('data-url') || '';
+      var done = function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function() { btn.textContent = original; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(done);
+      } else {
+        // Fallback for older browsers
+        var ta = document.createElement('textarea');
+        ta.value = url;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

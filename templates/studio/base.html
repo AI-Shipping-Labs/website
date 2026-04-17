@@ -79,9 +79,16 @@
             </li>
             <li>
               <a href="{% url 'studio_campaign_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'campaigns' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/campaigns' in request.path and 'utm-campaigns' not in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="mail" class="w-4 h-4"></i>
                 <span>Campaigns</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_utm_campaign_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-campaigns' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="link" class="w-4 h-4"></i>
+                <span>UTM Campaigns</span>
               </a>
             </li>
             <li>

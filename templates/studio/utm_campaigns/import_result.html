@@ -1,0 +1,64 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Import Result{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to UTM Campaigns
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">Import result</h1>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 max-w-3xl">
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Campaigns created</p>
+    <p class="text-2xl font-semibold text-foreground mt-1" data-stat="campaigns_created">{{ campaigns_created }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Campaigns matched</p>
+    <p class="text-2xl font-semibold text-foreground mt-1" data-stat="campaigns_matched">{{ campaigns_matched }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Links created</p>
+    <p class="text-2xl font-semibold text-foreground mt-1" data-stat="links_created">{{ links_created }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Links skipped</p>
+    <p class="text-2xl font-semibold text-foreground mt-1" data-stat="links_skipped">{{ links_skipped }}</p>
+  </div>
+</div>
+
+{% if errors %}
+<h2 class="text-lg font-semibold text-foreground mb-3">Errors ({{ errors|length }})</h2>
+<div class="bg-card border border-border rounded-lg overflow-hidden mb-8 max-w-4xl">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">URL</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for raw_url, reason in errors %}
+      <tr>
+        <td class="px-6 py-4 text-xs text-foreground font-mono break-all">{{ raw_url }}</td>
+        <td class="px-6 py-4 text-sm text-red-400">{{ reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm text-muted-foreground mb-8">0 errors.</p>
+{% endif %}
+
+<div class="flex items-center space-x-4">
+  <a href="{% url 'studio_utm_campaign_list' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    Back to campaigns
+  </a>
+  <a href="{% url 'studio_utm_campaign_import' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    Import more
+  </a>
+</div>
+{% endblock %}

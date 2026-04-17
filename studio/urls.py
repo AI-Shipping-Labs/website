@@ -45,6 +45,18 @@ from studio.views.settings import settings_dashboard, settings_save_group
 from studio.views.subscribers import subscriber_export_csv, subscriber_list
 from studio.views.sync import sync_all, sync_dashboard, sync_history, sync_status, sync_trigger
 from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
+from studio.views.utm_campaigns import (
+    utm_campaign_archive,
+    utm_campaign_create,
+    utm_campaign_detail,
+    utm_campaign_edit,
+    utm_campaign_import,
+    utm_campaign_list,
+    utm_campaign_unarchive,
+    utm_link_archive,
+    utm_link_create,
+    utm_link_edit,
+)
 from studio.views.worker import worker_status
 
 urlpatterns = [
@@ -93,6 +105,18 @@ urlpatterns = [
     path('campaigns/', campaign_list, name='studio_campaign_list'),
     path('campaigns/new', campaign_create, name='studio_campaign_create'),
     path('campaigns/<int:campaign_id>/', campaign_detail, name='studio_campaign_detail'),
+
+    # UTM Campaigns
+    path('utm-campaigns/', utm_campaign_list, name='studio_utm_campaign_list'),
+    path('utm-campaigns/new', utm_campaign_create, name='studio_utm_campaign_create'),
+    path('utm-campaigns/import', utm_campaign_import, name='studio_utm_campaign_import'),
+    path('utm-campaigns/<int:campaign_id>/', utm_campaign_detail, name='studio_utm_campaign_detail'),
+    path('utm-campaigns/<int:campaign_id>/edit', utm_campaign_edit, name='studio_utm_campaign_edit'),
+    path('utm-campaigns/<int:campaign_id>/archive', utm_campaign_archive, name='studio_utm_campaign_archive'),
+    path('utm-campaigns/<int:campaign_id>/unarchive', utm_campaign_unarchive, name='studio_utm_campaign_unarchive'),
+    path('utm-campaigns/<int:campaign_id>/links/add', utm_link_create, name='studio_utm_link_create'),
+    path('utm-campaigns/<int:campaign_id>/links/<int:link_id>/edit', utm_link_edit, name='studio_utm_link_edit'),
+    path('utm-campaigns/<int:campaign_id>/links/<int:link_id>/archive', utm_link_archive, name='studio_utm_link_archive'),
 
     # Subscribers
     path('subscribers/', subscriber_list, name='studio_subscriber_list'),

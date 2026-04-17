@@ -1,0 +1,87 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit Campaign{% else %}New Campaign{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to UTM Campaigns
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">
+    {% if form_action == 'edit' %}Edit Campaign{% else %}New UTM Campaign{% endif %}
+  </h1>
+</div>
+
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post" action="{% if form_action == 'edit' %}{% url 'studio_utm_campaign_edit' campaign_id=campaign.pk %}{% else %}{% url 'studio_utm_campaign_create' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Name</label>
+      <input type="text" name="name" value="{{ form_data.name|default:'' }}" required
+             placeholder="AI Shipping Labs Launch — April 2026"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Human-readable name shown in Studio.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      {% if slug_locked %}
+        <input type="text" value="{{ form_data.slug }}" readonly
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-muted-foreground font-mono cursor-not-allowed">
+        <p class="text-xs text-yellow-400 mt-1">Slug is locked because changing it would break attribution for existing links.</p>
+      {% else %}
+        <input type="text" name="slug" value="{{ form_data.slug|default:'' }}" required
+               pattern="[a-z0-9_]+"
+               placeholder="ai_shipping_labs_launch_april2026"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent">
+        <p class="text-xs text-muted-foreground mt-1">Used as <code>utm_campaign</code> value. Lowercase letters, digits, and underscores only. Example: <code>ai_shipping_labs_launch_april2026</code>.</p>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 mb-6">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Default <code>utm_source</code></label>
+        <input type="text" name="default_utm_source" value="{{ form_data.default_utm_source|default:'' }}" required
+               placeholder="newsletter"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <p class="text-xs text-muted-foreground mt-1">Default source for new links (e.g. <code>newsletter</code>).</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1">Default <code>utm_medium</code></label>
+        <input type="text" name="default_utm_medium" value="{{ form_data.default_utm_medium|default:'' }}" required
+               placeholder="email"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <p class="text-xs text-muted-foreground mt-1">Default medium for new links (e.g. <code>email</code>).</p>
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Notes</label>
+      <textarea name="notes" rows="3"
+                placeholder="Internal notes for the team"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.notes|default:'' }}</textarea>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        {% if form_action == 'edit' %}Save Changes{% else %}Create Campaign{% endif %}
+      </button>
+      <a href="{% url 'studio_utm_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

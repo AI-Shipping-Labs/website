@@ -160,6 +160,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 VERSION = os.getenv("VERSION", "N/A")
 SITE_NAME = 'AI Shipping Labs'
 SITE_URL = 'https://aishippinglabs.com'
+# Base URL used by UTM link generation when destinations are paths
+SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com')
 SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who want to turn AI ideas into real projects.'
 
 # Stripe payment links

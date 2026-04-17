@@ -53,6 +53,36 @@ The app fetches this from Secrets Manager automatically if the `GITHUB_APP_PRIVA
 
 When adding a new environment (e.g. prod), make sure `CSRF_TRUSTED_ORIGINS` includes all domains that will submit forms to it.
 
+### GitHub App (content sync)
+
+Content syncing uses one GitHub App. The App's installation in the org grants the platform access to specific repos.
+
+Recommended setup: at https://github.com/organizations/AI-Shipping-Labs/settings/installations, open the installation (ID `117839867`) and set Repository access to "All repositories". With this setting, any new content repo in the `AI-Shipping-Labs` org becomes syncable without revisiting installation settings.
+
+To onboard a new content repo:
+
+1. Confirm the App installation has access to it (covered automatically by "All repositories"). Otherwise add it under "Only select repositories".
+2. Add a `ContentSource` row pointing at the repo (`is_private=True` for private repos). Either edit `seed_content_sources.py` and re-run `manage.py seed_content_sources`, or add via Django admin.
+3. Run `uv run python manage.py sync_content` (or push to the repo if the webhook is wired).
+
+To verify the App can reach a specific repo:
+
+```bash
+uv run python -c "
+import django, os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'website.settings')
+django.setup()
+from integrations.services.github import generate_github_app_token
+import requests
+t = generate_github_app_token()
+r = requests.get('https://api.github.com/repos/AI-Shipping-Labs/<repo-name>',
+    headers={'Authorization': f'token {t}'}, timeout=10)
+print(r.status_code, r.json().get('full_name') or r.json().get('message'))
+"
+```
+
+A `200` with the full repo name means it works. A `404` means the installation is not granted access to that repo.
+
 ## CI/CD
 
 Two GitHub Actions workflows handle deployment:

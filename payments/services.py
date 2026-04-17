@@ -119,6 +119,11 @@ def handle_checkout_completed(session_data):
         user = User.objects.filter(email=customer_email).first()
     if user is None and customer_email:
         # Create a new user if one doesn't exist (spec says "or creates a new user")
+        # Flag the creation so the analytics post_save handler can record
+        # signup_path='stripe_checkout' on the resulting UserAttribution row
+        # (the webhook runs without an HttpRequest bound to the thread).
+        from analytics.request_context import set_stripe_user_creation
+        set_stripe_user_creation()
         user = User.objects.create_user(email=customer_email)
 
     if user is None:

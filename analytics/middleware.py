@@ -3,6 +3,12 @@
 Captures `utm_*` query params, persists first-touch in a long-lived cookie,
 last-touch in the session, assigns a stable anonymous_id cookie, and writes
 one CampaignVisit row per UTM-bearing request.
+
+Also stashes the active request on a thread-local so downstream code that
+runs inside a request (e.g. signal handlers fired during ORM operations)
+can reach `request.COOKIES`, `request.session`, and `request.path` without
+having them threaded through manually. See `analytics.request_context` for
+the public accessor.
 """
 
 import hashlib
@@ -14,6 +20,10 @@ from datetime import datetime, timezone
 from django.conf import settings
 
 from analytics.bots import is_bot
+from analytics.request_context import (
+    clear_current_request,
+    set_current_request,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +179,18 @@ class CampaignTrackingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Stash the request on a thread-local so downstream code (e.g. the
+        # `User` post_save signal that creates a UserAttribution row) can
+        # read cookies/session/path without them being threaded through
+        # manually. We do this even for skipped paths so a signup POST
+        # (skipped because POST != GET) still has access to UTM cookies.
+        set_current_request(request)
+        try:
+            return self._dispatch(request)
+        finally:
+            clear_current_request()
+
+    def _dispatch(self, request):
         # Fast-path skip: bots, non-GET, system paths.
         if _should_skip(request):
             return self.get_response(request)

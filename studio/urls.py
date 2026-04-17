@@ -45,6 +45,15 @@ from studio.views.settings import settings_dashboard, settings_save_group
 from studio.views.subscribers import subscriber_export_csv, subscriber_list
 from studio.views.sync import sync_all, sync_dashboard, sync_history, sync_status, sync_trigger
 from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
+from studio.views.utm_analytics import (
+    utm_campaign_detail as utm_analytics_campaign_detail,
+)
+from studio.views.utm_analytics import (
+    utm_dashboard,
+)
+from studio.views.utm_analytics import (
+    utm_link_detail as utm_analytics_link_detail,
+)
 from studio.views.utm_campaigns import (
     utm_campaign_archive,
     utm_campaign_create,
@@ -117,6 +126,19 @@ urlpatterns = [
     path('utm-campaigns/<int:campaign_id>/links/add', utm_link_create, name='studio_utm_link_create'),
     path('utm-campaigns/<int:campaign_id>/links/<int:link_id>/edit', utm_link_edit, name='studio_utm_link_edit'),
     path('utm-campaigns/<int:campaign_id>/links/<int:link_id>/archive', utm_link_archive, name='studio_utm_link_archive'),
+
+    # UTM Analytics
+    path('utm-analytics/', utm_dashboard, name='studio_utm_dashboard'),
+    path(
+        'utm-analytics/campaign/<slug:campaign_slug>/',
+        utm_analytics_campaign_detail,
+        name='studio_utm_campaign_analytics',
+    ),
+    path(
+        'utm-analytics/campaign/<slug:campaign_slug>/link/<int:link_id>/',
+        utm_analytics_link_detail,
+        name='studio_utm_link_analytics',
+    ),
 
     # Subscribers
     path('subscribers/', subscriber_list, name='studio_subscriber_list'),

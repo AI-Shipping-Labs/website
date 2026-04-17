@@ -85,6 +85,20 @@
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_notification_log' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="bell" class="w-4 h-4"></i>
+                <span>Notifications</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Analytics Section -->
+        <div>
+          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Analytics</p>
+          <ul class="space-y-1">
+            <li>
               <a href="{% url 'studio_utm_campaign_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-campaigns' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="link" class="w-4 h-4"></i>
@@ -92,10 +106,10 @@
               </a>
             </li>
             <li>
-              <a href="{% url 'studio_notification_log' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="bell" class="w-4 h-4"></i>
-                <span>Notifications</span>
+              <a href="{% url 'studio_utm_dashboard' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-analytics' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                <span>UTM Analytics</span>
               </a>
             </li>
           </ul>

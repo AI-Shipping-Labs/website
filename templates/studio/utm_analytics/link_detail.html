@@ -1,0 +1,142 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{{ link.utm_content }} - {{ campaign.name }}{% endblock %}
+
+{% block studio_content %}
+<nav class="text-sm text-muted-foreground mb-3">
+  <a href="{% url 'studio_utm_dashboard' %}{{ querystring }}" class="hover:text-accent">UTM Analytics</a>
+  <span class="mx-2">&gt;</span>
+  <a href="{% url 'studio_utm_campaign_analytics' campaign_slug=campaign.slug %}{{ querystring }}" class="hover:text-accent">{{ campaign.name }}</a>
+  <span class="mx-2">&gt;</span>
+  <span class="text-foreground">{{ link.utm_content }}</span>
+</nav>
+
+<div class="mb-6">
+  <h1 class="text-2xl font-semibold text-foreground">{{ link.utm_content }}</h1>
+  {% if link.label %}<p class="text-sm text-muted-foreground mt-1">{{ link.label }}</p>{% endif %}
+</div>
+
+{% include "studio/utm_analytics/_filters.html" %}
+
+{# Link summary card #}
+<div class="bg-card border border-border rounded-lg p-6 mb-6">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Link summary</h2>
+  <dl class="space-y-3 text-sm">
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Destination</dt>
+      <dd class="text-foreground break-all font-mono">{{ link.destination }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Assembled UTM URL</dt>
+      <dd class="flex items-center gap-2">
+        <code id="assembled-url" class="text-foreground break-all font-mono text-xs flex-1 bg-secondary px-2 py-1 rounded">{{ assembled_url }}</code>
+        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('assembled-url').innerText)"
+                class="bg-secondary border border-border text-foreground px-3 py-1 rounded text-xs hover:bg-muted transition-colors shrink-0">
+          Copy
+        </button>
+      </dd>
+    </div>
+  </dl>
+</div>
+
+{% include "studio/utm_analytics/_kpis.html" %}
+
+{# Visits table #}
+<div class="bg-card border border-border rounded-lg p-6 mb-6">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Visits</h2>
+  {% if visits_page.object_list %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Timestamp</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Anon ID</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">User</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Path</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Referrer</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">User agent</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for v in visits_page.object_list %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground whitespace-nowrap">{{ v.ts|date:"Y-m-d H:i" }}</td>
+          <td class="px-4 py-3 text-xs font-mono text-muted-foreground">{{ v.anonymous_id|truncatechars:12 }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
+            {% if v.user %}
+              <a href="/admin/accounts/user/{{ v.user.pk }}/change/" class="text-accent hover:underline">{{ v.user.email }}</a>
+            {% else %}
+              <span class="text-xs">anonymous</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell font-mono">{{ v.path|truncatechars:30 }}</td>
+          <td class="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">{{ v.referrer|truncatechars:40|default:"—" }}</td>
+          <td class="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">{{ v.user_agent|truncatechars:40|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if paginator.num_pages > 1 %}
+  <div class="mt-4 flex items-center justify-between text-sm">
+    <span class="text-muted-foreground">Page {{ visits_page.number }} of {{ paginator.num_pages }} ({{ paginator.count }} total)</span>
+    <div class="space-x-2">
+      {% if visits_page.has_previous %}
+      <a href="{{ page_link_prefix }}{{ visits_page.previous_page_number }}" class="text-accent hover:underline">Previous</a>
+      {% endif %}
+      {% if visits_page.has_next %}
+      <a href="{{ page_link_prefix }}{{ visits_page.next_page_number }}" class="text-accent hover:underline">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <p class="text-sm text-muted-foreground">No visits captured for this link in this window.</p>
+  {% endif %}
+</div>
+
+{# Conversions table #}
+<div class="bg-card border border-border rounded-lg p-6">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Signups &amp; conversions</h2>
+  {% if conversion_rows %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signup</th>
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tier</th>
+          {% if has_conversion_data %}
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Paid</th>
+          <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">MRR EUR</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for c in conversion_rows %}
+        <tr class="hover:bg-secondary/50 transition-colors">
+          <td class="px-4 py-3 text-sm text-foreground break-all">{{ c.email }}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{% if c.signup_ts %}{{ c.signup_ts|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">{{ c.tier.name|default:"—" }}</td>
+          {% if has_conversion_data %}
+          <td class="px-4 py-3 text-sm">
+            {% if c.paid %}
+              <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Paid</span>
+            {% else %}
+              <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Free</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-sm text-foreground text-right">{{ c.mrr|default:0 }}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No signups attributed to this link yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

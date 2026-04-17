@@ -1,0 +1,25 @@
+{# Shared KPI strip used by all three UTM Analytics views. #}
+<div class="grid grid-cols-2 md:grid-cols-3 {% if has_conversion_data %}lg:grid-cols-5{% else %}lg:grid-cols-3{% endif %} gap-4 mb-6">
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Total Visits</p>
+    <p class="text-2xl font-semibold text-foreground mt-1">{{ kpis.visits }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Unique Visitors</p>
+    <p class="text-2xl font-semibold text-foreground mt-1">{{ kpis.unique_visitors }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Signups</p>
+    <p class="text-2xl font-semibold text-foreground mt-1">{{ kpis.signups }}</p>
+  </div>
+  {% if has_conversion_data %}
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Paid Conversions</p>
+    <p class="text-2xl font-semibold text-foreground mt-1">{{ kpis.conversions }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">MRR Added</p>
+    <p class="text-2xl font-semibold text-foreground mt-1">EUR {{ kpis.mrr|floatformat:0 }}</p>
+  </div>
+  {% endif %}
+</div>

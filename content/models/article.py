@@ -5,6 +5,7 @@ from django.db import models
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
+from content.utils.h1 import strip_leading_title_h1
 
 
 def render_markdown(text):
@@ -111,7 +112,11 @@ class Article(models.Model):
         if self.content_markdown:
             from content.templatetags.video_utils import replace_video_urls_in_html
             from content.utils.linkify import linkify_urls
-            html = render_markdown(self.content_markdown)
+            # Strip the leading H1 if it duplicates the title — the page
+            # template renders the title as the page heading, so an
+            # author-written ``# Title`` would show up twice (issue #227).
+            body_md = strip_leading_title_h1(self.content_markdown, self.title)
+            html = render_markdown(body_md)
             html = replace_video_urls_in_html(html)
             self.content_html = linkify_urls(html)
 

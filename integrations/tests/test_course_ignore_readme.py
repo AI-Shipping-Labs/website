@@ -199,8 +199,11 @@ class CourseRootReadmeAsDescriptionTest(_CourseSyncFixtureBase):
 
         course = Course.objects.get(slug='python-course')
         self.assertIn('Welcome to the course.', course.description)
-        # Rendered HTML picks up the README heading.
-        self.assertIn('Python Course', course.description_html)
+        # The README's body text renders into description_html. Its leading
+        # ``# Python Course`` H1 is dropped because it duplicates the course
+        # title (issue #227); the page template renders the title itself.
+        self.assertIn('Welcome to the course.', course.description_html)
+        self.assertNotIn('<h1>Python Course</h1>', course.description_html)
 
     def test_explicit_description_overrides_readme(self):
         self._write_root_course_yaml(

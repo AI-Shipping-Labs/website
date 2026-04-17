@@ -3,6 +3,7 @@ from django.conf import settings
 from django.db import models
 
 from content.access import VISIBILITY_CHOICES, get_required_tier_name
+from content.utils.h1 import strip_leading_title_h1
 
 
 def render_markdown(text):
@@ -132,7 +133,12 @@ class Course(models.Model):
         self.tags = normalize_tags(self.tags)
 
         if self.description:
-            self.description_html = linkify_urls(render_markdown(self.description))
+            # Strip the leading H1 if it duplicates the course title — the
+            # course detail page renders the title as the page heading, so
+            # a README that starts with ``# Course Title`` would show up
+            # twice (issue #227).
+            description_md = strip_leading_title_h1(self.description, self.title)
+            self.description_html = linkify_urls(render_markdown(description_md))
         if self.peer_review_criteria:
             self.peer_review_criteria_html = linkify_urls(
                 render_markdown(self.peer_review_criteria)
@@ -271,7 +277,12 @@ class Unit(models.Model):
     def save(self, *args, **kwargs):
         from content.utils.linkify import linkify_urls
         if self.body:
-            self.body_html = linkify_urls(render_markdown(self.body))
+            # Strip the leading H1 if it duplicates the unit title — the
+            # unit page renders the title as the page heading, so a body
+            # that starts with ``# Unit Title`` would show up twice
+            # (issue #227).
+            body_md = strip_leading_title_h1(self.body, self.title)
+            self.body_html = linkify_urls(render_markdown(body_md))
         if self.homework:
             self.homework_html = linkify_urls(render_markdown(self.homework))
         # When save() is called with update_fields (e.g. from update_or_create),

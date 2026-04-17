@@ -97,6 +97,7 @@ TEMPLATES = [
                 'website.context_processors.site_context',
                 'website.context_processors.impersonation_context',
                 'website.context_processors.announcement_banner_context',
+                'studio.context_processors.worker_status_banner',
             ],
         },
     },

@@ -1,21 +1,23 @@
 """Studio view for django-q2 worker status dashboard.
 
 Shows worker health, queue depth, recent tasks, and failed task details.
+
+Liveness is determined by ``django_q.status.Stat.get_all()`` (cluster
+heartbeat), not by recent task activity — see ``studio.worker_health`` for
+the rationale.
 """
 
 from django.shortcuts import render
-from django.utils import timezone
+from django_q.models import OrmQ, Task
 
 from studio.decorators import staff_required
+from studio.worker_health import get_worker_status
 
 
 @staff_required
 def worker_status(request):
     """Display django-q2 worker status and recent task history."""
-    from django_q.models import OrmQ, Task
-
-    now = timezone.now()
-    five_minutes_ago = now - timezone.timedelta(minutes=5)
+    worker_info = get_worker_status()
 
     # Recent tasks (last 50)
     recent_tasks = Task.objects.order_by('-started')[:50]
@@ -23,10 +25,6 @@ def worker_status(request):
     # Success/failure counts
     success_count = Task.objects.filter(success=True).count()
     failure_count = Task.objects.filter(success=False).count()
-
-    # Worker health: any task completed in the last 5 minutes
-    recent_completions = Task.objects.filter(stopped__gte=five_minutes_ago).count()
-    worker_healthy = recent_completions > 0
 
     # Queue depth
     queue_depth = OrmQ.objects.count()
@@ -58,8 +56,12 @@ def worker_status(request):
         })
 
     return render(request, 'studio/worker.html', {
-        'worker_healthy': worker_healthy,
-        'recent_completions': recent_completions,
+        'worker_info': worker_info,
+        # Backwards-compatible aliases used by older template fragments / tests.
+        'worker_alive': worker_info['alive'],
+        'worker_idle': worker_info['idle'],
+        'last_heartbeat_age': worker_info['last_heartbeat_age'],
+        'cluster_count': worker_info['cluster_count'],
         'queue_depth': queue_depth,
         'success_count': success_count,
         'failure_count': failure_count,

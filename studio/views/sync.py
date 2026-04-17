@@ -22,8 +22,24 @@ from django.views.decorators.http import require_POST
 from integrations.models import ContentSource, SyncLog
 from integrations.services.github import sync_content_source
 from studio.decorators import staff_required
+from studio.worker_health import get_worker_status
 
 logger = logging.getLogger(__name__)
+
+
+def _worker_warning_suffix():
+    """Return ' — worker not running, sync will not start until you run `manage.py qcluster`.'
+
+    or empty string if the worker is running. Appended to async-task success
+    messages so users know the queue is filling up but nothing is processing.
+    """
+    info = get_worker_status()
+    if info['expect_worker'] and not info['alive']:
+        return (
+            ' — worker is not running, sync will not start until you run '
+            '`manage.py qcluster`.'
+        )
+    return ''
 
 
 def _is_not_configured_error(errors):
@@ -227,11 +243,15 @@ def sync_trigger(request, source_id):
                 source,
                 task_name=f'sync-{source.repo_name}',
             )
-            messages.success(
-                request,
-                f'Sync queued for {source.repo_name}'
-                + (f' ({source.content_path})' if source.content_path else ''),
-            )
+            warning = _worker_warning_suffix()
+            label = source.repo_name
+            if source.content_path:
+                label = f'{label} ({source.content_path})'
+            base_msg = f'Sync queued for {label}'
+            if warning:
+                messages.warning(request, base_msg + warning)
+            else:
+                messages.success(request, base_msg)
         except ImportError:
             sync_content_source(source)
             messages.success(
@@ -272,7 +292,12 @@ def sync_all(request):
         except Exception:
             logger.exception('Error triggering sync for %s', source.repo_name)
 
-    messages.success(request, f'Sync triggered for {count} sources.')
+    warning = _worker_warning_suffix()
+    base_msg = f'Sync triggered for {count} source{"" if count == 1 else "s"}.'
+    if warning:
+        messages.warning(request, base_msg + warning)
+    else:
+        messages.success(request, base_msg)
     return redirect('studio_sync_dashboard')
 
 

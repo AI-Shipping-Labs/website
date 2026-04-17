@@ -1342,6 +1342,17 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
 
             seen_slugs.add(slug)
 
+            # Validate recap if present: must be a dict
+            recap_value = data.get('recap', {})
+            if recap_value and not isinstance(recap_value, dict):
+                msg = (
+                    f'Invalid recap in {rel_path}: must be a mapping/dict, '
+                    f'got {type(recap_value).__name__}. Skipping recap.'
+                )
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
+                recap_value = {}
+
             # Content fields that sync always updates
             content_defaults = {
                 'title': data.get('title', slug),
@@ -1360,6 +1371,7 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
                 'speaker_bio': data.get('speaker_bio', ''),
                 'related_course': data.get('related_course', ''),
                 'published': data.get('published', True),
+                'recap': recap_value,
                 'content_id': event_content_id,
                 'source_repo': source.repo_name,
                 'source_path': rel_path,

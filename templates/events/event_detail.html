@@ -79,6 +79,26 @@
         {% endif %}
       </header>
 
+      <!-- Recap link -->
+      {% if event.has_recap %}
+      <div class="mb-8 rounded-lg border border-accent/30 bg-accent/5 p-5">
+        <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-3">
+            <i data-lucide="sparkles" class="h-5 w-5 text-accent"></i>
+            <div>
+              <p class="font-semibold text-foreground">Event recap available</p>
+              <p class="text-sm text-muted-foreground">A summary of key topics, recording, and next steps.</p>
+            </div>
+          </div>
+          <a href="{{ event.get_recap_url }}"
+             class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90">
+            View event recap
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Registration / Action Section -->
       {% if event.status == 'upcoming' or event.status == 'live' %}
       <div class="mb-12 rounded-lg border border-border bg-card p-6">

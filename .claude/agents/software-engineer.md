@@ -56,6 +56,7 @@ Every issue must include tests.
   - View tests: use `self.client.get()/post()`, check status codes, check template used, check context data
   - Access control tests: verify anonymous/free/paid users see correct content or get correct gating
 - Run tests and make sure they all pass: `uv run python manage.py test`
+- Run lint and fix any issues before declaring done: `uv run ruff check --fix .`. Re-run `uv run ruff check .` to confirm zero remaining errors. CI will fail on lint, so this MUST be clean before commit.
 
 Example:
 ```python

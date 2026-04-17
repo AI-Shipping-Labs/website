@@ -3,6 +3,10 @@ from django.urls import path
 from studio.views.announcement import announcement_banner_edit
 from studio.views.articles import article_edit, article_list
 from studio.views.campaigns import campaign_create, campaign_detail, campaign_list
+from studio.views.content_sources import (
+    content_source_create,
+    content_source_refresh,
+)
 from studio.views.courses import (
     course_access_grant,
     course_access_list,
@@ -189,4 +193,16 @@ urlpatterns = [
     path('sync/history/', sync_history, name='studio_sync_history'),
     path('sync/<uuid:source_id>/trigger/', sync_trigger, name='studio_sync_trigger'),
     path('sync/<uuid:source_id>/status/', sync_status, name='studio_sync_status'),
+
+    # Content Sources (register a new repo)
+    path(
+        'content-sources/new/',
+        content_source_create,
+        name='studio_content_source_create',
+    ),
+    path(
+        'content-sources/refresh/',
+        content_source_refresh,
+        name='studio_content_source_refresh',
+    ),
 ]

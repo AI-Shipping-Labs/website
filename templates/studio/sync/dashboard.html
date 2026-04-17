@@ -9,6 +9,10 @@
     <p class="text-muted-foreground mt-1">Sync content from GitHub repositories.</p>
   </div>
   <div class="flex items-center gap-3 shrink-0">
+    <a href="{% url 'studio_content_source_create' %}"
+       class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
+      Add content source
+    </a>
     <a href="{% url 'studio_sync_history' %}"
        class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
       History
@@ -199,7 +203,10 @@
 {% else %}
 <div class="bg-card border border-border rounded-lg p-12 text-center">
   <p class="text-muted-foreground">No content sources configured.</p>
-  <p class="text-sm text-muted-foreground mt-1">Add content sources in Django admin or run <code class="bg-secondary px-1.5 py-0.5 rounded text-xs">manage.py seed_content_sources</code>.</p>
+  <p class="text-sm text-muted-foreground mt-1">
+    <a href="{% url 'studio_content_source_create' %}" class="text-accent hover:underline">Add a content source</a>,
+    use Django admin, or run <code class="bg-secondary px-1.5 py-0.5 rounded text-xs">manage.py seed_content_sources</code>.
+  </p>
 </div>
 {% endif %}
 

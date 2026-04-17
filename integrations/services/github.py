@@ -17,6 +17,8 @@ import shutil
 import subprocess
 import tempfile
 import time
+import uuid
+from pathlib import PurePath
 
 import boto3
 import frontmatter
@@ -74,6 +76,49 @@ def derive_slug(name):
     stem = name.rsplit('.', 1)[0] if '.' in name else name
     match = re.match(r'^\d+-(.+)', stem)
     return match.group(1) if match else stem
+
+
+def _matches_ignore_patterns(rel_path, patterns):
+    """Return True if ``rel_path`` matches any glob in ``patterns``.
+
+    Uses :meth:`pathlib.PurePath.full_match` (Python 3.13+) so recursive
+    ``**`` globs work as expected. ``rel_path`` must be relative to whichever
+    directory the ignore patterns were declared against (course root for
+    course-level ``ignore:``, module dir for module-level).
+    """
+    if not patterns:
+        return False
+    p = PurePath(rel_path)
+    for pattern in patterns:
+        if not pattern:
+            continue
+        try:
+            if p.full_match(pattern):
+                return True
+        except (ValueError, TypeError):
+            # Malformed glob – treat as non-matching rather than blowing up sync.
+            continue
+    return False
+
+
+def _extract_readme_title(body, fallback):
+    """Return the first Markdown H1 heading in ``body`` or ``fallback``."""
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('# ') and not stripped.startswith('## '):
+            return stripped[2:].strip() or fallback
+    return fallback
+
+
+def _derive_readme_content_id(repo_name, module_source_path):
+    """Derive a stable UUIDv5 content_id for a module's README-as-unit.
+
+    Used when the README has no explicit ``content_id`` in frontmatter. The
+    namespace key combines the repo name and module source path so the UUID is
+    stable across syncs and unique across modules/repos.
+    """
+    key = f'{repo_name}:{module_source_path}:readme'
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
 class GitHubSyncError(Exception):
@@ -1039,6 +1084,12 @@ def _sync_single_course(
 
     Used by both multi-course mode (each child dir is its own course) and
     single-course mode (the resolved content_dir is the course root).
+
+    Respects ``ignore:`` in ``course.yaml`` (a list of globs relative to the
+    course root) — matched files are skipped everywhere in the course. If no
+    ``description:`` is set in ``course.yaml`` and ``README.md`` exists at the
+    course root and is not ignored, the README body becomes the course
+    description.
     """
     from content.models import Course
 
@@ -1074,9 +1125,35 @@ def _sync_single_course(
 
         seen_course_slugs.add(slug)
 
+        # Course-level ignore globs (relative to course_dir). Applied to every
+        # module via _sync_course_modules.
+        raw_ignore = course_data.get('ignore', []) or []
+        course_ignore_patterns = [str(p) for p in raw_ignore]
+
+        # Description: explicit `description:` wins; otherwise fall back to
+        # README.md at the course root if present and not ignored.
+        description = course_data.get('description', '') or ''
+        if not description:
+            readme_path = os.path.join(course_dir, 'README.md')
+            if (
+                os.path.isfile(readme_path)
+                and not _matches_ignore_patterns(
+                    'README.md', course_ignore_patterns,
+                )
+            ):
+                try:
+                    _, readme_body = _parse_markdown_file(readme_path)
+                    if readme_body and readme_body.strip():
+                        description = readme_body
+                except Exception as e:
+                    logger.warning(
+                        'Failed to read course README at %s: %s',
+                        readme_path, e,
+                    )
+
         course_defaults = {
             'title': course_data.get('title', slug),
-            'description': course_data.get('description', ''),
+            'description': description,
             'instructor_name': course_data.get('instructor_name', ''),
             'instructor_bio': course_data.get('instructor_bio', ''),
             'cover_image_url': rewrite_cover_image_url(
@@ -1115,6 +1192,7 @@ def _sync_single_course(
         _sync_course_modules(
             course, course_dir, repo_dir, source.repo_name,
             commit_sha, stats, known_images=known_images,
+            course_ignore_patterns=course_ignore_patterns,
         )
 
     except Exception as e:
@@ -1199,14 +1277,27 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
 
 
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
-                         known_images=None):
-    """Sync modules and units for a course."""
+                         known_images=None, course_ignore_patterns=None):
+    """Sync modules and units for a course.
+
+    ``course_ignore_patterns`` are globs relative to ``course_dir`` from the
+    course-level ``ignore:`` key. A directory whose path matches is skipped
+    entirely. The patterns are also passed down to unit sync so individual
+    files matched at the course level are skipped wherever they appear.
+    """
     from content.models import Module
 
+    course_ignore_patterns = course_ignore_patterns or []
     seen_module_paths = set()
 
     for entry in sorted(os.scandir(course_dir), key=lambda e: e.name):
         if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
+            continue
+
+        # Skip whole module dirs that match course-level ignore globs
+        # (e.g. `docs/**` ignores the docs/ directory in addition to its files).
+        dir_rel_to_course = os.path.relpath(entry.path, course_dir)
+        if _matches_ignore_patterns(dir_rel_to_course, course_ignore_patterns):
             continue
 
         module_yaml_path = os.path.join(entry.path, 'module.yaml')
@@ -1244,10 +1335,18 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             else:
                 stats['updated'] += 1
 
+            # Module-level ignore patterns (relative to module dir). Course
+            # patterns are translated/filtered separately in _sync_module_units.
+            raw_module_ignore = module_data.get('ignore', []) or []
+            module_ignore_patterns = [str(p) for p in raw_module_ignore]
+
             # Sync units within this module
             _sync_module_units(
                 module, entry.path, repo_dir, repo_name, commit_sha, stats,
                 known_images=known_images,
+                course_dir=course_dir,
+                course_ignore_patterns=course_ignore_patterns,
+                module_ignore_patterns=module_ignore_patterns,
             )
 
         except Exception as e:
@@ -1267,16 +1366,117 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
 
 
 def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stats,
-                       known_images=None):
-    """Sync units (markdown files) within a module directory."""
+                       known_images=None, course_dir=None,
+                       course_ignore_patterns=None,
+                       module_ignore_patterns=None):
+    """Sync units (markdown files) within a module directory.
+
+    ``course_ignore_patterns`` are globs relative to ``course_dir`` (course
+    root). ``module_ignore_patterns`` are globs relative to ``module_dir``.
+    Files matched by either list are skipped.
+
+    README.md at the module root is promoted to the first unit of the module
+    (``sort_order = -1``) unless it is ignored by either list.
+    """
     from content.models import Unit, UserCourseProgress
+
+    course_ignore_patterns = course_ignore_patterns or []
+    module_ignore_patterns = module_ignore_patterns or []
+    # course_dir defaults to module_dir's parent when not supplied so callers
+    # that pre-date this signature still work (course-level patterns become
+    # no-ops in that case because course_ignore_patterns is empty).
+    if course_dir is None:
+        course_dir = os.path.dirname(module_dir)
 
     seen_unit_paths = set()
     # Track newly created units with their hashes for rename detection
     new_unit_hashes = {}
 
+    def _is_ignored(filename):
+        """Return True if the file is matched by any course- or module-level ignore glob."""
+        filepath = os.path.join(module_dir, filename)
+        rel_to_course = os.path.relpath(filepath, course_dir)
+        if _matches_ignore_patterns(rel_to_course, course_ignore_patterns):
+            return True
+        if _matches_ignore_patterns(filename, module_ignore_patterns):
+            return True
+        return False
+
+    # README at module root -> first unit (sort_order = -1) unless ignored.
+    readme_filename = None
+    for name in os.listdir(module_dir):
+        if name.lower() == 'readme.md':
+            readme_filename = name
+            break
+
+    if readme_filename and not _is_ignored(readme_filename):
+        readme_path = os.path.join(module_dir, readme_filename)
+        readme_rel = os.path.relpath(readme_path, repo_dir)
+        try:
+            metadata, body = _parse_markdown_file(readme_path)
+
+            # content_id: explicit frontmatter wins; otherwise derive a stable
+            # UUIDv5 from the module source path so we get idempotent upserts.
+            module_source_path = module.source_path or os.path.relpath(
+                module_dir, repo_dir,
+            )
+            readme_content_id = metadata.get('content_id') or (
+                _derive_readme_content_id(repo_name, module_source_path)
+            )
+
+            title = metadata.get('title') or _extract_readme_title(
+                body, fallback=module.title,
+            )
+
+            content_hash = _compute_content_hash(body)
+            base_dir = os.path.dirname(readme_rel)
+            if known_images is not None:
+                _check_broken_image_refs(
+                    body, readme_rel, repo_name, base_dir,
+                    known_images, stats.get('errors', []),
+                )
+            body = rewrite_image_urls(body, repo_name, base_dir)
+
+            readme_slug = metadata.get('slug', 'readme')
+            readme_sort_order = metadata.get('sort_order', -1)
+
+            readme_defaults = {
+                'title': title,
+                'slug': readme_slug,
+                'sort_order': readme_sort_order,
+                'video_url': metadata.get('video_url', ''),
+                'timestamps': metadata.get('timestamps', []),
+                'is_preview': metadata.get('is_preview', False),
+                'content_hash': content_hash,
+                'source_repo': repo_name,
+                'source_commit': commit_sha,
+                'content_id': readme_content_id,
+                'body': body,
+            }
+
+            unit, created = Unit.objects.update_or_create(
+                module=module,
+                source_path=readme_rel,
+                defaults=readme_defaults,
+            )
+            seen_unit_paths.add(readme_rel)
+            if created:
+                stats['created'] += 1
+                new_unit_hashes[content_hash] = unit
+            else:
+                stats['updated'] += 1
+        except Exception as e:
+            stats['errors'].append({
+                'file': readme_rel,
+                'error': str(e),
+            })
+
     for filename in sorted(os.listdir(module_dir)):
         if not filename.endswith('.md') or filename.upper() == 'README.MD':
+            continue
+
+        # Respect course- and module-level ignore globs.
+        if _is_ignored(filename):
             continue
 
         filepath = os.path.join(module_dir, filename)

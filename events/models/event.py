@@ -196,6 +196,10 @@ class Event(models.Model):
         default=0,
         help_text='Sequence number for .ics calendar invite updates.',
     )
+    recap = models.JSONField(
+        default=dict, blank=True,
+        help_text='Structured recap landing page sections. See docs for schema.',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -237,6 +241,15 @@ class Event(models.Model):
     def has_recording(self):
         """Return True if this event has a recording."""
         return bool(self.video_url)
+
+    @property
+    def has_recap(self):
+        """Return True if this event has any recap data."""
+        return bool(self.recap)
+
+    def get_recap_url(self):
+        """Return the URL for the recap landing page."""
+        return f'/events/{self.slug}/recap'
 
     @property
     def is_upcoming(self):

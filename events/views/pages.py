@@ -1,6 +1,8 @@
 import calendar as cal_module
+import copy
 from datetime import date
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,6 +13,7 @@ from content.access import (
     get_required_tier_name,
 )
 from events.models import Event, EventJoinClick, EventRegistration
+from payments.models import Tier
 
 
 def events_calendar(request, year=None, month=None):
@@ -214,3 +217,79 @@ def event_detail(request, slug):
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)
+
+
+def _resolve_tier_payment_link(tier_slug):
+    """Return the annual Stripe payment link for a tier slug, or '#' if missing.
+
+    Mirrors how /pricing resolves Stripe links from settings.STRIPE_PAYMENT_LINKS.
+    Recap plan cards always link to the annual checkout (matches the Next.js
+    reference component behavior).
+    """
+    if not tier_slug:
+        return '#'
+    links = settings.STRIPE_PAYMENT_LINKS.get(tier_slug, {})
+    return links.get('annual') or links.get('monthly') or '#'
+
+
+def _annotate_recap_with_tier_links(recap):
+    """Walk the recap dict and attach `payment_link` and `tier_name` to any
+    section that references a `tier:` key. Returns a deep copy so the original
+    JSONField data is not mutated.
+    """
+    if not recap:
+        return recap
+    annotated = copy.deepcopy(recap)
+
+    # Build a tier slug -> name map (small table, < 5 rows).
+    tier_names = {t.slug: t.name for t in Tier.objects.all()}
+
+    def annotate_cta(cta):
+        if not isinstance(cta, dict):
+            return
+        tier_slug = cta.get('tier')
+        if tier_slug:
+            cta['payment_link'] = _resolve_tier_payment_link(tier_slug)
+            cta['tier_name'] = tier_names.get(tier_slug, tier_slug.title())
+            # Default href to the resolved payment link if not explicit
+            cta.setdefault('href', cta['payment_link'])
+
+    # Plan cards
+    plans = annotated.get('plans') or {}
+    for item in plans.get('items', []) or []:
+        annotate_cta(item)
+
+    # Early-member section CTAs
+    early = annotated.get('early_member') or {}
+    annotate_cta(early.get('primary_cta'))
+    annotate_cta(early.get('secondary_cta'))
+
+    # Hero CTAs
+    hero = annotated.get('hero') or {}
+    annotate_cta(hero.get('primary_cta'))
+    annotate_cta(hero.get('secondary_cta'))
+
+    return annotated
+
+
+def event_recap(request, slug):
+    """Render the event recap landing page.
+
+    Returns 404 when the event does not exist, is draft (for non-staff),
+    or has no recap data.
+    """
+    event = get_object_or_404(Event, slug=slug)
+
+    if event.status == 'draft' and not request.user.is_staff:
+        raise Http404
+
+    if not event.has_recap:
+        raise Http404
+
+    recap = _annotate_recap_with_tier_links(event.recap)
+
+    context = {
+        'event': event,
+        'recap': recap,
+    }
+    return render(request, 'events/event_recap.html', context)

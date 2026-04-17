@@ -24,6 +24,7 @@ import jwt
 import requests
 import yaml
 from django.conf import settings
+from django.core.cache import cache
 from django.utils import timezone
 
 from integrations.config import get_config
@@ -35,6 +36,10 @@ IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'}
 CONTENT_EXTENSIONS = {'.md', '.yaml', '.yml'}
 
 GITHUB_API_BASE = 'https://api.github.com'
+
+# Cache key + TTL for the repositories accessible to the GitHub App installation.
+INSTALLATION_REPOS_CACHE_KEY = 'github_installation_repositories'
+INSTALLATION_REPOS_CACHE_TIMEOUT = 60  # seconds
 
 # Required frontmatter fields per content type
 REQUIRED_FIELDS = {
@@ -177,6 +182,80 @@ def generate_github_app_token():
         )
 
     return response.json()['token']
+
+
+def list_installation_repositories(force_refresh=False):
+    """List repositories accessible to the GitHub App installation.
+
+    Calls ``GET /installation/repositories`` using a freshly minted installation
+    token. Pages through results so all accessible repos are returned. The
+    response is cached briefly (``INSTALLATION_REPOS_CACHE_TIMEOUT`` seconds)
+    to avoid hammering the GitHub API when the Studio form is reopened.
+
+    Args:
+        force_refresh: If True, bypass the cache and re-fetch from GitHub.
+
+    Returns:
+        list[dict]: One entry per repo with keys
+            ``full_name`` (e.g. ``"AI-Shipping-Labs/content"``),
+            ``private`` (bool),
+            ``default_branch`` (str).
+        Sorted alphabetically by ``full_name`` (case-insensitive).
+
+    Raises:
+        GitHubSyncError: If credentials are missing or the API call fails.
+    """
+    if not force_refresh:
+        cached = cache.get(INSTALLATION_REPOS_CACHE_KEY)
+        if cached is not None:
+            return cached
+
+    token = generate_github_app_token()
+    headers = {
+        'Authorization': f'token {token}',
+        'Accept': 'application/vnd.github+json',
+    }
+
+    repos = []
+    page = 1
+    per_page = 100
+    # Hard upper bound on pages to avoid runaway loops on a misbehaving API.
+    max_pages = 20
+    while page <= max_pages:
+        response = requests.get(
+            f'{GITHUB_API_BASE}/installation/repositories',
+            headers=headers,
+            params={'per_page': per_page, 'page': page},
+            timeout=15,
+        )
+        if response.status_code != 200:
+            raise GitHubSyncError(
+                f'Failed to list installation repositories: '
+                f'{response.status_code} {response.text}'
+            )
+
+        payload = response.json()
+        page_repos = payload.get('repositories', []) or []
+        for repo in page_repos:
+            repos.append({
+                'full_name': repo.get('full_name', ''),
+                'private': bool(repo.get('private', False)),
+                'default_branch': repo.get('default_branch', '') or 'main',
+            })
+
+        if len(page_repos) < per_page:
+            break
+        page += 1
+
+    repos.sort(key=lambda r: r['full_name'].lower())
+
+    cache.set(INSTALLATION_REPOS_CACHE_KEY, repos, INSTALLATION_REPOS_CACHE_TIMEOUT)
+    return repos
+
+
+def clear_installation_repositories_cache():
+    """Drop the cached installation repository list so the next call re-fetches."""
+    cache.delete(INSTALLATION_REPOS_CACHE_KEY)
 
 
 def clone_or_pull_repo(repo_name, target_dir, is_private=False):

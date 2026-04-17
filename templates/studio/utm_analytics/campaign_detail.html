@@ -1,0 +1,107 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{{ campaign_name }} - UTM Analytics{% endblock %}
+
+{% block studio_content %}
+<nav class="text-sm text-muted-foreground mb-3">
+  <a href="{% url 'studio_utm_dashboard' %}{{ querystring }}" class="hover:text-accent">UTM Analytics</a>
+  <span class="mx-2">&gt;</span>
+  <span class="text-foreground">{{ campaign_name }}</span>
+</nav>
+
+<div class="mb-6 flex items-start justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">{{ campaign_name }}</h1>
+    <p class="text-xs font-mono text-muted-foreground mt-1">{{ campaign_slug }}</p>
+  </div>
+  {% if campaign %}
+  <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}"
+     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors shrink-0">
+    Edit campaign
+  </a>
+  {% endif %}
+</div>
+
+{% include "studio/utm_analytics/_filters.html" %}
+
+{% include "studio/utm_analytics/_kpis.html" %}
+
+{% if rows %}
+<div class="bg-card border border-border rounded-lg overflow-x-auto">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">utm_content</th>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Destination</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Visits</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Unique</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Signups</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Visit -&gt; Signup</th>
+        {% if has_conversion_data %}
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Paid</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Signup -&gt; Paid</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">MRR EUR</th>
+        {% endif %}
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Trend</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in rows %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-4 py-4 text-sm">
+          <span class="text-foreground font-medium font-mono">{{ row.utm_content|default:"(blank)" }}</span>
+          {% if row.label %}<p class="text-xs text-muted-foreground mt-0.5">{{ row.label }}</p>{% endif %}
+        </td>
+        <td class="px-4 py-4 text-sm text-muted-foreground hidden md:table-cell">
+          {% if row.destination %}
+          <span title="{{ row.destination }}" class="break-all">{{ row.destination|truncatechars:50 }}</span>
+          {% else %}
+          <span class="text-xs">—</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-4 text-sm text-foreground text-right font-medium">{{ row.visits }}</td>
+        <td class="px-4 py-4 text-sm text-muted-foreground text-right hidden lg:table-cell">{{ row.unique_visitors }}</td>
+        <td class="px-4 py-4 text-sm text-foreground text-right font-medium">{{ row.signups }}</td>
+        <td class="px-4 py-4 text-sm text-muted-foreground text-right hidden md:table-cell">{{ row.visit_to_signup_pct }}</td>
+        {% if has_conversion_data %}
+        <td class="px-4 py-4 text-sm text-foreground text-right font-medium">{{ row.conversions }}</td>
+        <td class="px-4 py-4 text-sm text-muted-foreground text-right hidden md:table-cell">{{ row.signup_to_paid_pct }}</td>
+        <td class="px-4 py-4 text-sm text-foreground text-right font-medium">EUR {{ row.mrr|floatformat:0 }}</td>
+        {% endif %}
+        <td class="px-4 py-4 hidden xl:table-cell">
+          {% if row.sparkline.has_data %}
+          <svg width="120" height="24" viewBox="0 0 120 24" class="overflow-visible" aria-label="Trend sparkline">
+            {% if row.sparkline.visits_points %}
+            <polyline points="{{ row.sparkline.visits_points }}" fill="none" stroke="#94a3b8" stroke-width="1.5" />
+            {% endif %}
+            {% if row.sparkline.signups_points %}
+            <polyline points="{{ row.sparkline.signups_points }}" fill="none" stroke="#22c55e" stroke-width="1.5" />
+            {% endif %}
+          </svg>
+          {% else %}
+          <span class="text-xs text-muted-foreground">—</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-4 text-right text-sm space-x-2 whitespace-nowrap">
+          {% if row.link %}
+          <a href="{% url 'studio_utm_link_analytics' campaign_slug=campaign_slug link_id=row.link.pk %}{{ querystring }}"
+             class="text-accent hover:underline">View link</a>
+          {% else %}
+          <span class="text-xs text-muted-foreground">No minted link</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center">
+  <p class="text-foreground mb-2">No visits for this campaign in this window.</p>
+  <p class="text-sm text-muted-foreground">
+    Try widening the date range or check that links for this campaign have been shared.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

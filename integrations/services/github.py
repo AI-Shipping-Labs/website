@@ -7,6 +7,7 @@ Handles:
 - Content sync: parse markdown/YAML, upload images, upsert content
 """
 
+import base64
 import hashlib
 import hmac
 import logging
@@ -42,6 +43,15 @@ GITHUB_API_BASE = 'https://api.github.com'
 # Cache key + TTL for the repositories accessible to the GitHub App installation.
 INSTALLATION_REPOS_CACHE_KEY = 'github_installation_repositories'
 INSTALLATION_REPOS_CACHE_TIMEOUT = 60  # seconds
+
+# Cache key prefix + TTL for content-type detection results per repo.
+DETECT_CONTENT_CACHE_KEY_PREFIX = 'github_detect_content:'
+DETECT_CONTENT_CACHE_TIMEOUT = 60  # seconds
+
+# Hard upper bound on the number of files we will fetch frontmatter from when
+# auto-detecting content types for a repo. Prevents runaway API usage on huge
+# repos (the recursive tree listing already gives us file paths cheaply).
+DETECT_FRONTMATTER_FETCH_LIMIT = 200
 
 # Required frontmatter fields per content type
 REQUIRED_FIELDS = {
@@ -301,6 +311,312 @@ def list_installation_repositories(force_refresh=False):
 def clear_installation_repositories_cache():
     """Drop the cached installation repository list so the next call re-fetches."""
     cache.delete(INSTALLATION_REPOS_CACHE_KEY)
+
+
+def _get_repo_metadata(repo_full_name, token):
+    """Return the repository metadata dict from ``GET /repos/{owner}/{repo}``.
+
+    Used by detection to discover the default branch (the tree listing requires
+    a branch ref).
+    """
+    response = requests.get(
+        f'{GITHUB_API_BASE}/repos/{repo_full_name}',
+        headers={
+            'Authorization': f'token {token}',
+            'Accept': 'application/vnd.github+json',
+        },
+        timeout=15,
+    )
+    if response.status_code != 200:
+        raise GitHubSyncError(
+            f'Failed to fetch repo metadata for {repo_full_name}: '
+            f'{response.status_code} {response.text}'
+        )
+    return response.json()
+
+
+def _list_repo_tree(repo_full_name, branch, token):
+    """List all paths in the repo via the recursive Git Trees API.
+
+    Returns a list of dicts: ``{'path': str, 'type': 'blob'|'tree'}``.
+
+    Uses the recursive tree listing so we get the entire repo structure in a
+    single request (no per-directory walking, no clone). The trees API caps
+    at ~100k entries with a ``truncated`` flag; for our repos this is fine.
+    """
+    response = requests.get(
+        f'{GITHUB_API_BASE}/repos/{repo_full_name}/git/trees/{branch}',
+        headers={
+            'Authorization': f'token {token}',
+            'Accept': 'application/vnd.github+json',
+        },
+        params={'recursive': '1'},
+        timeout=15,
+    )
+    if response.status_code != 200:
+        raise GitHubSyncError(
+            f'Failed to list tree for {repo_full_name}@{branch}: '
+            f'{response.status_code} {response.text}'
+        )
+    payload = response.json() or {}
+    return payload.get('tree', []) or []
+
+
+def _fetch_repo_file(repo_full_name, path, branch, token):
+    """Fetch a single file's text contents via the GitHub Contents API.
+
+    Returns the decoded UTF-8 string, or ``None`` if the file is binary,
+    too large, or unreadable.
+    """
+    response = requests.get(
+        f'{GITHUB_API_BASE}/repos/{repo_full_name}/contents/{path}',
+        headers={
+            'Authorization': f'token {token}',
+            'Accept': 'application/vnd.github+json',
+        },
+        params={'ref': branch},
+        timeout=15,
+    )
+    if response.status_code != 200:
+        return None
+    payload = response.json() or {}
+    if payload.get('encoding') != 'base64':
+        return None
+    raw = payload.get('content') or ''
+    try:
+        return base64.b64decode(raw).decode('utf-8')
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def _parse_frontmatter_text(text):
+    """Parse YAML frontmatter from a markdown text string.
+
+    Returns the metadata dict, or an empty dict if no frontmatter is present
+    or it fails to parse.
+    """
+    if not text:
+        return {}
+    try:
+        post = frontmatter.loads(text)
+        return dict(post.metadata or {})
+    except Exception:
+        return {}
+
+
+def _parse_yaml_text(text):
+    """Parse a YAML document from a string. Returns ``{}`` on failure."""
+    if not text:
+        return {}
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _interview_question_filename(name):
+    """Return True if a root-level filename looks like an interview question.
+
+    Convention: ``<topic>.md`` at the repo root, lowercase kebab-case, not
+    a README. Examples: ``python.md``, ``machine-learning.md``.
+    """
+    if not name.endswith('.md'):
+        return False
+    base = name[:-3]
+    if not base:
+        return False
+    if name.upper() == 'README.MD':
+        return False
+    # Allow lowercase letters, digits, and dashes only.
+    return all(c.islower() or c.isdigit() or c == '-' for c in base)
+
+
+def detect_content_sources(repo_full_name, *, force_refresh=False):
+    """Auto-detect ``ContentSource`` rows we should create for ``repo_full_name``.
+
+    Walks the repo via the recursive Git Trees API and inspects a small sample
+    of files via the Contents API to look for the structural signals listed in
+    issue #213. Result is a list of ``{content_type, content_path, summary}``
+    dicts; an empty list means "nothing recognized" and the caller should show
+    an actionable error.
+
+    Detection rules (priority order):
+
+    - ``course.yaml`` at the root  -> ``course`` at ``''``
+    - ``<dir>/course.yaml``        -> ``course`` at ``<dir>``
+    - YAML with ``start_datetime`` -> ``event`` at the file's directory
+    - Markdown with ``difficulty`` AND ``author`` frontmatter
+                                    -> ``project`` at the file's directory
+    - Markdown with ``date:``      -> ``article`` at the file's directory
+    - ``<root>/<topic>.md`` (lowercase kebab-case, not README, not consumed
+      above) -> ``interview_question`` at ``''``
+
+    Each detected ``(content_type, content_path)`` pair is reported once even
+    if many files match, so the monorepo case yields one row per directory.
+    Results are cached for ``DETECT_CONTENT_CACHE_TIMEOUT`` seconds.
+    """
+    cache_key = f'{DETECT_CONTENT_CACHE_KEY_PREFIX}{repo_full_name}'
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    token = generate_github_app_token()
+    metadata = _get_repo_metadata(repo_full_name, token)
+    branch = metadata.get('default_branch') or 'main'
+
+    tree = _list_repo_tree(repo_full_name, branch, token)
+
+    # Bucket file paths by directory and extension for cheap iteration.
+    yaml_paths = []
+    md_paths = []
+    course_yaml_dirs = set()  # dirs that contain a ``course.yaml`` (or '' for root)
+    for entry in tree:
+        if entry.get('type') != 'blob':
+            continue
+        path = entry.get('path') or ''
+        if not path:
+            continue
+        if path.startswith('.git/'):
+            continue
+        name = path.rsplit('/', 1)[-1]
+        if name == 'course.yaml':
+            parent = path.rsplit('/', 1)[0] if '/' in path else ''
+            course_yaml_dirs.add(parent)
+            continue
+        if name.lower().endswith(('.yaml', '.yml')):
+            yaml_paths.append(path)
+        elif name.lower().endswith('.md'):
+            md_paths.append(path)
+
+    detections = []
+    seen_keys = set()  # (content_type, content_path) pairs already added
+
+    def _add(content_type, content_path, summary):
+        key = (content_type, content_path)
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        detections.append({
+            'content_type': content_type,
+            'content_path': content_path,
+            'summary': summary,
+        })
+
+    # Rule 1+2: course.yaml at root or in a single subdirectory.
+    # If course.yaml lives at the root, register ``course`` at ``''``.
+    # If course.yaml lives in subdirs (e.g. ``courses/foo/course.yaml``), the
+    # multi-course layout is handled by registering the parent directory
+    # ``courses/``. We collapse all matching sibling-of-course.yaml dirs to
+    # their common parent so a monorepo with many courses gets one source.
+    if '' in course_yaml_dirs:
+        _add('course', '', 'course.yaml found at repo root')
+    nested = course_yaml_dirs - {''}
+    if nested:
+        # Group by the parent of the course.yaml's containing dir.
+        # For ``courses/foo/course.yaml`` parent dir is ``courses/foo``,
+        # grandparent is ``courses``. We register the grandparent as the
+        # content path so the multi-course sync sees ``courses/<slug>/``.
+        course_parents = set()
+        for d in nested:
+            parts = d.split('/')
+            if len(parts) >= 1:
+                course_parents.add(parts[0])
+        for parent in sorted(course_parents):
+            _add('course', parent, f'course.yaml found under {parent}/')
+
+    # Track files we've fetched so we don't re-fetch and so we can attribute
+    # ownership: a markdown file claimed by ``project`` should not also count
+    # as ``article`` even though it likely has a ``date:``.
+    fetched = 0
+    project_dirs_with_match = set()
+    article_dirs_with_match = set()
+    event_dirs_with_match = set()
+
+    # Cap how many files we sample. The tree already constrains us; this is
+    # belt-and-braces.
+    yaml_sample = yaml_paths[:DETECT_FRONTMATTER_FETCH_LIMIT]
+    md_sample = md_paths[:DETECT_FRONTMATTER_FETCH_LIMIT]
+
+    # Rule 3: events. YAML files with ``start_datetime``.
+    for path in yaml_sample:
+        if fetched >= DETECT_FRONTMATTER_FETCH_LIMIT:
+            break
+        text = _fetch_repo_file(repo_full_name, path, branch, token)
+        fetched += 1
+        if text is None:
+            continue
+        data = _parse_yaml_text(text)
+        if 'start_datetime' in data:
+            parent = path.rsplit('/', 1)[0] if '/' in path else ''
+            event_dirs_with_match.add(parent)
+
+    for parent in sorted(event_dirs_with_match):
+        label = parent or 'repo root'
+        _add('event', parent, f'YAML files with start_datetime found in {label}')
+
+    # Rules 4 + 5: project (difficulty + author) and article (date) markdown.
+    for path in md_sample:
+        if fetched >= DETECT_FRONTMATTER_FETCH_LIMIT:
+            break
+        name = path.rsplit('/', 1)[-1]
+        if name.upper() == 'README.MD':
+            continue
+        text = _fetch_repo_file(repo_full_name, path, branch, token)
+        fetched += 1
+        if text is None:
+            continue
+        meta = _parse_frontmatter_text(text)
+        parent = path.rsplit('/', 1)[0] if '/' in path else ''
+
+        if meta.get('difficulty') and meta.get('author'):
+            project_dirs_with_match.add(parent)
+            continue  # don't double-claim as article
+        if meta.get('date'):
+            article_dirs_with_match.add(parent)
+
+    for parent in sorted(project_dirs_with_match):
+        label = parent or 'repo root'
+        _add('project', parent, f'markdown with difficulty + author found in {label}')
+
+    for parent in sorted(article_dirs_with_match):
+        label = parent or 'repo root'
+        _add('article', parent, f'markdown with date frontmatter found in {label}')
+
+    # Rule 6: interview-question convention. Lowercase kebab-case ``.md`` files
+    # at the repo root that we did not already classify as article/project.
+    consumed_root_md = (
+        '' in article_dirs_with_match or '' in project_dirs_with_match
+    )
+    if not consumed_root_md:
+        root_md = [
+            p for p in md_paths
+            if '/' not in p and _interview_question_filename(p)
+        ]
+        if root_md:
+            _add(
+                'interview_question', '',
+                f'{len(root_md)} root-level markdown files matching '
+                'interview-question convention',
+            )
+
+    cache.set(cache_key, detections, DETECT_CONTENT_CACHE_TIMEOUT)
+    return detections
+
+
+def clear_detect_content_sources_cache(repo_full_name=None):
+    """Drop the cached detection results.
+
+    With no argument, drops every cached detection. With ``repo_full_name``,
+    drops just that one entry (used by the "Refresh repo list" button).
+    """
+    if repo_full_name is None:
+        # No public way to enumerate keys with the local-memory cache; clear
+        # the whole cache as a safe fallback.
+        cache.clear()
+        return
+    cache.delete(f'{DETECT_CONTENT_CACHE_KEY_PREFIX}{repo_full_name}')
 
 
 def clone_or_pull_repo(repo_name, target_dir, is_private=False):

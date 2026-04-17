@@ -5,6 +5,7 @@ from studio.views.articles import article_edit, article_list
 from studio.views.campaigns import campaign_create, campaign_detail, campaign_list
 from studio.views.content_sources import (
     content_source_create,
+    content_source_created,
     content_source_refresh,
 )
 from studio.views.courses import (
@@ -249,6 +250,11 @@ urlpatterns = [
         'content-sources/new/',
         content_source_create,
         name='studio_content_source_create',
+    ),
+    path(
+        'content-sources/created/',
+        content_source_created,
+        name='studio_content_source_created',
     ),
     path(
         'content-sources/refresh/',

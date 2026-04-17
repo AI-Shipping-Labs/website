@@ -10,7 +10,8 @@
   <h1 class="text-2xl font-semibold text-foreground mt-2">Add Content Source</h1>
   <p class="text-muted-foreground mt-1">
     Register a new GitHub repository for content sync. Pick from the list of
-    repositories the GitHub App installation already has access to.
+    repositories the GitHub App installation can access &mdash; we'll detect
+    the content type(s) automatically by inspecting the repo on GitHub.
   </p>
 </div>
 
@@ -37,13 +38,22 @@
 {% endif %}
 
 <div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  {% if all_registered %}
+  <div class="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm text-blue-200">
+    <p class="font-medium text-blue-300 mb-1">All accessible repos are already registered.</p>
+    <p class="text-blue-200/80">
+      Grant the GitHub App access to a new repo, then click "Refresh repo list" below.
+    </p>
+  </div>
+  {% else %}
   <form method="post" action="{% url 'studio_content_source_create' %}">
     {% csrf_token %}
+    <input type="hidden" name="step" value="detect">
 
     <div class="mb-6">
       <div class="flex items-center justify-between mb-1">
         <label for="id_repo_name" class="block text-sm font-medium text-foreground">Repository</label>
-        <span class="text-xs text-muted-foreground">{{ repos|length }} accessible</span>
+        <span class="text-xs text-muted-foreground">{{ repos|length }} available</span>
       </div>
       <select id="id_repo_name" name="repo_name" required
               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
@@ -57,35 +67,9 @@
         {% endfor %}
       </select>
       <p class="text-xs text-muted-foreground mt-1">
-        Don't see your repo? Grant the GitHub App access to it on GitHub, then
-        click "Refresh repo list" below.
-      </p>
-    </div>
-
-    <div class="mb-6">
-      <label for="id_content_type" class="block text-sm font-medium text-foreground mb-1">Content Type</label>
-      <select id="id_content_type" name="content_type" required
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-        <option value="">-- Select a content type --</option>
-        {% for value, label in content_type_choices %}
-        <option value="{{ value }}" {% if value == selected_content_type %}selected{% endif %}>
-          {{ label }}
-        </option>
-        {% endfor %}
-      </select>
-      <p class="text-xs text-muted-foreground mt-1">
-        Determines how the repo's files are parsed during sync.
-      </p>
-    </div>
-
-    <div class="mb-6">
-      <label for="id_content_path" class="block text-sm font-medium text-foreground mb-1">Content Path</label>
-      <input type="text" id="id_content_path" name="content_path"
-             value="{{ content_path }}" placeholder="e.g. blog/ (leave empty for repo root)"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <p class="text-xs text-muted-foreground mt-1">
-        Subdirectory within the repo to sync from. Leave empty to sync from the
-        repo root.
+        Repos already registered as content sources are hidden. Don't see your
+        repo? Grant the GitHub App access to it on GitHub, then click
+        "Refresh repo list" below.
       </p>
     </div>
 
@@ -96,21 +80,23 @@
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">
       <p class="text-xs text-muted-foreground mt-1">
         Used to validate GitHub webhook signatures. Leave blank and we'll
-        generate a secure random one. You'll need to paste it into GitHub when
-        you set up the webhook for this repo.
+        generate a secure random one. We'll display the final value once on
+        the next screen so you can paste it into the GitHub webhook
+        configuration.
       </p>
     </div>
 
     <div class="flex items-center gap-3">
       <button type="submit"
               class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Add Content Source
+        Detect content types
       </button>
       <a href="{% url 'studio_sync_dashboard' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
         Cancel
       </a>
     </div>
   </form>
+  {% endif %}
 
   <form method="post" action="{% url 'studio_content_source_refresh' %}" class="mt-6 pt-6 border-t border-border">
     {% csrf_token %}

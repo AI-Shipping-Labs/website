@@ -255,15 +255,27 @@
 
   <!-- Failed Tasks Section -->
   {% if failed_with_details %}
-    <div class="bg-card border border-red-500/20 rounded-lg">
+    <div class="bg-card border border-red-500/20 rounded-lg" id="failed-tasks-panel">
       <div class="p-4 border-b border-red-500/20 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h2 class="text-lg font-medium text-red-400">Failed Tasks</h2>
           <p class="text-xs text-muted-foreground mt-1">
-            {{ failure_count }} total failure{{ failure_count|pluralize }}.
+            {{ failure_count }} total failure{{ failure_count|pluralize }}. Click a row to view the full traceback.
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button"
+                  data-action="expand-all-failed"
+                  onclick="toggleAllFailedTraces(true)"
+                  class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 border border-border">
+            Expand all
+          </button>
+          <button type="button"
+                  data-action="collapse-all-failed"
+                  onclick="toggleAllFailedTraces(false)"
+                  class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 border border-border">
+            Collapse all
+          </button>
           <form method="post" action="{% url 'studio_worker_bulk_retry_failed' %}"
                 onsubmit="return confirm('Re-queue {{ failure_count }} failed task{{ failure_count|pluralize }}?');">
             {% csrf_token %}
@@ -286,13 +298,26 @@
       </div>
       <div class="divide-y divide-border">
         {% for item in failed_with_details %}
-          <div class="p-4" data-failed-task-id="{{ item.task.id }}">
-            <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-              <div>
-                <span class="font-medium text-foreground">{{ item.task.name }}</span>
-                <span class="text-xs text-muted-foreground ml-2">{{ item.task.started|date:"Y-m-d H:i:s" }}</span>
-              </div>
-              <div class="flex items-center gap-2">
+          <div class="p-4 failed-task-row" data-failed-task-id="{{ item.task.id }}">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+              <button type="button"
+                      class="flex-1 min-w-0 text-left flex items-start gap-2 group"
+                      aria-expanded="false"
+                      data-action="toggle-failed-trace"
+                      onclick="toggleFailedTrace(this)">
+                <i data-lucide="chevron-right"
+                   class="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground failed-task-chevron"></i>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-baseline flex-wrap gap-x-2">
+                    <span class="font-medium text-foreground">{{ item.task.name }}</span>
+                    <span class="text-xs text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</span>
+                  </div>
+                  <p class="text-xs text-red-500 dark:text-red-400 font-mono mt-1 truncate">
+                    {{ item.error_summary }}
+                  </p>
+                </div>
+              </button>
+              <div class="flex items-center gap-2 shrink-0">
                 <form method="post" action="{% url 'studio_worker_retry_failed' item.task.id %}" class="inline"
                       onsubmit="return confirm('Re-queue failed task {{ item.task.name|escapejs }}?');">
                   {% csrf_token %}
@@ -309,11 +334,43 @@
                 </form>
               </div>
             </div>
-            <pre class="text-xs text-red-400 bg-red-500/10 rounded p-2 overflow-x-auto whitespace-pre-wrap">{{ item.error_message }}</pre>
+            <pre class="hidden failed-task-trace text-xs text-red-700 dark:text-red-400 bg-red-500/10 rounded p-2 mt-2 overflow-x-auto whitespace-pre-wrap">{{ item.error_message }}</pre>
           </div>
         {% endfor %}
       </div>
     </div>
+
+    <script>
+    function toggleFailedTrace(btn) {
+      var row = btn.closest('.failed-task-row');
+      if (!row) return;
+      var trace = row.querySelector('.failed-task-trace');
+      var chevron = btn.querySelector('.failed-task-chevron');
+      if (!trace) return;
+      var willExpand = trace.classList.contains('hidden');
+      trace.classList.toggle('hidden', !willExpand);
+      btn.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+      if (chevron) {
+        chevron.style.transform = willExpand ? 'rotate(90deg)' : 'rotate(0deg)';
+      }
+    }
+
+    function toggleAllFailedTraces(expand) {
+      var panel = document.getElementById('failed-tasks-panel');
+      if (!panel) return;
+      panel.querySelectorAll('.failed-task-row').forEach(function(row) {
+        var trace = row.querySelector('.failed-task-trace');
+        var btn = row.querySelector('[data-action="toggle-failed-trace"]');
+        var chevron = row.querySelector('.failed-task-chevron');
+        if (!trace || !btn) return;
+        trace.classList.toggle('hidden', !expand);
+        btn.setAttribute('aria-expanded', expand ? 'true' : 'false');
+        if (chevron) {
+          chevron.style.transform = expand ? 'rotate(90deg)' : 'rotate(0deg)';
+        }
+      });
+    }
+    </script>
   {% endif %}
 </div>
 {% endblock %}

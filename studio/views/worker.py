@@ -13,8 +13,9 @@ Operational actions:
 * Inspect / delete a single queued task.
 * Retry / delete a single failed task.
 * Bulk retry / bulk delete failed tasks.
-* Run a content sync synchronously, bypassing the queue (useful when the
-  worker process is down).
+
+Content-sync triggers live on ``/studio/sync/`` — they don't belong on the
+worker page.
 """
 
 import logging
@@ -27,8 +28,6 @@ from django.views.decorators.http import require_POST
 from django_q.models import OrmQ, Task
 from django_q.tasks import async_task
 
-from integrations.models import ContentSource
-from integrations.services.github import sync_content_source
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
@@ -270,44 +269,3 @@ def worker_bulk_delete_failed(request):
     else:
         messages.info(request, 'No failed tasks to delete.')
     return redirect('studio_worker')
-
-
-@staff_required
-@require_POST
-def worker_run_sync_now(request):
-    """Run ``sync_content_source`` for every ContentSource synchronously.
-
-    Bypasses the queue. Useful when the worker is down and the operator wants
-    to actually see content sync without waiting for the cluster to come back.
-    """
-    sources = list(ContentSource.objects.all())
-    if not sources:
-        messages.info(request, 'No content sources are configured.')
-        return redirect('studio_worker')
-
-    succeeded = 0
-    failed = 0
-    for source in sources:
-        try:
-            sync_content_source(source)
-            succeeded += 1
-        except Exception as exc:
-            failed += 1
-            logger.exception('Synchronous sync failed for %s', source.repo_name)
-            messages.error(
-                request,
-                f'Sync failed for {source.repo_name}: {exc}',
-            )
-
-    if failed == 0:
-        messages.success(
-            request,
-            f'Ran sync synchronously for {succeeded} source'
-            f'{"" if succeeded == 1 else "s"}.',
-        )
-    elif succeeded:
-        messages.warning(
-            request,
-            f'Ran sync synchronously: {succeeded} succeeded, {failed} failed.',
-        )
-    return redirect('studio_sync_history')

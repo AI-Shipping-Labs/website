@@ -79,7 +79,6 @@ from studio.views.worker import (
     worker_drain_queue,
     worker_inspect_task,
     worker_retry_failed,
-    worker_run_sync_now,
     worker_status,
 )
 
@@ -231,11 +230,6 @@ urlpatterns = [
         'worker/failed/bulk-delete/',
         worker_bulk_delete_failed,
         name='studio_worker_bulk_delete_failed',
-    ),
-    path(
-        'worker/run-sync-now/',
-        worker_run_sync_now,
-        name='studio_worker_run_sync_now',
     ),
 
     # Content Sync

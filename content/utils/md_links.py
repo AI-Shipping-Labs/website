@@ -17,8 +17,10 @@ rewrites them to absolute platform URLs using the supplied unit-slug lookup.
 Resolution rules (see issue #226):
 
 - Sibling ``02-setup.md`` -> ``/courses/<course>/<module>/<unit-slug>``
-- ``README.md`` (sibling) -> the module's README-as-unit
-  (``/courses/<course>/<module>/readme`` by default).
+- ``README.md`` (sibling) -> the module's overview page
+  ``/courses/<course>/<module>/`` (issue #222). The README is no longer a
+  sibling Unit; the sync registers it under the sentinel slug
+  ``__module_overview__`` in the unit lookup so we can recognise it here.
 - Cross-module same-course ``../03-other-module/01-foo.md``
   -> ``/courses/<course>/03-other-module/<unit-slug>``.
 - Cross-course links (more than one ``..`` segment, or a leading ``/``)
@@ -200,6 +202,14 @@ def rewrite_md_links(
                 f'"{target_module_slug}".'
             )
             return None
+
+        # README.md targets resolve to the module's overview page
+        # (issue #222) rather than a /readme unit URL. No trailing slash:
+        # the project uses ``RemoveTrailingSlashMiddleware``.
+        if unit_slug == '__module_overview__':
+            return (
+                f'/courses/{course_slug}/{target_module_slug}{fragment}'
+            )
 
         return (
             f'/courses/{course_slug}/{target_module_slug}/{unit_slug}{fragment}'

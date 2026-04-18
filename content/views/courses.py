@@ -324,6 +324,66 @@ def _get_unit_or_404(course_slug, module_slug, unit_slug):
     return course, module, unit
 
 
+def module_overview(request, course_slug, module_slug):
+    """Module overview page: renders ``Module.overview_html`` + lesson list.
+
+    Issue #222: the module README is now the module overview rather than a
+    sibling Unit. This page replaces the old ``/<course>/<module>/readme``
+    URL (which now redirects here permanently).
+
+    Access mirrors the course detail page: the page is always reachable for
+    SEO; gated content shows the upgrade CTA. Unit links in the lesson
+    list are clickable for users with access; the unit detail view itself
+    handles the per-lesson gating / teaser.
+    """
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    module = get_object_or_404(Module, course=course, slug=module_slug)
+    user = request.user
+
+    has_access = can_access(user, course)
+    units = list(module.units.all().order_by('sort_order'))
+
+    completed_unit_ids: set[int] = set()
+    if user.is_authenticated:
+        completed_unit_ids = set(
+            UserCourseProgress.objects.filter(
+                user=user,
+                unit__module=module,
+                completed_at__isnull=False,
+            ).values_list('unit_id', flat=True)
+        )
+
+    cta_message = ''
+    cta_url = ''
+    if not has_access:
+        tier_name = get_required_tier_name(course.required_level)
+        cta_message = f'Upgrade to {tier_name} to access this module'
+        cta_url = '/pricing'
+
+    context = {
+        'course': course,
+        'module': module,
+        'units': units,
+        'has_access': has_access,
+        'user_authenticated': user.is_authenticated,
+        'completed_unit_ids': completed_unit_ids,
+        'cta_message': cta_message,
+        'cta_url': cta_url,
+    }
+    return render(request, 'content/module_overview.html', context)
+
+
+def module_readme_redirect(request, course_slug, module_slug):
+    """Permanently redirect old ``/<course>/<module>/readme`` URLs.
+
+    Issue #222: the README is now the module overview at the bare
+    ``/<course>/<module>/`` URL, not a sibling unit.
+    """
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    module = get_object_or_404(Module, course=course, slug=module_slug)
+    return redirect(module.get_absolute_url(), permanent=True)
+
+
 def _get_all_units_ordered(course):
     """Return all units in the course ordered by module sort_order, then unit sort_order."""
     return list(

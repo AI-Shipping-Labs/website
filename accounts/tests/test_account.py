@@ -500,27 +500,13 @@ class CancelSubscriptionAPITest(TestCase):
         self.assertIsNotNone(self.user.pending_tier)
         self.assertEqual(self.user.pending_tier.slug, "free")
 
-    @patch("payments.services.cancel_subscription")
-    def test_cancel_without_period_end_does_not_crash(self, mock_cancel):
-        """Cancel API handles missing current_period_end gracefully."""
-        main_tier = Tier.objects.get(slug="main")
-        self.user.tier = main_tier
-        self.user.subscription_id = "sub_cancel_noend"
-        self.user.save(update_fields=["tier", "subscription_id"])
-
-        mock_sub = MagicMock(spec=[])  # No attributes
-        mock_cancel.return_value = mock_sub
-
-        response = self.client.post(
-            self.url,
-            data="{}",
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-
-        self.user.refresh_from_db()
-        self.assertIsNotNone(self.user.pending_tier)
-        self.assertEqual(self.user.pending_tier.slug, "free")
+    # `test_cancel_without_period_end_does_not_crash` removed under
+    # `_docs/testing-guidelines.md` Rule 7 (do not test impossible API states).
+    # The Stripe API guarantees `current_period_end` on a Subscription object;
+    # a `MagicMock(spec=[])` representing a Subscription with no attributes is
+    # not a state Stripe can produce. The defensive `getattr(..., None)` in
+    # `accounts/views/account.py::cancel_subscription_view` is harmless extra
+    # caution but not a real bug surface that needs a regression test.
 
     @patch("payments.services.cancel_subscription")
     def test_cancel_then_page_shows_date(self, mock_cancel):

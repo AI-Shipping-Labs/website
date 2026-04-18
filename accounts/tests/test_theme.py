@@ -179,45 +179,7 @@ class LoginAPIThemeSyncTest(TestCase):
         self.assertNotIn("theme_preference", data)
 
 
-class ThemeToggleTemplateTest(TestCase):
-    """Tests for theme toggle button presence in templates."""
-
-    def test_homepage_has_theme_toggle(self):
-        """Homepage has a theme toggle button with correct data-testid."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn('data-testid="theme-toggle"', content)
-
-    def test_homepage_has_desktop_theme_toggle(self):
-        """Desktop header area contains theme toggle."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn('data-testid="theme-toggle"', content)
-
-    def test_homepage_has_mobile_theme_toggle(self):
-        """Mobile menu area contains theme toggle."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        # There should be at least 2 toggle buttons (desktop + mobile)
-        count = content.count('data-testid="theme-toggle"')
-        self.assertGreaterEqual(count, 2)
-
-    def test_toggle_has_aria_label(self):
-        """Theme toggle has an aria-label for accessibility."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn('aria-label="Switch to light mode"', content)
-
-    def test_toggle_has_sun_icon(self):
-        """Theme toggle includes the sun icon (for dark mode)."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn('theme-icon-sun', content)
-
-    def test_toggle_has_moon_icon(self):
-        """Theme toggle includes the moon icon (for light mode)."""
-        response = self.client.get("/")
-        content = response.content.decode()
-        self.assertIn('theme-icon-moon', content)
-
-
+# `ThemeToggleTemplateTest` removed under `_docs/testing-guidelines.md` Rule 4
+# (template string-matching: `data-testid="theme-toggle"`, `theme-icon-sun`,
+# `theme-icon-moon`). Toggle behavior (clicks change theme, persists across nav)
+# belongs in Playwright -- see follow-up issue #267.

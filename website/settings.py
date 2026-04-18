@@ -326,6 +326,43 @@ SLACK_COMMUNITY_CHANNEL_IDS = [
 SLACK_INVITE_URL = os.environ.get('SLACK_INVITE_URL', '')
 SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 
+# Cache configuration
+# django-q writes cluster heartbeats (used by the /studio/worker/ dashboard)
+# to Django's cache backend. The default LocMemCache is per-process, so the
+# qcluster's heartbeats are invisible to the gunicorn / runserver process —
+# the dashboard always reports "Worker NOT running" even when the cluster is
+# healthy. We use a dedicated `django_q` cache that is shared across
+# processes:
+#
+# - Tests: LocMemCache. Single-process, fast, isolated per run. The
+#   cross-process behaviour is exercised explicitly in
+#   `studio/tests/test_worker_health_cache.py` via a real subprocess + a
+#   tmpdir FileBasedCache.
+# - Local dev / production: FileBasedCache by default (zero-deps,
+#   cross-process). Override the directory with `CACHE_DIR` env var.
+#
+# `Q_CLUSTER['cache'] = 'django_q'` (below) tells django-q to use this
+# named cache rather than `default`, so the application's own cache usage
+# (if any) doesn't share a namespace with cluster heartbeats.
+if TESTING:
+    _django_q_cache = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'django-q-test',
+    }
+else:
+    # FileBasedCache creates LOCATION lazily on first write — no makedirs here.
+    _cache_dir = os.environ.get('CACHE_DIR') or str(BASE_DIR / '.django_cache')
+    _django_q_cache = {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': _cache_dir,
+    }
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    },
+    'django_q': _django_q_cache,
+}
+
 # Django-Q2 task queue configuration
 # Default workers=1 on SQLite — concurrent writers serialise on the file lock
 # and surface as "database is locked" during bulk syncs. Override with
@@ -343,8 +380,14 @@ Q_CLUSTER = {
     'queue_limit': 50,
     'bulk': 10,
     'orm': 'default',         # Use the default database as broker
+    'cache': 'django_q',      # Named cache for cluster heartbeats (cross-process)
     'save_limit': 250,        # Keep last 250 task results
-    'guard_cycle': 5,         # Guard checks every 5 seconds
+    # Heartbeats are written by the guard loop and stored in the cache
+    # with a hardcoded 3 s TTL (see django_q.status.Stat.save). Keep
+    # guard_cycle <= 2 s so writes always overlap the TTL — otherwise
+    # the worker dashboard flickers between alive and dead between
+    # cycles.
+    'guard_cycle': 2,
     'poll': 5,                # Worker polls every 5 seconds
     'catch_up': False,        # Don't catch up on missed schedules
     'sync': os.environ.get('Q_SYNC', '') == 'true',  # Sync mode for testing

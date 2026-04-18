@@ -624,14 +624,17 @@ class SyncEventsUnchangedTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Module README-as-unit
+# Module README-as-overview (issue #222)
 # ---------------------------------------------------------------------------
 
 
-class SyncCourseReadmeUnitUnchangedTest(TestCase):
-    """README.md at the module root is promoted to a Unit; verify the same
-    no-change behaviour applies to that code path (it has its own upsert
-    block separate from the regular unit loop)."""
+class SyncCourseReadmeOverviewUnchangedTest(TestCase):
+    """README.md at the module root populates Module.overview (not a Unit).
+
+    Verify the no-change skip logic also applies here: re-running sync with
+    an identical README must not re-touch ``Module.overview`` and must not
+    add an entry to ``items_detail``.
+    """
 
     def setUp(self):
         self.source = ContentSource.objects.create(
@@ -658,18 +661,22 @@ class SyncCourseReadmeUnitUnchangedTest(TestCase):
         with open(os.path.join(mdir, 'module.yaml'), 'w') as f:
             f.write('title: "M1"\n')
             f.write('sort_order: 1\n')
-        # README acts as the first unit.
+        # README acts as the module overview (issue #222), not a Unit.
         with open(os.path.join(mdir, 'README.md'), 'w') as f:
             f.write('# Module 1 intro\n\nReadme body here.\n')
 
-    def test_resync_unchanged_readme_unit(self):
+    def test_resync_unchanged_readme_overview(self):
         self._build()
         log1 = sync_content_source(self.source, repo_dir=self.temp_dir)
-        # 1 course + 1 module + 1 README-unit = 3
-        self.assertEqual(log1.items_created, 3)
+        # 1 course + 1 module = 2 created. The README is folded into the
+        # module's overview field, so it doesn't count as a separate item.
+        self.assertEqual(log1.items_created, 2)
 
         log2 = sync_content_source(self.source, repo_dir=self.temp_dir)
         self.assertEqual(log2.items_created, 0)
         self.assertEqual(log2.items_updated, 0)
+        # 1 course + 1 module + 1 README all come back unchanged.
         self.assertEqual(log2.items_unchanged, 3)
+        # The README path must short-circuit: no items_detail entry on a
+        # no-op re-sync.
         self.assertEqual(log2.items_detail, [])

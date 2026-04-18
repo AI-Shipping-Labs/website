@@ -159,18 +159,30 @@ class Course(models.Model):
         return get_required_tier_name(self.required_level)
 
     def total_units(self):
-        """Return the total number of units in this course."""
-        return Unit.objects.filter(module__course=self).count()
+        """Return the total number of units in this course.
+
+        Excludes legacy README-as-unit rows (slug='readme', sort_order=-1)
+        that may still exist in databases not yet migrated. After the
+        backfill migration these rows are gone, so the exclusion is a
+        no-op in normal operation.
+        """
+        return Unit.objects.filter(module__course=self).exclude(
+            slug='readme', sort_order=-1,
+        ).count()
 
     def completed_units(self, user):
-        """Return the number of units completed by the given user."""
+        """Return the number of units completed by the given user.
+
+        Excludes legacy README-as-unit rows so the count lines up with
+        ``total_units()`` for progress percentages.
+        """
         if user is None or not user.is_authenticated:
             return 0
         return UserCourseProgress.objects.filter(
             user=user,
             unit__module__course=self,
             completed_at__isnull=False,
-        ).count()
+        ).exclude(unit__slug='readme', unit__sort_order=-1).count()
 
     def get_syllabus(self):
         """Return modules with their units, ordered by sort_order."""
@@ -199,6 +211,7 @@ class Course(models.Model):
             return None
         units = list(
             Unit.objects.filter(module__course=self)
+            .exclude(slug='readme', sort_order=-1)
             .select_related('module')
             .order_by('module__sort_order', 'sort_order')
         )
@@ -226,6 +239,14 @@ class Module(models.Model):
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, default='')
     sort_order = models.IntegerField(default=0)
+    overview = models.TextField(
+        blank=True, default='',
+        help_text="Markdown overview shown on the module overview page (synced from README.md).",
+    )
+    overview_html = models.TextField(
+        blank=True, default='',
+        help_text="Auto-rendered HTML from overview markdown.",
+    )
     source_repo = models.CharField(
         max_length=300, blank=True, null=True, default=None,
         help_text="GitHub repo this content was synced from.",
@@ -238,6 +259,10 @@ class Module(models.Model):
         max_length=40, blank=True, null=True, default=None,
         help_text="Git commit SHA of the last sync.",
     )
+    overview_source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+        help_text="Source repo path of the README.md that backs the overview.",
+    )
 
     class Meta:
         ordering = ['sort_order']
@@ -245,6 +270,32 @@ class Module(models.Model):
 
     def __str__(self):
         return f'{self.course.title} - {self.title}'
+
+    def get_absolute_url(self):
+        """Return URL for this module's overview page (no trailing slash —
+        the project uses ``RemoveTrailingSlashMiddleware``)."""
+        return f'/courses/{self.course.slug}/{self.slug}'
+
+    def save(self, *args, **kwargs):
+        from content.utils.linkify import linkify_urls
+        if self.overview:
+            # Strip the leading H1 if it duplicates the module title — the
+            # module overview page renders the title as the page heading,
+            # so a README that starts with ``# Module Title`` would show
+            # up twice (issue #222 / #227).
+            overview_md = strip_leading_title_h1(self.overview, self.title)
+            self.overview_html = linkify_urls(render_markdown(overview_md))
+        else:
+            self.overview_html = ''
+        # When save() is called with update_fields, ensure overview_html is
+        # included so it gets written to DB.
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'overview' in update_fields:
+                update_fields.add('overview_html')
+            kwargs['update_fields'] = list(update_fields)
+        super().save(*args, **kwargs)
 
 
 class Unit(models.Model):

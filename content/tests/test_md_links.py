@@ -8,7 +8,7 @@ every internal link 404s.
 Covers:
 - Sibling `*.md` link resolves
 - Cross-module same-course link resolves
-- README.md sibling link resolves to the README-as-unit
+- README.md sibling link resolves to the module overview URL (issue #222)
 - External http(s):// links untouched
 - Anchor-only links untouched
 - Unresolvable .md link is left intact and a warning is emitted
@@ -22,7 +22,11 @@ from content.utils.md_links import rewrite_md_links
 
 COURSE_LOOKUP = {
     'fundamentals': {
-        'README.md': 'readme',
+        # README.md is the module overview (issue #222), not a unit.
+        # The sync registers it under the sentinel slug
+        # ``__module_overview__`` so the rewriter can map it to the bare
+        # module URL ``/<course>/<module>/``.
+        'README.md': '__module_overview__',
         '01-intro.md': 'intro',
         '02-setup.md': 'setup',
     },
@@ -60,7 +64,14 @@ class RewriteMdLinksTest(TestCase):
             result,
         )
 
-    def test_readme_sibling_resolves_to_module_readme_unit(self):
+    def test_readme_sibling_resolves_to_module_overview_url(self):
+        """README.md links resolve to the bare module URL (issue #222).
+
+        The README is now the module's overview page rather than a sibling
+        ``/readme`` unit, so the rewriter must produce
+        ``/courses/<course>/<module>`` (no trailing ``readme``, no trailing
+        slash — the project uses ``RemoveTrailingSlashMiddleware``).
+        """
         body = 'Back to [the overview](README.md).'
         result = rewrite_md_links(
             body,
@@ -69,9 +80,10 @@ class RewriteMdLinksTest(TestCase):
             unit_lookup=COURSE_LOOKUP,
         )
         self.assertIn(
-            '[the overview](/courses/python/fundamentals/readme)',
+            '[the overview](/courses/python/fundamentals)',
             result,
         )
+        self.assertNotIn('readme)', result)
 
     def test_external_http_link_untouched(self):
         body = 'Read the [docs](https://example.com/page).'

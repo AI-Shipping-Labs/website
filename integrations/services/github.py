@@ -1791,7 +1791,11 @@ def _build_course_unit_lookup(course_dir):
                 metadata = {}
 
             if filename.lower() == 'readme.md':
-                unit_slug = metadata.get('slug') or 'readme'
+                # README is the module overview, not a unit (issue #222).
+                # We still register it under a sentinel slug so the link
+                # rewriter can spot README.md targets and emit module-overview
+                # URLs (handled in content/utils/md_links.py).
+                unit_slug = '__module_overview__'
             else:
                 unit_slug = metadata.get('slug') or derive_slug(filename)
             files[filename] = unit_slug
@@ -1943,8 +1947,11 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     root). ``module_ignore_patterns`` are globs relative to ``module_dir``.
     Files matched by either list are skipped.
 
-    README.md at the module root is promoted to the first unit of the module
-    (``sort_order = -1``) unless it is ignored by either list.
+    README.md at the module root is the module's overview (issue #222):
+    its body is written to ``Module.overview`` and rendered into
+    ``Module.overview_html``. The README does NOT become a Unit, so it is
+    not counted in lesson totals and does not appear in the lesson list.
+    The page at ``/courses/<course>/<module>/`` renders the overview.
 
     ``course_slug`` and ``unit_lookup`` are used by the markdown link
     rewriter (issue #226) to convert intra-content ``.md`` links into
@@ -1975,7 +1982,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             return True
         return False
 
-    # README at module root -> first unit (sort_order = -1) unless ignored.
+    # README at module root -> Module.overview (issue #222), unless ignored.
     readme_filename = None
     for name in os.listdir(module_dir):
         if name.lower() == 'readme.md':
@@ -1986,22 +1993,8 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
         readme_path = os.path.join(module_dir, readme_filename)
         readme_rel = os.path.relpath(readme_path, repo_dir)
         try:
-            metadata, body = _parse_markdown_file(readme_path)
+            _metadata, body = _parse_markdown_file(readme_path)
 
-            # content_id: explicit frontmatter wins; otherwise derive a stable
-            # UUIDv5 from the module source path so we get idempotent upserts.
-            module_source_path = module.source_path or os.path.relpath(
-                module_dir, repo_dir,
-            )
-            readme_content_id = metadata.get('content_id') or (
-                _derive_readme_content_id(repo_name, module_source_path)
-            )
-
-            title = metadata.get('title') or _extract_readme_title(
-                body, fallback=module.title,
-            )
-
-            content_hash = _compute_content_hash(body)
             base_dir = os.path.dirname(readme_rel)
             if known_images is not None:
                 _check_broken_image_refs(
@@ -2020,75 +2013,55 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                     sync_errors=stats.get('errors'),
                 )
 
-            readme_slug = metadata.get('slug', 'readme')
-            readme_sort_order = metadata.get('sort_order', -1)
-
-            readme_defaults = {
-                'title': title,
-                'slug': readme_slug,
-                'sort_order': readme_sort_order,
-                'video_url': metadata.get('video_url', ''),
-                'timestamps': metadata.get('timestamps', []),
-                'is_preview': metadata.get('is_preview', False),
-                'content_hash': content_hash,
-                'source_repo': repo_name,
-                'source_commit': commit_sha,
-                'content_id': readme_content_id,
-                'body': body,
-            }
-
-            # Issue #225: only count as 'updated' when content actually changed.
-            try:
-                unit = Unit.objects.get(
-                    module=module, source_path=readme_rel,
-                )
-            except Unit.DoesNotExist:
-                unit = Unit(
-                    module=module, source_path=readme_rel, **readme_defaults,
-                )
-                unit.save()
-                created = True
-                changed = True
-            else:
-                if _defaults_differ(unit, readme_defaults):
-                    for k, v in readme_defaults.items():
-                        setattr(unit, k, v)
-                    unit.save()
-                    created = False
-                    changed = True
-                else:
-                    created = False
-                    changed = False
-
-            seen_unit_paths.add(readme_rel)
-            if not changed:
-                stats['unchanged'] += 1
-            else:
-                action = 'created' if created else 'updated'
-                if created:
-                    stats['created'] += 1
-                    new_unit_hashes[content_hash] = unit
-                else:
-                    stats['updated'] += 1
-                # Per-level breakdown (issue #224): track each unit touched
-                # so the dashboard can show "Lessons (units): X created Y updated"
-                # and link to the studio edit page.
+            overview_changed = (
+                module.overview != body
+                or module.overview_source_path != readme_rel
+            )
+            if overview_changed:
+                module.overview = body
+                module.overview_source_path = readme_rel
+                module.save(update_fields=[
+                    'overview', 'overview_html', 'overview_source_path',
+                ])
+                # Issue #224: surface the README touch in the per-level
+                # breakdown so staff can see at a glance that the module
+                # overview changed. Reported as content_type='module'
+                # (not 'unit'), since README is no longer a Unit.
                 stats['items_detail'].append({
-                    'title': unit.title,
-                    'slug': unit.slug,
-                    'action': action,
-                    'content_type': 'unit',
+                    'title': f'{module.title} — overview',
+                    'slug': module.slug,
+                    'action': 'updated',
+                    'content_type': 'module',
                     'course_id': module.course_id,
                     'course_slug': course_slug or module.course.slug,
                     'module_id': module.pk,
-                    'module_slug': module.slug,
-                    'unit_id': unit.pk,
                 })
+            else:
+                # Unchanged README still counts as a synced file — track it
+                # in the no-change bucket so the dashboard shows accurate
+                # totals (issue #225).
+                stats['unchanged'] += 1
         except Exception as e:
             stats['errors'].append({
                 'file': readme_rel,
                 'error': str(e),
             })
+    elif not readme_filename and module.overview:
+        # README was removed from the repo: clear the overview so the page
+        # falls back to the lesson-list-only layout.
+        module.overview = ''
+        module.overview_source_path = None
+        module.save(update_fields=[
+            'overview', 'overview_html', 'overview_source_path',
+        ])
+
+    # Defensive cleanup: if a legacy README-as-unit row still exists for
+    # this module (e.g. running sync against a DB whose backfill migration
+    # already ran but the unit got recreated), drop it. Identified by the
+    # exact slug/sort_order pair the old sync wrote.
+    Unit.objects.filter(
+        module=module, slug='readme', sort_order=-1,
+    ).delete()
 
     for filename in sorted(os.listdir(module_dir)):
         if not filename.endswith('.md') or filename.upper() == 'README.MD':

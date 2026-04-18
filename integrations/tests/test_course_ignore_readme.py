@@ -255,10 +255,16 @@ class CourseRootReadmeAsDescriptionTest(_CourseSyncFixtureBase):
         self.assertEqual(course.description, '')
 
 
-class ModuleReadmeAsFirstUnitTest(_CourseSyncFixtureBase):
-    """Module-root README.md becomes the first unit of the module."""
+class ModuleReadmeAsOverviewTest(_CourseSyncFixtureBase):
+    """Module-root README.md populates Module.overview (issue #222).
 
-    def test_module_readme_becomes_first_unit(self):
+    Previously the README was promoted to a first Unit (sort_order=-1),
+    which duplicated the module title and inflated lesson counts. It now
+    lands on ``Module.overview`` and renders as the bare module URL
+    ``/<course>/<module>/`` instead.
+    """
+
+    def test_module_readme_populates_overview_not_unit(self):
         self._write_root_course_yaml()
         self._write_module_yaml(
             '01-intro', 'Introduction',
@@ -283,31 +289,17 @@ class ModuleReadmeAsFirstUnitTest(_CourseSyncFixtureBase):
         self.assertEqual(log.errors, [])
 
         module = Module.objects.get(course__slug='python-course')
+        # No README unit was created.
+        self.assertFalse(
+            Unit.objects.filter(module=module, slug='readme').exists(),
+            'README.md must not be synced as a Unit (issue #222).',
+        )
+        # Lesson rows are exactly the two real units, in order.
         units = list(Unit.objects.filter(module=module).order_by('sort_order'))
-        titles = [u.title for u in units]
-        self.assertEqual(
-            titles,
-            ['Getting Started With Python', 'Why Python', 'Setup'],
-        )
-        # First unit is the README and comes before the numbered units.
-        self.assertEqual(units[0].sort_order, -1)
-        self.assertEqual(units[0].slug, 'readme')
-        self.assertIn('Overview of this module.', units[0].body)
-
-    def test_module_readme_title_falls_back_to_module_title(self):
-        self._write_root_course_yaml()
-        self._write_module_yaml(
-            '01-intro', 'Introduction',
-            'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-        )
-        # README without H1.
-        self._write('01-intro/README.md', 'No heading, just text.\n')
-
-        sync_content_source(self.source, repo_dir=self.temp_dir)
-        unit = Unit.objects.get(
-            module__course__slug='python-course', slug='readme',
-        )
-        self.assertEqual(unit.title, 'Introduction')
+        self.assertEqual([u.title for u in units], ['Why Python', 'Setup'])
+        # The README body landed on the module overview.
+        self.assertIn('Overview of this module.', module.overview)
+        self.assertIn('Overview of this module.', module.overview_html)
 
     def test_module_readme_in_module_ignore_is_suppressed(self):
         self._write_root_course_yaml()
@@ -327,8 +319,11 @@ class ModuleReadmeAsFirstUnitTest(_CourseSyncFixtureBase):
         slugs = set(Unit.objects.filter(module=module).values_list('slug', flat=True))
         self.assertNotIn('readme', slugs)
         self.assertEqual(slugs, {'why'})
+        # Ignored README must not leak into the overview either.
+        self.assertEqual(module.overview, '')
+        self.assertEqual(module.overview_html, '')
 
-    def test_module_readme_content_id_is_stable_across_syncs(self):
+    def test_module_readme_overview_is_stable_across_syncs(self):
         self._write_root_course_yaml()
         self._write_module_yaml(
             '01-intro', 'Intro',
@@ -341,15 +336,35 @@ class ModuleReadmeAsFirstUnitTest(_CourseSyncFixtureBase):
         )
 
         sync_content_source(self.source, repo_dir=self.temp_dir)
-        first_unit = Unit.objects.get(slug='readme')
-        first_id = first_unit.content_id
+        # No churn on a second sync — items_created is 0.
+        log2 = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(log2.items_created, 0)
+        # And no README unit was ever created.
+        self.assertFalse(Unit.objects.filter(slug='readme').exists())
 
-        # Run sync again - no churn.
-        sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.assertEqual(Unit.objects.filter(slug='readme').count(), 1)
-        self.assertEqual(
-            Unit.objects.get(slug='readme').content_id, first_id,
+    def test_module_readme_removed_clears_overview(self):
+        """Removing README.md from the repo clears Module.overview."""
+        self._write_root_course_yaml()
+        self._write_module_yaml(
+            '01-intro', 'Intro',
+            'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
         )
+        self._write('01-intro/README.md', '# Intro\n\nWill be removed.\n')
+        self._write_unit(
+            '01-intro', '01-why.md', 'Why',
+            'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        )
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        module = Module.objects.get(course__slug='python-course')
+        self.assertIn('Will be removed.', module.overview)
+
+        # Delete README.md and re-sync.
+        os.remove(os.path.join(self.temp_dir, '01-intro/README.md'))
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        module.refresh_from_db()
+        self.assertEqual(module.overview, '')
+        self.assertEqual(module.overview_html, '')
 
 
 class CourseIgnorePatternsTest(_CourseSyncFixtureBase):
@@ -445,7 +460,8 @@ class ModuleIgnoreMergesWithCourseTest(_CourseSyncFixtureBase):
             'cccccccc-cccc-cccc-cccc-cccccccccccc',
         )
 
-        # Module 2: keeps README.
+        # Module 2: keeps README — it should land on Module.overview
+        # (issue #222), not become a Unit.
         self._write_module_yaml(
             '02-basics', 'Basics',
             'dddddddd-dddd-dddd-dddd-dddddddddddd',
@@ -461,8 +477,13 @@ class ModuleIgnoreMergesWithCourseTest(_CourseSyncFixtureBase):
         m2 = Module.objects.get(slug='basics')
         m1_slugs = set(Unit.objects.filter(module=m1).values_list('slug', flat=True))
         m2_slugs = set(Unit.objects.filter(module=m2).values_list('slug', flat=True))
+        # Neither module gains a README unit any more.
         self.assertNotIn('readme', m1_slugs)
-        self.assertIn('readme', m2_slugs)
+        self.assertNotIn('readme', m2_slugs)
+        # Module 1's README was ignored — overview stays empty.
+        self.assertEqual(m1.overview, '')
+        # Module 2's README populated its overview.
+        self.assertIn('Keep me.', m2.overview)
 
 
 class CourseSyncIdempotencyTest(_CourseSyncFixtureBase):
@@ -503,6 +524,7 @@ class CourseSyncIdempotencyTest(_CourseSyncFixtureBase):
         self.assertEqual(log2.items_created, 0)
         self.assertEqual(log2.items_deleted, 0)
 
-        # Sanity: the first sync created course (1) + module (1) + readme unit
-        # (1) + why unit (1) = 4.
-        self.assertEqual(created_first, 4)
+        # Sanity: the first sync created course (1) + module (1) +
+        # why unit (1) = 3. The module README is the module overview, not
+        # a Unit (issue #222), so it doesn't count toward items_created.
+        self.assertEqual(created_first, 3)

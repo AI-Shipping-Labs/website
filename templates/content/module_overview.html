@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ module.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ module.overview|truncatechars:160 }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ module.get_absolute_url }}">{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <article class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="/courses/{{ course.slug }}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="module-back-link">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to {{ course.title }}
+      </a>
+
+      <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden" data-testid="module-breadcrumb">
+        <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
+        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+        <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
+        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+        <span class="text-foreground truncate">{{ module.title }}</span>
+      </div>
+
+      <header class="mb-10">
+        <div class="mb-3 flex items-center gap-2">
+          <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="book-open" class="h-4 w-4"></i>
+            Module
+          </span>
+        </div>
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="module-title">
+          {{ module.title }}
+        </h1>
+      </header>
+
+      {% if module.overview_html %}
+      <div class="prose mb-12" data-testid="module-overview">
+        {{ module.overview_html|safe }}
+      </div>
+      {% endif %}
+
+      <!-- Lesson list (always rendered as a separate section, never interleaved with overview) -->
+      <section class="mb-12" data-testid="module-lesson-list">
+        <h2 class="text-2xl font-semibold tracking-tight mb-4">
+          Lessons
+          {% if units %}
+          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ units|length }}</span>
+          {% endif %}
+        </h2>
+        {% if units %}
+        <div class="rounded-lg border border-border bg-card divide-y divide-border">
+          {% for unit in units %}
+          <div class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]">
+            {% if unit.pk in completed_unit_ids %}
+            <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+            {% elif unit.is_preview %}
+            <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+            {% elif not has_access %}
+            <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+            {% else %}
+            <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+            {% endif %}
+            <a href="{{ unit.get_absolute_url }}"
+               class="text-sm {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %} hover:text-accent transition-colors flex-1 py-2"
+               data-testid="module-lesson-link">
+              {{ unit.title }}
+            </a>
+            {% if unit.is_preview and not has_access %}
+            <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-muted-foreground" data-testid="module-no-lessons">
+          This module has no lessons yet.
+        </p>
+        {% endif %}
+      </section>
+
+      {% if cta_message %}
+      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="module-cta">
+        <div class="mb-4">
+          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+        <p class="mt-2 text-sm text-muted-foreground">Get full access to this course and more with a membership.</p>
+        <a href="{{ cta_url }}"
+           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+          View Pricing
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </article>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

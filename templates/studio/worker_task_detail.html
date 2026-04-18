@@ -1,0 +1,140 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Task Detail{% endblock %}
+
+{% block studio_content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-foreground">Task Detail</h1>
+      <p class="text-muted-foreground mt-1">Completed django-q task — full payload, timing, and result.</p>
+    </div>
+    <a href="{% url 'studio_worker' %}"
+       class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-secondary text-foreground hover:bg-secondary/70">
+      Back to worker
+    </a>
+  </div>
+
+  {% if messages %}
+    <div class="space-y-2">
+      {% for message in messages %}
+        <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'info' %}bg-blue-500/20 text-blue-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {# Status banner — green for success, red for failure. #}
+  {% if task.success %}
+    <div class="bg-card border border-green-500/30 rounded-lg p-4 flex items-center gap-3" data-task-status="success">
+      <div class="w-3 h-3 rounded-full bg-green-500"></div>
+      <p class="text-sm font-medium text-foreground">Success</p>
+    </div>
+  {% else %}
+    <div class="bg-card border border-red-500/30 rounded-lg p-4 flex items-center gap-3" data-task-status="failed">
+      <div class="w-3 h-3 rounded-full bg-red-500"></div>
+      <p class="text-sm font-medium text-foreground">Failed</p>
+    </div>
+  {% endif %}
+
+  <div class="bg-card border border-border rounded-lg divide-y divide-border">
+    <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Task ID</p>
+        <p class="text-foreground font-mono break-all">{{ task.id }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Name</p>
+        <p class="text-foreground">{{ task.name|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Group</p>
+        <p class="text-foreground">{{ task.group|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Started</p>
+        <p class="text-foreground">{{ task.started|date:"Y-m-d H:i:s"|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Stopped</p>
+        <p class="text-foreground">{{ task.stopped|date:"Y-m-d H:i:s"|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Duration</p>
+        <p class="text-foreground" data-task-duration>
+          {% if duration_seconds is not None %}{{ duration_seconds|floatformat:3 }}s{% else %}—{% endif %}
+        </p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Cluster</p>
+        <p class="text-foreground font-mono text-xs">{{ task.cluster|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Hook</p>
+        <p class="text-foreground font-mono text-xs">{{ task.hook|default:"—" }}</p>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground uppercase">Attempt</p>
+        <p class="text-foreground">{{ task.attempt_count }}</p>
+      </div>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-muted-foreground uppercase mb-1">Function</p>
+      <pre class="text-sm text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto">{{ task.func|default:"—" }}</pre>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-muted-foreground uppercase mb-1">Args</p>
+      <pre class="text-sm text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto whitespace-pre-wrap" data-task-args>{{ args_text|default:"—" }}</pre>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-muted-foreground uppercase mb-1">Kwargs</p>
+      <pre class="text-sm text-foreground font-mono bg-secondary/40 rounded p-2 overflow-x-auto whitespace-pre-wrap" data-task-kwargs>{{ kwargs_text|default:"—" }}</pre>
+    </div>
+    <div class="p-4">
+      <p class="text-xs text-muted-foreground uppercase mb-2">
+        {% if task.success %}Result{% else %}Error{% endif %}
+      </p>
+      {% if result_is_traceback %}
+        {% comment %}Mirrors the failed-task collapsible from #218 — same chevron + toggle pattern so operators get a consistent UX between the dashboard's inline traceback and this detail view.{% endcomment %}
+        <div class="failed-task-row" data-result-block="traceback">
+          <button type="button"
+                  class="text-left flex items-start gap-2 group w-full"
+                  aria-expanded="true"
+                  data-action="toggle-failed-trace"
+                  onclick="toggleFailedTrace(this)">
+            <i data-lucide="chevron-right"
+               class="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground transition-transform failed-task-chevron"
+               style="transform: rotate(90deg);"></i>
+            <span class="text-sm text-red-500 dark:text-red-400 font-mono">
+              Full traceback
+            </span>
+          </button>
+          <pre class="failed-task-trace text-xs text-red-700 dark:text-red-400 bg-red-500/10 rounded p-2 mt-2 overflow-x-auto whitespace-pre-wrap" data-task-result>{{ result_text }}</pre>
+        </div>
+        <script>
+        // Reuse the dashboard's toggleFailedTrace if present; otherwise inline
+        // a minimal version so the detail page works on its own.
+        if (typeof toggleFailedTrace === 'undefined') {
+          window.toggleFailedTrace = function(btn) {
+            var row = btn.closest('[data-result-block="traceback"]');
+            if (!row) return;
+            var trace = row.querySelector('.failed-task-trace');
+            var chevron = btn.querySelector('.failed-task-chevron');
+            if (!trace) return;
+            var willExpand = trace.classList.contains('hidden');
+            trace.classList.toggle('hidden', !willExpand);
+            btn.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+            if (chevron) {
+              chevron.style.transform = willExpand ? 'rotate(90deg)' : 'rotate(0deg)';
+            }
+          };
+        }
+        </script>
+      {% else %}
+        <pre class="text-sm {% if task.success %}text-foreground bg-secondary/40{% else %}text-red-700 dark:text-red-400 bg-red-500/10{% endif %} font-mono rounded p-2 overflow-x-auto whitespace-pre-wrap" data-task-result>{{ result_text|default:"—" }}</pre>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

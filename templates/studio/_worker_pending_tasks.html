@@ -1,0 +1,59 @@
+{% comment %}
+Pending Tasks table partial.
+
+Used both inline on /studio/worker/ and as the response body for the
+?fragment=pending auto-refresh poller (issue #242). Self-contained: must
+render correctly with only ``queue_depth`` + ``queued_tasks`` in context.
+
+The container div carries the ``id="pending-tasks-section"`` anchor that the
+poller swaps in place every ~3s.
+{% endcomment %}
+{% if queued_tasks %}
+  <div class="bg-card border border-border rounded-lg" id="pending-tasks-section" data-pending-tasks data-queue-depth="{{ queue_depth }}">
+    <div class="p-4 border-b border-border">
+      <h2 class="text-lg font-medium text-foreground">Pending Tasks ({{ queue_depth }})</h2>
+      <p class="text-xs text-muted-foreground mt-1">
+        Tasks queued but not yet picked up by a worker. Updates automatically every few seconds.
+      </p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left px-4 py-3 text-muted-foreground font-medium">Name</th>
+            <th class="text-left px-4 py-3 text-muted-foreground font-medium">Func</th>
+            <th class="text-left px-4 py-3 text-muted-foreground font-medium">Lock expires</th>
+            <th class="text-right px-4 py-3 text-muted-foreground font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in queued_tasks %}
+            <tr class="border-b border-border last:border-0 hover:bg-secondary/50" data-queued-task-id="{{ q.id }}">
+              <td class="px-4 py-3 text-foreground">{{ q.name|default:"—" }}</td>
+              <td class="px-4 py-3 text-muted-foreground font-mono text-xs">{{ q.func|default:"—"|truncatechars:60 }}</td>
+              <td class="px-4 py-3 text-muted-foreground">
+                {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
+              </td>
+              <td class="px-4 py-3 text-right">
+                <a href="{% url 'studio_worker_inspect_task' q.id %}{% if q.task_id %}?task_id={{ q.task_id }}{% endif %}"
+                   class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 mr-1"
+                   data-action="inspect">Inspect</a>
+                <form method="post" action="{% url 'studio_worker_delete_queued' q.id %}" class="inline"
+                      onsubmit="return confirm('Delete queued task {{ q.name|default:q.id|escapejs }}?');">
+                  {% csrf_token %}
+                  {% if q.task_id %}<input type="hidden" name="task_id" value="{{ q.task_id }}">{% endif %}
+                  <button type="submit"
+                          class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                          data-action="delete-queued">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  {% comment %}Empty placeholder so the poller can still locate (and replace) the section when the queue drains to zero.{% endcomment %}
+  <div id="pending-tasks-section" data-pending-tasks data-queue-depth="0" class="hidden"></div>
+{% endif %}

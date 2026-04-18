@@ -16,9 +16,25 @@ Operational actions:
 
 Content-sync triggers live on ``/studio/sync/`` — they don't belong on the
 worker page.
+
+Stale-OrmQ handling (issue #242)
+--------------------------------
+
+The pending-tasks table is a server-rendered snapshot. If a worker consumes a
+queued row between page load and the operator clicking ``Inspect`` /
+``Delete``, the ``OrmQ`` row referenced by the URL is gone. We don't want a
+generic 404; we want to land the operator on the corresponding completed
+``Task`` row when one exists, or back on the dashboard with an info flash
+otherwise.
+
+To make that recovery possible, the template carries the django-q ``task_id``
+alongside the ``OrmQ.pk`` in a ``?task_id=...`` query parameter (POST body for
+the delete form). On ``OrmQ.DoesNotExist`` we look up the matching ``Task``
+and redirect.
 """
 
 import logging
+import pprint
 
 from django.contrib import messages
 from django.http import Http404
@@ -32,6 +48,10 @@ from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
 logger = logging.getLogger(__name__)
+
+# Flash shown when the operator clicks a pending row that has already been
+# drained AND no completed Task row exists either (e.g. queue was wiped).
+STALE_QUEUED_INFO = 'Task already finished or removed from the queue.'
 
 
 def _safe_task_field(ormq, attr, default=None):
@@ -92,9 +112,33 @@ def _ormq_summary(ormq, now=None):
     }
 
 
+def _build_pending_context():
+    """Build the queue-depth + per-task-summary payload for the pending table.
+
+    Extracted so the auto-refresh fragment endpoint can reuse it without
+    re-running cluster-heartbeat / failed-task queries.
+    """
+    queued = OrmQ.objects.all().order_by('pk')
+    queue_depth = queued.count()
+    now = timezone.now()
+    queued_summaries = [_ormq_summary(q, now=now) for q in queued]
+    return {'queue_depth': queue_depth, 'queued_tasks': queued_summaries}
+
+
 @staff_required
 def worker_status(request):
-    """Display django-q2 worker status and recent task history."""
+    """Display django-q2 worker status and recent task history.
+
+    Supports a ``?fragment=pending`` query param that returns just the
+    pending-tasks table partial. Used by the lightweight JS poller on the
+    dashboard so the queue snapshot doesn't go stale between page loads.
+    """
+    pending = _build_pending_context()
+
+    if request.GET.get('fragment') == 'pending':
+        # Auto-refresh endpoint: just the pending table, no chrome.
+        return render(request, 'studio/_worker_pending_tasks.html', pending)
+
     worker_info = get_worker_status()
 
     # Recent tasks (last 50)
@@ -103,12 +147,6 @@ def worker_status(request):
     # Success/failure counts
     success_count = Task.objects.filter(success=True).count()
     failure_count = Task.objects.filter(success=False).count()
-
-    # Queue depth + per-task summaries for the inspect / delete UI
-    queued = OrmQ.objects.all().order_by('pk')
-    queue_depth = queued.count()
-    now = timezone.now()
-    queued_summaries = [_ormq_summary(q, now=now) for q in queued]
 
     # Failed tasks with error details (last 20)
     failed_tasks = Task.objects.filter(success=False).order_by('-started')[:20]
@@ -163,8 +201,8 @@ def worker_status(request):
         'worker_idle': worker_info['idle'],
         'last_heartbeat_age': worker_info['last_heartbeat_age'],
         'cluster_count': worker_info['cluster_count'],
-        'queue_depth': queue_depth,
-        'queued_tasks': queued_summaries,
+        'queue_depth': pending['queue_depth'],
+        'queued_tasks': pending['queued_tasks'],
         'success_count': success_count,
         'failure_count': failure_count,
         'tasks_with_duration': tasks_with_duration,
@@ -172,10 +210,37 @@ def worker_status(request):
     })
 
 
+def _stale_ormq_redirect(request, task_id):
+    """Land the operator somewhere useful when the queued row vanished.
+
+    If the worker ran the task between page load and the click, the
+    corresponding ``Task`` row is the most useful destination — render the
+    completed-task detail view directly (option C from the issue's UX
+    discussion). If even that row is gone (queue drained, never executed)
+    fall back to the dashboard with an info flash so the operator isn't left
+    staring at a 404.
+    """
+    if task_id:
+        completed = Task.objects.filter(id=task_id).first()
+        if completed is not None:
+            return redirect('studio_worker_task_detail', task_id=task_id)
+    messages.info(request, STALE_QUEUED_INFO)
+    return redirect('studio_worker')
+
+
 @staff_required
 def worker_inspect_task(request, ormq_id):
-    """Show func/args/kwargs/lock state for a single queued task."""
-    ormq = get_object_or_404(OrmQ, pk=ormq_id)
+    """Show func/args/kwargs/lock state for a single queued task.
+
+    On stale OrmQ (task already executed and consumed): redirect to the
+    matching completed-task detail if available, else flash + back to dash.
+    The pending-tasks template carries the django-q ``task_id`` in
+    ``?task_id=...`` so we can recover the right Task row.
+    """
+    try:
+        ormq = OrmQ.objects.get(pk=ormq_id)
+    except OrmQ.DoesNotExist:
+        return _stale_ormq_redirect(request, request.GET.get('task_id'))
     summary = _ormq_summary(ormq)
     return render(request, 'studio/worker_inspect.html', {
         'task': summary,
@@ -205,12 +270,75 @@ def worker_drain_queue(request):
 @staff_required
 @require_POST
 def worker_delete_queued(request, ormq_id):
-    """Delete a single queued ``OrmQ`` row."""
-    ormq = get_object_or_404(OrmQ, pk=ormq_id)
+    """Delete a single queued ``OrmQ`` row.
+
+    On stale OrmQ (already consumed by a worker): same recovery as inspect —
+    don't 404 on delete-of-already-deleted, redirect to the completed-task
+    detail if possible, else flash + back to dash.
+    """
+    try:
+        ormq = OrmQ.objects.get(pk=ormq_id)
+    except OrmQ.DoesNotExist:
+        return _stale_ormq_redirect(request, request.POST.get('task_id'))
     name = _safe_task_field(ormq, 'name') or f'#{ormq.pk}'
     ormq.delete()
     messages.success(request, f'Deleted queued task: {name}.')
     return redirect('studio_worker')
+
+
+def _format_task_value(value):
+    """Pretty-print a Task arg/kwarg/result value for the detail template.
+
+    Strings come through unchanged so multi-line tracebacks aren't quoted to
+    death; everything else goes through ``pprint`` so dicts and tuples are
+    legible.
+    """
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    try:
+        return pprint.pformat(value, width=100, sort_dicts=False)
+    except Exception:  # pragma: no cover - defensive
+        return repr(value)
+
+
+def _looks_like_traceback(text):
+    """Heuristic: was this result string produced by ``traceback.format_exc()``?
+
+    django-q stores the formatted traceback in ``Task.result`` when a job
+    raises. The detail view renders those in a collapsible block so they
+    don't dominate the page.
+    """
+    if not isinstance(text, str):
+        return False
+    return (
+        text.startswith('Traceback')
+        or '\nTraceback (most recent call last):' in text
+    )
+
+
+@staff_required
+def worker_task_detail(request, task_id):
+    """Render full detail for a completed django-q ``Task`` row.
+
+    Used both for direct navigation from the Recent Tasks table and as the
+    redirect target when a stale ``OrmQ`` click discovers the worker already
+    finished the job.
+    """
+    task = get_object_or_404(Task, pk=task_id)
+    duration = None
+    if task.started and task.stopped:
+        duration = (task.stopped - task.started).total_seconds()
+    result_text = _format_task_value(task.result)
+    return render(request, 'studio/worker_task_detail.html', {
+        'task': task,
+        'duration_seconds': duration,
+        'args_text': _format_task_value(task.args),
+        'kwargs_text': _format_task_value(task.kwargs),
+        'result_text': result_text,
+        'result_is_traceback': (not task.success) and _looks_like_traceback(result_text),
+    })
 
 
 def _resubmit_failed(task):

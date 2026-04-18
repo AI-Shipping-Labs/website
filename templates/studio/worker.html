@@ -155,52 +155,10 @@
     </div>
   {% endif %}
 
-  <!-- Pending / Queued Tasks -->
-  {% if queued_tasks %}
-    <div class="bg-card border border-border rounded-lg">
-      <div class="p-4 border-b border-border">
-        <h2 class="text-lg font-medium text-foreground">Pending Tasks ({{ queue_depth }})</h2>
-        <p class="text-xs text-muted-foreground mt-1">
-          Tasks queued but not yet picked up by a worker.
-        </p>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border">
-              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Name</th>
-              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Func</th>
-              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Lock expires</th>
-              <th class="text-right px-4 py-3 text-muted-foreground font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for q in queued_tasks %}
-              <tr class="border-b border-border last:border-0 hover:bg-secondary/50" data-queued-task-id="{{ q.id }}">
-                <td class="px-4 py-3 text-foreground">{{ q.name|default:"—" }}</td>
-                <td class="px-4 py-3 text-muted-foreground font-mono text-xs">{{ q.func|default:"—"|truncatechars:60 }}</td>
-                <td class="px-4 py-3 text-muted-foreground">
-                  {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
-                </td>
-                <td class="px-4 py-3 text-right">
-                  <a href="{% url 'studio_worker_inspect_task' q.id %}"
-                     class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 mr-1"
-                     data-action="inspect">Inspect</a>
-                  <form method="post" action="{% url 'studio_worker_delete_queued' q.id %}" class="inline"
-                        onsubmit="return confirm('Delete queued task {{ q.name|default:q.id|escapejs }}?');">
-                    {% csrf_token %}
-                    <button type="submit"
-                            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
-                            data-action="delete-queued">Delete</button>
-                  </form>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  {% endif %}
+  <!-- Pending / Queued Tasks (auto-refreshed; see poller script below) -->
+  <div id="pending-tasks-wrapper" data-fragment-url="{% url 'studio_worker' %}?fragment=pending">
+    {% include "studio/_worker_pending_tasks.html" %}
+  </div>
 
   <!-- Recent Tasks Table -->
   <div class="bg-card border border-border rounded-lg">
@@ -221,8 +179,16 @@
           </thead>
           <tbody>
             {% for item in tasks_with_duration %}
-              <tr class="border-b border-border last:border-0 hover:bg-secondary/50">
-                <td class="px-4 py-3 text-foreground">{{ item.task.name }}</td>
+              {% comment %}Whole row is a click target — operator clicks the name, the status pill, anywhere — and lands on the task-detail view.{% endcomment %}
+              <tr class="border-b border-border last:border-0 hover:bg-secondary/50 cursor-pointer recent-task-row"
+                  data-task-id="{{ item.task.id }}"
+                  data-task-detail-url="{% url 'studio_worker_task_detail' item.task.id %}"
+                  onclick="window.location.href = this.dataset.taskDetailUrl;">
+                <td class="px-4 py-3 text-foreground">
+                  <a href="{% url 'studio_worker_task_detail' item.task.id %}"
+                     class="hover:underline"
+                     onclick="event.stopPropagation();">{{ item.task.name }}</a>
+                </td>
                 <td class="px-4 py-3 text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</td>
                 <td class="px-4 py-3 text-muted-foreground">
                   {% if item.duration %}
@@ -372,5 +338,67 @@
     }
     </script>
   {% endif %}
+
+  {% comment %}
+  Pending-tasks auto-refresh (issue #242).
+
+  Server snapshot goes stale within seconds — the worker can consume queued
+  rows between page load and the operator's click, producing 404s. We poll a
+  fragment endpoint every 3s and swap the table in place. We pause when the
+  tab isn't visible so backgrounded dashboards don't burn cycles.
+  {% endcomment %}
+  <script>
+  (function() {
+    var wrapper = document.getElementById('pending-tasks-wrapper');
+    if (!wrapper) return;
+    var fragmentUrl = wrapper.dataset.fragmentUrl;
+    if (!fragmentUrl) return;
+    var POLL_INTERVAL_MS = 3000;
+    var timer = null;
+
+    function shouldPoll() {
+      return document.visibilityState === 'visible';
+    }
+
+    function refresh() {
+      if (!shouldPoll()) return;
+      fetch(fragmentUrl, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function(resp) {
+          if (!resp.ok) return null;
+          return resp.text();
+        })
+        .then(function(html) {
+          if (html === null || html === undefined) return;
+          // Don't clobber the wrapper while a confirm() dialog is open — that
+          // would yank the form out from under the operator. The browser's
+          // own focus-during-confirm semantics handle this implicitly because
+          // fetch() callbacks queue behind the modal dialog.
+          wrapper.innerHTML = html;
+        })
+        .catch(function() {
+          // Network blip — try again next tick. Don't disable polling.
+        });
+    }
+
+    function start() {
+      if (timer !== null) return;
+      timer = setInterval(refresh, POLL_INTERVAL_MS);
+    }
+    function stop() {
+      if (timer === null) return;
+      clearInterval(timer);
+      timer = null;
+    }
+
+    document.addEventListener('visibilitychange', function() {
+      if (shouldPoll()) {
+        start();
+      } else {
+        stop();
+      }
+    });
+    if (shouldPoll()) start();
+  })();
+  </script>
 </div>
 {% endblock %}

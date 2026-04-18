@@ -26,3 +26,6 @@ _content-repo/
 playwright_tests/screenshots/
 *.sqlite3-shm
 *.sqlite3-wal
+
+# Django FileBasedCache (used by django-q for cluster heartbeats)
+.django_cache/

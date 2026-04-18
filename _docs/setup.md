@@ -83,6 +83,29 @@ print(r.status_code, r.json().get('full_name') or r.json().get('message'))
 
 A `200` with the full repo name means it works. A `404` means the installation is not granted access to that repo.
 
+## Cache backend (required for the worker dashboard)
+
+django-q writes cluster heartbeats to Django's cache backend. The `/studio/worker/` dashboard reads them back via `Stat.get_all()` to decide whether the cluster is alive. If the cache backend is per-process — which is the default `LocMemCache` — the gunicorn / runserver process never sees heartbeats written by the qcluster process, and the dashboard reports "Worker NOT running" forever, even when the cluster is healthy.
+
+The project ships a dedicated `django_q` cache for this. It is `LocMemCache` during tests (single-process, fast, isolated) and `FileBasedCache` everywhere else.
+
+| Setting | Test mode | Local dev / Production |
+|---------|-----------|------------------------|
+| `CACHES['django_q']['BACKEND']` | `locmem.LocMemCache` | `filebased.FileBasedCache` |
+| `CACHES['django_q']['LOCATION']` | `django-q-test` | `$CACHE_DIR` (default: `<project>/.django_cache`) |
+| `Q_CLUSTER['cache']` | `django_q` | `django_q` |
+
+Override the directory with `CACHE_DIR=/path/to/cache` if you need to. The directory is created lazily on first write.
+
+Approved alternatives for production:
+
+- `FileBasedCache` (default) — works on a single host. The directory must be writable by both the web container and the worker container, and they must share the same volume. On ECS this means mounting an EFS volume into both containers.
+- `DatabaseCache` — uses a row in Postgres (`CREATE TABLE` via `manage.py createcachetable`). Survives container restarts and works across hosts. Slightly higher latency than file-based but acceptable at heartbeat frequency (every 5 s).
+
+We deliberately do not use Redis: avoiding the operational dependency is a product decision.
+
+If you change `CACHES`, also keep `Q_CLUSTER['cache']` pointing at the same named cache. The wiring is asserted in `studio/tests/test_worker_health_cache.py::DjangoQCacheWiringTest`.
+
 ## CI/CD
 
 Two GitHub Actions workflows handle deployment:

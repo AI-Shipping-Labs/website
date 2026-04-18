@@ -726,3 +726,155 @@ class DraftArticleVisibilityTest(TestCase):
     def test_draft_returns_404_on_detail(self):
         response = self.client.get('/blog/draft-visibility')
         self.assertEqual(response.status_code, 404)
+
+
+# --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---
+
+
+class BlogTagFilterTest(TestCase):
+    """Behaviour previously covered by Playwright Scenarios 3, 4, 5, 6, 11
+    on /blog. Tag filtering uses ?tag=X query params and resolves entirely
+    server-side, so no JS is needed.
+    """
+
+    def test_single_tag_filter_narrows_results(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario3SingleTagFilter::test_single_tag_filter_narrows_results
+        Article.objects.create(
+            title='Python Basics', slug='python-basics',
+            description='Learn Python basics.',
+            date=date(2026, 1, 3), tags=['python'], published=True,
+        )
+        Article.objects.create(
+            title='AI Overview', slug='ai-overview',
+            description='Overview of AI concepts.',
+            date=date(2026, 1, 2), tags=['ai'], published=True,
+        )
+        Article.objects.create(
+            title='Python AI', slug='python-ai',
+            description='Python for AI.',
+            date=date(2026, 1, 1), tags=['python', 'ai'], published=True,
+        )
+
+        # Unfiltered: all three articles visible.
+        all_articles = self.client.get('/blog')
+        self.assertContains(all_articles, 'Python Basics')
+        self.assertContains(all_articles, 'AI Overview')
+        self.assertContains(all_articles, 'Python AI')
+
+        # Listing surfaces a chip whose href applies the python filter.
+        self.assertContains(all_articles, '?tag=python')
+
+        # Following ?tag=python: only python-tagged articles remain.
+        filtered = self.client.get('/blog?tag=python')
+        self.assertContains(filtered, 'Python Basics')
+        self.assertContains(filtered, 'Python AI')
+        self.assertNotContains(filtered, 'AI Overview')
+
+    def test_multi_tag_filter_narrows_to_intersection(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario4MultiTagAndLogic::test_multi_tag_filter_narrows_to_intersection
+        Article.objects.create(
+            title='Python Basics', slug='python-basics',
+            date=date(2026, 1, 3), tags=['python'], published=True,
+        )
+        Article.objects.create(
+            title='AI Overview', slug='ai-overview',
+            date=date(2026, 1, 2), tags=['ai'], published=True,
+        )
+        Article.objects.create(
+            title='Python AI', slug='python-ai',
+            date=date(2026, 1, 1), tags=['python', 'ai'], published=True,
+        )
+
+        # Filtering on python alone keeps the two python articles.
+        python_only = self.client.get('/blog?tag=python')
+        self.assertContains(python_only, 'Python Basics')
+        self.assertContains(python_only, 'Python AI')
+
+        # Adding the ai filter narrows the result to the intersection.
+        both = self.client.get('/blog?tag=python&tag=ai')
+        self.assertContains(both, 'Python AI')
+        self.assertNotContains(both, 'Python Basics')
+        self.assertNotContains(both, 'AI Overview')
+
+        # Both selected tags are reflected in the view context.
+        self.assertEqual(
+            sorted(both.context['selected_tags']), ['ai', 'python'],
+        )
+
+    def test_remove_tag_filter_and_clear_all(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario5RemoveTagFilter::test_remove_tag_filter_and_clear_all
+        Article.objects.create(
+            title='Python AI', slug='python-ai',
+            date=date(2026, 1, 2), tags=['python', 'ai'], published=True,
+        )
+        Article.objects.create(
+            title='Python Basics', slug='python-basics',
+            date=date(2026, 1, 1), tags=['python'], published=True,
+        )
+
+        # Both filters applied → only the article with both tags.
+        both = self.client.get('/blog?tag=python&tag=ai')
+        self.assertContains(both, 'Python AI')
+        self.assertNotContains(both, 'Python Basics')
+
+        # Removing the ai filter broadens results to all python articles.
+        python_only = self.client.get('/blog?tag=python')
+        self.assertEqual(python_only.context['selected_tags'], ['python'])
+        self.assertContains(python_only, 'Python AI')
+        self.assertContains(python_only, 'Python Basics')
+
+        # Clearing all filters returns the full listing.
+        cleared = self.client.get('/blog')
+        self.assertEqual(cleared.context['selected_tags'], [])
+        self.assertContains(cleared, 'Python AI')
+        self.assertContains(cleared, 'Python Basics')
+
+    def test_tag_filter_on_blog(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario6TagFiltersAcrossPages::test_tag_filter_on_blog
+        Article.objects.create(
+            title='Python Article', slug='python-article',
+            date=date(2026, 1, 1), tags=['python'], published=True,
+        )
+        Article.objects.create(
+            title='Go Article', slug='go-article',
+            date=date(2026, 1, 2), tags=['go'], published=True,
+        )
+
+        # Listing exposes the python chip whose href triggers the filter.
+        listing = self.client.get('/blog')
+        self.assertContains(listing, '?tag=python')
+
+        # Following that filter shows only the python article.
+        filtered = self.client.get('/blog?tag=python')
+        self.assertContains(filtered, 'Python Article')
+        self.assertNotContains(filtered, 'Go Article')
+
+    def test_article_detail_tag_chip_links_to_filtered_blog(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario11TagChipOnArticleDetail::test_tag_chip_navigates_to_filtered_blog
+        Article.objects.create(
+            title='AI Patterns', slug='ai-patterns',
+            description='Patterns for AI systems.',
+            content_markdown='# AI Patterns\n\nContent about AI patterns.',
+            date=date(2026, 2, 10),
+            tags=['ai', 'design-patterns'], published=True,
+        )
+        Article.objects.create(
+            title='Design Patterns Explained',
+            slug='design-patterns-explained',
+            description='Explaining common design patterns.',
+            content_markdown='# Design Patterns\n\nContent.',
+            date=date(2026, 2, 5),
+            tags=['design-patterns'], published=True,
+        )
+
+        # The article detail surfaces a tag chip linking to /blog?tag=design-patterns.
+        detail = self.client.get('/blog/ai-patterns')
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, 'AI Patterns')
+        self.assertContains(detail, '?tag=design-patterns')
+
+        # Following that link lands on a blog listing showing both
+        # design-patterns articles.
+        filtered = self.client.get('/blog?tag=design-patterns')
+        self.assertContains(filtered, 'AI Patterns')
+        self.assertContains(filtered, 'Design Patterns Explained')

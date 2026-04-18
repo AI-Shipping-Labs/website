@@ -653,3 +653,30 @@ class ResourcesEmptyStateTest(TestCase):
         )
         response = self.client.get('/resources?tag=nonexistent')
         self.assertContains(response, 'No links found with the selected tags')
+
+
+# --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---
+
+
+class CuratedLinksTagFilterTest(TestCase):
+    """Behaviour previously covered by Playwright Scenario 6 on
+    /resources. Filtering happens via ?tag= and resolves server-side.
+    """
+
+    def test_tag_filter_on_resources(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario6TagFiltersAcrossPages::test_tag_filter_on_resources
+        CuratedLink.objects.create(
+            item_id='python-cli', title='Python CLI',
+            url='https://example.com/python', category='tools',
+            tags=['python'], sort_order=1, published=True,
+        )
+        CuratedLink.objects.create(
+            item_id='go-toolkit', title='Go Toolkit',
+            url='https://example.com/go', category='tools',
+            tags=['go'], sort_order=2, published=True,
+        )
+
+        response = self.client.get('/resources?tag=python')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Python CLI')
+        self.assertNotContains(response, 'Go Toolkit')

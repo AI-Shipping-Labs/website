@@ -1078,3 +1078,29 @@ class CourseIsFreePropertyTests(TestCase):
     def test_required_level_premium_is_not_free(self):
         course = Course(required_level=30)
         self.assertFalse(course.is_free)
+
+
+# --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---
+
+
+class CourseTagFilterTest(TestCase):
+    """Behaviour previously covered by Playwright Scenario 6 on /courses.
+    Filtering happens via the ?tag= query param and resolves server-side.
+    """
+
+    def test_tag_filter_on_courses(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario6TagFiltersAcrossPages::test_tag_filter_on_courses
+        Course.objects.create(
+            title='Python Course', slug='python-course',
+            tags=['python'], status='published',
+        )
+        Course.objects.create(
+            title='Go Course', slug='go-course',
+            tags=['go'], status='published',
+        )
+
+        response = self.client.get('/courses?tag=python')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_tags'], ['python'])
+        self.assertContains(response, 'Python Course')
+        self.assertNotContains(response, 'Go Course')

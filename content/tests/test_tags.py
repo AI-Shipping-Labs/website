@@ -729,3 +729,205 @@ class TagRuleInjectionRecordingTest(TestCase):
 
 # Tag filter chips were removed from listing pages (tag filtering
 # still works via URL params, tested in other test classes above).
+
+
+# --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---
+
+
+class TagIndexPageTest(TestCase):
+    """Behaviour previously covered by Playwright Scenarios 1, 9, 10
+    on /tags. Asserts on context counts, link href targets, ordering,
+    and the empty state — no JS required.
+    """
+
+    def test_tag_cloud_shows_tags_with_counts_and_orders_by_count(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario1TagCloudExploration::test_tags_page_shows_tags_with_counts_sorted_by_count
+        Article.objects.create(
+            title='Python Basics', slug='python-basics',
+            date=date(2026, 1, 3), tags=['python', 'ai'], published=True,
+        )
+        Article.objects.create(
+            title='Python Advanced', slug='python-advanced',
+            date=date(2026, 1, 2), tags=['python', 'ai'], published=True,
+        )
+        Event.objects.create(
+            title='AI Workshop Recording', slug='ai-workshop-rec',
+            start_datetime=timezone.make_aware(timezone.datetime(2026, 1, 1, 12, 0)),
+            status='completed', recording_url='https://youtube.com/watch?v=test',
+            tags=['ai', 'workshop'], published=True,
+        )
+
+        response = self.client.get('/tags')
+        self.assertEqual(response.status_code, 200)
+
+        # Each tag has a link to its detail page (chip in the cloud).
+        self.assertContains(response, 'href="/tags/ai"')
+        self.assertContains(response, 'href="/tags/python"')
+        self.assertContains(response, 'href="/tags/workshop"')
+
+        # Counts are reflected in the context: ai=3, python=2, workshop=1.
+        tag_dict = dict(response.context['tag_counts'])
+        self.assertEqual(tag_dict['ai'], 3)
+        self.assertEqual(tag_dict['python'], 2)
+        self.assertEqual(tag_dict['workshop'], 1)
+
+        # Ordering: highest counts first — "ai" appears before "workshop".
+        content = response.content.decode()
+        self.assertLess(
+            content.index('/tags/ai"'),
+            content.index('/tags/workshop"'),
+        )
+
+    def test_tag_link_targets_tag_detail_with_all_tagged_items(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario1TagCloudExploration::test_click_tag_navigates_to_tag_detail
+        Article.objects.create(
+            title='Python Basics', slug='python-basics',
+            date=date(2026, 1, 3), tags=['python', 'ai'], published=True,
+        )
+        Article.objects.create(
+            title='Python Advanced', slug='python-advanced',
+            date=date(2026, 1, 2), tags=['python', 'ai'], published=True,
+        )
+        Event.objects.create(
+            title='AI Workshop Recording', slug='ai-workshop-rec',
+            start_datetime=timezone.make_aware(timezone.datetime(2026, 1, 1, 12, 0)),
+            status='completed', recording_url='https://youtube.com/watch?v=test',
+            tags=['ai', 'workshop'], published=True,
+        )
+
+        # The tag chip on /tags links to /tags/ai (the "click" target).
+        index = self.client.get('/tags')
+        self.assertContains(index, 'href="/tags/ai"')
+
+        # Following that link reaches the tag detail page with all 3
+        # items and both content type badges.
+        detail = self.client.get('/tags/ai')
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, 'Python Basics')
+        self.assertContains(detail, 'Python Advanced')
+        self.assertContains(detail, 'AI Workshop Recording')
+        self.assertContains(detail, 'Article')
+        # The unified Event model labels recordings as "Event" badges
+        # (see TagsDetailViewTest.test_shows_content_type_badges above).
+        self.assertContains(detail, 'Event')
+
+    def test_empty_tags_page_shows_message(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario9EmptyTagsPage::test_empty_tags_page_shows_message
+        # No content created — page should still render with empty state.
+        response = self.client.get('/tags')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No tags yet')
+
+        # The header (with navigation) is still present so the visitor
+        # can navigate elsewhere.
+        self.assertContains(response, '<header')
+        self.assertContains(response, '<nav')
+
+
+class TagDetailPageTest(TestCase):
+    """Behaviour previously covered by Playwright Scenarios 2 and 10
+    on /tags/{tag}. Asserts on result ordering, item link targets,
+    and the "All Tags" back-link.
+    """
+
+    def test_tag_detail_shows_both_items_sorted_newest_first(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario2DrillIntoTagAndNavigate::test_tag_detail_shows_both_items_sorted_by_date
+        Article.objects.create(
+            title='Intro to AI Engineering',
+            slug='intro-to-ai-engineering',
+            description='An introduction to AI engineering.',
+            content_markdown='# Intro to AI Engineering',
+            date=date(2026, 2, 15),
+            tags=['ai-engineering'], published=True,
+        )
+        Event.objects.create(
+            title='AI Workshop', slug='ai-workshop',
+            description='A workshop on AI engineering.',
+            start_datetime=timezone.make_aware(timezone.datetime(2026, 2, 10, 12, 0)),
+            status='completed', recording_url='https://youtube.com/watch?v=test',
+            tags=['ai-engineering'], published=True,
+        )
+
+        response = self.client.get('/tags/ai-engineering')
+        self.assertEqual(response.status_code, 200)
+
+        # Both items present, badges visible.
+        self.assertContains(response, 'Intro to AI Engineering')
+        self.assertContains(response, 'AI Workshop')
+        self.assertContains(response, 'Article')
+        self.assertContains(response, 'Event')
+
+        # Ordering: results context is sorted newest first
+        # (article on Feb 15 before recording on Feb 10).
+        titles = [r['title'] for r in response.context['results']]
+        self.assertEqual(
+            titles.index('Intro to AI Engineering'),
+            titles.index('AI Workshop') - 1,
+        )
+
+    def test_article_link_from_tag_detail_reaches_article_detail(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario2DrillIntoTagAndNavigate::test_click_article_from_tag_detail
+        Article.objects.create(
+            title='Intro to AI Engineering',
+            slug='intro-to-ai-engineering',
+            description='An introduction to AI engineering.',
+            content_markdown=(
+                '# Intro to AI Engineering\n\nFull article content about AI.'
+            ),
+            date=date(2026, 2, 15),
+            tags=['ai-engineering'], published=True,
+        )
+        Event.objects.create(
+            title='AI Workshop', slug='ai-workshop',
+            start_datetime=timezone.make_aware(timezone.datetime(2026, 2, 10, 12, 0)),
+            status='completed', recording_url='https://youtube.com/watch?v=test',
+            tags=['ai-engineering'], published=True,
+        )
+
+        # The tag detail page links the article title to /blog/<slug>.
+        tag_page = self.client.get('/tags/ai-engineering')
+        self.assertContains(tag_page, 'href="/blog/intro-to-ai-engineering"')
+
+        # That target resolves and shows the rendered article body.
+        article_page = self.client.get('/blog/intro-to-ai-engineering')
+        self.assertEqual(article_page.status_code, 200)
+        self.assertContains(article_page, 'Intro to AI Engineering')
+        self.assertContains(article_page, 'Full article content about AI')
+
+    def test_navigate_tag_index_to_detail_and_back_to_other_tag(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario10NavigateBetweenTagPages::test_navigate_tag_index_to_detail_and_back
+        Article.objects.create(
+            title='Python Tutorial', slug='python-tutorial',
+            date=date(2026, 1, 3), tags=['python'], published=True,
+        )
+        Article.objects.create(
+            title='AI Guide', slug='ai-guide',
+            date=date(2026, 1, 2), tags=['ai'], published=True,
+        )
+        Event.objects.create(
+            title='Python Workshop', slug='python-workshop',
+            start_datetime=timezone.make_aware(timezone.datetime(2026, 1, 1, 12, 0)),
+            status='completed', recording_url='https://youtube.com/watch?v=test',
+            tags=['python'], published=True,
+        )
+
+        # Step 1: /tags lists every tag chip.
+        index = self.client.get('/tags')
+        self.assertContains(index, 'href="/tags/python"')
+        self.assertContains(index, 'href="/tags/ai"')
+
+        # Step 2: /tags/python shows both python-tagged items.
+        python_page = self.client.get('/tags/python')
+        self.assertEqual(python_page.status_code, 200)
+        self.assertContains(python_page, 'Python Tutorial')
+        self.assertContains(python_page, 'Python Workshop')
+        # And links back to the index via "All Tags".
+        self.assertContains(python_page, 'href="/tags"')
+        self.assertContains(python_page, 'All Tags')
+
+        # Step 3: /tags/ai shows only ai-tagged content (no python items).
+        ai_page = self.client.get('/tags/ai')
+        self.assertEqual(ai_page.status_code, 200)
+        self.assertContains(ai_page, 'AI Guide')
+        self.assertNotContains(ai_page, 'Python Tutorial')
+        self.assertNotContains(ai_page, 'Python Workshop')

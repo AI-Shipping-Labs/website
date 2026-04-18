@@ -729,3 +729,36 @@ class DownloadURLTest(TestCase):
         # Anonymous user on free download gets 401 (lead magnet)
         response = self.client.get('/api/downloads/url-test/file')
         self.assertEqual(response.status_code, 401)
+
+
+# --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---
+
+
+class DownloadsTagFilterTest(TestCase):
+    """Behaviour previously covered by Playwright Scenario 6 on
+    /downloads. Filtering happens via ?tag= and resolves server-side.
+    """
+
+    def test_tag_filter_on_downloads(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario6TagFiltersAcrossPages::test_tag_filter_on_downloads
+        Download.objects.create(
+            title='Python Cheatsheet', slug='python-cheatsheet',
+            file_url='https://example.com/python.pdf',
+            tags=['python'], published=True,
+        )
+        Download.objects.create(
+            title='Go Cheatsheet', slug='go-cheatsheet',
+            file_url='https://example.com/go.pdf',
+            tags=['go'], published=True,
+        )
+
+        # Listing exposes the python chip whose href triggers the filter.
+        listing = self.client.get('/downloads')
+        self.assertEqual(listing.status_code, 200)
+        self.assertContains(listing, '?tag=python')
+
+        # Following ?tag=python: only the python download remains.
+        filtered = self.client.get('/downloads?tag=python')
+        self.assertEqual(filtered.status_code, 200)
+        self.assertContains(filtered, 'Python Cheatsheet')
+        self.assertNotContains(filtered, 'Go Cheatsheet')

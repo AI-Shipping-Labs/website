@@ -79,6 +79,8 @@
     <form method="post" action="{% url 'studio_worker_delete_queued' task.id %}"
           onsubmit="return confirm('Delete queued task {{ task.name|default:task.id|escapejs }}?');">
       {% csrf_token %}
+      {% comment %}Carry the django-q task_id so a stale-OrmQ delete (race vs the worker consuming the row) can still recover the matching completed Task row instead of 404'ing — see studio.views.worker._stale_ormq_redirect.{% endcomment %}
+      {% if task.task_id %}<input type="hidden" name="task_id" value="{{ task.task_id }}">{% endif %}
       <button type="submit"
               class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
               data-action="delete-queued">

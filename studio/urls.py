@@ -81,6 +81,7 @@ from studio.views.worker import (
     worker_inspect_task,
     worker_retry_failed,
     worker_status,
+    worker_task_detail,
 )
 
 urlpatterns = [
@@ -215,6 +216,11 @@ urlpatterns = [
         'worker/queue/<int:ormq_id>/delete/',
         worker_delete_queued,
         name='studio_worker_delete_queued',
+    ),
+    path(
+        'worker/task/<str:task_id>/',
+        worker_task_detail,
+        name='studio_worker_task_detail',
     ),
     path(
         'worker/failed/<str:task_id>/retry/',

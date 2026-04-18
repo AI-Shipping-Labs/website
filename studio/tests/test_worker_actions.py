@@ -229,9 +229,22 @@ class InspectQueuedTaskTest(TestCase):
         # not the misleading "42s" age that issue #241 fixed.
         self.assertContains(response, 'expired 42s ago')
 
-    def test_inspect_404_when_missing(self):
-        response = self.client.get('/studio/worker/queue/9999/inspect/')
-        self.assertEqual(response.status_code, 404)
+    def test_inspect_missing_redirects_to_dashboard_with_info_flash(self):
+        """Stale OrmQ click no longer 404s — soft-fail to dashboard (#242).
+
+        With no ``?task_id=`` in the URL there's no completed Task to land on,
+        so we drop back to /studio/worker/ with the "already finished or
+        removed from the queue" info flash.
+        """
+        response = self.client.get(
+            '/studio/worker/queue/9999/inspect/', follow=True,
+        )
+        self.assertRedirects(response, '/studio/worker/')
+        msgs = [str(m) for m in get_messages(response.wsgi_request)]
+        self.assertTrue(
+            any('already finished' in m.lower() for m in msgs),
+            f'Expected stale-OrmQ info flash; got {msgs!r}',
+        )
 
     def test_inspect_link_in_pending_table(self):
         ormq = _enqueue_ormq(name='visible-in-list')
@@ -267,9 +280,17 @@ class DeleteQueuedTaskTest(TestCase):
         self.assertFalse(OrmQ.objects.filter(pk=target.pk).exists())
         self.assertTrue(OrmQ.objects.filter(pk=keep.pk).exists())
 
-    def test_delete_404_when_missing(self):
-        response = self.client.post('/studio/worker/queue/9999/delete/')
-        self.assertEqual(response.status_code, 404)
+    def test_delete_missing_redirects_to_dashboard_with_info_flash(self):
+        """Stale OrmQ delete no longer 404s — soft-fail to dashboard (#242)."""
+        response = self.client.post(
+            '/studio/worker/queue/9999/delete/', follow=True,
+        )
+        self.assertRedirects(response, '/studio/worker/')
+        msgs = [str(m) for m in get_messages(response.wsgi_request)]
+        self.assertTrue(
+            any('already finished' in m.lower() for m in msgs),
+            f'Expected stale-OrmQ info flash; got {msgs!r}',
+        )
 
 
 class RetryFailedTaskTest(TestCase):

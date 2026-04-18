@@ -139,6 +139,73 @@ class ImpersonationBannerTest(TestCase):
         response = self.client.get('/')
         self.assertNotContains(response, 'Return to your account')
 
+    def test_banner_is_not_sticky(self):
+        """Banner sits in normal flow (no sticky positioning) so it pushes content down."""
+        self.client.login(email='admin@test.com', password='testpass')
+        self.client.post(f'/studio/impersonate/{self.target.pk}/')
+        response = self.client.get('/')
+        content = response.content.decode()
+        # Locate the banner div and verify its classes do not include sticky/z-[60].
+        banner_marker = 'You are logged in as'
+        idx = content.find(banner_marker)
+        self.assertNotEqual(idx, -1, 'impersonation banner not rendered')
+        # Grab ~400 chars before the marker (the surrounding div)
+        window = content[max(0, idx - 400):idx]
+        self.assertNotIn('sticky top-0', window)
+        self.assertNotIn('z-[60]', window)
+
+    def test_header_always_at_top_in_markup(self):
+        """Fixed header markup uses `top-0` regardless of impersonation.
+
+        While impersonating, a small inline script offsets the header by
+        the banner height *only when scrolled to the top of the page* so
+        there is no white gap once the user scrolls past the banner. The
+        scroll-driven behavior is JS, so the rendered HTML always has
+        `fixed top-0` on the header. The script is verified via the
+        presence of the `impersonation-banner` element it depends on.
+        """
+        # Not impersonating: header is top-0 and no JS offset script runs.
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/')
+        self.assertContains(response, 'fixed top-0')
+        self.assertNotContains(response, 'id="impersonation-banner"')
+
+        # Impersonating: header is still `top-0` in markup, plus the
+        # banner element with the id the inline script targets is present.
+        self.client.post(f'/studio/impersonate/{self.target.pk}/')
+        response = self.client.get('/')
+        self.assertContains(response, 'fixed top-0')
+        self.assertContains(response, 'id="impersonation-banner"')
+        self.assertContains(response, 'id="site-header"')
+
+
+class HeaderStopImpersonatingButtonTest(TestCase):
+    """Tests for the 'Stop impersonating' button in the header user area."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='admin@test.com', password='testpass', is_staff=True,
+        )
+        cls.target = User.objects.create_user(
+            email='target@test.com', password='testpass',
+        )
+
+    def test_header_button_shown_during_impersonation(self):
+        """Header shows a 'Stop impersonating' button while impersonating."""
+        self.client.login(email='admin@test.com', password='testpass')
+        self.client.post(f'/studio/impersonate/{self.target.pk}/')
+        response = self.client.get('/')
+        self.assertContains(response, 'data-testid="header-stop-impersonating"')
+        self.assertContains(response, 'Stop impersonating')
+
+    def test_header_button_hidden_normally(self):
+        """Header does not show the 'Stop impersonating' button when not impersonating."""
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/')
+        self.assertNotContains(response, 'data-testid="header-stop-impersonating"')
+        self.assertNotContains(response, 'Stop impersonating')
+
 
 class SubscriberListLoginAsButtonTest(TestCase):
     """Tests for the 'Login as' button on the subscribers page."""

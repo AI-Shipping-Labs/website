@@ -213,85 +213,10 @@ class RecordingPublishYouTubeAccessControlTest(TestCase):
         self.assertIn('/accounts/login/', response.url)
 
 
-class RecordingYouTubeTemplateTest(TestCase):
-    """Test that the recording form template correctly shows YouTube upload section."""
-
-    def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
-
-    def test_create_url_removed(self):
-        """New recording create URL is removed (synced content types)."""
-        response = self.client.get('/studio/recordings/new')
-        self.assertEqual(response.status_code, 404)
-
-    def test_edit_recording_with_s3_url_shows_publish_button(self):
-        """Edit form for recording with s3_url but no youtube_url shows Publish button."""
-        recording = Event.objects.create(
-            title='Ready for YT',
-            slug='ready-for-yt',
-            start_datetime=timezone.now(), status='completed',
-            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/ready.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('id="youtube-upload-section"', content)
-        self.assertIn('Publish to YouTube', content)
-        self.assertIn('id="publish-youtube-btn"', content)
-
-    def test_edit_recording_with_youtube_url_shows_url(self):
-        """Edit form for recording with youtube_url shows the URL, not the button."""
-        recording = Event.objects.create(
-            title='Has YouTube',
-            slug='has-youtube',
-            start_datetime=timezone.now(), status='completed',
-            recording_url='https://www.youtube.com/watch?v=abc123',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('id="youtube-upload-section"', content)
-        self.assertIn('https://www.youtube.com/watch?v=abc123', content)
-        self.assertNotIn('id="publish-youtube-btn"', content)
-
-    def test_edit_recording_without_s3_or_youtube_shows_message(self):
-        """Edit form for recording without s3_url or youtube_url shows info message."""
-        recording = Event.objects.create(
-            title='No URLs',
-            slug='no-urls',
-            start_datetime=timezone.now(), status='completed',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('id="youtube-upload-section"', content)
-        self.assertIn('Upload the recording to S3 first', content)
-        self.assertNotIn('id="publish-youtube-btn"', content)
-
-    def test_template_has_status_span(self):
-        """The template includes a status span for upload status messages."""
-        recording = Event.objects.create(
-            title='Status Span',
-            slug='status-span-yt',
-            start_datetime=timezone.now(), status='completed',
-            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/test.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('id="youtube-status"', content)
-
-    def test_template_shows_s3_url_value(self):
-        """The template shows the S3 URL value for reference."""
-        recording = Event.objects.create(
-            title='S3 URL Show',
-            slug='s3-url-show',
-            start_datetime=timezone.now(), status='completed',
-            recording_s3_url='https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/s3-show.mp4',
-        )
-        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
-        content = response.content.decode()
-        self.assertIn(
-            'https://bucket.s3.eu-central-1.amazonaws.com/recordings/2026/s3-show.mp4',
-            content,
-        )
+# `RecordingYouTubeTemplateTest` removed under `_docs/testing-guidelines.md`
+# Rule 4 (template string-matching: `id="youtube-upload-section"`,
+# `id="publish-youtube-btn"`, `id="youtube-status"` etc).
+# Endpoint behavior (POST enqueues task, error returns 400/500, auth gates)
+# is covered by the other classes above. The "create URL is removed" check
+# (`/studio/recordings/new` returns 404) is covered indirectly by URL routing
+# tests in studio access tests.

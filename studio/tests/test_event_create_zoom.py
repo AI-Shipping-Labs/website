@@ -200,83 +200,10 @@ class EventCreateZoomAccessControlTest(TestCase):
         self.assertIn('/accounts/login/', response.url)
 
 
-class EventCreateZoomTemplateTest(TestCase):
-    """Test that the event form template correctly shows/hides the Zoom meeting section."""
-
-    def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
-
-    def test_create_form_does_not_show_zoom_section(self):
-        """The create form (new event) should NOT have the Zoom meeting section,
-        since Zoom creation requires an existing event with a PK."""
-        response = self.client.get('/studio/events/new')
-        content = response.content.decode()
-        self.assertNotIn('id="zoom-meeting-section"', content)
-        self.assertNotIn('Create Zoom Meeting', content)
-
-    def test_edit_zoom_event_without_meeting_shows_button(self):
-        """Edit form for a Zoom event with no meeting shows the Create Zoom Meeting button."""
-        event = Event.objects.create(
-            title='No Meeting Yet', slug='no-meeting',
-            event_type='live', platform='zoom',
-            start_datetime=timezone.now(),
-            timezone='Europe/Berlin',
-            status='upcoming',
-        )
-        response = self.client.get(f'/studio/events/{event.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('id="zoom-meeting-section"', content)
-        self.assertIn('Create Zoom Meeting', content)
-        self.assertIn('id="create-zoom-btn"', content)
-
-    def test_edit_zoom_event_with_meeting_shows_meeting_info(self):
-        """Edit form for a Zoom event with an existing meeting shows meeting ID and URL."""
-        event = Event.objects.create(
-            title='Has Meeting', slug='has-meeting',
-            event_type='live', platform='zoom',
-            start_datetime=timezone.now(),
-            timezone='Europe/Berlin',
-            status='upcoming',
-            zoom_meeting_id='99887766',
-            zoom_join_url='https://zoom.us/j/99887766',
-        )
-        response = self.client.get(f'/studio/events/{event.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('id="zoom-meeting-section"', content)
-        self.assertIn('99887766', content)
-        self.assertIn('https://zoom.us/j/99887766', content)
-        # The create button should NOT be present when meeting already exists
-        self.assertNotIn('id="create-zoom-btn"', content)
-
-    def test_edit_custom_event_hides_zoom_section_via_js(self):
-        """Edit form for a Custom URL event includes JS to hide the zoom section."""
-        event = Event.objects.create(
-            title='Custom Event', slug='custom-event',
-            event_type='live', platform='custom',
-            start_datetime=timezone.now(),
-            zoom_join_url='https://youtube.com/live/abc',
-        )
-        response = self.client.get(f'/studio/events/{event.pk}/edit')
-        content = response.content.decode()
-        # The zoom meeting section element exists in the DOM but JS hides it
-        self.assertIn('id="zoom-meeting-section"', content)
-        # The platform toggle JS is present
-        self.assertIn('updatePlatformVisibility', content)
-        # Custom URL option is selected
-        self.assertIn('<option value="custom" selected>Custom URL</option>', content)
-
-    def test_template_has_error_status_span(self):
-        """The template includes a status span for error messages."""
-        event = Event.objects.create(
-            title='Status Span', slug='status-span',
-            event_type='live', platform='zoom',
-            start_datetime=timezone.now(),
-        )
-        response = self.client.get(f'/studio/events/{event.pk}/edit')
-        content = response.content.decode()
-        self.assertIn('id="zoom-status"', content)
+# `EventCreateZoomTemplateTest` removed under `_docs/testing-guidelines.md`
+# Rule 4 (template string-matching: `id="zoom-meeting-section"`,
+# `id="create-zoom-btn"`, `id="zoom-status"`, `updatePlatformVisibility`).
+# Endpoint behavior (POST creates a meeting, errors return correct status codes,
+# auth gates work) is covered by the other classes above. JS-driven show/hide
+# of the zoom section based on platform selection is a Playwright concern.
 

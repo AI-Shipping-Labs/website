@@ -84,6 +84,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
     });
+    // Course-type sources have a per-level breakdown (issue #224): each
+    // level row toggles its own detail block keyed by data-type+data-level.
+    root.querySelectorAll('.sync-course-level-row').forEach(function(row) {
+      if (row._toggleBound) return;
+      row._toggleBound = true;
+      row.addEventListener('click', function() {
+        var type = row.getAttribute('data-type');
+        var level = row.getAttribute('data-level');
+        var parent = row.closest('table');
+        var detail = parent.querySelector(
+          '.sync-course-level-detail[data-type="' + type + '"][data-level="' + level + '"]'
+        );
+        var chevron = row.querySelector('.sync-chevron');
+        if (detail) {
+          detail.classList.toggle('hidden');
+          if (chevron) {
+            chevron.style.transform = detail.classList.contains('hidden') ? '' : 'rotate(90deg)';
+          }
+        }
+      });
+    });
   }
 
   // Per-source Sync Now: briefly flash "Sync queued ✓" then revert.

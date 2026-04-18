@@ -56,6 +56,46 @@ def _is_not_configured_error(errors):
     )
 
 
+_COURSE_LEVELS = (
+    ('course', 'Courses'),
+    ('module', 'Modules'),
+    ('unit', 'Lessons (units)'),
+)
+
+
+def _build_course_level_breakdown(items_detail):
+    """Group ``items_detail`` items by content_type for course-type sources.
+
+    For course syncs the flat ``items_detail`` list mixes courses, modules,
+    and units. The dashboard renders a per-level row + expandable list for
+    each (issue #224), so we pre-compute the grouping in the aggregator
+    rather than re-walking the list in the template.
+    """
+    levels = OrderedDict()
+    for level_key, label in _COURSE_LEVELS:
+        levels[level_key] = {
+            'level': level_key,
+            'label': label,
+            'created': 0,
+            'updated': 0,
+            'deleted': 0,
+            'items': [],
+        }
+    for item in items_detail or []:
+        ct = item.get('content_type')
+        if ct not in levels:
+            continue
+        action = item.get('action')
+        if action == 'created':
+            levels[ct]['created'] += 1
+        elif action == 'updated':
+            levels[ct]['updated'] += 1
+        elif action == 'deleted':
+            levels[ct]['deleted'] += 1
+        levels[ct]['items'].append(item)
+    return list(levels.values())
+
+
 def _aggregate_batch(logs):
     """Aggregate a queryset of SyncLog entries into a batch summary dict.
 
@@ -63,6 +103,11 @@ def _aggregate_batch(logs):
     the batch level so the sync-status pill (template tag
     ``sync_status_pill``) can render ``Completed with N errors`` for partial
     syncs without dipping back into the SyncLog. See issue #245.
+
+    For ``content_type='course'`` rows, the aggregator also attaches a
+    ``course_breakdown`` list — one entry per level (courses, modules,
+    units) with its own counts and item list — so the dashboard can render
+    the per-level breakdown and expandable changed-pages list (issue #224).
     """
     total_created = 0
     total_updated = 0
@@ -110,6 +155,13 @@ def _aggregate_batch(logs):
             overall_status = 'failed'
         elif log.status == 'partial' and overall_status != 'failed':
             overall_status = 'partial'
+
+    # Compute course-level breakdown (issue #224) for course-type sources.
+    for entry in per_type.values():
+        if entry['content_type'] == 'course':
+            entry['course_breakdown'] = _build_course_level_breakdown(
+                entry['items_detail'],
+            )
 
     return {
         'total_created': total_created,

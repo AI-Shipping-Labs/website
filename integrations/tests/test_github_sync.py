@@ -895,6 +895,160 @@ class SyncCoursesTest(TestCase):
         self.assertTrue(course.is_free)
 
 
+class SyncCoursePerLevelDetailTest(TestCase):
+    """Issue #224 - course syncs record per-level items_detail entries.
+
+    Previously the sync only appended one entry per course to
+    ``items_detail``; modules and units were rolled into the bare counts.
+    The dashboard couldn't tell which lessons were touched. The sync now
+    appends one ``items_detail`` entry per course, per module, and per unit
+    so the dashboard can render the per-level breakdown and an expandable
+    list of changed pages.
+    """
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            content_path='',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _build_course_with_modules_and_units(
+        self, n_modules=3, units_per_module=4,
+    ):
+        """Create a single-course repo with N modules x M units each.
+
+        Returns the (n_modules, units_per_module) tuple so the test can
+        derive expected counts.
+        """
+        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Big Course"\n')
+            f.write('slug: "big-course"\n')
+            f.write('description: "Has many modules."\n')
+            f.write('instructor_name: "Test"\n')
+            f.write('required_level: 0\n')
+            f.write(
+                'content_id: "11111111-1111-1111-1111-111111111111"\n'
+            )
+
+        unit_counter = 0
+        for m in range(1, n_modules + 1):
+            mdir = os.path.join(self.temp_dir, f'module-{m:02d}')
+            os.makedirs(mdir, exist_ok=True)
+            with open(os.path.join(mdir, 'module.yaml'), 'w') as f:
+                f.write(f'title: "Module {m}"\n')
+                f.write(f'sort_order: {m}\n')
+            for u in range(1, units_per_module + 1):
+                unit_counter += 1
+                # Stable content_id keyed by counter so re-syncing yields
+                # the same UUID and we can verify update vs create.
+                content_id = f'22222222-2222-2222-2222-{unit_counter:012d}'
+                upath = os.path.join(mdir, f'unit-{u:02d}.md')
+                with open(upath, 'w') as f:
+                    f.write('---\n')
+                    f.write(f'title: "Unit {m}.{u}"\n')
+                    f.write(f'sort_order: {u}\n')
+                    f.write(f'content_id: "{content_id}"\n')
+                    f.write('---\n')
+                    f.write(f'Body for unit {m}.{u}.\n')
+        return n_modules, units_per_module
+
+    def test_sync_records_per_level_entries_in_items_detail(self):
+        """1 course + 3 modules + 12 units -> matching items_detail counts."""
+        n_modules, units_per_module = (
+            self._build_course_with_modules_and_units(
+                n_modules=3, units_per_module=4,
+            )
+        )
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertIn(sync_log.status, ('success', 'partial'))
+
+        by_type = {}
+        for item in sync_log.items_detail:
+            by_type.setdefault(item['content_type'], []).append(item)
+
+        self.assertEqual(len(by_type.get('course', [])), 1)
+        self.assertEqual(len(by_type.get('module', [])), n_modules)
+        self.assertEqual(
+            len(by_type.get('unit', [])),
+            n_modules * units_per_module,
+        )
+
+    def test_sync_lists_every_changed_unit_title(self):
+        """All 12 unit titles appear in items_detail (acceptance criterion)."""
+        self._build_course_with_modules_and_units(
+            n_modules=3, units_per_module=4,
+        )
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        unit_titles = sorted(
+            item['title']
+            for item in sync_log.items_detail
+            if item['content_type'] == 'unit'
+        )
+        expected = sorted(
+            f'Unit {m}.{u}'
+            for m in range(1, 4)
+            for u in range(1, 5)
+        )
+        self.assertEqual(unit_titles, expected)
+
+    def test_unit_items_include_studio_edit_ids(self):
+        """Each unit item includes course_id, module_id, unit_id for URL building."""
+        self._build_course_with_modules_and_units(
+            n_modules=1, units_per_module=2,
+        )
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        unit_items = [
+            i for i in sync_log.items_detail if i['content_type'] == 'unit'
+        ]
+        self.assertEqual(len(unit_items), 2)
+        for item in unit_items:
+            self.assertIn('course_id', item)
+            self.assertIn('module_id', item)
+            self.assertIn('unit_id', item)
+            self.assertIsNotNone(item['unit_id'])
+
+    def test_module_items_include_course_id(self):
+        """Each module item includes course_id so it can link to the course edit page."""
+        self._build_course_with_modules_and_units(
+            n_modules=2, units_per_module=1,
+        )
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        module_items = [
+            i for i in sync_log.items_detail if i['content_type'] == 'module'
+        ]
+        self.assertEqual(len(module_items), 2)
+        for item in module_items:
+            self.assertIn('course_id', item)
+            self.assertIn('module_id', item)
+            self.assertIsNotNone(item['module_id'])
+
+    def test_resync_marks_existing_items_as_updated(self):
+        """A second sync produces 'updated' actions, not 'created'."""
+        self._build_course_with_modules_and_units(
+            n_modules=2, units_per_module=2,
+        )
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log_2 = sync_content_source(
+            self.source, repo_dir=self.temp_dir,
+        )
+
+        actions = [item['action'] for item in sync_log_2.items_detail]
+        self.assertTrue(
+            all(a == 'updated' for a in actions),
+            f'Expected all actions to be updated; got {set(actions)}',
+        )
+
+
 # ===========================================================================
 # Content Sync Tests (Single-Course Repo)
 # ===========================================================================

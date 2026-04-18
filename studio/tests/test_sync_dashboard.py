@@ -299,6 +299,295 @@ class StudioSyncDashboardTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class StudioSyncDashboardCourseBreakdownTest(TestCase):
+    """Issue #224 - course-type sources show per-level breakdown.
+
+    A course sync touches three different content kinds:
+    - course (one or a few)
+    - module (several per course)
+    - unit (many per module)
+
+    Lumping them all into a single "Course   X created   Y updated" row
+    hides what actually changed. The dashboard now renders one row per
+    level plus an expandable list of changed pages with links to the
+    studio edit pages.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def _build_course_items_detail(self, n_courses=1, n_modules=3, n_units=12):
+        """Build a flat items_detail list mixing course/module/unit items.
+
+        Mirrors what the sync writes out for a course-type source after
+        issue #224. Uses placeholder PKs (1, 2, ...) so the studio edit
+        URL fields exist; we don't need real DB rows for view-layer tests.
+        """
+        items = []
+        for i in range(n_courses):
+            items.append({
+                'title': f'Course {i + 1}',
+                'slug': f'course-{i + 1}',
+                'action': 'updated',
+                'content_type': 'course',
+                'course_id': 100 + i,
+                'course_slug': f'course-{i + 1}',
+            })
+        for i in range(n_modules):
+            items.append({
+                'title': f'Module {i + 1}',
+                'slug': f'module-{i + 1}',
+                'action': 'updated',
+                'content_type': 'module',
+                'course_id': 100,
+                'course_slug': 'course-1',
+                'module_id': 200 + i,
+            })
+        for i in range(n_units):
+            items.append({
+                'title': f'Unit {i + 1}',
+                'slug': f'unit-{i + 1}',
+                'action': 'updated',
+                'content_type': 'unit',
+                'course_id': 100,
+                'course_slug': 'course-1',
+                'module_id': 200,
+                'module_slug': 'module-1',
+                'unit_id': 300 + i,
+            })
+        return items
+
+    def test_course_breakdown_present_in_context(self):
+        """Course-type per_type entry carries a course_breakdown list."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_created=0,
+            items_updated=16,
+            items_detail=self._build_course_items_detail(
+                n_courses=1, n_modules=3, n_units=12,
+            ),
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get('/studio/sync/')
+        repos = {r['repo_name']: r for r in response.context['repos']}
+        course_card = repos['AI-Shipping-Labs/python-course']
+        per_type = course_card['last_batch']['per_type']
+        self.assertEqual(len(per_type), 1)
+        self.assertIn('course_breakdown', per_type[0])
+
+        # The breakdown must list courses, modules, and units in that order.
+        breakdown = per_type[0]['course_breakdown']
+        self.assertEqual([b['level'] for b in breakdown],
+                         ['course', 'module', 'unit'])
+
+    def test_course_breakdown_counts_match_items(self):
+        """Per-level counts equal the number of items at each level."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_updated=16,
+            items_detail=self._build_course_items_detail(
+                n_courses=1, n_modules=3, n_units=12,
+            ),
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get('/studio/sync/')
+        repos = {r['repo_name']: r for r in response.context['repos']}
+        breakdown = {
+            b['level']: b
+            for b in repos['AI-Shipping-Labs/python-course']
+            ['last_batch']['per_type'][0]['course_breakdown']
+        }
+        self.assertEqual(breakdown['course']['updated'], 1)
+        self.assertEqual(breakdown['module']['updated'], 3)
+        self.assertEqual(breakdown['unit']['updated'], 12)
+
+    def test_course_breakdown_separates_created_and_updated(self):
+        """Per-level rows distinguish created vs updated counts."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        items_detail = [
+            {'title': 'C', 'slug': 'c', 'action': 'updated',
+             'content_type': 'course', 'course_id': 1, 'course_slug': 'c'},
+            {'title': 'M new', 'slug': 'm-new', 'action': 'created',
+             'content_type': 'module', 'course_id': 1, 'module_id': 1,
+             'course_slug': 'c'},
+            {'title': 'M old', 'slug': 'm-old', 'action': 'updated',
+             'content_type': 'module', 'course_id': 1, 'module_id': 2,
+             'course_slug': 'c'},
+            {'title': 'U new', 'slug': 'u-new', 'action': 'created',
+             'content_type': 'unit', 'course_id': 1, 'module_id': 1,
+             'unit_id': 1, 'course_slug': 'c', 'module_slug': 'm-new'},
+            {'title': 'U old', 'slug': 'u-old', 'action': 'updated',
+             'content_type': 'unit', 'course_id': 1, 'module_id': 1,
+             'unit_id': 2, 'course_slug': 'c', 'module_slug': 'm-new'},
+        ]
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_detail=items_detail,
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get('/studio/sync/')
+        repos = {r['repo_name']: r for r in response.context['repos']}
+        breakdown = {
+            b['level']: b
+            for b in repos['AI-Shipping-Labs/python-course']
+            ['last_batch']['per_type'][0]['course_breakdown']
+        }
+        self.assertEqual(breakdown['course']['created'], 0)
+        self.assertEqual(breakdown['course']['updated'], 1)
+        self.assertEqual(breakdown['module']['created'], 1)
+        self.assertEqual(breakdown['module']['updated'], 1)
+        self.assertEqual(breakdown['unit']['created'], 1)
+        self.assertEqual(breakdown['unit']['updated'], 1)
+
+    def test_course_breakdown_renders_level_labels(self):
+        """Dashboard HTML shows the per-level row labels for course sources."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_updated=16,
+            items_detail=self._build_course_items_detail(
+                n_courses=1, n_modules=3, n_units=12,
+            ),
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        self.assertIn('Courses', body)
+        self.assertIn('Modules', body)
+        self.assertIn('Lessons (units)', body)
+
+    def test_course_breakdown_lists_changed_unit_titles(self):
+        """The expandable list includes every changed unit title."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_updated=16,
+            items_detail=self._build_course_items_detail(
+                n_courses=1, n_modules=3, n_units=12,
+            ),
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get('/studio/sync/')
+        for i in range(1, 13):
+            self.assertContains(response, f'Unit {i}')
+
+    def test_course_breakdown_links_to_studio_edit_pages(self):
+        """Each item row links to its studio edit page (not the public site)."""
+        from content.models import Course, Module, Unit
+        course = Course.objects.create(
+            title='C', slug='c-slug',
+            source_repo='AI-Shipping-Labs/python-course',
+            status='published',
+        )
+        module = Module.objects.create(course=course, title='M', slug='m')
+        unit = Unit.objects.create(module=module, title='U', slug='u')
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_updated=3,
+            items_detail=[
+                {'title': 'C', 'slug': 'c-slug', 'action': 'updated',
+                 'content_type': 'course', 'course_id': course.pk,
+                 'course_slug': 'c-slug'},
+                {'title': 'M', 'slug': 'm', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'course_slug': 'c-slug', 'module_id': module.pk},
+                {'title': 'U', 'slug': 'u', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'course_slug': 'c-slug', 'module_id': module.pk,
+                 'module_slug': 'm', 'unit_id': unit.pk},
+            ],
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        # Course and module rows both link to the course edit page (modules
+        # are managed inline within the course form).
+        self.assertIn(f'/studio/courses/{course.pk}/edit', body)
+        # Unit rows link to the unit edit page.
+        self.assertIn(f'/studio/units/{unit.pk}/edit', body)
+        # No public-site links for these — operators want the edit page.
+        self.assertNotIn('/courses/c-slug', body)
+
+    def test_non_course_types_unchanged(self):
+        """Article/project/etc. rows still render with the original layout."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_created=1,
+            items_detail=[{
+                'title': 'Hello',
+                'slug': 'hello',
+                'action': 'created',
+                'content_type': 'article',
+            }],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        per_type = response.context['repos'][0]['last_batch']['per_type']
+        # Non-course rows do not get a course_breakdown.
+        self.assertNotIn('course_breakdown', per_type[0])
+        # Article row still uses public /blog/<slug> link (unchanged behavior).
+        self.assertContains(response, '/blog/hello')
+
+
 class StudioSyncDashboardFragmentTest(TestCase):
     """Test the ?fragment=status auto-refresh endpoint (issue #243).
 
@@ -421,6 +710,42 @@ class StudioSyncDashboardFragmentTest(TestCase):
         client = Client()
         response = client.get('/studio/sync/?fragment=status')
         self.assertEqual(response.status_code, 302)
+
+    def test_fragment_includes_course_breakdown(self):
+        """Fragment endpoint reflects the new course-level breakdown so
+        the dashboard's auto-refresh poller (issue #243) doesn't fall back
+        to the rolled-up "Course X created Y updated" row when a course
+        sync finishes mid-poll. See issue #224.
+        """
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_updated=5,
+            items_detail=[
+                {'title': 'C', 'slug': 'c', 'action': 'updated',
+                 'content_type': 'course', 'course_id': 1,
+                 'course_slug': 'c'},
+                {'title': 'M', 'slug': 'm', 'action': 'updated',
+                 'content_type': 'module', 'course_id': 1,
+                 'course_slug': 'c', 'module_id': 1},
+                {'title': 'Lesson Alpha', 'slug': 'lesson-a',
+                 'action': 'updated', 'content_type': 'unit',
+                 'course_id': 1, 'course_slug': 'c',
+                 'module_id': 1, 'module_slug': 'm', 'unit_id': 1},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        # Per-level rows appear in the fragment.
+        self.assertContains(response, 'Lessons (units)')
+        # Changed unit titles appear so the operator sees them after the poll.
+        self.assertContains(response, 'Lesson Alpha')
 
 
 class StudioSyncDashboardLiveIndicatorTest(TestCase):

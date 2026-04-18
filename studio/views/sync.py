@@ -117,7 +117,11 @@ def _aggregate_batch(logs):
     per_type = OrderedDict()
     tiers_synced = False
     tiers_count = 0
-    overall_status = 'success'
+    # Track the overall status. ``None`` means we haven't seen any logs
+    # yet; once we have, ``skipped``/``success`` get demoted by a worse
+    # status (failed > partial > success/skipped).
+    overall_status = None
+    seen_non_skipped = False
 
     for log in logs:
         ct = log.source.get_content_type_display()
@@ -132,6 +136,12 @@ def _aggregate_batch(logs):
                 'status': log.status,
                 'errors_count': 0,
                 'items_detail': [],
+                # Issue #235: surface the commit SHA each per-type row ran
+                # against (or, for skip rows, the SHA we compared HEAD to).
+                'commit_sha': log.commit_sha or '',
+                'short_commit_sha': log.short_commit_sha,
+                'commit_url': log.commit_url,
+                'is_skipped': log.status == 'skipped',
             }
         entry = per_type[ct]
         entry['created'] += log.items_created
@@ -139,7 +149,13 @@ def _aggregate_batch(logs):
         entry['unchanged'] += log.items_unchanged
         entry['deleted'] += log.items_deleted
         entry['items_detail'].extend(log.items_detail or [])
-        entry['errors_count'] += len(log.errors or [])
+        # ``skipped`` rows store their reason ("HEAD unchanged" or
+        # "Sync already in progress") in ``errors`` for compatibility,
+        # but those aren't actual errors — don't count them toward
+        # the dashboard's red error panel or the "Completed with N
+        # errors" pill (issue #235).
+        if log.status != 'skipped':
+            entry['errors_count'] += len(log.errors or [])
         if log.status == 'failed':
             entry['status'] = 'failed'
         elif log.status == 'partial' and entry['status'] != 'failed':
@@ -149,7 +165,8 @@ def _aggregate_batch(logs):
         total_updated += log.items_updated
         total_unchanged += log.items_unchanged
         total_deleted += log.items_deleted
-        all_errors.extend(log.errors or [])
+        if log.status != 'skipped':
+            all_errors.extend(log.errors or [])
 
         if log.tiers_synced:
             tiers_synced = True
@@ -159,6 +176,21 @@ def _aggregate_batch(logs):
             overall_status = 'failed'
         elif log.status == 'partial' and overall_status != 'failed':
             overall_status = 'partial'
+        elif log.status == 'success' and overall_status not in (
+            'failed', 'partial',
+        ):
+            overall_status = 'success'
+            seen_non_skipped = True
+        elif log.status == 'skipped' and overall_status is None:
+            # Stays as 'skipped' unless a later (worse) log overrides.
+            overall_status = 'skipped'
+
+    # If every log in the batch was a skip, surface that to the pill;
+    # otherwise default to success when nothing worse happened.
+    if overall_status is None:
+        overall_status = 'success'
+    elif overall_status == 'skipped' and seen_non_skipped:
+        overall_status = 'success'
 
     # Compute course-level breakdown (issue #224) for course-type sources.
     for entry in per_type.values():
@@ -263,6 +295,14 @@ def _build_repos_context():
             repo['last_batch']['errors_count'] if repo['last_batch'] else 0
         )
 
+        # Issue #235: expose a sorted list of (source, last_synced_commit)
+        # for the per-card SHA strip. Empty when the repo has only one
+        # source AND no recorded commit yet — the strip is hidden in that
+        # case to keep the card clean for never-synced repos.
+        sources_sorted = sorted(repo['sources'], key=lambda s: s.content_type)
+        any_synced = any(s.last_synced_commit for s in sources_sorted)
+        repo['sources_with_commits'] = sources_sorted if any_synced else []
+
     repos_list = list(repos.values())
     return {
         'repos': repos_list,
@@ -340,6 +380,17 @@ def sync_history(request, source_id=None):
     })
 
 
+def _force_flag(request):
+    """Read the ``force`` flag from a Studio sync POST.
+
+    Accepts truthy strings (``"1"``, ``"true"``, ``"on"``) so the form can
+    use either a hidden input or a checkbox. The default is False so the
+    HEAD-SHA skip check (issue #235) stays opt-out.
+    """
+    raw = (request.POST.get('force') or '').strip().lower()
+    return raw in ('1', 'true', 'on', 'yes')
+
+
 @staff_required
 @require_POST
 def sync_trigger(request, source_id):
@@ -349,8 +400,12 @@ def sync_trigger(request, source_id):
     dashboard and can see the inline indicator update. The flash message
     includes a link to ``/studio/worker/`` for operators who want to watch
     the job land in the queue. See issue #239.
+
+    If the POST includes ``force=1`` (issue #235's "Force resync" button),
+    the sync bypasses the HEAD-SHA skip check.
     """
     source = get_object_or_404(ContentSource, pk=source_id)
+    force = _force_flag(request)
 
     try:
         try:
@@ -358,15 +413,18 @@ def sync_trigger(request, source_id):
             async_task(
                 'integrations.services.github.sync_content_source',
                 source,
+                force=force,
                 task_name=f'sync-{source.repo_name}',
             )
             warning = _worker_warning_suffix()
             label = source.repo_name
             if source.content_path:
                 label = f'{label} ({source.content_path})'
+            verb = 'Force resync queued' if force else 'Sync queued'
             base_msg = format_html(
-                'Sync queued for {label}. You can see the status '
+                '{verb} for {label}. You can see the status '
                 '<a href="/studio/worker/" class="underline">here</a>{warning}',
+                verb=verb,
                 label=label,
                 warning=warning,
             )
@@ -375,7 +433,7 @@ def sync_trigger(request, source_id):
             else:
                 messages.success(request, base_msg)
         except ImportError:
-            sync_content_source(source)
+            sync_content_source(source, force=force)
             messages.success(
                 request,
                 f'Sync completed for {source.repo_name}'
@@ -409,6 +467,7 @@ def sync_repo_trigger(request, repo_name):
 
     batch_id = uuid.uuid4()
     count = len(sources)
+    force = _force_flag(request)
 
     for source in sources:
         try:
@@ -418,18 +477,21 @@ def sync_repo_trigger(request, repo_name):
                     'integrations.services.github.sync_content_source',
                     source,
                     batch_id=batch_id,
+                    force=force,
                     task_name=f'sync-{source.repo_name}-{source.content_type}',
                 )
             except ImportError:
-                sync_content_source(source, batch_id=batch_id)
+                sync_content_source(source, batch_id=batch_id, force=force)
         except Exception:
             logger.exception('Error triggering sync for %s', source.repo_name)
 
     warning = _worker_warning_suffix()
+    verb = 'Force resync queued' if force else 'Sync queued'
     base_msg = format_html(
-        'Sync queued for {repo_name} ({count} source{plural}). You can see '
+        '{verb} for {repo_name} ({count} source{plural}). You can see '
         'the status <a href="/studio/worker/" class="underline">here</a>'
         '{warning}',
+        verb=verb,
         repo_name=repo_name,
         count=count,
         plural='' if count == 1 else 's',
@@ -456,6 +518,7 @@ def sync_all(request):
     sources = ContentSource.objects.all()
     count = sources.count()
     batch_id = uuid.uuid4()
+    force = _force_flag(request)
 
     for source in sources:
         try:
@@ -465,17 +528,20 @@ def sync_all(request):
                     'integrations.services.github.sync_content_source',
                     source,
                     batch_id=batch_id,
+                    force=force,
                     task_name=f'sync-{source.repo_name}-{source.content_type}',
                 )
             except ImportError:
-                sync_content_source(source, batch_id=batch_id)
+                sync_content_source(source, batch_id=batch_id, force=force)
         except Exception:
             logger.exception('Error triggering sync for %s', source.repo_name)
 
     warning = _worker_warning_suffix()
+    verb = 'Force resync queued' if force else 'Sync queued'
     base_msg = format_html(
-        'Sync queued for {count} source{plural}. You can see the status '
+        '{verb} for {count} source{plural}. You can see the status '
         '<a href="/studio/worker/" class="underline">here</a>{warning}',
+        verb=verb,
         count=count,
         plural='' if count == 1 else 's',
         warning=warning,

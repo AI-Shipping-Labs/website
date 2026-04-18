@@ -59,6 +59,7 @@
             <th class="pb-2 pr-4 text-right">Updated</th>
             <th class="pb-2 pr-4 text-right">Deleted</th>
             <th class="pb-2 pr-4 text-right">Unchanged</th>
+            <th class="pb-2 pr-4">Commit</th>
             <th class="pb-2 pr-4">Status</th>
           </tr>
         </thead>
@@ -77,13 +78,27 @@
             <td class="py-2 pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ ct.updated }}</td>
             <td class="py-2 pr-4 text-right {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ ct.deleted }}</td>
             <td class="py-2 pr-4 text-right text-muted-foreground" data-unchanged>{{ ct.unchanged }}</td>
+            <td class="py-2 pr-4 text-xs" data-sync-commit-cell>
+              {% if ct.short_commit_sha %}
+                {% if ct.is_skipped %}
+                  <span class="text-muted-foreground">skipped: HEAD ==</span>
+                {% endif %}
+                {% if ct.commit_url %}
+                  <a href="{{ ct.commit_url }}" target="_blank" rel="noopener" class="font-mono text-accent hover:underline">{{ ct.short_commit_sha }}</a>
+                {% else %}
+                  <span class="font-mono text-muted-foreground">{{ ct.short_commit_sha }}</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted-foreground">-</span>
+              {% endif %}
+            </td>
             <td class="py-2 pr-4">
               {% sync_status_pill ct.status ct.errors_count 'xs' %}
             </td>
           </tr>
           {% if ct.items_detail %}
           <tr class="hist-type-detail hidden" data-batch="{{ forloop.parentloop.counter }}" data-type="{{ ct.content_type }}">
-            <td colspan="6" class="py-2 pl-8">
+            <td colspan="7" class="py-2 pl-8">
               <div class="space-y-1">
                 {% for item in ct.items_detail %}
                 <div class="flex items-center space-x-3 text-xs">
@@ -116,6 +131,7 @@
             <td class="py-2 pr-4 text-right text-blue-400">{{ batch.tiers_count }} tier{{ batch.tiers_count|pluralize }}</td>
             <td class="py-2 pr-4 text-right text-muted-foreground">-</td>
             <td class="py-2 pr-4 text-right text-muted-foreground">-</td>
+            <td class="py-2 pr-4 text-muted-foreground">-</td>
             <td class="py-2 pr-4"><span class="text-xs text-green-400">synced</span></td>
           </tr>
           {% endif %}

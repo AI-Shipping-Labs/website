@@ -69,6 +69,13 @@ class ContentSource(models.Model):
         null=True, blank=True,
         help_text="Timestamp of last webhook received.",
     )
+    last_synced_commit = models.CharField(
+        max_length=40, blank=True, default='', db_index=True,
+        help_text=(
+            "Git commit SHA from the last successful sync. Used to skip "
+            "no-op syncs when the upstream HEAD has not changed (issue #235)."
+        ),
+    )
     max_files = models.PositiveIntegerField(
         default=1000,
         help_text="Safety limit on number of content files to process per sync.",
@@ -87,6 +94,18 @@ class ContentSource(models.Model):
     def short_name(self):
         """Return just the repo name without the org prefix."""
         return self.repo_name.split('/')[-1] if '/' in self.repo_name else self.repo_name
+
+    @property
+    def short_synced_commit(self):
+        """7-char SHA prefix for display (or empty string)."""
+        return self.last_synced_commit[:7] if self.last_synced_commit else ''
+
+    @property
+    def synced_commit_url(self):
+        """GitHub URL to the last-synced commit (or empty string)."""
+        if not self.last_synced_commit or '/' not in self.repo_name:
+            return ''
+        return f'https://github.com/{self.repo_name}/commit/{self.last_synced_commit}'
 
 
 class SyncLog(models.Model):
@@ -119,6 +138,13 @@ class SyncLog(models.Model):
         default=list, blank=True,
         help_text="List of changed items: [{title, slug, action, content_type, url}, ...]",
     )
+    commit_sha = models.CharField(
+        max_length=40, blank=True, default='',
+        help_text=(
+            "Git commit SHA this sync ran against. For ``skipped`` rows this "
+            "is the SHA we compared HEAD against (issue #235)."
+        ),
+    )
     tiers_synced = models.BooleanField(
         default=False,
         help_text="Whether tiers.yaml was synced during this operation.",
@@ -147,3 +173,18 @@ class SyncLog(models.Model):
         if self.finished_at and self.started_at:
             return (self.finished_at - self.started_at).total_seconds()
         return None
+
+    @property
+    def short_commit_sha(self):
+        """7-char SHA prefix for display (or empty string)."""
+        return self.commit_sha[:7] if self.commit_sha else ''
+
+    @property
+    def commit_url(self):
+        """GitHub URL to this sync's commit (or empty string)."""
+        if not self.commit_sha or not self.source_id:
+            return ''
+        repo_name = self.source.repo_name
+        if '/' not in repo_name:
+            return ''
+        return f'https://github.com/{repo_name}/commit/{self.commit_sha}'

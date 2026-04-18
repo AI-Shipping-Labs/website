@@ -1,0 +1,25 @@
+{% comment %}
+Subtle inline worker-status indicator for studio pages that submit jobs to
+the queue. Renders as a single line, no background, click-anywhere link to
+``/studio/worker/``. Suppressed entirely when ``EXPECT_WORKER=false``.
+Driven by ``{% worker_status_inline %}`` (see ``studio.templatetags``).
+{% endcomment %}
+{% if worker_status.expect_worker %}
+<a href="{% url 'studio_worker' %}"
+   data-testid="worker-status-inline"
+   class="inline-flex items-center gap-2 mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+  {% if worker_status.alive %}
+    <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" aria-hidden="true"></span>
+    <span class="text-foreground">Worker:</span>
+    <span>Running</span>
+    <span class="text-muted-foreground/70">&middot;</span>
+    <span>Queue: {{ worker_status.queue_depth }} pending</span>
+  {% else %}
+    <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" aria-hidden="true"></span>
+    <span class="text-foreground">Worker:</span>
+    <span>Not running</span>
+    <span class="text-muted-foreground/70">&middot;</span>
+    <span class="underline">View worker &rarr;</span>
+  {% endif %}
+</a>
+{% endif %}

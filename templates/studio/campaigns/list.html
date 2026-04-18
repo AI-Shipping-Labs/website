@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Campaigns{% endblock %}
 
@@ -7,6 +8,7 @@
   <div>
     <h1 class="text-2xl font-semibold text-foreground">Email Campaigns</h1>
     <p class="text-muted-foreground mt-1">Manage email campaigns and newsletters.</p>
+    {% worker_status_inline %}
   </div>
   <a href="{% url 'studio_campaign_create' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
     New Campaign

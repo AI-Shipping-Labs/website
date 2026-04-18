@@ -2,17 +2,18 @@
 
 from django.shortcuts import render
 from django.utils import timezone
+from django_q.models import OrmQ
 
+from content.models import Article, Course, Download, Project
+from email_app.models import EmailCampaign, NewsletterSubscriber
+from events.models import Event
 from studio.decorators import staff_required
+from studio.worker_health import get_worker_status
 
 
 @staff_required
 def dashboard(request):
     """Studio dashboard with quick stats."""
-    from content.models import Article, Course, Download, Project
-    from email_app.models import EmailCampaign, NewsletterSubscriber
-    from events.models import Event
-
     stats = {
         'total_courses': Course.objects.count(),
         'published_courses': Course.objects.filter(status='published').count(),
@@ -38,9 +39,17 @@ def dashboard(request):
     recent_events = Event.objects.order_by('-created_at')[:5]
     pending_projects = Project.objects.filter(status='pending_review').order_by('-created_at')[:5]
 
+    worker_info = get_worker_status()
+    try:
+        queue_depth = OrmQ.objects.count()
+    except Exception:
+        queue_depth = 0
+
     return render(request, 'studio/dashboard.html', {
         'stats': stats,
         'recent_articles': recent_articles,
         'recent_events': recent_events,
         'pending_projects': pending_projects,
+        'worker_info': worker_info,
+        'worker_queue_depth': queue_depth,
     })

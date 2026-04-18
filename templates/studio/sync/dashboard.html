@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Content Sync{% endblock %}
 
@@ -7,6 +8,7 @@
   <div>
     <h1 class="text-2xl font-semibold text-foreground">Content Sync</h1>
     <p class="text-muted-foreground mt-1">Sync content from GitHub repositories.</p>
+    {% worker_status_inline %}
   </div>
   <div class="flex items-center gap-3 shrink-0">
     <a href="{% url 'studio_content_source_create' %}"
@@ -26,16 +28,6 @@
     </form>
   </div>
 </div>
-
-{% if studio_worker_status and studio_worker_status.expect_worker and not studio_worker_status.alive %}
-<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-yellow-500/15 border border-yellow-500/40 text-yellow-200">
-  <p class="font-medium">Worker not running.</p>
-  <p class="mt-1 text-yellow-200/80">
-    Sync jobs will be queued but not executed until you start the worker:
-    <code class="bg-yellow-500/20 px-1.5 py-0.5 rounded text-xs">uv run python manage.py qcluster</code>
-  </p>
-</div>
-{% endif %}
 
 <!-- Messages -->
 {% if messages %}

@@ -238,7 +238,11 @@ def sync_history(request, source_id=None):
 @staff_required
 @require_POST
 def sync_trigger(request, source_id):
-    """Trigger a sync for a single content source."""
+    """Trigger a sync for a single content source.
+
+    Redirects to ``/studio/worker/`` after enqueuing so the user can see the
+    job land in the queue (and detect if the worker is down).
+    """
     source = get_object_or_404(ContentSource, pk=source_id)
 
     try:
@@ -253,7 +257,7 @@ def sync_trigger(request, source_id):
             label = source.repo_name
             if source.content_path:
                 label = f'{label} ({source.content_path})'
-            base_msg = f'Sync queued for {label}'
+            base_msg = f'Sync queued for {label} — watching it here.'
             if warning:
                 messages.warning(request, base_msg + warning)
             else:
@@ -272,13 +276,17 @@ def sync_trigger(request, source_id):
             f'Sync failed for {source.repo_name}: {e}',
         )
 
-    return redirect('studio_sync_dashboard')
+    return redirect('studio_worker')
 
 
 @staff_required
 @require_POST
 def sync_all(request):
-    """Trigger sync for all content sources with a shared batch_id."""
+    """Trigger sync for all content sources with a shared batch_id.
+
+    Redirects to ``/studio/worker/`` after enqueuing so the user can watch
+    the batch flow through the queue.
+    """
     sources = ContentSource.objects.all()
     count = sources.count()
     batch_id = uuid.uuid4()
@@ -299,12 +307,15 @@ def sync_all(request):
             logger.exception('Error triggering sync for %s', source.repo_name)
 
     warning = _worker_warning_suffix()
-    base_msg = f'Sync triggered for {count} source{"" if count == 1 else "s"}.'
+    base_msg = (
+        f'Sync triggered for {count} source{"" if count == 1 else "s"} — '
+        'watching it here.'
+    )
     if warning:
         messages.warning(request, base_msg + warning)
     else:
         messages.success(request, base_msg)
-    return redirect('studio_sync_dashboard')
+    return redirect('studio_worker')
 
 
 @staff_required

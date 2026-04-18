@@ -98,7 +98,10 @@ function sendCampaign() {
         if (data.status === 'ok') {
             btn.style.display = 'none';
             document.getElementById('btn-send-test').style.display = 'none';
-            setTimeout(function() { location.reload(); }, 2000);
+            // Redirect to the worker dashboard so the operator can watch
+            // the queued send_campaign task actually run.
+            var target = data.redirect_url || '/studio/worker/';
+            setTimeout(function() { window.location.href = target; }, 800);
         } else {
             btn.disabled = false;
             btn.textContent = 'Send Campaign';

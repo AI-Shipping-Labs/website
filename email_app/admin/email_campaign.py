@@ -2,7 +2,7 @@
 
 import logging
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.http import JsonResponse
 from django.urls import path, reverse
 
@@ -153,10 +153,23 @@ class EmailCampaignAdmin(admin.ModelAdmin):
             campaign_id, task_id,
         )
 
+        # Set a flash message so the user sees context after the redirect.
+        flash_message = (
+            f'Campaign "{campaign.subject}" queued for sending — '
+            'watching it here.'
+        )
+        messages.success(request, flash_message)
+
+        # Tell the JS handler where to navigate. Pointing the operator at the
+        # worker dashboard mirrors the studio sync/sync-all flow: enqueue then
+        # show the queue so they can see the job actually run.
+        redirect_url = reverse('studio_worker')
+
         return JsonResponse({
             'status': 'ok',
-            'message': 'Campaign queued for sending.',
+            'message': flash_message,
             'task_id': str(task_id) if task_id else None,
+            'redirect_url': redirect_url,
         })
 
     def recipient_count_view(self, request, campaign_id):

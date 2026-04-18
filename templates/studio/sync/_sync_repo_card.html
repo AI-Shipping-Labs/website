@@ -61,7 +61,10 @@ still in flight.
       {% if repo.last_batch.total_deleted %}
       <span class="text-red-400">-{{ repo.last_batch.total_deleted }} deleted</span>
       {% endif %}
-      {% if not repo.last_batch.total_created and not repo.last_batch.total_updated and not repo.last_batch.total_deleted %}
+      {% if repo.last_batch.total_unchanged %}
+      <span class="text-muted-foreground">{{ repo.last_batch.total_unchanged }} unchanged</span>
+      {% endif %}
+      {% if not repo.last_batch.total_created and not repo.last_batch.total_updated and not repo.last_batch.total_deleted and not repo.last_batch.total_unchanged %}
       <span class="text-muted-foreground">No changes</span>
       {% endif %}
     </div>
@@ -75,6 +78,7 @@ still in flight.
             <th class="pb-2 pr-2 sm:pr-4 text-right">Created</th>
             <th class="pb-2 pr-2 sm:pr-4 text-right">Updated</th>
             <th class="pb-2 pr-2 sm:pr-4 text-right hidden sm:table-cell">Deleted</th>
+            <th class="pb-2 pr-2 sm:pr-4 text-right hidden sm:table-cell">Unchanged</th>
             <th class="pb-2 pr-2 sm:pr-4">Status</th>
           </tr>
         </thead>
@@ -87,7 +91,7 @@ still in flight.
           and expandable changed-pages list.
           {% endcomment %}
           <tr>
-            <td class="py-2 pr-4 text-foreground font-medium" colspan="5">
+            <td class="py-2 pr-4 text-foreground font-medium" colspan="6">
               <span>{{ ct.display_name }}</span>
             </td>
           </tr>
@@ -104,6 +108,7 @@ still in flight.
             <td class="py-2 pr-2 sm:pr-4 text-right {% if level.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ level.created }}</td>
             <td class="py-2 pr-2 sm:pr-4 text-right {% if level.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ level.updated }}</td>
             <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell {% if level.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ level.deleted }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell text-muted-foreground">-</td>
             <td class="py-2 pr-2 sm:pr-4">
               {% if forloop.last %}
                 {% sync_status_pill ct.status ct.errors_count 'xs' %}
@@ -114,7 +119,7 @@ still in flight.
           <tr class="sync-course-level-detail hidden"
               data-type="{{ ct.content_type }}"
               data-level="{{ level.level }}">
-            <td colspan="5" class="py-2 pl-12">
+            <td colspan="6" class="py-2 pl-12">
               <div class="space-y-1">
                 {% for item in level.items %}
                 <div class="flex items-center space-x-3 text-xs">
@@ -147,6 +152,7 @@ still in flight.
             <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ ct.created }}</td>
             <td class="py-2 pr-2 sm:pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ ct.updated }}</td>
             <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ ct.deleted }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell text-muted-foreground" data-unchanged>{{ ct.unchanged }}</td>
             <td class="py-2 pr-2 sm:pr-4">
               {% sync_status_pill ct.status ct.errors_count 'xs' %}
             </td>
@@ -154,7 +160,7 @@ still in flight.
           <!-- Expandable detail rows -->
           {% if ct.items_detail %}
           <tr class="sync-type-detail hidden" data-type="{{ ct.content_type }}">
-            <td colspan="5" class="py-2 pl-8">
+            <td colspan="6" class="py-2 pl-8">
               <div class="space-y-1">
                 {% for item in ct.items_detail %}
                 <div class="flex items-center space-x-3 text-xs">
@@ -186,7 +192,8 @@ still in flight.
             <td class="py-2 pr-4 text-foreground font-medium">Tiers</td>
             <td class="py-2 pr-4 text-right text-muted-foreground">-</td>
             <td class="py-2 pr-4 text-right text-blue-400">{{ repo.last_batch.tiers_count }} tier{{ repo.last_batch.tiers_count|pluralize }}</td>
-            <td class="py-2 pr-4 text-right text-muted-foreground">-</td>
+            <td class="py-2 pr-4 text-right hidden sm:table-cell text-muted-foreground">-</td>
+            <td class="py-2 pr-4 text-right hidden sm:table-cell text-muted-foreground">-</td>
             <td class="py-2 pr-4">
               <span class="text-xs text-green-400">synced</span>
             </td>

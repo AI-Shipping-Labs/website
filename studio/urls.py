@@ -22,6 +22,11 @@ from studio.views.courses import (
 )
 from studio.views.dashboard import dashboard
 from studio.views.downloads import download_edit, download_list
+from studio.views.enrollments import (
+    enrollment_create,
+    enrollment_list,
+    enrollment_unenroll,
+)
 from studio.views.events import event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.notifications import (
@@ -112,6 +117,11 @@ urlpatterns = [
     path('courses/<int:course_id>/access/', course_access_list, name='studio_course_access_list'),
     path('courses/<int:course_id>/access/grant/', course_access_grant, name='studio_course_access_grant'),
     path('courses/<int:course_id>/access/<int:access_id>/revoke/', course_access_revoke, name='studio_course_access_revoke'),
+
+    # Enrollments (issue #236)
+    path('enrollments/', enrollment_list, name='studio_enrollment_list'),
+    path('enrollments/create', enrollment_create, name='studio_enrollment_create'),
+    path('enrollments/<int:enrollment_id>/unenroll', enrollment_unenroll, name='studio_enrollment_unenroll'),
 
     # Articles
     path('articles/', article_list, name='studio_article_list'),

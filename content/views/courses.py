@@ -1,7 +1,8 @@
 import datetime
 
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.views.decorators.http import require_POST
@@ -19,6 +20,14 @@ from content.models import (
     Module,
     Unit,
     UserCourseProgress,
+)
+from content.services.enrollment import (
+    auto_enroll_on_progress,
+    ensure_enrollment,
+    is_enrolled,
+)
+from content.services.enrollment import (
+    unenroll as unenroll_user,
 )
 from content.templatetags.video_utils import get_video_thumbnail_url
 from content.utils.teaser import first_sentence, truncate_to_words
@@ -45,12 +54,24 @@ def courses_list(request):
     # Filter by tags if provided (AND logic)
     courses = _filter_by_tags(courses, selected_tags)
 
+    # Set of course IDs the user is currently enrolled in — drives the
+    # "Enrolled" badge in the template (issue #236). Single query.
+    enrolled_course_ids: set[int] = set()
+    if request.user.is_authenticated:
+        from content.models import Enrollment
+        enrolled_course_ids = set(
+            Enrollment.objects
+            .filter(user=request.user, unenrolled_at__isnull=True)
+            .values_list('course_id', flat=True)
+        )
+
     context = {
         'courses': courses,
         'all_tags': all_tags,
         'selected_tags': selected_tags,
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'base_path': '/courses',
+        'enrolled_course_ids': enrolled_course_ids,
     }
     return render(request, 'content/courses_list.html', context)
 
@@ -134,6 +155,12 @@ def course_detail(request, slug):
         and get_user_level(user) >= LEVEL_MAIN
     )
 
+    # Enrollment state (issue #236). Drives the Enroll / Continue buttons.
+    user_is_enrolled = is_enrolled(user, course)
+    next_unit_for_user = None
+    if user_is_enrolled:
+        next_unit_for_user = course.get_next_unit_for(user)
+
     context = {
         'course': course,
         'modules': modules,
@@ -152,8 +179,56 @@ def course_detail(request, slug):
         'buy_individual_price': buy_individual_price,
         'testimonials': course.testimonials,
         'show_discussion': show_discussion,
+        'user_is_enrolled': user_is_enrolled,
+        'next_unit_for_user': next_unit_for_user,
     }
     return render(request, 'content/course_detail.html', context)
+
+
+# --- Enrollment endpoints (issue #236) ---
+
+
+@require_POST
+@login_required(login_url='/accounts/login/')
+def enroll_course(request, slug):
+    """POST /courses/{slug}/enroll — create an active Enrollment.
+
+    Idempotent: if already enrolled, just redirect.
+
+    Behaviour:
+    - Requires login (decorator handles the redirect).
+    - Tier-gated courses without access: redirect back to the detail page
+      with the existing CTA — we don't create an enrollment we couldn't
+      honour. Free courses are always enrollable.
+    - On success, redirect to the next unfinished unit (or first unit if
+      none completed yet); fall back to the course page if the course has
+      no units.
+    """
+    course = get_object_or_404(Course, slug=slug, status='published')
+    user = request.user
+
+    # Don't enroll users who can't actually access the course content.
+    # The course detail page surfaces the upgrade CTA in that case.
+    if not can_access(user, course):
+        return redirect(course.get_absolute_url())
+
+    ensure_enrollment(user, course)
+
+    next_unit = course.get_next_unit_for(user)
+    if next_unit is not None:
+        return redirect(next_unit.get_absolute_url())
+    # No units yet — bounce back to the course page so the user sees the
+    # "Enrolled" state.
+    return redirect(course.get_absolute_url())
+
+
+@require_POST
+@login_required(login_url='/accounts/login/')
+def unenroll_course(request, slug):
+    """POST /courses/{slug}/unenroll — soft-delete the active enrollment."""
+    course = get_object_or_404(Course, slug=slug, status='published')
+    unenroll_user(request.user, course)
+    return redirect(course.get_absolute_url())
 
 
 # --- API endpoints ---
@@ -511,6 +586,11 @@ def api_course_unit_complete(request, slug, unit_id):
         # Mark as completed
         progress.completed_at = timezone.now()
         progress.save()
+        # Auto-enroll on first lesson completion (issue #236). Idempotent —
+        # ensure_enrollment is a no-op when an active enrollment already
+        # exists, so this fires safely even when the user already clicked
+        # the explicit Enroll button.
+        auto_enroll_on_progress(user, course)
         return JsonResponse({'completed': True})
     else:
         # Uncomplete - delete the record

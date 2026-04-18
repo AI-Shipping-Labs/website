@@ -76,6 +76,56 @@
       </div>
       {% endif %}
 
+      <!-- Enroll / Continue (issue #236) -->
+      {% if has_access and user_authenticated %}
+      <div class="mb-10" data-testid="enrollment-cta">
+        {% if user_is_enrolled %}
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-accent/30 bg-accent/5 p-5">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="inline-flex items-center gap-2 rounded-full bg-green-500/15 px-3 py-1 text-sm font-medium text-green-400">
+              <i data-lucide="check-circle-2" class="h-4 w-4"></i>
+              Enrolled
+            </span>
+            <span class="text-sm text-muted-foreground truncate">You're taking this course.</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            {% if next_unit_for_user %}
+            <a href="{{ next_unit_for_user.get_absolute_url }}"
+               class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+               data-testid="continue-button">
+              Continue
+              <i data-lucide="play" class="h-4 w-4"></i>
+            </a>
+            {% endif %}
+            <form method="post" action="/courses/{{ course.slug }}/unenroll" class="inline"
+                  onsubmit="return confirm('Unenroll from this course? Your progress will be preserved.')">
+              {% csrf_token %}
+              <button type="submit"
+                      class="inline-flex items-center gap-2 rounded-lg border border-border bg-transparent px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      data-testid="unenroll-button">
+                Unenroll
+              </button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <form method="post" action="/courses/{{ course.slug }}/enroll" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-accent/30 bg-accent/5 p-5">
+          {% csrf_token %}
+          <div class="min-w-0">
+            <p class="text-base font-semibold text-foreground">Ready to start?</p>
+            <p class="text-sm text-muted-foreground">Enroll to track your progress and pick up where you left off.</p>
+          </div>
+          <button type="submit"
+                  class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                  data-testid="enroll-button">
+            <i data-lucide="bookmark-plus" class="h-4 w-4"></i>
+            Enroll
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <!-- Active Cohorts -->
       {% if active_cohorts %}
       <div class="mb-8">

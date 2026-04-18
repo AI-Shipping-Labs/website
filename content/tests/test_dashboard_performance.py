@@ -18,6 +18,7 @@ from content.access import get_active_override, get_user_level
 from content.models import (
     Article,
     Course,
+    Enrollment,
     Module,
     Unit,
     UserCourseProgress,
@@ -39,7 +40,8 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='perf@example.com', password='testpass',
         )
-        # Create 5 courses, each with 4 units, user has progress in all of them
+        # Create 5 courses, each with 4 units, user is enrolled and has
+        # completed 2 of 4 units in each (course is in progress).
         cls.courses = []
         now = timezone.now()
         for i in range(5):
@@ -47,6 +49,7 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
                 title=f'Course {i}', slug=f'course-{i}', status='published',
             )
             cls.courses.append(course)
+            Enrollment.objects.create(user=cls.user, course=course)
             module = Module.objects.create(
                 course=course, title=f'Mod {i}', slug=f'mod-{i}', sort_order=0,
             )
@@ -57,7 +60,6 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
                     slug=f'unit-{i}-{j}', sort_order=j,
                 )
                 units.append(unit)
-            # Complete 2 of 4 units (course is in progress)
             for j in range(2):
                 UserCourseProgress.objects.create(
                     user=cls.user, unit=units[j],
@@ -65,16 +67,19 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
                 )
 
     def test_query_count_does_not_scale_with_course_count(self):
-        """With 5 in-progress courses, query count should be constant (not 5+)."""
+        """With 5 enrolled-in-progress courses, query count is constant (not 5+).
+
+        Issue #236: queries are sourced from Enrollment now, not inferred
+        from progress rows. Total constant queries:
+          1. Active enrollments + course (select_related)
+          2. Per-course total unit counts (annotate)
+          3. Per-course completed unit ids (UserCourseProgress)
+          4. All units across enrolled courses (resolve next_unit in Python)
+        """
         from content.views.home import _get_in_progress_courses
         user_level = get_user_level(self.user)
 
-        # Queries expected (constant regardless of course count):
-        # 1. Fetch UserCourseProgress with select_related (1 query)
-        # 2. Annotate unit counts on Course (1 query)
-        # 3. Fetch all units for in-progress courses to resolve next_unit
-        #    in Python without per-course queries (1 query, issue #244)
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             result = _get_in_progress_courses(self.user, user_level)
 
         self.assertEqual(len(result), 5)
@@ -82,7 +87,6 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
             self.assertEqual(item['total_units'], 4)
             self.assertEqual(item['completed_count'], 2)
             self.assertEqual(item['percentage'], 50)
-            # next_unit should be populated and resolvable without extra queries
             self.assertIsNotNone(item['next_unit'])
 
     def test_next_unit_resolution_does_not_scale_with_course_count(self):
@@ -90,13 +94,15 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
         from content.views.home import _get_in_progress_courses
         user_level = get_user_level(self.user)
 
-        # Add 5 more in-progress courses (10 total) and assert the query
-        # count stays at 3 — proving next_unit resolution is not N+1.
+        # Add 5 more enrolled in-progress courses (10 total) and assert
+        # the query count stays at 4 — proving the dashboard query is
+        # not N+1.
         now = timezone.now()
         for i in range(5, 10):
             course = Course.objects.create(
                 title=f'Course {i}', slug=f'course-{i}', status='published',
             )
+            Enrollment.objects.create(user=self.user, course=course)
             module = Module.objects.create(
                 course=course, title=f'Mod {i}', slug=f'mod-{i}', sort_order=0,
             )
@@ -113,22 +119,21 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
                     completed_at=now - timedelta(hours=10 - i),
                 )
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             result = _get_in_progress_courses(self.user, user_level)
         self.assertEqual(len(result), 10)
         for item in result:
             self.assertIsNotNone(item['next_unit'])
 
-    def test_no_progress_uses_zero_queries_after_initial(self):
-        """User with no progress should use minimal queries."""
+    def test_no_enrollments_uses_one_query(self):
+        """User with no enrollments uses a single query and short-circuits."""
         from content.views.home import _get_in_progress_courses
         other_user = User.objects.create_user(
             email='noprogress@example.com', password='testpass',
         )
         user_level = get_user_level(other_user)
 
-        # 1 query: fetch progress (returns empty)
-        # No annotation query needed because course_data is empty
+        # 1 query: fetch enrollments (returns empty), then short-circuit
         with self.assertNumQueries(1):
             result = _get_in_progress_courses(other_user, user_level)
         self.assertEqual(result, [])
@@ -227,10 +232,11 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
             user=cls.user, title='Test Notif', url='/test', read=False,
         )
 
-        # One in-progress course
+        # One in-progress course (enrolled, with 1 of 2 units complete)
         course = Course.objects.create(
             title='Perf Course', slug='perf-course', status='published',
         )
+        Enrollment.objects.create(user=cls.user, course=course)
         module = Module.objects.create(
             course=course, title='Mod', slug='mod', sort_order=0,
         )

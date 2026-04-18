@@ -1,0 +1,127 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Enrollments{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold text-foreground">Enrollments</h1>
+  <p class="text-muted-foreground mt-1">Course enrollments across all users. Filter by course or manually enroll a user.</p>
+</div>
+
+<!-- Messages -->
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'info' %}bg-blue-500/20 text-blue-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Manual enroll form -->
+<div class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Enroll a user</h2>
+  <form method="post" action="{% url 'studio_enrollment_create' %}" class="grid gap-4 sm:grid-cols-3 sm:items-end">
+    {% csrf_token %}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="enroll-email">User email</label>
+      <input id="enroll-email" type="email" name="email" required placeholder="user@example.com"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="enroll-course">Course</label>
+      <select id="enroll-course" name="course_id" required
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="">— Choose a course —</option>
+        {% for c in courses %}
+        <option value="{{ c.pk }}">{{ c.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Enroll user
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Filters -->
+<form method="get" class="mb-6 flex flex-wrap items-end gap-3">
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1" for="filter-course">Course</label>
+    <select id="filter-course" name="course" onchange="this.form.submit()"
+            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="">All courses</option>
+      {% for c in courses %}
+      <option value="{{ c.pk }}" {% if c.pk == selected_course_id %}selected{% endif %}>{{ c.title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1" for="filter-status">Status</label>
+    <select id="filter-status" name="status" onchange="this.form.submit()"
+            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="active" {% if status == 'active' %}selected{% endif %}>Active only</option>
+      <option value="all" {% if status == 'all' %}selected{% endif %}>Including unenrolled</option>
+    </select>
+  </div>
+  {% if selected_course_id or status != 'active' %}
+  <a href="{% url 'studio_enrollment_list' %}" class="text-sm text-accent hover:underline">Reset</a>
+  {% endif %}
+</form>
+
+<!-- Enrollments table -->
+<div class="bg-card border border-border rounded-lg overflow-x-auto">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Course</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unenrolled</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for enr in enrollments %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="enrollment-row">
+        <td class="px-6 py-4 text-sm text-foreground">{{ enr.user.email }}</td>
+        <td class="px-6 py-4 text-sm text-foreground">{{ enr.course.title }}</td>
+        <td class="px-6 py-4">
+          <span class="text-xs px-2 py-1 rounded-full
+            {% if enr.source == 'manual' %}bg-blue-500/20 text-blue-400
+            {% elif enr.source == 'auto_progress' %}bg-purple-500/20 text-purple-400
+            {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+            {{ enr.get_source_display }}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ enr.enrolled_at|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">
+          {% if enr.unenrolled_at %}{{ enr.unenrolled_at|date:"M d, Y H:i" }}{% else %}—{% endif %}
+        </td>
+        <td class="px-6 py-4 text-right">
+          {% if not enr.unenrolled_at %}
+          <form method="post" action="{% url 'studio_enrollment_unenroll' enrollment_id=enr.pk %}" class="inline"
+                onsubmit="return confirm('Unenroll {{ enr.user.email }} from {{ enr.course.title }}?');">
+            {% csrf_token %}
+            <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline" data-testid="unenroll-row-btn">Unenroll</button>
+          </form>
+          {% else %}
+          <span class="text-xs text-muted-foreground">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">
+          {% if selected_course_id %}No enrollments for this course.{% else %}No enrollments yet.{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

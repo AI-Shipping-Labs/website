@@ -25,6 +25,7 @@ from django.utils import timezone
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import (
     Course,
+    Enrollment,
     Module,
     Project,
     Unit,
@@ -71,6 +72,12 @@ class SubscriptionDeletedProgressRetentionTest(TierSetupMixin, TestCase):
                 module=self.module, title=f'Unit {i+1}', slug=f'unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
+
+        # Issue #236: auto-enroll on first lesson complete is wired in
+        # the API layer; these tests create UserCourseProgress directly,
+        # so we mirror the production invariant by creating the
+        # Enrollment here too.
+        Enrollment.objects.create(user=self.user, course=self.course)
 
         # Mark 3 units as completed
         now = timezone.now()
@@ -201,6 +208,9 @@ class ResubscriptionProgressRetentionTest(TierSetupMixin, TestCase):
             )
             self.units.append(unit)
 
+        # Issue #236: mirror production auto-enroll behaviour.
+        Enrollment.objects.create(user=self.user, course=self.course)
+
         # Mark 3 units as completed
         now = timezone.now()
         for i in range(3):
@@ -292,6 +302,9 @@ class DashboardProgressCancellationTest(TierSetupMixin, TestCase):
                 module=module, title=f'Unit {i+1}', slug=f'unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
+
+        # Issue #236: mirror production auto-enroll behaviour.
+        Enrollment.objects.create(user=self.user, course=self.course)
 
         # Complete 2 of 4 units
         now = timezone.now()
@@ -556,6 +569,10 @@ class DowngradeTierProgressFilteringTest(TierSetupMixin, TestCase):
             )
             self.premium_units.append(unit)
 
+        # Issue #236: mirror production auto-enroll behaviour.
+        Enrollment.objects.create(user=self.user, course=self.basic_course)
+        Enrollment.objects.create(user=self.user, course=self.premium_course)
+
         # User has progress in both courses
         now = timezone.now()
         UserCourseProgress.objects.create(
@@ -685,6 +702,9 @@ class ResumeCourseAfterResubTest(TierSetupMixin, TestCase):
             )
             self.units.append(unit)
 
+        # Issue #236: mirror production auto-enroll behaviour.
+        Enrollment.objects.create(user=self.user, course=self.course)
+
         # Complete units 1 and 2, with unit 2 completed most recently
         now = timezone.now()
         UserCourseProgress.objects.create(
@@ -787,6 +807,9 @@ class OpenCourseProgressAlwaysVisibleTest(TierSetupMixin, TestCase):
                 module=module, title=f'Free Unit {i+1}', slug=f'free-unit-{i+1}', sort_order=i,
             )
             self.units.append(unit)
+
+        # Issue #236: mirror production auto-enroll behaviour.
+        Enrollment.objects.create(user=self.user, course=self.course)
 
         # Complete 1 unit
         UserCourseProgress.objects.create(

@@ -1206,8 +1206,8 @@ class TestScenario13SyncQueuedButtonConfirmation:
     def test_sync_now_button_flashes_queued_then_reverts(
         self, django_server, page,
     ):
-        """Per-source 'Sync Now' button text becomes 'Sync queued ✓' on click
-        and reverts to 'Sync Now' within 2 seconds, with no spinner SVG."""
+        """Per-source 'Sync now' button text becomes 'Sync queued ✓' on click
+        and reverts to 'Sync now' within 2 seconds, with no spinner SVG."""
         self._setup(django_server, page)
 
         blog_card = page.locator(
@@ -1216,8 +1216,8 @@ class TestScenario13SyncQueuedButtonConfirmation:
         sync_btn = blog_card.locator('button.sync-btn')
         sync_btn_text = sync_btn.locator('span.sync-btn-text')
 
-        # Pre-condition: original label is "Sync Now", button enabled.
-        assert sync_btn_text.inner_text().strip() == "Sync Now"
+        # Pre-condition: original label is "Sync now", button enabled.
+        assert sync_btn_text.inner_text().strip() == "Sync now"
         assert sync_btn.is_enabled()
 
         # Click the button — the form will submit but we have aborted
@@ -1244,13 +1244,13 @@ class TestScenario13SyncQueuedButtonConfirmation:
         # (The .sync-spinner SVG was removed from this code path.)
         assert sync_btn.locator('svg.animate-spin').count() == 0
 
-        # Within 2 seconds the label reverts to "Sync Now" and re-enables.
+        # Within 2 seconds the label reverts to "Sync now" and re-enables.
         page.wait_for_function(
-            "el => el.textContent.trim() === 'Sync Now'",
+            "el => el.textContent.trim() === 'Sync now'",
             arg=sync_btn_text.element_handle(),
             timeout=2000,
         )
-        assert sync_btn_text.inner_text().strip() == "Sync Now"
+        assert sync_btn_text.inner_text().strip() == "Sync now"
         assert sync_btn.is_enabled()
 
     def test_sync_all_button_flashes_queued_then_reverts(
@@ -1338,7 +1338,7 @@ class TestScenario13SyncQueuedButtonConfirmation:
 
         # And it eventually reverts cleanly after the second timer fires.
         page.wait_for_function(
-            "el => el.textContent.trim() === 'Sync Now'",
+            "el => el.textContent.trim() === 'Sync now'",
             arg=text_handle,
             timeout=1500,
         )

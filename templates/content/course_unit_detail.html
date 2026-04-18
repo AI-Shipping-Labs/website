@@ -51,17 +51,107 @@
   </div>
   {% else %}
   <!-- Accessible unit -->
+  <!--
+    Inline script: read the desktop-collapse preference from localStorage and
+    apply it to <html> before the layout paints, so we never get a flash of
+    expanded sidebar before collapsing it.
+  -->
+  <script>
+    (function() {
+      try {
+        if (localStorage.getItem('content-sidebar-collapsed') === '1') {
+          document.documentElement.setAttribute('data-content-sidebar', 'collapsed');
+        } else {
+          document.documentElement.setAttribute('data-content-sidebar', 'expanded');
+        }
+      } catch (e) {
+        document.documentElement.setAttribute('data-content-sidebar', 'expanded');
+      }
+    })();
+  </script>
+  <style>
+    /*
+      Foldable content sidebar (issue #229)
+      State is tracked via [data-content-sidebar] on <html>:
+        "expanded" (default) - sidebar visible, main content fills remaining space
+        "collapsed"          - sidebar slid out, main content centered with max-width
+
+      All collapse rules apply at lg+ only; mobile keeps its own hamburger toggle.
+    */
+    @media (min-width: 1024px) {
+      #content-sidebar-aside {
+        transition: width 200ms ease, opacity 200ms ease, margin 200ms ease;
+        overflow: hidden;
+      }
+      :root[data-content-sidebar="collapsed"] #content-sidebar-aside {
+        width: 0 !important;
+        min-width: 0 !important;
+        opacity: 0;
+        pointer-events: none;
+        /* Cancel the parent flex gap so the centered main column doesn't
+           sit half a gap off-center. */
+        margin-right: -2rem;
+        flex-basis: 0;
+      }
+      :root[data-content-sidebar="collapsed"] #content-sidebar-main {
+        /* Drop flex-1 so the element shrinks to its max-width and the
+           auto margins can center it inside the parent flex row. */
+        flex: 0 1 56rem;
+        max-width: 56rem;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      /* Floating toggle (only when collapsed) */
+      #content-sidebar-floating-toggle { display: none; }
+      :root[data-content-sidebar="collapsed"] #content-sidebar-floating-toggle {
+        display: inline-flex;
+      }
+      /* In-sidebar collapse button: only visible at lg+ (mobile uses hamburger) */
+      #content-sidebar-collapse-btn { display: inline-flex; }
+    }
+    @media (max-width: 1023px) {
+      #content-sidebar-collapse-btn,
+      #content-sidebar-floating-toggle { display: none !important; }
+    }
+  </style>
+  <!-- Floating toggle: shown when sidebar is collapsed (lg+ only). -->
+  <button
+    type="button"
+    id="content-sidebar-floating-toggle"
+    aria-label="Open course navigation"
+    aria-expanded="false"
+    aria-controls="content-sidebar-aside"
+    class="fixed top-28 left-4 z-30 items-center justify-center rounded-lg border border-border bg-card p-2 text-muted-foreground shadow-sm transition-colors hover:text-foreground hover:bg-muted"
+    data-testid="content-sidebar-floating-toggle"
+  >
+    <i data-lucide="panel-left-open" class="h-5 w-5"></i>
+  </button>
+
   <div class="py-8 lg:py-12">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
-      <div class="flex flex-col lg:flex-row gap-8">
+      <div class="flex flex-col lg:flex-row gap-8" id="content-layout">
 
         <!-- Sidebar: module/unit navigation -->
-        <aside class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
+        <aside id="content-sidebar-aside" class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
           <div class="lg:sticky lg:top-28">
-            <a href="/courses/{{ course.slug }}" class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
-              <i data-lucide="arrow-left" class="h-4 w-4"></i>
-              <span class="truncate">{{ course.title }}</span>
-            </a>
+            <div class="flex items-center justify-between gap-2">
+              <a href="/courses/{{ course.slug }}" class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0">
+                <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+                <span class="truncate">{{ course.title }}</span>
+              </a>
+              <!-- Desktop collapse button: hide the sidebar (lg+ only) -->
+              <button
+                type="button"
+                id="content-sidebar-collapse-btn"
+                aria-label="Collapse course navigation"
+                aria-expanded="true"
+                aria-controls="content-sidebar-aside"
+                class="mb-4 -mt-0.5 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+                data-testid="content-sidebar-collapse-btn"
+              >
+                <i data-lucide="panel-left-close" class="h-4 w-4"></i>
+              </button>
+            </div>
 
             <!-- Mobile toggle for course nav -->
             <button
@@ -130,7 +220,7 @@
         </aside>
 
         <!-- Main content -->
-        <div class="flex-1 min-w-0 order-1 lg:order-2">
+        <div class="flex-1 min-w-0 order-1 lg:order-2" id="content-sidebar-main">
           <!-- Breadcrumb -->
           <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden">
             <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
@@ -280,6 +370,41 @@
 
 {% block extra_scripts %}
 <script>
+  // Desktop foldable sidebar toggle (issue #229).
+  // Mirrors the ChatGPT/Claude pattern: collapse-and-center the body so
+  // long-form lessons get a comfortable max-width when the TOC is hidden.
+  // State lives in localStorage under "content-sidebar-collapsed" (default: open).
+  (function() {
+    var STORAGE_KEY = 'content-sidebar-collapsed';
+    var collapseBtn = document.getElementById('content-sidebar-collapse-btn');
+    var floatingBtn = document.getElementById('content-sidebar-floating-toggle');
+    if (!collapseBtn && !floatingBtn) return;
+
+    function getCollapsed() {
+      try { return localStorage.getItem(STORAGE_KEY) === '1'; }
+      catch (e) { return false; }
+    }
+    function setCollapsed(collapsed) {
+      try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); }
+      catch (e) { /* localStorage disabled, in-memory only */ }
+      document.documentElement.setAttribute(
+        'data-content-sidebar', collapsed ? 'collapsed' : 'expanded'
+      );
+      if (collapseBtn) collapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      if (floatingBtn) floatingBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+    // Apply initial aria state (visual state was already applied by the
+    // inline script in <head> path to avoid layout flash).
+    setCollapsed(getCollapsed());
+
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', function() { setCollapsed(true); });
+    }
+    if (floatingBtn) {
+      floatingBtn.addEventListener('click', function() { setCollapsed(false); });
+    }
+  })();
+
   // Sidebar mobile toggle
   (function() {
     var toggleBtn = document.getElementById('sidebar-toggle-btn');

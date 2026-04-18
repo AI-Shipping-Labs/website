@@ -103,13 +103,73 @@ class StudioSyncDashboardTest(TestCase):
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'Sync All')
 
-    def test_dashboard_has_sync_now_button(self):
+    def test_dashboard_per_repo_button_posts_to_repo_trigger(self):
+        """The per-repo button must post to ``studio_sync_repo_trigger`` with
+        the repo name, not to ``studio_sync_all`` (issue #232).
+        """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             content_type='article',
         )
         response = self.client.get('/studio/sync/')
-        self.assertContains(response, 'Sync Now')
+        self.assertContains(
+            response,
+            'action="/studio/sync/AI-Shipping-Labs/content/trigger-repo/"',
+        )
+        # Button label is the generic ``Sync now`` (not per-content-type).
+        self.assertContains(response, 'Sync now')
+
+    def test_dashboard_per_repo_button_does_not_post_to_sync_all(self):
+        """Regression test for #232: per-repo button must not point to
+        ``/studio/sync/all/`` (which would trigger every repo, not one).
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            content_path='courses/',
+        )
+        response = self.client.get('/studio/sync/')
+        html = response.content.decode()
+        # Exactly one form on the page should post to /studio/sync/all/ —
+        # the top-level Sync All button. The per-repo card must use the
+        # new repo-trigger URL.
+        self.assertEqual(html.count('action="/studio/sync/all/"'), 1)
+        self.assertIn(
+            'action="/studio/sync/AI-Shipping-Labs/content/trigger-repo/"',
+            html,
+        )
+
+    def test_dashboard_renders_one_button_per_repo(self):
+        """A repo with N content sources renders ONE ``Sync now`` button
+        (the fan-out happens server-side, see issue #232).
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            content_path='courses/',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            content_path='projects/',
+        )
+        response = self.client.get('/studio/sync/')
+        html = response.content.decode()
+        # One per-repo trigger form for the single repo card.
+        self.assertEqual(
+            html.count(
+                'action="/studio/sync/AI-Shipping-Labs/content/trigger-repo/"'
+            ),
+            1,
+        )
 
     def test_dashboard_has_history_link(self):
         response = self.client.get('/studio/sync/')
@@ -393,6 +453,194 @@ class StudioSyncTriggerTest(TestCase):
     @patch('django_q.tasks.async_task', side_effect=Exception('queue error'))
     def test_trigger_handles_sync_error(self, mock_async):
         response = self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
+        self.assertEqual(response.status_code, 302)
+
+    @patch('django_q.tasks.async_task')
+    def test_trigger_only_syncs_targeted_source(self, mock_async):
+        """Regression for #232: posting to /studio/sync/<id>/trigger/ must
+        sync only that source, not every configured source.
+        """
+        # Create additional sources to make sure they're NOT triggered.
+        other = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            content_path='courses/',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            content_path='projects/',
+        )
+        self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
+        # Exactly one async_task call (vs three if it had hit sync_all).
+        mock_async.assert_called_once()
+        # The single call must be for the targeted source, not the others.
+        synced_source = mock_async.call_args[0][1]
+        self.assertEqual(synced_source.pk, self.source.pk)
+        self.assertNotEqual(synced_source.pk, other.pk)
+
+
+class StudioSyncRepoTriggerTest(TestCase):
+    """Test the per-repo fan-out trigger endpoint (issue #232)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    @patch('django_q.tasks.async_task')
+    def test_repo_trigger_fans_out_to_all_sources(self, mock_async):
+        """Posting to /studio/sync/<repo_name>/trigger-repo/ enqueues one
+        task per ContentSource sharing that repo_name.
+        """
+        article = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        course = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            content_path='courses/',
+        )
+        project = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            content_path='projects/',
+        )
+        response = self.client.post(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(mock_async.call_count, 3)
+        # Every call must target a ContentSource from the targeted repo.
+        synced_pks = {call.args[1].pk for call in mock_async.call_args_list}
+        self.assertEqual(synced_pks, {article.pk, course.pk, project.pk})
+
+    @patch('django_q.tasks.async_task')
+    def test_repo_trigger_creates_one_batch_id(self, mock_async):
+        """All fan-out calls share one batch_id so the batch shows up as a
+        single row in history and the dashboard aggregator finds them.
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            content_path='courses/',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            content_path='projects/',
+        )
+        self.client.post(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
+        )
+        batch_ids = [
+            call.kwargs.get('batch_id')
+            for call in mock_async.call_args_list
+        ]
+        self.assertEqual(len(batch_ids), 3)
+        self.assertIsNotNone(batch_ids[0])
+        self.assertEqual(len(set(batch_ids)), 1)
+
+    @patch('django_q.tasks.async_task')
+    def test_repo_trigger_doesnt_touch_other_repos(self, mock_async):
+        """Posting for one repo must NOT enqueue tasks for any other repo's
+        sources (regression for the bug where the per-row button hit
+        /studio/sync/all/).
+        """
+        target = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        other_repo_course = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            content_path='units/',
+        )
+        other_repo_article = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='article',
+            content_path='posts/',
+        )
+        self.client.post(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
+        )
+        synced_pks = {call.args[1].pk for call in mock_async.call_args_list}
+        self.assertEqual(synced_pks, {target.pk})
+        self.assertNotIn(other_repo_course.pk, synced_pks)
+        self.assertNotIn(other_repo_article.pk, synced_pks)
+
+    @patch('django_q.tasks.async_task')
+    def test_repo_trigger_redirects_to_sync_dashboard(self, mock_async):
+        """Per #239, sync actions stay on /studio/sync/ rather than yanking
+        the operator to /studio/worker/.
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.post(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/studio/sync/')
+
+    @patch('django_q.tasks.async_task')
+    def test_repo_trigger_flash_names_the_repo(self, mock_async):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+            content_path='courses/',
+        )
+        response = self.client.post(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/',
+            follow=True,
+        )
+        self.assertContains(response, 'AI-Shipping-Labs/content')
+        self.assertContains(response, '2 sources')
+        # Flash message includes a link back to the worker page so operators
+        # can still watch the queue (consistent with sync_trigger / sync_all).
+        self.assertContains(response, '/studio/worker/')
+
+    def test_repo_trigger_unknown_repo_redirects_with_error(self):
+        response = self.client.post(
+            '/studio/sync/AI-Shipping-Labs/no-such-repo/trigger-repo/',
+            follow=True,
+        )
+        self.assertContains(response, 'No content sources configured')
+
+    def test_repo_trigger_requires_post(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
+        )
+        self.assertEqual(response.status_code, 405)
+
+    def test_repo_trigger_requires_staff(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        client = Client()
+        response = client.post(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
+        )
         self.assertEqual(response.status_code, 302)
 
 

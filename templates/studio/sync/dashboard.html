@@ -65,12 +65,14 @@
           {% endif %}
         </div>
       </div>
-      <form method="post" action="{% url 'studio_sync_all' %}" class="sync-form">
-        {% csrf_token %}
-        <button type="submit" class="sync-btn px-4 py-2 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 transition-opacity inline-flex items-center space-x-1">
-          <span class="sync-btn-text">Sync Now</span>
-        </button>
-      </form>
+      <div class="flex flex-wrap items-center gap-2">
+        <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form">
+          {% csrf_token %}
+          <button type="submit" class="sync-btn px-4 py-2 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 transition-opacity inline-flex items-center space-x-1" data-original-text="Sync now">
+            <span class="sync-btn-text">Sync now</span>
+          </button>
+        </form>
+      </div>
     </div>
 
     <!-- Last sync results -->

@@ -112,9 +112,29 @@ def worker_status(request):
     failed_with_details = []
     for task in failed_tasks:
         error_message = str(task.result) if task.result is not None else 'No error details'
+        # Pick the most informative one-line summary for the collapsed row.
+        # For traceback-shaped results (``traceback.format_exc()`` output) the
+        # first line is the literal ``Traceback (most recent call last):``
+        # banner, which is identical for every failure and tells operators
+        # nothing — the exception class + message lives on the LAST non-blank
+        # line. For other result strings (custom error wrappers, plain
+        # messages) the first non-blank line is still the most useful summary.
+        nonblank_lines = [line.strip() for line in error_message.splitlines() if line.strip()]
+        if not nonblank_lines:
+            summary_line = 'No error details'
+        elif (
+            error_message.startswith('Traceback')
+            or '\nTraceback (most recent call last):' in error_message
+        ):
+            summary_line = nonblank_lines[-1]
+        else:
+            summary_line = nonblank_lines[0]
+        if len(summary_line) > 160:
+            summary_line = summary_line[:157] + '...'
         failed_with_details.append({
             'task': task,
             'error_message': error_message,
+            'error_summary': summary_line,
         })
 
     return render(request, 'studio/worker.html', {

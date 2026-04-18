@@ -579,6 +579,7 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Upgrade to Basic to view this project')
 
     def test_basic_user_sees_full_project(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario7BasicMemberUnlocksBasicProject::test_basic_member_sees_full_project_content
         user = User.objects.create_user(email='basic@test.com', password='testpass')
         user.tier = self.basic_tier
         user.save()
@@ -586,6 +587,9 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/projects/gated-project')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Secret project content')
+        # No upgrade CTA / blur overlay leaks through for an authorised viewer.
+        self.assertNotContains(response, 'Upgrade to Basic to view this project')
+        self.assertNotContains(response, 'filter: blur(8px)')
 
     def test_staff_user_sees_gated_project(self):
         user = User.objects.create_user(

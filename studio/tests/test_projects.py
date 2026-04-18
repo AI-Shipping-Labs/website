@@ -98,6 +98,7 @@ class StudioProjectReviewTest(TestCase):
         self.assertContains(response, 'Reject')
 
     def test_approve_project(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario9StaffApprovesSubmission::test_staff_approves_project_in_studio
         response = self.client.post(
             f'/studio/projects/{self.project.pk}/review',
             {'action': 'approve'},
@@ -106,13 +107,21 @@ class StudioProjectReviewTest(TestCase):
         self.project.refresh_from_db()
         self.assertEqual(self.project.status, 'published')
         self.assertTrue(self.project.published)
+        # Approved project now appears on the public listing.
+        public = Client().get('/projects')
+        self.assertContains(public, 'Review Project')
 
     def test_reject_project(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario10StaffRejectsPublishedProject::test_staff_rejects_published_project
         # First approve the project so reject has an observable effect
         self.project.approve()
         self.project.refresh_from_db()
         self.assertEqual(self.project.status, 'published')
         self.assertTrue(self.project.published)
+
+        # Confirm the published project is visible publicly before reject
+        public_before = Client().get('/projects')
+        self.assertContains(public_before, 'Review Project')
 
         response = self.client.post(
             f'/studio/projects/{self.project.pk}/review',
@@ -122,6 +131,9 @@ class StudioProjectReviewTest(TestCase):
         self.project.refresh_from_db()
         self.assertEqual(self.project.status, 'pending_review')
         self.assertFalse(self.project.published)
+        # Rejected project disappears from the public listing
+        public_after = Client().get('/projects')
+        self.assertNotContains(public_after, 'Review Project')
 
     def test_approve_redirects_to_list(self):
         response = self.client.post(

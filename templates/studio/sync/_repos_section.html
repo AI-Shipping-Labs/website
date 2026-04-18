@@ -1,0 +1,30 @@
+{% comment %}
+Per-repo sync cards section.
+
+Used both inline on /studio/sync/ and as the response body for the
+?fragment=status auto-refresh poller (issue #243). Self-contained: must
+render correctly with only ``repos`` in context.
+
+The container div carries ``id="sync-repos-section"`` plus
+``data-any-running="true|false"`` so the dashboard's poller can stop
+itself once nothing is running anymore.
+{% endcomment %}
+{% if repos %}
+<div id="sync-repos-section"
+     class="space-y-6"
+     data-any-running="{% if any_running %}true{% else %}false{% endif %}">
+  {% for repo in repos %}
+    {% include "studio/sync/_sync_repo_card.html" with repo=repo %}
+  {% endfor %}
+</div>
+{% else %}
+<div id="sync-repos-section"
+     data-any-running="false"
+     class="bg-card border border-border rounded-lg p-12 text-center">
+  <p class="text-muted-foreground">No content sources configured.</p>
+  <p class="text-sm text-muted-foreground mt-1">
+    <a href="{% url 'studio_content_source_create' %}" class="text-accent hover:underline">Add a content source</a>,
+    use Django admin, or run <code class="bg-secondary px-1.5 py-0.5 rounded text-xs">manage.py seed_content_sources</code>.
+  </p>
+</div>
+{% endif %}

@@ -124,9 +124,15 @@ def _aggregate_batch(logs):
     }
 
 
-@staff_required
-def sync_dashboard(request):
-    """Display unified sync dashboard with one card per repo."""
+def _build_repos_context():
+    """Build the per-repo dashboard payload (cards + last batches).
+
+    Extracted so the auto-refresh fragment endpoint (issue #243) can reuse
+    the same aggregation without re-rendering the page chrome.
+
+    Returns a dict with ``repos`` (list of repo dicts) and ``sources`` (the
+    flat queryset, kept for callers that still need it).
+    """
     # Order by ``repo_name`` (then ``content_type``) so the dashboard is
     # deterministic — relying on insertion order produced flaky card layouts
     # when sources were added in different sequences across environments.
@@ -200,10 +206,30 @@ def sync_dashboard(request):
             repo['last_batch']['errors_count'] if repo['last_batch'] else 0
         )
 
-    return render(request, 'studio/sync/dashboard.html', {
-        'repos': list(repos.values()),
+    repos_list = list(repos.values())
+    return {
+        'repos': repos_list,
         'sources': sources,
-    })
+        'any_running': any(r['any_running'] for r in repos_list),
+    }
+
+
+@staff_required
+def sync_dashboard(request):
+    """Display unified sync dashboard with one card per repo.
+
+    Supports a ``?fragment=status`` query param that returns just the
+    per-repo cards partial. Used by the lightweight JS poller (issue #243)
+    so a row that finishes syncing flips from ``running`` to its final
+    status without the operator having to refresh the page.
+    """
+    context = _build_repos_context()
+
+    if request.GET.get('fragment') == 'status':
+        # Auto-refresh endpoint: just the cards section, no chrome.
+        return render(request, 'studio/sync/_repos_section.html', context)
+
+    return render(request, 'studio/sync/dashboard.html', context)
 
 
 @staff_required

@@ -1358,3 +1358,133 @@ class TestScenario13SyncQueuedButtonConfirmation:
         sync_btns = page.locator('button.sync-btn')
         for i in range(sync_btns.count()):
             assert sync_btns.nth(i).locator('.sync-spinner').count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Scenario 14: Sync dashboard auto-refreshes while a sync is in flight (#243)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario14SyncDashboardAutoRefresh:
+    """Sync dashboard polls itself while a row is 'running' and flips the
+    pill to its final status without the operator pressing reload (#243).
+
+    We don't run a real sync (the worker is not started in E2E); instead
+    we set ``last_sync_status='running'`` on the row, load the dashboard
+    so the JS poller starts, then flip the row to 'success' from the
+    test process and assert the dashboard picks up the change within the
+    poll interval.
+    """
+
+    def _setup(self, django_server, page):
+        from integrations.models import ContentSource
+
+        _clear_content_sources()
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+        # Single source pinned to 'running' so the poller starts immediately.
+        source = ContentSource.objects.create(
+            repo_name="AI-Shipping-Labs/blog",
+            content_type="article",
+            last_sync_status="running",
+        )
+        _login_admin_via_browser(page, django_server, "admin@test.com")
+        page.goto(
+            f"{django_server}/studio/sync/",
+            wait_until="domcontentloaded",
+        )
+        return source
+
+    def test_live_indicator_visible_while_a_source_is_running(
+        self, django_server, page,
+    ):
+        """When the page loads with at least one running row, the Live
+        indicator becomes visible and the poller flips its
+        ``data-polling`` attribute to 'true'.
+        """
+        self._setup(django_server, page)
+
+        live = page.locator('#sync-live-indicator')
+        page.wait_for_function(
+            "el => el && el.dataset.polling === 'true'",
+            arg=live.element_handle(),
+            timeout=2000,
+        )
+        assert live.is_visible()
+        assert live.inner_text().strip().endswith("Live")
+
+    def test_row_flips_from_running_to_success_without_reload(
+        self, django_server, page,
+    ):
+        """The headline behavior: row shows 'running' → worker writes
+        'success' → dashboard auto-refreshes the card and the pill flips,
+        all without ``page.reload()``.
+        """
+        source = self._setup(django_server, page)
+
+        # Pre-condition: the running card is on the page.
+        card = page.locator('[data-repo-card][data-repo-name="AI-Shipping-Labs/blog"]')
+        page.wait_for_function(
+            "el => el && el.dataset.status === 'running'",
+            arg=card.element_handle(),
+            timeout=2000,
+        )
+
+        # Worker finishes — write the final status to the source row.
+        # In a real sync this is what ``sync_content_source`` does in its
+        # finally block.
+        source.last_sync_status = "success"
+        source.last_synced_at = timezone.now()
+        source.save()
+
+        # Within ~1 poll interval (3s) plus jitter the poller swaps the
+        # cards section and the new card carries data-status="success".
+        page.wait_for_function(
+            (
+                "() => {"
+                "  const c = document.querySelector("
+                "    '[data-repo-card][data-repo-name=\"AI-Shipping-Labs/blog\"]'"
+                "  );"
+                "  return c && c.dataset.status === 'success';"
+                "}"
+            ),
+            timeout=8000,
+        )
+
+    def test_polling_stops_once_nothing_is_running(
+        self, django_server, page,
+    ):
+        """After the row flips to success, ``data-any-running`` becomes
+        'false' and the Live indicator hides again.
+        """
+        source = self._setup(django_server, page)
+
+        # Wait for the first polling cycle to start.
+        live = page.locator('#sync-live-indicator')
+        page.wait_for_function(
+            "el => el && el.dataset.polling === 'true'",
+            arg=live.element_handle(),
+            timeout=2000,
+        )
+
+        # Worker writes terminal status; poller should swap then stop.
+        source.last_sync_status = "success"
+        source.last_synced_at = timezone.now()
+        source.save()
+
+        page.wait_for_function(
+            (
+                "() => {"
+                "  const s = document.getElementById('sync-repos-section');"
+                "  return s && s.dataset.anyRunning === 'false';"
+                "}"
+            ),
+            timeout=8000,
+        )
+        # Indicator hides shortly after (same JS callback).
+        page.wait_for_function(
+            "el => el && el.dataset.polling === 'false'",
+            arg=live.element_handle(),
+            timeout=2000,
+        )

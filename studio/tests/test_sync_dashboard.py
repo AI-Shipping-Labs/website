@@ -299,6 +299,124 @@ class StudioSyncDashboardTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class StudioSyncDashboardUnchangedTest(TestCase):
+    """Issue #252 - dashboard surfaces ``items_unchanged`` per source/batch.
+
+    The aggregator already exposes ``per_type[*]['unchanged']`` and
+    ``total_unchanged`` (issue #225); these tests pin the template to render
+    them next to created/updated/deleted with muted styling.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_per_type_row_renders_unchanged_count(self):
+        """The per-content-type table row shows the unchanged count cell."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_created=0,
+            items_updated=3,
+            items_unchanged=17,
+            items_deleted=0,
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertEqual(response.status_code, 200)
+        # The aggregator must expose unchanged so the template can render it.
+        repo = response.context['repos'][0]
+        self.assertEqual(repo['last_batch']['per_type'][0]['unchanged'], 17)
+        self.assertEqual(repo['last_batch']['total_unchanged'], 17)
+        # The dashboard renders the column header and the per-type cell value.
+        self.assertContains(response, 'Unchanged')
+        self.assertContains(
+            response,
+            '<td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell '
+            'text-muted-foreground" data-unchanged>17</td>',
+            html=False,
+        )
+
+    def test_summary_shows_unchanged_when_nonzero(self):
+        """The compact summary above the table includes ``N unchanged``."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_unchanged=42,
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertContains(response, '42 unchanged')
+        # Even with only unchanged items, the "No changes" fallback must NOT
+        # render — the operator should see the unchanged count instead.
+        self.assertNotContains(response, 'No changes')
+
+    def test_summary_hides_unchanged_when_zero(self):
+        """First-syncs (no unchanged items) must not render an empty pill."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_created=5,
+            items_unchanged=0,
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        # The summary line must show created but not "0 unchanged" clutter.
+        self.assertContains(response, '+5 created')
+        self.assertNotContains(response, 'unchanged</span>')
+
+    def test_per_type_unchanged_cell_uses_muted_styling(self):
+        """Unchanged counts use muted/secondary color, never green/blue/red."""
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_unchanged=4,
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        html = response.content.decode()
+        # Find the unchanged cell and check its class string is muted.
+        marker = 'data-unchanged>4</td>'
+        idx = html.find(marker)
+        self.assertNotEqual(idx, -1, 'unchanged cell with value 4 not found')
+        cell_open = html.rfind('<td', 0, idx)
+        cell_html = html[cell_open:idx + len(marker)]
+        self.assertIn('text-muted-foreground', cell_html)
+        self.assertNotIn('text-green-400', cell_html)
+        self.assertNotIn('text-blue-400', cell_html)
+        self.assertNotIn('text-red-400', cell_html)
+
+
 class StudioSyncDashboardCourseBreakdownTest(TestCase):
     """Issue #224 - course-type sources show per-level breakdown.
 
@@ -892,6 +1010,20 @@ class StudioSyncHistoryTest(TestCase):
         )
         response = self.client.get('/studio/sync/history/')
         self.assertContains(response, 'tiers synced')
+
+    def test_history_shows_unchanged_in_batch_summary(self):
+        """Issue #252 - history batch summary surfaces ``total_unchanged``."""
+        SyncLog.objects.create(
+            source=self.source,
+            status='success',
+            items_created=1,
+            items_unchanged=9,
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/history/')
+        self.assertContains(response, '9 unchanged')
+        # Per-type table also gets the unchanged column.
+        self.assertContains(response, 'Unchanged')
 
 
 class StudioSyncTriggerTest(TestCase):

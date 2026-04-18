@@ -48,7 +48,14 @@ from studio.views.recordings import recording_edit, recording_list, recording_pu
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
 from studio.views.settings import settings_dashboard, settings_save_group
 from studio.views.subscribers import subscriber_export_csv, subscriber_list
-from studio.views.sync import sync_all, sync_dashboard, sync_history, sync_status, sync_trigger
+from studio.views.sync import (
+    sync_all,
+    sync_dashboard,
+    sync_history,
+    sync_repo_trigger,
+    sync_status,
+    sync_trigger,
+)
 from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
 from studio.views.users import user_create, user_create_done
 from studio.views.utm_analytics import (
@@ -243,6 +250,13 @@ urlpatterns = [
     path('sync/history/', sync_history, name='studio_sync_history'),
     path('sync/<uuid:source_id>/trigger/', sync_trigger, name='studio_sync_trigger'),
     path('sync/<uuid:source_id>/status/', sync_status, name='studio_sync_status'),
+    # Per-repo sync uses ``<path:repo_name>`` because repo names contain a
+    # slash (e.g. ``AI-Shipping-Labs/content``). See issue #232.
+    path(
+        'sync/<path:repo_name>/trigger-repo/',
+        sync_repo_trigger,
+        name='studio_sync_repo_trigger',
+    ),
 
     # Content Sources (register a new repo)
     path(

@@ -4,6 +4,8 @@ Provides:
 - /studio/sync/ - Unified sync dashboard with repo-level card and results
 - /studio/sync/history/ - Aggregated sync history per batch
 - /studio/sync/<source_id>/trigger/ - Trigger sync for a single source
+- /studio/sync/<repo_name>/trigger-repo/ - Trigger sync for every source
+  sharing one repo_name (fan-out under one button, see issue #232)
 - /studio/sync/all/ - Trigger sync for all sources (with batch_id)
 - /studio/sync/<source_id>/status/ - JSON endpoint for polling sync status
 """
@@ -125,7 +127,10 @@ def _aggregate_batch(logs):
 @staff_required
 def sync_dashboard(request):
     """Display unified sync dashboard with one card per repo."""
-    sources = ContentSource.objects.all()
+    # Order by ``repo_name`` (then ``content_type``) so the dashboard is
+    # deterministic — relying on insertion order produced flaky card layouts
+    # when sources were added in different sequences across environments.
+    sources = ContentSource.objects.all().order_by('repo_name', 'content_type')
 
     # Group sources by repo_name
     repos = OrderedDict()
@@ -299,6 +304,58 @@ def sync_trigger(request, source_id):
             request,
             f'Sync failed for {source.repo_name}: {e}',
         )
+
+    return redirect('studio_sync_dashboard')
+
+
+@staff_required
+@require_POST
+def sync_repo_trigger(request, repo_name):
+    """Trigger sync for every ContentSource sharing one ``repo_name``.
+
+    The dashboard renders one ``Sync now`` button per repo card. Clicking it
+    fans out an ``async_task`` for every ContentSource with that repo name,
+    all sharing one ``batch_id`` so the batch shows up as a single row in
+    history and the per-card ``last_batch`` aggregator finds them together.
+    See issue #232.
+    """
+    sources = list(ContentSource.objects.filter(repo_name=repo_name))
+    if not sources:
+        messages.error(request, f'No content sources configured for {repo_name}.')
+        return redirect('studio_sync_dashboard')
+
+    batch_id = uuid.uuid4()
+    count = len(sources)
+
+    for source in sources:
+        try:
+            try:
+                from django_q.tasks import async_task
+                async_task(
+                    'integrations.services.github.sync_content_source',
+                    source,
+                    batch_id=batch_id,
+                    task_name=f'sync-{source.repo_name}-{source.content_type}',
+                )
+            except ImportError:
+                sync_content_source(source, batch_id=batch_id)
+        except Exception:
+            logger.exception('Error triggering sync for %s', source.repo_name)
+
+    warning = _worker_warning_suffix()
+    base_msg = format_html(
+        'Sync queued for {repo_name} ({count} source{plural}). You can see '
+        'the status <a href="/studio/worker/" class="underline">here</a>'
+        '{warning}',
+        repo_name=repo_name,
+        count=count,
+        plural='' if count == 1 else 's',
+        warning=warning,
+    )
+    if warning:
+        messages.warning(request, base_msg)
+    else:
+        messages.success(request, base_msg)
 
     return redirect('studio_sync_dashboard')
 

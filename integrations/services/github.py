@@ -1592,6 +1592,71 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
     return stats
 
 
+def _build_course_unit_lookup(course_dir):
+    """Build a ``{module_slug: {filename: unit_slug}}`` map for a course tree.
+
+    Used by the markdown link rewriter (issue #226) so we can resolve sibling
+    and cross-module ``.md`` links without doing a database round-trip per
+    link. The slug derivation here mirrors what :func:`_sync_module_units`
+    writes to ``Module.slug`` / ``Unit.slug`` so the rewriter produces URLs
+    that actually resolve.
+
+    Modules without a ``module.yaml`` are skipped (mirroring
+    :func:`_sync_course_modules`). Files starting with ``.`` are ignored.
+    Frontmatter ``slug`` overrides for both modules and units are honoured.
+    """
+    lookup = {}
+    if not os.path.isdir(course_dir):
+        return lookup
+
+    for entry in sorted(os.scandir(course_dir), key=lambda e: e.name):
+        if (
+            not entry.is_dir()
+            or entry.name.startswith('.')
+            or entry.name == 'images'
+        ):
+            continue
+
+        module_yaml_path = os.path.join(entry.path, 'module.yaml')
+        if not os.path.exists(module_yaml_path):
+            continue
+
+        # Best-effort: skip modules whose YAML can't be parsed. We don't want
+        # link rewriting to ever fail the sync, so a parse error here just
+        # means those modules' units can't be link targets.
+        try:
+            module_data = _parse_yaml_file(module_yaml_path) or {}
+        except Exception:
+            module_data = {}
+        module_slug = module_data.get('slug') or derive_slug(entry.name)
+
+        files = {}
+        for filename in os.listdir(entry.path):
+            if (
+                not filename.lower().endswith('.md')
+                or filename.startswith('.')
+            ):
+                continue
+            filepath = os.path.join(entry.path, filename)
+            if not os.path.isfile(filepath):
+                continue
+
+            try:
+                metadata, _ = _parse_markdown_file(filepath)
+            except Exception:
+                metadata = {}
+
+            if filename.lower() == 'readme.md':
+                unit_slug = metadata.get('slug') or 'readme'
+            else:
+                unit_slug = metadata.get('slug') or derive_slug(filename)
+            files[filename] = unit_slug
+
+        lookup[module_slug] = files
+
+    return lookup
+
+
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
                          known_images=None, course_ignore_patterns=None):
     """Sync modules and units for a course.
@@ -1605,6 +1670,11 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
 
     course_ignore_patterns = course_ignore_patterns or []
     seen_module_paths = set()
+
+    # Build the course-wide unit lookup once before processing any unit so the
+    # markdown link rewriter (issue #226) can resolve sibling and cross-module
+    # `.md` links to platform URLs.
+    unit_lookup = _build_course_unit_lookup(course_dir)
 
     for entry in sorted(os.scandir(course_dir), key=lambda e: e.name):
         if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
@@ -1663,6 +1733,8 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
                 course_dir=course_dir,
                 course_ignore_patterns=course_ignore_patterns,
                 module_ignore_patterns=module_ignore_patterns,
+                course_slug=course.slug,
+                unit_lookup=unit_lookup,
             )
 
         except Exception as e:
@@ -1684,7 +1756,8 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
 def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stats,
                        known_images=None, course_dir=None,
                        course_ignore_patterns=None,
-                       module_ignore_patterns=None):
+                       module_ignore_patterns=None,
+                       course_slug=None, unit_lookup=None):
     """Sync units (markdown files) within a module directory.
 
     ``course_ignore_patterns`` are globs relative to ``course_dir`` (course
@@ -1693,8 +1766,13 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
     README.md at the module root is promoted to the first unit of the module
     (``sort_order = -1``) unless it is ignored by either list.
+
+    ``course_slug`` and ``unit_lookup`` are used by the markdown link
+    rewriter (issue #226) to convert intra-content ``.md`` links into
+    platform URLs. When either is missing, link rewriting is skipped.
     """
     from content.models import Unit, UserCourseProgress
+    from content.utils.md_links import rewrite_md_links
 
     course_ignore_patterns = course_ignore_patterns or []
     module_ignore_patterns = module_ignore_patterns or []
@@ -1752,6 +1830,16 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                     known_images, stats.get('errors', []),
                 )
             body = rewrite_image_urls(body, repo_name, base_dir)
+            # Rewrite intra-content `.md` links to platform URLs (issue #226).
+            if course_slug and unit_lookup is not None:
+                body = rewrite_md_links(
+                    body,
+                    course_slug=course_slug,
+                    module_slug=module.slug,
+                    unit_lookup=unit_lookup,
+                    source_path=readme_rel,
+                    sync_errors=stats.get('errors'),
+                )
 
             readme_slug = metadata.get('slug', 'readme')
             readme_sort_order = metadata.get('sort_order', -1)
@@ -1828,6 +1916,16 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 )
 
             body = rewrite_image_urls(body, repo_name, base_dir)
+            # Rewrite intra-content `.md` links to platform URLs (issue #226).
+            if course_slug and unit_lookup is not None:
+                body = rewrite_md_links(
+                    body,
+                    course_slug=course_slug,
+                    module_slug=module.slug,
+                    unit_lookup=unit_lookup,
+                    source_path=rel_path,
+                    sync_errors=stats.get('errors'),
+                )
 
             is_homework = metadata.get('is_homework', False)
 

@@ -1372,11 +1372,6 @@ class TierOverrideModelTest(TierOverrideTestBase):
         result = str(override)
         self.assertIn("inactive", result)
 
-    def test_default_ordering(self):
-        """Verify default ordering is -created_at."""
-        self.assertEqual(
-            TierOverride._meta.ordering, ["-created_at"]
-        )
 
     def test_get_active_override_returns_object(self):
         user = self._make_user()

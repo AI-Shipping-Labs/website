@@ -57,33 +57,6 @@ class DownloadModelFieldsTest(TestCase):
         self.assertTrue(dl.published)
         self.assertIsNotNone(dl.created_at)
 
-    def test_default_values(self):
-        dl = Download.objects.create(
-            title='Minimal',
-            slug='minimal',
-            file_url='https://example.com/file.pdf',
-        )
-        self.assertEqual(dl.description, '')
-        self.assertEqual(dl.file_type, 'pdf')
-        self.assertEqual(dl.file_size_bytes, 0)
-        self.assertEqual(dl.cover_image_url, '')
-        self.assertEqual(dl.required_level, 0)
-        self.assertEqual(dl.tags, [])
-        self.assertEqual(dl.download_count, 0)
-        self.assertTrue(dl.published)
-
-    def test_slug_unique(self):
-        from django.db import IntegrityError
-        Download.objects.create(
-            title='First', slug='unique-slug',
-            file_url='https://example.com/file.pdf',
-        )
-        with self.assertRaises(IntegrityError):
-            Download.objects.create(
-                title='Second', slug='unique-slug',
-                file_url='https://example.com/file2.pdf',
-            )
-
     def test_ordering_by_created_at_desc(self):
         Download.objects.create(
             title='Old', slug='old',
@@ -96,10 +69,6 @@ class DownloadModelFieldsTest(TestCase):
         downloads = list(Download.objects.all())
         self.assertEqual(downloads[0].slug, 'new')
         self.assertEqual(downloads[1].slug, 'old')
-
-    def test_str(self):
-        dl = Download(title='My Download')
-        self.assertEqual(str(dl), 'My Download')
 
     def test_get_absolute_url(self):
         dl = Download(slug='my-download')

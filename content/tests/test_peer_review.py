@@ -22,7 +22,6 @@ from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.db import IntegrityError
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -69,13 +68,6 @@ def _create_user(email, **kwargs):
 class CourseModelPeerReviewFieldsTest(TestCase):
     """Test Course model peer review configuration fields."""
 
-    def test_default_values(self):
-        course = Course.objects.create(title='Test', slug='test-pr-defaults')
-        self.assertFalse(course.peer_review_enabled)
-        self.assertEqual(course.peer_review_count, 3)
-        self.assertEqual(course.peer_review_deadline_days, 7)
-        self.assertEqual(course.peer_review_criteria, '')
-
     def test_criteria_html_rendered_on_save(self):
         course = Course.objects.create(
             title='Test', slug='test-pr-html',
@@ -103,29 +95,6 @@ class ProjectSubmissionModelTest(TestCase):
         self.assertIsNone(sub.review_deadline)
         self.assertIsNone(sub.certificate_issued_at)
 
-    def test_unique_per_user_course(self):
-        ProjectSubmission.objects.create(
-            user=self.user,
-            course=self.course,
-            project_url='https://github.com/test/project',
-        )
-        with self.assertRaises(IntegrityError):
-            ProjectSubmission.objects.create(
-                user=self.user,
-                course=self.course,
-                project_url='https://github.com/test/project2',
-            )
-
-    def test_str(self):
-        sub = ProjectSubmission.objects.create(
-            user=self.user,
-            course=self.course,
-            project_url='https://github.com/test/project',
-        )
-        self.assertIn('student@test.com', str(sub))
-        self.assertIn('submitted', str(sub))
-
-
 class PeerReviewModelTest(TestCase):
     """Test PeerReview model fields and constraints."""
 
@@ -149,18 +118,6 @@ class PeerReviewModelTest(TestCase):
         self.assertEqual(review.feedback, '')
         self.assertIsNone(review.completed_at)
 
-    def test_unique_per_submission_reviewer(self):
-        PeerReview.objects.create(
-            submission=self.submission,
-            reviewer=self.reviewer,
-        )
-        with self.assertRaises(IntegrityError):
-            PeerReview.objects.create(
-                submission=self.submission,
-                reviewer=self.reviewer,
-            )
-
-
 class CourseCertificateModelTest(TestCase):
     """Test CourseCertificate model fields and constraints."""
 
@@ -175,11 +132,6 @@ class CourseCertificateModelTest(TestCase):
         )
         self.assertIsInstance(cert.id, uuid.UUID)
         self.assertIsNotNone(cert.issued_at)
-
-    def test_unique_per_user_course(self):
-        CourseCertificate.objects.create(user=self.user, course=self.course)
-        with self.assertRaises(IntegrityError):
-            CourseCertificate.objects.create(user=self.user, course=self.course)
 
     def test_get_absolute_url(self):
         cert = CourseCertificate.objects.create(

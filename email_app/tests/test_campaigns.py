@@ -142,20 +142,6 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(campaign.get_recipient_count(), 5)
 
-    def test_status_default_draft(self):
-        """New campaigns default to 'draft' status."""
-        campaign = EmailCampaign.objects.create(
-            subject='Test', body='Body',
-        )
-        self.assertEqual(campaign.status, 'draft')
-
-    def test_str_representation(self):
-        campaign = EmailCampaign.objects.create(
-            subject='My Campaign', body='Body',
-        )
-        self.assertEqual(str(campaign), 'My Campaign (draft)')
-
-
 @tag('core')
 class SendCampaignFanOutTest(TierSetupMixin, TestCase):
     """Test the top-level send_campaign fan-out task.

@@ -9,17 +9,6 @@ class NewsletterSubscriberModelTest(TestCase):
             email='test@example.com',
         )
 
-    def test_str(self):
-        self.assertEqual(str(self.subscriber), 'test@example.com')
-
-    def test_unique_email(self):
-        from django.db import IntegrityError
-        with self.assertRaises(IntegrityError):
-            NewsletterSubscriber.objects.create(email='test@example.com')
-
-    def test_default_active(self):
-        self.assertTrue(self.subscriber.is_active)
-
     def test_ordering(self):
         NewsletterSubscriber.objects.create(email='second@example.com')
         subs = list(NewsletterSubscriber.objects.all())

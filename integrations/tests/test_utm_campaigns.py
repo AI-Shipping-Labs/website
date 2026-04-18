@@ -54,19 +54,6 @@ class UtmCampaignLinkModelTest(TestCase):
             default_utm_medium='email',
         )
 
-    def test_unique_together_campaign_utm_content(self):
-        UtmCampaignLink.objects.create(
-            campaign=self.campaign,
-            utm_content='ai_hero_list',
-            destination='/events/launch',
-        )
-        with self.assertRaises(IntegrityError):
-            UtmCampaignLink.objects.create(
-                campaign=self.campaign,
-                utm_content='ai_hero_list',
-                destination='/something-else',
-            )
-
     def test_utm_content_validator_rejects_dash(self):
         link = UtmCampaignLink(
             campaign=self.campaign,

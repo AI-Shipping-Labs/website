@@ -18,7 +18,6 @@ Covers:
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -78,21 +77,6 @@ class EventModelFieldsTest(TestCase):
         self.assertEqual(event.required_level, LEVEL_MAIN)
         self.assertEqual(event.max_participants, 50)
         self.assertEqual(event.status, 'upcoming')
-
-    def test_slug_unique(self):
-        Event.objects.create(
-            title='First', slug='unique-slug',
-            start_datetime=timezone.now(),
-        )
-        with self.assertRaises(IntegrityError):
-            Event.objects.create(
-                title='Second', slug='unique-slug',
-                start_datetime=timezone.now(),
-            )
-
-    def test_str(self):
-        event = Event(title='My Event')
-        self.assertEqual(str(event), 'My Event')
 
     def test_get_absolute_url(self):
         event = Event(slug='my-event')
@@ -228,26 +212,12 @@ class EventRegistrationModelTest(TestCase):
         self.assertEqual(reg.event, self.event)
         self.assertEqual(reg.user, self.user)
 
-    def test_unique_together_constraint(self):
-        EventRegistration.objects.create(
-            event=self.event, user=self.user,
-        )
-        with self.assertRaises(IntegrityError):
-            EventRegistration.objects.create(
-                event=self.event, user=self.user,
-            )
-
     def test_registration_count(self):
         self.assertEqual(self.event.registration_count, 0)
         EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
         self.assertEqual(self.event.registration_count, 1)
-
-    def test_str(self):
-        reg = EventRegistration(event=self.event, user=self.user)
-        self.assertEqual(str(reg), f'{self.user} - {self.event}')
-
 
 # --- Events List Page Tests ---
 

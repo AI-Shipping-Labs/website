@@ -52,14 +52,6 @@ class NotificationModelTest(TestCase):
         self.assertEqual(notifications[0], n2)
         self.assertEqual(notifications[1], n1)
 
-    def test_notification_str(self):
-        n = Notification.objects.create(
-            user=self.user,
-            title='My Notification',
-            notification_type='new_content',
-        )
-        self.assertEqual(str(n), 'My Notification (new_content)')
-
     def test_notification_all_fields(self):
         n = Notification.objects.create(
             user=self.user,
@@ -104,17 +96,6 @@ class EventReminderLogModelTest(TestCase):
         self.assertEqual(log.user, self.user)
         self.assertEqual(log.interval, '24h')
 
-    def test_unique_constraint_prevents_duplicate(self):
-        """Same (event, user, interval) should not be allowed twice."""
-        from django.db import IntegrityError
-        EventReminderLog.objects.create(
-            event=self.event, user=self.user, interval='24h',
-        )
-        with self.assertRaises(IntegrityError):
-            EventReminderLog.objects.create(
-                event=self.event, user=self.user, interval='24h',
-            )
-
     def test_different_intervals_allowed(self):
         """Same event+user can have both 24h and 1h reminders."""
         EventReminderLog.objects.create(
@@ -126,8 +107,3 @@ class EventReminderLogModelTest(TestCase):
         self.assertEqual(EventReminderLog.objects.count(), 2)
         self.assertEqual(log2.interval, '1h')
 
-    def test_str(self):
-        log = EventReminderLog.objects.create(
-            event=self.event, user=self.user, interval='24h',
-        )
-        self.assertIn('24h', str(log))

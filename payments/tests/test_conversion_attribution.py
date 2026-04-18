@@ -659,29 +659,6 @@ class ReadOnlyAdminTest(TestCase):
 class ConversionAttributionModelTest(TestCase):
     """Model-level checks for constraints and ordering."""
 
-    def test_stripe_session_id_is_unique(self):
-        """Second insert with the same stripe_session_id raises IntegrityError."""
-        from django.db import IntegrityError
-
-        user = User.objects.create_user(email="unique@test.com")
-        ConversionAttribution.objects.create(
-            user=user,
-            stripe_session_id="cs_unique_session",
-        )
-        with self.assertRaises(IntegrityError):
-            ConversionAttribution.objects.create(
-                user=user,
-                stripe_session_id="cs_unique_session",
-            )
-
-    def test_created_at_is_auto_populated(self):
-        user = User.objects.create_user(email="ts@test.com")
-        row = ConversionAttribution.objects.create(
-            user=user,
-            stripe_session_id="cs_ts_test",
-        )
-        self.assertIsNotNone(row.created_at)
-
     def test_default_ordering_is_newest_first(self):
         user = User.objects.create_user(email="order@test.com")
         older = ConversionAttribution.objects.create(

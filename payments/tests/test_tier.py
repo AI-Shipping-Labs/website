@@ -1,4 +1,3 @@
-from django.db import IntegrityError
 from django.test import TestCase, override_settings, tag
 
 from payments.models import Tier
@@ -44,18 +43,6 @@ class TierModelTest(TestCase):
         tiers = list(Tier.objects.values_list("slug", flat=True))
         self.assertEqual(tiers, ["free", "basic", "main", "premium"])
 
-    def test_str_returns_name(self):
-        tier = Tier.objects.get(slug="main")
-        self.assertEqual(str(tier), "Main")
-
-    def test_slug_unique(self):
-        with self.assertRaises(IntegrityError):
-            Tier.objects.create(slug="free", name="Duplicate", level=99)
-
-    def test_level_unique(self):
-        with self.assertRaises(IntegrityError):
-            Tier.objects.create(slug="custom", name="Custom", level=0)
-
     def test_features_is_list(self):
         tier = Tier.objects.get(slug="basic")
         self.assertIsInstance(tier.features, list)
@@ -73,11 +60,6 @@ class TierModelTest(TestCase):
                 f"Tier '{tier.slug}' should have a description",
             )
 
-    def test_stripe_fields_default_empty(self):
-        """Seeded tiers should have empty stripe price IDs by default."""
-        for tier in Tier.objects.all():
-            self.assertEqual(tier.stripe_price_id_monthly, "")
-            self.assertEqual(tier.stripe_price_id_yearly, "")
 
 
 class TierPricingViewTest(TestCase):

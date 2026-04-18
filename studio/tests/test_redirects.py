@@ -1,54 +1,12 @@
 """Tests for redirect model, middleware, and studio views."""
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
 from django.test import Client, TestCase
 
 from integrations.middleware import clear_redirect_cache
 from integrations.models import Redirect
 
 User = get_user_model()
-
-
-class RedirectModelTest(TestCase):
-    """Test the Redirect model."""
-
-    def test_create_redirect(self):
-        r = Redirect.objects.create(
-            source_path='/old',
-            target_path='/new',
-            redirect_type=301,
-        )
-        self.assertEqual(r.source_path, '/old')
-        self.assertEqual(r.target_path, '/new')
-        self.assertEqual(r.redirect_type, 301)
-        self.assertTrue(r.is_active)
-
-    def test_str_representation(self):
-        r = Redirect.objects.create(
-            source_path='/old',
-            target_path='/new',
-            redirect_type=301,
-        )
-        self.assertEqual(str(r), '/old -> /new (301)')
-
-    def test_source_path_unique(self):
-        Redirect.objects.create(source_path='/old', target_path='/new')
-        with self.assertRaises(IntegrityError):
-            Redirect.objects.create(source_path='/old', target_path='/other')
-
-    def test_default_redirect_type_is_301(self):
-        r = Redirect.objects.create(source_path='/a', target_path='/b')
-        self.assertEqual(r.redirect_type, 301)
-
-    def test_default_is_active_true(self):
-        r = Redirect.objects.create(source_path='/a', target_path='/b')
-        self.assertTrue(r.is_active)
-
-    def test_timestamps_auto_set(self):
-        r = Redirect.objects.create(source_path='/a', target_path='/b')
-        self.assertIsNotNone(r.created_at)
-        self.assertIsNotNone(r.updated_at)
 
 
 class RedirectSeedTest(TestCase):

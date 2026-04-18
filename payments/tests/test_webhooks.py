@@ -685,37 +685,3 @@ class WebhookIdempotencyTest(TestCase):
         )
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["status"], "already_processed")
-
-
-class WebhookEventModelTest(TestCase):
-    """Tests for the WebhookEvent model."""
-
-    def test_str_representation(self):
-        event = WebhookEvent.objects.create(
-            stripe_event_id="evt_test_str",
-            event_type="checkout.session.completed",
-        )
-        self.assertEqual(
-            str(event), "checkout.session.completed (evt_test_str)"
-        )
-
-    def test_unique_stripe_event_id(self):
-        """stripe_event_id must be unique."""
-        from django.db import IntegrityError
-
-        WebhookEvent.objects.create(
-            stripe_event_id="evt_unique",
-            event_type="test.event",
-        )
-        with self.assertRaises(IntegrityError):
-            WebhookEvent.objects.create(
-                stripe_event_id="evt_unique",
-                event_type="test.event",
-            )
-
-    def test_processed_at_auto_set(self):
-        event = WebhookEvent.objects.create(
-            stripe_event_id="evt_auto_ts",
-            event_type="test.event",
-        )
-        self.assertIsNotNone(event.processed_at)

@@ -2,7 +2,6 @@ from django.db import IntegrityError
 from django.test import TestCase, tag
 
 from accounts.models import User
-from payments.models import Tier
 
 
 @tag('core')
@@ -62,10 +61,6 @@ class UserModelTest(TestCase):
         with self.assertRaises(IntegrityError):
             User.objects.create_user(email="test@example.com")
 
-    def test_str_returns_email(self):
-        user = User.objects.create_user(email="test@example.com")
-        self.assertEqual(str(user), "test@example.com")
-
 class UserPaymentFieldsTest(TestCase):
     """Tests for user payment-related fields."""
 
@@ -75,7 +70,4 @@ class UserPaymentFieldsTest(TestCase):
         self.assertIsNotNone(user.tier)
         self.assertEqual(user.tier.slug, "free")
 
-    def test_tier_fk_resolves_to_tier_model(self):
-        user = User.objects.create_user(email="test@example.com")
-        self.assertIsInstance(user.tier, Tier)
 

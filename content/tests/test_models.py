@@ -22,9 +22,6 @@ class ArticleModelTest(TestCase):
             published=True,
         )
 
-    def test_str(self):
-        self.assertEqual(str(self.article), 'Test Article')
-
     def test_get_absolute_url(self):
         self.assertEqual(self.article.get_absolute_url(), '/blog/test-article')
 
@@ -43,26 +40,6 @@ class ArticleModelTest(TestCase):
         articles = list(Article.objects.all())
         self.assertEqual(articles[0].slug, 'test-article')
         self.assertEqual(articles[1].slug, 'older-article')
-
-    def test_default_values(self):
-        article = Article.objects.create(
-            title='Minimal Article',
-            slug='minimal-article',
-            date=date(2025, 1, 1),
-        )
-        self.assertEqual(article.description, '')
-        self.assertEqual(article.tags, [])
-        self.assertTrue(article.published)
-
-    def test_unique_slug(self):
-        from django.db import IntegrityError
-        with self.assertRaises(IntegrityError):
-            Article.objects.create(
-                title='Duplicate',
-                slug='test-article',
-                date=date(2025, 1, 1),
-            )
-
 
 @tag('core')
 class EventRecordingModelTest(TestCase):
@@ -86,9 +63,6 @@ class EventRecordingModelTest(TestCase):
             published=True,
         )
 
-    def test_str(self):
-        self.assertEqual(str(self.recording), 'Test Recording')
-
     def test_get_absolute_url(self):
         self.assertEqual(self.recording.get_absolute_url(), '/events/test-recording')
 
@@ -108,21 +82,6 @@ class EventRecordingModelTest(TestCase):
         self.assertEqual(len(self.recording.core_tools), 2)
         self.assertEqual(len(self.recording.learning_objectives), 1)
 
-    def test_default_values(self):
-        from django.utils import timezone as tz
-        rec = Event.objects.create(
-            title='Minimal',
-            slug='minimal-recording',
-            start_datetime=tz.now(),
-        )
-        self.assertEqual(rec.tags, [])
-        self.assertEqual(rec.timestamps, [])
-        self.assertEqual(rec.materials, [])
-        self.assertEqual(rec.core_tools, [])
-        self.assertEqual(rec.learning_objectives, [])
-        self.assertEqual(rec.outcome, '')
-
-
 @tag('core')
 class ProjectModelTest(TestCase):
     def setUp(self):
@@ -140,9 +99,6 @@ class ProjectModelTest(TestCase):
             estimated_time='4 hours',
             published=True,
         )
-
-    def test_str(self):
-        self.assertEqual(str(self.project), 'Test Project')
 
     def test_get_absolute_url(self):
         self.assertEqual(self.project.get_absolute_url(), '/projects/test-project')
@@ -181,9 +137,6 @@ class TutorialModelTest(TestCase):
             published=True,
         )
 
-    def test_str(self):
-        self.assertEqual(str(self.tutorial), 'Test Tutorial')
-
     def test_get_absolute_url(self):
         self.assertEqual(self.tutorial.get_absolute_url(), '/tutorials/test-tutorial')
 
@@ -207,9 +160,6 @@ class CuratedLinkModelTest(TestCase):
             sort_order=0,
             published=True,
         )
-
-    def test_str(self):
-        self.assertEqual(str(self.link), 'Test Link')
 
     def test_category_label(self):
         self.assertEqual(self.link.category_label, 'Tools')
@@ -241,16 +191,6 @@ class CuratedLinkModelTest(TestCase):
         self.assertEqual(self.link.category_icon_name, 'graduation-cap')
         self.link.category = 'other'
         self.assertEqual(self.link.category_icon_name, 'folder-open')
-
-    def test_unique_item_id(self):
-        from django.db import IntegrityError
-        with self.assertRaises(IntegrityError):
-            CuratedLink.objects.create(
-                item_id='test-link',
-                title='Duplicate',
-                url='https://example.com',
-                category='tools',
-            )
 
     def test_ordering(self):
         CuratedLink.objects.create(

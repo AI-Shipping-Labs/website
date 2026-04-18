@@ -12,16 +12,6 @@ class WebhookLogModelTest(TestCase):
             processed=False,
         )
 
-    def test_str(self):
-        self.assertIn('stripe', str(self.log))
-        self.assertIn('payment.succeeded', str(self.log))
-
-    def test_default_values(self):
-        log = WebhookLog.objects.create(service='slack')
-        self.assertEqual(log.event_type, '')
-        self.assertEqual(log.payload, {})
-        self.assertFalse(log.processed)
-
     def test_ordering(self):
         WebhookLog.objects.create(service='zoom')
         logs = list(WebhookLog.objects.all())

@@ -170,7 +170,7 @@
             <tr class="border-b border-border">
               <th class="text-left px-4 py-3 text-muted-foreground font-medium">Name</th>
               <th class="text-left px-4 py-3 text-muted-foreground font-medium">Func</th>
-              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Age</th>
+              <th class="text-left px-4 py-3 text-muted-foreground font-medium">Lock expires</th>
               <th class="text-right px-4 py-3 text-muted-foreground font-medium">Actions</th>
             </tr>
           </thead>
@@ -180,7 +180,7 @@
                 <td class="px-4 py-3 text-foreground">{{ q.name|default:"—" }}</td>
                 <td class="px-4 py-3 text-muted-foreground font-mono text-xs">{{ q.func|default:"—"|truncatechars:60 }}</td>
                 <td class="px-4 py-3 text-muted-foreground">
-                  {% if q.age_seconds is not None %}{{ q.age_seconds|floatformat:0 }}s{% else %}—{% endif %}
+                  {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
                 </td>
                 <td class="px-4 py-3 text-right">
                   <a href="{% url 'studio_worker_inspect_task' q.id %}"

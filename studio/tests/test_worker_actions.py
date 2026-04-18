@@ -224,8 +224,10 @@ class InspectQueuedTaskTest(TestCase):
         self.assertContains(response, 'sync_content_source')
         self.assertContains(response, 'source-uuid-1')
         self.assertContains(response, 'batch_id')
-        # Age in seconds is shown (rounded). 42s lock → "42s" in template.
-        self.assertContains(response, '42s')
+        # ``lock_age_seconds=42`` puts ``OrmQ.lock`` 42s in the past, i.e. an
+        # expired worker claim. The template should render "expired 42s ago",
+        # not the misleading "42s" age that issue #241 fixed.
+        self.assertContains(response, 'expired 42s ago')
 
     def test_inspect_404_when_missing(self):
         response = self.client.get('/studio/worker/queue/9999/inspect/')
@@ -461,12 +463,14 @@ class WorkerDashboardRendersQueuedTasksTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_pending_tasks_section_lists_queued_tasks(self):
+        # ``lock_age_seconds=7`` puts the lock 7s in the past — an expired
+        # claim. The Lock-expires column should say so explicitly.
         _enqueue_ormq(name='visible-task', lock_age_seconds=7)
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
             response = self.client.get('/studio/worker/')
         self.assertContains(response, 'Pending Tasks (1)')
         self.assertContains(response, 'visible-task')
-        self.assertContains(response, '7s')
+        self.assertContains(response, 'expired 7s ago')
         self.assertContains(response, 'data-action="delete-queued"')
 
     def test_pending_section_hidden_when_queue_empty(self):

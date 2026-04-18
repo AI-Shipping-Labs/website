@@ -976,6 +976,7 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
         # Update sync log
         sync_log.items_created = stats.get('created', 0)
         sync_log.items_updated = stats.get('updated', 0)
+        sync_log.items_unchanged = stats.get('unchanged', 0)
         sync_log.items_deleted = stats.get('deleted', 0)
         sync_log.items_detail = stats.get('items_detail', [])
         sync_log.tiers_synced = tiers_result.get('synced', False)
@@ -996,6 +997,7 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
         source.last_sync_log = (
             f"Created: {sync_log.items_created}, "
             f"Updated: {sync_log.items_updated}, "
+            f"Unchanged: {sync_log.items_unchanged}, "
             f"Deleted: {sync_log.items_deleted}"
         )
         if sync_log.errors:
@@ -1166,6 +1168,64 @@ def _compute_content_hash(text):
     return hashlib.md5(text.encode('utf-8')).hexdigest()
 
 
+# Fields ignored when deciding whether a re-sync actually changed an item.
+# ``source_commit`` bumps on every sync to whatever the current HEAD is, so
+# comparing it would mark every item as updated (defeating the whole point of
+# issue #225). ``source_repo`` and ``source_path`` are scope/identity fields
+# we look up by; they would always be equal and including them is just noise.
+_NO_CHANGE_IGNORED_FIELDS = frozenset({
+    'source_commit',
+    'source_repo',
+    'source_path',
+})
+
+
+def _defaults_differ(instance, defaults):
+    """Return True if any value in ``defaults`` differs from ``instance``.
+
+    Used by the per-content-type sync helpers to decide whether an existing
+    row needs to be re-saved on a re-sync (issue #225). When this returns
+    False the sync skips the save AND skips the items_detail entry, so the
+    sync report only lists items whose content actually changed.
+
+    Notes on normalization:
+
+    - ``tags`` is a JSONField list that the model ``save()`` normalizes
+      (lowercase, hyphenated). The incoming defaults have not been
+      normalized yet, so we normalize before comparing — otherwise an
+      author-cased tag like ``Python`` would always look different from
+      the stored ``python`` and the row would re-save on every sync.
+    - Fields in :data:`_NO_CHANGE_IGNORED_FIELDS` are skipped because they
+      either change every run (``source_commit``) or are scope keys that
+      cannot differ for a row we just looked up (``source_repo``,
+      ``source_path``).
+    """
+    for field, new_value in defaults.items():
+        if field in _NO_CHANGE_IGNORED_FIELDS:
+            continue
+        current = getattr(instance, field, None)
+        if field == 'tags' and isinstance(new_value, list):
+            from content.utils.tags import normalize_tags
+            new_value = normalize_tags(new_value)
+        # ``content_id`` is stored as a UUID but YAML frontmatter parses
+        # to a string. Coerce both sides to a UUID for the comparison so a
+        # re-sync of the same file doesn't look like a diff.
+        if field == 'content_id' and current is not None and new_value is not None:
+            if isinstance(current, uuid.UUID) and isinstance(new_value, str):
+                try:
+                    new_value = uuid.UUID(new_value)
+                except (ValueError, AttributeError):
+                    pass
+            elif isinstance(new_value, uuid.UUID) and isinstance(current, str):
+                try:
+                    current = uuid.UUID(current)
+                except (ValueError, AttributeError):
+                    pass
+        if current != new_value:
+            return True
+    return False
+
+
 def _count_content_files(content_dir):
     """Count content files (.md, .yaml, .yml) in a directory tree."""
     count = 0
@@ -1253,7 +1313,10 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync blog articles from the repo."""
     from content.models import Article
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
     seen_slugs = set()
     failed_slugs = set()
 
@@ -1356,18 +1419,51 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
                 else:
                     defaults['date'] = timezone.now().date()
 
-                # Edge Case 2: Scope update_or_create to source_repo
-                article, created = Article.objects.update_or_create(
-                    slug=current_slug,
-                    source_repo=source.repo_name,
-                    defaults=defaults,
-                )
+                # Pre-derive description so the no-change comparison below
+                # matches what Article.save() would persist. Article.save()
+                # auto-fills description from the first 200 chars of
+                # content_markdown when description is empty; if we left
+                # defaults['description'] = '' we'd see a spurious diff on
+                # every re-sync (issue #225).
+                if not defaults['description'] and body:
+                    defaults['description'] = body[:200]
+
+                # Issue #225: only mark as 'updated' when content actually
+                # changed. Look up first; if found and unchanged, skip the
+                # save and don't bump items_updated / items_detail.
+                try:
+                    article = Article.objects.get(
+                        slug=current_slug, source_repo=source.repo_name,
+                    )
+                except Article.DoesNotExist:
+                    article = Article(
+                        slug=current_slug, **defaults,
+                    )
+                    article.save()
+                    created = True
+                    changed = True
+                else:
+                    if _defaults_differ(article, defaults):
+                        for k, v in defaults.items():
+                            setattr(article, k, v)
+                        article.save()
+                        created = False
+                        changed = True
+                    else:
+                        created = False
+                        changed = False
 
                 # Expand widgets after save (save already rendered markdown to HTML)
-                if article.data_json:
+                # Only re-run when we actually saved — for an unchanged row the
+                # rendered HTML is already correct.
+                if changed and article.data_json:
                     from content.utils.widgets import expand_widgets
                     expanded = expand_widgets(article.content_html, article.data_json)
                     Article.objects.filter(pk=article.pk).update(content_html=expanded)
+
+                if not changed:
+                    stats['unchanged'] += 1
+                    continue
 
                 action = 'created' if created else 'updated'
                 if created:
@@ -1509,24 +1605,43 @@ def _sync_single_course(
             'content_id': course_content_id,
         }
 
-        course, created = Course.objects.update_or_create(
-            slug=slug,
-            source_repo=source.repo_name,
-            defaults=course_defaults,
-        )
-        action = 'created' if created else 'updated'
-        if created:
-            stats['created'] += 1
+        # Issue #225: only count as 'updated' when content actually changed.
+        try:
+            course = Course.objects.get(
+                slug=slug, source_repo=source.repo_name,
+            )
+        except Course.DoesNotExist:
+            course = Course(slug=slug, **course_defaults)
+            course.save()
+            created = True
+            changed = True
         else:
-            stats['updated'] += 1
-        stats['items_detail'].append({
-            'title': course_defaults.get('title', slug),
-            'slug': slug,
-            'action': action,
-            'content_type': 'course',
-            'course_id': course.pk,
-            'course_slug': course.slug,
-        })
+            if _defaults_differ(course, course_defaults):
+                for k, v in course_defaults.items():
+                    setattr(course, k, v)
+                course.save()
+                created = False
+                changed = True
+            else:
+                created = False
+                changed = False
+
+        if changed:
+            action = 'created' if created else 'updated'
+            if created:
+                stats['created'] += 1
+            else:
+                stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': course_defaults.get('title', slug),
+                'slug': slug,
+                'action': action,
+                'content_type': 'course',
+                'course_id': course.pk,
+                'course_slug': course.slug,
+            })
+        else:
+            stats['unchanged'] += 1
 
         # Sync modules (immediate child directories of course_dir)
         _sync_course_modules(
@@ -1569,7 +1684,10 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
     """
     from content.models import Course
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
     seen_course_slugs = set()
     failed_course_slugs = set()
 
@@ -1731,34 +1849,56 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             )
             slug = module_data.get('slug', derive_slug(entry.name))
 
-            module, created = Module.objects.update_or_create(
-                course=course,
-                source_path=rel_path,
-                defaults={
-                    'title': module_data.get('title', entry.name),
-                    'slug': slug,
-                    'sort_order': sort_order,
-                    'source_repo': repo_name,
-                    'source_commit': commit_sha,
-                },
-            )
-            action = 'created' if created else 'updated'
-            if created:
-                stats['created'] += 1
+            module_defaults = {
+                'title': module_data.get('title', entry.name),
+                'slug': slug,
+                'sort_order': sort_order,
+                'source_repo': repo_name,
+                'source_commit': commit_sha,
+            }
+            # Issue #225: only count as 'updated' when content actually changed.
+            try:
+                module = Module.objects.get(
+                    course=course, source_path=rel_path,
+                )
+            except Module.DoesNotExist:
+                module = Module(
+                    course=course, source_path=rel_path, **module_defaults,
+                )
+                module.save()
+                created = True
+                changed = True
             else:
-                stats['updated'] += 1
-            # Per-level breakdown (issue #224): track each module touched
-            # so the dashboard can show "Modules: X created Y updated"
-            # and link to the studio edit page.
-            stats['items_detail'].append({
-                'title': module.title,
-                'slug': module.slug,
-                'action': action,
-                'content_type': 'module',
-                'course_id': course.pk,
-                'course_slug': course.slug,
-                'module_id': module.pk,
-            })
+                if _defaults_differ(module, module_defaults):
+                    for k, v in module_defaults.items():
+                        setattr(module, k, v)
+                    module.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            if changed:
+                action = 'created' if created else 'updated'
+                if created:
+                    stats['created'] += 1
+                else:
+                    stats['updated'] += 1
+                # Per-level breakdown (issue #224): track each module touched
+                # so the dashboard can show "Modules: X created Y updated"
+                # and link to the studio edit page.
+                stats['items_detail'].append({
+                    'title': module.title,
+                    'slug': module.slug,
+                    'action': action,
+                    'content_type': 'module',
+                    'course_id': course.pk,
+                    'course_slug': course.slug,
+                    'module_id': module.pk,
+                })
+            else:
+                stats['unchanged'] += 1
 
             # Module-level ignore patterns (relative to module dir). Course
             # patterns are translated/filtered separately in _sync_module_units.
@@ -1897,32 +2037,53 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 'body': body,
             }
 
-            unit, created = Unit.objects.update_or_create(
-                module=module,
-                source_path=readme_rel,
-                defaults=readme_defaults,
-            )
-            seen_unit_paths.add(readme_rel)
-            action = 'created' if created else 'updated'
-            if created:
-                stats['created'] += 1
-                new_unit_hashes[content_hash] = unit
+            # Issue #225: only count as 'updated' when content actually changed.
+            try:
+                unit = Unit.objects.get(
+                    module=module, source_path=readme_rel,
+                )
+            except Unit.DoesNotExist:
+                unit = Unit(
+                    module=module, source_path=readme_rel, **readme_defaults,
+                )
+                unit.save()
+                created = True
+                changed = True
             else:
-                stats['updated'] += 1
-            # Per-level breakdown (issue #224): track each unit touched
-            # so the dashboard can show "Lessons (units): X created Y updated"
-            # and link to the studio edit page.
-            stats['items_detail'].append({
-                'title': unit.title,
-                'slug': unit.slug,
-                'action': action,
-                'content_type': 'unit',
-                'course_id': module.course_id,
-                'course_slug': course_slug or module.course.slug,
-                'module_id': module.pk,
-                'module_slug': module.slug,
-                'unit_id': unit.pk,
-            })
+                if _defaults_differ(unit, readme_defaults):
+                    for k, v in readme_defaults.items():
+                        setattr(unit, k, v)
+                    unit.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            seen_unit_paths.add(readme_rel)
+            if not changed:
+                stats['unchanged'] += 1
+            else:
+                action = 'created' if created else 'updated'
+                if created:
+                    stats['created'] += 1
+                    new_unit_hashes[content_hash] = unit
+                else:
+                    stats['updated'] += 1
+                # Per-level breakdown (issue #224): track each unit touched
+                # so the dashboard can show "Lessons (units): X created Y updated"
+                # and link to the studio edit page.
+                stats['items_detail'].append({
+                    'title': unit.title,
+                    'slug': unit.slug,
+                    'action': action,
+                    'content_type': 'unit',
+                    'course_id': module.course_id,
+                    'course_slug': course_slug or module.course.slug,
+                    'module_id': module.pk,
+                    'module_slug': module.slug,
+                    'unit_id': unit.pk,
+                })
         except Exception as e:
             stats['errors'].append({
                 'file': readme_rel,
@@ -2007,11 +2168,33 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             else:
                 defaults['body'] = body
 
-            unit, created = Unit.objects.update_or_create(
-                module=module,
-                source_path=rel_path,
-                defaults=defaults,
-            )
+            # Issue #225: only count as 'updated' when content actually changed.
+            try:
+                unit = Unit.objects.get(
+                    module=module, source_path=rel_path,
+                )
+            except Unit.DoesNotExist:
+                unit = Unit(
+                    module=module, source_path=rel_path, **defaults,
+                )
+                unit.save()
+                created = True
+                changed = True
+            else:
+                if _defaults_differ(unit, defaults):
+                    for k, v in defaults.items():
+                        setattr(unit, k, v)
+                    unit.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            if not changed:
+                stats['unchanged'] += 1
+                continue
+
             action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
@@ -2072,7 +2255,10 @@ def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
     Note: recordings are now synced via _sync_events (content_type='event').
     """
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
 
     # Sync curated links
     links_dir = os.path.join(repo_dir, 'curated-links')
@@ -2102,7 +2288,10 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
 
     from events.models import Event
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
     seen_slugs = set()
     failed_slugs = set()
 
@@ -2211,17 +2400,23 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
             # Try to find existing event by slug + source_repo
             try:
                 event = Event.objects.get(slug=slug, source_repo=source.repo_name)
-                # Update only content fields, not operational fields
-                for key, value in content_defaults.items():
-                    setattr(event, key, value)
-                event.save()
-                stats['updated'] += 1
-                stats['items_detail'].append({
-                    'title': content_defaults.get('title', slug),
-                    'slug': slug,
-                    'action': 'updated',
-                    'content_type': 'event',
-                })
+                # Issue #225: skip the save when every synced content field
+                # matches the DB row. Operational fields (start_datetime,
+                # zoom_join_url, status, etc.) are not in content_defaults,
+                # so they are never touched here.
+                if _defaults_differ(event, content_defaults):
+                    for key, value in content_defaults.items():
+                        setattr(event, key, value)
+                    event.save()
+                    stats['updated'] += 1
+                    stats['items_detail'].append({
+                        'title': content_defaults.get('title', slug),
+                        'slug': slug,
+                        'action': 'updated',
+                        'content_type': 'event',
+                    })
+                else:
+                    stats['unchanged'] += 1
             except Event.DoesNotExist:
                 # Create new event with status='completed' (content-repo events
                 # are assumed to be past events with recordings)
@@ -2330,10 +2525,29 @@ def _sync_curated_links(source, links_dir, repo_dir, commit_sha, stats):
                 'source_commit': commit_sha,
             }
 
-            obj, created = CuratedLink.objects.update_or_create(
-                item_id=item_id,
-                defaults=defaults,
-            )
+            # Issue #225: only count as 'updated' when content actually changed.
+            try:
+                obj = CuratedLink.objects.get(item_id=item_id)
+            except CuratedLink.DoesNotExist:
+                obj = CuratedLink(item_id=item_id, **defaults)
+                obj.save()
+                created = True
+                changed = True
+            else:
+                if _defaults_differ(obj, defaults):
+                    for k, v in defaults.items():
+                        setattr(obj, k, v)
+                    obj.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            if not changed:
+                stats['unchanged'] += 1
+                continue
+
             action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
@@ -2434,11 +2648,31 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
                 'content_id': download_content_id,
             }
 
-            download, created = Download.objects.update_or_create(
-                slug=slug,
-                source_repo=source.repo_name,
-                defaults=defaults,
-            )
+            # Issue #225: only count as 'updated' when content actually changed.
+            try:
+                download = Download.objects.get(
+                    slug=slug, source_repo=source.repo_name,
+                )
+            except Download.DoesNotExist:
+                download = Download(slug=slug, **defaults)
+                download.save()
+                created = True
+                changed = True
+            else:
+                if _defaults_differ(download, defaults):
+                    for k, v in defaults.items():
+                        setattr(download, k, v)
+                    download.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            if not changed:
+                stats['unchanged'] += 1
+                continue
+
             action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
@@ -2483,7 +2717,10 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
 
     from content.models import Project
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
     seen_slugs = set()
     failed_slugs = set()
 
@@ -2567,11 +2804,31 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
                 else:
                     defaults['date'] = timezone.now().date()
 
-                project, created = Project.objects.update_or_create(
-                    slug=slug,
-                    source_repo=source.repo_name,
-                    defaults=defaults,
-                )
+                # Issue #225: only count as 'updated' when content actually changed.
+                try:
+                    project = Project.objects.get(
+                        slug=slug, source_repo=source.repo_name,
+                    )
+                except Project.DoesNotExist:
+                    project = Project(slug=slug, **defaults)
+                    project.save()
+                    created = True
+                    changed = True
+                else:
+                    if _defaults_differ(project, defaults):
+                        for k, v in defaults.items():
+                            setattr(project, k, v)
+                        project.save()
+                        created = False
+                        changed = True
+                    else:
+                        created = False
+                        changed = False
+
+                if not changed:
+                    stats['unchanged'] += 1
+                    continue
+
                 action = 'created' if created else 'updated'
                 if created:
                     stats['created'] += 1
@@ -2617,7 +2874,10 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
     """Sync interview question categories from markdown files."""
     from content.models import InterviewCategory
 
-    stats = {'created': 0, 'updated': 0, 'deleted': 0, 'errors': [], 'items_detail': []}
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
     seen_slugs = set()
 
     # Walk for all .md files (excluding README)
@@ -2647,10 +2907,29 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
                     'source_commit': commit_sha,
                 }
 
-                obj, created = InterviewCategory.objects.update_or_create(
-                    slug=slug,
-                    defaults=defaults,
-                )
+                # Issue #225: only count as 'updated' when content actually changed.
+                try:
+                    obj = InterviewCategory.objects.get(slug=slug)
+                except InterviewCategory.DoesNotExist:
+                    obj = InterviewCategory(slug=slug, **defaults)
+                    obj.save()
+                    created = True
+                    changed = True
+                else:
+                    if _defaults_differ(obj, defaults):
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        obj.save()
+                        created = False
+                        changed = True
+                    else:
+                        created = False
+                        changed = False
+
+                if not changed:
+                    stats['unchanged'] += 1
+                    continue
+
                 action = 'created' if created else 'updated'
                 if created:
                     stats['created'] += 1

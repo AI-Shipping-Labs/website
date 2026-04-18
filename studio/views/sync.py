@@ -111,6 +111,7 @@ def _aggregate_batch(logs):
     """
     total_created = 0
     total_updated = 0
+    total_unchanged = 0
     total_deleted = 0
     all_errors = []
     per_type = OrderedDict()
@@ -126,6 +127,7 @@ def _aggregate_batch(logs):
                 'display_name': ct,
                 'created': 0,
                 'updated': 0,
+                'unchanged': 0,
                 'deleted': 0,
                 'status': log.status,
                 'errors_count': 0,
@@ -134,6 +136,7 @@ def _aggregate_batch(logs):
         entry = per_type[ct]
         entry['created'] += log.items_created
         entry['updated'] += log.items_updated
+        entry['unchanged'] += log.items_unchanged
         entry['deleted'] += log.items_deleted
         entry['items_detail'].extend(log.items_detail or [])
         entry['errors_count'] += len(log.errors or [])
@@ -144,6 +147,7 @@ def _aggregate_batch(logs):
 
         total_created += log.items_created
         total_updated += log.items_updated
+        total_unchanged += log.items_unchanged
         total_deleted += log.items_deleted
         all_errors.extend(log.errors or [])
 
@@ -166,6 +170,7 @@ def _aggregate_batch(logs):
     return {
         'total_created': total_created,
         'total_updated': total_updated,
+        'total_unchanged': total_unchanged,
         'total_deleted': total_deleted,
         'errors': all_errors,
         'errors_count': len(all_errors),

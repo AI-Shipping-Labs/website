@@ -275,6 +275,41 @@
     /* Line clamp utility */
     .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* Copy button for code blocks (issue #228).
+       The button is positioned in the top-right of the code block.
+       The wrapper class .code-copy-wrapper is added by JS so we don't have to
+       touch every template that renders markdown. The wrapper sits inside
+       .prose so existing prose styles continue to apply. */
+    .code-copy-wrapper { position: relative; }
+    .code-copy-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 0.75rem;
+      line-height: 1;
+      color: hsl(var(--muted-foreground));
+      background: hsl(var(--card));
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.25rem;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s ease, color 0.15s ease;
+    }
+    .code-copy-wrapper:hover .code-copy-btn,
+    .code-copy-btn:focus-visible { opacity: 1; }
+    .code-copy-btn:hover { color: hsl(var(--foreground)); }
+    .code-copy-btn.is-copied { color: hsl(var(--accent)); opacity: 1; }
+    /* Touch devices (no hover): always show the button so it's tappable. */
+    @media (hover: none) {
+      .code-copy-btn { opacity: 1; }
+    }
   </style>
 
   {% block extra_head %}{% endblock %}
@@ -368,6 +403,104 @@
 
     // Initialize toggle state after icons are created
     window.themeToggle.init();
+  </script>
+
+  <script>
+    // Copy button for fenced code blocks inside .prose (issue #228).
+    // Walks every <pre> in .prose, wraps it in a relatively-positioned div,
+    // and injects an absolute-positioned "Copy" button. Pygments output
+    // (.codehilite > pre) and bare <pre><code> are both handled because
+    // we always start from .prose pre.
+    (function() {
+      function getCodeText(pre) {
+        // Prefer the inner <code> element since the <pre> itself can contain
+        // a line-number gutter on Pygments output. Fall back to <pre>.textContent.
+        var code = pre.querySelector('code');
+        var text = code ? code.textContent : pre.textContent;
+        // Strip a single trailing newline that fenced code blocks usually carry.
+        return text.replace(/\n$/, '');
+      }
+
+      function makeButton() {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'code-copy-btn';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.setAttribute('data-testid', 'code-copy-btn');
+        btn.textContent = 'Copy';
+        return btn;
+      }
+
+      function flashCopied(btn) {
+        btn.textContent = 'Copied!';
+        btn.classList.add('is-copied');
+        if (btn._copyTimer) {
+          clearTimeout(btn._copyTimer);
+        }
+        btn._copyTimer = setTimeout(function() {
+          btn.textContent = 'Copy';
+          btn.classList.remove('is-copied');
+        }, 1500);
+      }
+
+      function attachCopyButtons(root) {
+        var pres = (root || document).querySelectorAll('.prose pre');
+        for (var i = 0; i < pres.length; i++) {
+          var pre = pres[i];
+          // Skip if already wrapped (e.g. on re-runs).
+          if (pre.parentNode && pre.parentNode.classList && pre.parentNode.classList.contains('code-copy-wrapper')) {
+            continue;
+          }
+          // Determine the element to wrap. If the <pre> sits inside a
+          // .codehilite container (Pygments), wrap that container instead so
+          // the button lines up with the visible block, not the inner <pre>.
+          var target = pre;
+          var parent = pre.parentNode;
+          if (parent && parent.classList && parent.classList.contains('codehilite')) {
+            target = parent;
+          }
+          // Avoid double-wrapping when multiple <pre>s share a .codehilite parent.
+          if (target.parentNode && target.parentNode.classList && target.parentNode.classList.contains('code-copy-wrapper')) {
+            continue;
+          }
+          var wrapper = document.createElement('div');
+          wrapper.className = 'code-copy-wrapper';
+          target.parentNode.insertBefore(wrapper, target);
+          wrapper.appendChild(target);
+
+          var btn = makeButton();
+          (function(b, p) {
+            b.addEventListener('click', function() {
+              var text = getCodeText(p);
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(
+                  function() { flashCopied(b); },
+                  function() { /* clipboard write rejected; no-op */ }
+                );
+              } else {
+                // Fallback: select the code text so the user can copy manually.
+                try {
+                  var range = document.createRange();
+                  range.selectNodeContents(p);
+                  var sel = window.getSelection();
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                } catch (e) { /* no-op */ }
+              }
+            });
+          })(btn, pre);
+          wrapper.appendChild(btn);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { attachCopyButtons(); });
+      } else {
+        attachCopyButtons();
+      }
+      // Expose for tests / re-runs after dynamic content loads.
+      window.attachCodeCopyButtons = attachCopyButtons;
+    })();
   </script>
   {% block extra_scripts %}{% endblock %}
 </body>

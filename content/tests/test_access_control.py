@@ -26,205 +26,168 @@ from tests.fixtures import TierSetupMixin
 
 @tag('core')
 class GetUserLevelTest(TierSetupMixin, TestCase):
-    """Test get_user_level for various user states."""
+    """Test get_user_level for various user states.
 
-    def test_anonymous_user_returns_0(self):
+    Consolidated in #261: previously 13 separate tests for each
+    (tier x staff/superuser) combination -> 2 parameterized tests.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
         from django.contrib.auth.models import AnonymousUser
-        self.assertEqual(get_user_level(AnonymousUser()), 0)
 
-    def test_none_user_returns_0(self):
-        self.assertEqual(get_user_level(None), 0)
+        cls.anon = AnonymousUser()
+        cls.no_tier_user = User.objects.create_user(email='notier@example.com')
+        cls.no_tier_user.tier = None
+        cls.no_tier_user.save()
 
-    def test_user_without_tier_returns_0(self):
-        user = User.objects.create_user(email='notier@example.com')
-        user.tier = None
-        user.save()
-        self.assertEqual(get_user_level(user), 0)
+        cls.free_user = User.objects.create_user(email='free@example.com')
+        cls.free_user.tier = cls.free_tier
+        cls.free_user.save()
 
-    def test_free_user_returns_0(self):
-        user = User.objects.create_user(email='free@example.com')
-        user.tier = self.free_tier
-        user.save()
-        self.assertEqual(get_user_level(user), 0)
+        cls.basic_user = User.objects.create_user(email='basic@example.com')
+        cls.basic_user.tier = cls.basic_tier
+        cls.basic_user.save()
 
-    def test_basic_user_returns_10(self):
-        user = User.objects.create_user(email='basic@example.com')
-        user.tier = self.basic_tier
-        user.save()
-        self.assertEqual(get_user_level(user), 10)
+        cls.main_user = User.objects.create_user(email='main@example.com')
+        cls.main_user.tier = cls.main_tier
+        cls.main_user.save()
 
-    def test_main_user_returns_20(self):
-        user = User.objects.create_user(email='main@example.com')
-        user.tier = self.main_tier
-        user.save()
-        self.assertEqual(get_user_level(user), 20)
+        cls.premium_user = User.objects.create_user(email='premium@example.com')
+        cls.premium_user.tier = cls.premium_tier
+        cls.premium_user.save()
 
-    def test_premium_user_returns_30(self):
-        user = User.objects.create_user(email='premium@example.com')
-        user.tier = self.premium_tier
-        user.save()
-        self.assertEqual(get_user_level(user), 30)
+    def test_returns_correct_level_per_tier(self):
+        cases = [
+            ('anonymous', self.anon, 0),
+            ('none', None, 0),
+            ('user without tier', self.no_tier_user, 0),
+            ('free', self.free_user, 0),
+            ('basic', self.basic_user, 10),
+            ('main', self.main_user, 20),
+            ('premium', self.premium_user, 30),
+        ]
+        for label, user, expected in cases:
+            with self.subTest(user=label):
+                self.assertEqual(get_user_level(user), expected)
 
-    def test_staff_user_with_free_tier_returns_30(self):
-        user = User.objects.create_user(email='staff-free@example.com')
-        user.tier = self.free_tier
-        user.is_staff = True
-        user.save()
-        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
-
-    def test_staff_user_without_tier_returns_30(self):
-        user = User.objects.create_user(email='staff-notier@example.com')
-        user.tier = None
-        user.is_staff = True
-        user.save()
-        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
-
-    def test_superuser_with_free_tier_returns_30(self):
-        user = User.objects.create_user(email='super-free@example.com')
-        user.tier = self.free_tier
-        user.is_superuser = True
-        user.save()
-        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
-
-    def test_superuser_without_tier_returns_30(self):
-        user = User.objects.create_user(email='super-notier@example.com')
-        user.tier = None
-        user.is_superuser = True
-        user.save()
-        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
-
-    def test_staff_superuser_returns_30(self):
-        user = User.objects.create_user(email='staffsuper@example.com')
-        user.tier = self.free_tier
-        user.is_staff = True
-        user.is_superuser = True
-        user.save()
-        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
-
-    def test_staff_with_basic_tier_returns_30(self):
-        user = User.objects.create_user(email='staff-basic@example.com')
-        user.tier = self.basic_tier
-        user.is_staff = True
-        user.save()
-        self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
+    def test_staff_and_superuser_always_return_premium(self):
+        cases = [
+            ('staff with free tier', dict(email='s1@example.com', tier=self.free_tier, is_staff=True)),
+            ('staff with basic tier', dict(email='s2@example.com', tier=self.basic_tier, is_staff=True)),
+            ('staff without tier', dict(email='s3@example.com', tier=None, is_staff=True)),
+            ('superuser with free tier', dict(email='s4@example.com', tier=self.free_tier, is_superuser=True)),
+            ('superuser without tier', dict(email='s5@example.com', tier=None, is_superuser=True)),
+            ('staff and superuser', dict(email='s6@example.com', tier=self.free_tier, is_staff=True, is_superuser=True)),
+        ]
+        for label, attrs in cases:
+            with self.subTest(user=label):
+                user = User.objects.create_user(email=attrs['email'])
+                user.tier = attrs.get('tier')
+                user.is_staff = attrs.get('is_staff', False)
+                user.is_superuser = attrs.get('is_superuser', False)
+                user.save()
+                self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
 
 
 @tag('core')
 class CanAccessTest(TierSetupMixin, TestCase):
-    """Test the can_access utility function."""
+    """Test the can_access utility function.
 
-    def setUp(self):
-        self.open_article = Article.objects.create(
+    Consolidated in #261: previously 14 separate tests for each
+    (user, content level) combination -> 2 parameterized tests
+    (matrix + privileged-users-bypass-all).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from django.contrib.auth.models import AnonymousUser
+
+        cls.anon = AnonymousUser()
+
+        cls.free_user = User.objects.create_user(email='free@test.com')
+        cls.free_user.tier = cls.free_tier
+        cls.free_user.save()
+
+        cls.basic_user = User.objects.create_user(email='basic@test.com')
+        cls.basic_user.tier = cls.basic_tier
+        cls.basic_user.save()
+
+        cls.main_user = User.objects.create_user(email='main@test.com')
+        cls.main_user.tier = cls.main_tier
+        cls.main_user.save()
+
+        cls.premium_user = User.objects.create_user(email='prem@test.com')
+        cls.premium_user.tier = cls.premium_tier
+        cls.premium_user.save()
+
+        cls.open_article = Article.objects.create(
             title='Open', slug='open', date=date(2025, 1, 1),
             required_level=LEVEL_OPEN,
         )
-        self.basic_article = Article.objects.create(
+        cls.basic_article = Article.objects.create(
             title='Basic', slug='basic', date=date(2025, 1, 1),
             required_level=LEVEL_BASIC,
         )
-        self.main_article = Article.objects.create(
+        cls.main_article = Article.objects.create(
             title='Main', slug='main', date=date(2025, 1, 1),
             required_level=LEVEL_MAIN,
         )
-        self.premium_article = Article.objects.create(
+        cls.premium_article = Article.objects.create(
             title='Premium', slug='premium', date=date(2025, 1, 1),
             required_level=LEVEL_PREMIUM,
         )
 
-    def test_anonymous_can_access_open(self):
-        from django.contrib.auth.models import AnonymousUser
-        self.assertTrue(can_access(AnonymousUser(), self.open_article))
+    def test_tier_access_matrix(self):
+        """Each user can access content at or below their level only."""
+        cases = [
+            # (label, user, content, expected)
+            ('anon vs open',    self.anon,        self.open_article,    True),
+            ('anon vs basic',   self.anon,        self.basic_article,   False),
+            ('free vs open',    self.free_user,   self.open_article,    True),
+            ('free vs basic',   self.free_user,   self.basic_article,   False),
+            ('basic vs basic',  self.basic_user,  self.basic_article,   True),
+            ('basic vs main',   self.basic_user,  self.main_article,    False),
+            ('main vs basic',   self.main_user,   self.basic_article,   True),
+            ('main vs main',    self.main_user,   self.main_article,    True),
+            ('main vs premium', self.main_user,   self.premium_article, False),
+            ('premium vs open', self.premium_user, self.open_article,    True),
+            ('premium vs basic',self.premium_user, self.basic_article,   True),
+            ('premium vs main', self.premium_user, self.main_article,    True),
+            ('premium vs premium', self.premium_user, self.premium_article, True),
+        ]
+        for label, user, article, expected in cases:
+            with self.subTest(case=label):
+                self.assertEqual(can_access(user, article), expected)
 
-    def test_anonymous_cannot_access_basic(self):
-        from django.contrib.auth.models import AnonymousUser
-        self.assertFalse(can_access(AnonymousUser(), self.basic_article))
+    def test_staff_and_superuser_bypass_all_gates(self):
+        """Staff / superusers (with or without a tier) can access everything."""
+        privileged = []
 
-    def test_free_user_can_access_open(self):
-        user = User.objects.create_user(email='free@test.com')
-        user.tier = self.free_tier
-        user.save()
-        self.assertTrue(can_access(user, self.open_article))
+        staff_with_tier = User.objects.create_user(email='staff-access@test.com')
+        staff_with_tier.tier = self.free_tier
+        staff_with_tier.is_staff = True
+        staff_with_tier.save()
+        privileged.append(('staff with free tier', staff_with_tier))
 
-    def test_free_user_cannot_access_basic(self):
-        user = User.objects.create_user(email='free2@test.com')
-        user.tier = self.free_tier
-        user.save()
-        self.assertFalse(can_access(user, self.basic_article))
+        superuser_with_tier = User.objects.create_user(email='super-access@test.com')
+        superuser_with_tier.tier = self.free_tier
+        superuser_with_tier.is_superuser = True
+        superuser_with_tier.save()
+        privileged.append(('superuser with free tier', superuser_with_tier))
 
-    def test_basic_user_can_access_basic(self):
-        user = User.objects.create_user(email='basic@test.com')
-        user.tier = self.basic_tier
-        user.save()
-        self.assertTrue(can_access(user, self.basic_article))
+        staff_no_tier = User.objects.create_user(email='staff-notier@test.com')
+        staff_no_tier.tier = None
+        staff_no_tier.is_staff = True
+        staff_no_tier.save()
+        privileged.append(('staff without tier', staff_no_tier))
 
-    def test_basic_user_cannot_access_main(self):
-        user = User.objects.create_user(email='basic2@test.com')
-        user.tier = self.basic_tier
-        user.save()
-        self.assertFalse(can_access(user, self.main_article))
-
-    def test_main_user_can_access_main(self):
-        user = User.objects.create_user(email='main@test.com')
-        user.tier = self.main_tier
-        user.save()
-        self.assertTrue(can_access(user, self.main_article))
-
-    def test_main_user_can_access_basic(self):
-        user = User.objects.create_user(email='main2@test.com')
-        user.tier = self.main_tier
-        user.save()
-        self.assertTrue(can_access(user, self.basic_article))
-
-    def test_main_user_cannot_access_premium(self):
-        user = User.objects.create_user(email='main3@test.com')
-        user.tier = self.main_tier
-        user.save()
-        self.assertFalse(can_access(user, self.premium_article))
-
-    def test_premium_user_can_access_premium(self):
-        user = User.objects.create_user(email='prem@test.com')
-        user.tier = self.premium_tier
-        user.save()
-        self.assertTrue(can_access(user, self.premium_article))
-
-    def test_premium_user_can_access_all(self):
-        user = User.objects.create_user(email='prem2@test.com')
-        user.tier = self.premium_tier
-        user.save()
-        self.assertTrue(can_access(user, self.open_article))
-        self.assertTrue(can_access(user, self.basic_article))
-        self.assertTrue(can_access(user, self.main_article))
-        self.assertTrue(can_access(user, self.premium_article))
-
-    def test_staff_user_can_access_all(self):
-        user = User.objects.create_user(email='staff-access@test.com')
-        user.tier = self.free_tier
-        user.is_staff = True
-        user.save()
-        self.assertTrue(can_access(user, self.open_article))
-        self.assertTrue(can_access(user, self.basic_article))
-        self.assertTrue(can_access(user, self.main_article))
-        self.assertTrue(can_access(user, self.premium_article))
-
-    def test_superuser_can_access_all(self):
-        user = User.objects.create_user(email='super-access@test.com')
-        user.tier = self.free_tier
-        user.is_superuser = True
-        user.save()
-        self.assertTrue(can_access(user, self.open_article))
-        self.assertTrue(can_access(user, self.basic_article))
-        self.assertTrue(can_access(user, self.main_article))
-        self.assertTrue(can_access(user, self.premium_article))
-
-    def test_staff_without_tier_can_access_all(self):
-        user = User.objects.create_user(email='staff-notier@test.com')
-        user.tier = None
-        user.is_staff = True
-        user.save()
-        self.assertTrue(can_access(user, self.open_article))
-        self.assertTrue(can_access(user, self.basic_article))
-        self.assertTrue(can_access(user, self.main_article))
-        self.assertTrue(can_access(user, self.premium_article))
+        for label, user in privileged:
+            for article in [self.open_article, self.basic_article, self.main_article, self.premium_article]:
+                with self.subTest(user=label, article=article.slug):
+                    self.assertTrue(can_access(user, article))
 
 
 @tag('core')

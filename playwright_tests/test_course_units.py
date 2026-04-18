@@ -813,7 +813,8 @@ class TestScenario10DashboardContinueLearning:
     def test_in_progress_course_on_dashboard(self, django_server, browser):
         """Given a Premium member with 1 of 3 units completed, the
         dashboard shows the course in 'Continue Learning' with progress.
-        Clicking it leads to the course detail page."""
+        Clicking the Continue button deep-links to the next unfinished
+        unit within the course."""
         _clear_courses()
         _create_user("premium-dash@test.com", tier_slug="premium")
 
@@ -857,15 +858,28 @@ class TestScenario10DashboardContinueLearning:
         progress_text = page.locator("text=/1\\s*(of|\\/)\\s*3/")
         assert progress_text.count() >= 1, "Expected progress indicator like '1 of 3' or '1/3'"
 
-        # Step 2: Click on the course in the Continue Learning section
+        # Step 2: Click the Continue button in the Continue Learning section.
+        # After #244, Continue deep-links to the next unfinished unit, so the
+        # link should start with /courses/dashboard-course/ (a descendant URL),
+        # not point at the course landing page.
         course_link = page.locator(
-            'a[href="/courses/dashboard-course"]'
+            'a[href^="/courses/dashboard-course/"]'
         )
-        assert course_link.count() >= 1
+        assert course_link.count() >= 1, (
+            "Expected a Continue link deep-linking into the course "
+            "(href starting with /courses/dashboard-course/)"
+        )
+        # Unit 1 was marked complete, so the next unfinished unit is unit 2.
+        expected_href = "/courses/dashboard-course/module-1/dash-unit-2"
+        assert course_link.first.get_attribute("href") == expected_href, (
+            f"Expected Continue link to point at {expected_href}, "
+            f"got {course_link.first.get_attribute('href')!r}"
+        )
         course_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Lands on the course detail page
-        assert "/courses/dashboard-course" in page.url
+        # Lands on the next unfinished unit's page within the course.
+        assert "/courses/dashboard-course/" in page.url
+        assert page.url.endswith(expected_href)
 
         context.close()

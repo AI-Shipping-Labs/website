@@ -1032,21 +1032,30 @@ class SyncCoursePerLevelDetailTest(TestCase):
             self.assertIn('module_id', item)
             self.assertIsNotNone(item['module_id'])
 
-    def test_resync_marks_existing_items_as_updated(self):
-        """A second sync produces 'updated' actions, not 'created'."""
+    def test_resync_with_no_changes_produces_no_items_detail(self):
+        """Issue #225: re-syncing identical content does not mark anything
+        as 'updated' or include items in items_detail.
+
+        The previous behavior wrote every row on every sync, inflating the
+        'updated' counter and the per-item detail with rows that hadn't
+        actually changed. The dashboard treats items_detail as an audit log
+        of what changed, so spurious entries make it useless.
+        """
         self._build_course_with_modules_and_units(
             n_modules=2, units_per_module=2,
         )
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log_1 = sync_content_source(self.source, repo_dir=self.temp_dir)
+        # First sync should create everything.
+        self.assertEqual(sync_log_1.items_created, 1 + 2 + 4)  # course+modules+units
+
         sync_log_2 = sync_content_source(
             self.source, repo_dir=self.temp_dir,
         )
 
-        actions = [item['action'] for item in sync_log_2.items_detail]
-        self.assertTrue(
-            all(a == 'updated' for a in actions),
-            f'Expected all actions to be updated; got {set(actions)}',
-        )
+        self.assertEqual(sync_log_2.items_created, 0)
+        self.assertEqual(sync_log_2.items_updated, 0)
+        self.assertEqual(sync_log_2.items_unchanged, 1 + 2 + 4)
+        self.assertEqual(sync_log_2.items_detail, [])
 
 
 # ===========================================================================

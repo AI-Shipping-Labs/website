@@ -107,6 +107,13 @@ class SyncLog(models.Model):
     )
     items_created = models.IntegerField(default=0)
     items_updated = models.IntegerField(default=0)
+    items_unchanged = models.IntegerField(
+        default=0,
+        help_text=(
+            "Items found in the repo whose content matched the DB row exactly "
+            "and were skipped (no save, no items_detail entry). See issue #225."
+        ),
+    )
     items_deleted = models.IntegerField(default=0)
     items_detail = models.JSONField(
         default=list, blank=True,

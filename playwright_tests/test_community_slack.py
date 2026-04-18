@@ -259,14 +259,16 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
         assert "basic" not in tiers_attr
 
         # Step 3: Click the Membership link in the header
+        # (Issue #238: header Membership now points at /pricing instead of
+        # the marketing-only /#tiers anchor.)
         membership_link = page.locator(
-            'header a[href="/#tiers"]'
+            'header a[href="/pricing"]'
         ).first
         membership_link.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Then: User is taken to the homepage tiers section
-        assert "/#tiers" in page.url or "tiers" in page.url
+        # Then: User is taken to the pricing page
+        assert "/pricing" in page.url
 # ---------------------------------------------------------------
 # Scenario 4: Anonymous visitor sees community access highlighted
 #              in the Main tier on the pricing page

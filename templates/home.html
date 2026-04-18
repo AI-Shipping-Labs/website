@@ -481,30 +481,7 @@
   </section>
 
   <!-- FAQ Section -->
-  <section id="faq" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
-    <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-      <div class="text-center">
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">FAQ</p>
-        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-          Common questions
-        </h2>
-      </div>
-
-      <div class="mt-12 divide-y divide-border">
-        {% for faq in faq_items %}
-        <div class="faq-item">
-          <button type="button" class="flex w-full items-center justify-between py-4 text-left text-foreground hover:text-accent transition-colors" onclick="toggleFaq(this)">
-            <span class="pr-4">{{ faq.question }}</span>
-            <i data-lucide="chevron-down" class="h-4 w-4 shrink-0 transition-transform"></i>
-          </button>
-          <div class="accordion-content">
-            <p class="pb-4 text-muted-foreground">{{ faq.answer }}</p>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-  </section>
+  {% include "includes/_faq_section.html" %}
 
   {% include "includes/footer.html" %}
 </main>

@@ -9,7 +9,7 @@
     <div class="hidden md:flex md:items-center md:gap-8">
       <a href="/about" class="text-sm text-muted-foreground transition-colors hover:text-foreground">About</a>
       <a href="/activities" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Activities</a>
-      <a href="/#tiers" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Membership</a>
+      <a href="{% url 'pricing' %}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Membership</a>
       <div class="relative group">
         <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="resources-dropdown-btn">
           Resources
@@ -28,7 +28,7 @@
         </div>
         </div>
       </div>
-      <a href="/#faq" class="text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+      <a href="{% url 'faq' %}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
     </div>
 
     <div class="hidden md:flex md:items-center md:gap-4">
@@ -98,7 +98,7 @@
       </div>
       <a href="/about" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">About</a>
       <a href="/activities" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">Activities</a>
-      <a href="/#tiers" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">Membership</a>
+      <a href="{% url 'pricing' %}" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">Membership</a>
       <div class="py-2">
         <button type="button" id="mobile-resources-toggle" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
           Resources
@@ -115,7 +115,7 @@
           <a href="/learning-path/ai-engineer" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Learning Path</a>
         </div>
       </div>
-      <a href="/#faq" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+      <a href="{% url 'faq' %}" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
       {% if user.is_authenticated %}
       <div class="mt-4 border-t border-border pt-4">
         <a href="{% url 'account' %}" class="text-sm text-muted-foreground hover:text-foreground mb-2 block">{{ user.email }}</a>

@@ -182,3 +182,31 @@ class TierPricingViewTest(TestCase):
         content = response.content.decode()
         for item in response.context["tiers_data"]:
             self.assertIn(item["tier"].description, content)
+
+
+class TierPricingViewAuthenticatedTest(TestCase):
+    """Issue #238: logged-in users must reach `/pricing` and see all tier
+    cards (the dashboard does not contain them, so this is the canonical
+    destination for header/footer Membership links)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        cls.user = User.objects.create_user(
+            email="pricing-user@test.com",
+            password="TestPass123!",
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_authenticated_pricing_page_returns_200(self):
+        response = self.client.get("/pricing")
+        self.assertEqual(response.status_code, 200)
+
+    def test_authenticated_pricing_page_contains_all_tier_names(self):
+        response = self.client.get("/pricing")
+        content = response.content.decode()
+        for tier_name in ("Free", "Basic", "Main", "Premium"):
+            self.assertIn(tier_name, content)

@@ -46,10 +46,10 @@
             <a href="/about" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">About</a>
           </li>
           <li>
-            <a href="/#tiers" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Membership Tiers</a>
+            <a href="{% url 'pricing' %}" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Membership Tiers</a>
           </li>
           <li>
-            <a href="/#faq" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+            <a href="{% url 'faq' %}" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
           </li>
           <li>
             <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Manage Subscription</a>

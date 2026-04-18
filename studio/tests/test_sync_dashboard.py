@@ -362,12 +362,12 @@ class StudioSyncTriggerTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
-    def test_trigger_redirects_to_worker_dashboard(self, mock_async):
-        """After enqueuing, the user lands on the worker page so they can
-        watch the job actually run."""
+    def test_trigger_redirects_to_sync_dashboard(self, mock_async):
+        """After enqueuing, the user stays on /studio/sync/ — being yanked
+        to the worker page interrupted operator flow (see issue #239)."""
         response = self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/worker/')
+        self.assertEqual(response['Location'], '/studio/sync/')
 
     @patch('django_q.tasks.async_task')
     def test_trigger_calls_sync(self, mock_async):
@@ -410,16 +410,16 @@ class StudioSyncAllTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
-    def test_sync_all_redirects_to_worker_dashboard(self, mock_async):
-        """Sync All redirects to the worker page so the operator can watch
-        the batch flow through the queue."""
+    def test_sync_all_redirects_to_sync_dashboard(self, mock_async):
+        """Sync All redirects back to the sync dashboard so the operator
+        can watch every per-source row update in place (see issue #239)."""
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
             content_type='article',
         )
         response = self.client.post('/studio/sync/all/')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/worker/')
+        self.assertEqual(response['Location'], '/studio/sync/')
 
     @patch('django_q.tasks.async_task')
     def test_sync_all_triggers_all_sources(self, mock_async):

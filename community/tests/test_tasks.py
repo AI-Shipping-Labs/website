@@ -9,7 +9,7 @@ Tests cover:
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
 from community.models import CommunityAuditLog
@@ -27,6 +27,7 @@ from payments.models import Tier
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001"],
 )
+@tag('core')
 class EmailMatcherTest(TestCase):
     """Tests for the email matcher background job."""
 

@@ -10,7 +10,7 @@ Covers:
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -20,6 +20,7 @@ from tests.fixtures import TierSetupMixin
 User = get_user_model()
 
 
+@tag('core')
 class EmailCampaignModelTest(TierSetupMixin, TestCase):
     """Test EmailCampaign model enhancements for campaigns."""
 
@@ -155,6 +156,7 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
         self.assertEqual(str(campaign), 'My Campaign (draft)')
 
 
+@tag('core')
 class SendCampaignFanOutTest(TierSetupMixin, TestCase):
     """Test the top-level send_campaign fan-out task.
 
@@ -315,6 +317,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         self.assertEqual(result['batch_count'], 2)
 
 
+@tag('core')
 class SendCampaignBatchTest(TierSetupMixin, TestCase):
     """Test the chunked send_campaign_batch task."""
 
@@ -492,6 +495,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertIn('not found', str(ctx.exception))
 
 
+@tag('core')
 class EmailLogUniquenessTest(TierSetupMixin, TestCase):
     """Per-recipient idempotency is enforced at the database level."""
 
@@ -858,6 +862,7 @@ class CampaignAdminUnauthenticatedTest(TestCase):
         self.assertEqual(response.status_code, 302)
 
 
+@tag('core')
 class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
     """Campaign send respects tier, verification, and subscription status.
 

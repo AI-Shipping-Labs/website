@@ -1,9 +1,10 @@
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 
 from accounts.models import User
 
 
+@tag('core')
 class LoginViewTest(TestCase):
     """Tests for the login page."""
 
@@ -72,6 +73,7 @@ class LoginViewTest(TestCase):
         self.assertEqual(url, "/accounts/login/")
 
 
+@tag('core')
 class LogoutViewTest(TestCase):
     """Tests for the logout flow."""
 
@@ -95,6 +97,7 @@ class LogoutViewTest(TestCase):
         self.assertEqual(url, "/accounts/logout/")
 
 
+@tag('core')
 class ProtectedPageRedirectTest(TestCase):
     """Tests that protected pages redirect to login."""
 
@@ -105,6 +108,7 @@ class ProtectedPageRedirectTest(TestCase):
         self.assertIn("/login/", response.url)
 
 
+@tag('core')
 class HeaderAuthDisplayTest(TestCase):
     """Tests for authentication-aware header display."""
 

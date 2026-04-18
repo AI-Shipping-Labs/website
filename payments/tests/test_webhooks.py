@@ -15,7 +15,7 @@ import json
 import time
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
 from payments.models import Tier, WebhookEvent
@@ -55,6 +55,7 @@ def _make_event_payload(event_id, event_type, data_object):
     }
 
 
+@tag('core')
 class WebhookSignatureValidationTest(TestCase):
     """Tests that the webhook endpoint validates Stripe signatures."""
 
@@ -141,6 +142,7 @@ class WebhookSignatureValidationTest(TestCase):
         self.assertEqual(data["status"], "ignored")
 
 
+@tag('core')
 class CheckoutCompletedHandlerTest(TestCase):
     """Tests for the checkout.session.completed webhook handler."""
 
@@ -279,6 +281,7 @@ class CheckoutCompletedHandlerTest(TestCase):
         self.assertEqual(user.tier.slug, "free")
 
 
+@tag('core')
 class SubscriptionUpdatedHandlerTest(TestCase):
     """Tests for the customer.subscription.updated webhook handler."""
 
@@ -413,6 +416,7 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         handle_subscription_updated(subscription_data)
 
 
+@tag('core')
 class SubscriptionDeletedHandlerTest(TestCase):
     """Tests for the customer.subscription.deleted webhook handler."""
 
@@ -525,6 +529,7 @@ class SubscriptionDeletedHandlerTest(TestCase):
         handle_subscription_deleted(subscription_data)
 
 
+@tag('core')
 class InvoicePaymentFailedHandlerTest(TestCase):
     """Tests for the invoice.payment_failed webhook handler."""
 
@@ -595,6 +600,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         mock_send_mail.assert_not_called()
 
 
+@tag('core')
 class WebhookIdempotencyTest(TestCase):
     """Tests that webhook processing is idempotent."""
 

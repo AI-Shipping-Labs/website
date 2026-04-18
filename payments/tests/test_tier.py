@@ -1,9 +1,10 @@
 from django.db import IntegrityError
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 
 from payments.models import Tier
 
 
+@tag('core')
 class TierModelTest(TestCase):
     """Tests for the Tier model."""
 

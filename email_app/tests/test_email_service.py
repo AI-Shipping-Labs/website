@@ -15,7 +15,7 @@ Covers:
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 
 from email_app.models import EmailLog
 from email_app.services.email_service import EmailService, EmailServiceError
@@ -23,6 +23,7 @@ from email_app.services.email_service import EmailService, EmailServiceError
 User = get_user_model()
 
 
+@tag('core')
 class EmailServiceSendTest(TestCase):
     """Test EmailService.send() method."""
 

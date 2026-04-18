@@ -14,7 +14,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN
@@ -29,6 +29,7 @@ User = get_user_model()
 # ============================================================
 
 
+@tag('core')
 class CourseModelTest(TestCase):
     """Test Course model fields and methods."""
 
@@ -106,6 +107,7 @@ class CourseModelTest(TestCase):
         self.assertEqual(courses[1].slug, 'older')
 
 
+@tag('core')
 class ModuleModelTest(TestCase):
     """Test Module model fields."""
 
@@ -134,6 +136,7 @@ class ModuleModelTest(TestCase):
         self.assertEqual(modules[1].title, 'Second')
 
 
+@tag('core')
 class UnitModelTest(TestCase):
     """Test Unit model fields and methods."""
 
@@ -207,6 +210,7 @@ class UnitModelTest(TestCase):
         self.assertEqual(units[1].title, 'Second')
 
 
+@tag('core')
 class UserCourseProgressModelTest(TestCase):
     """Test UserCourseProgress model."""
 
@@ -255,6 +259,7 @@ class UserCourseProgressModelTest(TestCase):
         self.assertIsNone(progress.completed_at)
 
 
+@tag('core')
 class CourseTotalAndCompletedTest(TestCase):
     """Test Course.total_units() and Course.completed_units()."""
 
@@ -301,6 +306,7 @@ class CourseTotalAndCompletedTest(TestCase):
         self.assertEqual(self.course.completed_units(self.user), 0)
 
 
+@tag('core')
 class CourseGetNextUnitForTest(TestCase):
     """Test Course.get_next_unit_for(user) — issue #244.
 
@@ -425,6 +431,7 @@ class CourseGetNextUnitForTest(TestCase):
 # ============================================================
 
 
+@tag('core')
 class CoursesListViewTest(TestCase):
     """Test the /courses catalog page."""
 
@@ -494,6 +501,7 @@ class CoursesListViewTest(TestCase):
 # ============================================================
 
 
+@tag('core')
 class CourseDetailViewTest(TierSetupMixin, TestCase):
     """Test the /courses/{slug} detail page."""
 
@@ -595,6 +603,7 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         self.assertIn('Deep Dive', content)
 
 
+@tag('core')
 class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test access control on course detail page."""
 
@@ -674,6 +683,7 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Unlock with Main')
 
 
+@tag('core')
 class FreeCourseAccessTest(TierSetupMixin, TestCase):
     """Test free course CTA behavior."""
 
@@ -1109,6 +1119,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Join the discussion')
 
 
+@tag('core')
 class CourseIsFreePropertyTests(TestCase):
     """`Course.is_free` is derived from `required_level == 0`."""
 

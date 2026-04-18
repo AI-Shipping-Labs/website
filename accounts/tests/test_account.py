@@ -3,7 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -11,6 +11,7 @@ from accounts.models import User
 from payments.models import Tier
 
 
+@tag('core')
 class AccountPageAccessTest(TestCase):
     """Tests for account page access control."""
 
@@ -347,6 +348,7 @@ class AccountPagePendingCancellationTest(TestCase):
         self.assertFalse(response.context["is_pending_downgrade"])
 
 
+@tag('core')
 class EmailPreferencesAPITest(TestCase):
     """Tests for the email preferences API endpoint."""
 
@@ -426,6 +428,7 @@ class EmailPreferencesAPITest(TestCase):
         self.assertEqual(url, "/account/api/email-preferences")
 
 
+@tag('core')
 class CancelSubscriptionAPITest(TestCase):
     """Tests for the account cancel subscription API endpoint."""
 

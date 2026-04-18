@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
 from django.db.models import ProtectedError
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 from freezegun import freeze_time
 
@@ -70,6 +70,7 @@ class TierOverrideTestBase(TestCase):
 # Scenarios 1-5: Access check with override
 # ============================================================
 
+@tag('core')
 class AccessCheckWithOverrideTest(TierOverrideTestBase):
     """Scenarios 1-5: Access check with override."""
 
@@ -123,6 +124,7 @@ class AccessCheckWithOverrideTest(TierOverrideTestBase):
 # Scenarios 6-8: Override lifecycle
 # ============================================================
 
+@tag('core')
 class OverrideLifecycleTest(TierOverrideTestBase):
     """Scenarios 6-8: Override lifecycle."""
 
@@ -316,6 +318,7 @@ class SequentialOverridesTest(TierOverrideTestBase):
 # Scenarios 16-20: Expiry job
 # ============================================================
 
+@tag('core')
 class ExpiryJobTest(TierOverrideTestBase):
     """Scenarios 16-20: Expiry job."""
 
@@ -415,6 +418,7 @@ class ExpiryJobTest(TierOverrideTestBase):
 # Scenarios 21-22: Content gating transitions
 # ============================================================
 
+@tag('core')
 class ContentGatingTransitionsTest(TierOverrideTestBase):
     """Scenarios 21-22: Content gating transitions."""
 
@@ -462,6 +466,7 @@ class ContentGatingTransitionsTest(TierOverrideTestBase):
 # Scenarios 23-24: Billing interactions with pending_tier
 # ============================================================
 
+@tag('core')
 class BillingInteractionsTest(TierOverrideTestBase):
     """Scenarios 23-24: Billing interactions with pending_tier."""
 
@@ -557,6 +562,7 @@ class SlackAccessTest(TierOverrideTestBase):
 # Scenarios 27-28: CourseAccess interaction
 # ============================================================
 
+@tag('core')
 class CourseAccessInteractionTest(TierOverrideTestBase):
     """Scenarios 27-28: CourseAccess interaction."""
 
@@ -859,6 +865,7 @@ class DownloadAccessWithOverrideTest(TierOverrideTestBase):
 # Scenarios 45-46: Multiple overrides / audit trail
 # ============================================================
 
+@tag('core')
 class AuditTrailTest(TierOverrideTestBase):
     """Scenarios 45-46: Multiple overrides / audit trail."""
 
@@ -912,6 +919,7 @@ class AuditTrailTest(TierOverrideTestBase):
 # Scenarios 47-49: Data integrity
 # ============================================================
 
+@tag('core')
 class DataIntegrityTest(TierOverrideTestBase):
     """Scenarios 47-49: Data integrity."""
 
@@ -1319,6 +1327,7 @@ class TemplateRenderingTest(TierOverrideTestBase):
 # Scenario 69: Override interplay with staff/superuser
 # ============================================================
 
+@tag('core')
 class StaffOverrideTest(TierOverrideTestBase):
     """Scenario 69: Override interplay with staff/superuser."""
 
@@ -1344,6 +1353,7 @@ class StaffOverrideTest(TierOverrideTestBase):
 # Additional model tests
 # ============================================================
 
+@tag('core')
 class TierOverrideModelTest(TierOverrideTestBase):
     """Additional model tests for TierOverride."""
 

@@ -290,3 +290,65 @@ def test_registration_sends_verification_email(self):
     self.assertIn("verify", mail.outbox[0].subject.lower())
     self.assertEqual(mail.outbox[0].to, ["new@example.com"])
 ```
+
+---
+
+## Core test subset (`make test-core`)
+
+The full Django suite has thousands of tests and takes 1-3 minutes. For the
+inner loop (TDD, quick sanity checks before pushing) we maintain a tagged
+subset that runs in well under a minute.
+
+```bash
+make test-core          # ~800 tests in ~30s, parallel
+make test               # full suite, parallel
+```
+
+`make test-core` runs `python manage.py test --tag=core --parallel`. CI
+continues to run the full suite -- the tag is a local-development convenience,
+not a substitute for `make test` before merging.
+
+### What belongs in `core`
+
+A test class should be tagged `@tag('core')` if it covers any of:
+
+- Authentication flows (login, signup, email verification, password reset).
+- Tier-based access control matrix (free/basic/main/premium gating on every
+  content type).
+- Course purchase + Stripe webhook handlers (checkout, subscription updated,
+  subscription deleted, invoice failed, idempotency).
+- Sync upsert correctness for each content type -- one happy path per content
+  type, not exhaustive edge cases.
+- Critical model invariants (Course.required_level, User.tier, Enrollment
+  uniqueness, TierOverride lifecycle, CourseAccess gating).
+- Studio access gates (staff-only and superuser-only views).
+- Notification creation + delivery, vote submission, newsletter subscribe
+  happy paths.
+
+### What does not belong in `core`
+
+- Migration data-backfill tests.
+- Slow integration tests with image-upload mocks or external SDK calls.
+- One-off edge cases and defensive guards.
+- Admin UI rendering / `list_display` / `list_filter` assertions.
+- Mobile-specific responsive smoke tests.
+- Anything that exercises Django framework behaviour itself (see Rule 3).
+
+### How to tag
+
+Apply the tag at the class level (most ergonomic):
+
+```python
+from django.test import TestCase, tag
+
+@tag('core')
+class CourseAccessControlTest(TestCase):
+    ...
+```
+
+Per-method tagging works too, but prefer one decorator per `TestCase` so the
+selection is auditable at a glance.
+
+If you add a new feature to a critical path, tag the test class. If you remove
+one, the tag travels with the deletion. There is no separate registry to
+maintain -- the tag IS the registry.

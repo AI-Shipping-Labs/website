@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase, override_settings, tag
 from django.utils import timezone
 
 from content.models import (
@@ -68,6 +68,7 @@ def make_github_signature(body, secret=TEST_WEBHOOK_SECRET):
 # ===========================================================================
 
 
+@tag('core')
 class ContentSourceModelTest(TestCase):
     """Test ContentSource model fields and behavior."""
 
@@ -298,6 +299,7 @@ class SourceTrackingFieldsTest(TestCase):
 # ===========================================================================
 
 
+@tag('core')
 class GitHubWebhookSignatureTest(TestCase):
     """Test GitHub webhook X-Hub-Signature-256 validation."""
 
@@ -377,6 +379,7 @@ class FindContentSourceTest(TestCase):
 # ===========================================================================
 
 
+@tag('core')
 class ImageURLRewriteTest(TestCase):
     """Test markdown image URL rewriting."""
 
@@ -410,6 +413,7 @@ class ImageURLRewriteTest(TestCase):
 # ===========================================================================
 
 
+@tag('core')
 class GitHubWebhookEndpointTest(TestCase):
     """Test POST /api/webhooks/github endpoint."""
 
@@ -549,6 +553,7 @@ class GitHubWebhookEndpointTest(TestCase):
 # ===========================================================================
 
 
+@tag('core')
 class SyncArticlesTest(TestCase):
     """Test syncing articles from a mock repo directory."""
 
@@ -724,6 +729,7 @@ class SyncArticlesTest(TestCase):
 # ===========================================================================
 
 
+@tag('core')
 class SyncProjectsTest(TestCase):
     """Test syncing projects from a mock repo directory."""
 
@@ -774,6 +780,7 @@ class SyncProjectsTest(TestCase):
 # ===========================================================================
 
 
+@tag('core')
 class SyncCoursesTest(TestCase):
     """Test syncing courses from a mock repo directory."""
 
@@ -1287,6 +1294,7 @@ class SyncSingleCourseRepoTest(TestCase):
 # ===========================================================================
 
 
+@tag('core')
 class SyncResourcesTest(TestCase):
     """Test syncing resources (recordings, curated links, downloads)."""
 

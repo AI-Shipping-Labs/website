@@ -4,7 +4,7 @@ Tests for the example task functions (cleanup, health check).
 
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from integrations.models import WebhookLog
@@ -12,6 +12,7 @@ from jobs.tasks.cleanup import cleanup_old_webhook_logs
 from jobs.tasks.healthcheck import health_check
 
 
+@tag('core')
 class HealthCheckTaskTest(TestCase):
     """Tests for the health_check task."""
 

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from content.models import Article, Course, Download
@@ -16,6 +16,7 @@ from voting.models import Poll
 User = get_user_model()
 
 
+@tag('core')
 class NotificationServiceNotifyTest(TestCase):
     """Tests for NotificationService.notify()."""
 
@@ -165,6 +166,7 @@ class NotificationServiceNotifyTest(TestCase):
         self.assertEqual(Notification.objects.count(), 0)
 
 
+@tag('core')
 class EventReminderServiceTest(TestCase):
     """Tests for NotificationService.create_event_reminder()."""
 

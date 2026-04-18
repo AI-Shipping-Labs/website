@@ -1,11 +1,12 @@
 from datetime import date
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from content.models import Article, CuratedLink, Project, Tutorial
 from events.models import Event
 
 
+@tag('core')
 class ArticleModelTest(TestCase):
     def setUp(self):
         self.article = Article.objects.create(
@@ -63,6 +64,7 @@ class ArticleModelTest(TestCase):
             )
 
 
+@tag('core')
 class EventRecordingModelTest(TestCase):
     """Test recording fields on the unified Event model."""
 
@@ -121,6 +123,7 @@ class EventRecordingModelTest(TestCase):
         self.assertEqual(rec.outcome, '')
 
 
+@tag('core')
 class ProjectModelTest(TestCase):
     def setUp(self):
         self.project = Project.objects.create(
@@ -163,6 +166,7 @@ class ProjectModelTest(TestCase):
         self.assertEqual(self.project.formatted_date(), 'August 10, 2025')
 
 
+@tag('core')
 class TutorialModelTest(TestCase):
     def setUp(self):
         self.tutorial = Tutorial.objects.create(
@@ -190,6 +194,7 @@ class TutorialModelTest(TestCase):
         self.assertEqual(self.tutorial.short_date(), 'Sep 01, 2025')
 
 
+@tag('core')
 class CuratedLinkModelTest(TestCase):
     def setUp(self):
         self.link = CuratedLink.objects.create(

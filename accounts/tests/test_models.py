@@ -1,10 +1,11 @@
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from accounts.models import User
 from payments.models import Tier
 
 
+@tag('core')
 class UserModelTest(TestCase):
     """Tests for the custom User model."""
 

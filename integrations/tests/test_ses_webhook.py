@@ -14,7 +14,7 @@ Covers:
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase, override_settings, tag
 
 from integrations.models import WebhookLog
 
@@ -72,6 +72,7 @@ def make_subscription_confirmation():
 
 
 @override_settings(SES_WEBHOOK_VALIDATION_ENABLED=False)
+@tag('core')
 class SESWebhookBounceTest(TestCase):
     """Test hard bounce handling via SES webhook."""
 
@@ -143,6 +144,7 @@ class SESWebhookBounceTest(TestCase):
 
 
 @override_settings(SES_WEBHOOK_VALIDATION_ENABLED=False)
+@tag('core')
 class SESWebhookComplaintTest(TestCase):
     """Test complaint handling via SES webhook."""
 
@@ -206,6 +208,7 @@ class SESWebhookComplaintTest(TestCase):
 
 
 @override_settings(SES_WEBHOOK_VALIDATION_ENABLED=False)
+@tag('core')
 class SESWebhookEndpointTest(TestCase):
     """Test general SES webhook endpoint behavior."""
 

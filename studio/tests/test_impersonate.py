@@ -1,13 +1,14 @@
 """Tests for studio user impersonation."""
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from email_app.models import NewsletterSubscriber
 
 User = get_user_model()
 
 
+@tag('core')
 class ImpersonateUserTest(TestCase):
     """Tests for the impersonate_user view."""
 
@@ -65,6 +66,7 @@ class ImpersonateUserTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@tag('core')
 class StopImpersonationTest(TestCase):
     """Tests for the stop_impersonation view."""
 

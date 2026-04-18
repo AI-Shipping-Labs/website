@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 from django.utils import timezone
 
 from accounts.models import User
@@ -24,6 +24,7 @@ from tests.fixtures import TierSetupMixin
 # --- Unit Tests for access.py utilities ---
 
 
+@tag('core')
 class GetUserLevelTest(TierSetupMixin, TestCase):
     """Test get_user_level for various user states."""
 
@@ -108,6 +109,7 @@ class GetUserLevelTest(TierSetupMixin, TestCase):
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
 
 
+@tag('core')
 class CanAccessTest(TierSetupMixin, TestCase):
     """Test the can_access utility function."""
 
@@ -225,6 +227,7 @@ class CanAccessTest(TierSetupMixin, TestCase):
         self.assertTrue(can_access(user, self.premium_article))
 
 
+@tag('core')
 class GetRequiredTierNameTest(TestCase):
     """Test tier name mapping."""
 
@@ -265,6 +268,7 @@ class GetTeaserTextTest(TestCase):
         self.assertEqual(get_teaser_text(article), '')
 
 
+@tag('core')
 class BuildGatingContextTest(TierSetupMixin, TestCase):
     """Test build_gating_context."""
 
@@ -327,6 +331,7 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
 # --- Model field tests ---
 
 
+@tag('core')
 class RequiredLevelFieldTest(TestCase):
     """Test that required_level field exists and defaults to 0 on all models."""
 
@@ -372,6 +377,7 @@ class RequiredLevelFieldTest(TestCase):
 # --- View integration tests ---
 
 
+@tag('core')
 class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test blog detail view access control."""
 
@@ -496,6 +502,7 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Full main content')
 
 
+@tag('core')
 class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test recording detail view access control."""
 
@@ -551,6 +558,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Upgrade to Main')
 
 
+@tag('core')
 class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test project detail view access control."""
 
@@ -592,6 +600,7 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Secret project content')
 
 
+@tag('core')
 class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test tutorial detail view access control."""
 
@@ -745,6 +754,7 @@ class CollectionListLockIconTest(TierSetupMixin, TestCase):
 # --- Template tags tests ---
 
 
+@tag('core')
 class AccessTemplateTagsTest(TierSetupMixin, TestCase):
     """Test the access_tags template tags."""
 
@@ -790,6 +800,7 @@ class AccessTemplateTagsTest(TierSetupMixin, TestCase):
 # --- Visibility choices on models ---
 
 
+@tag('core')
 class VisibilityChoicesTest(TestCase):
     """Test that VISIBILITY_CHOICES are correctly defined."""
 

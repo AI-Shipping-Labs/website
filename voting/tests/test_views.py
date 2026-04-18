@@ -226,3 +226,228 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
         self.client.login(email='main7@test.com', password='testpass')
         response = self.client.get(f'/vote/{course_poll.id}')
         self.assertContains(response, 'Upgrade to Premium')
+
+
+class PollGatingTest(TierSetupMixin, TestCase):
+    """Free user gating: no polls in list, gated detail with pricing CTA.
+
+    Replaces playwright_tests/test_voting_polls.py::
+    TestScenario5FreeMemberCannotAccessTopicPolls::
+    test_free_member_sees_no_polls_and_gating_on_direct_access
+    (template state only; no JS interaction).
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.poll = Poll.objects.create(
+            title='Topic Poll for Main Members',
+            poll_type='topic',
+            status='open',
+        )
+        PollOption.objects.create(poll=self.poll, title='Option 1')
+        self.free_user = User.objects.create_user(
+            email='free@test.com', password='testpass',
+        )
+        self.free_user.tier = self.free_tier
+        self.free_user.save()
+        self.client.login(email='free@test.com', password='testpass')
+
+    def test_free_user_list_shows_empty_state(self):
+        """Free user (level 0) sees no topic polls (level 20) in list."""
+        response = self.client.get('/vote')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Topic Poll for Main Members')
+        self.assertContains(response, 'No active polls right now')
+        self.assertEqual(list(response.context['polls']), [])
+
+    def test_free_user_detail_shows_upgrade_to_main_cta(self):
+        """Direct access to topic poll detail shows Upgrade to Main CTA."""
+        response = self.client.get(f'/vote/{self.poll.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['is_gated'])
+        self.assertEqual(response.context['required_tier_name'], 'Main')
+        self.assertContains(
+            response,
+            'Upgrade to Main to participate in this poll',
+        )
+
+    def test_free_user_detail_has_view_pricing_link(self):
+        """Gated detail page renders a 'View Pricing' link to /pricing."""
+        response = self.client.get(f'/vote/{self.poll.id}')
+        self.assertContains(
+            response,
+            'href="/pricing"',
+        )
+        self.assertContains(response, 'View Pricing')
+
+
+class CoursePollGatingTest(TierSetupMixin, TestCase):
+    """Main user gating on Premium-only course polls.
+
+    Replaces playwright_tests/test_voting_polls.py::
+    TestScenario6MainMemberCannotAccessCoursePoll::
+    test_main_member_sees_gating_on_course_poll
+    (template state only; no JS interaction).
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.course_poll = Poll.objects.create(
+            title='Next Mini-Course',
+            poll_type='course',
+            description='Vote for the next mini-course!',
+            status='open',
+        )
+        PollOption.objects.create(poll=self.course_poll, title='Course Option A')
+        self.main_user = User.objects.create_user(
+            email='main@test.com', password='testpass',
+        )
+        self.main_user.tier = self.main_tier
+        self.main_user.save()
+        self.client.login(email='main@test.com', password='testpass')
+
+    def test_course_poll_absent_from_list_for_main_user(self):
+        """Course polls (level 30) are not listed for Main users (level 20)."""
+        response = self.client.get('/vote')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Next Mini-Course')
+        self.assertEqual(list(response.context['polls']), [])
+
+    def test_course_poll_detail_shows_upgrade_to_premium_cta(self):
+        """Direct access to a course poll shows Upgrade to Premium CTA."""
+        response = self.client.get(f'/vote/{self.course_poll.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['is_gated'])
+        self.assertEqual(response.context['required_tier_name'], 'Premium')
+        self.assertContains(
+            response,
+            'Upgrade to Premium to participate in this poll',
+        )
+
+    def test_course_poll_detail_has_view_pricing_link(self):
+        """Gated course poll detail renders the 'View Pricing' link."""
+        response = self.client.get(f'/vote/{self.course_poll.id}')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertContains(response, 'View Pricing')
+
+
+class ClosedPollDisplayTest(TierSetupMixin, TestCase):
+    """Closed polls render read-only with no vote buttons or proposal form.
+
+    Replaces playwright_tests/test_voting_polls.py::
+    TestScenario8ClosedPollReadOnly::
+    test_closed_poll_shows_read_only_results
+    (template state only; no JS interaction).
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.poll = Poll.objects.create(
+            title='Closed Topic Poll',
+            poll_type='topic',
+            status='closed',
+            allow_proposals=True,  # even with proposals enabled
+        )
+        self.opt_alpha = PollOption.objects.create(
+            poll=self.poll, title='Option Alpha',
+        )
+        self.opt_beta = PollOption.objects.create(
+            poll=self.poll, title='Option Beta',
+        )
+        self.opt_gamma = PollOption.objects.create(
+            poll=self.poll, title='Option Gamma',
+        )
+        self.user = User.objects.create_user(
+            email='main@test.com', password='testpass',
+        )
+        self.user.tier = self.main_tier
+        self.user.save()
+        other = User.objects.create_user(
+            email='other@test.com', password='testpass',
+        )
+        other.tier = self.main_tier
+        other.save()
+        # Add some votes so vote counts are non-zero
+        PollVote.objects.create(
+            poll=self.poll, option=self.opt_alpha, user=self.user,
+        )
+        PollVote.objects.create(
+            poll=self.poll, option=self.opt_alpha, user=other,
+        )
+        PollVote.objects.create(
+            poll=self.poll, option=self.opt_beta, user=other,
+        )
+        self.client.login(email='main@test.com', password='testpass')
+
+    def test_closed_poll_shows_closed_indicator(self):
+        response = self.client.get(f'/vote/{self.poll.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['is_closed'])
+        self.assertFalse(response.context['can_vote'])
+        # 'Closed' badge appears in the poll header
+        self.assertContains(response, 'Closed')
+
+    def test_closed_poll_lists_all_options(self):
+        response = self.client.get(f'/vote/{self.poll.id}')
+        self.assertContains(response, 'Option Alpha')
+        self.assertContains(response, 'Option Beta')
+        self.assertContains(response, 'Option Gamma')
+
+    def test_closed_poll_renders_no_vote_buttons(self):
+        response = self.client.get(f'/vote/{self.poll.id}')
+        # The vote button is rendered with the vote-btn CSS class only
+        # when can_vote is True; closed polls must not render any.
+        self.assertNotContains(response, 'class="vote-btn')
+
+    def test_closed_poll_hides_proposal_form_even_when_allowed(self):
+        """allow_proposals=True is overridden by the closed status."""
+        response = self.client.get(f'/vote/{self.poll.id}')
+        self.assertFalse(response.context['allow_proposals'])
+        self.assertNotContains(response, 'id="propose-form"')
+        self.assertNotContains(response, 'Propose a New Option')
+
+
+class AnonymousVotePromptTest(TierSetupMixin, TestCase):
+    """Anonymous visitors are prompted to sign in on list and detail pages.
+
+    Replaces playwright_tests/test_voting_polls.py::
+    TestScenario9AnonymousVisitorPromptedToSignIn::
+    test_anonymous_visitor_sees_sign_in_prompts
+    (template state only; no JS interaction).
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.poll = Poll.objects.create(
+            title='Public Topic Poll',
+            poll_type='topic',
+            status='open',
+        )
+        PollOption.objects.create(poll=self.poll, title='Option X')
+        PollOption.objects.create(poll=self.poll, title='Option Y')
+
+    def test_anonymous_list_hides_topic_poll_and_prompts_signin(self):
+        """Anonymous (level 0) sees no topic polls and a sign-in link."""
+        response = self.client.get('/vote')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Public Topic Poll')
+        self.assertEqual(list(response.context['polls']), [])
+        # Empty-state block contains the sign-in CTA copy specific to
+        # the poll list (distinct from the global header Sign in button).
+        self.assertContains(
+            response,
+            'to see polls available for your membership level',
+        )
+        self.assertContains(response, 'href="/accounts/login/"')
+
+    def test_anonymous_detail_shows_gating_with_pricing_link(self):
+        """Anonymous direct access to topic poll detail is gated."""
+        response = self.client.get(f'/vote/{self.poll.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['is_gated'])
+        # Anon users see the same Upgrade-to-Main path as Free users
+        self.assertContains(
+            response,
+            'Upgrade to Main to participate in this poll',
+        )
+        self.assertContains(response, 'View Pricing')

@@ -1,19 +1,19 @@
 """
 Playwright E2E tests for Voting and Polls (Issue #88).
 
-Tests cover all 12 BDD scenarios from the issue:
+Tests cover the 8 BDD scenarios that exercise real JavaScript behavior:
 - Main member browses active polls and votes on a topic
 - Main member changes their mind and unvotes an option
 - Main member hits the maximum votes limit on a poll
 - Main member proposes a new option on a poll that accepts proposals
-- Free member cannot access topic polls and sees the upgrade path
-- Main member cannot access course polls reserved for Premium
 - Premium member votes on a course poll
-- Member views a closed poll with read-only results
-- Anonymous visitor navigates to polls and is prompted to sign in
 - Main member navigates to polls from the dashboard
 - Member submits a proposal with missing title and gets validation feedback
 - Poll with no options yet shows empty state and encourages proposals
+
+The 4 template-state scenarios (free/main gating, closed read-only,
+anonymous sign-in prompts) moved to ``voting/tests/test_views.py``
+because they have no JS interaction. See the in-file pointers below.
 
 Usage:
     uv run pytest playwright_tests/test_voting_polls.py -v
@@ -23,9 +23,6 @@ import os
 
 import pytest
 
-from playwright_tests.conftest import (
-    VIEWPORT,
-)
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -38,20 +35,6 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
-
-
-def _anon_context(browser):
-    """Create an anonymous browser context with a CSRF cookie."""
-    context = browser.new_context(viewport=VIEWPORT)
-    context.add_cookies([
-        {
-            "name": "csrftoken",
-            "value": "e2e-test-csrf-token-value",
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-    ])
-    return context
 
 
 def _clear_polls():
@@ -501,130 +484,13 @@ class TestScenario4ProposeNewOption:
         # Find the option element and check vote count
         assert "main@test.com" in body  # Attributed to proposer
 # ---------------------------------------------------------------
-# Scenario 5: Free member cannot access topic polls and sees the
-#              upgrade path
+# Scenario 5 (free member can't access topic polls) moved to Django:
+#   voting/tests/test_views.py::PollGatingTest
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario5FreeMemberCannotAccessTopicPolls:
-    """Free member cannot access topic polls and sees the upgrade
-    path."""
-
-    def test_free_member_sees_no_polls_and_gating_on_direct_access(
-        self, django_server
-    , browser):
-        """Given a user logged in as free@test.com (Free tier), an open
-        topic poll exists (required_level = 20).
-        1. Navigate to /vote
-        Then: The poll listing shows no accessible polls
-        2. Navigate directly to /vote/{poll_id} for the topic poll
-        Then: The poll detail shows a gating message 'Upgrade to Main
-              to participate in this poll' with a 'View Pricing' link
-        3. Click 'View Pricing'
-        Then: User lands on /pricing."""
-        _clear_polls()
-        _ensure_tiers()
-        _create_user("free@test.com", tier_slug="free")
-
-        poll = _create_poll(
-            title="Topic Poll for Main Members",
-            poll_type="topic",
-        )
-        _create_option(poll, "Option 1")
-
-        context = _auth_context(browser, "free@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to /vote
-        page.goto(
-            f"{django_server}/vote",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: No polls are visible (free user lacks Main tier)
-        assert "Topic Poll for Main Members" not in body
-        assert "No active polls right now" in body
-
-        # Step 2: Navigate directly to the poll detail
-        page.goto(
-            f"{django_server}/vote/{poll.id}",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: Gating message is shown
-        assert "Upgrade to Main to participate in this poll" in body
-
-        # "View Pricing" link is present
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
-        assert pricing_link.count() >= 1
-
-        # Step 3: Click "View Pricing"
-        pricing_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: User lands on /pricing
-        assert "/pricing" in page.url
 # ---------------------------------------------------------------
-# Scenario 6: Main member cannot access course polls reserved for
-#              Premium
+# Scenario 6 (main member can't access course polls) moved to Django:
+#   voting/tests/test_views.py::CoursePollGatingTest
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario6MainMemberCannotAccessCoursePoll:
-    """Main member cannot access course polls reserved for Premium."""
-
-    def test_main_member_sees_gating_on_course_poll(
-        self, django_server
-    , browser):
-        """Given a user logged in as main@test.com (Main tier), an open
-        course poll 'Next Mini-Course' exists (required_level = 30).
-        1. Navigate to /vote
-        Then: The course poll does not appear in the listing
-        2. Navigate directly to /vote/{poll_id} for the course poll
-        Then: The poll detail shows a gating message 'Upgrade to
-              Premium to participate in this poll' with a 'View
-              Pricing' link."""
-        _clear_polls()
-        _ensure_tiers()
-        _create_user("main@test.com", tier_slug="main")
-
-        poll = _create_poll(
-            title="Next Mini-Course",
-            poll_type="course",
-            description="Vote for the next mini-course!",
-        )
-        _create_option(poll, "Course Option A")
-
-        context = _auth_context(browser, "main@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to /vote
-        page.goto(
-            f"{django_server}/vote",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: The course poll does not appear
-        assert "Next Mini-Course" not in body
-
-        # Step 2: Navigate directly to the course poll
-        page.goto(
-            f"{django_server}/vote/{poll.id}",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: Gating message for Premium
-        assert "Upgrade to Premium to participate in this poll" in body
-
-        # "View Pricing" link is present
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
-        assert pricing_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 7: Premium member votes on a course poll
 # ---------------------------------------------------------------
@@ -708,122 +574,13 @@ class TestScenario7PremiumMemberVotesOnCoursePoll:
         )
         assert vote_count.inner_text() == "1"
 # ---------------------------------------------------------------
-# Scenario 8: Member views a closed poll with read-only results
+# Scenario 8 (closed poll read-only display) moved to Django:
+#   voting/tests/test_views.py::ClosedPollDisplayTest
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario8ClosedPollReadOnly:
-    """Member views a closed poll with read-only results."""
-
-    def test_closed_poll_shows_read_only_results(
-        self, django_server
-    , browser):
-        """Given a user logged in as main@test.com (Main tier), a closed
-        topic poll exists with several options that received votes.
-        1. Navigate to /vote/{poll_id} for the closed poll
-        Then: The poll shows a 'Closed' status indicator
-        Then: All options and their final vote counts are visible
-        Then: No vote buttons or proposal form are available."""
-        _clear_polls()
-        _ensure_tiers()
-        user = _create_user("main@test.com", tier_slug="main")
-        other_user = _create_user("other@test.com", tier_slug="main")
-
-        poll = _create_poll(
-            title="Closed Topic Poll",
-            poll_type="topic",
-            status="closed",
-            allow_proposals=True,  # even with proposals enabled
-        )
-        opt1 = _create_option(poll, "Option Alpha")
-        opt2 = _create_option(poll, "Option Beta")
-        _create_option(poll, "Option Gamma")
-
-        # Add some votes
-        _create_vote(poll, opt1, user)
-        _create_vote(poll, opt1, other_user)
-        _create_vote(poll, opt2, other_user)
-
-        context = _auth_context(browser, "main@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to the closed poll
-        page.goto(
-            f"{django_server}/vote/{poll.id}",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: Shows "Closed" status indicator
-        assert "Closed" in body
-
-        # Then: All options are visible with vote counts
-        assert "Option Alpha" in body
-        assert "Option Beta" in body
-        assert "Option Gamma" in body
-
-        # Then: No vote buttons are available
-        vote_buttons = page.locator("button.vote-btn")
-        assert vote_buttons.count() == 0
-
-        # Then: No proposal form is available
-        propose_form = page.locator("#propose-form")
-        assert propose_form.count() == 0
 # ---------------------------------------------------------------
-# Scenario 9: Anonymous visitor navigates to polls and is prompted
-#              to sign in
+# Scenario 9 (anonymous sign-in prompts) moved to Django:
+#   voting/tests/test_views.py::AnonymousVotePromptTest
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario9AnonymousVisitorPromptedToSignIn:
-    """Anonymous visitor navigates to polls and is prompted to sign
-    in."""
-
-    def test_anonymous_visitor_sees_sign_in_prompts(
-        self, django_server
-    , page):
-        """Given an anonymous visitor (not logged in), an open topic
-        poll exists.
-        1. Navigate to /vote
-        Then: The page shows no active polls and includes a prompt to
-              sign in
-        2. Navigate directly to /vote/{poll_id}
-        Then: The poll detail page prompts the user to sign in to
-              vote."""
-        _clear_polls()
-        _ensure_tiers()
-
-        poll = _create_poll(
-            title="Public Topic Poll",
-            poll_type="topic",
-        )
-        _create_option(poll, "Option X")
-        _create_option(poll, "Option Y")
-
-        # Step 1: Navigate to /vote
-        page.goto(
-            f"{django_server}/vote",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: No active polls shown (anonymous has level 0,
-        # topic polls require level 20)
-        assert "Public Topic Poll" not in body
-
-        # Then: Sign in prompt is present
-        assert "Sign in" in body
-
-        # Step 2: Navigate directly to /vote/{poll_id}
-        page.goto(
-            f"{django_server}/vote/{poll.id}",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: The poll is visible but shows gating or
-        # sign-in prompt to vote
-        assert "Public Topic Poll" in body
-        assert "Sign in" in body
 # ---------------------------------------------------------------
 # Scenario 10: Main member navigates to polls from the dashboard
 # ---------------------------------------------------------------

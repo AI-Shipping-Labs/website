@@ -1,4 +1,4 @@
-from django.test import TestCase, override_settings, tag
+from django.test import TestCase, tag
 
 from payments.models import Tier
 
@@ -63,85 +63,20 @@ class TierModelTest(TestCase):
 
 
 class TierPricingViewTest(TestCase):
-    """Tests for the /pricing page."""
+    """Smoke + context tests for the /pricing page.
 
-    def test_pricing_page_returns_200(self):
+    The visible tier cards, prices, monthly/annual toggle, CTA buttons,
+    "Most Popular" badge, free-tier-links-to-newsletter behavior, and
+    stripe payment links are all exercised end-to-end by
+    `playwright_tests/test_membership_tiers.py` (30+ scenarios). Only
+    the view-context invariants and a 200/template smoke test stay at
+    the Django layer (#261).
+    """
+
+    def test_pricing_page_smoke(self):
         response = self.client.get("/pricing")
         self.assertEqual(response.status_code, 200)
-
-    def test_pricing_page_uses_correct_template(self):
-        response = self.client.get("/pricing")
         self.assertTemplateUsed(response, "payments/pricing.html")
-
-    def test_pricing_page_contains_all_tier_names(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        self.assertIn("Free", content)
-        self.assertIn("Basic", content)
-        self.assertIn("Main", content)
-        self.assertIn("Premium", content)
-
-    def test_pricing_page_contains_most_popular_badge(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        self.assertIn("Most Popular", content)
-
-    def test_pricing_page_contains_monthly_prices(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        # Monthly prices should be in data attributes
-        self.assertIn('data-monthly="20"', content)
-        self.assertIn('data-monthly="50"', content)
-        self.assertIn('data-monthly="100"', content)
-
-    def test_pricing_page_contains_annual_prices(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        # Annual prices should be in data attributes
-        self.assertIn('data-annual="200"', content)
-        self.assertIn('data-annual="500"', content)
-        self.assertIn('data-annual="1000"', content)
-
-    def test_pricing_page_free_tier_has_subscribe_button(self):
-        response = self.client.get("/pricing")
-        # Free tier CTA links to /#newsletter with "Subscribe" text
-        self.assertContains(
-            response,
-            '<a href="/#newsletter"',
-        )
-        self.assertContains(response, "Subscribe")
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_pricing_page_paid_tiers_have_join_button(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        # Each paid tier has a CTA link with data-tier attribute
-        self.assertIn('data-tier="basic"', content)
-        self.assertIn('data-tier="main"', content)
-        self.assertIn('data-tier="premium"', content)
-        # CTA links use the tier-cta-link class
-        self.assertGreaterEqual(content.count("tier-cta-link"), 3)
-
-    def test_pricing_page_contains_billing_toggle(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        self.assertIn("billing-toggle", content)
-        self.assertIn("Monthly", content)
-        self.assertIn("Annual", content)
-
-    def test_pricing_page_contains_tier_features(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        # Check some features from different tiers
-        self.assertIn("Newsletter emails", content)
-        self.assertIn("Exclusive articles", content)
-        self.assertIn("Slack community access", content)
-        self.assertIn("All mini-courses", content)
-
-    def test_pricing_page_contains_stripe_payment_links(self):
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        self.assertIn("buy.stripe.com", content)
 
     def test_pricing_page_has_four_tier_cards(self):
         response = self.client.get("/pricing")
@@ -152,13 +87,6 @@ class TierPricingViewTest(TestCase):
         tiers_data = response.context["tiers_data"]
         levels = [item["tier"].level for item in tiers_data]
         self.assertEqual(levels, [0, 10, 20, 30])
-
-    def test_pricing_page_free_tier_no_payment_link(self):
-        """Free tier Subscribe button should link to newsletter, not stripe."""
-        response = self.client.get("/pricing")
-        content = response.content.decode()
-        # The free tier links to /#newsletter, not a stripe link
-        self.assertIn('href="/#newsletter"', content)
 
     def test_pricing_page_contains_tier_descriptions(self):
         response = self.client.get("/pricing")

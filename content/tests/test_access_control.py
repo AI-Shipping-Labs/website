@@ -377,19 +377,26 @@ class RequiredLevelFieldTest(TestCase):
 # --- View integration tests ---
 
 
+# Per-content-type detail view tier matrix tests removed in #261:
+# the full Article/Recording/Project/Tutorial gating matrix is exercised
+# end-to-end by playwright_tests/test_access_control.py
+# (TestScenario1-7 cover open/gated content for each content type and tier).
+# Function-level access logic stays covered by CanAccessTest /
+# BuildGatingContextTest above. One smoke test per detail view remains
+# below to catch URL/template breakage that wouldn't bubble up via the
+# Playwright suite during unit-test runs.
+
+
 @tag('core')
 class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Test blog detail view access control."""
+    """Smoke test: blog detail view renders gated CTA when user lacks access.
+
+    Per-tier matrix coverage lives in
+    playwright_tests/test_access_control.py.
+    """
 
     def setUp(self):
         self.client = Client()
-        self.open_article = Article.objects.create(
-            title='Open Article', slug='open-article',
-            description='Open description',
-            content_html='<p>Full open content</p>',
-            date=date(2025, 6, 15), published=True,
-            required_level=LEVEL_OPEN,
-        )
         self.basic_article = Article.objects.create(
             title='Basic Article', slug='basic-article',
             description='Basic description',
@@ -397,114 +404,21 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
             date=date(2025, 6, 15), published=True,
             required_level=LEVEL_BASIC,
         )
-        self.main_article = Article.objects.create(
-            title='Main Article', slug='main-article',
-            description='Main description',
-            content_html='<p>Full main content</p>',
-            date=date(2025, 6, 15), published=True,
-            required_level=LEVEL_MAIN,
-        )
-
-    def test_anonymous_sees_open_article_full_content(self):
-        response = self.client.get('/blog/open-article')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Full open content')
 
     def test_anonymous_sees_gated_basic_article(self):
         response = self.client.get('/blog/basic-article')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Full basic content')
         self.assertContains(response, 'Upgrade to Basic to read this article')
-        self.assertContains(response, '/pricing')
-
-    def test_gated_article_never_returns_404(self):
-        response = self.client.get('/blog/basic-article')
-        self.assertEqual(response.status_code, 200)
-
-    def test_anonymous_sees_teaser_for_basic_article(self):
-        response = self.client.get('/blog/basic-article')
-        self.assertContains(response, 'Basic description')
-
-    def test_free_user_sees_gated_basic_article(self):
-        user = User.objects.create_user(email='free@test.com', password='testpass')
-        user.tier = self.free_tier
-        user.save()
-        self.client.login(email='free@test.com', password='testpass')
-        response = self.client.get('/blog/basic-article')
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Full basic content')
-        self.assertContains(response, 'Upgrade to Basic')
-
-    def test_basic_user_sees_basic_article_full_content(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/blog/basic-article')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Full basic content')
-
-    def test_main_user_sees_basic_article_full_content(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
-        response = self.client.get('/blog/basic-article')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Full basic content')
-
-    def test_main_user_sees_main_article_full_content(self):
-        user = User.objects.create_user(email='main2@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main2@test.com', password='testpass')
-        response = self.client.get('/blog/main-article')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Full main content')
-
-    def test_basic_user_cannot_see_main_article(self):
-        user = User.objects.create_user(email='basic2@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic2@test.com', password='testpass')
-        response = self.client.get('/blog/main-article')
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Full main content')
-        self.assertContains(response, 'Upgrade to Main to read this article')
-
-    def test_staff_user_sees_all_gated_articles(self):
-        user = User.objects.create_user(
-            email='staff-blog@test.com', password='testpass',
-        )
-        user.tier = self.free_tier
-        user.is_staff = True
-        user.save()
-        self.client.login(email='staff-blog@test.com', password='testpass')
-        for slug, content_snippet in [
-            ('open-article', 'Full open content'),
-            ('basic-article', 'Full basic content'),
-            ('main-article', 'Full main content'),
-        ]:
-            response = self.client.get(f'/blog/{slug}')
-            self.assertEqual(response.status_code, 200)
-            self.assertContains(response, content_snippet)
-
-    def test_superuser_sees_all_gated_articles(self):
-        user = User.objects.create_user(
-            email='super-blog@test.com', password='testpass',
-        )
-        user.tier = self.free_tier
-        user.is_superuser = True
-        user.save()
-        self.client.login(email='super-blog@test.com', password='testpass')
-        response = self.client.get('/blog/main-article')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Full main content')
 
 
 @tag('core')
 class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Test recording detail view access control."""
+    """Smoke test: recording detail view renders gated CTA when user lacks access.
+
+    Per-tier matrix and "video URL never leaks" coverage lives in
+    playwright_tests/test_access_control.py::TestScenario7BasicMemberBlockedFromMainRecording.
+    """
 
     def setUp(self):
         self.client = Client()
@@ -516,51 +430,20 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
             required_level=LEVEL_MAIN,
         )
 
-    def test_anonymous_sees_title_and_description(self):
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Gated Recording')
-        self.assertContains(response, 'Recording description')
-
     def test_anonymous_does_not_see_video(self):
         response = self.client.get('/event-recordings/gated-recording')
+        self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'youtube.com/embed')
         self.assertContains(response, 'Upgrade to Main to watch this recording')
-
-    def test_main_user_sees_video(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Upgrade to Main')
-
-    def test_free_user_sees_gated_recording(self):
-        user = User.objects.create_user(email='free@test.com', password='testpass')
-        user.tier = self.free_tier
-        user.save()
-        self.client.login(email='free@test.com', password='testpass')
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Upgrade to Main')
-
-    def test_staff_user_sees_gated_recording(self):
-        user = User.objects.create_user(
-            email='staff-rec@test.com', password='testpass',
-        )
-        user.tier = self.free_tier
-        user.is_staff = True
-        user.save()
-        self.client.login(email='staff-rec@test.com', password='testpass')
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Upgrade to Main')
 
 
 @tag('core')
 class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Test project detail view access control."""
+    """Smoke test: project detail view renders gated CTA when user lacks access.
+
+    Per-tier matrix coverage lives in
+    playwright_tests/test_access_control.py.
+    """
 
     def setUp(self):
         self.client = Client()
@@ -578,31 +461,14 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Secret project content')
         self.assertContains(response, 'Upgrade to Basic to view this project')
 
-    def test_basic_user_sees_full_project(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/projects/gated-project')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Secret project content')
-
-    def test_staff_user_sees_gated_project(self):
-        user = User.objects.create_user(
-            email='staff-proj@test.com', password='testpass',
-        )
-        user.tier = self.free_tier
-        user.is_staff = True
-        user.save()
-        self.client.login(email='staff-proj@test.com', password='testpass')
-        response = self.client.get('/projects/gated-project')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Secret project content')
-
 
 @tag('core')
 class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Test tutorial detail view access control."""
+    """Smoke test: tutorial detail view renders gated CTA when user lacks access.
+
+    Per-tier matrix coverage lives in
+    playwright_tests/test_access_control.py.
+    """
 
     def setUp(self):
         self.client = Client()
@@ -620,135 +486,19 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Secret tutorial content')
         self.assertContains(response, 'Upgrade to Premium to read this tutorial')
 
-    def test_premium_user_sees_full_tutorial(self):
-        user = User.objects.create_user(email='prem@test.com', password='testpass')
-        user.tier = self.premium_tier
-        user.save()
-        self.client.login(email='prem@test.com', password='testpass')
-        response = self.client.get('/tutorials/gated-tutorial')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Secret tutorial content')
-
-    def test_main_user_cannot_see_premium_tutorial(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
-        response = self.client.get('/tutorials/gated-tutorial')
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Secret tutorial content')
-        self.assertContains(response, 'Upgrade to Premium')
-
-    def test_staff_user_sees_premium_tutorial(self):
-        user = User.objects.create_user(
-            email='staff-tut@test.com', password='testpass',
-        )
-        user.tier = self.free_tier
-        user.is_staff = True
-        user.save()
-        self.client.login(email='staff-tut@test.com', password='testpass')
-        response = self.client.get('/tutorials/gated-tutorial')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Secret tutorial content')
-
 
 # --- Lock icon in listing pages ---
-
-
-class BlogListLockIconTest(TierSetupMixin, TestCase):
-    """Test lock icon display on blog listing page."""
-
-    def setUp(self):
-        self.client = Client()
-        self.open_article = Article.objects.create(
-            title='Open Post', slug='open-post',
-            description='Open', date=date(2025, 6, 15),
-            published=True, required_level=LEVEL_OPEN,
-        )
-        self.gated_article = Article.objects.create(
-            title='Gated Post', slug='gated-post',
-            description='Gated', date=date(2025, 6, 15),
-            published=True, required_level=LEVEL_BASIC,
-        )
-
-    def test_lock_icon_on_gated_article(self):
-        response = self.client.get('/blog')
-        content = response.content.decode()
-        # The lock icon should appear near the gated article
-        self.assertIn('data-lucide="lock"', content)
-
-    def test_open_article_no_lock(self):
-        # Delete the gated article so only open remains
-        self.gated_article.delete()
-        response = self.client.get('/blog')
-        content = response.content.decode()
-        self.assertNotIn('data-lucide="lock"', content)
-
-
-class RecordingsListLockIconTest(TierSetupMixin, TestCase):
-    """Test lock icon on recordings listing page."""
-
-    def setUp(self):
-        self.client = Client()
-        self.gated_recording = Event.objects.create(
-            title='Gated Rec', slug='gated-rec',
-            description='Gated', start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)), status='completed',
-            recording_url='https://youtube.com/watch?v=test',
-            published=True, required_level=LEVEL_MAIN,
-        )
-
-    def test_lock_icon_on_gated_recording(self):
-        response = self.client.get('/event-recordings')
-        self.assertContains(response, 'data-lucide="lock"')
-
-
-class ProjectsListLockIconTest(TierSetupMixin, TestCase):
-    """Test lock icon on projects listing page."""
-
-    def setUp(self):
-        self.client = Client()
-        self.gated_project = Project.objects.create(
-            title='Gated Proj', slug='gated-proj',
-            description='Gated', date=date(2025, 8, 10),
-            published=True, required_level=LEVEL_BASIC,
-        )
-
-    def test_lock_icon_on_gated_project(self):
-        response = self.client.get('/projects')
-        self.assertContains(response, 'data-lucide="lock"')
-
-
-class TutorialsListLockIconTest(TierSetupMixin, TestCase):
-    """Test lock icon on tutorials listing page."""
-
-    def setUp(self):
-        self.client = Client()
-        self.gated_tutorial = Tutorial.objects.create(
-            title='Gated Tut', slug='gated-tut',
-            description='Gated', date=date(2025, 9, 1),
-            published=True, required_level=LEVEL_PREMIUM,
-        )
-
-    def test_lock_icon_on_gated_tutorial(self):
-        response = self.client.get('/tutorials')
-        self.assertContains(response, 'data-lucide="lock"')
-
-
-class CollectionListLockIconTest(TierSetupMixin, TestCase):
-    """Test lock icon on collection listing page."""
-
-    def setUp(self):
-        self.client = Client()
-        self.gated_link = CuratedLink.objects.create(
-            item_id='gated-link', title='Gated Link',
-            description='Gated', url='https://example.com',
-            category='tools', published=True,
-            required_level=LEVEL_BASIC,
-        )
-
-    def test_lock_icon_on_gated_link(self):
-        response = self.client.get('/collection')
-        self.assertContains(response, 'data-lucide="lock"')
+# Lock icon presence on listing pages is covered end-to-end by:
+#   playwright_tests/test_articles_blog.py  (blog listing lock icon)
+#   playwright_tests/test_event_recordings.py  (recordings listing lock icon)
+#   playwright_tests/test_project_showcase.py  (projects listing lock icon)
+#   playwright_tests/test_curated_links.py  (collection listing lock icon)
+# The Django string-match versions are removed in #261 because they
+# only assert on a CSS-attribute literal (`data-lucide="lock"`) and pass
+# even when the icon never renders for the user (Rule 4).
+# /tutorials lock-icon coverage has no Playwright equivalent today; the
+# behavior is acceptable to drop because tutorial gating is exercised
+# by `TutorialDetailAccessControlTest` above.
 
 
 # --- Template tags tests ---

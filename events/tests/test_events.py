@@ -519,7 +519,14 @@ class EventDetailRecordingLinkTest(TestCase):
 
 
 class EventDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Test event detail access control and registration gating."""
+    """Smoke + access-control matrix for event detail pages.
+
+    Full per-tier matrix (free/basic/main/premium) is exercised
+    end-to-end by
+    `playwright_tests/test_access_control.py::TestScenario12FreeMemberGatedEvent`.
+    Only the gated-vs-not-gated smokes and the access-flag context
+    invariant remain at the Django layer (#261).
+    """
 
     def setUp(self):
         self.client = Client()
@@ -544,28 +551,14 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Open Event')
 
-    def test_anonymous_sees_gated_event_details(self):
+    def test_anonymous_sees_gated_event_with_upgrade_cta(self):
         """Detail page is always visible, but registration is gated."""
         response = self.client.get('/events/gated-event')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Gated Event')
         self.assertContains(response, 'This event is gated.')
-
-    def test_free_user_sees_upgrade_cta_for_gated(self):
-        user = User.objects.create_user(email='free@test.com', password='pass')
-        user.tier = self.free_tier
-        user.save()
-        self.client.login(email='free@test.com', password='pass')
-        response = self.client.get('/events/gated-event')
-        self.assertContains(response, 'Upgrade to Main to attend')
-
-    def test_basic_user_sees_upgrade_cta_for_main_event(self):
-        user = User.objects.create_user(email='basic@test.com', password='pass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='pass')
-        response = self.client.get('/events/gated-event')
-        self.assertContains(response, 'Upgrade to Main to attend')
+        # Anonymous users do not see the register button; the gating CTA
+        # is an upgrade prompt that appears for any insufficient-tier user.
 
     def test_main_user_sees_register_button(self):
         user = User.objects.create_user(email='main@test.com', password='pass')
@@ -577,18 +570,13 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'id="register-btn"')
         self.assertNotContains(response, 'Upgrade to Main')
 
-    def test_premium_user_sees_register_button(self):
-        user = User.objects.create_user(email='prem@test.com', password='pass')
-        user.tier = self.premium_tier
+    def test_basic_user_sees_upgrade_cta_for_main_event(self):
+        user = User.objects.create_user(email='basic@test.com', password='pass')
+        user.tier = self.basic_tier
         user.save()
-        self.client.login(email='prem@test.com', password='pass')
+        self.client.login(email='basic@test.com', password='pass')
         response = self.client.get('/events/gated-event')
-        self.assertTrue(response.context['has_access'])
-        self.assertContains(response, 'id="register-btn"')
-
-    def test_gated_event_never_returns_404(self):
-        response = self.client.get('/events/gated-event')
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Upgrade to Main to attend')
 
     def test_full_event_shows_full_message(self):
         event = Event.objects.create(

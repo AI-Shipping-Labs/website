@@ -333,22 +333,16 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
             published=True,
         )
 
-    def test_anonymous_sees_email_signup_for_free_download(self):
+    def test_anonymous_sees_signup_and_upgrade_ctas(self):
+        """Anonymous users see 'Sign Up to Download' for free items and
+        'Upgrade to Basic to download' for gated items.
+
+        Per-tier matrix and lock-icon rendering covered by
+        `playwright_tests/test_downloadable_resources.py`.
+        """
         response = self.client.get('/downloads')
         self.assertContains(response, 'Sign Up to Download')
-
-    def test_anonymous_sees_upgrade_cta_for_gated_download(self):
-        response = self.client.get('/downloads')
         self.assertContains(response, 'Upgrade to Basic to download')
-
-    def test_authenticated_sees_download_button_for_free_resource(self):
-        User.objects.create_user(
-            email='free@test.com', password='testpass',
-        )
-        self.client.login(email='free@test.com', password='testpass')
-        response = self.client.get('/downloads')
-        # Free resource with level 0 should show download for authenticated users
-        self.assertContains(response, 'Download')
 
     def test_basic_user_sees_download_for_basic_resource(self):
         User.objects.create_user(
@@ -357,25 +351,10 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         )
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/downloads')
-        # Should be able to download the basic resource
+        # Should be able to download the basic resource (URL points at the
+        # download API endpoint, not at the public file URL)
         content = response.content.decode()
         self.assertIn('/api/downloads/basic-resource/file', content)
-
-    def test_free_user_sees_upgrade_for_basic_resource(self):
-        User.objects.create_user(
-            email='freeuser@test.com', password='testpass',
-            tier=self.free_tier,
-        )
-        self.client.login(email='freeuser@test.com', password='testpass')
-        response = self.client.get('/downloads')
-        self.assertContains(response, 'Upgrade to Basic to download')
-
-    def test_lock_icon_on_gated_download(self):
-        response = self.client.get('/downloads')
-        # The basic resource should show a lock icon
-        content = response.content.decode()
-        # Lock icon is used for required_level > 0
-        self.assertIn('data-lucide="lock"', content)
 
 
 # --- File download endpoint tests ---

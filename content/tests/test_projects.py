@@ -549,11 +549,6 @@ class ProjectDetailGatingTest(TestCase):
         self.assertContains(response, 'Upgrade to Basic to view this project')
         self.assertContains(response, '/pricing')
 
-    def test_gated_project_returns_200_not_404(self):
-        response = self.client.get('/projects/gated-project')
-        self.assertEqual(response.status_code, 200)
-
-
 # --- Community submission tests ---
 
 

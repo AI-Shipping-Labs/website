@@ -1,0 +1,111 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}User Created{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_user_create' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Create another user
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">User created</h1>
+  <p class="text-muted-foreground mt-1">
+    Account for <span class="font-mono text-foreground">{{ email }}</span> is ready.
+    {% if is_admin %}
+      <span data-testid="admin-badge"
+            class="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/40 align-middle">
+        <i data-lucide="shield" class="w-3 h-3"></i>
+        Admin
+      </span>
+    {% endif %}
+  </p>
+</div>
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl space-y-6">
+
+  <div class="px-4 py-3 rounded-lg bg-yellow-500/15 border border-yellow-500/40 text-sm text-yellow-900 dark:text-yellow-200">
+    <p class="font-medium text-yellow-900 dark:text-yellow-300">Copy the password now.</p>
+    <p class="mt-1 text-yellow-900/90 dark:text-yellow-200/80">
+      This is the only time it will be shown. Once you navigate away from this
+      page the password cannot be retrieved &mdash; you'd have to send a
+      password reset or generate a new account. The password is not logged or
+      emailed.
+    </p>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium text-foreground mb-1">Email</label>
+    <code class="block bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground font-mono break-all select-all">{{ email }}</code>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium text-foreground mb-1">Generated password</label>
+    <div class="flex items-stretch gap-2">
+      <code id="user-password-value"
+            data-testid="generated-password"
+            class="flex-1 bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground font-mono break-all select-all">{{ password }}</code>
+      <button type="button"
+              id="copy-password-btn"
+              data-copy-target="user-password-value"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity shrink-0">
+        Copy
+      </button>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2">
+      Send this to the user over a secure channel. They can change it after
+      first login from their account settings.
+    </p>
+  </div>
+
+  {% if is_admin %}
+  <div class="px-4 py-3 rounded-lg bg-purple-500/10 border border-purple-500/30 text-sm">
+    <p class="font-medium text-purple-700 dark:text-purple-300">Admin account</p>
+    <p class="mt-1 text-purple-800/90 dark:text-purple-200/80">
+      This user has <span class="font-mono">is_staff</span> and
+      <span class="font-mono">is_superuser</span> set. They can sign in to
+      Studio and Django admin immediately and bypass tier gates.
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="pt-2 border-t border-border flex flex-wrap items-center gap-3">
+    <a href="{% url 'studio_tier_override' %}?email={{ email|urlencode }}"
+       data-testid="user-detail-link"
+       class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Open user detail
+    </a>
+    <a href="{% url 'studio_user_create' %}"
+       class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+      Create another user
+    </a>
+  </div>
+</div>
+
+<script>
+(function() {
+  document.querySelectorAll('[data-copy-target]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var targetId = btn.getAttribute('data-copy-target');
+      var el = document.getElementById(targetId);
+      if (!el) { return; }
+      var text = el.textContent || '';
+      var done = function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function() { btn.textContent = original; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

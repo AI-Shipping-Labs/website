@@ -133,6 +133,15 @@
                 <span>Tier Overrides</span>
               </a>
             </li>
+            {% if request.user.is_superuser %}
+            <li>
+              <a href="{% url 'studio_user_create' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/new' in request.path or '/users/created' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                <span>New User</span>
+              </a>
+            </li>
+            {% endif %}
           </ul>
         </div>
 

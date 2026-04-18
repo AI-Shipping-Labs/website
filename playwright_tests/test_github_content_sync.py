@@ -1159,3 +1159,192 @@ class TestScenario12AdminViewsSeededSources:
 
         # Then: Each source shows "Never synced"
         assert body.count("Never synced") >= 4
+# ---------------------------------------------------------------------------
+# Issue #246: Sync button shows one-shot "Sync queued" confirmation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario13SyncQueuedButtonConfirmation:
+    """Sync buttons briefly flash 'Sync queued ✓' then revert (no spinner)."""
+
+    def _setup(self, django_server, page):
+        _clear_content_sources()
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+        _seed_content_sources()
+        _login_admin_via_browser(page, django_server, "admin@test.com")
+        page.goto(
+            f"{django_server}/studio/sync/",
+            wait_until="domcontentloaded",
+        )
+        # Stop forms from actually navigating so the test can observe the
+        # button state transition. Our submit listener still fires (it's
+        # registered first, in DOMContentLoaded), but preventDefault keeps
+        # the page on /studio/sync/.
+        page.evaluate(
+            """
+            document.querySelectorAll('form.sync-form, #sync-all-form')
+              .forEach(function(f) {
+                f.addEventListener('submit', function(e) {
+                  e.preventDefault();
+                });
+              });
+            """
+        )
+
+    def test_sync_now_button_flashes_queued_then_reverts(
+        self, django_server, page,
+    ):
+        """Per-source 'Sync Now' button text becomes 'Sync queued ✓' on click
+        and reverts to 'Sync Now' within 2 seconds, with no spinner SVG."""
+        self._setup(django_server, page)
+
+        blog_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/blog")'
+        ).first
+        sync_btn = blog_card.locator('button.sync-btn')
+        sync_btn_text = sync_btn.locator('span.sync-btn-text')
+
+        # Pre-condition: original label is "Sync Now", button enabled.
+        assert sync_btn_text.inner_text().strip() == "Sync Now"
+        assert sync_btn.is_enabled()
+
+        # Click the button — the form will submit but we have aborted
+        # the POST, so the page stays.
+        # Capture the inner-text element handle BEFORE the click so we can
+        # observe the transition synchronously.
+        sync_btn_text.wait_for()
+        text_handle = sync_btn_text.element_handle()
+
+        sync_btn.click()
+
+        # Immediately after the click the label flashes to "Sync queued ✓".
+        page.wait_for_function(
+            "el => el.textContent.indexOf('Sync queued') !== -1",
+            arg=text_handle,
+            timeout=2000,
+        )
+        flashed_text = sync_btn_text.inner_text()
+        assert "Sync queued" in flashed_text
+        assert "\u2713" in flashed_text  # check mark
+        assert not sync_btn.is_enabled()
+
+        # No spinner inside the button while in the queued state.
+        # (The .sync-spinner SVG was removed from this code path.)
+        assert sync_btn.locator('svg.animate-spin').count() == 0
+
+        # Within 2 seconds the label reverts to "Sync Now" and re-enables.
+        page.wait_for_function(
+            "el => el.textContent.trim() === 'Sync Now'",
+            arg=sync_btn_text.element_handle(),
+            timeout=2000,
+        )
+        assert sync_btn_text.inner_text().strip() == "Sync Now"
+        assert sync_btn.is_enabled()
+
+    def test_sync_all_button_flashes_queued_then_reverts(
+        self, django_server, page,
+    ):
+        """The header 'Sync All' button shows 'Sync queued ✓' then reverts."""
+        self._setup(django_server, page)
+
+        sync_all_btn = page.locator('#sync-all-btn')
+        sync_all_label = sync_all_btn.locator('span').first
+
+        # Pre-condition: original label "Sync All", enabled.
+        assert sync_all_label.inner_text().strip() == "Sync All"
+        assert sync_all_btn.is_enabled()
+
+        sync_all_btn.click()
+
+        page.wait_for_function(
+            "el => el.textContent.indexOf('Sync queued') !== -1",
+            arg=sync_all_label.element_handle(),
+            timeout=500,
+        )
+        flashed_text = sync_all_label.inner_text()
+        assert "Sync queued" in flashed_text
+        assert "\u2713" in flashed_text
+        assert not sync_all_btn.is_enabled()
+        # No spinner SVG inside the Sync All button.
+        assert sync_all_btn.locator('svg.animate-spin').count() == 0
+
+        page.wait_for_function(
+            "el => el.textContent.trim() === 'Sync All'",
+            arg=sync_all_label.element_handle(),
+            timeout=2000,
+        )
+        assert sync_all_label.inner_text().strip() == "Sync All"
+        assert sync_all_btn.is_enabled()
+
+    def test_rapid_clicks_do_not_stack_resets(self, django_server, page):
+        """Two rapid form submits within the queued window must clearTimeout
+        the first timer so the button doesn't revert prematurely.
+
+        We dispatch the submit event directly via JS rather than clicking
+        twice, because the first click disables the button and a normal
+        click on a disabled button is a no-op. Dispatching the event
+        verifies the clearTimeout guard in the JS handler itself.
+        """
+        self._setup(django_server, page)
+
+        blog_card = page.locator(
+            '.bg-card:has-text("AI-Shipping-Labs/blog")'
+        ).first
+        sync_btn = blog_card.locator('button.sync-btn')
+        sync_btn_text = sync_btn.locator('span.sync-btn-text')
+
+        sync_btn_text.wait_for()
+        text_handle = sync_btn_text.element_handle()
+
+        # First submit — triggers the queued flash and a 1.5s timer.
+        sync_btn.click()
+        page.wait_for_function(
+            "el => el.textContent.indexOf('Sync queued') !== -1",
+            arg=text_handle,
+            timeout=2000,
+        )
+
+        # Wait ~1 second, then dispatch a second submit on the same form.
+        # If the previous timer was not cleared, it would fire ~500ms
+        # after this point and the label would revert too early.
+        page.wait_for_timeout(1000)
+        page.evaluate(
+            """
+            const btn = document.querySelectorAll('button.sync-btn')[0];
+            const form = btn.closest('form');
+            form.dispatchEvent(
+              new Event('submit', {bubbles: true, cancelable: true})
+            );
+            """
+        )
+
+        # 1100ms after the second submit (i.e., ~2100ms after the first
+        # submit's timer was set), the label must still say "Sync queued"
+        # — proves the second submit reset the timer.
+        page.wait_for_timeout(1100)
+        assert "Sync queued" in sync_btn_text.inner_text()
+
+        # And it eventually reverts cleanly after the second timer fires.
+        page.wait_for_function(
+            "el => el.textContent.trim() === 'Sync Now'",
+            arg=text_handle,
+            timeout=1500,
+        )
+
+    def test_dashboard_html_does_not_contain_syncing_label(
+        self, django_server, page,
+    ):
+        """The 'Syncing...' / 'Syncing All...' labels and the inline
+        spinner SVG inside .sync-btn must be gone from this code path."""
+        self._setup(django_server, page)
+
+        body = page.content()
+        assert "Syncing..." not in body
+        assert "Syncing All..." not in body
+
+        # The .sync-btn buttons should have no .sync-spinner SVG inside.
+        sync_btns = page.locator('button.sync-btn')
+        for i in range(sync_btns.count()):
+            assert sync_btns.nth(i).locator('.sync-spinner').count() == 0

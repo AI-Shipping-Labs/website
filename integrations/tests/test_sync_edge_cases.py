@@ -35,7 +35,7 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
-from integrations.models import ContentSource
+from integrations.models import ContentSource, SyncLog
 from integrations.services.github import (
     _compute_content_hash,
     _validate_frontmatter,
@@ -274,6 +274,68 @@ class ConcurrentSyncSkipTest(TestCase):
         # Second lock should fail
         acquired = acquire_sync_lock(source)
         self.assertFalse(acquired)
+
+
+# ===========================================================================
+# Scenario (issue #221): skip-path FK error when source row is gone
+# ===========================================================================
+
+
+class SkipPathStaleSourceTest(TestCase):
+    """Regression test for issue #221.
+
+    The skip-path branch of ``sync_content_source`` previously created a
+    ``SyncLog`` row using the in-memory ``source`` reference. If that row had
+    been deleted (or rolled back) before this task ran, the FK to
+    ``ContentSource`` violated, raising ``IntegrityError`` and failing the
+    worker task. The fix confirms the source still exists and treats the
+    SyncLog write as best-effort.
+    """
+
+    def test_skip_path_does_not_raise_when_source_deleted(self):
+        """Given an in-memory source whose DB row was deleted,
+        when ``sync_content_source`` enters the skip path,
+        then it returns without writing a SyncLog and without raising."""
+        # Create a real source so we can capture the in-memory reference, then
+        # delete it from the DB to simulate the race.
+        source = ContentSource.objects.create(
+            repo_name='test-org/blog',
+            content_type='article',
+        )
+        stale_source = ContentSource.objects.get(pk=source.pk)
+        ContentSource.objects.filter(pk=source.pk).delete()
+
+        # Skip-path is reached via acquire_sync_lock returning False, which
+        # happens automatically because the row is gone.
+        result = sync_content_source(stale_source)
+
+        self.assertIsNone(result)
+        # No SyncLog row should exist for the stale source PK.
+        self.assertFalse(
+            SyncLog.objects.filter(source_id=stale_source.pk).exists(),
+        )
+
+    def test_skip_path_writes_synclog_when_source_exists(self):
+        """Given a locked source whose row still exists,
+        when a second sync hits the skip path,
+        then a SyncLog row with status='skipped' is written."""
+        source = ContentSource.objects.create(
+            repo_name='test-org/blog',
+            content_type='article',
+            sync_locked_at=timezone.now(),  # Lock is held by another worker
+        )
+
+        sync_log = sync_content_source(source)
+
+        self.assertIsNotNone(sync_log)
+        self.assertEqual(sync_log.status, 'skipped')
+        self.assertEqual(sync_log.source_id, source.pk)
+        self.assertTrue(
+            any(
+                'already in progress' in str(e.get('error', ''))
+                for e in sync_log.errors
+            ),
+        )
 
 
 # ===========================================================================

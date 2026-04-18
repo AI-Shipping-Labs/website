@@ -28,6 +28,7 @@ import requests
 import yaml
 from django.conf import settings
 from django.core.cache import cache
+from django.db import IntegrityError
 from django.utils import timezone
 
 from integrations.config import get_config
@@ -867,7 +868,7 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
         batch_id: Optional UUID to group logs from the same "Sync All" action.
 
     Returns:
-        SyncLog: The sync log entry.
+        SyncLog or None: The sync log entry.
     """
     # Acquire sync lock (Edge Case 4: Concurrent Syncs)
     # Skip locking when repo_dir is provided (testing mode)
@@ -876,13 +877,34 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
         logger.info(
             'Sync already in progress for %s, skipping.', source.repo_name,
         )
-        sync_log = SyncLog.objects.create(
-            source=source,
-            batch_id=batch_id,
-            status='skipped',
-            finished_at=timezone.now(),
-            errors=[{'file': '', 'error': 'Sync already in progress, skipped.'}],
-        )
+        # Issue #221: the in-memory ``source`` may point to a row that was
+        # deleted (or rolled back under SQLite contention) before this task
+        # ran. Writing the SyncLog with a stale FK raises IntegrityError and
+        # fails the worker task. Confirm the source still exists, and treat
+        # the SyncLog write itself as best-effort.
+        if not ContentSource.objects.filter(pk=source.pk).exists():
+            logger.warning(
+                'Skipping SyncLog for %s: ContentSource %s no longer exists.',
+                source.repo_name, source.pk,
+            )
+            return None
+        try:
+            sync_log = SyncLog.objects.create(
+                source=source,
+                batch_id=batch_id,
+                status='skipped',
+                finished_at=timezone.now(),
+                errors=[
+                    {'file': '', 'error': 'Sync already in progress, skipped.'},
+                ],
+            )
+        except IntegrityError:
+            logger.warning(
+                'Could not write skipped SyncLog for %s (FK gone); '
+                'returning without raising.',
+                source.repo_name,
+            )
+            return None
         return sync_log
 
     sync_log = SyncLog.objects.create(

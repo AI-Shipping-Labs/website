@@ -41,6 +41,7 @@ Three test classes:
 import sqlite3
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 from django.conf import settings
@@ -140,20 +141,27 @@ class SqlitePragmasAppliedTest(SimpleTestCase):
         )
 
 
-def _run_writers(db_path, n_threads, *, apply_fix):
+def _run_writers(db_path, n_threads, *, apply_fix, hold_seconds=0.05):
     """Spawn ``n_threads`` raw sqlite3 writers against ``db_path``.
 
     Returns ``(errors, total_rows)``.
 
-    - ``apply_fix=False`` reproduces the broken config: short timeout, no
-      WAL, default DEFERRED transaction mode. This is what surfaces
+    - ``apply_fix=False`` reproduces the broken config: short busy_timeout,
+      no WAL, default DEFERRED transaction mode. This is what surfaces
       "database is locked" under contention.
     - ``apply_fix=True`` mirrors the production fix: WAL +
       busy_timeout=30000 + IMMEDIATE transaction mode.
 
     Each thread waits on a barrier so they all hit the write lock at the
-    same instant — without that, the threads serialise naturally and the
-    bug doesn't reproduce.
+    same instant. Whichever thread wins the race holds the write lock
+    for ``hold_seconds`` before committing; without that hold, fast CI
+    runners can let 8 writers serialise through the lock in under a
+    millisecond and the negative control silently passes (see
+    https://github.com/AI-Shipping-Labs/website/issues/220 CI failure on
+    commit a7ac69a). The fix path uses a 30 s busy_timeout + IMMEDIATE,
+    so a 50 ms hold is invisible to it; the broken path uses a 10 ms
+    busy_timeout, so the hold guarantees at least one losing writer
+    exceeds the timeout and surfaces SQLITE_BUSY.
     """
     errors: list[Exception] = []
     errors_lock = threading.Lock()
@@ -167,9 +175,16 @@ def _run_writers(db_path, n_threads, *, apply_fix):
             con.execute('PRAGMA busy_timeout=30000')
             con.execute('PRAGMA synchronous=NORMAL')
         else:
-            # Tight timeout exposes the lock race in a couple of milliseconds
-            # instead of letting the OS-level connect timeout paper over it.
-            con = sqlite3.connect(db_path, timeout=0.05, isolation_level=None)
+            # Tight busy_timeout exposes the lock race in milliseconds
+            # instead of letting SQLite's default 5 s busy handler
+            # silently absorb the contention. We set it via PRAGMA (not
+            # the connect-level ``timeout`` kwarg) because the connect
+            # kwarg is the same busy_timeout under the hood and we want
+            # an explicit, surgical value here. 10 ms is well below the
+            # 50 ms hold below, so any losing writer is guaranteed to
+            # exhaust busy_timeout and raise SQLITE_BUSY.
+            con = sqlite3.connect(db_path, timeout=0, isolation_level=None)
+            con.execute('PRAGMA busy_timeout=10')
         try:
             barrier.wait()
             # IMMEDIATE matches Django's transaction_mode='IMMEDIATE';
@@ -178,6 +193,11 @@ def _run_writers(db_path, n_threads, *, apply_fix):
             begin = 'BEGIN IMMEDIATE' if apply_fix else 'BEGIN DEFERRED'
             con.execute(begin)
             con.execute('INSERT INTO concurrency_test (val) VALUES (?)', (f'thread-{i}',))
+            # Hold the write lock long enough that at least one losing
+            # writer exhausts its busy_timeout. Skipped when there is
+            # only one writer (no contention possible anyway).
+            if hold_seconds and n_threads > 1:
+                time.sleep(hold_seconds)
             con.execute('COMMIT')
         except sqlite3.OperationalError as exc:
             with errors_lock:

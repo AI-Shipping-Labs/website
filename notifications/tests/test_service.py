@@ -165,6 +165,86 @@ class NotificationServiceNotifyTest(TestCase):
         NotificationService.notify('article', 99999)
         self.assertEqual(Notification.objects.count(), 0)
 
+    # Replaces playwright_tests/test_notifications.py::
+    # TestScenario5NotificationOnArticlePublish::
+    # test_publish_creates_notification_for_eligible_not_ineligible
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_publish_basic_article_notifies_basic_not_free(self, mock_slack):
+        """A required_level=10 article notifies basic+main but not free."""
+        article = Article.objects.create(
+            title='Exclusive Basic Article',
+            slug='exclusive-basic-article',
+            description='This article is for Basic and above.',
+            date=date(2025, 1, 1),
+            published=True,
+            required_level=10,
+        )
+        NotificationService.notify('article', article.pk)
+
+        # Basic user got it
+        basic_notif = Notification.objects.filter(user=self.basic_user).first()
+        self.assertIsNotNone(basic_notif)
+        self.assertIn('Exclusive Basic Article', basic_notif.title)
+        self.assertEqual(basic_notif.url, '/blog/exclusive-basic-article')
+
+        # Free user did not
+        self.assertFalse(
+            Notification.objects.filter(user=self.free_user).exists(),
+        )
+
+    # Replaces playwright_tests/test_notifications.py::
+    # TestScenario8NotificationLinksToCorrectContent::
+    # test_notifications_link_to_correct_content_types
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_notification_url_matches_content_type(self, mock_slack):
+        """Each content type produces a notification.url for its detail page."""
+        from datetime import timedelta
+
+        article = Article.objects.create(
+            title='Article For Main', slug='article-for-main',
+            date=date(2025, 1, 1), published=True, required_level=0,
+        )
+        course = Course.objects.create(
+            title='Course For Main', slug='course-for-main',
+            status='published', required_level=0,
+        )
+        event = Event.objects.create(
+            title='Event For Main', slug='event-for-main',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming', required_level=0,
+        )
+        download = Download.objects.create(
+            title='Download For Main', slug='download-for-main',
+            file_url='https://example.com/file.pdf',
+            published=True, required_level=0,
+        )
+
+        NotificationService.notify('article', article.pk)
+        NotificationService.notify('course', course.pk)
+        NotificationService.notify('event', event.pk)
+        NotificationService.notify('download', download.pk)
+
+        urls_by_title = dict(
+            Notification.objects.filter(user=self.main_user)
+            .values_list('title', 'url'),
+        )
+        self.assertEqual(
+            urls_by_title['New article: Article For Main'],
+            '/blog/article-for-main',
+        )
+        self.assertEqual(
+            urls_by_title['New course: Course For Main'],
+            '/courses/course-for-main',
+        )
+        self.assertEqual(
+            urls_by_title['Upcoming event: Event For Main'],
+            '/events/event-for-main',
+        )
+        self.assertEqual(
+            urls_by_title['New download: Download For Main'],
+            '/downloads/download-for-main',
+        )
+
 
 @tag('core')
 class EventReminderServiceTest(TestCase):

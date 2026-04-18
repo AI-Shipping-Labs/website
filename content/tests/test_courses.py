@@ -301,6 +301,125 @@ class CourseTotalAndCompletedTest(TestCase):
         self.assertEqual(self.course.completed_units(self.user), 0)
 
 
+class CourseGetNextUnitForTest(TestCase):
+    """Test Course.get_next_unit_for(user) — issue #244.
+
+    Returns the first unit in canonical order (module sort_order, then
+    unit sort_order) with no UserCourseProgress.completed_at for the
+    user. Returns None if all units are done.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(email='nextunit@example.com')
+        self.course = Course.objects.create(
+            title='Next Unit Course', slug='next-unit-course',
+        )
+        # Two modules, three units each, deliberately created out of
+        # sort_order to prove the method respects sort_order rather than
+        # creation order.
+        self.module2 = Module.objects.create(
+            course=self.course, title='Module 2', slug='module-2', sort_order=2,
+        )
+        self.module1 = Module.objects.create(
+            course=self.course, title='Module 1', slug='module-1', sort_order=1,
+        )
+        # Module 1 units (created out of order)
+        self.m1_u3 = Unit.objects.create(
+            module=self.module1, title='M1 U3', slug='m1-u3', sort_order=3,
+        )
+        self.m1_u1 = Unit.objects.create(
+            module=self.module1, title='M1 U1', slug='m1-u1', sort_order=1,
+        )
+        self.m1_u2 = Unit.objects.create(
+            module=self.module1, title='M1 U2', slug='m1-u2', sort_order=2,
+        )
+        # Module 2 units
+        self.m2_u1 = Unit.objects.create(
+            module=self.module2, title='M2 U1', slug='m2-u1', sort_order=1,
+        )
+        self.m2_u2 = Unit.objects.create(
+            module=self.module2, title='M2 U2', slug='m2-u2', sort_order=2,
+        )
+        self.m2_u3 = Unit.objects.create(
+            module=self.module2, title='M2 U3', slug='m2-u3', sort_order=3,
+        )
+        self.canonical_order = [
+            self.m1_u1, self.m1_u2, self.m1_u3,
+            self.m2_u1, self.m2_u2, self.m2_u3,
+        ]
+
+    def _complete(self, *units):
+        now = timezone.now()
+        for unit in units:
+            UserCourseProgress.objects.create(
+                user=self.user, unit=unit, completed_at=now,
+            )
+
+    def test_no_progress_returns_first_unit_in_canonical_order(self):
+        result = self.course.get_next_unit_for(self.user)
+        self.assertEqual(result, self.m1_u1)
+
+    def test_after_completing_first_three_units_returns_unit_4(self):
+        self._complete(self.m1_u1, self.m1_u2, self.m1_u3)
+        result = self.course.get_next_unit_for(self.user)
+        self.assertEqual(result, self.m2_u1)
+
+    def test_skipped_units_returns_first_skipped(self):
+        # Completed units 1, 3, 5 (skipped 2 and 4) → next is unit 2.
+        self._complete(
+            self.canonical_order[0],
+            self.canonical_order[2],
+            self.canonical_order[4],
+        )
+        result = self.course.get_next_unit_for(self.user)
+        self.assertEqual(result, self.canonical_order[1])
+
+    def test_all_completed_returns_none(self):
+        self._complete(*self.canonical_order)
+        self.assertIsNone(self.course.get_next_unit_for(self.user))
+
+    def test_in_progress_progress_records_count_as_unfinished(self):
+        # A UserCourseProgress with completed_at=None means "started but
+        # not finished" — it should still be returned as the next unit.
+        UserCourseProgress.objects.create(
+            user=self.user, unit=self.m1_u1, completed_at=None,
+        )
+        result = self.course.get_next_unit_for(self.user)
+        self.assertEqual(result, self.m1_u1)
+
+    def test_anonymous_user_returns_none(self):
+        self.assertIsNone(self.course.get_next_unit_for(AnonymousUser()))
+
+    def test_none_user_returns_none(self):
+        self.assertIsNone(self.course.get_next_unit_for(None))
+
+    def test_course_with_no_units_returns_none(self):
+        empty = Course.objects.create(title='Empty', slug='empty-course')
+        self.assertIsNone(empty.get_next_unit_for(self.user))
+
+    def test_progress_in_other_course_does_not_affect_result(self):
+        # Completing a unit in a different course must not be considered.
+        other_course = Course.objects.create(title='Other', slug='other')
+        other_module = Module.objects.create(
+            course=other_course, title='OM', slug='om', sort_order=1,
+        )
+        other_unit = Unit.objects.create(
+            module=other_module, title='OU', slug='ou', sort_order=1,
+        )
+        self._complete(other_unit)
+        result = self.course.get_next_unit_for(self.user)
+        self.assertEqual(result, self.m1_u1)
+
+    def test_progress_from_different_user_does_not_affect_result(self):
+        other_user = User.objects.create_user(email='other@example.com')
+        UserCourseProgress.objects.create(
+            user=other_user, unit=self.m1_u1, completed_at=timezone.now(),
+        )
+        # Our user has no progress, so next unit is still m1_u1.
+        result = self.course.get_next_unit_for(self.user)
+        self.assertEqual(result, self.m1_u1)
+
+
 # ============================================================
 # View Tests: /courses catalog
 # ============================================================

@@ -69,10 +69,12 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
         from content.views.home import _get_in_progress_courses
         user_level = get_user_level(self.user)
 
-        # Queries expected:
+        # Queries expected (constant regardless of course count):
         # 1. Fetch UserCourseProgress with select_related (1 query)
         # 2. Annotate unit counts on Course (1 query)
-        with self.assertNumQueries(2):
+        # 3. Fetch all units for in-progress courses to resolve next_unit
+        #    in Python without per-course queries (1 query, issue #244)
+        with self.assertNumQueries(3):
             result = _get_in_progress_courses(self.user, user_level)
 
         self.assertEqual(len(result), 5)
@@ -80,6 +82,42 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
             self.assertEqual(item['total_units'], 4)
             self.assertEqual(item['completed_count'], 2)
             self.assertEqual(item['percentage'], 50)
+            # next_unit should be populated and resolvable without extra queries
+            self.assertIsNotNone(item['next_unit'])
+
+    def test_next_unit_resolution_does_not_scale_with_course_count(self):
+        """Adding more in-progress courses must not increase the query count."""
+        from content.views.home import _get_in_progress_courses
+        user_level = get_user_level(self.user)
+
+        # Add 5 more in-progress courses (10 total) and assert the query
+        # count stays at 3 — proving next_unit resolution is not N+1.
+        now = timezone.now()
+        for i in range(5, 10):
+            course = Course.objects.create(
+                title=f'Course {i}', slug=f'course-{i}', status='published',
+            )
+            module = Module.objects.create(
+                course=course, title=f'Mod {i}', slug=f'mod-{i}', sort_order=0,
+            )
+            units = []
+            for j in range(4):
+                unit = Unit.objects.create(
+                    module=module, title=f'Unit {i}-{j}',
+                    slug=f'unit-{i}-{j}', sort_order=j,
+                )
+                units.append(unit)
+            for j in range(2):
+                UserCourseProgress.objects.create(
+                    user=self.user, unit=units[j],
+                    completed_at=now - timedelta(hours=10 - i),
+                )
+
+        with self.assertNumQueries(3):
+            result = _get_in_progress_courses(self.user, user_level)
+        self.assertEqual(len(result), 10)
+        for item in result:
+            self.assertIsNotNone(item['next_unit'])
 
     def test_no_progress_uses_zero_queries_after_initial(self):
         """User with no progress should use minimal queries."""

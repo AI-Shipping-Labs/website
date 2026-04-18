@@ -5,7 +5,14 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import get_active_override, get_user_level
-from content.models import Article, Course, CuratedLink, Project, UserCourseProgress
+from content.models import (
+    Article,
+    Course,
+    CuratedLink,
+    Project,
+    Unit,
+    UserCourseProgress,
+)
 from content.tier_config import get_tiers_with_features
 from events.models import Event
 
@@ -264,7 +271,9 @@ def _get_in_progress_courses(user, user_level):
         completed_at__isnull=False,
     ).select_related('unit__module__course')
 
-    # Group by course: collect course ids and latest completed_at
+    # Group by course: collect course ids and latest completed_at.
+    # We also collect the set of completed unit ids per course so we can
+    # resolve "next unfinished unit" in Python without per-course queries.
     course_data = {}
     for prog in progress_qs:
         course = prog.unit.module.course
@@ -273,10 +282,12 @@ def _get_in_progress_courses(user, user_level):
             course_data[cid] = {
                 'course': course,
                 'completed_count': 0,
+                'completed_unit_ids': set(),
                 'last_completed_at': prog.completed_at,
                 'last_unit': prog.unit,
             }
         course_data[cid]['completed_count'] += 1
+        course_data[cid]['completed_unit_ids'].add(prog.unit_id)
         if prog.completed_at > course_data[cid]['last_completed_at']:
             course_data[cid]['last_completed_at'] = prog.completed_at
             course_data[cid]['last_unit'] = prog.unit
@@ -293,6 +304,20 @@ def _get_in_progress_courses(user, user_level):
         ).values_list('id', 'unit_count')
     )
 
+    # Batch-fetch all units for the in-progress courses in a single query,
+    # ordered canonically (module sort_order, then unit sort_order). We then
+    # group them by course in Python and resolve next_unit without any
+    # per-course DB calls. select_related('module') so the template can
+    # access unit.module.title for the aria-label without extra queries.
+    units_by_course: dict[int, list[Unit]] = {cid: [] for cid in course_ids}
+    units_qs = (
+        Unit.objects.filter(module__course_id__in=course_ids)
+        .select_related('module')
+        .order_by('module__sort_order', 'sort_order')
+    )
+    for unit in units_qs:
+        units_by_course[unit.module.course_id].append(unit)
+
     # Build result list, filtering out fully completed courses
     # and courses the user can no longer access at their current tier level
     result = []
@@ -306,6 +331,14 @@ def _get_in_progress_courses(user, user_level):
         if total == 0 or completed >= total:
             continue  # Skip fully completed courses
         percentage = int((completed / total) * 100)
+        # Resolve next_unit: first unit in canonical order not in
+        # completed_unit_ids. Falls back to None if (defensively) all are
+        # completed — the filter above should have already excluded that.
+        next_unit = None
+        for unit in units_by_course.get(cid, []):
+            if unit.id not in data['completed_unit_ids']:
+                next_unit = unit
+                break
         result.append({
             'course': course,
             'completed_count': completed,
@@ -313,6 +346,7 @@ def _get_in_progress_courses(user, user_level):
             'percentage': percentage,
             'last_unit': data['last_unit'],
             'last_completed_at': data['last_completed_at'],
+            'next_unit': next_unit,
         })
 
     # Sort by most recently accessed first

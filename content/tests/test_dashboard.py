@@ -242,6 +242,64 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertNotIn('AI Basics', content)
         self.assertIn('No courses in progress yet', content)
 
+    def test_continue_button_links_to_next_unfinished_unit(self):
+        # Complete units 1-3 of 4 → Continue should link to unit 4.
+        now = timezone.now()
+        for i in range(3):
+            UserCourseProgress.objects.create(
+                user=self.user, unit=self.units[i],
+                completed_at=now - timedelta(hours=3 - i),
+            )
+
+        response = self.client.get('/')
+        item = response.context['in_progress_courses'][0]
+        self.assertEqual(item['next_unit'], self.units[3])
+        # The button uses the next-unit URL, not the course URL.
+        self.assertContains(response, self.units[3].get_absolute_url())
+
+    def test_continue_button_links_to_first_skipped_unit(self):
+        # Complete units 1, 3 (skip unit 2) → Continue should link to unit 2.
+        now = timezone.now()
+        UserCourseProgress.objects.create(
+            user=self.user, unit=self.units[0],
+            completed_at=now - timedelta(hours=2),
+        )
+        UserCourseProgress.objects.create(
+            user=self.user, unit=self.units[2],
+            completed_at=now - timedelta(hours=1),
+        )
+
+        response = self.client.get('/')
+        item = response.context['in_progress_courses'][0]
+        self.assertEqual(item['next_unit'], self.units[1])
+        self.assertContains(response, self.units[1].get_absolute_url())
+
+    def test_continue_button_aria_label_names_module_and_unit(self):
+        # Aria label gives screen-reader users the destination unit name.
+        now = timezone.now()
+        UserCourseProgress.objects.create(
+            user=self.user, unit=self.units[0],
+            completed_at=now,
+        )
+        response = self.client.get('/')
+        # Next unfinished unit is units[1] = "Unit 2" in "Module 1".
+        expected_label = 'aria-label="Continue with Module 1 — Unit 2"'
+        self.assertContains(response, expected_label)
+
+    def test_fully_completed_course_stays_filtered_from_in_progress(self):
+        # When all units are completed the course should not appear in the
+        # in-progress list — this is the existing behavior, asserted here
+        # so the next-unit work doesn't accidentally re-include it.
+        now = timezone.now()
+        for i, unit in enumerate(self.units):
+            UserCourseProgress.objects.create(
+                user=self.user, unit=unit,
+                completed_at=now - timedelta(hours=4 - i),
+            )
+        response = self.client.get('/')
+        self.assertEqual(response.context['in_progress_courses'], [])
+        self.assertNotContains(response, 'AI Basics')
+
     def test_most_recently_accessed_first(self):
         # Create a second course
         course2 = Course.objects.create(

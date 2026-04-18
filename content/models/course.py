@@ -177,6 +177,45 @@ class Course(models.Model):
         modules = self.modules.prefetch_related('units').order_by('sort_order')
         return modules
 
+    def get_next_unit_for(self, user):
+        """Return the next unfinished unit for the given user.
+
+        Walks units in canonical order (module sort_order, then unit
+        sort_order) and returns the first unit with no
+        ``UserCourseProgress.completed_at`` for this user. Returns
+        ``None`` if the user has completed every unit (or the course
+        has no units, or the user is anonymous).
+
+        "Next" means the first unfinished unit in reading order, not
+        "after the last completed". If the user completed units 1, 3, 5
+        but skipped 2 and 4, the next unit is unit 2.
+
+        This walks the course's units with two queries (units +
+        completed-progress ids). Callers that need to compute this for
+        many courses should batch-prefetch the data and resolve next-unit
+        in Python — see ``content.views.home._get_in_progress_courses``.
+        """
+        if user is None or not user.is_authenticated:
+            return None
+        units = list(
+            Unit.objects.filter(module__course=self)
+            .select_related('module')
+            .order_by('module__sort_order', 'sort_order')
+        )
+        if not units:
+            return None
+        completed_ids = set(
+            UserCourseProgress.objects.filter(
+                user=user,
+                unit__in=units,
+                completed_at__isnull=False,
+            ).values_list('unit_id', flat=True)
+        )
+        for unit in units:
+            if unit.id not in completed_ids:
+                return unit
+        return None
+
 
 class Module(models.Model):
     """A module within a course, containing units."""

@@ -287,6 +287,7 @@ class ProjectsListFilteringTest(TestCase):
         )
 
     def test_no_filter_shows_all_projects(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_all_projects_visible_on_listing
         response = self.client.get('/projects')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Beginner Project')
@@ -294,6 +295,7 @@ class ProjectsListFilteringTest(TestCase):
         self.assertContains(response, 'Intermediate Project')
 
     def test_filter_by_difficulty_beginner(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario2VisitorFiltersByDifficulty::test_difficulty_filter_narrows_results
         response = self.client.get('/projects?difficulty=beginner')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Beginner Project')
@@ -322,6 +324,7 @@ class ProjectsListFilteringTest(TestCase):
         self.assertNotContains(response, 'Beginner Project')
 
     def test_filter_by_both_difficulty_and_tag(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario3VisitorCombinesDifficultyAndTagFilters::test_tag_filter_then_combined_with_difficulty
         response = self.client.get('/projects?difficulty=intermediate&tag=python')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Intermediate Project')
@@ -333,6 +336,22 @@ class ProjectsListFilteringTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Beginner Project')
         self.assertNotContains(response, 'Advanced Project')
+
+    def test_empty_state_message_and_clear_filter_link(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario4VisitorHitsDeadEndFilter::test_nonexistent_tag_shows_empty_message_with_recovery
+        response = self.client.get('/projects?tag=nonexistent-tag')
+        self.assertEqual(response.status_code, 200)
+        # No project cards rendered
+        self.assertNotContains(response, 'Beginner Project')
+        self.assertNotContains(response, 'Advanced Project')
+        self.assertNotContains(response, 'Intermediate Project')
+        # Empty-state message and recovery link visible
+        self.assertContains(response, 'No projects found with the selected tags.')
+        self.assertContains(
+            response,
+            '<a href="/projects" class="text-accent hover:underline">View all projects</a>',
+            html=True,
+        )
 
     def test_filter_by_nonexistent_difficulty(self):
         response = self.client.get('/projects?difficulty=expert')
@@ -417,14 +436,17 @@ class ProjectsListDisplayTest(TestCase):
         )
 
     def test_shows_title(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_all_projects_visible_on_listing
         response = self.client.get('/projects')
         self.assertContains(response, 'Display Project')
 
     def test_shows_author(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_all_projects_visible_on_listing
         response = self.client.get('/projects')
         self.assertContains(response, 'Project Author')
 
     def test_shows_difficulty_badge(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_all_projects_visible_on_listing
         response = self.client.get('/projects')
         self.assertContains(response, 'beginner')
 
@@ -440,6 +462,37 @@ class ProjectsListDisplayTest(TestCase):
     def test_shows_description(self):
         response = self.client.get('/projects')
         self.assertContains(response, 'A project description')
+
+    def test_lock_icon_on_gated_no_icon_on_open(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario12VisitorDistinguishesOpenFromGated::test_lock_icon_on_gated_project_and_no_icon_on_open
+        # The setUp project (Display Project) is open (required_level=0) so
+        # it MUST NOT carry a lock icon. We add a single gated project so
+        # the listing distinguishes the two.
+        Project.objects.create(
+            title='Pro Techniques',
+            slug='pro-techniques',
+            description='Advanced techniques for pros.',
+            date=date(2025, 8, 11),
+            published=True,
+            required_level=LEVEL_BASIC,
+        )
+        # Anonymous viewer to ensure gating is active
+        response = self.client.get('/projects')
+        self.assertEqual(response.status_code, 200)
+        # Both cards visible
+        self.assertContains(response, 'Display Project')
+        self.assertContains(response, 'Pro Techniques')
+        # Exactly one lock icon — on the gated card
+        self.assertContains(response, 'data-lucide="lock"', count=1)
+
+    def test_no_lock_icon_when_all_projects_are_open(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario12VisitorDistinguishesOpenFromGated::test_lock_icon_on_gated_project_and_no_icon_on_open
+        # Companion to the above — when only open projects exist no lock
+        # icon should be rendered anywhere on the listing.
+        response = self.client.get('/projects')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Display Project')
+        self.assertNotContains(response, 'data-lucide="lock"')
 
 
 # --- Project detail display tests ---
@@ -466,10 +519,12 @@ class ProjectDetailDisplayTest(TestCase):
         )
 
     def test_shows_title(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_click_project_navigates_to_detail
         response = self.client.get('/projects/detail-project')
         self.assertContains(response, 'Detail Project')
 
     def test_shows_author(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_click_project_navigates_to_detail
         response = self.client.get('/projects/detail-project')
         self.assertContains(response, 'by Detail Author')
 
@@ -482,18 +537,36 @@ class ProjectDetailDisplayTest(TestCase):
         self.assertContains(response, 'Detailed description')
 
     def test_shows_content(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_click_project_navigates_to_detail
         response = self.client.get('/projects/detail-project')
         self.assertContains(response, 'Full project content')
 
     def test_shows_source_code_link(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_click_project_navigates_to_detail
         response = self.client.get('/projects/detail-project')
         self.assertContains(response, 'https://github.com/test/project')
         self.assertContains(response, 'Source Code')
 
     def test_shows_demo_link(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario1VisitorBrowsesProjects::test_click_project_navigates_to_detail
         response = self.client.get('/projects/detail-project')
         self.assertContains(response, 'https://demo.example.com/project')
         self.assertContains(response, 'Live Demo')
+
+    def test_tag_link_href_points_to_filtered_listing(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario5VisitorExploresProjectTags::test_tag_link_on_detail_navigates_to_filtered_list
+        # Each tag on the project detail page must link to the
+        # /projects?tag=<tag> filtered listing so visitors can find related work.
+        response = self.client.get('/projects/detail-project')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/projects?tag=ai"')
+        self.assertContains(response, 'href="/projects?tag=mcp"')
+
+        # Following one of those hrefs should land on the listing with
+        # the project showing (i.e. the link is wired to a real route).
+        related = self.client.get('/projects?tag=ai')
+        self.assertEqual(related.status_code, 200)
+        self.assertContains(related, 'Detail Project')
 
     def test_shows_cover_image(self):
         response = self.client.get('/projects/detail-project')
@@ -543,11 +616,22 @@ class ProjectDetailGatingTest(TestCase):
         self.assertContains(response, 'Full open project content')
 
     def test_anonymous_sees_gated_teaser_and_cta(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario6AnonymousHitsGatedProject::test_anonymous_sees_gated_overlay_on_premium_project
         response = self.client.get('/projects/gated-project')
         self.assertEqual(response.status_code, 200)
+        # Title and description still visible above the fold
+        self.assertContains(response, 'Gated Project')
+        self.assertContains(response, 'Gated description')
+        # Full content NOT served to anonymous viewer
         self.assertNotContains(response, 'Secret gated project content')
+        # Upgrade CTA + link to pricing
         self.assertContains(response, 'Upgrade to Basic to view this project')
         self.assertContains(response, '/pricing')
+        # Gated overlay artefacts: blur style and lock icon in the CTA banner
+        self.assertContains(response, 'filter: blur(8px)')
+        self.assertContains(response, 'data-lucide="lock"')
+        # The "View Pricing" button text from the gated CTA
+        self.assertContains(response, 'View Pricing')
 
     def test_gated_project_returns_200_not_404(self):
         response = self.client.get('/projects/gated-project')
@@ -567,6 +651,9 @@ class ProjectSubmissionAPITest(TestCase):
         )
 
     def test_anonymous_user_gets_401(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario11UnauthenticatedCannotSubmit::test_anonymous_post_returns_error
+        # Rule 12: also assert no DB row was created so we test the
+        # actual side-effect, not just the HTTP envelope.
         response = self.client.post(
             '/api/projects/submit',
             data=json.dumps({
@@ -578,25 +665,28 @@ class ProjectSubmissionAPITest(TestCase):
         self.assertEqual(response.status_code, 401)
         data = json.loads(response.content)
         self.assertEqual(data['error'], 'Authentication required')
+        # No project should have been created
+        self.assertFalse(Project.objects.filter(title='My Project').exists())
 
     def test_authenticated_user_can_submit(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario8MemberSubmitsProject::test_member_submits_project_via_api
         self.client.login(email='member@test.com', password='testpass')
         response = self.client.post(
             '/api/projects/submit',
             data=json.dumps({
-                'title': 'My Project',
-                'description': 'A great project',
+                'title': 'My AI Tool',
+                'description': 'A tool that automates shipping',
                 'difficulty': 'beginner',
                 'tags': ['python', 'ai'],
-                'source_code_url': 'https://github.com/test/repo',
-                'demo_url': 'https://demo.example.com',
+                'source_code_url': 'https://github.com/example/ai-tool',
+                'demo_url': 'https://ai-tool.example.com',
             }),
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 201)
         data = json.loads(response.content)
         self.assertEqual(data['status'], 'pending_review')
-        self.assertIn('slug', data)
+        self.assertEqual(data['slug'], 'my-ai-tool')
         self.assertEqual(data['message'], 'Project submitted for review')
 
     def test_submitted_project_is_pending_review(self):
@@ -615,6 +705,7 @@ class ProjectSubmissionAPITest(TestCase):
         self.assertEqual(project.submitter, self.user)
 
     def test_submitted_project_not_visible_in_listing(self):
+        # Replaces playwright_tests/test_project_showcase.py::TestScenario8MemberSubmitsProject::test_member_submits_project_via_api
         self.client.login(email='member@test.com', password='testpass')
         self.client.post(
             '/api/projects/submit',

@@ -383,6 +383,18 @@ class ProjectsListFilteringTest(TestCase):
         response = self.client.get('/projects')
         self.assertNotContains(response, 'Pending Project')
 
+    def test_tag_filter_excludes_unrelated_projects(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario6TagFiltersAcrossPages::test_tag_filter_on_projects
+        # The Playwright fixture used "python"/"go" tags; this asserts
+        # the same shape (filter narrows to matching projects only)
+        # using the existing setUp dataset where "Beginner Project" and
+        # "Intermediate Project" carry the python tag.
+        response = self.client.get('/projects?tag=python')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Beginner Project')
+        self.assertContains(response, 'Intermediate Project')
+        self.assertNotContains(response, 'Advanced Project')
+
 
 # --- Projects list display tests ---
 

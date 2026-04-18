@@ -10,7 +10,7 @@ from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
 from content.access import LEVEL_BASIC
-from content.models import Article, Course, Module, Project, Tutorial, Unit
+from content.models import Article, Course, Module, Project, TagRule, Tutorial, Unit
 from events.models import Event
 
 
@@ -1195,3 +1195,103 @@ class BaseHtmlMetaTagsTest(TestCase):
         self.assertIn('sameAs', content)
         self.assertIn('https://twitter.com/Al_Grigor', content)
         self.assertIn('https://github.com/AI-Shipping-Labs', content)
+
+
+# --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---
+
+
+class TagRuleInjectionTest(TestCase):
+    """Behaviour previously covered by Playwright Scenarios 7 and 8 on
+    article detail pages. Tag rules render as plain HTML server-side, so
+    the injection (and absence) is verified entirely with assertContains.
+    """
+
+    def test_course_promo_injected_after_article_content(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario7TagRuleInjection::test_course_promo_injected_after_article_content
+        Article.objects.create(
+            title='Getting Started with AI Engineering',
+            slug='getting-started-with-ai-engineering',
+            description='A guide to AI engineering.',
+            content_markdown=(
+                '# Getting Started with AI Engineering\n\n'
+                'This is the article body about AI engineering.'
+            ),
+            date=date(2026, 2, 1),
+            tags=['ai-engineering'], published=True,
+        )
+        Course.objects.create(
+            title='Python Data AI', slug='python-data-ai',
+            tags=['ai-engineering'], status='published',
+        )
+        TagRule.objects.create(
+            tag='ai-engineering',
+            component_type='course_promo',
+            component_config={
+                'title': 'Recommended Course',
+                'course_slug': 'python-data-ai',
+                'cta_text': 'Start learning',
+            },
+            position='after_content',
+        )
+
+        response = self.client.get(
+            '/blog/getting-started-with-ai-engineering',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Article content rendered as usual.
+        self.assertContains(response, 'Getting Started with AI Engineering')
+        self.assertContains(response, 'article body about AI engineering')
+
+        # The course promo component is injected with title, CTA text,
+        # and a link to the configured course.
+        self.assertContains(response, 'tag-rule-component')
+        self.assertContains(response, 'tag-rule-course_promo')
+        self.assertContains(response, 'Recommended Course')
+        self.assertContains(response, 'Start learning')
+        self.assertContains(response, 'href="/courses/python-data-ai"')
+
+        # The view context exposes the rule at the after_content slot.
+        rules = response.context['tag_rules']['after_content']
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0].tag, 'ai-engineering')
+
+    def test_no_injected_components_for_unmatched_tags(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario8NoMatchingTagRules::test_no_injected_components_for_unmatched_tags
+        Article.objects.create(
+            title='Intro to Go', slug='intro-to-go',
+            description='A Go language introduction.',
+            content_markdown=(
+                '# Intro to Go\n\nThis is the article body about Go.'
+            ),
+            date=date(2026, 2, 1),
+            tags=['golang'], published=True,
+        )
+        TagRule.objects.create(
+            tag='ai-engineering',
+            component_type='course_promo',
+            component_config={
+                'title': 'Recommended Course',
+                'course_slug': 'python-data-ai',
+                'cta_text': 'Start learning',
+            },
+            position='after_content',
+        )
+
+        response = self.client.get('/blog/intro-to-go')
+        self.assertEqual(response.status_code, 200)
+
+        # Article content still renders.
+        self.assertContains(response, 'Intro to Go')
+        self.assertContains(response, 'article body about Go')
+
+        # No tag-rule component appears, and the CTA configured for
+        # the unrelated rule is absent.
+        self.assertNotContains(response, 'tag-rule-component')
+        self.assertNotContains(response, 'Recommended Course')
+        self.assertNotContains(response, 'Start learning')
+
+        # Context confirms no rules attach to the after_content slot.
+        self.assertEqual(
+            len(response.context['tag_rules']['after_content']), 0,
+        )

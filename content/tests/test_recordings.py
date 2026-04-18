@@ -540,3 +540,36 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
     def test_gated_recording_shows_pricing_link(self):
         response = self.client.get('/event-recordings/gated-recording')
         self.assertContains(response, '/pricing')
+
+
+# --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---
+
+
+class RecordingTagFilterTest(TestCase):
+    """Behaviour previously covered by Playwright Scenario 6 on
+    /event-recordings. Filtering happens via ?tag= and resolves
+    server-side; no JS required.
+    """
+
+    def test_tag_filter_on_recordings(self):
+        # Replaces playwright_tests/test_seo_tags.py::TestScenario6TagFiltersAcrossPages::test_tag_filter_on_recordings
+        _create_recording_event(
+            'python-recording', title='Python Recording',
+            tags=['python'],
+        )
+        _create_recording_event(
+            'go-recording', title='Go Recording',
+            tags=['go'],
+        )
+
+        # The unfiltered listing surfaces a chip whose href triggers
+        # the python filter.
+        listing = self.client.get('/event-recordings')
+        self.assertEqual(listing.status_code, 200)
+        self.assertContains(listing, '?tag=python')
+
+        # Following ?tag=python: only the python recording remains.
+        filtered = self.client.get('/event-recordings?tag=python')
+        self.assertEqual(filtered.status_code, 200)
+        self.assertContains(filtered, 'Python Recording')
+        self.assertNotContains(filtered, 'Go Recording')

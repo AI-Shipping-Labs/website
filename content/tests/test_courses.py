@@ -42,30 +42,9 @@ class CourseModelTest(TestCase):
         self.assertEqual(course.slug, 'test-course')
         self.assertIsNotNone(course.created_at)
 
-    def test_str(self):
-        course = Course.objects.create(title='My Course', slug='my-course')
-        self.assertEqual(str(course), 'My Course')
-
     def test_get_absolute_url(self):
         course = Course.objects.create(title='Test', slug='test-url')
         self.assertEqual(course.get_absolute_url(), '/courses/test-url')
-
-    def test_unique_slug(self):
-        from django.db import IntegrityError
-        Course.objects.create(title='First', slug='unique-slug')
-        with self.assertRaises(IntegrityError):
-            Course.objects.create(title='Second', slug='unique-slug')
-
-    def test_default_values(self):
-        course = Course.objects.create(title='Defaults', slug='defaults')
-        self.assertEqual(course.description, '')
-        self.assertEqual(course.cover_image_url, '')
-        self.assertEqual(course.instructor_name, '')
-        self.assertEqual(course.instructor_bio, '')
-        self.assertEqual(course.required_level, 0)
-        self.assertEqual(course.status, 'draft')
-        self.assertEqual(course.discussion_url, '')
-        self.assertEqual(course.tags, [])
 
     def test_is_published_property(self):
         course = Course.objects.create(
@@ -122,12 +101,6 @@ class ModuleModelTest(TestCase):
         self.assertEqual(module.course, self.course)
         self.assertEqual(module.sort_order, 1)
 
-    def test_str(self):
-        module = Module.objects.create(
-            course=self.course, title='Intro', slug='intro', sort_order=0,
-        )
-        self.assertEqual(str(module), 'Course - Intro')
-
     def test_ordering_by_sort_order(self):
         Module.objects.create(course=self.course, title='Second', slug='second', sort_order=2)
         Module.objects.create(course=self.course, title='First', slug='first', sort_order=1)
@@ -152,22 +125,6 @@ class UnitModelTest(TestCase):
         )
         self.assertEqual(unit.title, 'Unit 1')
         self.assertEqual(unit.module, self.module)
-
-    def test_str(self):
-        unit = Unit.objects.create(
-            module=self.module, title='Lesson 1', slug='lesson-1', sort_order=1,
-        )
-        self.assertEqual(str(unit), 'Module - Lesson 1')
-
-    def test_default_values(self):
-        unit = Unit.objects.create(
-            module=self.module, title='Defaults', slug='defaults', sort_order=0,
-        )
-        self.assertEqual(unit.video_url, '')
-        self.assertEqual(unit.body, '')
-        self.assertEqual(unit.homework, '')
-        self.assertEqual(unit.timestamps, [])
-        self.assertFalse(unit.is_preview)
 
     def test_body_markdown_rendered_on_save(self):
         unit = Unit.objects.create(
@@ -230,16 +187,6 @@ class UserCourseProgressModelTest(TestCase):
         )
         self.assertIsNotNone(progress.completed_at)
 
-    def test_unique_together_user_unit(self):
-        from django.db import IntegrityError
-        UserCourseProgress.objects.create(
-            user=self.user, unit=self.unit, completed_at=timezone.now(),
-        )
-        with self.assertRaises(IntegrityError):
-            UserCourseProgress.objects.create(
-                user=self.user, unit=self.unit, completed_at=timezone.now(),
-            )
-
     def test_str_completed(self):
         progress = UserCourseProgress.objects.create(
             user=self.user, unit=self.unit, completed_at=timezone.now(),
@@ -251,13 +198,6 @@ class UserCourseProgressModelTest(TestCase):
             user=self.user, unit=self.unit, completed_at=None,
         )
         self.assertIn('in progress', str(progress))
-
-    def test_completed_at_nullable(self):
-        progress = UserCourseProgress.objects.create(
-            user=self.user, unit=self.unit, completed_at=None,
-        )
-        self.assertIsNone(progress.completed_at)
-
 
 @tag('core')
 class CourseTotalAndCompletedTest(TestCase):

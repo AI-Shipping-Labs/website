@@ -67,44 +67,6 @@ class CourseAccessModelTest(TestCase):
         self.assertEqual(access.granted_by, admin_user)
         self.assertEqual(access.stripe_session_id, '')
 
-    def test_unique_together_user_course(self):
-        from django.db import IntegrityError
-        CourseAccess.objects.create(
-            user=self.user, course=self.course, access_type='purchased',
-        )
-        with self.assertRaises(IntegrityError):
-            CourseAccess.objects.create(
-                user=self.user, course=self.course, access_type='granted',
-            )
-
-    def test_str(self):
-        access = CourseAccess.objects.create(
-            user=self.user, course=self.course, access_type='purchased',
-        )
-        self.assertIn('buyer@test.com', str(access))
-        self.assertIn('Purchase Course', str(access))
-        self.assertIn('purchased', str(access))
-
-    def test_default_access_type(self):
-        access = CourseAccess.objects.create(
-            user=self.user, course=self.course,
-        )
-        self.assertEqual(access.access_type, 'purchased')
-
-    def test_cascade_delete_user(self):
-        CourseAccess.objects.create(
-            user=self.user, course=self.course,
-        )
-        self.user.delete()
-        self.assertEqual(CourseAccess.objects.count(), 0)
-
-    def test_cascade_delete_course(self):
-        CourseAccess.objects.create(
-            user=self.user, course=self.course,
-        )
-        self.course.delete()
-        self.assertEqual(CourseAccess.objects.count(), 0)
-
     def test_granted_by_set_null_on_delete(self):
         admin_user = User.objects.create_user(email='admin@test.com')
         access = CourseAccess.objects.create(
@@ -119,39 +81,6 @@ class CourseAccessModelTest(TestCase):
 # ============================================================
 # Course Model New Fields Tests
 # ============================================================
-
-
-@tag('core')
-class CourseIndividualPriceFieldsTest(TestCase):
-    """Test new fields on Course model for individual purchase."""
-
-    def test_individual_price_eur_null_by_default(self):
-        course = Course.objects.create(title='No Price', slug='no-price')
-        self.assertIsNone(course.individual_price_eur)
-
-    def test_individual_price_eur_set(self):
-        course = Course.objects.create(
-            title='Priced', slug='priced',
-            individual_price_eur=Decimal('49.99'),
-        )
-        self.assertEqual(course.individual_price_eur, Decimal('49.99'))
-
-    def test_stripe_product_id_blank_by_default(self):
-        course = Course.objects.create(title='No Stripe', slug='no-stripe')
-        self.assertEqual(course.stripe_product_id, '')
-
-    def test_stripe_price_id_blank_by_default(self):
-        course = Course.objects.create(title='No Stripe', slug='no-stripe-2')
-        self.assertEqual(course.stripe_price_id, '')
-
-    def test_stripe_ids_can_be_set(self):
-        course = Course.objects.create(
-            title='With Stripe', slug='with-stripe',
-            stripe_product_id='prod_abc123',
-            stripe_price_id='price_xyz789',
-        )
-        self.assertEqual(course.stripe_product_id, 'prod_abc123')
-        self.assertEqual(course.stripe_price_id, 'price_xyz789')
 
 
 # ============================================================

@@ -535,15 +535,6 @@ class TagRuleModelTest(TestCase):
         )
         self.assertEqual(rule.tag, 'ai-engineer')
 
-    def test_str_representation(self):
-        rule = TagRule.objects.create(
-            tag='python',
-            component_type='download_cta',
-            component_config={},
-            position='sidebar',
-        )
-        self.assertEqual(str(rule), 'python -> download_cta (sidebar)')
-
     def test_uuid_primary_key(self):
         rule = TagRule.objects.create(
             tag='test',

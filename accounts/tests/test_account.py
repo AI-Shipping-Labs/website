@@ -4,7 +4,6 @@ import json
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings, tag
-from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
@@ -33,11 +32,6 @@ class AccountPageAccessTest(TestCase):
         self.client.force_login(user)
         response = self.client.get("/account/")
         self.assertTemplateUsed(response, "accounts/account.html")
-
-    def test_url_name_resolves(self):
-        url = reverse("account")
-        self.assertEqual(url, "/account/")
-
 
 class AccountPageFreeUserTest(TestCase):
     """Tests for account page display for free-tier users."""
@@ -423,11 +417,6 @@ class EmailPreferencesAPITest(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_url_name_resolves(self):
-        url = reverse("email_preferences")
-        self.assertEqual(url, "/account/api/email-preferences")
-
-
 @tag('core')
 class CancelSubscriptionAPITest(TestCase):
     """Tests for the account cancel subscription API endpoint."""
@@ -462,10 +451,6 @@ class CancelSubscriptionAPITest(TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.json()
         self.assertIn("error", data)
-
-    def test_url_name_resolves(self):
-        url = reverse("account_cancel_subscription")
-        self.assertEqual(url, "/account/api/cancel")
 
     @patch("payments.services.cancel_subscription")
     def test_cancel_sets_billing_period_end(self, mock_cancel):

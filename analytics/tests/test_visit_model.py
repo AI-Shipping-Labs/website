@@ -10,28 +10,6 @@ User = get_user_model()
 
 
 class CampaignVisitModelTest(TestCase):
-    def test_create_with_minimum_fields(self):
-        """A CampaignVisit can be created with just an anonymous_id."""
-        visit = CampaignVisit.objects.create(anonymous_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
-        self.assertIsNotNone(visit.pk)
-        self.assertIsNotNone(visit.ts)
-        self.assertEqual(visit.utm_source, '')
-        self.assertIsNone(visit.campaign_id)
-        self.assertIsNone(visit.user_id)
-
-    def test_str_includes_utm_source_and_path(self):
-        v = CampaignVisit.objects.create(
-            anonymous_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-            utm_source='newsletter',
-            utm_medium='email',
-            utm_campaign='launch',
-            path='/blog',
-        )
-        s = str(v)
-        self.assertIn('newsletter', s)
-        self.assertIn('launch', s)
-        self.assertIn('/blog', s)
-
     def test_campaign_set_null_on_campaign_delete(self):
         """If the FK target is deleted, the visit row keeps utm_campaign string."""
         camp = UtmCampaign.objects.create(

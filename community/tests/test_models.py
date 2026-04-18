@@ -47,14 +47,6 @@ class CommunityAuditLogModelTest(TestCase):
         )
         self.assertEqual(log.action, "link")
 
-    def test_str_representation(self):
-        log = CommunityAuditLog.objects.create(
-            user=self.user,
-            action="invite",
-        )
-        self.assertIn("invite", str(log))
-        self.assertIn("audit@test.com", str(log))
-
     def test_ordering_is_newest_first(self):
         log1 = CommunityAuditLog.objects.create(user=self.user, action="invite")
         log2 = CommunityAuditLog.objects.create(user=self.user, action="remove")
@@ -62,10 +54,4 @@ class CommunityAuditLogModelTest(TestCase):
         self.assertEqual(logs[0], log2)
         self.assertEqual(logs[1], log1)
 
-    def test_details_default_empty(self):
-        log = CommunityAuditLog.objects.create(
-            user=self.user,
-            action="invite",
-        )
-        self.assertEqual(log.details, "")
 

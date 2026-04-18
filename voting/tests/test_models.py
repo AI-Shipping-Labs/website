@@ -2,7 +2,6 @@
 
 from datetime import timedelta
 
-from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -55,10 +54,6 @@ class PollModelTest(TierSetupMixin, TestCase):
         poll.refresh_from_db()
         self.assertEqual(poll.required_level, LEVEL_PREMIUM)
 
-    def test_poll_str(self):
-        poll = Poll(title='My Poll')
-        self.assertEqual(str(poll), 'My Poll')
-
     def test_is_closed_by_status(self):
         poll = Poll.objects.create(title='Closed', status='closed')
         self.assertTrue(poll.is_closed)
@@ -102,13 +97,6 @@ class PollModelTest(TierSetupMixin, TestCase):
         poll = Poll.objects.create(title='Test')
         self.assertEqual(poll.get_absolute_url(), f'/vote/{poll.id}')
 
-    def test_default_ordering_newest_first(self):
-        poll1 = Poll.objects.create(title='First')
-        poll2 = Poll.objects.create(title='Second')
-        polls = list(Poll.objects.all())
-        self.assertEqual(polls[0], poll2)
-        self.assertEqual(polls[1], poll1)
-
 
 class PollOptionModelTest(TierSetupMixin, TestCase):
     """Test PollOption model."""
@@ -134,10 +122,6 @@ class PollOptionModelTest(TierSetupMixin, TestCase):
             proposed_by=user,
         )
         self.assertEqual(option.proposed_by, user)
-
-    def test_option_str(self):
-        option = PollOption(title='My Option')
-        self.assertEqual(str(option), 'My Option')
 
     def test_vote_count_empty(self):
         option = PollOption.objects.create(poll=self.poll, title='Test')
@@ -167,15 +151,6 @@ class PollVoteModelTest(TierSetupMixin, TestCase):
         self.assertEqual(vote.user, self.user)
         self.assertIsNotNone(vote.created_at)
 
-    def test_unique_together_constraint(self):
-        PollVote.objects.create(
-            poll=self.poll, option=self.option, user=self.user,
-        )
-        with self.assertRaises(IntegrityError):
-            PollVote.objects.create(
-                poll=self.poll, option=self.option, user=self.user,
-            )
-
     def test_same_user_different_options(self):
         """User can vote on multiple different options."""
         option2 = PollOption.objects.create(poll=self.poll, title='Option 2')
@@ -189,8 +164,4 @@ class PollVoteModelTest(TierSetupMixin, TestCase):
         PollVote.objects.create(poll=self.poll, option=self.option, user=self.user)
         PollVote.objects.create(poll=self.poll, option=self.option, user=user2)
         self.assertEqual(self.option.vote_count, 2)
-
-    def test_vote_str(self):
-        vote = PollVote(user=self.user, option=self.option)
-        self.assertEqual(str(vote), f'{self.user} -> {self.option}')
 

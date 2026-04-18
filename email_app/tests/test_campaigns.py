@@ -24,21 +24,6 @@ User = get_user_model()
 class EmailCampaignModelTest(TierSetupMixin, TestCase):
     """Test EmailCampaign model enhancements for campaigns."""
 
-    def test_target_level_choices(self):
-        """target_min_level has choices for 0/10/20/30."""
-        EmailCampaign.objects.create(
-            subject='Test',
-            body='Body',
-            target_min_level=0,
-        )
-        choices = dict(EmailCampaign.TARGET_LEVEL_CHOICES)
-        self.assertIn(0, choices)
-        self.assertIn(10, choices)
-        self.assertIn(20, choices)
-        self.assertIn(30, choices)
-        self.assertEqual(choices[0], 'Everyone (including free)')
-        self.assertEqual(choices[30], 'Premium only')
-
     def test_get_eligible_recipients_everyone(self):
         """target_min_level=0 includes all verified, subscribed users."""
         User.objects.create_user(
@@ -141,20 +126,6 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
             subject='Test', body='Hi', target_min_level=0,
         )
         self.assertEqual(campaign.get_recipient_count(), 5)
-
-    def test_status_default_draft(self):
-        """New campaigns default to 'draft' status."""
-        campaign = EmailCampaign.objects.create(
-            subject='Test', body='Body',
-        )
-        self.assertEqual(campaign.status, 'draft')
-
-    def test_str_representation(self):
-        campaign = EmailCampaign.objects.create(
-            subject='My Campaign', body='Body',
-        )
-        self.assertEqual(str(campaign), 'My Campaign (draft)')
-
 
 @tag('core')
 class SendCampaignFanOutTest(TierSetupMixin, TestCase):

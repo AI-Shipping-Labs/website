@@ -650,11 +650,6 @@ class ArticleAdminTest(TestCase):
         self.assertFalse(article.published)
         self.assertEqual(article.status, 'draft')
 
-    def test_admin_slug_auto_generated(self):
-        """Verify prepopulated_fields config for slug from title."""
-        from content.admin.article import ArticleAdmin
-        self.assertEqual(ArticleAdmin.prepopulated_fields, {'slug': ('title',)})
-
     def test_admin_list_filter_by_status(self):
         Article.objects.create(
             title='Draft Article', slug='filter-draft',

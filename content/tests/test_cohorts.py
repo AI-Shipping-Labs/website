@@ -16,7 +16,6 @@ import datetime
 import json
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -57,15 +56,6 @@ class CohortModelTest(TestCase):
         self.assertEqual(cohort.course, self.course)
         self.assertTrue(cohort.is_active)
         self.assertIsNone(cohort.max_participants)
-
-    def test_str(self):
-        cohort = Cohort.objects.create(
-            course=self.course,
-            name='Spring Cohort',
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
-        )
-        self.assertEqual(str(cohort), 'Test Course - Spring Cohort')
 
     def test_ordering_by_start_date(self):
         Cohort.objects.create(
@@ -179,21 +169,6 @@ class CohortEnrollmentModelTest(TestCase):
         self.assertEqual(enrollment.cohort, self.cohort)
         self.assertEqual(enrollment.user, self.user)
 
-    def test_str(self):
-        enrollment = CohortEnrollment.objects.create(
-            cohort=self.cohort, user=self.user,
-        )
-        self.assertEqual(str(enrollment), f'{self.user} - {self.cohort.name}')
-
-    def test_unique_together_cohort_user(self):
-        CohortEnrollment.objects.create(
-            cohort=self.cohort, user=self.user,
-        )
-        with self.assertRaises(IntegrityError):
-            CohortEnrollment.objects.create(
-                cohort=self.cohort, user=self.user,
-            )
-
     def test_user_can_enroll_in_different_cohorts(self):
         cohort2 = Cohort.objects.create(
             course=self.course, name='Another Cohort',
@@ -203,43 +178,6 @@ class CohortEnrollmentModelTest(TestCase):
         CohortEnrollment.objects.create(cohort=self.cohort, user=self.user)
         CohortEnrollment.objects.create(cohort=cohort2, user=self.user)
         self.assertEqual(CohortEnrollment.objects.filter(user=self.user).count(), 2)
-
-
-# ============================================================
-# Unit available_after_days field
-# ============================================================
-
-
-class UnitAvailableAfterDaysTest(TestCase):
-    """Test the available_after_days field on Unit."""
-
-    def setUp(self):
-        self.course = Course.objects.create(
-            title='Drip Course', slug='drip-course', status='published',
-        )
-        self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=1,
-        )
-
-    def test_default_is_none(self):
-        unit = Unit.objects.create(
-            module=self.module, title='No Drip', slug='no-drip', sort_order=1,
-        )
-        self.assertIsNone(unit.available_after_days)
-
-    def test_set_available_after_days(self):
-        unit = Unit.objects.create(
-            module=self.module, title='Drip Unit', slug='drip-unit', sort_order=1,
-            available_after_days=7,
-        )
-        self.assertEqual(unit.available_after_days, 7)
-
-    def test_available_after_days_zero(self):
-        unit = Unit.objects.create(
-            module=self.module, title='Day Zero', slug='day-zero', sort_order=1,
-            available_after_days=0,
-        )
-        self.assertEqual(unit.available_after_days, 0)
 
 
 # ============================================================

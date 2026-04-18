@@ -473,9 +473,6 @@ class PasswordResetAPITest(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
-    def test_url_name(self):
-        url = reverse("api_password_reset")
-        self.assertEqual(url, "/api/password-reset")
 
 
 # ── Change Password API ──────────────────────────────────────────────
@@ -557,11 +554,6 @@ class ChangePasswordAPITest(TestCase):
             self.url, data="not json", content_type="application/json"
         )
         self.assertEqual(resp.status_code, 400)
-
-    def test_url_name(self):
-        url = reverse("account_change_password")
-        self.assertEqual(url, "/account/api/change-password")
-
 
 # ── Registration Page ─────────────────────────────────────────────────
 

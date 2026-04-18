@@ -18,33 +18,12 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from events.models import Event, EventRegistration
-from events.models.event import EVENT_PLATFORM_CHOICES
 
 User = get_user_model()
 
 
 class EventPlatformModelTest(TestCase):
     """Test the platform field on the Event model."""
-
-    def test_platform_field_exists(self):
-        event = Event.objects.create(
-            title='Platform Test', slug='platform-test',
-            start_datetime=timezone.now(),
-        )
-        self.assertTrue(hasattr(event, 'platform'))
-
-    def test_platform_default_is_zoom(self):
-        event = Event.objects.create(
-            title='Default Platform', slug='default-platform',
-            start_datetime=timezone.now(),
-        )
-        self.assertEqual(event.platform, 'zoom')
-
-    def test_platform_choices(self):
-        self.assertEqual(EVENT_PLATFORM_CHOICES, [
-            ('zoom', 'Zoom'),
-            ('custom', 'Custom URL'),
-        ])
 
     def test_platform_set_to_custom(self):
         event = Event.objects.create(

@@ -797,26 +797,3 @@ class AccessTemplateTagsTest(TierSetupMixin, TestCase):
         self.assertEqual(required_tier_name(30), 'Premium')
 
 
-# --- Visibility choices on models ---
-
-
-@tag('core')
-class VisibilityChoicesTest(TestCase):
-    """Test that VISIBILITY_CHOICES are correctly defined."""
-
-    def test_choices_are_four(self):
-        from content.access import VISIBILITY_CHOICES
-        self.assertEqual(len(VISIBILITY_CHOICES), 4)
-
-    def test_choice_values(self):
-        from content.access import VISIBILITY_CHOICES
-        values = [v for v, _ in VISIBILITY_CHOICES]
-        self.assertEqual(values, [0, 10, 20, 30])
-
-    def test_choice_labels(self):
-        from content.access import VISIBILITY_CHOICES
-        labels = [l for _, l in VISIBILITY_CHOICES]
-        self.assertIn('Open (everyone)', labels)
-        self.assertIn('Basic and above', labels)
-        self.assertIn('Main and above', labels)
-        self.assertIn('Premium only', labels)

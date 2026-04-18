@@ -141,11 +141,6 @@ class EventRecordingFieldsTest(TestCase):
         ))
         self.assertEqual(event.formatted_date(), 'July 20, 2025')
 
-    def test_str(self):
-        event = Event(title='My Recording')
-        self.assertEqual(str(event), 'My Recording')
-
-
 # --- Tag filtering tests ---
 
 

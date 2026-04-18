@@ -177,16 +177,16 @@ SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who wa
 # Stripe payment links
 STRIPE_PAYMENT_LINKS = {
     'basic': {
-        'monthly': 'https://buy.stripe.com/14A4gy0F1b610WdewRgbm00',
-        'annual': 'https://buy.stripe.com/3cIcN44VhfmhbARagBgbm01',
+        'monthly': 'https://buy.stripe.com/aFa6oGdrN8XT8oFcoJgbm0c',
+        'annual': 'https://buy.stripe.com/eVq7sK5Zl2zveN388tgbm0b',
     },
     'main': {
-        'monthly': 'https://buy.stripe.com/dRm8wOgDZca5bARbkFgbm02',
-        'annual': 'https://buy.stripe.com/3cI3cu0F12zvcEV4Whgbm06',
+        'monthly': 'https://buy.stripe.com/7sYbJ0afBb61gVbfAVgbm0a',
+        'annual': 'https://buy.stripe.com/3cI00ifzV6PL7kB0G1gbm07',
     },
     'premium': {
-        'monthly': 'https://buy.stripe.com/dRm3cu4Vh7TPawN3Sdgbm04',
-        'annual': 'https://buy.stripe.com/4gM9AS1J50rneN360lgbm05',
+        'monthly': 'https://buy.stripe.com/7sY3cudrNeid6gx9cxgbm09',
+        'annual': 'https://buy.stripe.com/cNi9AS2N96PLbARagBgbm08',
     },
 }
 STRIPE_CUSTOMER_PORTAL_URL = 'https://billing.stripe.com/p/login/14A4gy0F1b610WdewRgbm00'

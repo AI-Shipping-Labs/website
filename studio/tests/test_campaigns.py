@@ -55,6 +55,22 @@ class StudioCampaignListTest(TestCase):
         self.assertContains(response, 'Welcome Email')
         self.assertNotContains(response, 'Update Email')
 
+    def test_empty_state_message_and_create_link(self):
+        """When no campaigns exist, show empty-state message and 'New Campaign' link.
+
+        Covers Playwright Scenario 11 (test_empty_campaign_list_shows_message_and_create_link)
+        from the deleted playwright_tests/test_email_campaigns.py.
+        """
+        # No campaigns exist for this test.
+        self.assertEqual(EmailCampaign.objects.count(), 0)
+
+        response = self.client.get('/studio/campaigns/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No campaigns found')
+        # 'New Campaign' link is still available even with no campaigns.
+        self.assertContains(response, 'href="/studio/campaigns/new"')
+        self.assertContains(response, 'New Campaign')
+
 
 class StudioCampaignCreateTest(TestCase):
     """Test campaign creation."""

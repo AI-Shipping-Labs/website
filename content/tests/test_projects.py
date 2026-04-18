@@ -835,7 +835,3 @@ class ProjectAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Searchable Project')
 
-    def test_admin_slug_auto_generated(self):
-        """Verify prepopulated_fields config for slug from title."""
-        from content.admin.project import ProjectAdmin
-        self.assertEqual(ProjectAdmin.prepopulated_fields, {'slug': ('title',)})

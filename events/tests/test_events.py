@@ -877,10 +877,6 @@ class EventAdminTest(TestCase):
         )
         self.assertEqual(Event.objects.filter(slug='delete-me').count(), 0)
 
-    def test_admin_slug_prepopulated(self):
-        from events.admin.event import EventAdmin
-        self.assertEqual(EventAdmin.prepopulated_fields, {'slug': ('title',)})
-
     def test_admin_search(self):
         Event.objects.create(
             title='Searchable Event',

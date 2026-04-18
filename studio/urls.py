@@ -50,6 +50,7 @@ from studio.views.settings import settings_dashboard, settings_save_group
 from studio.views.subscribers import subscriber_export_csv, subscriber_list
 from studio.views.sync import sync_all, sync_dashboard, sync_history, sync_status, sync_trigger
 from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
+from studio.views.users import user_create, user_create_done
 from studio.views.utm_analytics import (
     utm_campaign_detail as utm_analytics_campaign_detail,
 )
@@ -179,6 +180,10 @@ urlpatterns = [
     path('users/tier-override/', tier_override_page, name='studio_tier_override'),
     path('users/tier-override/create', tier_override_create, name='studio_tier_override_create'),
     path('users/tier-override/revoke', tier_override_revoke, name='studio_tier_override_revoke'),
+
+    # Manually create user (issue #234)
+    path('users/new/', user_create, name='studio_user_create'),
+    path('users/created/', user_create_done, name='studio_user_create_done'),
 
     # Announcement banner
     path('announcement/', announcement_banner_edit, name='studio_announcement_banner'),

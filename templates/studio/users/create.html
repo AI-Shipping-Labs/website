@@ -1,0 +1,74 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}New User{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_tier_override' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Users
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">New user</h1>
+  <p class="text-muted-foreground mt-1">
+    Provision an account manually for speakers, partners, comp accounts, or
+    support cases. The account is created on the free tier with the email
+    marked verified, and we generate a strong random password that we'll show
+    you exactly once on the next screen.
+  </p>
+</div>
+
+{% if error %}
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" data-testid="form-error">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post" action="{% url 'studio_user_create' %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label for="id_email" class="block text-sm font-medium text-foreground mb-1">Email</label>
+      <input type="email" id="id_email" name="email" value="{{ email }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Required. The account is created with this address marked as verified.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div>
+        <label for="id_first_name" class="block text-sm font-medium text-foreground mb-1">First name</label>
+        <input type="text" id="id_first_name" name="first_name" value="{{ first_name }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+      <div>
+        <label for="id_last_name" class="block text-sm font-medium text-foreground mb-1">Last name</label>
+        <input type="text" id="id_last_name" name="last_name" value="{{ last_name }}"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input type="checkbox" id="id_make_admin" name="make_admin"
+               {% if make_admin %}checked{% endif %}
+               class="mt-1 h-4 w-4 rounded border-border bg-secondary text-accent focus:ring-1 focus:ring-accent">
+        <span class="text-sm">
+          <span class="block font-medium text-foreground">Make admin</span>
+          <span class="block text-xs text-muted-foreground mt-0.5">
+            Grants staff + superuser access. Skips tier &mdash; admins bypass tier gates.
+          </span>
+        </span>
+      </label>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Create user
+      </button>
+      <a href="{% url 'studio_tier_override' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -299,6 +299,171 @@ class StudioSyncDashboardTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class StudioSyncDashboardFragmentTest(TestCase):
+    """Test the ?fragment=status auto-refresh endpoint (issue #243).
+
+    The dashboard polls itself every ~3s while at least one source is in
+    'running' state and swaps the per-repo cards in place. The fragment
+    endpoint must return just the cards section, not the full chrome, so
+    the payload stays small.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_fragment_returns_200(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertEqual(response.status_code, 200)
+
+    def test_fragment_uses_partial_template(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertTemplateUsed(response, 'studio/sync/_repos_section.html')
+
+    def test_fragment_does_not_render_full_chrome(self):
+        """Fragment must not include the page header / Sync All button —
+        otherwise the swap would inject duplicates of the chrome.
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        body = response.content.decode()
+        # Page chrome must NOT be in the fragment.
+        self.assertNotIn('id="sync-all-form"', body)
+        self.assertNotIn('id="sync-live-indicator"', body)
+        # Cards section MUST be there.
+        self.assertIn('id="sync-repos-section"', body)
+
+    def test_fragment_includes_repo_cards(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, 'AI-Shipping-Labs/content')
+        self.assertContains(response, 'data-repo-card')
+
+    def test_fragment_marks_any_running_true_when_a_source_is_running(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='running',
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, 'data-any-running="true"')
+
+    def test_fragment_marks_any_running_false_when_nothing_running(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, 'data-any-running="false"')
+
+    def test_fragment_card_carries_status_dataset_for_poller(self):
+        """The poller checks each card's data-status to decide whether
+        anything is still running — the attribute must be present and
+        reflect the source's current status.
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='running',
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, 'data-status="running"')
+
+    def test_fragment_card_status_flips_after_worker_finishes(self):
+        """End-to-end aggregation check: when the underlying source row's
+        ``last_sync_status`` flips from 'running' to 'success', a fresh
+        fragment fetch reflects that — proving the poller will see the
+        update without a full page reload.
+        """
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='running',
+        )
+        # First fetch: still running.
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, 'data-any-running="true"')
+        self.assertContains(response, 'data-status="running"')
+
+        # Worker finishes — write the final status to the source row.
+        source.last_sync_status = 'success'
+        source.last_synced_at = timezone.now()
+        source.save()
+
+        # Second fetch: poller now sees the row as done.
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, 'data-any-running="false"')
+        self.assertContains(response, 'data-status="success"')
+
+    def test_fragment_requires_staff(self):
+        client = Client()
+        response = client.get('/studio/sync/?fragment=status')
+        self.assertEqual(response.status_code, 302)
+
+
+class StudioSyncDashboardLiveIndicatorTest(TestCase):
+    """The Live indicator + poller wiring on the full dashboard (issue #243)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_dashboard_renders_live_indicator_element(self):
+        """The Live indicator is always present in the DOM; the poller
+        toggles its visibility. Test the markup is there.
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertContains(response, 'id="sync-live-indicator"')
+        self.assertContains(response, '>Live<')
+
+    def test_dashboard_wraps_repos_in_polling_wrapper(self):
+        """The poller mounts on ``#sync-repos-wrapper`` and uses its
+        ``data-fragment-url`` attribute to know what to fetch. The wrapper
+        must point at the ?fragment=status endpoint.
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertContains(response, 'id="sync-repos-wrapper"')
+        self.assertContains(
+            response, 'data-fragment-url="/studio/sync/?fragment=status"',
+        )
+
+
 class StudioSyncHistoryTest(TestCase):
     """Test the aggregated sync history view."""
 

@@ -183,12 +183,12 @@
                     class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors {% if newsletter_subscribed %}bg-accent{% else %}bg-secondary{% endif %}"
                     onclick="toggleNewsletter()"
                     aria-label="Toggle newsletter subscription">
-              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform {% if newsletter_subscribed %}translate-x-5{% else %}translate-x-0{% endif %}" id="newsletter-toggle-dot"></span>
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-transform {% if newsletter_subscribed %}translate-x-5 bg-accent-foreground{% else %}translate-x-0 bg-foreground{% endif %}" id="newsletter-toggle-dot"></span>
             </button>
           </div>
         </div>
 
-        <p class="text-xs text-muted-foreground mt-4" id="newsletter-status">
+        <p class="text-sm text-foreground mt-4" id="newsletter-status">
           {% if newsletter_subscribed %}You are subscribed to newsletters.{% else %}You are unsubscribed from newsletters.{% endif %}
         </p>
       </div>
@@ -514,14 +514,14 @@ function toggleNewsletter() {
   .then(function(data) {
     if (data.status === 'ok') {
       if (data.newsletter) {
-        dot.classList.add('translate-x-5');
-        dot.classList.remove('translate-x-0');
+        dot.classList.add('translate-x-5', 'bg-accent-foreground');
+        dot.classList.remove('translate-x-0', 'bg-foreground');
         toggle.classList.add('bg-accent');
         toggle.classList.remove('bg-secondary');
         status.textContent = 'You are subscribed to newsletters.';
       } else {
-        dot.classList.remove('translate-x-5');
-        dot.classList.add('translate-x-0');
+        dot.classList.remove('translate-x-5', 'bg-accent-foreground');
+        dot.classList.add('translate-x-0', 'bg-foreground');
         toggle.classList.remove('bg-accent');
         toggle.classList.add('bg-secondary');
         status.textContent = 'You are unsubscribed from newsletters.';

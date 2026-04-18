@@ -609,6 +609,75 @@ class AccountPageEmailPreferencesDisplayTest(TestCase):
         self.assertFalse(response.context["newsletter_subscribed"])
 
 
+class AccountPageNewsletterToggleContrastTest(TestCase):
+    """Toggle dot must use a theme token that contrasts with the track in
+    both states / both themes (issue #237)."""
+
+    def _dot_html(self, content):
+        # Extract the <span ... id="newsletter-toggle-dot"> tag attributes.
+        marker = 'id="newsletter-toggle-dot"'
+        idx = content.find(marker)
+        self.assertNotEqual(idx, -1, "newsletter-toggle-dot span missing")
+        start = content.rfind("<span", 0, idx)
+        end = content.find(">", idx)
+        return content[start:end + 1]
+
+    def test_dot_uses_accent_foreground_when_subscribed(self):
+        """Subscribed (track is bg-accent) → dot must be bg-accent-foreground
+        so the value contrast stays high in dark mode (was bg-foreground = white
+        on bright lime, near-invisible)."""
+        user = User.objects.create_user(email="sub-dot@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        dot = self._dot_html(response.content.decode())
+        self.assertIn("bg-accent-foreground", dot)
+        self.assertNotIn("bg-foreground ", dot)
+        self.assertNotIn('bg-foreground"', dot)
+
+    def test_dot_uses_foreground_when_unsubscribed(self):
+        """Unsubscribed (track is bg-secondary) → dot stays bg-foreground for
+        strong contrast against the muted track."""
+        user = User.objects.create_user(email="unsub-dot@example.com")
+        user.unsubscribed = True
+        user.save(update_fields=["unsubscribed"])
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        dot = self._dot_html(response.content.decode())
+        self.assertIn("bg-foreground", dot)
+        self.assertNotIn("bg-accent-foreground", dot)
+
+    def test_status_text_uses_foreground_not_muted(self):
+        """Status text below the toggle must be readable in dark mode — it
+        previously used text-muted-foreground which dimmed it to invisibility."""
+        user = User.objects.create_user(email="status@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        content = response.content.decode()
+        marker = 'id="newsletter-status"'
+        idx = content.find(marker)
+        self.assertNotEqual(idx, -1)
+        tag_start = content.rfind("<", 0, idx)
+        tag_end = content.find(">", idx)
+        status_tag = content[tag_start:tag_end + 1]
+        self.assertIn("text-foreground", status_tag)
+        self.assertNotIn("text-muted-foreground", status_tag)
+
+    def test_touch_target_wrapper_preserved(self):
+        """The .touch-target-toggle wrapper guarantees a 44px tap area on
+        mobile — must not regress when restyling the toggle."""
+        user = User.objects.create_user(email="touch@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        content = response.content.decode()
+        # Wrapper must immediately precede the toggle button.
+        toggle_idx = content.find('id="newsletter-toggle"')
+        self.assertNotEqual(toggle_idx, -1)
+        wrapper_idx = content.rfind('class="touch-target-toggle"', 0, toggle_idx)
+        self.assertNotEqual(
+            wrapper_idx, -1, "touch-target-toggle wrapper must wrap the toggle"
+        )
+
+
 class AccountPageContextDataTest(TestCase):
     """Tests for the context data provided to the template."""
 

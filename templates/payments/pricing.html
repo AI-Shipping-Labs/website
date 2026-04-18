@@ -160,6 +160,8 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
     dot.classList.remove('translate-x-0', 'translate-x-0.5');
     if (!isMobile) dot.classList.remove('translate-x-7');
     if (isMobile) dot.classList.remove('translate-x-5');
+    dot.classList.add('bg-accent-foreground');
+    dot.classList.remove('bg-foreground');
     toggleBtn.classList.add('bg-accent');
     toggleBtn.classList.remove('bg-secondary');
     monthlyLabel.className = 'text-sm text-muted-foreground';
@@ -169,6 +171,8 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
     dot.classList.add(isMobile ? 'translate-x-0.5' : 'translate-x-0');
     if (!isMobile) dot.classList.remove('translate-x-0.5');
     if (isMobile) dot.classList.remove('translate-x-0');
+    dot.classList.add('bg-foreground');
+    dot.classList.remove('bg-accent-foreground');
     toggleBtn.classList.remove('bg-accent');
     toggleBtn.classList.add('bg-secondary');
     monthlyLabel.className = 'text-sm text-foreground';

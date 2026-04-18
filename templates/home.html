@@ -117,7 +117,7 @@
             <button type="button" id="billing-toggle"
                     class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors"
                     aria-label="Toggle annual pricing">
-              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-accent-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
             </button>
           </div>
           <span class="text-sm text-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
@@ -508,15 +508,15 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
   var annualLabel = document.getElementById('annual-label');
 
   if (isAnnual) {
-    dot.classList.add('translate-x-5');
-    dot.classList.remove('translate-x-0');
+    dot.classList.add('translate-x-5', 'bg-accent-foreground');
+    dot.classList.remove('translate-x-0', 'bg-foreground');
     toggleBtn.classList.add('bg-accent');
     toggleBtn.classList.remove('bg-secondary');
     monthlyLabel.className = 'text-sm text-muted-foreground';
     annualLabel.className = 'text-sm text-foreground';
   } else {
-    dot.classList.remove('translate-x-5');
-    dot.classList.add('translate-x-0');
+    dot.classList.remove('translate-x-5', 'bg-accent-foreground');
+    dot.classList.add('translate-x-0', 'bg-foreground');
     toggleBtn.classList.remove('bg-accent');
     toggleBtn.classList.add('bg-secondary');
     monthlyLabel.className = 'text-sm text-foreground';

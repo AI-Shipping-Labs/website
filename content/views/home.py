@@ -9,6 +9,7 @@ from content.models import (
     Article,
     Course,
     CuratedLink,
+    Enrollment,
     Project,
     Unit,
     UserCourseProgress,
@@ -254,61 +255,75 @@ def _dashboard(request):
 
 
 def _get_in_progress_courses(user, user_level):
-    """Return courses the user has started but not finished, most recently accessed first.
+    """Return courses the user is enrolled in but hasn't finished.
 
-    Only includes courses the user currently has access to based on their
-    tier level.  Progress records for inaccessible courses are preserved in
-    the database but excluded from the dashboard until the user's tier
-    qualifies again.
+    Issue #236 — driven by ``Enrollment`` rows, not by inferring "in
+    progress" from completed-unit counts. A course appears here when:
 
-    Args:
-        user: The authenticated user.
-        user_level: Pre-computed access level (avoids duplicate get_user_level call).
+    - There's an active ``Enrollment`` (``unenrolled_at IS NULL``).
+    - The user's current tier still meets ``course.required_level``
+      (the enrollment is preserved, just hidden from the dashboard
+      until the tier qualifies again).
+    - The course has at least one unit and the user hasn't completed
+      every unit yet.
+
+    Sorted by most recent activity: latest ``UserCourseProgress.completed_at``
+    on the course, falling back to the enrollment's ``enrolled_at`` for
+    courses where the user has enrolled but not yet completed anything.
+
+    Implementation note: keeps the query count constant regardless of
+    enrollment count (N+1 guarded by ``content/tests/test_dashboard_performance.py``).
     """
-    # Get all courses where user has at least one completed unit
-    progress_qs = UserCourseProgress.objects.filter(
-        user=user,
-        completed_at__isnull=False,
-    ).select_related('unit__module__course')
+    # Pull active enrollments + the course in a single query.
+    enrollments = list(
+        Enrollment.objects
+        .filter(user=user, unenrolled_at__isnull=True)
+        .select_related('course')
+    )
 
-    # Group by course: collect course ids and latest completed_at.
-    # We also collect the set of completed unit ids per course so we can
-    # resolve "next unfinished unit" in Python without per-course queries.
-    course_data = {}
-    for prog in progress_qs:
-        course = prog.unit.module.course
-        cid = course.id
-        if cid not in course_data:
-            course_data[cid] = {
-                'course': course,
-                'completed_count': 0,
-                'completed_unit_ids': set(),
-                'last_completed_at': prog.completed_at,
-                'last_unit': prog.unit,
-            }
-        course_data[cid]['completed_count'] += 1
-        course_data[cid]['completed_unit_ids'].add(prog.unit_id)
-        if prog.completed_at > course_data[cid]['last_completed_at']:
-            course_data[cid]['last_completed_at'] = prog.completed_at
-            course_data[cid]['last_unit'] = prog.unit
-
-    if not course_data:
+    if not enrollments:
         return []
 
-    # Batch-fetch total unit counts for all relevant courses in a single query
-    # instead of calling course.total_units() per course (N+1).
-    course_ids = list(course_data.keys())
+    course_by_id: dict[int, Course] = {}
+    enrolled_at_by_course: dict[int, object] = {}
+    for enr in enrollments:
+        course_by_id[enr.course_id] = enr.course
+        enrolled_at_by_course[enr.course_id] = enr.enrolled_at
+
+    course_ids = list(course_by_id.keys())
+
+    # Batch-fetch total unit counts for all enrolled courses (one query).
     unit_counts = dict(
         Course.objects.filter(id__in=course_ids).annotate(
             unit_count=Count('modules__units')
         ).values_list('id', 'unit_count')
     )
 
-    # Batch-fetch all units for the in-progress courses in a single query,
-    # ordered canonically (module sort_order, then unit sort_order). We then
-    # group them by course in Python and resolve next_unit without any
-    # per-course DB calls. select_related('module') so the template can
-    # access unit.module.title for the aria-label without extra queries.
+    # Per-course completed unit ids + last completion timestamp + the
+    # unit that was completed last. One query for all enrolled courses.
+    progress_qs = (
+        UserCourseProgress.objects
+        .filter(
+            user=user,
+            unit__module__course_id__in=course_ids,
+            completed_at__isnull=False,
+        )
+        .select_related('unit__module')
+    )
+    completed_by_course: dict[int, set[int]] = {cid: set() for cid in course_ids}
+    last_completed_by_course: dict[int, object] = {}
+    last_unit_by_course: dict[int, Unit] = {}
+    for prog in progress_qs:
+        cid = prog.unit.module.course_id
+        completed_by_course.setdefault(cid, set()).add(prog.unit_id)
+        prev = last_completed_by_course.get(cid)
+        if prev is None or prog.completed_at > prev:
+            last_completed_by_course[cid] = prog.completed_at
+            last_unit_by_course[cid] = prog.unit
+
+    # Batch-fetch all units for the enrolled courses in a single query,
+    # ordered canonically. We resolve next_unit in Python — no per-course
+    # DB calls (N+1 guarded by test_dashboard_performance.py).
     units_by_course: dict[int, list[Unit]] = {cid: [] for cid in course_ids}
     units_qs = (
         Unit.objects.filter(module__course_id__in=course_ids)
@@ -318,39 +333,55 @@ def _get_in_progress_courses(user, user_level):
     for unit in units_qs:
         units_by_course[unit.module.course_id].append(unit)
 
-    # Build result list, filtering out fully completed courses
-    # and courses the user can no longer access at their current tier level
     result = []
-    for cid, data in course_data.items():
-        course = data['course']
-        # Skip courses whose required_level exceeds the user's current tier
+    for cid, course in course_by_id.items():
+        # Hide enrollments the user no longer has tier access to.
+        # The Enrollment row is preserved — we just skip rendering.
         if course.required_level > user_level:
             continue
         total = unit_counts.get(cid, 0)
-        completed = data['completed_count']
-        if total == 0 or completed >= total:
-            continue  # Skip fully completed courses
-        percentage = int((completed / total) * 100)
+        if total == 0:
+            # Course has no units — skip silently. Defensive: ought not to
+            # happen for a published course but we don't want a divide-by-zero
+            # below either.
+            continue
+        completed_unit_ids = completed_by_course.get(cid, set())
+        completed_count = len(completed_unit_ids)
+        if completed_count >= total:
+            # Fully completed — out of "in progress".
+            continue
+        percentage = int((completed_count / total) * 100)
         # Resolve next_unit: first unit in canonical order not in
-        # completed_unit_ids. Falls back to None if (defensively) all are
-        # completed — the filter above should have already excluded that.
+        # completed_unit_ids. With a fresh enrollment (zero completions)
+        # this is the very first unit.
         next_unit = None
         for unit in units_by_course.get(cid, []):
-            if unit.id not in data['completed_unit_ids']:
+            if unit.id not in completed_unit_ids:
                 next_unit = unit
                 break
+        # last_unit / last_completed_at fall back to enrolled_at + None
+        # for users who haven't completed anything yet.
+        last_completed_at = last_completed_by_course.get(cid)
+        last_unit = last_unit_by_course.get(cid)
+        # Sort key: prefer the most recent completion; fall back to the
+        # enrollment timestamp so freshly-enrolled (zero-progress) courses
+        # still slot into the list in a sensible order.
+        sort_key = last_completed_at or enrolled_at_by_course[cid]
         result.append({
             'course': course,
-            'completed_count': completed,
+            'completed_count': completed_count,
             'total_units': total,
             'percentage': percentage,
-            'last_unit': data['last_unit'],
-            'last_completed_at': data['last_completed_at'],
+            'last_unit': last_unit,
+            'last_completed_at': last_completed_at,
             'next_unit': next_unit,
+            'enrolled_at': enrolled_at_by_course[cid],
+            '_sort_key': sort_key,
         })
 
-    # Sort by most recently accessed first
-    result.sort(key=lambda x: x['last_completed_at'], reverse=True)
+    result.sort(key=lambda x: x['_sort_key'], reverse=True)
+    for item in result:
+        del item['_sort_key']
     return result
 
 

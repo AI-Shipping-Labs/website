@@ -14,6 +14,8 @@ from content.views.courses import (
     course_detail,
     course_unit_detail,
     courses_list,
+    enroll_course,
+    unenroll_course,
 )
 from content.views.faq import faq
 from content.views.home import home
@@ -70,6 +72,9 @@ urlpatterns = [
     # Courses
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),
+    # Enrollment (issue #236) — must be before the catch-all unit URL
+    path('courses/<slug:slug>/enroll', enroll_course, name='enroll_course'),
+    path('courses/<slug:slug>/unenroll', unenroll_course, name='unenroll_course'),
     # Peer review (must be before the catch-all slug-based unit URL)
     path('courses/<slug:slug>/submit', project_submit, name='project_submit'),
     path('courses/<slug:slug>/reviews', review_dashboard, name='peer_review_dashboard'),

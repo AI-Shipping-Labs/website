@@ -23,6 +23,7 @@ from content.access import LEVEL_PREMIUM
 from content.models import (
     Article,
     Course,
+    Enrollment,
     Module,
     Unit,
     UserCourseProgress,
@@ -159,7 +160,14 @@ class WelcomeBannerTest(TierSetupMixin, TestCase):
 
 
 class ContinueLearningTest(TierSetupMixin, TestCase):
-    """Test the continue learning section."""
+    """Test the continue learning section.
+
+    Issue #236 made the dashboard query Enrollment rows instead of
+    inferring "in progress" from completed-unit counts. These tests
+    create explicit Enrollments via ``_enroll`` (matches what the
+    Enroll button + auto-enroll-on-complete hook would do in
+    production).
+    """
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -181,6 +189,15 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
             )
             self.units.append(unit)
 
+    def _enroll(self, user, course):
+        """Create an active Enrollment for (user, course).
+
+        The dashboard now queries Enrollment rows; production code
+        creates one when the user clicks Enroll or marks the first
+        lesson complete.
+        """
+        return Enrollment.objects.create(user=user, course=course)
+
     def test_empty_state_when_no_courses_in_progress(self):
         response = self.client.get('/')
         content = response.content.decode()
@@ -188,7 +205,8 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertIn('Browse Courses', content)
 
     def test_shows_in_progress_course(self):
-        # Complete 2 of 4 units
+        # Enroll + complete 2 of 4 units
+        self._enroll(self.user, self.course)
         now = timezone.now()
         UserCourseProgress.objects.create(
             user=self.user, unit=self.units[0],
@@ -206,6 +224,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertIn('Continue', content)
 
     def test_shows_progress_percentage(self):
+        self._enroll(self.user, self.course)
         now = timezone.now()
         UserCourseProgress.objects.create(
             user=self.user, unit=self.units[0],
@@ -217,6 +236,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertIn('25%', content)
 
     def test_shows_last_accessed_unit(self):
+        self._enroll(self.user, self.course)
         now = timezone.now()
         UserCourseProgress.objects.create(
             user=self.user, unit=self.units[0],
@@ -231,6 +251,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertIn('Last: Unit 2', content)
 
     def test_fully_completed_course_not_shown(self):
+        self._enroll(self.user, self.course)
         now = timezone.now()
         for i, unit in enumerate(self.units):
             UserCourseProgress.objects.create(
@@ -244,6 +265,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
 
     def test_continue_button_links_to_next_unfinished_unit(self):
         # Complete units 1-3 of 4 → Continue should link to unit 4.
+        self._enroll(self.user, self.course)
         now = timezone.now()
         for i in range(3):
             UserCourseProgress.objects.create(
@@ -259,6 +281,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
 
     def test_continue_button_links_to_first_skipped_unit(self):
         # Complete units 1, 3 (skip unit 2) → Continue should link to unit 2.
+        self._enroll(self.user, self.course)
         now = timezone.now()
         UserCourseProgress.objects.create(
             user=self.user, unit=self.units[0],
@@ -276,6 +299,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
 
     def test_continue_button_aria_label_names_module_and_unit(self):
         # Aria label gives screen-reader users the destination unit name.
+        self._enroll(self.user, self.course)
         now = timezone.now()
         UserCourseProgress.objects.create(
             user=self.user, unit=self.units[0],
@@ -290,6 +314,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         # When all units are completed the course should not appear in the
         # in-progress list — this is the existing behavior, asserted here
         # so the next-unit work doesn't accidentally re-include it.
+        self._enroll(self.user, self.course)
         now = timezone.now()
         for i, unit in enumerate(self.units):
             UserCourseProgress.objects.create(
@@ -314,6 +339,9 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         Unit.objects.create(
             module=module2, title='Adv Unit 2', slug='adv-unit-2', sort_order=1,
         )
+
+        self._enroll(self.user, self.course)
+        self._enroll(self.user, course2)
 
         now = timezone.now()
         # AI Basics: accessed 2 hours ago

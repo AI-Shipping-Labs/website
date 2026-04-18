@@ -35,11 +35,17 @@
             </div>
             {% endif %}
             <div class="p-6">
-              <div class="flex items-center gap-2 mb-3">
+              <div class="flex flex-wrap items-center gap-2 mb-3">
                 {% if course.is_free %}
                 <span class="rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">Free</span>
                 {% elif course.required_level > 0 %}
                 <span class="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent">{{ course.required_level|required_tier_name }}+</span>
+                {% endif %}
+                {% if course.pk in enrolled_course_ids %}
+                <span class="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-medium text-green-400" data-testid="enrolled-badge">
+                  <i data-lucide="check-circle-2" class="h-3 w-3"></i>
+                  Enrolled
+                </span>
                 {% endif %}
               </div>
               <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">

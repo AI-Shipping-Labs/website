@@ -1524,6 +1524,8 @@ def _sync_single_course(
             'slug': slug,
             'action': action,
             'content_type': 'course',
+            'course_id': course.pk,
+            'course_slug': course.slug,
         })
 
         # Sync modules (immediate child directories of course_dir)
@@ -1606,6 +1608,8 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
             'slug': course.slug,
             'action': 'deleted',
             'content_type': 'course',
+            'course_id': course.pk,
+            'course_slug': course.slug,
         })
     deleted_count = stale_courses.count()
     stale_courses.update(status='draft')
@@ -1738,10 +1742,23 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
                     'source_commit': commit_sha,
                 },
             )
+            action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
             else:
                 stats['updated'] += 1
+            # Per-level breakdown (issue #224): track each module touched
+            # so the dashboard can show "Modules: X created Y updated"
+            # and link to the studio edit page.
+            stats['items_detail'].append({
+                'title': module.title,
+                'slug': module.slug,
+                'action': action,
+                'content_type': 'module',
+                'course_id': course.pk,
+                'course_slug': course.slug,
+                'module_id': module.pk,
+            })
 
             # Module-level ignore patterns (relative to module dir). Course
             # patterns are translated/filtered separately in _sync_module_units.
@@ -1886,11 +1903,26 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 defaults=readme_defaults,
             )
             seen_unit_paths.add(readme_rel)
+            action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
                 new_unit_hashes[content_hash] = unit
             else:
                 stats['updated'] += 1
+            # Per-level breakdown (issue #224): track each unit touched
+            # so the dashboard can show "Lessons (units): X created Y updated"
+            # and link to the studio edit page.
+            stats['items_detail'].append({
+                'title': unit.title,
+                'slug': unit.slug,
+                'action': action,
+                'content_type': 'unit',
+                'course_id': module.course_id,
+                'course_slug': course_slug or module.course.slug,
+                'module_id': module.pk,
+                'module_slug': module.slug,
+                'unit_id': unit.pk,
+            })
         except Exception as e:
             stats['errors'].append({
                 'file': readme_rel,
@@ -1980,11 +2012,26 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 source_path=rel_path,
                 defaults=defaults,
             )
+            action = 'created' if created else 'updated'
             if created:
                 stats['created'] += 1
                 new_unit_hashes[content_hash] = unit
             else:
                 stats['updated'] += 1
+            # Per-level breakdown (issue #224): track each unit touched
+            # so the dashboard can show "Lessons (units): X created Y updated"
+            # and link to the studio edit page.
+            stats['items_detail'].append({
+                'title': unit.title,
+                'slug': unit.slug,
+                'action': action,
+                'content_type': 'unit',
+                'course_id': module.course_id,
+                'course_slug': course_slug or module.course.slug,
+                'module_id': module.pk,
+                'module_slug': module.slug,
+                'unit_id': unit.pk,
+            })
 
         except Exception as e:
             stats['errors'].append({

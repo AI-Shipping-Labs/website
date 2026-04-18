@@ -80,6 +80,63 @@ still in flight.
         </thead>
         <tbody class="divide-y divide-border">
           {% for ct in repo.last_batch.per_type %}
+          {% if ct.content_type == 'course' %}
+          {% comment %}
+          Course-type sources render a per-level breakdown (issue #224):
+          one row per level (courses, modules, units) with its own counts
+          and expandable changed-pages list.
+          {% endcomment %}
+          <tr>
+            <td class="py-2 pr-4 text-foreground font-medium" colspan="5">
+              <span>{{ ct.display_name }}</span>
+            </td>
+          </tr>
+          {% for level in ct.course_breakdown %}
+          <tr class="sync-course-level-row cursor-pointer hover:bg-secondary/50 transition-colors"
+              data-type="{{ ct.content_type }}"
+              data-level="{{ level.level }}">
+            <td class="py-2 pr-4 pl-6 text-foreground">
+              <span class="inline-flex items-center space-x-1">
+                <svg class="w-3 h-3 text-muted-foreground transition-transform sync-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                <span>{{ level.label }}</span>
+              </span>
+            </td>
+            <td class="py-2 pr-2 sm:pr-4 text-right {% if level.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ level.created }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-right {% if level.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ level.updated }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell {% if level.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ level.deleted }}</td>
+            <td class="py-2 pr-2 sm:pr-4">
+              {% if forloop.last %}
+                {% sync_status_pill ct.status ct.errors_count 'xs' %}
+              {% endif %}
+            </td>
+          </tr>
+          {% if level.items %}
+          <tr class="sync-course-level-detail hidden"
+              data-type="{{ ct.content_type }}"
+              data-level="{{ level.level }}">
+            <td colspan="5" class="py-2 pl-12">
+              <div class="space-y-1">
+                {% for item in level.items %}
+                <div class="flex items-center space-x-3 text-xs">
+                  <span class="w-16 {% if item.action == 'created' %}text-green-400{% elif item.action == 'updated' %}text-blue-400{% else %}text-red-400{% endif %}">{{ item.action }}</span>
+                  {% if item.content_type == 'course' and item.course_id %}
+                  <a href="{% url 'studio_course_edit' course_id=item.course_id %}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% elif item.content_type == 'module' and item.course_id %}
+                  <a href="{% url 'studio_course_edit' course_id=item.course_id %}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% elif item.content_type == 'unit' and item.unit_id %}
+                  <a href="{% url 'studio_unit_edit' unit_id=item.unit_id %}" class="text-accent hover:underline">{{ item.title }}</a>
+                  {% else %}
+                  <span class="text-foreground">{{ item.title }}</span>
+                  {% endif %}
+                  <span class="text-muted-foreground font-mono">{{ item.slug }}</span>
+                </div>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+          {% else %}
           <tr class="sync-type-row cursor-pointer hover:bg-secondary/50 transition-colors" data-type="{{ ct.content_type }}">
             <td class="py-2 pr-4 text-foreground font-medium">
               <span class="inline-flex items-center space-x-1">
@@ -104,8 +161,6 @@ still in flight.
                   <span class="w-16 {% if item.action == 'created' %}text-green-400{% elif item.action == 'updated' %}text-blue-400{% else %}text-red-400{% endif %}">{{ item.action }}</span>
                   {% if item.content_type == 'article' %}
                   <a href="/blog/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
-                  {% elif item.content_type == 'course' %}
-                  <a href="/courses/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
                   {% elif item.content_type == 'project' %}
                   <a href="/projects/{{ item.slug }}" class="text-accent hover:underline">{{ item.title }}</a>
                   {% elif item.content_type == 'event' %}
@@ -121,6 +176,7 @@ still in flight.
               </div>
             </td>
           </tr>
+          {% endif %}
           {% endif %}
           {% endfor %}
 

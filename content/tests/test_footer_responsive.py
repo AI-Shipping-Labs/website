@@ -102,7 +102,7 @@ class FooterTapTargetsTest(TestCase):
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
         faq_match = re.search(
-            r'<a[^>]*href="/#faq"[^>]*class="([^"]*)"', footer
+            r'<a[^>]*href="/faq"[^>]*class="([^"]*)"', footer
         )
         self.assertIsNotNone(faq_match, "FAQ link not found in footer")
         self.assertIn("min-h-[44px]", faq_match.group(1))

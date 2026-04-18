@@ -15,6 +15,7 @@ from content.views.courses import (
     course_unit_detail,
     courses_list,
 )
+from content.views.faq import faq
 from content.views.home import home
 from content.views.interview import interview_detail, interview_hub
 from content.views.pages import (
@@ -46,6 +47,7 @@ urlpatterns = [
     path('', home, name='home'),
     path('about', about, name='about'),
     path('activities', activities, name='activities'),
+    path('faq', faq, name='faq'),
     path('blog', blog_list, name='blog_list'),
     path('blog/<slug:slug>', blog_detail, name='blog_detail'),
     path('event-recordings', recordings_list, name='recordings_list'),

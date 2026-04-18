@@ -289,8 +289,10 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         )
         self.assertContains(response, '/accounts/signup/', status_code=403)
         self.assertContains(response, 'Sign Up', status_code=403)
+        # The gated CTA on a free course should not invite the visitor to
+        # upgrade. (Issue #238 added /pricing links to the global header
+        # and footer, so we only assert on the gated CTA copy here.)
         self.assertNotContains(response, 'View Pricing', status_code=403)
-        self.assertNotContains(response, '/pricing', status_code=403)
 
     def test_anonymous_paid_course_sees_pricing_cta(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')

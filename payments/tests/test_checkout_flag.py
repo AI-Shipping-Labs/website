@@ -29,7 +29,11 @@ User = get_user_model()
 
 
 class CheckoutFlagOffTest(TierSetupMixin, TestCase):
-    """When STRIPE_CHECKOUT_ENABLED is False (default), checkout endpoints return 410."""
+    """When STRIPE_CHECKOUT_ENABLED is False (default), checkout endpoints return 410.
+
+    Consolidated in #261: 4 separate endpoint tests collapsed into one
+    parameterized test (same assertion shape; only URL/payload differs).
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -42,48 +46,27 @@ class CheckoutFlagOffTest(TierSetupMixin, TestCase):
         self.client.login(email="flagoff@test.com", password="testpass123")
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_create_checkout_returns_410(self):
-        response = self.client.post(
-            "/api/checkout/create",
-            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 410)
-        data = response.json()
-        self.assertIn("payment links", data["error"])
-        self.assertIn("portal_url", data)
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_upgrade_returns_410(self):
-        response = self.client.post(
-            "/api/subscription/upgrade",
-            data=json.dumps({"tier_slug": "main", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 410)
-        data = response.json()
-        self.assertIn("payment links", data["error"])
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_downgrade_returns_410(self):
-        response = self.client.post(
-            "/api/subscription/downgrade",
-            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 410)
-        data = response.json()
-        self.assertIn("payment links", data["error"])
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_cancel_returns_410(self):
-        response = self.client.post(
-            "/api/subscription/cancel",
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 410)
-        data = response.json()
-        self.assertIn("payment links", data["error"])
+    def test_all_checkout_endpoints_return_410_when_flag_off(self):
+        endpoints = [
+            ("create",   "/api/checkout/create",
+             {"tier_slug": "basic", "billing_period": "monthly"}, True),
+            ("upgrade",  "/api/subscription/upgrade",
+             {"tier_slug": "main", "billing_period": "monthly"}, False),
+            ("downgrade", "/api/subscription/downgrade",
+             {"tier_slug": "basic", "billing_period": "monthly"}, False),
+            ("cancel",   "/api/subscription/cancel", None, False),
+        ]
+        for label, url, payload, check_portal_url in endpoints:
+            with self.subTest(endpoint=label):
+                kwargs = {"content_type": "application/json"}
+                if payload is not None:
+                    kwargs["data"] = json.dumps(payload)
+                response = self.client.post(url, **kwargs)
+                self.assertEqual(response.status_code, 410)
+                data = response.json()
+                self.assertIn("payment links", data["error"])
+                if check_portal_url:
+                    self.assertIn("portal_url", data)
 
 
 # ============================================================

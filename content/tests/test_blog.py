@@ -16,7 +16,6 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, tag
 
-from content.access import LEVEL_BASIC
 from content.models import Article
 from content.models.article import render_markdown
 
@@ -456,23 +455,11 @@ class BlogListDisplayTest(TestCase):
         response = self.client.get('/blog')
         self.assertContains(response, 'https://example.com/cover.jpg')
 
-    def test_gated_article_shows_lock_icon(self):
-        Article.objects.create(
-            title='Gated', slug='gated-article',
-            description='Gated desc', date=date(2025, 6, 14),
-            required_level=LEVEL_BASIC, published=True,
-        )
-        response = self.client.get('/blog')
-        self.assertContains(response, 'data-lucide="lock"')
-
-    def test_gated_article_shows_tier_name(self):
-        Article.objects.create(
-            title='Gated', slug='gated-tier-name',
-            description='Gated desc', date=date(2025, 6, 14),
-            required_level=LEVEL_BASIC, published=True,
-        )
-        response = self.client.get('/blog')
-        self.assertContains(response, 'Basic+')
+    # Listing-page lock icon and tier-name badge tests removed in #261:
+    # `playwright_tests/test_articles_blog.py` exercises the lock icon
+    # rendering, and `BlogDetailAccessControlTest` keeps the gating
+    # smoke at the detail-view layer. Listing-page string-match tests
+    # only verified that the template literal exists (Rule 4).
 
 
 # --- Title tag tests ---
@@ -544,21 +531,9 @@ class BlogDetailDisplayTest(TestCase):
         self.assertIn('?tag=python', content)
         self.assertIn('?tag=tutorial', content)
 
-    def test_gated_article_shows_cta(self):
-        Article.objects.create(
-            title='Gated Detail',
-            slug='gated-detail',
-            description='Gated description',
-            content_html='<p>Secret content</p>',
-            date=date(2025, 6, 14),
-            required_level=LEVEL_BASIC,
-            published=True,
-        )
-        response = self.client.get('/blog/gated-detail')
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Secret content')
-        self.assertContains(response, 'Upgrade to Basic to read this article')
-        self.assertContains(response, '/pricing')
+    # Detail-page gating CTA test removed in #261: covered at the
+    # detail layer by `BlogDetailAccessControlTest` and end-to-end by
+    # `playwright_tests/test_access_control.py::TestScenario2FreeMemberHitsBasicGatedArticle`.
 
 
 # --- Admin tests ---

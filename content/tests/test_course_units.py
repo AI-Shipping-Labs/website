@@ -324,7 +324,16 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
 
 
 class CourseUnitProgressTest(CourseUnitSetupMixin, TestCase):
-    """Test mark-as-completed toggle and sidebar checkmarks."""
+    """Smoke tests for the mark-complete UI render hooks.
+
+    The completion toggle (button click -> sidebar checkmark -> course
+    progress bar) is exercised end-to-end by:
+    - playwright_tests/test_course_units.py::test_mark_complete_and_undo
+    - playwright_tests/test_course_units.py::test_progress_bar_updates_after_completing_units
+    - playwright_tests/test_course_units.py::test_sidebar_navigation_with_checkmarks
+    Only the API contract (ApiCourseUnitCompleteTest below) and the
+    render-hook smoke tests below stay at the Django layer.
+    """
 
     def setUp(self):
         super().setUp()
@@ -337,13 +346,6 @@ class CourseUnitProgressTest(CourseUnitSetupMixin, TestCase):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Mark as completed')
 
-    def test_shows_completed_button_when_done(self):
-        UserCourseProgress.objects.create(
-            user=self.user, unit=self.unit1, completed_at=timezone.now(),
-        )
-        response = self.client.get('/courses/test-course/module-1/lesson-1')
-        self.assertContains(response, 'Completed')
-
     def test_no_mark_complete_for_anonymous(self):
         self.client.logout()
         # Preview unit accessible to anonymous
@@ -351,21 +353,6 @@ class CourseUnitProgressTest(CourseUnitSetupMixin, TestCase):
         # The button element itself should not render for anonymous users.
         # The JS script block always has the ID ref but does nothing if button is absent.
         self.assertNotContains(response, 'id="mark-complete-btn"')
-
-    def test_sidebar_shows_checkmark_for_completed(self):
-        UserCourseProgress.objects.create(
-            user=self.user, unit=self.unit1, completed_at=timezone.now(),
-        )
-        response = self.client.get('/courses/test-course/module-1/lesson-2')
-        content = response.content.decode()
-        # check-circle-2 icon should appear in sidebar for completed unit
-        self.assertIn('check-circle-2', content)
-
-    def test_sidebar_shows_circle_for_incomplete(self):
-        response = self.client.get('/courses/test-course/module-1/lesson-1')
-        content = response.content.decode()
-        # circle icon for incomplete units
-        self.assertIn('data-lucide="circle"', content)
 
 
 # ============================================================

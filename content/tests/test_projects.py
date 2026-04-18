@@ -633,11 +633,6 @@ class ProjectDetailGatingTest(TestCase):
         # The "View Pricing" button text from the gated CTA
         self.assertContains(response, 'View Pricing')
 
-    def test_gated_project_returns_200_not_404(self):
-        response = self.client.get('/projects/gated-project')
-        self.assertEqual(response.status_code, 200)
-
-
 # --- Community submission tests ---
 
 

@@ -228,6 +228,14 @@ Do not test the same behavior in multiple places. Pick the right layer:
 | User-facing flows (login, purchase, navigation) | Playwright E2E |
 | JavaScript interactions (modals, toggles, forms) | Playwright E2E |
 
+Cross-layer dedup example: issue #261 removed Django per-content-type
+detail-view tier matrices (article / recording / project / tutorial)
+once `playwright_tests/test_access_control.py` covered each scenario
+end-to-end. The Django layer kept the access function unit tests
+(`CanAccessTest`, `BuildGatingContextTest`) and one smoke test per
+detail view; everything else moved to Playwright as the single
+authoritative source.
+
 ---
 
 ## Rule 12: Verify side effects of unauthorized requests

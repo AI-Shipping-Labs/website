@@ -319,18 +319,8 @@ class RecordingsListDisplayTest(TestCase):
         self.assertIn('href="/event-recordings?tag=agents"', content)
         self.assertIn('href="/event-recordings?tag=python"', content)
 
-    def test_gated_recording_shows_lock_icon(self):
-        _create_recording_event(
-            'gated-display',
-            required_level=LEVEL_MAIN,
-        )
-        response = self.client.get('/event-recordings')
-        self.assertContains(response, 'data-lucide="lock"')
-
-    def test_open_recording_no_lock_icon(self):
-        response = self.client.get('/event-recordings')
-        content = response.content.decode()
-        self.assertNotIn('data-lucide="lock"', content)
+    # Listing-page lock-icon tests removed in #261 (covered by
+    # `playwright_tests/test_event_recordings.py` and Rule 4).
 
     def test_empty_list_message(self):
         Event.objects.all().delete()
@@ -459,7 +449,15 @@ class RecordingDetailDisplayTest(TestCase):
 
 
 class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Test recording detail view access control."""
+    """Smoke tests for recording detail gating.
+
+    The full per-tier matrix (anonymous/free/basic/main/premium x
+    open/gated recording) is exercised end-to-end by
+    `playwright_tests/test_access_control.py::TestScenario7BasicMemberBlockedFromMainRecording`
+    and by the access-function unit tests in
+    `content/tests/test_access_control.py::CanAccessTest`. Only smoke
+    tests for the gated and ungated paths stay here (#261).
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -485,36 +483,14 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['is_gated'])
 
-    def test_anonymous_sees_gated_recording_title_and_description(self):
+    def test_anonymous_blocked_on_gated_recording(self):
         response = self.client.get('/event-recordings/gated-recording')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Gated Recording')
-        self.assertContains(response, 'Gated description')
-
-    def test_anonymous_does_not_see_gated_video(self):
-        response = self.client.get('/event-recordings/gated-recording')
+        # No video, no materials, gating CTA + pricing link rendered.
         self.assertNotContains(response, 'youtube.com/embed')
-        self.assertContains(response, 'Upgrade to Main to watch this recording')
-
-    def test_anonymous_does_not_see_gated_materials(self):
-        response = self.client.get('/event-recordings/gated-recording')
         self.assertNotContains(response, 'Secret Slides')
-
-    def test_free_user_sees_gated_cta(self):
-        user = User.objects.create_user(email='free@test.com', password='testpass')
-        user.tier = self.free_tier
-        user.save()
-        self.client.login(email='free@test.com', password='testpass')
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertContains(response, 'Upgrade to Main')
-
-    def test_basic_user_cannot_see_main_recording(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertContains(response, 'Upgrade to Main')
+        self.assertContains(response, 'Upgrade to Main to watch this recording')
+        self.assertContains(response, '/pricing')
 
     def test_main_user_sees_full_recording(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
@@ -524,22 +500,6 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/event-recordings/gated-recording')
         self.assertNotContains(response, 'Upgrade to Main')
         self.assertContains(response, 'Secret Slides')
-
-    def test_premium_user_sees_full_recording(self):
-        user = User.objects.create_user(email='premium@test.com', password='testpass')
-        user.tier = self.premium_tier
-        user.save()
-        self.client.login(email='premium@test.com', password='testpass')
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertNotContains(response, 'Upgrade to Main')
-
-    def test_gated_recording_never_returns_404(self):
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertEqual(response.status_code, 200)
-
-    def test_gated_recording_shows_pricing_link(self):
-        response = self.client.get('/event-recordings/gated-recording')
-        self.assertContains(response, '/pricing')
 
 
 # --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---

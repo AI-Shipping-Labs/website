@@ -417,24 +417,15 @@ class ResourcesGatingTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         self.assertNotIn('data-url="https://example.com/secret-resource"', content)
 
-    def test_gated_link_shows_lock_icon(self):
-        response = self.client.get('/resources')
-        self.assertContains(response, 'data-lucide="lock"')
-
     def test_gated_link_shows_upgrade_cta(self):
         response = self.client.get('/resources')
         self.assertContains(response, 'Upgrade to Basic to access this resource')
-
-    def test_gated_link_shows_pricing_link(self):
-        response = self.client.get('/resources')
         self.assertContains(response, '/pricing')
 
-    def test_open_link_has_external_icon(self):
-        """Open links should have external-link icon, not lock."""
-        # Delete gated link so we can verify open link behavior in isolation
-        self.gated_link.delete()
-        response = self.client.get('/resources')
-        self.assertContains(response, 'data-lucide="external-link"')
+    # Lock-icon and external-link icon string-match tests removed in
+    # #261: covered end-to-end by
+    # `playwright_tests/test_curated_links.py` and Rule 4 (do not test
+    # JS/CSS class strings in templates).
 
     def test_basic_user_sees_gated_link_url(self):
         user = User.objects.create_user(

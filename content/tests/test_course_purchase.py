@@ -90,7 +90,13 @@ class CourseAccessModelTest(TestCase):
 
 @tag('core')
 class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
-    """Test that can_access() checks CourseAccess in addition to tier level."""
+    """Test that can_access() checks CourseAccess in addition to tier level.
+
+    Consolidated in #261: 5 access-grant variations collapsed into one
+    parameterized matrix; the 3 cross-cutting invariants (open course,
+    article isolation, staff bypass) stay as standalone tests because
+    they exercise different code paths from the grant matrix.
+    """
 
     def setUp(self):
         self.user = User.objects.create_user(email='access@test.com')
@@ -100,29 +106,44 @@ class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
             status='published', required_level=20,
         )
 
-    def test_free_user_cannot_access_paid_course(self):
-        self.assertFalse(can_access(self.user, self.paid_course))
+    def test_paid_course_access_grant_matrix(self):
+        """Each grant pathway (tier upgrade, purchased CourseAccess,
+        granted CourseAccess, no grant, anonymous) yields the right
+        access decision for a paid course."""
+        from django.contrib.auth.models import AnonymousUser
 
-    def test_free_user_with_course_access_can_access(self):
-        CourseAccess.objects.create(
-            user=self.user, course=self.paid_course, access_type='purchased',
+        # Case: no grant -> denied
+        self.assertFalse(
+            can_access(self.user, self.paid_course),
+            "free user with no CourseAccess should be denied",
         )
-        self.assertTrue(can_access(self.user, self.paid_course))
 
-    def test_free_user_with_granted_access_can_access(self):
-        CourseAccess.objects.create(
-            user=self.user, course=self.paid_course, access_type='granted',
+        # Case: anonymous -> denied
+        self.assertFalse(
+            can_access(AnonymousUser(), self.paid_course),
+            "anonymous user should never have CourseAccess",
         )
-        self.assertTrue(can_access(self.user, self.paid_course))
 
-    def test_tier_access_still_works(self):
+        # Case: purchased grant -> allowed
+        purchased_user = User.objects.create_user(email='paid@test.com')
+        CourseAccess.objects.create(
+            user=purchased_user, course=self.paid_course,
+            access_type='purchased',
+        )
+        self.assertTrue(can_access(purchased_user, self.paid_course))
+
+        # Case: granted grant -> allowed
+        granted_user = User.objects.create_user(email='granted@test.com')
+        CourseAccess.objects.create(
+            user=granted_user, course=self.paid_course,
+            access_type='granted',
+        )
+        self.assertTrue(can_access(granted_user, self.paid_course))
+
+        # Case: tier upgrade -> allowed (no CourseAccess needed)
         self.user.tier = self.main_tier
         self.user.save()
         self.assertTrue(can_access(self.user, self.paid_course))
-
-    def test_anonymous_user_no_course_access(self):
-        from django.contrib.auth.models import AnonymousUser
-        self.assertFalse(can_access(AnonymousUser(), self.paid_course))
 
     def test_open_course_accessible_to_all(self):
         open_course = Course.objects.create(
@@ -139,7 +160,10 @@ class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
             title='Test Article', slug='test-article', required_level=20,
             date=datetime.date(2025, 1, 1),
         )
-        # Even with CourseAccess, article access is not affected
+        # Even with CourseAccess for the paid course, article access is unaffected
+        CourseAccess.objects.create(
+            user=self.user, course=self.paid_course, access_type='purchased',
+        )
         self.assertFalse(can_access(self.user, article))
 
     def test_staff_user_always_has_access(self):

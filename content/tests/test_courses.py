@@ -605,22 +605,12 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/paid-course')
         self.assertNotContains(response, 'Your Progress')
 
-    def test_basic_user_cannot_access_main_course(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/courses/paid-course')
-        self.assertContains(response, 'Unlock with Main')
-
-    def test_premium_user_can_access_main_course(self):
-        user = User.objects.create_user(email='prem@test.com', password='testpass')
-        user.tier = self.premium_tier
-        user.save()
-        self.client.login(email='prem@test.com', password='testpass')
-        response = self.client.get('/courses/paid-course')
-        self.assertContains(response, 'href="/courses/paid-course/module-1/lesson-1"')
-        self.assertNotContains(response, 'Unlock with Main')
+    # Per-tier matrix on /courses/{slug} (basic vs main, premium vs main)
+    # removed in #261: covered end-to-end by
+    # `playwright_tests/test_access_control.py::TestScenario4MainMemberReadsUpToLevelBlockedOnPremium`
+    # and `TestScenario8AnonymousEvaluatesGatedCourseSyllabus`. The
+    # access function unit tests in `test_access_control.py::CanAccessTest`
+    # remain authoritative at the Django layer.
 
 
 @tag('core')

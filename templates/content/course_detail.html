@@ -156,21 +156,25 @@
             </summary>
             <div class="px-4 pb-3 space-y-1">
               {% for unit in module.units.all %}
-              <div class="flex items-center gap-3 rounded-lg px-3 py-2.5 {% if has_access %}hover:bg-muted/50{% endif %} transition-colors min-h-[44px]">
+              {% comment %}
+                Issue #248: locked unit rows are clickable. The unit detail
+                view returns a teaser preview for non-eligible visitors so
+                we let them click through, see what they'd be unlocking,
+                and then convert. The lock icon sets expectation up-front.
+              {% endcomment %}
+              <div class="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted/50 transition-colors min-h-[44px]">
                 {% if unit.pk in completed_unit_ids %}
                 <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
                 {% elif unit.is_preview %}
                 <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+                {% elif not has_access %}
+                <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0" data-testid="syllabus-lock-icon"></i>
                 {% else %}
                 <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
                 {% endif %}
-                {% if has_access %}
-                <a href="{{ unit.get_absolute_url }}" class="text-sm text-foreground hover:text-accent transition-colors flex-1 py-2">
+                <a href="{{ unit.get_absolute_url }}" class="text-sm {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %} hover:text-accent transition-colors flex-1 py-2" {% if not has_access and not unit.is_preview %}data-testid="syllabus-locked-link"{% endif %}>
                   {{ unit.title }}
                 </a>
-                {% else %}
-                <span class="text-sm text-muted-foreground">{{ unit.title }}</span>
-                {% endif %}
                 {% if unit.is_preview and not has_access %}
                 <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
                 {% endif %}

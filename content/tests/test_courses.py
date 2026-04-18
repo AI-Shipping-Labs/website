@@ -621,11 +621,19 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/paid-course')
         self.assertContains(response, 'Unlock with Main')
 
-    def test_anonymous_unit_titles_not_clickable(self):
+    def test_anonymous_unit_titles_clickable_for_teaser(self):
+        """Issue #248: locked unit rows are clickable so visitors can
+        click through to the teaser preview instead of bouncing off
+        a non-interactive list."""
         response = self.client.get('/courses/paid-course')
         content = response.content.decode()
-        # Should not have a link to the unit page
-        self.assertNotIn('href="/courses/paid-course/module-1/lesson-1"', content)
+        self.assertIn('href="/courses/paid-course/module-1/lesson-1"', content)
+
+    def test_anonymous_locked_unit_row_shows_lock_icon(self):
+        """Issue #248: lock icon sets the expectation that the row is gated."""
+        response = self.client.get('/courses/paid-course')
+        self.assertContains(response, 'data-testid="syllabus-lock-icon"')
+        self.assertContains(response, 'data-testid="syllabus-locked-link"')
 
     def test_authorized_user_sees_clickable_links(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')

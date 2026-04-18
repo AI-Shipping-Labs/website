@@ -303,8 +303,15 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
             status_code=403,
         )
         self.assertContains(response, 'View Pricing', status_code=403)
-        self.assertNotContains(response, 'Sign Up', status_code=403)
-        self.assertNotContains(response, '/accounts/signup/', status_code=403)
+        # Issue #248: anonymous visitors on a paid course also see a
+        # secondary signup CTA so they can create an account first and
+        # have the course in their dashboard once they upgrade.
+        self.assertContains(response, '/accounts/signup/', status_code=403)
+        self.assertContains(
+            response,
+            'Sign in or create a free account',
+            status_code=403,
+        )
 
     def test_gated_page_shows_lock_icon(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')

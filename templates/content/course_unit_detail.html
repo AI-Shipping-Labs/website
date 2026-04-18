@@ -12,41 +12,144 @@
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
   {% if is_gated %}
-  <!-- Gated: user does not have access -->
+  <!-- Gated: user does not have access. Issue #248: render a teaser
+       (title, breadcrumb, video thumbnail, ~150 words of body with
+       fade-out, homework intro, upgrade CTA) instead of a bare paywall.
+       Drip-locked units fall back to the simple lock card below since
+       the lesson is conceptually "not yet available", not "behind a
+       paywall" — showing a teaser there would imply the user could
+       unlock it by upgrading, which isn't true. -->
   <div class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-3xl px-6 lg:px-8">
-      <a href="/courses/{{ course.slug }}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+      <a href="/courses/{{ course.slug }}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="teaser-back-link">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
         Back to {{ course.title }}
       </a>
 
-      <h1 class="mt-8 text-3xl font-semibold tracking-tight">{{ unit.title }}</h1>
+      {% if not is_drip_locked and module %}
+      <!-- Breadcrumb mirrors the unlocked layout so the visitor can navigate
+           back to the course or the catalog without the sidebar. -->
+      <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden" data-testid="teaser-breadcrumb">
+        <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
+        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+        <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
+        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+        <span class="text-muted-foreground truncate hidden sm:inline">{{ module.title }}</span>
+      </div>
+      {% endif %}
 
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight" data-testid="teaser-title">{{ unit.title }}</h1>
+
+      {% if is_drip_locked %}
+      <!-- Drip schedule path: keep the original simple lock card. -->
       <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
         <div class="mb-4">
-          {% if is_drip_locked %}
           <i data-lucide="clock" class="mx-auto h-10 w-10 text-accent"></i>
-          {% else %}
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-          {% endif %}
         </div>
         <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
-        {% if is_drip_locked %}
         <p class="mt-2 text-sm text-muted-foreground">This lesson will unlock based on your cohort schedule.</p>
-        {% else %}
-        <p class="mt-2 text-sm text-muted-foreground">{{ cta_description }}</p>
-        {% endif %}
         <a href="{{ pricing_url }}"
            class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-          {% if is_drip_locked %}
           <i data-lucide="arrow-left" class="h-4 w-4"></i>
           Back to Course
-          {% else %}
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          {{ cta_label }}
-          {% endif %}
         </a>
       </div>
+      {% elif teaser_body_html %}
+      <!-- Teaser path: video thumbnail + truncated body + homework intro
+           + CTA. Body has a fade-out gradient at the bottom so it visually
+           "trails off" rather than ending mid-sentence. -->
+
+      {% if has_video %}
+      <div class="mt-8" data-testid="teaser-video-thumbnail">
+        <div class="relative aspect-video rounded-lg overflow-hidden border border-border bg-muted">
+          {% if video_thumbnail_url %}
+          <img src="{{ video_thumbnail_url }}"
+               alt="Video preview for {{ unit.title }}"
+               class="w-full h-full object-cover"
+               loading="lazy"
+               referrerpolicy="no-referrer">
+          {% endif %}
+          <!-- Disabled play button overlay — clearly conveys "video here, locked" -->
+          <div class="absolute inset-0 flex items-center justify-center bg-background/40">
+            <div class="flex h-16 w-16 items-center justify-center rounded-full border border-white/30 bg-background/70 backdrop-blur-sm" aria-hidden="true">
+              <i data-lucide="lock" class="h-7 w-7 text-foreground"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="mt-8 relative" data-testid="teaser-body-wrapper">
+        <div class="prose teaser-body" data-testid="teaser-body">
+          {{ teaser_body_html|safe }}
+        </div>
+        <!-- Fade-out gradient over the bottom of the teaser body. Sits
+             above the prose but below the CTA so the eye is led down. -->
+        <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-background"></div>
+      </div>
+
+      {% if homework_teaser %}
+      <div class="mt-8 rounded-lg border border-border bg-card p-6" data-testid="teaser-homework">
+        <h2 class="mb-3 flex items-center gap-2 text-xl font-semibold tracking-tight">
+          <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
+          Homework
+        </h2>
+        <p class="text-sm text-foreground">{{ homework_teaser }}</p>
+        <p class="mt-3 text-sm text-muted-foreground italic">Unlock to see the assignment.</p>
+      </div>
+      {% endif %}
+
+      <!-- Pinned upgrade CTA. Replaces the mark-complete button on the
+           accessible layout — gating is the only meaningful action here. -->
+      <div class="mt-10 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="teaser-cta">
+        <div class="mb-4">
+          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+        <p class="mt-2 text-sm text-muted-foreground">{{ cta_description }}</p>
+        <a href="{{ pricing_url }}"
+           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+           data-testid="teaser-upgrade-cta">
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+          {{ cta_label }}
+        </a>
+        {% if signup_cta_url %}
+        <div class="mt-4">
+          <a href="{{ signup_cta_url }}"
+             class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+             data-testid="teaser-signup-cta">
+            <i data-lucide="user-plus" class="h-4 w-4"></i>
+            {{ signup_cta_label }}
+          </a>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <!-- Fallback: unit body is empty so there's nothing to tease. Render
+           the original minimal lock card so we don't ship an empty fade-out. -->
+      <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
+        <div class="mb-4">
+          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
+        <p class="mt-2 text-sm text-muted-foreground">{{ cta_description }}</p>
+        <a href="{{ pricing_url }}"
+           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+          {{ cta_label }}
+        </a>
+        {% if signup_cta_url %}
+        <div class="mt-4">
+          <a href="{{ signup_cta_url }}"
+             class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+             data-testid="teaser-signup-cta-fallback">
+            <i data-lucide="user-plus" class="h-4 w-4"></i>
+            {{ signup_cta_label }}
+          </a>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
   </div>
   {% else %}

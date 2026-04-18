@@ -3,6 +3,7 @@ import datetime
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.utils.html import strip_tags
 from django.views.decorators.http import require_POST
 
 from content.access import (
@@ -19,7 +20,14 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
+from content.templatetags.video_utils import get_video_thumbnail_url
+from content.utils.teaser import first_sentence, truncate_to_words
 from content.views.pages import _filter_by_tags, _get_selected_tags
+
+# Approximate word budget for the locked-lesson teaser body. Issue #248:
+# enough to give the visitor a sense of voice / depth, short enough that a
+# fade-out gradient still teases more below.
+TEASER_WORD_LIMIT = 150
 
 
 def courses_list(request):
@@ -304,8 +312,35 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
             pricing_url = '/pricing'
             cta_label = 'View Pricing'
             cta_description = 'Get full access to this course and more with a membership.'
+
+        # Build the teaser body / homework preview here (issue #248) so the
+        # template stays a flat layout and we don't run heavy HTML parsing
+        # in template tags. ``teaser_body_html`` is None when the unit body
+        # is empty — the template falls back to the original lock card so
+        # we don't render an awkward empty fade-out.
+        teaser_body_html = None
+        if unit.body_html:
+            teaser_body_html = truncate_to_words(unit.body_html, TEASER_WORD_LIMIT)
+
+        homework_teaser = ''
+        if unit.homework_html:
+            # Strip markdown / HTML formatting then take the first sentence
+            # so the visitor sees the assignment intro without the answer.
+            homework_text = strip_tags(unit.homework_html).strip()
+            homework_teaser = first_sentence(homework_text)
+
+        # Anonymous users on a paid course get a second CTA inviting them
+        # to sign in / sign up — the upgrade CTA still wins, but we don't
+        # want to send them back to /pricing without an account.
+        signup_cta_url = ''
+        signup_cta_label = ''
+        if not user.is_authenticated and course.required_level > 0:
+            signup_cta_url = '/accounts/signup/'
+            signup_cta_label = 'Sign in or create a free account'
+
         context = {
             'course': course,
+            'module': module,
             'unit': unit,
             'is_gated': True,
             'required_tier_name': tier_name,
@@ -313,6 +348,13 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
             'pricing_url': pricing_url,
             'cta_label': cta_label,
             'cta_description': cta_description,
+            'teaser_body_html': teaser_body_html,
+            'homework_teaser': homework_teaser,
+            'video_thumbnail_url': get_video_thumbnail_url(unit.video_url),
+            'has_video': bool(unit.video_url),
+            'signup_cta_url': signup_cta_url,
+            'signup_cta_label': signup_cta_label,
+            'user_authenticated': user.is_authenticated,
         }
         return render(request, 'content/course_unit_detail.html', context, status=403)
 

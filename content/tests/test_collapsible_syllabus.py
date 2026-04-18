@@ -115,17 +115,14 @@ class CollapsibleSyllabusAccessControlTest(TierSetupMixin, TestCase):
     def setUp(self):
         self.client = Client()
 
-    def test_anonymous_sees_unit_titles_as_spans_not_links(self):
+    def test_anonymous_sees_unit_titles_as_links(self):
+        """Issue #248: anonymous visitors see clickable links into the
+        teaser preview, not non-interactive spans, so the syllabus is a
+        conversion surface rather than a wall."""
         response = self.client.get("/courses/access-course")
-        content = response.content.decode()
-        self.assertNotIn(
-            f'href="{self.unit_normal.get_absolute_url()}"',
-            content,
-        )
         self.assertContains(
             response,
-            '<span class="text-sm text-muted-foreground">Normal Lesson</span>',
-            html=True,
+            f'href="{self.unit_normal.get_absolute_url()}"',
         )
 
     def test_anonymous_sees_preview_badge(self):
@@ -160,10 +157,23 @@ class CollapsibleSyllabusAccessControlTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         self.assertIn("eye", content)
 
-    def test_uncompleted_unit_shows_circle_icon(self):
+    def test_uncompleted_unit_shows_circle_icon_for_authorized_user(self):
+        """The empty circle icon marks an unfinished lesson for users who
+        already have access. (Locked rows now show a lock icon instead of
+        the circle — issue #248 — so the assertion subject is the
+        authorized user.)"""
+        user = User.objects.create_user(email="circle@collapsible.com", password="pass")
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email="circle@collapsible.com", password="pass")
         response = self.client.get("/courses/access-course")
         content = response.content.decode()
         self.assertIn('data-lucide="circle"', content)
+
+    def test_anonymous_locked_unit_shows_lock_icon(self):
+        """Issue #248: locked rows render the lock icon to signal gating."""
+        response = self.client.get("/courses/access-course")
+        self.assertContains(response, 'data-testid="syllabus-lock-icon"')
 
     def test_cta_block_still_visible_for_anonymous(self):
         response = self.client.get("/courses/access-course")

@@ -70,6 +70,25 @@ def get_loom_embed_url(video_id, time_seconds=None):
     return base
 
 
+def get_video_thumbnail_url(video_url):
+    """Return a static thumbnail URL for a video, or None if unsupported.
+
+    YouTube exposes ``hqdefault.jpg`` for every video at a stable URL; Loom
+    exposes ``i.loom.com/.../with-play.gif`` (we use the static jpg form).
+    Self-hosted videos have no convenient thumbnail endpoint, so we return
+    None and let the caller render a generic placeholder.
+
+    Used by the locked-lesson teaser (issue #248) so we can show the user
+    *what* they'd be watching without auto-loading the video player.
+    """
+    source_type, video_id = detect_video_source(video_url)
+    if source_type == 'youtube' and video_id:
+        return f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg'
+    if source_type == 'loom' and video_id:
+        return f'https://cdn.loom.com/sessions/thumbnails/{video_id}-with-play.jpg'
+    return None
+
+
 def format_timestamp(time_seconds):
     """
     Format seconds into [MM:SS] or [H:MM:SS] display string.

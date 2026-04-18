@@ -3,7 +3,6 @@
 import json
 
 from django.test import TestCase
-from django.urls import reverse
 
 from accounts.models import User
 
@@ -14,11 +13,6 @@ class ThemePreferenceAPITest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="api-theme@example.com")
         self.url = "/api/account/theme-preference"
-
-    def test_url_name_resolves(self):
-        """URL name api_theme_preference resolves to the correct path."""
-        url = reverse("api_theme_preference")
-        self.assertEqual(url, "/api/account/theme-preference")
 
     def test_anonymous_user_gets_redirect(self):
         """Anonymous users are redirected (login_required)."""

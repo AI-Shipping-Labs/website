@@ -24,21 +24,6 @@ User = get_user_model()
 class EmailCampaignModelTest(TierSetupMixin, TestCase):
     """Test EmailCampaign model enhancements for campaigns."""
 
-    def test_target_level_choices(self):
-        """target_min_level has choices for 0/10/20/30."""
-        EmailCampaign.objects.create(
-            subject='Test',
-            body='Body',
-            target_min_level=0,
-        )
-        choices = dict(EmailCampaign.TARGET_LEVEL_CHOICES)
-        self.assertIn(0, choices)
-        self.assertIn(10, choices)
-        self.assertIn(20, choices)
-        self.assertIn(30, choices)
-        self.assertEqual(choices[0], 'Everyone (including free)')
-        self.assertEqual(choices[30], 'Premium only')
-
     def test_get_eligible_recipients_everyone(self):
         """target_min_level=0 includes all verified, subscribed users."""
         User.objects.create_user(

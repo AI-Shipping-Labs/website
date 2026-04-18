@@ -133,10 +133,17 @@
                     Last: {{ item.last_unit.title }}
                   </p>
                 </div>
+                {% if item.next_unit %}
+                <a href="{{ item.next_unit.get_absolute_url }}" aria-label="Continue with {{ item.next_unit.module.title }} — {{ item.next_unit.title }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  Continue
+                  <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                </a>
+                {% else %}
                 <a href="{{ item.course.get_absolute_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
                   Continue
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
+                {% endif %}
               </div>
             </div>
             {% endfor %}

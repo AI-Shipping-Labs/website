@@ -113,17 +113,21 @@ def github_webhook(request):
                     )
                     continue
 
-                # Try to enqueue as a background job
+                # Try to enqueue as a background job.
+                # ``force=True`` (issue #235): the webhook payload tells us
+                # a new commit just landed, so we trust it without
+                # re-checking via ``git ls-remote`` first.
                 try:
                     from django_q.tasks import async_task
                     async_task(
                         'integrations.services.github.sync_content_source',
                         source,
+                        force=True,
                         task_name=f'sync-{source.repo_name}-{source.content_type}',
                     )
                 except ImportError:
                     # Django-Q not available, run synchronously
-                    sync_content_source(source)
+                    sync_content_source(source, force=True)
 
             webhook_log.processed = True
             webhook_log.save()

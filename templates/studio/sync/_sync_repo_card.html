@@ -42,8 +42,46 @@ still in flight.
           <span class="sync-btn-text">Sync now</span>
         </button>
       </form>
+      {% comment %}
+      "Force resync" (issue #235) — bypasses the HEAD-SHA skip check.
+      Posts ``force=1`` to the same endpoint as Sync now.
+      {% endcomment %}
+      <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form">
+        {% csrf_token %}
+        <input type="hidden" name="force" value="1">
+        <button type="submit"
+                class="sync-btn px-4 py-2 text-sm border border-border text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors inline-flex items-center space-x-1"
+                title="Re-sync even if no new commits since last sync"
+                data-original-text="Force resync">
+          <span class="sync-btn-text">Force resync</span>
+        </button>
+      </form>
     </div>
   </div>
+
+  {% comment %}
+  Synced commit SHA per content source (issue #235). One row per source
+  in the repo, since separate ContentSource rows can sit at different
+  commits when sub-syncs fail independently.
+  {% endcomment %}
+  {% if repo.sources_with_commits %}
+  <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" data-repo-commits>
+    {% for s in repo.sources_with_commits %}
+      <span class="inline-flex items-center gap-1">
+        <span>{{ s.get_content_type_display }}:</span>
+        {% if s.last_synced_commit %}
+          <a href="{{ s.synced_commit_url }}"
+             target="_blank" rel="noopener"
+             class="font-mono text-accent hover:underline"
+             title="View commit on GitHub"
+             data-source-commit>{{ s.short_synced_commit }}</a>
+        {% else %}
+          <span class="font-mono text-muted-foreground italic" data-source-commit>not synced</span>
+        {% endif %}
+      </span>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <!-- Last sync results -->
   {% if repo.last_batch %}

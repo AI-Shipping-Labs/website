@@ -620,6 +620,91 @@ def clear_detect_content_sources_cache(repo_full_name=None):
     cache.delete(f'{DETECT_CONTENT_CACHE_KEY_PREFIX}{repo_full_name}')
 
 
+def _resolve_local_repo_sha(repo_dir):
+    """Return ``git rev-parse HEAD`` for a local checkout, or ``''``.
+
+    Used by ``sync_content_source`` when ``repo_dir`` is provided
+    (``--from-disk`` syncs and tests). Falls back silently when the
+    directory isn't a git checkout — most test fixtures aren't.
+    """
+    if not os.path.isdir(os.path.join(repo_dir, '.git')):
+        return ''
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ''
+    if result.returncode != 0:
+        return ''
+    sha = result.stdout.strip()
+    return sha if re.fullmatch(r'[0-9a-f]{40}', sha) else ''
+
+
+def fetch_remote_head_sha(repo_name, is_private=False, timeout=15):
+    """Cheaply fetch the upstream HEAD commit SHA for a repo.
+
+    Uses ``git ls-remote <url> HEAD`` which is much cheaper than a full
+    clone — no working tree, no object pack download. Used by
+    :func:`sync_content_source` to short-circuit no-op syncs when the
+    upstream HEAD has not changed since the last successful sync
+    (issue #235).
+
+    Args:
+        repo_name: Full repo name (e.g. ``"AI-Shipping-Labs/blog"``).
+        is_private: Whether the repo requires authentication.
+        timeout: Subprocess timeout in seconds.
+
+    Returns:
+        str | None: The HEAD commit SHA, or ``None`` if the lookup failed.
+            Failures are intentionally non-fatal so the caller can fall back
+            to running the sync — we never silently skip when we can't
+            verify HEAD.
+    """
+    if is_private:
+        try:
+            token = generate_github_app_token()
+        except GitHubSyncError as e:
+            logger.warning(
+                'Could not get GitHub App token for HEAD check on %s: %s',
+                repo_name, e,
+            )
+            return None
+        repo_url = f'https://x-access-token:{token}@github.com/{repo_name}.git'
+    else:
+        repo_url = f'https://github.com/{repo_name}.git'
+
+    try:
+        result = subprocess.run(
+            ['git', 'ls-remote', repo_url, 'HEAD'],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning('git ls-remote failed for %s: %s', repo_name, e)
+        return None
+
+    if result.returncode != 0:
+        logger.warning(
+            'git ls-remote returned %s for %s: %s',
+            result.returncode, repo_name, result.stderr.strip(),
+        )
+        return None
+
+    # Output is "<sha>\tHEAD\n"
+    line = result.stdout.strip().split('\n', 1)[0]
+    sha = line.split('\t', 1)[0].strip()
+    if not re.fullmatch(r'[0-9a-f]{40}', sha):
+        logger.warning('Unexpected ls-remote output for %s: %r', repo_name, line)
+        return None
+    return sha
+
+
 def clone_or_pull_repo(repo_name, target_dir, is_private=False):
     """Clone or pull a GitHub repository to a local directory.
 
@@ -852,7 +937,7 @@ def upload_images_to_s3(content_dir, source):
     return stats
 
 
-def sync_content_source(source, repo_dir=None, batch_id=None):
+def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
     """Sync content from a GitHub repo into the database.
 
     This is the main sync function that:
@@ -864,8 +949,15 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
 
     Args:
         source: ContentSource instance.
-        repo_dir: Optional pre-cloned repo directory (for testing).
+        repo_dir: Optional pre-cloned repo directory (for testing /
+            ``--from-disk`` syncs). When provided, the cheap HEAD-SHA
+            skip optimisation (issue #235) is bypassed because there's
+            no remote to compare against.
         batch_id: Optional UUID to group logs from the same "Sync All" action.
+        force: If True, bypass the HEAD-SHA skip check and force a full
+            sync even when the upstream HEAD hasn't changed (issue #235).
+            Used by the Studio "Force resync" button and the webhook
+            handler (which already knows a new commit landed).
 
     Returns:
         SyncLog or None: The sync log entry.
@@ -907,6 +999,52 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
             return None
         return sync_log
 
+    # Cheap HEAD-SHA skip check (issue #235).
+    #
+    # If the upstream HEAD hasn't moved since the last successful sync, a
+    # full clone + file walk would be a no-op. Use ``git ls-remote HEAD``
+    # (a single network round-trip, no object download) to compare. Skip
+    # the optimisation when:
+    #   - ``force=True`` (operator clicked "Force resync" or webhook fired)
+    #   - ``repo_dir`` is provided (no remote to check; tests + ``--from-disk``)
+    #   - the previous sync didn't end in ``success`` (we want to retry)
+    #   - we don't yet have a baseline (first-ever sync)
+    #
+    # If the HEAD lookup itself fails (network error, missing auth) we
+    # fall through and run the sync rather than silently skipping —
+    # better to do the work than to lie about being up to date.
+    if (
+        repo_dir is None
+        and not force
+        and source.last_synced_commit
+        and source.last_sync_status == 'success'
+    ):
+        head_sha = fetch_remote_head_sha(source.repo_name, source.is_private)
+        if head_sha and head_sha == source.last_synced_commit:
+            now = timezone.now()
+            sync_log = SyncLog.objects.create(
+                source=source,
+                batch_id=batch_id,
+                status='skipped',
+                commit_sha=head_sha,
+                finished_at=now,
+                errors=[{'file': '', 'error': 'HEAD unchanged'}],
+            )
+            source.last_synced_at = now
+            source.last_sync_status = 'skipped'
+            source.last_sync_log = f'Skipped: HEAD unchanged ({head_sha[:7]})'
+            source.save(update_fields=[
+                'last_synced_at', 'last_sync_status', 'last_sync_log',
+                'updated_at',
+            ])
+            if use_lock:
+                release_sync_lock(source)
+            logger.info(
+                'Skipping sync for %s — HEAD unchanged (%s).',
+                source.repo_name, head_sha[:7],
+            )
+            return sync_log
+
     sync_log = SyncLog.objects.create(
         source=source,
         batch_id=batch_id,
@@ -917,6 +1055,7 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
     source.save(update_fields=['last_sync_status', 'updated_at'])
 
     temp_dir = None
+    commit_sha = ''
     try:
         if repo_dir is None:
             temp_dir = tempfile.mkdtemp(prefix='github-sync-')
@@ -925,8 +1064,12 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
             )
             repo_dir = temp_dir
         else:
-            # For testing, use provided directory
-            commit_sha = 'test-commit-sha'
+            # For testing / --from-disk, resolve the SHA from the local
+            # clone if possible; otherwise fall back to the legacy
+            # ``test-commit-sha`` marker so downstream per-item
+            # ``source_commit`` writes (and tests asserting on it) still
+            # have a value.
+            commit_sha = _resolve_local_repo_sha(repo_dir) or 'test-commit-sha'
 
         # Resolve content subdirectory
         content_dir = repo_dir
@@ -982,6 +1125,7 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
         sync_log.tiers_synced = tiers_result.get('synced', False)
         sync_log.tiers_count = tiers_result.get('count', 0)
         sync_log.errors = all_errors
+        sync_log.commit_sha = commit_sha or ''
 
         if sync_log.errors:
             sync_log.status = 'partial'
@@ -1002,6 +1146,13 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
         )
         if sync_log.errors:
             source.last_sync_log += f"\nErrors: {len(sync_log.errors)}"
+        # Issue #235: only persist last_synced_commit on success/partial
+        # (i.e. the sync at least completed without raising). On failure
+        # we keep the previous last-good SHA so the next skip check still
+        # has a baseline. We treat ``partial`` (per-file errors) as good
+        # enough — the repo was processed, we know what we have.
+        if commit_sha and commit_sha != 'test-commit-sha':
+            source.last_synced_commit = commit_sha
         source.save()
 
     except Exception as e:
@@ -1009,6 +1160,11 @@ def sync_content_source(source, repo_dir=None, batch_id=None):
         sync_log.status = 'failed'
         sync_log.finished_at = timezone.now()
         sync_log.errors = [{'file': '', 'error': str(e)}]
+        # Record which SHA we were trying to sync against (helps debug
+        # repeated failures), but do NOT update ContentSource —
+        # ``last_synced_commit`` is a "last known good" pointer.
+        if commit_sha:
+            sync_log.commit_sha = commit_sha
         sync_log.save()
 
         source.last_sync_status = 'failed'

@@ -163,12 +163,14 @@ class StudioSyncDashboardTest(TestCase):
         )
         response = self.client.get('/studio/sync/')
         html = response.content.decode()
-        # One per-repo trigger form for the single repo card.
+        # Two per-repo trigger forms (Sync now + Force resync) for the
+        # single repo card. Issue #235 added the Force resync form which
+        # POSTs ``force=1`` to the same URL.
         self.assertEqual(
             html.count(
                 'action="/studio/sync/AI-Shipping-Labs/content/trigger-repo/"'
             ),
-            1,
+            2,
         )
 
     def test_dashboard_has_history_link(self):

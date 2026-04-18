@@ -48,10 +48,10 @@
         <p class="text-foreground">{{ task.group|default:"—" }}</p>
       </div>
       <div>
-        <p class="text-xs text-muted-foreground uppercase">Age</p>
+        <p class="text-xs text-muted-foreground uppercase">Lock expires</p>
         <p class="text-foreground">
-          {% if task.age_seconds is not None %}{{ task.age_seconds|floatformat:0 }}s{% else %}—{% endif %}
-          {% if task.lock %}<span class="text-muted-foreground text-xs">(queued at {{ task.lock|date:"Y-m-d H:i:s" }})</span>{% endif %}
+          {% if task.lock_state == 'future' %}in {{ task.lock_seconds|floatformat:0 }}s{% elif task.lock_state == 'expired' %}expired {{ task.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
+          {% if task.lock %}<span class="text-muted-foreground text-xs">(lock expiry {{ task.lock|date:"Y-m-d H:i:s" }})</span>{% endif %}
         </p>
       </div>
     </div>

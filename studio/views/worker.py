@@ -51,13 +51,31 @@ def _safe_task_field(ormq, attr, default=None):
 
 
 def _ormq_summary(ormq, now=None):
-    """Build a serialisable summary dict for a queued task."""
+    """Build a serialisable summary dict for a queued task.
+
+    ``OrmQ.lock`` is the per-worker claim-expiry timestamp (set to
+    ``timezone.now() + retry_after`` when a worker tries to claim the row),
+    NOT a queued-at timestamp — django-q2's OrmQ schema doesn't persist when
+    a row was first enqueued. We translate ``lock`` into one of three states
+    so the template can render an honest "Lock expires" column:
+
+    * ``future``   — ``lock > now``: a worker holds the claim; lock will
+      expire in ``lock_seconds`` (positive countdown).
+    * ``expired``  — ``lock <= now``: the claim expired ``lock_seconds`` ago
+      and the row is awaiting reclaim by a worker.
+    * ``unlocked`` — ``lock IS NULL``: nothing has touched the row yet.
+    """
     now = now or timezone.now()
-    age_seconds = None
+    lock_state = 'unlocked'
+    lock_seconds = None
     if ormq.lock is not None:
-        # ``lock`` is set when the row is first written by the broker, so it
-        # doubles as a "queued at" timestamp. When unset, we report ``None``.
-        age_seconds = (now - ormq.lock).total_seconds()
+        delta = (ormq.lock - now).total_seconds()
+        if delta > 0:
+            lock_state = 'future'
+            lock_seconds = delta
+        else:
+            lock_state = 'expired'
+            lock_seconds = -delta
     return {
         'id': ormq.pk,
         'key': ormq.key,
@@ -69,7 +87,8 @@ def _ormq_summary(ormq, now=None):
         'kwargs': _safe_task_field(ormq, 'kwargs'),
         'q_options': _safe_task_field(ormq, 'q_options'),
         'lock': ormq.lock,
-        'age_seconds': age_seconds,
+        'lock_state': lock_state,
+        'lock_seconds': lock_seconds,
     }
 
 
@@ -155,7 +174,7 @@ def worker_status(request):
 
 @staff_required
 def worker_inspect_task(request, ormq_id):
-    """Show func/args/kwargs/age for a single queued task."""
+    """Show func/args/kwargs/lock state for a single queued task."""
     ormq = get_object_or_404(OrmQ, pk=ormq_id)
     summary = _ormq_summary(ormq)
     return render(request, 'studio/worker_inspect.html', {

@@ -116,22 +116,33 @@ DATABASES = {
         conn_max_age=600,
     ),
 }
+# SQLite concurrency tuning. Without these PRAGMAs, two writers racing the
+# same db.sqlite3 file (e.g. Q_WORKERS>1 syncing 6 sources in parallel)
+# surface as "database is locked". The Postgres branch is left untouched.
+#
+# - journal_mode=WAL: writers don't block readers, and one writer can run
+#   while others queue on the busy_timeout instead of failing immediately.
+# - busy_timeout=30000: when a writer hits the lock, wait up to 30 s for
+#   it to clear instead of raising OperationalError.
+# - synchronous=NORMAL: WAL's recommended fsync level. FULL is overkill
+#   for a dev database and noticeably slower.
+# - transaction_mode=IMMEDIATE (Django 5.1+): start write transactions in
+#   IMMEDIATE mode so we acquire the write lock up front. Without this,
+#   two transactions that both START as readers (DEFERRED, the default)
+#   and later try to UPGRADE to writers deadlock — SQLite resolves this
+#   by killing one with SQLITE_BUSY, which busy_timeout cannot retry.
+# - timeout=30: connect-level fallback for the same lock acquisition;
+#   retained for callers that bypass the busy_timeout PRAGMA.
 if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
-    DATABASES['default'].setdefault('OPTIONS', {})['timeout'] = 30
-
-
-# Enable WAL mode for SQLite to improve concurrency (needed for Playwright E2E
-# tests where the dev server and test process access the same database).
-def _enable_wal_mode(sender, connection, **kwargs):
-    if connection.vendor == 'sqlite':
-        cursor = connection.cursor()
-        cursor.execute('PRAGMA journal_mode=WAL;')
-        cursor.execute('PRAGMA busy_timeout=30000;')
-
-
-from django.db.backends.signals import connection_created  # noqa: E402
-
-connection_created.connect(_enable_wal_mode)
+    DATABASES['default'].setdefault('OPTIONS', {}).update({
+        'timeout': 30,
+        'init_command': (
+            'PRAGMA journal_mode=WAL;'
+            'PRAGMA busy_timeout=30000;'
+            'PRAGMA synchronous=NORMAL;'
+        ),
+        'transaction_mode': 'IMMEDIATE',
+    })
 
 
 # Password validation

@@ -1,0 +1,40 @@
+{% comment %}
+Reusable sync status pill.
+
+Renders a colored pill for a SyncLog/ContentSource sync status.
+
+Inputs (passed by `sync_status_pill` template tag):
+- status: raw enum value: success, failed, running, partial, skipped.
+- error_count: int. Used when status is partial to render
+  "Completed with N errors". DB enum stays partial so existing tests
+  and code paths keep working — only the surface label changes.
+- label: pre-computed display label (see `sync_status_label`).
+- size: optional CSS sizing variant: sm (default) or xs.
+{% endcomment %}
+{% if size == 'xs' %}
+<span class="text-xs whitespace-nowrap
+  {% if status == 'success' %}text-green-400
+  {% elif status == 'failed' %}text-red-400
+  {% elif status == 'running' %}text-blue-400
+  {% elif status == 'skipped' %}text-muted-foreground
+  {% else %}text-yellow-400{% endif %}">{{ label }}</span>
+{% else %}
+<span class="px-2 py-0.5 text-xs rounded-full whitespace-nowrap
+  {% if status == 'success' %}bg-green-500/20 text-green-400
+  {% elif status == 'failed' %}bg-red-500/20 text-red-400
+  {% elif status == 'running' %}bg-blue-500/20 text-blue-400
+  {% elif status == 'skipped' %}bg-secondary text-muted-foreground
+  {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+  {% if status == 'running' %}
+  <span class="inline-flex items-center space-x-1">
+    <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    </svg>
+    <span>{{ label }}</span>
+  </span>
+  {% else %}
+  {{ label }}
+  {% endif %}
+</span>
+{% endif %}

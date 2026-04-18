@@ -54,7 +54,13 @@ def _is_not_configured_error(errors):
 
 
 def _aggregate_batch(logs):
-    """Aggregate a queryset of SyncLog entries into a batch summary dict."""
+    """Aggregate a queryset of SyncLog entries into a batch summary dict.
+
+    The aggregate dict surfaces ``errors_count`` on every per-type row and at
+    the batch level so the sync-status pill (template tag
+    ``sync_status_pill``) can render ``Completed with N errors`` for partial
+    syncs without dipping back into the SyncLog. See issue #245.
+    """
     total_created = 0
     total_updated = 0
     total_deleted = 0
@@ -74,6 +80,7 @@ def _aggregate_batch(logs):
                 'updated': 0,
                 'deleted': 0,
                 'status': log.status,
+                'errors_count': 0,
                 'items_detail': [],
             }
         entry = per_type[ct]
@@ -81,6 +88,7 @@ def _aggregate_batch(logs):
         entry['updated'] += log.items_updated
         entry['deleted'] += log.items_deleted
         entry['items_detail'].extend(log.items_detail or [])
+        entry['errors_count'] += len(log.errors or [])
         if log.status == 'failed':
             entry['status'] = 'failed'
         elif log.status == 'partial' and entry['status'] != 'failed':
@@ -105,6 +113,7 @@ def _aggregate_batch(logs):
         'total_updated': total_updated,
         'total_deleted': total_deleted,
         'errors': all_errors,
+        'errors_count': len(all_errors),
         'per_type': list(per_type.values()),
         'tiers_synced': tiers_synced,
         'tiers_count': tiers_count,
@@ -177,6 +186,13 @@ def sync_dashboard(request):
             repo['last_batch'] = _aggregate_batch(batch_logs)
         else:
             repo['last_batch'] = None
+
+        # Surface the latest-batch error count on the repo dict so the
+        # status pill can render "Completed with N errors" for ``partial``
+        # without having to walk into ``last_batch`` from the template.
+        repo['overall_errors_count'] = (
+            repo['last_batch']['errors_count'] if repo['last_batch'] else 0
+        )
 
     return render(request, 'studio/sync/dashboard.html', {
         'repos': list(repos.values()),

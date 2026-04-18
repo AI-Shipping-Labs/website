@@ -414,8 +414,13 @@ class TestScenario1AdminTriggersSingleSync:
         # Should no longer say "Never synced"
         assert "Never synced" not in blog_text
 
-        # Then: Status displays as "success" or "partial"
-        assert "success" in blog_text or "partial" in blog_text
+        # Then: Status displays as "success" or the new "Completed with N
+        # error(s)" label (the operator-facing replacement for "partial").
+        # See issue #245 — the bare word "partial" is no longer surfaced.
+        assert (
+            "success" in blog_text
+            or "Completed with" in blog_text
+        )
 # ---------------------------------------------------------------------------
 # Scenario 2: Admin triggers "Sync All" to update every content source at once
 # ---------------------------------------------------------------------------
@@ -485,12 +490,14 @@ class TestScenario2AdminTriggersSyncAll:
         # All 4 sources should have been synced
         assert synced_count >= 4
 
-        # Each source should display a sync status
+        # Each source should display a sync status. ``partial`` is no
+        # longer rendered as a bare word — see issue #245; it surfaces as
+        # "Completed with N error(s)".
         for card in cards:
             card_text = card.inner_text()
             has_status = (
                 "success" in card_text
-                or "partial" in card_text
+                or "Completed with" in card_text
                 or "running" in card_text
             )
             assert has_status, f"Card missing status: {card_text[:80]}"
@@ -546,9 +553,10 @@ class TestScenario3AdminReviewsSyncHistory:
 
         body = page.content()
 
-        # Then: At least 2 sync log entries visible
+        # Then: At least 2 sync log entries visible. "partial" surfaces as
+        # the new "Completed with N error(s)" label — see issue #245.
         assert "success" in body
-        assert "partial" in body
+        assert "Completed with" in body
 
         # Then: Item counts shown
         assert "created" in body
@@ -610,8 +618,10 @@ class TestScenario4AdminReviewsErrorDetails:
 
         body = page.content()
 
-        # Then: Sync entry with status "partial"
-        assert "partial" in body
+        # Then: Sync entry with the new "Completed with N error(s)" label
+        # (DB enum is still 'partial'; only the surface label changed —
+        # see issue #245).
+        assert "Completed with" in body
 
         # Then: Error section lists specific files and messages
         assert "malformed-article.md" in body

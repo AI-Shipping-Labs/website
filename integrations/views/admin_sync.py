@@ -20,10 +20,32 @@ from integrations.services.github import sync_content_source
 logger = logging.getLogger(__name__)
 
 
+def _last_sync_errors_count(source):
+    """Number of errors in the most recent SyncLog for ``source`` (0 if none).
+
+    Surfaces the per-source error count to the admin sync templates so the
+    status pill can render ``Completed with N errors`` for ``partial`` syncs.
+    See issue #245.
+    """
+    last_log = (
+        SyncLog.objects.filter(source=source)
+        .order_by('-started_at')
+        .only('errors')
+        .first()
+    )
+    if not last_log:
+        return 0
+    return len(last_log.errors or [])
+
+
 @staff_member_required
 def admin_sync_dashboard(request):
     """Display all content sources with their sync status."""
-    sources = ContentSource.objects.all()
+    sources = list(ContentSource.objects.all())
+    for source in sources:
+        # Attach the per-source error count so the template can render the
+        # ``Completed with N errors`` label without extra DB chatter.
+        source.last_errors_count = _last_sync_errors_count(source)
     context = {
         'sources': sources,
         'title': 'Content Sync',
@@ -35,6 +57,7 @@ def admin_sync_dashboard(request):
 def admin_sync_history(request, source_id):
     """Display sync history for a specific content source."""
     source = get_object_or_404(ContentSource, pk=source_id)
+    source.last_errors_count = _last_sync_errors_count(source)
     logs = SyncLog.objects.filter(source=source)[:50]
     context = {
         'source': source,

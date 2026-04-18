@@ -34,6 +34,7 @@ pythonpath = ["."]
 
 [dependency-groups]
 dev = [
+    "honcho>=2.0.0",
     "ruff>=0.11.0",
 ]
 

@@ -1,4 +1,4 @@
-.PHONY: run migrate sync seed test coverage playwright lint lint-fix clean
+.PHONY: run dev migrate sync seed test coverage playwright lint lint-fix clean
 
 # Start dev server
 run: migrate
@@ -7,6 +7,10 @@ run: migrate
 # Start dev server on port 8001
 run2: migrate
 	uv run python manage.py runserver 8001
+
+# Start dev server + django-q worker together (Ctrl-C kills both)
+dev: migrate
+	uv run honcho -f Procfile.dev start
 
 # Run migrations
 migrate:

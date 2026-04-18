@@ -1,0 +1,2 @@
+web: uv run python manage.py runserver
+worker: uv run python manage.py qcluster

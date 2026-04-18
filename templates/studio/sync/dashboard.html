@@ -84,10 +84,6 @@
       <form method="post" action="{% url 'studio_sync_all' %}" class="sync-form">
         {% csrf_token %}
         <button type="submit" class="sync-btn px-4 py-2 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 transition-opacity inline-flex items-center space-x-1">
-          <svg class="animate-spin h-3 w-3 hidden sync-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-          </svg>
           <span class="sync-btn-text">Sync Now</span>
         </button>
       </form>
@@ -230,27 +226,53 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Show spinner on sync button click
+  // Per-source Sync Now: briefly flash "Sync queued ✓" then revert.
+  // No spinner — the button only acknowledges the click; the per-row
+  // status pill below is the source of truth for sync progress.
+  var SYNC_QUEUED_MS = 1500;
   document.querySelectorAll('.sync-form').forEach(function(form) {
     form.addEventListener('submit', function() {
       var btn = form.querySelector('.sync-btn');
-      var spinner = form.querySelector('.sync-spinner');
       var text = form.querySelector('.sync-btn-text');
-      if (btn) btn.disabled = true;
-      if (btn) btn.classList.add('opacity-60');
-      if (spinner) spinner.classList.remove('hidden');
-      if (text) text.textContent = 'Syncing...';
+      if (!btn || !text) return;
+      var originalText = text.getAttribute('data-original-text') || text.textContent;
+      text.setAttribute('data-original-text', originalText);
+      if (btn._queuedTimer) clearTimeout(btn._queuedTimer);
+      btn.disabled = true;
+      btn.classList.add('opacity-60');
+      text.textContent = 'Sync queued \u2713';
+      btn._queuedTimer = setTimeout(function() {
+        text.textContent = originalText;
+        btn.disabled = false;
+        btn.classList.remove('opacity-60');
+        btn._queuedTimer = null;
+      }, SYNC_QUEUED_MS);
     });
   });
 
-  // Show spinner on sync all click
+  // Sync All: same one-shot confirmation, no spinner.
   var syncAllForm = document.getElementById('sync-all-form');
   if (syncAllForm) {
+    var syncAllBtn = document.getElementById('sync-all-btn');
+    var syncAllLabel = syncAllBtn ? syncAllBtn.querySelector('span') : null;
+    if (syncAllLabel) {
+      syncAllLabel.setAttribute(
+        'data-original-text', syncAllLabel.textContent
+      );
+    }
     syncAllForm.addEventListener('submit', function() {
-      var btn = document.getElementById('sync-all-btn');
-      btn.disabled = true;
-      btn.classList.add('opacity-60');
-      btn.innerHTML = '<svg class="animate-spin h-4 w-4 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Syncing All...';
+      if (!syncAllBtn || !syncAllLabel) return;
+      var originalText = syncAllLabel.getAttribute('data-original-text');
+      if (syncAllBtn._queuedTimer) clearTimeout(syncAllBtn._queuedTimer);
+      syncAllBtn.disabled = true;
+      syncAllBtn.classList.add('opacity-60');
+      syncAllLabel.textContent = 'Sync queued \u2713';
+      syncAllBtn._queuedTimer = setTimeout(function() {
+        syncAllLabel.textContent = originalText;
+        syncAllBtn.disabled = false;
+        syncAllBtn.classList.remove('opacity-60');
+        syncAllBtn._queuedTimer = null;
+      }, SYNC_QUEUED_MS);
     });
   }
 

@@ -6,12 +6,15 @@ Covers (per issue #215):
 - Delete a single queued task.
 - Retry / delete a single failed Task.
 - Bulk retry / bulk delete failed Tasks.
-- Run sync now (synchronous), bypassing the queue.
 - Conditional rendering of action buttons.
+
+Content-sync triggers live on /studio/sync/ — they are intentionally not
+exposed on the worker page (see issue #240).
 """
 
 import uuid
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -21,9 +24,25 @@ from django.utils import timezone
 from django_q.models import OrmQ, Task
 from django_q.signing import SignedPackage
 
-from integrations.models import ContentSource
-
 User = get_user_model()
+
+
+def _fake_alive_cluster():
+    """Return a SimpleNamespace mimicking django_q.status.Stat for an alive worker."""
+    now = timezone.now()
+    cluster = SimpleNamespace(
+        cluster_id='cluster-abc',
+        host='worker-1',
+        pid=1234,
+        workers=[101, 102],
+        status='Idle',
+        timestamp=now - timedelta(seconds=3),
+        tob=now - timedelta(seconds=300),
+        task_q_size=0,
+        done_q_size=0,
+    )
+    cluster.uptime = lambda c=cluster: (timezone.now() - c.tob).total_seconds()
+    return cluster
 
 
 def _create_task(success=False, result=None, **kwargs):
@@ -91,15 +110,11 @@ class WorkerActionsAccessTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response.url)
 
-    def test_run_sync_now_requires_post(self):
+    def test_run_sync_now_endpoint_is_gone(self):
+        """Removed in #240 — sync triggers belong on /studio/sync/."""
         self.client.login(email='staff@test.com', password='testpass')
-        response = self.client.get('/studio/worker/run-sync-now/')
-        self.assertEqual(response.status_code, 405)
-
-    def test_run_sync_now_requires_staff(self):
-        self.client.login(email='user@test.com', password='testpass')
         response = self.client.post('/studio/worker/run-sync-now/')
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
     def test_inspect_requires_staff(self):
         ormq = _enqueue_ormq()
@@ -392,80 +407,45 @@ class BulkFailedActionsTest(TestCase):
         self.assertContains(response, 'data-action="bulk-delete"')
 
 
-class RunSyncNowTest(TestCase):
-    """Run sync now bypasses the queue and calls sync_content_source in-process."""
+class RunSyncButtonRemovedTest(TestCase):
+    """Per #240, the 'Run sync now' button must not appear on /studio/worker/.
+
+    Sync triggers live on /studio/sync/. The button conflated worker
+    monitoring with content-sync operator actions.
+    """
 
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-        cls.source_a = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
-        )
-        cls.source_b = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/courses',
-            content_type='course',
-            content_path='courses/',
-        )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('studio.views.worker.sync_content_source')
-    def test_run_sync_now_calls_sync_for_each_source(self, mock_sync):
-        response = self.client.post('/studio/worker/run-sync-now/')
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/sync/history/')
-        self.assertEqual(mock_sync.call_count, 2)
-        synced_sources = {call.args[0].pk for call in mock_sync.call_args_list}
-        self.assertEqual(
-            synced_sources, {self.source_a.pk, self.source_b.pk},
-        )
-
-    @patch('studio.views.worker.async_task')
-    @patch('studio.views.worker.sync_content_source')
-    def test_run_sync_now_does_not_use_async_task(
-        self, mock_sync, mock_async,
-    ):
-        """Bypassing the queue is the whole point — async_task must not run."""
-        self.client.post('/studio/worker/run-sync-now/')
-        mock_async.assert_not_called()
-        self.assertTrue(mock_sync.called)
-
-    @patch(
-        'studio.views.worker.sync_content_source',
-        side_effect=RuntimeError('boom'),
-    )
-    def test_run_sync_now_reports_per_source_failure(self, mock_sync):
-        response = self.client.post(
-            '/studio/worker/run-sync-now/', follow=True,
-        )
-        msgs = [str(m) for m in get_messages(response.wsgi_request)]
-        self.assertTrue(
-            any('boom' in m for m in msgs),
-            f'Expected error message containing "boom"; got {msgs!r}',
-        )
-
-    def test_run_sync_now_when_no_sources(self):
-        ContentSource.objects.all().delete()
-        response = self.client.post(
-            '/studio/worker/run-sync-now/', follow=True,
-        )
-        msgs = [str(m) for m in get_messages(response.wsgi_request)]
-        self.assertTrue(
-            any('no content sources' in m.lower() for m in msgs),
-            f'Expected "no content sources" message; got {msgs!r}',
-        )
-
-    def test_run_sync_button_always_renders(self):
-        """Per spec: 'Run sync directly always available with worker-down hint'."""
+    def test_run_sync_button_absent_when_worker_dead(self):
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
             response = self.client.get('/studio/worker/')
-        self.assertContains(response, 'data-action="run-sync-now"')
-        self.assertContains(response, 'Use when worker is down', status_code=200)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-action="run-sync-now"')
+        self.assertNotContains(response, 'Run sync now')
+
+    def test_run_sync_button_absent_when_worker_alive(self):
+        with patch(
+            'studio.worker_health.Stat.get_all',
+            return_value=[_fake_alive_cluster()],
+        ):
+            response = self.client.get('/studio/worker/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-action="run-sync-now"')
+        self.assertNotContains(response, 'Run sync now')
+
+    def test_drain_queue_button_still_present_when_queue_nonempty(self):
+        """Regression guard: removing the sync button must not nuke drain."""
+        _enqueue_ormq(name='still-here')
+        with patch('studio.worker_health.Stat.get_all', return_value=[]):
+            response = self.client.get('/studio/worker/')
+        self.assertContains(response, 'data-action="drain-queue"')
 
 
 class WorkerDashboardRendersQueuedTasksTest(TestCase):

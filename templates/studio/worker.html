@@ -112,23 +112,8 @@
             </button>
           </form>
         {% endif %}
-        <form method="post" action="{% url 'studio_worker_run_sync_now' %}"
-              onsubmit="return confirm('Run sync now (synchronously, bypassing the queue)? This will block until done.');">
-          {% csrf_token %}
-          <button type="submit"
-                  class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-amber-500/15 text-amber-200 border border-amber-500/30 hover:bg-amber-500/25"
-                  data-action="run-sync-now"
-                  title="Bypass the queue and run sync_content_source for every source in-process. Use when worker is down.">
-            Run sync now (sync)
-          </button>
-        </form>
       </div>
     </div>
-    <p class="text-xs text-muted-foreground">
-      <span class="font-medium text-amber-200">Run sync now:</span>
-      bypasses the queue and runs every content source sync in-process.
-      Use when the worker is down and you need content to sync immediately.
-    </p>
   </div>
 
   <!-- Active Clusters -->

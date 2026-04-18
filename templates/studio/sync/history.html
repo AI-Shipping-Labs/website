@@ -22,7 +22,7 @@
           {% elif batch.overall_status == 'failed' %}bg-red-400
           {% elif batch.overall_status == 'running' %}bg-blue-400
           {% else %}bg-yellow-400{% endif %}"></span>
-        <span class="text-sm text-foreground font-medium">{{ batch.overall_status }}</span>
+        <span class="text-sm text-foreground font-medium">{{ batch.overall_status|sync_status_label:batch.errors_count }}</span>
         <span class="text-sm text-muted-foreground">{{ batch.started_at }}</span>
         {% if batch.log_count > 1 %}
         <span class="text-xs text-muted-foreground">({{ batch.log_count }} sources)</span>
@@ -73,7 +73,7 @@
             <td class="py-2 pr-4 text-right {% if ct.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ ct.updated }}</td>
             <td class="py-2 pr-4 text-right {% if ct.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ ct.deleted }}</td>
             <td class="py-2 pr-4">
-              <span class="text-xs {% if ct.status == 'success' %}text-green-400{% elif ct.status == 'failed' %}text-red-400{% else %}text-yellow-400{% endif %}">{{ ct.status }}</span>
+              {% sync_status_pill ct.status ct.errors_count 'xs' %}
             </td>
           </tr>
           {% if ct.items_detail %}

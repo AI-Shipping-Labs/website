@@ -607,9 +607,11 @@ class TestScenario6StaffReviewsSyncHistory:
         assert "/history/" in page.url
         body = page.content()
 
-        # Shows past sync entries with statuses
+        # Shows past sync entries with statuses. The bare word "partial"
+        # is no longer surfaced — it's rendered as "Completed with N
+        # error(s)". DB enum is still 'partial'; see issue #245.
         assert "success" in body
-        assert "partial" in body
+        assert "Completed with" in body
 
         # Shows item counts
         assert "created" in body

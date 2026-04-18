@@ -17,6 +17,7 @@ from django.contrib import messages
 from django.db.models import Max, Min
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
 from integrations.models import ContentSource, SyncLog
@@ -256,8 +257,10 @@ def sync_history(request, source_id=None):
 def sync_trigger(request, source_id):
     """Trigger a sync for a single content source.
 
-    Redirects to ``/studio/worker/`` after enqueuing so the user can see the
-    job land in the queue (and detect if the worker is down).
+    Redirects back to ``/studio/sync/`` so the operator stays on the sync
+    dashboard and can see the inline indicator update. The flash message
+    includes a link to ``/studio/worker/`` for operators who want to watch
+    the job land in the queue. See issue #239.
     """
     source = get_object_or_404(ContentSource, pk=source_id)
 
@@ -273,9 +276,14 @@ def sync_trigger(request, source_id):
             label = source.repo_name
             if source.content_path:
                 label = f'{label} ({source.content_path})'
-            base_msg = f'Sync queued for {label} — watching it here.'
+            base_msg = format_html(
+                'Sync queued for {label}. You can see the status '
+                '<a href="/studio/worker/" class="underline">here</a>{warning}',
+                label=label,
+                warning=warning,
+            )
             if warning:
-                messages.warning(request, base_msg + warning)
+                messages.warning(request, base_msg)
             else:
                 messages.success(request, base_msg)
         except ImportError:
@@ -292,7 +300,7 @@ def sync_trigger(request, source_id):
             f'Sync failed for {source.repo_name}: {e}',
         )
 
-    return redirect('studio_worker')
+    return redirect('studio_sync_dashboard')
 
 
 @staff_required
@@ -300,8 +308,10 @@ def sync_trigger(request, source_id):
 def sync_all(request):
     """Trigger sync for all content sources with a shared batch_id.
 
-    Redirects to ``/studio/worker/`` after enqueuing so the user can watch
-    the batch flow through the queue.
+    Redirects back to ``/studio/sync/`` so the operator stays on the sync
+    dashboard and watches every per-source row update in place. The flash
+    message includes a link to ``/studio/worker/`` for operators who want
+    to watch the batch flow through the queue. See issue #239.
     """
     sources = ContentSource.objects.all()
     count = sources.count()
@@ -323,15 +333,18 @@ def sync_all(request):
             logger.exception('Error triggering sync for %s', source.repo_name)
 
     warning = _worker_warning_suffix()
-    base_msg = (
-        f'Sync triggered for {count} source{"" if count == 1 else "s"} — '
-        'watching it here.'
+    base_msg = format_html(
+        'Sync queued for {count} source{plural}. You can see the status '
+        '<a href="/studio/worker/" class="underline">here</a>{warning}',
+        count=count,
+        plural='' if count == 1 else 's',
+        warning=warning,
     )
     if warning:
-        messages.warning(request, base_msg + warning)
+        messages.warning(request, base_msg)
     else:
         messages.success(request, base_msg)
-    return redirect('studio_worker')
+    return redirect('studio_sync_dashboard')
 
 
 @staff_required

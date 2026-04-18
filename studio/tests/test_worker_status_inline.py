@@ -7,8 +7,10 @@ Covers:
   and /studio/notifications/ in both worker-up and worker-down states.
 - The studio dashboard at /studio/ shows the prominent worker status panel
   in both states.
-- Sync trigger and Sync All redirect to /studio/worker/ with a flash
-  message that mentions "watching it here".
+- Sync trigger and Sync All redirect back to /studio/sync/ (the sync
+  dashboard, NOT the worker page — see #239) with a flash message that
+  includes a clickable link to /studio/worker/ via the wording
+  "You can see the status here".
 - The Send Campaign admin endpoint surfaces a redirect URL pointing at
   /studio/worker/ in its JSON response and sets the matching flash.
 - The legacy global worker-down banner (red bar across every studio page)
@@ -164,8 +166,9 @@ class InlineIndicatorPresenceTest(TestCase):
 
 
 class SyncSubmitRedirectTest(TestCase):
-    """Sync Now / Sync All must enqueue the job, then redirect to the
-    worker dashboard with a flash message."""
+    """Sync Now / Sync All must enqueue the job, then redirect back to the
+    sync dashboard (NOT the worker page — see #239) with a flash message
+    that includes a clickable link to the worker page."""
 
     @classmethod
     def setUpTestData(cls):
@@ -181,25 +184,33 @@ class SyncSubmitRedirectTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
-    def test_sync_trigger_redirects_to_worker(self, _mock_async):
+    def test_sync_trigger_redirects_to_sync_dashboard(self, _mock_async):
+        """Per #239 the operator stays on the sync dashboard so they can
+        keep reading sync history instead of being yanked to /worker/."""
         response = self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/worker/')
+        self.assertEqual(response['Location'], '/studio/sync/')
 
     @patch('django_q.tasks.async_task')
-    def test_sync_trigger_flash_message_explains_redirect(self, _mock_async):
+    def test_sync_trigger_flash_mentions_source_and_links_to_worker(self, _mock_async):
+        """The flash mentions the specific source and includes a clickable
+        ``here`` link to /studio/worker/ for operators who want to watch."""
         with patch('studio.worker_health.Stat.get_all', return_value=[_fake_cluster()]):
             response = self.client.post(
                 f'/studio/sync/{self.source.pk}/trigger/',
                 follow=True,
             )
         body = response.content.decode()
-        self.assertIn('Sync queued', body)
-        self.assertIn('watching it here', body)
+        self.assertIn('Sync queued for AI-Shipping-Labs/blog', body)
+        self.assertIn(
+            'You can see the status <a href="/studio/worker/" class="underline">here</a>',
+            body,
+        )
 
     @patch('django_q.tasks.async_task')
     def test_sync_trigger_flash_warns_when_worker_down(self, _mock_async):
-        """The worker-down warning suffix is preserved on the flash."""
+        """The worker-down warning suffix is preserved on the flash and
+        the ``here`` link still renders."""
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
             response = self.client.post(
                 f'/studio/sync/{self.source.pk}/trigger/',
@@ -208,20 +219,35 @@ class SyncSubmitRedirectTest(TestCase):
         body = response.content.decode()
         self.assertIn('worker is not running', body)
         self.assertIn('manage.py qcluster', body)
+        self.assertIn('href="/studio/worker/"', body)
 
     @patch('django_q.tasks.async_task')
-    def test_sync_all_redirects_to_worker(self, _mock_async):
+    def test_sync_all_redirects_to_sync_dashboard(self, _mock_async):
+        """Per #239 Sync All also stays on the sync dashboard so the
+        operator can watch every per-source row update in place."""
         response = self.client.post('/studio/sync/all/')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/worker/')
+        self.assertEqual(response['Location'], '/studio/sync/')
 
     @patch('django_q.tasks.async_task')
-    def test_sync_all_flash_message_explains_redirect(self, _mock_async):
+    def test_sync_all_flash_mentions_count_and_links_to_worker(self, _mock_async):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='course',
+        )
         with patch('studio.worker_health.Stat.get_all', return_value=[_fake_cluster()]):
             response = self.client.post('/studio/sync/all/', follow=True)
         body = response.content.decode()
-        self.assertIn('Sync triggered', body)
-        self.assertIn('watching it here', body)
+        # 1 source from setUpTestData + 2 created above = 3 total.
+        self.assertIn('Sync queued for 3 sources', body)
+        self.assertIn(
+            'You can see the status <a href="/studio/worker/" class="underline">here</a>',
+            body,
+        )
 
 
 class SendCampaignRedirectTest(TestCase):

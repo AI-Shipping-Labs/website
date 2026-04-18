@@ -59,6 +59,9 @@ class StudioDownloadCreateRemovedTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_create_url_returns_404(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario11StaffCreatesDownloadViaStudio::test_download_create_url_removed_and_download_visible_publicly
+        # (the "/studio/downloads/new is removed" half — the public-listing
+        # half lives in content.tests.test_downloads.DownloadsPubliclyVisibleAfterCreateTest)
         response = self.client.get('/studio/downloads/new')
         self.assertEqual(response.status_code, 404)
 

@@ -762,3 +762,435 @@ class DownloadsTagFilterTest(TestCase):
         self.assertEqual(filtered.status_code, 200)
         self.assertContains(filtered, 'Python Cheatsheet')
         self.assertNotContains(filtered, 'Go Cheatsheet')
+
+
+# ---------------------------------------------------------------
+# Conversions from playwright_tests/test_downloadable_resources.py
+# (issue #262 — workstream 3 sub-issue of #170)
+# ---------------------------------------------------------------
+
+
+class DownloadsListDisplayTest(TestCase):
+    """Anonymous visitor browses the catalog and evaluates resources by
+    type, size, description.
+
+    Replaces the Playwright scenario where two downloads of different
+    file types are listed on /downloads with badges, sizes, and copy.
+    """
+
+    def test_downloads_catalog_shows_type_badges_sizes_descriptions(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario1VisitorBrowsesCatalog::test_downloads_catalog_shows_type_badges_sizes_descriptions
+        Download.objects.create(
+            title='AI Cheat Sheet',
+            slug='ai-cheat-sheet',
+            description='A comprehensive cheat sheet for AI concepts.',
+            file_url='https://example.com/cheatsheet.pdf',
+            file_type='pdf',
+            file_size_bytes=2_500_000,  # -> "2.4 MB"
+            tags=['ai', 'reference'],
+            published=True,
+        )
+        Download.objects.create(
+            title='Starter Kit',
+            slug='starter-kit',
+            description='Everything you need to get started.',
+            file_url='https://example.com/starter.zip',
+            file_type='zip',
+            file_size_bytes=9_961_472,  # -> "9.5 MB"
+            tags=['starter'],
+            published=True,
+        )
+
+        response = self.client.get('/downloads')
+        self.assertEqual(response.status_code, 200)
+
+        # Both card titles render.
+        self.assertContains(response, 'AI Cheat Sheet')
+        self.assertContains(response, 'Starter Kit')
+
+        # File-type badges (PDF and ZIP).
+        self.assertContains(response, 'PDF')
+        self.assertContains(response, 'ZIP')
+
+        # Human-readable sizes from human_file_size.
+        self.assertContains(response, '2.4 MB')
+        self.assertContains(response, '9.5 MB')
+
+        # Descriptions render.
+        self.assertContains(response, 'comprehensive cheat sheet for AI concepts')
+        self.assertContains(response, 'Everything you need to get started')
+
+
+class DownloadsGatingTest(TierSetupMixin, TestCase):
+    """Anonymous-visitor gating CTAs on the /downloads listing.
+
+    Replaces the Playwright scenarios for lead-magnet signup and
+    upgrade CTA on a gated download.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.lead_magnet = Download.objects.create(
+            title='Free PDF Guide',
+            slug='free-pdf-guide',
+            description='A free guide for everyone.',
+            file_url='https://example.com/guide.pdf',
+            file_type='pdf',
+            required_level=LEVEL_OPEN,
+            published=True,
+        )
+        cls.gated = Download.objects.create(
+            title='Basic Toolkit',
+            slug='basic-toolkit',
+            description='A toolkit for Basic members.',
+            file_url='https://example.com/toolkit.zip',
+            file_type='zip',
+            required_level=LEVEL_BASIC,
+            published=True,
+        )
+
+    def test_anonymous_sees_signup_for_lead_magnet(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario2AnonymousLeadMagnetSignup::test_anonymous_sees_signup_button_for_free_download
+        response = self.client.get('/downloads')
+        self.assertEqual(response.status_code, 200)
+
+        # Card is present and the signup CTA links the visitor to
+        # /accounts/signup with a `next` parameter pointing at the
+        # gated file endpoint.
+        self.assertContains(response, 'Free PDF Guide')
+        self.assertContains(
+            response,
+            'href="/accounts/signup?next=/api/downloads/free-pdf-guide/file"',
+        )
+        self.assertContains(response, 'Sign Up to Download')
+
+    def test_anonymous_sees_upgrade_cta_for_gated(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario3AnonymousGatedDownloadUpgradeCTA::test_anonymous_sees_upgrade_cta_for_gated_download
+        response = self.client.get('/downloads')
+        self.assertEqual(response.status_code, 200)
+
+        # Upgrade CTA is shown with a /pricing link.
+        self.assertContains(response, 'Upgrade to Basic to download')
+        self.assertContains(response, 'href="/pricing"')
+
+        # The gated file endpoint must not be exposed as a download link.
+        body = response.content.decode()
+        self.assertNotIn(
+            'href="/api/downloads/basic-toolkit/file"',
+            body,
+        )
+
+
+class DownloadsFileEndpointTest(TierSetupMixin, TestCase):
+    """File-endpoint behaviour previously verified end-to-end via
+    Playwright by intercepting redirects.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.basic_resource = Download.objects.create(
+            title='Member Resource',
+            slug='member-resource',
+            description='A resource for members.',
+            file_url='https://example.com/member.pdf',
+            file_type='pdf',
+            required_level=LEVEL_BASIC,
+            published=True,
+        )
+        cls.premium_resource = Download.objects.create(
+            title='Premium Report',
+            slug='premium-report',
+            description='An exclusive premium report.',
+            file_url='https://example.com/secret.pdf',
+            file_type='pdf',
+            required_level=LEVEL_PREMIUM,
+            published=True,
+        )
+
+    def test_basic_member_gets_file_and_count_increments(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario4AuthorizedMemberDownloads::test_basic_member_downloads_file_and_count_increments
+        User.objects.create_user(
+            email='basic_dl@test.com', password='testpass',
+            tier=self.basic_tier,
+        )
+        self.client.login(email='basic_dl@test.com', password='testpass')
+
+        # Listing exposes the direct download link (no upgrade CTA).
+        listing = self.client.get('/downloads')
+        self.assertContains(
+            listing,
+            'href="/api/downloads/member-resource/file"',
+        )
+
+        # Capture before/after to verify the side effect, not just ">0".
+        initial_count = Download.objects.get(slug='member-resource').download_count
+
+        response = self.client.get(
+            '/api/downloads/member-resource/file', follow=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'https://example.com/member.pdf')
+
+        final_count = Download.objects.get(slug='member-resource').download_count
+        self.assertEqual(final_count, initial_count + 1)
+
+    def test_basic_member_403_on_premium_and_count_unchanged(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario5InsufficientTierUpgradeCTA::test_basic_member_cannot_access_premium_download
+        User.objects.create_user(
+            email='basic_p@test.com', password='testpass',
+            tier=self.basic_tier,
+        )
+        self.client.login(email='basic_p@test.com', password='testpass')
+
+        # Listing shows the upgrade CTA, never the file URL.
+        listing = self.client.get('/downloads')
+        self.assertContains(listing, 'Upgrade to Premium to download')
+        self.assertContains(listing, 'href="/pricing"')
+        body = listing.content.decode()
+        self.assertNotIn('https://example.com/secret.pdf', body)
+        self.assertNotIn(
+            'href="/api/downloads/premium-report/file"',
+            body,
+        )
+
+        # Endpoint refuses with 403 and download_count is not bumped
+        # (Rule 12: assert side-effect is unchanged, not just status).
+        initial_count = Download.objects.get(slug='premium-report').download_count
+        response = self.client.get(
+            '/api/downloads/premium-report/file', follow=False,
+        )
+        self.assertEqual(response.status_code, 403)
+        # The forbidden response must not leak the source file URL.
+        self.assertNotIn(
+            'https://example.com/secret.pdf',
+            response.content.decode(),
+        )
+        final_count = Download.objects.get(slug='premium-report').download_count
+        self.assertEqual(final_count, initial_count)
+
+
+class DownloadsListFilteringTest(TestCase):
+    """Tag chip filtering on /downloads + empty-state recovery link.
+
+    Replaces the Playwright scenarios that drove these flows through
+    the browser even though they are pure server-rendered behaviour.
+    """
+
+    def test_tag_filter_narrows_results(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario6VisitorFiltersByTag::test_tag_filter_narrows_to_matching_downloads
+        Download.objects.create(
+            title='Doc A', slug='doc-a',
+            description='A document about Python and AI.',
+            file_url='https://example.com/doc-a.pdf',
+            file_type='pdf',
+            tags=['python', 'ai'],
+            published=True,
+        )
+        Download.objects.create(
+            title='Doc B', slug='doc-b',
+            description='A document about Django.',
+            file_url='https://example.com/doc-b.pdf',
+            file_type='pdf',
+            tags=['django'],
+            published=True,
+        )
+
+        # Without filter, both cards are visible.
+        unfiltered = self.client.get('/downloads')
+        self.assertContains(unfiltered, 'Doc A')
+        self.assertContains(unfiltered, 'Doc B')
+
+        # Filtering by ?tag=python keeps Doc A and drops Doc B.
+        filtered = self.client.get('/downloads?tag=python')
+        self.assertEqual(filtered.status_code, 200)
+        self.assertContains(filtered, 'Doc A')
+        self.assertNotContains(filtered, 'Doc B')
+        # current_tag context is what the chip UI uses to highlight.
+        self.assertEqual(filtered.context['current_tag'], 'python')
+
+    def test_empty_state_with_clear_filter_link(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario7EmptyTagFilter::test_nonexistent_tag_shows_empty_message_and_recovery_link
+        # No downloads tagged "nonexistent" exist.
+        response = self.client.get('/downloads?tag=nonexistent')
+        self.assertEqual(response.status_code, 200)
+
+        # Empty-state copy + recovery link to /downloads (no <article>
+        # cards are rendered when the queryset is empty).
+        self.assertContains(response, 'No downloads found with the selected tags.')
+        self.assertContains(response, 'href="/downloads"')
+        self.assertContains(response, 'View all downloads')
+        # No download cards in the response (cards use <article>).
+        self.assertNotContains(response, '<article')
+
+
+def _create_article_with_shortcode(slug, shortcode_html):
+    """Helper: create a published Article whose content_html embeds a
+    download shortcode.
+
+    The Article ``save()`` only re-renders ``content_html`` when
+    ``content_markdown`` is non-empty, so we can pass HTML directly here
+    and trust it to survive the round-trip into the blog detail page.
+    """
+    import datetime
+
+    from content.models import Article
+
+    return Article.objects.create(
+        title='Article With Download',
+        slug=slug,
+        description='An article containing a download shortcode.',
+        content_markdown='',
+        content_html=shortcode_html,
+        date=datetime.date.today(),
+        published=True,
+    )
+
+
+class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
+    """End-to-end shortcode rendering through the blog detail view.
+
+    The shortcode is rewritten to the inline download card by the
+    ``render_download_shortcodes`` filter in the blog_detail template,
+    so going through ``/blog/<slug>`` exercises both the template tag
+    and the includes/download_card.html template — same surface the
+    Playwright tests covered, with no JavaScript involved.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.lead_magnet = Download.objects.create(
+            title='Inline Resource',
+            slug='inline-pdf',
+            description='Get it here',
+            file_url='https://example.com/inline.pdf',
+            file_type='pdf',
+            required_level=LEVEL_OPEN,
+            published=True,
+        )
+        cls.gated = Download.objects.create(
+            title='Gated Slides',
+            slug='gated-slides',
+            description='Slides for Basic members.',
+            file_url='https://example.com/slides.pdf',
+            file_type='slides',
+            required_level=LEVEL_BASIC,
+            published=True,
+        )
+
+    def test_anonymous_inline_card(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario8ShortcodeAnonymousReader::test_anonymous_sees_inline_card_with_signup_button
+        _create_article_with_shortcode(
+            'article-with-download',
+            '<p>Here is some intro text.</p>'
+            '{{download:inline-pdf}}'
+            '<p>More content after.</p>',
+        )
+
+        response = self.client.get('/blog/article-with-download')
+        self.assertEqual(response.status_code, 200)
+
+        # Inline card renders title, description, file-type badge.
+        self.assertContains(response, 'Inline Resource')
+        self.assertContains(response, 'Get it here')
+        self.assertContains(response, 'PDF')
+
+        # Lead-magnet signup button with `next` pointing at the file
+        # endpoint — this is the only allowed CTA for anonymous users.
+        self.assertContains(
+            response,
+            'href="/accounts/signup?next=/api/downloads/inline-pdf/file"',
+        )
+        self.assertContains(response, 'Sign Up to Download Free')
+
+        # The direct download link must NOT be exposed to anonymous.
+        body = response.content.decode()
+        self.assertNotIn(
+            'href="/api/downloads/inline-pdf/file"',
+            body,
+        )
+
+    def test_authenticated_inline_card(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario9AuthenticatedShortcodeDownload::test_authenticated_user_sees_direct_download_link
+        User.objects.create_user(
+            email='free_sc@test.com', password='testpass',
+            tier=self.free_tier,
+        )
+        self.client.login(email='free_sc@test.com', password='testpass')
+
+        _create_article_with_shortcode(
+            'article-with-download',
+            '<p>Intro text.</p>'
+            '{{download:inline-pdf}}'
+            '<p>More content.</p>',
+        )
+
+        response = self.client.get('/blog/article-with-download')
+        self.assertEqual(response.status_code, 200)
+
+        # Direct download link is exposed to the logged-in reader.
+        self.assertContains(
+            response,
+            'href="/api/downloads/inline-pdf/file"',
+        )
+        self.assertContains(response, 'Download PDF')
+
+        # The lead-magnet signup CTA is gone for authenticated users.
+        self.assertNotContains(response, 'Sign Up to Download Free')
+
+    def test_free_user_sees_upgrade_cta(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario10FreeUserGatedShortcode::test_free_user_sees_upgrade_cta_in_shortcode_card
+        User.objects.create_user(
+            email='free_gated@test.com', password='testpass',
+            tier=self.free_tier,
+        )
+        self.client.login(email='free_gated@test.com', password='testpass')
+
+        _create_article_with_shortcode(
+            'article-gated-download',
+            '<p>Check out these slides.</p>'
+            '{{download:gated-slides}}',
+        )
+
+        response = self.client.get('/blog/article-gated-download')
+        self.assertEqual(response.status_code, 200)
+
+        # The card shows the upgrade CTA and a /pricing link, never the
+        # file endpoint.
+        self.assertContains(response, 'Gated Slides')
+        self.assertContains(response, 'Upgrade to Basic to download')
+        self.assertContains(response, 'href="/pricing"')
+
+        body = response.content.decode()
+        self.assertNotIn(
+            'href="/api/downloads/gated-slides/file"',
+            body,
+        )
+
+
+class DownloadsPubliclyVisibleAfterCreateTest(TestCase):
+    """The Studio create form was removed (#152) — but downloads created
+    via other paths (sync, ORM, admin) must still surface on /downloads.
+
+    The "studio create URL is gone" half of the original Playwright
+    scenario lives in studio.tests.test_downloads.StudioDownloadCreateRemovedTest;
+    here we cover the public-listing half so the original behaviour is
+    not lost when the file is deleted.
+    """
+
+    def test_download_created_via_orm_appears_publicly(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario11StaffCreatesDownloadViaStudio::test_download_create_url_removed_and_download_visible_publicly
+        Download.objects.create(
+            title='Test Resource',
+            slug='test-resource',
+            file_url='https://example.com/test.pdf',
+            file_type='pdf',
+            required_level=LEVEL_OPEN,
+            published=True,
+        )
+
+        response = self.client.get('/downloads')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Test Resource')

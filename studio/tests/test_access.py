@@ -108,6 +108,7 @@ class StudioAccessControlTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_non_staff_downloads_forbidden(self):
+        # Replaces playwright_tests/test_downloadable_resources.py::TestScenario12RegularMemberCannotAccessStudio::test_non_staff_member_is_denied_studio_access
         self.client.login(email='user@test.com', password='testpass')
         response = self.client.get('/studio/downloads/')
         self.assertEqual(response.status_code, 403)

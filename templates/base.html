@@ -316,13 +316,46 @@
 </head>
 <body class="font-sans antialiased">
   {% if is_impersonating %}
-  <div class="bg-yellow-500 text-black text-center py-2 px-4 text-sm font-medium sticky top-0 z-[60]">
+  <div id="impersonation-banner" class="bg-yellow-500 text-black text-center py-2 px-4 text-sm font-medium">
     You are logged in as {{ request.user.email }}
     <form method="post" action="{% url 'studio_stop_impersonate' %}" class="inline ml-2">
       {% csrf_token %}
       <button type="submit" class="underline font-bold">Return to your account</button>
     </form>
   </div>
+  <script>
+    // While impersonating, the banner sits in normal flow above the fixed
+    // header. To stop the header from overlapping the banner at the top of
+    // the page, we offset the header down by the banner height *only while
+    // the banner is on screen*. Once scrolled past, we snap the header back
+    // to top:0 so there is no white gap above it.
+    //
+    // The header element lives inside the body block which is rendered
+    // after this script tag, so we wait for DOMContentLoaded to look it up.
+    (function() {
+      function init() {
+        var header = document.getElementById('site-header');
+        var banner = document.getElementById('impersonation-banner');
+        if (!header || !banner) return;
+        function update() {
+          var bannerHeight = banner.offsetHeight;
+          if (window.scrollY < bannerHeight) {
+            header.style.top = bannerHeight + 'px';
+          } else {
+            header.style.top = '0px';
+          }
+        }
+        window.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update, { passive: true });
+        update();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
   {% endif %}
   {% block body %}{% endblock %}
 

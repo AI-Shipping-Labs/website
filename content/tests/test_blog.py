@@ -14,7 +14,7 @@ Covers:
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 
 from content.access import LEVEL_BASIC
 from content.models import Article
@@ -26,6 +26,7 @@ User = get_user_model()
 # --- Model field tests ---
 
 
+@tag('core')
 class ArticleFieldsTest(TestCase):
     """Test that Article has all required fields from issue #72."""
 
@@ -75,6 +76,7 @@ class ArticleFieldsTest(TestCase):
 # --- Status/Published sync tests ---
 
 
+@tag('core')
 class ArticleStatusSyncTest(TestCase):
     """Test that status and published stay in sync."""
 
@@ -133,6 +135,7 @@ class ArticleStatusSyncTest(TestCase):
 # --- Markdown rendering tests ---
 
 
+@tag('core')
 class MarkdownRenderingTest(TestCase):
     """Test markdown rendering with syntax highlighting."""
 
@@ -182,6 +185,7 @@ class MarkdownRenderingTest(TestCase):
         self.assertIn('<td>1</td>', html)
 
 
+@tag('core')
 class ArticleSaveRendersMarkdownTest(TestCase):
     """Test that saving an article auto-renders markdown to HTML."""
 
@@ -234,6 +238,7 @@ class ArticleSaveRendersMarkdownTest(TestCase):
 # --- Tag filtering tests ---
 
 
+@tag('core')
 class BlogListTagFilteringTest(TestCase):
     """Test tag filtering on /blog via ?tag=X query param."""
 
@@ -676,6 +681,7 @@ class ArticleAdminTest(TestCase):
 # --- Sorting tests ---
 
 
+@tag('core')
 class BlogListSortingTest(TestCase):
     """Test that articles are sorted by date descending."""
 
@@ -705,6 +711,7 @@ class BlogListSortingTest(TestCase):
 # --- Draft article visibility tests ---
 
 
+@tag('core')
 class DraftArticleVisibilityTest(TestCase):
     """Test that draft articles are not visible on public pages."""
 

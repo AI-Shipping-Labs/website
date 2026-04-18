@@ -16,7 +16,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase, override_settings, tag
 
 from content.access import can_access
 from content.models import Course, CourseAccess, Module, Unit
@@ -31,6 +31,7 @@ User = get_user_model()
 # ============================================================
 
 
+@tag('core')
 class CourseAccessModelTest(TestCase):
     """Test CourseAccess model fields and constraints."""
 
@@ -120,6 +121,7 @@ class CourseAccessModelTest(TestCase):
 # ============================================================
 
 
+@tag('core')
 class CourseIndividualPriceFieldsTest(TestCase):
     """Test new fields on Course model for individual purchase."""
 
@@ -157,6 +159,7 @@ class CourseIndividualPriceFieldsTest(TestCase):
 # ============================================================
 
 
+@tag('core')
 class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
     """Test that can_access() checks CourseAccess in addition to tier level."""
 
@@ -296,6 +299,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 
 
 @override_settings(STRIPE_CHECKOUT_ENABLED=True)
+@tag('core')
 class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
     """Test POST /api/courses/{slug}/purchase endpoint."""
 
@@ -443,6 +447,7 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
+@tag('core')
 class WebhookCoursePurchaseTest(TierSetupMixin, TestCase):
     """Test that checkout.session.completed with course_id creates CourseAccess."""
 
@@ -851,6 +856,7 @@ class StudioCreateStripeProductTest(TestCase):
 # ============================================================
 
 
+@tag('core')
 class CourseUnitAccessWithPurchaseTest(TierSetupMixin, TestCase):
     """Test that individual course purchasers can access course units."""
 

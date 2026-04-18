@@ -7,11 +7,12 @@ Verifies that:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 
 User = get_user_model()
 
 
+@tag('core')
 class StudioAccessControlTest(TestCase):
     """Test that studio pages are staff-only."""
 

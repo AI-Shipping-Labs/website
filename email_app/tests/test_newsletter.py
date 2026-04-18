@@ -18,13 +18,14 @@ from unittest.mock import patch
 import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, tag
 
 User = get_user_model()
 
 JWT_ALGORITHM = "HS256"
 
 
+@tag('core')
 class SubscribeAPITest(TestCase):
     """Test POST /api/subscribe endpoint."""
 
@@ -207,6 +208,7 @@ class SubscribeLeadMagnetTest(TestCase):
         )
 
 
+@tag('core')
 class VerifyEmailAPITest(TestCase):
     """Test GET /api/verify-email?token= endpoint."""
 
@@ -304,6 +306,7 @@ class VerifyEmailAPITest(TestCase):
         self.assertTrue(user.email_verified)
 
 
+@tag('core')
 class UnsubscribeAPITest(TestCase):
     """Test GET /api/unsubscribe?token= endpoint."""
 

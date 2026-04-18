@@ -12,13 +12,14 @@ Verifies:
 """
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 
 from content.models import Course, CourseAccess
 
 User = get_user_model()
 
 
+@tag('core')
 class StudioCourseAccessListTest(TestCase):
     """Test course access list view."""
 
@@ -111,6 +112,7 @@ class StudioCourseAccessListTest(TestCase):
         self.assertEqual(content.count('Revoke</button>'), 1)
 
 
+@tag('core')
 class StudioCourseAccessGrantTest(TestCase):
     """Test granting course access."""
 
@@ -215,6 +217,7 @@ class StudioCourseAccessGrantTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@tag('core')
 class StudioCourseAccessRevokeTest(TestCase):
     """Test revoking course access."""
 
@@ -309,6 +312,7 @@ class StudioCourseAccessRevokeTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@tag('core')
 class StudioCourseAccessPermissionTest(TestCase):
     """Test access control for course access management views."""
 

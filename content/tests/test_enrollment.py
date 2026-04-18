@@ -15,7 +15,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
@@ -55,6 +55,7 @@ def _make_course_with_units(title='Course', slug='course', n_units=3, required_l
 # ============================================================
 
 
+@tag('core')
 class EnrollmentModelTest(TierSetupMixin, TestCase):
 
     def setUp(self):
@@ -106,6 +107,7 @@ class EnrollmentModelTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
+@tag('core')
 class EnrollmentServiceTest(TierSetupMixin, TestCase):
 
     def setUp(self):
@@ -167,6 +169,7 @@ class EnrollmentServiceTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
+@tag('core')
 class EnrollViewTest(TierSetupMixin, TestCase):
 
     def setUp(self):
@@ -233,6 +236,7 @@ class EnrollViewTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+@tag('core')
 class UnenrollViewTest(TierSetupMixin, TestCase):
 
     def setUp(self):
@@ -260,6 +264,7 @@ class UnenrollViewTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
+@tag('core')
 class AutoEnrollOnCompleteTest(TierSetupMixin, TestCase):
 
     def setUp(self):

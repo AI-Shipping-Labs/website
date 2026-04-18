@@ -84,7 +84,10 @@ uv run python manage.py createsuperuser
 ## Tests
 
 ```bash
-# Django unit/integration tests
+# Fast core subset for the inner dev loop (~30s, parallel)
+make test-core
+
+# Full Django unit/integration suite (parallel)
 make test
 
 # Tests with coverage report
@@ -96,6 +99,12 @@ make playwright
 # All tests (Django + Playwright)
 make test-all
 ```
+
+`make test-core` runs only test classes decorated with `@tag('core')` -- the
+auth, access-control, payments, sync, and critical model paths. CI runs the
+full suite, so always run `make test` before pushing. See
+[_docs/testing-guidelines.md](_docs/testing-guidelines.md) for the policy on
+what belongs in core.
 
 ## Background Job Worker
 

@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import timedelta
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 from django.utils import timezone
 
 from accounts.models import User
@@ -12,6 +12,7 @@ from tests.fixtures import TierSetupMixin
 from voting.models import Poll, PollOption, PollVote
 
 
+@tag('core')
 class VoteToggleAPITest(TierSetupMixin, TestCase):
     """Test POST /api/vote/{id}/vote endpoint."""
 
@@ -174,6 +175,7 @@ class VoteToggleAPITest(TierSetupMixin, TestCase):
         self.assertEqual(response.json()['action'], 'voted')
 
 
+@tag('core')
 class ProposeOptionAPITest(TierSetupMixin, TestCase):
     """Test POST /api/vote/{id}/propose endpoint."""
 

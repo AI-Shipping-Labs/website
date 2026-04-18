@@ -1,4 +1,4 @@
-.PHONY: run dev migrate sync seed test coverage playwright lint lint-fix clean
+.PHONY: run dev migrate sync seed test test-core coverage playwright lint lint-fix clean
 
 # Start dev server
 run: migrate
@@ -30,6 +30,12 @@ seed:
 # Run all Django tests
 test:
 	uv run python manage.py test --parallel
+
+# Run only the core subset of Django tests (auth, access control, payments,
+# sync happy paths, critical model invariants). Targeted at <45s wall time.
+# See _docs/testing-guidelines.md ("Core test subset") for the tagging policy.
+test-core:
+	uv run python manage.py test --tag=core --parallel
 
 # Run tests with coverage
 coverage:

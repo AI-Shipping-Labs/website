@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import jwt
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
 
 from accounts.models import User
@@ -56,6 +56,7 @@ def _make_password_reset_token(user_id, expired=False):
 # ── Registration API ──────────────────────────────────────────────────
 
 
+@tag('core')
 class RegisterAPITest(TestCase):
     """Tests for POST /api/register."""
 
@@ -160,6 +161,7 @@ class RegisterAPITest(TestCase):
 # ── Email Verification API ────────────────────────────────────────────
 
 
+@tag('core')
 class VerifyEmailAPITest(TestCase):
     """Tests for GET /api/verify-email?token={jwt}."""
 
@@ -233,6 +235,7 @@ class VerifyEmailAPITest(TestCase):
 # ── Login API ─────────────────────────────────────────────────────────
 
 
+@tag('core')
 class LoginAPITest(TestCase):
     """Tests for POST /api/login."""
 
@@ -307,6 +310,7 @@ class LoginAPITest(TestCase):
 # ── Password Reset Request API ────────────────────────────────────────
 
 
+@tag('core')
 class PasswordResetRequestAPITest(TestCase):
     """Tests for POST /api/password-reset-request."""
 
@@ -373,6 +377,7 @@ class PasswordResetRequestAPITest(TestCase):
 # ── Password Reset API ───────────────────────────────────────────────
 
 
+@tag('core')
 class PasswordResetAPITest(TestCase):
     """Tests for GET/POST /api/password-reset."""
 
@@ -476,6 +481,7 @@ class PasswordResetAPITest(TestCase):
 # ── Change Password API ──────────────────────────────────────────────
 
 
+@tag('core')
 class ChangePasswordAPITest(TestCase):
     """Tests for POST /account/api/change-password."""
 
@@ -724,6 +730,7 @@ class AccountPageChangePasswordSectionTest(TestCase):
 # ── Works Alongside OAuth ─────────────────────────────────────────────
 
 
+@tag('core')
 class OAuthCoexistenceTest(TestCase):
     """Tests that email+password auth works alongside existing OAuth."""
 
@@ -762,6 +769,7 @@ class OAuthCoexistenceTest(TestCase):
 # ── Unverified Users Access ───────────────────────────────────────────
 
 
+@tag('core')
 class UnverifiedUserAccessTest(TestCase):
     """Tests that unverified users have same access as free tier."""
 

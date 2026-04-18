@@ -14,7 +14,7 @@ All Slack API calls are mocked. Tests verify:
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from accounts.models import User
@@ -40,6 +40,7 @@ class CommunityServiceInterfaceTest(TestCase):
 
 
 @override_settings(SLACK_ENABLED=True)
+@tag('core')
 class SlackAPICallTest(TestCase):
     """Tests for the Slack API call mechanism."""
 
@@ -186,6 +187,7 @@ class RemoveFromChannelsTest(TestCase):
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001", "C002"],
 )
+@tag('core')
 class InviteServiceTest(TestCase):
     """Tests for SlackCommunityService.invite()."""
 
@@ -286,6 +288,7 @@ class InviteServiceTest(TestCase):
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001", "C002"],
 )
+@tag('core')
 class RemoveServiceTest(TestCase):
     """Tests for SlackCommunityService.remove()."""
 
@@ -328,6 +331,7 @@ class RemoveServiceTest(TestCase):
     SLACK_BOT_TOKEN="xoxb-test",
     SLACK_COMMUNITY_CHANNEL_IDS=["C001", "C002"],
 )
+@tag('core')
 class ReactivateServiceTest(TestCase):
     """Tests for SlackCommunityService.reactivate()."""
 

@@ -4,12 +4,13 @@ Tests for the jobs.tasks helper functions (async_task, schedule).
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django_q.models import Schedule
 
 from jobs.tasks.helpers import async_task, schedule
 
 
+@tag('core')
 class AsyncTaskTest(TestCase):
     """Tests for the async_task helper."""
 

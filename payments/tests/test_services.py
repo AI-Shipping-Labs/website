@@ -14,7 +14,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import stripe
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
 from payments.models import Tier
@@ -27,6 +27,7 @@ from payments.services import (
 )
 
 
+@tag('core')
 class TierForPriceIdTest(TestCase):
     """Tests for the _tier_for_price_id helper function."""
 
@@ -57,6 +58,7 @@ class TierForPriceIdTest(TestCase):
         self.assertIsNone(tier)
 
 
+@tag('core')
 class CreateCheckoutSessionTest(TestCase):
     """Tests for create_checkout_session service function."""
 
@@ -176,6 +178,7 @@ class CreateCheckoutSessionTest(TestCase):
         self.assertEqual(call_params["client_reference_id"], str(self.user.pk))
 
 
+@tag('core')
 class UpgradeSubscriptionTest(TestCase):
     """Tests for upgrade_subscription service function."""
 
@@ -215,6 +218,7 @@ class UpgradeSubscriptionTest(TestCase):
         self.assertEqual(call_params["items"][0]["price"], "price_main_monthly")
 
 
+@tag('core')
 class DowngradeSubscriptionTest(TestCase):
     """Tests for downgrade_subscription service function."""
 
@@ -280,6 +284,7 @@ class DowngradeSubscriptionTest(TestCase):
         self.assertEqual(call_params["proration_behavior"], "none")
 
 
+@tag('core')
 class CancelSubscriptionTest(TestCase):
     """Tests for cancel_subscription service function."""
 

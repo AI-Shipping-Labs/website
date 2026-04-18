@@ -1736,7 +1736,7 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
     return stats
 
 
-def _build_course_unit_lookup(course_dir):
+def _build_course_unit_lookup(course_dir, course_ignore_patterns=None):
     """Build a ``{module_slug: {filename: unit_slug}}`` map for a course tree.
 
     Used by the markdown link rewriter (issue #226) so we can resolve sibling
@@ -1748,10 +1748,25 @@ def _build_course_unit_lookup(course_dir):
     Modules without a ``module.yaml`` are skipped (mirroring
     :func:`_sync_course_modules`). Files starting with ``.`` are ignored.
     Frontmatter ``slug`` overrides for both modules and units are honoured.
+
+    To stay in lock-step with :func:`_sync_module_units` (issue #233),
+    files matched by course-level or module-level ``ignore:`` globs are
+    excluded, and non-README files missing ``content_id`` in frontmatter
+    are excluded too. Without these checks the rewriter would emit
+    "working-looking" URLs to units that were never persisted, producing
+    silent 404s instead of the standard unresolvable-link warning.
+
+    Args:
+        course_dir: Path to the course root directory on disk.
+        course_ignore_patterns: List of glob patterns from the course-level
+            ``ignore:`` key, relative to ``course_dir``. Same shape as the
+            value passed to :func:`_sync_course_modules`.
     """
     lookup = {}
     if not os.path.isdir(course_dir):
         return lookup
+
+    course_ignore_patterns = course_ignore_patterns or []
 
     for entry in sorted(os.scandir(course_dir), key=lambda e: e.name):
         if (
@@ -1759,6 +1774,13 @@ def _build_course_unit_lookup(course_dir):
             or entry.name.startswith('.')
             or entry.name == 'images'
         ):
+            continue
+
+        # Mirror _sync_course_modules: a module dir matched by a course-level
+        # ignore glob (e.g. ``docs/**``) is skipped entirely — its files
+        # never become Units, so they must not appear in the lookup.
+        dir_rel_to_course = os.path.relpath(entry.path, course_dir)
+        if _matches_ignore_patterns(dir_rel_to_course, course_ignore_patterns):
             continue
 
         module_yaml_path = os.path.join(entry.path, 'module.yaml')
@@ -1774,6 +1796,12 @@ def _build_course_unit_lookup(course_dir):
             module_data = {}
         module_slug = module_data.get('slug') or derive_slug(entry.name)
 
+        # Module-level ignore patterns are relative to the module dir,
+        # course-level patterns are relative to the course dir — same split
+        # _sync_module_units uses.
+        raw_module_ignore = module_data.get('ignore', []) or []
+        module_ignore_patterns = [str(p) for p in raw_module_ignore]
+
         files = {}
         for filename in os.listdir(entry.path):
             if (
@@ -1785,6 +1813,17 @@ def _build_course_unit_lookup(course_dir):
             if not os.path.isfile(filepath):
                 continue
 
+            # Same _is_ignored check _sync_module_units uses: a file matched
+            # by either glob list is skipped from sync, so it must also be
+            # skipped from the lookup.
+            rel_to_course = os.path.relpath(filepath, course_dir)
+            if _matches_ignore_patterns(
+                rel_to_course, course_ignore_patterns,
+            ):
+                continue
+            if _matches_ignore_patterns(filename, module_ignore_patterns):
+                continue
+
             try:
                 metadata, _ = _parse_markdown_file(filepath)
             except Exception:
@@ -1794,10 +1833,20 @@ def _build_course_unit_lookup(course_dir):
                 # README is the module overview, not a unit (issue #222).
                 # We still register it under a sentinel slug so the link
                 # rewriter can spot README.md targets and emit module-overview
-                # URLs (handled in content/utils/md_links.py).
+                # URLs (handled in content/utils/md_links.py). README has no
+                # content_id requirement (the sync derives one).
                 unit_slug = '__module_overview__'
             else:
-                unit_slug = metadata.get('slug') or derive_slug(filename)
+                # _sync_module_units skips non-README files missing
+                # content_id (logs a warning, no Unit created). Mirror that
+                # here so the rewriter doesn't emit URLs for ghost units.
+                if not metadata.get('content_id'):
+                    continue
+                # Key-absent default to match _sync_module_units exactly:
+                # an explicit empty ``slug:`` in YAML yields ``''`` rather
+                # than falling back to the filename-derived slug. In
+                # practice authors never write ``slug:`` empty.
+                unit_slug = metadata.get('slug', derive_slug(filename))
             files[filename] = unit_slug
 
         lookup[module_slug] = files
@@ -1821,8 +1870,11 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
 
     # Build the course-wide unit lookup once before processing any unit so the
     # markdown link rewriter (issue #226) can resolve sibling and cross-module
-    # `.md` links to platform URLs.
-    unit_lookup = _build_course_unit_lookup(course_dir)
+    # `.md` links to platform URLs. Pass course-level ignore patterns so the
+    # lookup mirrors what _sync_module_units actually persists (issue #233).
+    unit_lookup = _build_course_unit_lookup(
+        course_dir, course_ignore_patterns=course_ignore_patterns,
+    )
 
     for entry in sorted(os.scandir(course_dir), key=lambda e: e.name):
         if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':

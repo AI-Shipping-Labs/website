@@ -4,7 +4,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
-from content.access import get_active_override, get_user_level
+from content.access import can_access, get_active_override, get_user_level
 from content.models import (
     Article,
     Course,
@@ -335,9 +335,11 @@ def _get_in_progress_courses(user, user_level):
 
     result = []
     for cid, course in course_by_id.items():
-        # Hide enrollments the user no longer has tier access to.
-        # The Enrollment row is preserved — we just skip rendering.
-        if course.required_level > user_level:
+        # Hide enrollments the user no longer has access to. Uses
+        # can_access() so individual CourseAccess grants (purchase or
+        # admin grant) keep the course visible even when the user's
+        # tier level is below the course's required_level.
+        if not can_access(user, course):
             continue
         total = unit_counts.get(cid, 0)
         if total == 0:

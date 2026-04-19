@@ -23,6 +23,7 @@ from content.access import LEVEL_PREMIUM
 from content.models import (
     Article,
     Course,
+    CourseAccess,
     Enrollment,
     Module,
     Unit,
@@ -361,6 +362,63 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         pos_ml = content.index('ML Advanced')
         pos_ai = content.index('AI Basics')
         self.assertLess(pos_ml, pos_ai)
+
+
+class ContinueLearningCourseAccessTest(TierSetupMixin, TestCase):
+    """Issue #275 — Continue Learning honors per-user CourseAccess grants.
+
+    Previously, _get_in_progress_courses filtered by tier level only,
+    hiding premium courses from free users even when an admin had
+    granted explicit CourseAccess. The fix swaps the tier check for
+    can_access(user, course) which also consults CourseAccess.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='granted@example.com', password='testpass',
+        )
+        cls.user.tier = cls.free_tier
+        cls.user.save()
+
+        # Premium-gated course with one unit so it can be "in progress"
+        cls.course = Course.objects.create(
+            title='Premium Course', slug='premium-course',
+            status='published', required_level=LEVEL_PREMIUM,
+        )
+        module = Module.objects.create(
+            course=cls.course, title='Module 1', slug='module-1', sort_order=1,
+        )
+        Unit.objects.create(
+            module=module, title='Unit 1', slug='unit-1', sort_order=0,
+        )
+
+    def setUp(self):
+        # Each test gets a fresh enrollment so they remain independent.
+        Enrollment.objects.create(user=self.user, course=self.course)
+
+    def test_in_progress_includes_granted_premium_course_for_free_user(self):
+        # Free-tier user with a CourseAccess grant should see the course
+        # in their Continue Learning widget.
+        CourseAccess.objects.create(
+            user=self.user, course=self.course, access_type='granted',
+        )
+
+        from content.views.home import _get_in_progress_courses
+        result = _get_in_progress_courses(self.user, user_level=0)
+
+        course_ids = [item['course'].id for item in result]
+        self.assertIn(self.course.id, course_ids)
+
+    def test_in_progress_excludes_premium_without_grant_or_tier(self):
+        # Same enrollment, but no CourseAccess and no qualifying tier —
+        # the course must stay hidden from the widget.
+        from content.views.home import _get_in_progress_courses
+        result = _get_in_progress_courses(self.user, user_level=0)
+
+        course_ids = [item['course'].id for item in result]
+        self.assertNotIn(self.course.id, course_ids)
 
 
 # ============================================================

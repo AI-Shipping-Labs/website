@@ -404,6 +404,32 @@ def _build_repos_context():
         any_synced = any(s.last_synced_commit for s in sources_sorted)
         repo['sources_with_commits'] = sources_sorted if any_synced else []
 
+        # Issue #279: collapse repeated commit SHAs to one line per repo.
+        # When every source in the repo points at the same commit (treating
+        # missing/empty as "same"), surface a single ``unique_commit`` dict so
+        # the template can render one ``Commit: <short>`` line instead of N
+        # identical per-content-type rows. If sources genuinely diverge
+        # (one sub-sync stuck at an older SHA), ``unique_commit`` stays
+        # None and the template falls back to the per-content-type loop.
+        repo['unique_commit'] = None
+        if any_synced:
+            distinct_shas = {
+                s.last_synced_commit
+                for s in sources_sorted
+                if s.last_synced_commit
+            }
+            if len(distinct_shas) == 1:
+                # Pick the first source that actually has the SHA so we get
+                # a valid ``synced_commit_url`` (sources without a commit
+                # return ''). Any source with the SHA works since they
+                # share the same repo_name.
+                src = next(s for s in sources_sorted if s.last_synced_commit)
+                repo['unique_commit'] = {
+                    'last_synced_commit': src.last_synced_commit,
+                    'short_synced_commit': src.short_synced_commit,
+                    'synced_commit_url': src.synced_commit_url,
+                }
+
     repos_list = list(repos.values())
     return {
         'repos': repos_list,

@@ -77,8 +77,25 @@ still in flight.
   Synced commit SHA per content source (issue #235). One row per source
   in the repo, since separate ContentSource rows can sit at different
   commits when sub-syncs fail independently.
+
+  Issue #279: when every source in the repo points at the same SHA
+  (treating "missing" as same), collapse to one ``Commit: <short>`` line
+  instead of N identical per-content-type rows. If they diverge, fall
+  back to the per-content-type breakdown so the operator can see which
+  source is stale.
   {% endcomment %}
-  {% if repo.sources_with_commits %}
+  {% if repo.unique_commit %}
+  <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" data-repo-commits>
+    <span class="inline-flex items-center gap-1">
+      <span>Commit:</span>
+      <a href="{{ repo.unique_commit.synced_commit_url }}"
+         target="_blank" rel="noopener"
+         class="font-mono text-accent hover:underline"
+         title="View commit on GitHub"
+         data-source-commit>{{ repo.unique_commit.short_synced_commit }}</a>
+    </span>
+  </div>
+  {% elif repo.sources_with_commits %}
   <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" data-repo-commits>
     {% for s in repo.sources_with_commits %}
       <span class="inline-flex items-center gap-1">

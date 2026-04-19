@@ -1588,3 +1588,177 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
         source.save()
         response = self.client.get('/studio/sync/?fragment=status')
         self.assertNotContains(response, self.LINK_MARKER)
+
+
+class StudioSyncDashboardCollapsedCommitTest(TestCase):
+    """Issue #279 - collapse repeated commit SHAs to one line per repo.
+
+    The main content repo has 6 sources sharing the same SHA after a sync.
+    Rendering one line per source produced visual noise. The dashboard now
+    collapses to a single ``Commit: <short>`` line when every source in
+    the repo points at the same SHA, and falls back to the per-content-type
+    breakdown when sources actually diverge.
+    """
+
+    SHA_A = 'a' * 40
+    SHA_B = 'b' * 40
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_unique_commit_set_when_all_sources_share_sha(self):
+        """3 sources at the same SHA → ``unique_commit`` populated, no per-type fallback."""
+        for ct in ('article', 'project', 'event'):
+            ContentSource.objects.create(
+                repo_name='AI-Shipping-Labs/content',
+                content_type=ct,
+                content_path=f'{ct}s/',
+                last_synced_commit=self.SHA_A,
+                last_sync_status='success',
+                last_synced_at=timezone.now(),
+            )
+        response = self.client.get('/studio/sync/')
+        repo = response.context['repos'][0]
+        self.assertIsNotNone(repo['unique_commit'])
+        self.assertEqual(repo['unique_commit']['last_synced_commit'], self.SHA_A)
+        self.assertEqual(repo['unique_commit']['short_synced_commit'], self.SHA_A[:7])
+        self.assertIn(self.SHA_A, repo['unique_commit']['synced_commit_url'])
+
+    def test_collapsed_commit_renders_single_line(self):
+        """3 sources at same SHA renders ONE ``Commit: <short>`` line.
+
+        Counts ``data-source-commit`` markers — one per rendered SHA cell.
+        Collapsed view = exactly 1; per-type fallback = 1 per source.
+        """
+        for ct in ('article', 'project', 'event'):
+            ContentSource.objects.create(
+                repo_name='AI-Shipping-Labs/content',
+                content_type=ct,
+                content_path=f'{ct}s/',
+                last_synced_commit=self.SHA_A,
+                last_sync_status='success',
+                last_synced_at=timezone.now(),
+            )
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        self.assertEqual(body.count('data-source-commit'), 1)
+        self.assertIn('Commit:', body)
+        # The short SHA is rendered in the single line.
+        self.assertIn(self.SHA_A[:7], body)
+        # Per-content-type labels in the SHA strip (e.g. "Article:") must
+        # NOT render when collapsed. We scope the check to the commit
+        # strip section only — the per-type results table below still
+        # uses display names like "Article" in its rows.
+        commits_idx = body.find('data-repo-commits')
+        commits_end = body.find('</div>', commits_idx)
+        commits_section = body[commits_idx:commits_end]
+        self.assertNotIn('Article:', commits_section)
+        self.assertNotIn('Project:', commits_section)
+
+    def test_diverging_shas_fall_back_to_per_type_breakdown(self):
+        """2 sources at DIFFERENT SHAs renders one line per source."""
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_synced_commit=self.SHA_A,
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            content_path='projects/',
+            last_synced_commit=self.SHA_B,
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        repo = response.context['repos'][0]
+        self.assertIsNone(repo['unique_commit'])
+        body = response.content.decode()
+        # Both SHAs visible — per-content-type breakdown rendered.
+        self.assertIn(self.SHA_A[:7], body)
+        self.assertIn(self.SHA_B[:7], body)
+        # Two SHA cells, one per source.
+        self.assertEqual(body.count('data-source-commit'), 2)
+
+    def test_missing_sha_treated_as_same_when_others_match(self):
+        """One source has SHA, others have nothing → still collapsed.
+
+        Acceptance criterion: "If only one source has a commit and others
+        have none, shows the one commit (treat 'missing' as same)."
+        """
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_synced_commit=self.SHA_A,
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='project',
+            content_path='projects/',
+            last_synced_commit='',
+        )
+        response = self.client.get('/studio/sync/')
+        repo = response.context['repos'][0]
+        self.assertIsNotNone(repo['unique_commit'])
+        self.assertEqual(repo['unique_commit']['short_synced_commit'], self.SHA_A[:7])
+        body = response.content.decode()
+        self.assertEqual(body.count('data-source-commit'), 1)
+
+    def test_single_source_repo_shows_one_commit_line(self):
+        """A single-source repo (e.g., python-course) renders one line — same as today."""
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            content_type='course',
+            last_synced_commit=self.SHA_A,
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        self.assertEqual(body.count('data-source-commit'), 1)
+        self.assertIn(self.SHA_A[:7], body)
+
+    def test_polling_fragment_uses_same_collapsed_logic(self):
+        """The ?fragment=status endpoint must also collapse — otherwise the
+        view would flicker between collapsed (full reload) and expanded
+        (poll refresh). Acceptance criterion: "Polling endpoint preserves
+        the same logic — no flicker between collapsed and expanded view
+        across refreshes."
+        """
+        for ct in ('article', 'project', 'event'):
+            ContentSource.objects.create(
+                repo_name='AI-Shipping-Labs/content',
+                content_type=ct,
+                content_path=f'{ct}s/',
+                last_synced_commit=self.SHA_A,
+                last_sync_status='success',
+                last_synced_at=timezone.now(),
+            )
+        response = self.client.get('/studio/sync/?fragment=status')
+        body = response.content.decode()
+        self.assertEqual(body.count('data-source-commit'), 1)
+        self.assertIn('Commit:', body)
+
+    def test_unique_commit_none_when_no_sync_recorded(self):
+        """Never-synced repo: no commit strip at all (existing behavior)."""
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+        )
+        response = self.client.get('/studio/sync/')
+        repo = response.context['repos'][0]
+        self.assertIsNone(repo['unique_commit'])
+        self.assertEqual(repo['sources_with_commits'], [])
+        body = response.content.decode()
+        self.assertEqual(body.count('data-source-commit'), 0)

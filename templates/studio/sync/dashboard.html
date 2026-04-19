@@ -135,8 +135,50 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  /*
+   * Persist <details> open state for the course-tree accordions
+   * (issue #280). Polling (issue #243) re-renders the cards section
+   * every ~3s; without this the operator's expanded course/module
+   * collapses on every refresh. Stable IDs come from `data-tree-key`
+   * on each <details>; we mirror open state into sessionStorage so
+   * the freshly rendered DOM picks up the same state.
+   */
+  var TREE_STATE_KEY = 'studio.sync.treeOpen';
+  function loadTreeState() {
+    try {
+      var raw = sessionStorage.getItem(TREE_STATE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+  function saveTreeState(state) {
+    try {
+      sessionStorage.setItem(TREE_STATE_KEY, JSON.stringify(state));
+    } catch (e) { /* storage full / disabled — ignore */ }
+  }
+  function bindCourseTreeState(root) {
+    var state = loadTreeState();
+    root.querySelectorAll('details[data-tree-key]').forEach(function(d) {
+      var key = d.getAttribute('data-tree-key');
+      if (state[key]) {
+        d.setAttribute('open', '');
+      }
+      if (d._treeBound) return;
+      d._treeBound = true;
+      d.addEventListener('toggle', function() {
+        var s = loadTreeState();
+        if (d.open) {
+          s[key] = 1;
+        } else {
+          delete s[key];
+        }
+        saveTreeState(s);
+      });
+    });
+  }
+
   bindTypeRowToggles(document);
   bindSyncFormFlash(document);
+  bindCourseTreeState(document);
 
   // Sync All: same one-shot confirmation, no spinner.
   var syncAllForm = document.getElementById('sync-all-form');
@@ -221,6 +263,7 @@ document.addEventListener('DOMContentLoaded', function() {
           // Re-bind delegated handlers on freshly injected DOM.
           bindTypeRowToggles(wrapper);
           bindSyncFormFlash(wrapper);
+          bindCourseTreeState(wrapper);
           // Stop polling if nothing is running anymore.
           if (!anyRunning()) {
             stop();

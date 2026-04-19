@@ -590,7 +590,13 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         self.assertEqual(breakdown['unit']['updated'], 1)
 
     def test_course_breakdown_renders_level_labels(self):
-        """Dashboard HTML shows the per-level row labels for course sources."""
+        """Dashboard HTML shows the tree node labels for course sources.
+
+        Issue #280 replaced the per-level row layout with a nested tree:
+        each course gets a node with module children, each module gets
+        lesson children. Labels are still ``Course:``, ``Module:``,
+        ``Lesson:`` so the operator can scan the hierarchy at a glance.
+        """
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
             content_type='course',
@@ -609,9 +615,9 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
 
         response = self.client.get('/studio/sync/')
         body = response.content.decode()
-        self.assertIn('Courses', body)
-        self.assertIn('Modules', body)
-        self.assertIn('Lessons (units)', body)
+        self.assertIn('Course:', body)
+        self.assertIn('Module:', body)
+        self.assertIn('Lesson:', body)
 
     def test_course_breakdown_lists_changed_unit_titles(self):
         """The expandable list includes every changed unit title."""
@@ -704,8 +710,388 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         per_type = response.context['repos'][0]['last_batch']['per_type']
         # Non-course rows do not get a course_breakdown.
         self.assertNotIn('course_breakdown', per_type[0])
+        # Non-course rows do not get a course_tree either.
+        self.assertNotIn('course_tree', per_type[0])
         # Article row still uses public /blog/<slug> link (unchanged behavior).
         self.assertContains(response, '/blog/hello')
+
+
+class StudioSyncDashboardCourseTreeTest(TestCase):
+    """Issue #280 - course-type sources render a nested tree
+    (Course -> Module -> Lesson) instead of three flat per-level rows.
+
+    The tree shows what really changed by attaching every touched
+    module to its parent course and every touched lesson to its
+    parent module. Counts roll up the visible children of each node.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def _make_course_source(self, repo='AI-Shipping-Labs/python-course'):
+        return ContentSource.objects.create(
+            repo_name=repo,
+            content_type='course',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+
+    def test_course_tree_present_in_context(self):
+        """Course-type per_type entries carry a ``course_tree`` list."""
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_updated=3,
+            items_detail=[
+                {'title': 'C', 'slug': 'c', 'action': 'updated',
+                 'content_type': 'course', 'course_id': 1, 'course_slug': 'c'},
+                {'title': 'M', 'slug': 'm', 'action': 'updated',
+                 'content_type': 'module', 'course_id': 1, 'module_id': 1},
+                {'title': 'U', 'slug': 'u', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': 1,
+                 'module_id': 1, 'unit_id': 1},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        per_type = response.context['repos'][0]['last_batch']['per_type']
+        self.assertIn('course_tree', per_type[0])
+
+    def test_tree_nests_modules_under_their_course(self):
+        """Two modules belong to the same course → both appear under
+        that course node.
+
+        Course (1)
+          Module (10)
+          Module (11)
+        """
+        from content.models import Course, Module
+        course = Course.objects.create(title='C', slug='c', status='published')
+        m_a = Module.objects.create(course=course, title='Module A', slug='m-a')
+        m_b = Module.objects.create(course=course, title='Module B', slug='m-b')
+
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_updated=3,
+            items_detail=[
+                {'title': 'C', 'slug': 'c', 'action': 'updated',
+                 'content_type': 'course', 'course_id': course.pk,
+                 'course_slug': 'c'},
+                {'title': 'Module A', 'slug': 'm-a', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'module_id': m_a.pk},
+                {'title': 'Module B', 'slug': 'm-b', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'module_id': m_b.pk},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        tree = response.context['repos'][0]['last_batch']['per_type'][0][
+            'course_tree'
+        ]
+        self.assertEqual(len(tree), 1)
+        self.assertEqual(tree[0]['course_id'], course.pk)
+        self.assertEqual(len(tree[0]['modules']), 2)
+        module_ids = {m['module_id'] for m in tree[0]['modules']}
+        self.assertEqual(module_ids, {m_a.pk, m_b.pk})
+
+    def test_tree_nests_lessons_under_their_module(self):
+        """A course with 2 modules, each with 2 lessons → 1 course node,
+        2 module nodes, each with 2 lesson children.
+
+        This is the central acceptance criterion from issue #280.
+        """
+        from content.models import Course, Module, Unit
+        course = Course.objects.create(title='Py', slug='py', status='published')
+        m1 = Module.objects.create(course=course, title='M1', slug='m1')
+        m2 = Module.objects.create(course=course, title='M2', slug='m2')
+        u1a = Unit.objects.create(module=m1, title='Lesson 1A', slug='l1a')
+        u1b = Unit.objects.create(module=m1, title='Lesson 1B', slug='l1b')
+        u2a = Unit.objects.create(module=m2, title='Lesson 2A', slug='l2a')
+        u2b = Unit.objects.create(module=m2, title='Lesson 2B', slug='l2b')
+
+        items_detail = [
+            {'title': 'Py', 'slug': 'py', 'action': 'updated',
+             'content_type': 'course', 'course_id': course.pk,
+             'course_slug': 'py'},
+            {'title': 'M1', 'slug': 'm1', 'action': 'updated',
+             'content_type': 'module', 'course_id': course.pk,
+             'module_id': m1.pk},
+            {'title': 'M2', 'slug': 'm2', 'action': 'updated',
+             'content_type': 'module', 'course_id': course.pk,
+             'module_id': m2.pk},
+            {'title': 'Lesson 1A', 'slug': 'l1a', 'action': 'updated',
+             'content_type': 'unit', 'course_id': course.pk,
+             'module_id': m1.pk, 'module_slug': 'm1', 'unit_id': u1a.pk},
+            {'title': 'Lesson 1B', 'slug': 'l1b', 'action': 'updated',
+             'content_type': 'unit', 'course_id': course.pk,
+             'module_id': m1.pk, 'module_slug': 'm1', 'unit_id': u1b.pk},
+            {'title': 'Lesson 2A', 'slug': 'l2a', 'action': 'updated',
+             'content_type': 'unit', 'course_id': course.pk,
+             'module_id': m2.pk, 'module_slug': 'm2', 'unit_id': u2a.pk},
+            {'title': 'Lesson 2B', 'slug': 'l2b', 'action': 'updated',
+             'content_type': 'unit', 'course_id': course.pk,
+             'module_id': m2.pk, 'module_slug': 'm2', 'unit_id': u2b.pk},
+        ]
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_updated=7, items_detail=items_detail,
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        tree = response.context['repos'][0]['last_batch']['per_type'][0][
+            'course_tree'
+        ]
+        # 1 course node
+        self.assertEqual(len(tree), 1)
+        course_node = tree[0]
+        self.assertEqual(course_node['course_id'], course.pk)
+        # 2 module nodes nested under it
+        self.assertEqual(len(course_node['modules']), 2)
+        modules_by_id = {m['module_id']: m for m in course_node['modules']}
+        # 2 lesson nodes under each module
+        self.assertEqual(len(modules_by_id[m1.pk]['lessons']), 2)
+        self.assertEqual(len(modules_by_id[m2.pk]['lessons']), 2)
+        # Lesson titles end up under the right module.
+        m1_titles = {l['title'] for l in modules_by_id[m1.pk]['lessons']}
+        m2_titles = {l['title'] for l in modules_by_id[m2.pk]['lessons']}
+        self.assertEqual(m1_titles, {'Lesson 1A', 'Lesson 1B'})
+        self.assertEqual(m2_titles, {'Lesson 2A', 'Lesson 2B'})
+
+    def test_tree_lesson_resolves_parent_via_fk_when_module_not_in_batch(self):
+        """A lesson edited without its parent module being in the batch
+        is still nested under the right course/module — the aggregator
+        resolves the parents via FK lookup.
+        """
+        from content.models import Course, Module, Unit
+        course = Course.objects.create(title='C', slug='c', status='published')
+        module = Module.objects.create(course=course, title='M', slug='m')
+        unit = Unit.objects.create(module=module, title='U', slug='u')
+
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_updated=1,
+            items_detail=[{
+                'title': 'U', 'slug': 'u', 'action': 'updated',
+                'content_type': 'unit',
+                # Note: no course_id / module-meta — only unit_id + module_id.
+                'module_id': module.pk, 'unit_id': unit.pk,
+            }],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        tree = response.context['repos'][0]['last_batch']['per_type'][0][
+            'course_tree'
+        ]
+        # The unit's parent module/course must be discovered via FK and
+        # surfaced as the root, NOT dumped into the orphan bucket.
+        course_ids = [n['course_id'] for n in tree]
+        self.assertIn(course.pk, course_ids)
+        course_node = next(n for n in tree if n['course_id'] == course.pk)
+        self.assertEqual(len(course_node['modules']), 1)
+        mnode = course_node['modules'][0]
+        self.assertEqual(mnode['module_id'], module.pk)
+        self.assertEqual(len(mnode['lessons']), 1)
+        self.assertEqual(mnode['lessons'][0]['title'], 'U')
+
+    def test_tree_renders_nested_html(self):
+        """Tree HTML uses ``<details>`` accordion: 1 course details,
+        2 module details, with lesson titles inside.
+        """
+        from content.models import Course, Module, Unit
+        course = Course.objects.create(
+            title='Python Course', slug='py-course', status='published',
+        )
+        m1 = Module.objects.create(course=course, title='Fundamentals', slug='fund')
+        m2 = Module.objects.create(course=course, title='Advanced', slug='adv')
+        u1 = Unit.objects.create(module=m1, title='Running Python', slug='run')
+        u2 = Unit.objects.create(module=m2, title='Decorators', slug='dec')
+
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_updated=5,
+            items_detail=[
+                {'title': 'Python Course', 'slug': 'py-course',
+                 'action': 'updated', 'content_type': 'course',
+                 'course_id': course.pk, 'course_slug': 'py-course'},
+                {'title': 'Fundamentals', 'slug': 'fund', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'module_id': m1.pk},
+                {'title': 'Advanced', 'slug': 'adv', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'module_id': m2.pk},
+                {'title': 'Running Python', 'slug': 'run', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'module_id': m1.pk, 'unit_id': u1.pk},
+                {'title': 'Decorators', 'slug': 'dec', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'module_id': m2.pk, 'unit_id': u2.pk},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        # 1 course-tree container
+        self.assertIn('data-course-tree', body)
+        # The course title appears inside the tree node summary
+        self.assertIn('Python Course', body)
+        # Both module titles appear, and lesson titles appear nested.
+        self.assertIn('Fundamentals', body)
+        self.assertIn('Advanced', body)
+        self.assertIn('Running Python', body)
+        self.assertIn('Decorators', body)
+        # Stable tree keys are present so the JS can persist open state.
+        self.assertIn(f'course:{course.pk}', body)
+        self.assertIn(f'module:{m1.pk}', body)
+        self.assertIn(f'module:{m2.pk}', body)
+
+    def test_tree_summary_shows_module_and_lesson_counts(self):
+        """Each course summary surfaces ``N modules, M lessons synced``."""
+        from content.models import Course, Module, Unit
+        course = Course.objects.create(title='C', slug='c', status='published')
+        m1 = Module.objects.create(course=course, title='M1', slug='m1')
+        m2 = Module.objects.create(course=course, title='M2', slug='m2')
+        u1 = Unit.objects.create(module=m1, title='U1', slug='u1')
+        u2 = Unit.objects.create(module=m2, title='U2', slug='u2')
+
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_updated=5,
+            items_detail=[
+                {'title': 'C', 'slug': 'c', 'action': 'updated',
+                 'content_type': 'course', 'course_id': course.pk,
+                 'course_slug': 'c'},
+                {'title': 'M1', 'slug': 'm1', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'module_id': m1.pk},
+                {'title': 'M2', 'slug': 'm2', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'module_id': m2.pk},
+                {'title': 'U1', 'slug': 'u1', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'module_id': m1.pk, 'unit_id': u1.pk},
+                {'title': 'U2', 'slug': 'u2', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'module_id': m2.pk, 'unit_id': u2.pk},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        # The course summary includes a "2 modules, 2 lessons synced" pill.
+        self.assertIn('2 modules', body)
+        self.assertIn('2 lessons', body)
+
+    def test_tree_links_use_studio_edit_pages(self):
+        """Course/module links → studio_course_edit; lesson → studio_unit_edit.
+
+        Operators want the edit page, never the public-facing /courses/.
+        """
+        from content.models import Course, Module, Unit
+        course = Course.objects.create(title='C', slug='c-public', status='published')
+        module = Module.objects.create(course=course, title='M', slug='m')
+        unit = Unit.objects.create(module=module, title='U', slug='u')
+
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_updated=3,
+            items_detail=[
+                {'title': 'C', 'slug': 'c-public', 'action': 'updated',
+                 'content_type': 'course', 'course_id': course.pk},
+                {'title': 'M', 'slug': 'm', 'action': 'updated',
+                 'content_type': 'module', 'course_id': course.pk,
+                 'module_id': module.pk},
+                {'title': 'U', 'slug': 'u', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'module_id': module.pk, 'unit_id': unit.pk},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        self.assertIn(f'/studio/courses/{course.pk}/edit', body)
+        self.assertIn(f'/studio/units/{unit.pk}/edit', body)
+        # No public-facing course URL leaked into the tree.
+        self.assertNotIn('href="/courses/c-public', body)
+
+    def test_article_only_batch_keeps_flat_layout(self):
+        """Non-course content types (article, project, ...) keep the
+        original flat per-row layout — no tree, no nesting.
+        """
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_created=2,
+            items_detail=[
+                {'title': 'Hello', 'slug': 'hello',
+                 'action': 'created', 'content_type': 'article'},
+                {'title': 'World', 'slug': 'world',
+                 'action': 'created', 'content_type': 'article'},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        # No tree wrapper for article-only batches.
+        self.assertNotIn('data-course-tree', body)
+        # The original flat layout is intact: the row uses sync-type-row.
+        self.assertIn('sync-type-row', body)
+        # No course/module/lesson labels — those are tree-only.
+        self.assertNotIn('Course:', body)
+        self.assertNotIn('Module:', body)
+        self.assertNotIn('Lesson:', body)
+
+    def test_tree_renders_action_per_lesson(self):
+        """Each lesson in the tree shows its own action (created/updated/deleted)
+        so the operator can distinguish what changed at the leaf level.
+        """
+        from content.models import Course, Module, Unit
+        course = Course.objects.create(title='C', slug='c', status='published')
+        module = Module.objects.create(course=course, title='M', slug='m')
+        u_new = Unit.objects.create(module=module, title='Newcomer', slug='new')
+        u_upd = Unit.objects.create(module=module, title='Veteran', slug='vet')
+
+        source = self._make_course_source()
+        SyncLog.objects.create(
+            source=source, status='success',
+            items_created=1, items_updated=1,
+            items_detail=[
+                {'title': 'Newcomer', 'slug': 'new', 'action': 'created',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'module_id': module.pk, 'unit_id': u_new.pk},
+                {'title': 'Veteran', 'slug': 'vet', 'action': 'updated',
+                 'content_type': 'unit', 'course_id': course.pk,
+                 'module_id': module.pk, 'unit_id': u_upd.pk},
+            ],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        tree = response.context['repos'][0]['last_batch']['per_type'][0][
+            'course_tree'
+        ]
+        lessons = tree[0]['modules'][0]['lessons']
+        actions = {l['title']: l['action'] for l in lessons}
+        self.assertEqual(actions['Newcomer'], 'created')
+        self.assertEqual(actions['Veteran'], 'updated')
 
 
 class StudioSyncDashboardFragmentTest(TestCase):
@@ -832,10 +1218,10 @@ class StudioSyncDashboardFragmentTest(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_fragment_includes_course_breakdown(self):
-        """Fragment endpoint reflects the new course-level breakdown so
-        the dashboard's auto-refresh poller (issue #243) doesn't fall back
+        """Fragment endpoint reflects the course tree (issue #280) so the
+        dashboard's auto-refresh poller (issue #243) doesn't fall back
         to the rolled-up "Course X created Y updated" row when a course
-        sync finishes mid-poll. See issue #224.
+        sync finishes mid-poll.
         """
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
@@ -862,8 +1248,8 @@ class StudioSyncDashboardFragmentTest(TestCase):
             finished_at=timezone.now(),
         )
         response = self.client.get('/studio/sync/?fragment=status')
-        # Per-level rows appear in the fragment.
-        self.assertContains(response, 'Lessons (units)')
+        # Tree node labels appear in the fragment.
+        self.assertContains(response, 'Lesson:')
         # Changed unit titles appear so the operator sees them after the poll.
         self.assertContains(response, 'Lesson Alpha')
 

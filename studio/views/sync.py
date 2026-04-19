@@ -190,6 +190,250 @@ def _build_course_level_breakdown(items_detail):
     return list(levels.values())
 
 
+def _new_course_node(course_id=None, course_slug=None, title=None, slug=None):
+    return {
+        'course_id': course_id,
+        'course_slug': course_slug,
+        'title': title,
+        'slug': slug,
+        'action': None,
+        'modules_count': 0,
+        'lessons_count': 0,
+        'modules': OrderedDict(),
+    }
+
+
+def _new_module_node(module_id=None, module_slug=None, course_id=None,
+                     title=None, slug=None):
+    return {
+        'module_id': module_id,
+        'module_slug': module_slug,
+        'course_id': course_id,
+        'title': title,
+        'slug': slug,
+        'action': None,
+        'lessons_count': 0,
+        'lessons': [],
+    }
+
+
+def _build_course_tree(items_detail):
+    """Build a nested tree (courses → modules → lessons) from ``items_detail``.
+
+    Issue #280: the flat per-level breakdown loses the parent/child
+    relationships between course → module → unit. We rebuild that
+    hierarchy here so the dashboard can show what really changed: every
+    lesson nested under its module, every module nested under its course.
+
+    Items in the batch may not include the parent (e.g. a unit was
+    edited but neither its module nor course was touched). Those parents
+    are resolved via FK lookups against the current DB so the tree is
+    always rooted in real courses, never in orphan synthetic nodes.
+
+    Returns a list of course-node dicts. Each course node has:
+        - course_id, course_slug, title, slug, action (or None if not in batch)
+        - modules_count, lessons_count
+        - modules: list of module-node dicts (each with lessons list)
+
+    Items whose course can't be resolved (deleted / missing FK) end up
+    in a synthetic "Other" group so they're not silently dropped.
+    """
+    # Lazy-import to avoid an import cycle at app load.
+    from content.models import Course, Module
+
+    courses_in_batch = []
+    modules_in_batch = []
+    units_in_batch = []
+    for item in items_detail or []:
+        ct = item.get('content_type')
+        if ct == 'course':
+            courses_in_batch.append(item)
+        elif ct == 'module':
+            modules_in_batch.append(item)
+        elif ct == 'unit':
+            units_in_batch.append(item)
+
+    # Resolve missing module → course parents via DB.
+    module_ids_needing_course = {
+        m.get('module_id') for m in modules_in_batch
+        if m.get('module_id') and not m.get('course_id')
+    }
+    unit_module_ids = {
+        u.get('module_id') for u in units_in_batch if u.get('module_id')
+    }
+    # We need module → course mapping for any unit whose module isn't
+    # itself in the batch (or whose `course_id` is missing).
+    module_ids_for_units = {
+        u.get('module_id') for u in units_in_batch
+        if u.get('module_id') and not u.get('course_id')
+    }
+    module_lookup_ids = (
+        module_ids_needing_course | module_ids_for_units | unit_module_ids
+    )
+    module_lookup_ids.discard(None)
+    module_to_course = {}
+    module_meta = {}
+    if module_lookup_ids:
+        for m in Module.objects.filter(pk__in=module_lookup_ids).values(
+            'pk', 'course_id', 'title', 'slug', 'course__slug',
+        ):
+            module_to_course[m['pk']] = m['course_id']
+            module_meta[m['pk']] = {
+                'title': m['title'],
+                'slug': m['slug'],
+                'course_id': m['course_id'],
+                'course_slug': m['course__slug'],
+            }
+
+    # Resolve any course ids we still need metadata for (course rows that
+    # weren't in the batch but were referenced by a module/unit).
+    needed_course_ids = set()
+    for c in courses_in_batch:
+        if c.get('course_id'):
+            needed_course_ids.add(c['course_id'])
+    for m in modules_in_batch:
+        cid = m.get('course_id') or module_to_course.get(m.get('module_id'))
+        if cid:
+            needed_course_ids.add(cid)
+    for u in units_in_batch:
+        cid = u.get('course_id') or module_to_course.get(u.get('module_id'))
+        if cid:
+            needed_course_ids.add(cid)
+    needed_course_ids.discard(None)
+
+    course_meta = {}
+    if needed_course_ids:
+        for c in Course.objects.filter(pk__in=needed_course_ids).values(
+            'pk', 'title', 'slug',
+        ):
+            course_meta[c['pk']] = {'title': c['title'], 'slug': c['slug']}
+
+    courses = OrderedDict()  # course_id -> course node
+    orphan = _new_course_node(
+        course_id=None, course_slug=None,
+        title='Other (parent course not found)', slug='',
+    )
+
+    def _ensure_course(course_id, course_slug=None, title=None, slug=None):
+        if course_id is None:
+            return orphan
+        node = courses.get(course_id)
+        if node is None:
+            meta = course_meta.get(course_id, {})
+            node = _new_course_node(
+                course_id=course_id,
+                course_slug=course_slug or meta.get('slug') or '',
+                title=title or meta.get('title') or f'Course #{course_id}',
+                slug=slug or meta.get('slug') or '',
+            )
+            courses[course_id] = node
+        else:
+            # Fill in missing fields opportunistically.
+            if not node['title'] and (title or course_meta.get(course_id)):
+                node['title'] = title or course_meta[course_id]['title']
+            if not node['course_slug']:
+                node['course_slug'] = (
+                    course_slug or course_meta.get(course_id, {}).get('slug', '')
+                )
+        return node
+
+    def _ensure_module(course_node, module_id, module_slug=None,
+                       title=None, slug=None):
+        if module_id is None:
+            # Synthetic per-course "loose lessons" bucket.
+            key = '__loose__'
+        else:
+            key = module_id
+        node = course_node['modules'].get(key)
+        if node is None:
+            meta = module_meta.get(module_id, {}) if module_id else {}
+            node = _new_module_node(
+                module_id=module_id,
+                module_slug=module_slug or meta.get('slug') or '',
+                course_id=course_node['course_id'],
+                title=title or meta.get('title') or (
+                    'Other lessons (parent module not in batch)'
+                    if module_id is None else f'Module #{module_id}'
+                ),
+                slug=slug or meta.get('slug') or '',
+            )
+            course_node['modules'][key] = node
+        else:
+            if not node['title'] and title:
+                node['title'] = title
+            if not node['slug'] and slug:
+                node['slug'] = slug
+        return node
+
+    # 1) Add course-level items (these set the course node's own action).
+    for item in courses_in_batch:
+        cid = item.get('course_id')
+        node = _ensure_course(
+            course_id=cid,
+            course_slug=item.get('course_slug'),
+            title=item.get('title'),
+            slug=item.get('slug'),
+        )
+        node['action'] = item.get('action')
+
+    # 2) Add module-level items.
+    for item in modules_in_batch:
+        mid = item.get('module_id')
+        cid = item.get('course_id') or module_to_course.get(mid)
+        course_node = _ensure_course(
+            course_id=cid,
+            course_slug=item.get('course_slug'),
+        )
+        mnode = _ensure_module(
+            course_node,
+            module_id=mid,
+            module_slug=item.get('module_slug') or item.get('slug'),
+            title=item.get('title'),
+            slug=item.get('slug'),
+        )
+        mnode['action'] = item.get('action')
+        course_node['modules_count'] += 1
+
+    # 3) Add unit-level items, attaching to (and creating) module + course
+    # placeholders as needed.
+    for item in units_in_batch:
+        mid = item.get('module_id')
+        cid = item.get('course_id') or module_to_course.get(mid)
+        course_node = _ensure_course(
+            course_id=cid,
+            course_slug=item.get('course_slug'),
+        )
+        # Module title/slug for the lesson's parent module — preferred from
+        # the item itself, fall back to DB-resolved metadata.
+        mmeta = module_meta.get(mid, {})
+        mnode = _ensure_module(
+            course_node,
+            module_id=mid,
+            module_slug=item.get('module_slug') or mmeta.get('slug'),
+            title=mmeta.get('title'),
+            slug=item.get('module_slug') or mmeta.get('slug'),
+        )
+        mnode['lessons'].append({
+            'unit_id': item.get('unit_id'),
+            'title': item.get('title'),
+            'slug': item.get('slug'),
+            'action': item.get('action'),
+        })
+        mnode['lessons_count'] += 1
+        course_node['lessons_count'] += 1
+
+    # Flatten OrderedDict children to lists for stable, deterministic
+    # iteration in templates.
+    result = []
+    for course_node in courses.values():
+        course_node['modules'] = list(course_node['modules'].values())
+        result.append(course_node)
+    if orphan['modules']:
+        orphan['modules'] = list(orphan['modules'].values())
+        result.append(orphan)
+    return result
+
+
 def _aggregate_batch(logs):
     """Aggregate a queryset of SyncLog entries into a batch summary dict.
 
@@ -286,10 +530,17 @@ def _aggregate_batch(logs):
     elif overall_status == 'skipped' and seen_non_skipped:
         overall_status = 'success'
 
-    # Compute course-level breakdown (issue #224) for course-type sources.
+    # Compute course-level breakdown (issue #224) and tree (issue #280)
+    # for course-type sources. The tree shows what really changed by
+    # nesting modules under their course and lessons under their module,
+    # while the legacy flat breakdown stays for callers/tests that still
+    # expect it.
     for entry in per_type.values():
         if entry['content_type'] == 'course':
             entry['course_breakdown'] = _build_course_level_breakdown(
+                entry['items_detail'],
+            )
+            entry['course_tree'] = _build_course_tree(
                 entry['items_detail'],
             )
 

@@ -155,61 +155,108 @@ still in flight.
           {% for ct in repo.last_batch.per_type %}
           {% if ct.content_type == 'course' %}
           {% comment %}
-          Course-type sources render a per-level breakdown (issue #224):
-          one row per level (courses, modules, units) with its own counts
-          and expandable changed-pages list.
+          Course-type sources render a tree (issue #280): one node per
+          synced course, with its modules nested below it and each
+          module's synced lessons nested below that. Modules and lessons
+          only show items actually touched in this batch — orphan rows
+          fall back to the per-course "loose lessons" bucket.
+
+          Header row carries the per-content-type status pill so the
+          table layout stays compatible with non-course rows.
           {% endcomment %}
           <tr>
-            <td class="py-2 pr-4 text-foreground font-medium" colspan="6">
+            <td class="py-2 pr-4 text-foreground font-medium" colspan="5">
               <span>{{ ct.display_name }}</span>
             </td>
-          </tr>
-          {% for level in ct.course_breakdown %}
-          <tr class="sync-course-level-row cursor-pointer hover:bg-secondary/50 transition-colors"
-              data-type="{{ ct.content_type }}"
-              data-level="{{ level.level }}">
-            <td class="py-2 pr-4 pl-6 text-foreground">
-              <span class="inline-flex items-center space-x-1">
-                <svg class="w-3 h-3 text-muted-foreground transition-transform sync-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                <span>{{ level.label }}</span>
-              </span>
-            </td>
-            <td class="py-2 pr-2 sm:pr-4 text-right {% if level.created %}text-green-400{% else %}text-muted-foreground{% endif %}">{{ level.created }}</td>
-            <td class="py-2 pr-2 sm:pr-4 text-right {% if level.updated %}text-blue-400{% else %}text-muted-foreground{% endif %}">{{ level.updated }}</td>
-            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell {% if level.deleted %}text-red-400{% else %}text-muted-foreground{% endif %}">{{ level.deleted }}</td>
-            <td class="py-2 pr-2 sm:pr-4 text-right hidden sm:table-cell text-muted-foreground">-</td>
             <td class="py-2 pr-2 sm:pr-4">
-              {% if forloop.last %}
-                {% sync_status_pill ct.status ct.errors_count 'xs' %}
-              {% endif %}
+              {% sync_status_pill ct.status ct.errors_count 'xs' %}
             </td>
           </tr>
-          {% if level.items %}
-          <tr class="sync-course-level-detail hidden"
-              data-type="{{ ct.content_type }}"
-              data-level="{{ level.level }}">
-            <td colspan="6" class="py-2 pl-12">
-              <div class="space-y-1">
-                {% for item in level.items %}
-                <div class="flex items-center space-x-3 text-xs">
-                  <span class="w-16 {% if item.action == 'created' %}text-green-400{% elif item.action == 'updated' %}text-blue-400{% else %}text-red-400{% endif %}">{{ item.action }}</span>
-                  {% if item.content_type == 'course' and item.course_id %}
-                  <a href="{% url 'studio_course_edit' course_id=item.course_id %}" class="text-accent hover:underline">{{ item.title }}</a>
-                  {% elif item.content_type == 'module' and item.course_id %}
-                  <a href="{% url 'studio_course_edit' course_id=item.course_id %}" class="text-accent hover:underline">{{ item.title }}</a>
-                  {% elif item.content_type == 'unit' and item.unit_id %}
-                  <a href="{% url 'studio_unit_edit' unit_id=item.unit_id %}" class="text-accent hover:underline">{{ item.title }}</a>
-                  {% else %}
-                  <span class="text-foreground">{{ item.title }}</span>
-                  {% endif %}
-                  <span class="text-muted-foreground font-mono">{{ item.slug }}</span>
-                </div>
+          <tr data-course-tree-row data-type="{{ ct.content_type }}">
+            <td colspan="6" class="py-2 pl-4 pr-2">
+              <div class="space-y-2 sync-course-tree" data-course-tree>
+                {% for course_node in ct.course_tree %}
+                <details class="rounded border border-border bg-secondary/20 overflow-hidden sync-tree-node sync-tree-course"
+                         data-tree-key="repo:{{ repo.repo_name }}|course:{{ course_node.course_id|default:'_' }}">
+                  <summary class="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-secondary/40 transition-colors text-sm">
+                    <span class="flex items-center gap-2 min-w-0">
+                      <svg class="w-3 h-3 text-muted-foreground transition-transform shrink-0 sync-tree-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                      <span class="text-muted-foreground text-xs uppercase tracking-wider shrink-0">Course:</span>
+                      {% if course_node.course_id %}
+                      <a href="{% url 'studio_course_edit' course_id=course_node.course_id %}"
+                         class="text-accent hover:underline truncate"
+                         onclick="event.stopPropagation()">{{ course_node.title }}</a>
+                      {% else %}
+                      <span class="text-foreground truncate">{{ course_node.title }}</span>
+                      {% endif %}
+                      {% if course_node.action %}
+                      <span class="text-xs shrink-0 {% if course_node.action == 'created' %}text-green-400{% elif course_node.action == 'updated' %}text-blue-400{% else %}text-red-400{% endif %}">({{ course_node.action }})</span>
+                      {% endif %}
+                    </span>
+                    <span class="text-xs text-muted-foreground shrink-0 ml-2 whitespace-nowrap"
+                          data-course-summary>
+                      {{ course_node.modules|length }} module{{ course_node.modules|length|pluralize }},
+                      {{ course_node.lessons_count }} lesson{{ course_node.lessons_count|pluralize }} synced
+                    </span>
+                  </summary>
+                  <div class="px-3 pb-3 pt-1 space-y-1.5">
+                    {% for module_node in course_node.modules %}
+                    <details class="rounded border border-border bg-card overflow-hidden sync-tree-node sync-tree-module"
+                             data-tree-key="repo:{{ repo.repo_name }}|course:{{ course_node.course_id|default:'_' }}|module:{{ module_node.module_id|default:'_' }}">
+                      <summary class="flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-secondary/40 transition-colors text-xs">
+                        <span class="flex items-center gap-2 min-w-0">
+                          <svg class="w-3 h-3 text-muted-foreground transition-transform shrink-0 sync-tree-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                          <span class="text-muted-foreground uppercase tracking-wider shrink-0">Module:</span>
+                          {% if module_node.course_id %}
+                          <a href="{% url 'studio_course_edit' course_id=module_node.course_id %}"
+                             class="text-accent hover:underline truncate"
+                             onclick="event.stopPropagation()">{{ module_node.title }}</a>
+                          {% else %}
+                          <span class="text-foreground truncate">{{ module_node.title }}</span>
+                          {% endif %}
+                          {% if module_node.action %}
+                          <span class="shrink-0 {% if module_node.action == 'created' %}text-green-400{% elif module_node.action == 'updated' %}text-blue-400{% else %}text-red-400{% endif %}">({{ module_node.action }})</span>
+                          {% endif %}
+                        </span>
+                        <span class="text-muted-foreground shrink-0 ml-2 whitespace-nowrap"
+                              data-module-summary>
+                          {% if module_node.lessons_count %}
+                          {{ module_node.lessons_count }} lesson{{ module_node.lessons_count|pluralize }}
+                          {% else %}
+                          no lessons in this batch
+                          {% endif %}
+                        </span>
+                      </summary>
+                      {% if module_node.lessons %}
+                      <ul class="px-3 pb-2 pt-1 space-y-1">
+                        {% for lesson in module_node.lessons %}
+                        <li class="flex items-center gap-2 text-xs pl-5">
+                          <span class="text-muted-foreground uppercase tracking-wider shrink-0">Lesson:</span>
+                          {% if lesson.unit_id %}
+                          <a href="{% url 'studio_unit_edit' unit_id=lesson.unit_id %}"
+                             class="text-accent hover:underline truncate">{{ lesson.title }}</a>
+                          {% else %}
+                          <span class="text-foreground truncate">{{ lesson.title }}</span>
+                          {% endif %}
+                          <span class="shrink-0 {% if lesson.action == 'created' %}text-green-400{% elif lesson.action == 'updated' %}text-blue-400{% else %}text-red-400{% endif %}">({{ lesson.action }})</span>
+                          <span class="text-muted-foreground font-mono shrink-0">{{ lesson.slug }}</span>
+                        </li>
+                        {% endfor %}
+                      </ul>
+                      {% endif %}
+                    </details>
+                    {% endfor %}
+                    {% if not course_node.modules %}
+                    <p class="text-xs text-muted-foreground pl-5">No modules or lessons changed in this batch.</p>
+                    {% endif %}
+                  </div>
+                </details>
+                {% empty %}
+                <p class="text-xs text-muted-foreground pl-2">No course items changed in this batch.</p>
                 {% endfor %}
               </div>
             </td>
           </tr>
-          {% endif %}
-          {% endfor %}
           {% else %}
           <tr class="sync-type-row cursor-pointer hover:bg-secondary/50 transition-colors" data-type="{{ ct.content_type }}">
             <td class="py-2 pr-4 text-foreground font-medium">

@@ -90,7 +90,7 @@
     </button>
   </nav>
 
-  <div class="border-t border-border bg-background md:hidden hidden" id="mobile-menu">
+  <div class="border-t border-border bg-background md:hidden hidden max-h-[calc(100vh-4rem)] overflow-y-auto" id="mobile-menu">
     <div class="space-y-1 px-6 py-4">
       <!-- Theme Toggle (Mobile) -->
       <div class="flex items-center justify-between py-2 mb-2 border-b border-border pb-3">
@@ -112,7 +112,7 @@
           Resources
           <svg class="h-4 w-4 transition-transform" id="mobile-resources-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="pl-4 space-y-1" id="mobile-resources-list">
+        <div class="pl-4 space-y-1 hidden" id="mobile-resources-list">
           <a href="/blog" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Blog</a>
           <a href="/courses" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Courses</a>
           <a href="/projects" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Project Ideas</a>

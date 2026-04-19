@@ -276,6 +276,20 @@ if not GITHUB_APP_PRIVATE_KEY:
 # CDN base URL for content images uploaded during sync
 CONTENT_CDN_BASE = os.environ.get('CONTENT_CDN_BASE', '/static/content-images')
 
+# Sync watchdog thresholds (issue #274). The dashboard runs an inline
+# watchdog query at the top of every render to flip stuck rows to ``failed``:
+#  - SYNC_QUEUED_THRESHOLD_MINUTES: a SyncLog stuck in ``queued`` longer than
+#    this means the worker never picked it up. Should normally be seconds.
+#  - SYNC_RUNNING_THRESHOLD_MINUTES: a SyncLog stuck in ``running`` longer
+#    than this means the worker died mid-sync. Real syncs can take a few
+#    minutes, so the default is generous.
+SYNC_QUEUED_THRESHOLD_MINUTES = int(
+    os.environ.get('SYNC_QUEUED_THRESHOLD_MINUTES', 10),
+)
+SYNC_RUNNING_THRESHOLD_MINUTES = int(
+    os.environ.get('SYNC_RUNNING_THRESHOLD_MINUTES', 30),
+)
+
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'
 

@@ -15,6 +15,7 @@ SYNC_STATUS_CHOICES = [
     ('success', 'Success'),
     ('partial', 'Partial'),
     ('failed', 'Failed'),
+    ('queued', 'Queued'),
     ('running', 'Running'),
     ('skipped', 'Skipped'),
 ]

@@ -15,10 +15,12 @@ import logging
 import uuid
 from collections import OrderedDict
 
+from django.conf import settings
 from django.contrib import messages
 from django.db.models import Max, Min
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
@@ -28,6 +30,98 @@ from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
 logger = logging.getLogger(__name__)
+
+
+# Error messages used by the watchdog when it auto-fails a stuck SyncLog.
+# Pinned as constants so tests can assert on them and operators can grep
+# server logs / SyncLog rows for them. See issue #274.
+WATCHDOG_QUEUED_ERROR = 'Worker did not pick up task within {minutes} minutes'
+WATCHDOG_RUNNING_ERROR = (
+    'Worker did not report completion within {minutes} minutes'
+)
+
+
+def _run_sync_watchdog():
+    """Inline watchdog: flip stuck queued/running SyncLog rows to ``failed``.
+
+    Called at the top of the dashboard view and the JSON status endpoint
+    (issue #274). Runs cheaply: two filtered ``UPDATE``s scoped by status
+    and started_at. Per ContentSource, also syncs ``last_sync_status`` so
+    the dashboard pill matches the SyncLog row the operator clicks
+    through to.
+
+    Two distinct thresholds because the two states mean different things:
+    ``queued`` should pick up in seconds (anything > 10min ⇒ broken
+    worker); ``running`` is real work that can take 5min, so 30min is a
+    generous safety net before we declare it dead.
+    """
+    now = timezone.now()
+    queued_threshold_min = settings.SYNC_QUEUED_THRESHOLD_MINUTES
+    running_threshold_min = settings.SYNC_RUNNING_THRESHOLD_MINUTES
+    queued_cutoff = now - datetime.timedelta(minutes=queued_threshold_min)
+    running_cutoff = now - datetime.timedelta(minutes=running_threshold_min)
+
+    # Stuck queued rows
+    stuck_queued = SyncLog.objects.filter(
+        status='queued', started_at__lt=queued_cutoff,
+    )
+    queued_source_ids = list(stuck_queued.values_list('source_id', flat=True))
+    if queued_source_ids:
+        queued_error = WATCHDOG_QUEUED_ERROR.format(minutes=queued_threshold_min)
+        for log in stuck_queued:
+            log.status = 'failed'
+            log.finished_at = now
+            log.errors = (log.errors or []) + [
+                {'file': '', 'error': queued_error},
+            ]
+            log.save(
+                update_fields=['status', 'finished_at', 'errors'],
+            )
+        # Sync corresponding ContentSource.last_sync_status, but only if it
+        # still says 'queued' — don't clobber a fresher state.
+        ContentSource.objects.filter(
+            pk__in=queued_source_ids, last_sync_status='queued',
+        ).update(last_sync_status='failed', updated_at=now)
+
+    # Stuck running rows
+    stuck_running = SyncLog.objects.filter(
+        status='running', started_at__lt=running_cutoff,
+    )
+    running_source_ids = list(stuck_running.values_list('source_id', flat=True))
+    if running_source_ids:
+        running_error = WATCHDOG_RUNNING_ERROR.format(
+            minutes=running_threshold_min,
+        )
+        for log in stuck_running:
+            log.status = 'failed'
+            log.finished_at = now
+            log.errors = (log.errors or []) + [
+                {'file': '', 'error': running_error},
+            ]
+            log.save(
+                update_fields=['status', 'finished_at', 'errors'],
+            )
+        ContentSource.objects.filter(
+            pk__in=running_source_ids, last_sync_status='running',
+        ).update(last_sync_status='failed', updated_at=now)
+
+
+def _mark_source_queued(source, batch_id=None):
+    """Set ``ContentSource.last_sync_status='queued'`` and create a SyncLog
+    row at status='queued' for it.
+
+    Called after a successful ``async_task`` enqueue from the trigger
+    views (issue #274). The new SyncLog row is the row the worker will
+    later UPDATE in place when it picks up the task — see
+    ``sync_content_source`` for the queued→running transition logic.
+    """
+    SyncLog.objects.create(
+        source=source,
+        batch_id=batch_id,
+        status='queued',
+    )
+    source.last_sync_status = 'queued'
+    source.save(update_fields=['last_sync_status', 'updated_at'])
 
 
 def _worker_warning_suffix():
@@ -244,7 +338,10 @@ def _build_repos_context():
         if source.last_synced_at:
             if repo['last_synced_at'] is None or source.last_synced_at > repo['last_synced_at']:
                 repo['last_synced_at'] = source.last_synced_at
-        if source.last_sync_status == 'running':
+        # Both ``queued`` and ``running`` keep the dashboard's auto-refresh
+        # poller ticking — issue #274 added ``queued`` so the operator sees
+        # "click registered" even before the worker picks up the task.
+        if source.last_sync_status in ('running', 'queued'):
             repo['any_running'] = True
         if source.last_sync_status:
             if source.last_sync_status == 'failed':
@@ -256,6 +353,10 @@ def _build_repos_context():
                 repo['overall_status'] = 'partial'
             elif source.last_sync_status == 'running':
                 repo['overall_status'] = 'running'
+            elif source.last_sync_status == 'queued' and repo['overall_status'] not in (
+                'failed', 'partial', 'running',
+            ):
+                repo['overall_status'] = 'queued'
             elif repo['overall_status'] is None:
                 repo['overall_status'] = source.last_sync_status
 
@@ -264,7 +365,7 @@ def _build_repos_context():
         source_ids = [s.pk for s in repo['sources']]
         latest_logs = SyncLog.objects.filter(
             source_id__in=source_ids,
-        ).exclude(status='running').order_by('-started_at')
+        ).exclude(status__in=['running', 'queued']).order_by('-started_at')
 
         # Find the most recent batch_id or timestamp cluster
         if latest_logs.exists():
@@ -283,7 +384,7 @@ def _build_repos_context():
                     source_id__in=source_ids,
                     started_at__gte=newest.started_at - datetime.timedelta(seconds=60),
                     started_at__lte=newest.started_at + datetime.timedelta(seconds=60),
-                ).exclude(status='running')
+                ).exclude(status__in=['running', 'queued'])
             repo['last_batch'] = _aggregate_batch(batch_logs)
         else:
             repo['last_batch'] = None
@@ -319,7 +420,13 @@ def sync_dashboard(request):
     per-repo cards partial. Used by the lightweight JS poller (issue #243)
     so a row that finishes syncing flips from ``running`` to its final
     status without the operator having to refresh the page.
+
+    Runs the inline watchdog (issue #274) at the top of every render so
+    rows stuck in ``queued`` (worker never picked up) or ``running``
+    (worker died mid-sync) get flipped to ``failed`` rather than
+    silently lying about being in flight.
     """
+    _run_sync_watchdog()
     context = _build_repos_context()
 
     if request.GET.get('fragment') == 'status':
@@ -416,6 +523,10 @@ def sync_trigger(request, source_id):
                 force=force,
                 task_name=f'sync-{source.repo_name}',
             )
+            # Issue #274: only AFTER the enqueue succeeds, mark the source
+            # ``queued`` and create a SyncLog row so the operator sees the
+            # click landed even if the worker is down.
+            _mark_source_queued(source)
             warning = _worker_warning_suffix()
             label = source.repo_name
             if source.content_path:
@@ -480,6 +591,9 @@ def sync_repo_trigger(request, repo_name):
                     force=force,
                     task_name=f'sync-{source.repo_name}-{source.content_type}',
                 )
+                # Issue #274: visible queued state per source so the operator
+                # can tell their click landed before the worker picks up.
+                _mark_source_queued(source, batch_id=batch_id)
             except ImportError:
                 sync_content_source(source, batch_id=batch_id, force=force)
         except Exception:
@@ -531,6 +645,8 @@ def sync_all(request):
                     force=force,
                     task_name=f'sync-{source.repo_name}-{source.content_type}',
                 )
+                # Issue #274: visible queued state per source.
+                _mark_source_queued(source, batch_id=batch_id)
             except ImportError:
                 sync_content_source(source, batch_id=batch_id, force=force)
         except Exception:
@@ -555,8 +671,16 @@ def sync_all(request):
 
 @staff_required
 def sync_status(request, source_id):
-    """JSON endpoint returning current sync status for a source (for polling)."""
+    """JSON endpoint returning current sync status for a source (for polling).
+
+    Runs the watchdog (issue #274) at the top so JS pollers — even on
+    surfaces other than the dashboard fragment — see ``failed`` for stuck
+    rows instead of stale ``queued``/``running``.
+    """
+    _run_sync_watchdog()
     source = get_object_or_404(ContentSource, pk=source_id)
+    # Re-fetch in case the watchdog just flipped it.
+    source.refresh_from_db()
     return JsonResponse({
         'id': str(source.pk),
         'last_sync_status': source.last_sync_status,

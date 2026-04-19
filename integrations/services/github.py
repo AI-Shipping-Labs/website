@@ -1045,11 +1045,44 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
             )
             return sync_log
 
-    sync_log = SyncLog.objects.create(
-        source=source,
-        batch_id=batch_id,
-        status='running',
+    # Issue #274: queued → running transition.
+    #
+    # The Studio trigger views now create a SyncLog at status='queued' the
+    # moment the operator clicks "Sync now". When the worker (this code)
+    # finally picks up the task, we UPDATE that existing row instead of
+    # creating a duplicate — otherwise the dashboard would show two rows
+    # for one logical sync (a queued one and a running one).
+    #
+    # We look for the most recent queued row for this source within the
+    # last queued-watchdog window (only those rows could plausibly belong
+    # to *this* enqueue call). If none found — direct CLI invocation,
+    # webhook bypass, etc. — fall back to creating one as before.
+    from django.conf import settings as _settings
+    queued_window = timezone.now() - timezone.timedelta(
+        minutes=getattr(_settings, 'SYNC_QUEUED_THRESHOLD_MINUTES', 10),
     )
+    queued_log = SyncLog.objects.filter(
+        source=source,
+        status='queued',
+        started_at__gte=queued_window,
+    ).order_by('-started_at').first()
+    if queued_log is not None:
+        queued_log.status = 'running'
+        # Carry batch_id from the worker call if the trigger view didn't
+        # know it (single-source trigger); otherwise the trigger view's
+        # batch_id was already written when the queued row was created.
+        if batch_id and not queued_log.batch_id:
+            queued_log.batch_id = batch_id
+            queued_log.save(update_fields=['status', 'batch_id'])
+        else:
+            queued_log.save(update_fields=['status'])
+        sync_log = queued_log
+    else:
+        sync_log = SyncLog.objects.create(
+            source=source,
+            batch_id=batch_id,
+            status='running',
+        )
 
     source.last_sync_status = 'running'
     source.save(update_fields=['last_sync_status', 'updated_at'])

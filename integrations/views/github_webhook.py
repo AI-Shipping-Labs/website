@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from integrations.models import WebhookLog
+from integrations.models import SyncLog, WebhookLog
 from integrations.services.github import (
     SYNC_LOCK_TIMEOUT_MINUTES,
     find_content_source,
@@ -124,6 +124,16 @@ def github_webhook(request):
                         source,
                         force=True,
                         task_name=f'sync-{source.repo_name}-{source.content_type}',
+                    )
+                    # Issue #274: webhook-driven sync goes through the same
+                    # queued-then-running pattern as the Studio trigger so
+                    # the dashboard shows blue "queued" pills for in-flight
+                    # webhook syncs (otherwise the dashboard would still
+                    # say "success" for the old commit until pickup).
+                    SyncLog.objects.create(source=source, status='queued')
+                    source.last_sync_status = 'queued'
+                    source.save(
+                        update_fields=['last_sync_status', 'updated_at'],
                     )
                 except ImportError:
                     # Django-Q not available, run synchronously

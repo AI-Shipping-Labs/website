@@ -28,6 +28,8 @@ def _sync_status_label(status, error_count=0):
         return 'failed'
     if status == 'running':
         return 'running'
+    if status == 'queued':
+        return 'queued'
     if status == 'skipped':
         return 'skipped'
     if status == 'partial':

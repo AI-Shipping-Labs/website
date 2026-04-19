@@ -301,6 +301,80 @@ def test_registration_sends_verification_email(self):
 
 ---
 
+## Rule 15: Choose the right test layer for the right job
+
+Default to Django `TestCase` unless the test genuinely needs JavaScript or a real
+browser. Browsers are roughly 100x slower than the Django test client, and every
+Playwright test we add slows the whole suite for everyone.
+
+### Use Playwright when
+
+- The user interaction triggers JS that updates the DOM without a full reload
+  (vote counter, mark-as-complete toggle, dropdown open, modal open/close,
+  inline edit, autosave indicator).
+- The test verifies an AJAX call's effect on the page (form submit that updates
+  inline, not a redirect).
+- The test depends on a browser dialog (`alert`, `confirm`, `prompt`).
+- The test depends on browser-only behaviour (clipboard copy, `localStorage`,
+  video player state, scroll position, keyboard shortcuts).
+- The flow spans multiple pages with intermediate JS state that has to survive
+  a navigation (e.g. wizard with client-side form draft).
+- The test verifies an auto-refresh, polling, or `setInterval`-driven update.
+
+### Use Django `TestCase` when
+
+- The page is fully server-rendered and the test asserts on the HTML.
+- The test asserts on response status, headers, redirects, or `response.context`.
+- The interaction is a regular form POST that returns a redirect or a re-render
+  (no JS in the loop).
+- Filtering, sorting, or pagination is server-side via querystring.
+- The test asserts on side effects (DB rows created, emails sent via
+  `mail.outbox`, files written, async tasks enqueued).
+- The test covers a model invariant, computed property, or custom `clean()`.
+- The test covers an API contract (status code, JSON shape, error payload).
+- The test covers an access-control or permission gate (anonymous vs free vs
+  paid tier returning the right status / template / context).
+
+### Heuristic
+
+If you can write the test as `self.client.get(url)` followed by
+`assertContains(response, ...)` (or `response.context[...]`) without losing
+meaningful coverage, it belongs in Django. Reach for Playwright only when there
+is a concrete JS or browser behaviour that the test client cannot reproduce.
+
+A second heuristic: open the template the test exercises. If the behaviour you
+are asserting on is produced by Django rendering server-side, test it server-side.
+If it is produced by a `<script>` block or an `hx-*` / `data-*` attribute that
+runs in the browser, test it in Playwright.
+
+### Cross-reference
+
+- Rule 10 (E2E tests test user flows, not implementation details) — Playwright
+  must actually open a browser. Don't use it as a slow Django runner.
+- Rule 11 (one authoritative test per behaviour) — pick a single layer per
+  behaviour and stick to it. The matrix in Rule 11 is the canonical mapping.
+
+### Canonical examples (workstream 3 of #170)
+
+The cleanup tracked under #254 (sub-issues #255-#264) is the worked example for
+this rule. It moved ~95 assertions from Playwright to Django and removed ~53
+redundant Django tests, in both directions:
+
+- Server-rendered HTML, status codes, context, framework behaviour, URL
+  resolution, config constants, template strings, impossible edge cases, and
+  cross-layer duplicates moved out of Playwright (or were deleted from Django
+  where Playwright was already authoritative). See #255, #258, #261.
+- Real JS interactions (mark-complete toggle, vote button, modal close,
+  dropdowns, auto-refresh) stayed in Playwright but were simplified to assert
+  on the specific DOM change rather than re-checking server-rendered text. See
+  #256, #257, #259, #260, #262, #263, #264.
+
+Use these issues as the reference when you are unsure which layer a new test
+belongs in. If your test would have been deleted or moved by one of those
+sub-issues, write it on the other layer to begin with.
+
+---
+
 ## Core test subset (`make test-core`)
 
 The full Django suite has thousands of tests and takes 1-3 minutes. For the

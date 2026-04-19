@@ -256,6 +256,10 @@ document.querySelectorAll('.tier-cta-link').forEach(function(el) {
         section.classList.add('pt-8');
       }
     }
+    // Clean the URL so a refresh or share does not re-trigger the banner.
+    var cleanUrl = new URL(window.location);
+    cleanUrl.searchParams.delete('checkout');
+    history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
   }
   var dismissBtn = document.getElementById('dismiss-cancelled-banner');
   if (dismissBtn) {

@@ -350,6 +350,10 @@
     if (banner) {
       banner.classList.remove('hidden');
     }
+    // Clean the URL so a refresh or share does not re-trigger the banner.
+    var cleanUrl = new URL(window.location);
+    cleanUrl.searchParams.delete('checkout');
+    history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
   }
   var dismissBtn = document.getElementById('dismiss-success-banner');
   if (dismissBtn) {

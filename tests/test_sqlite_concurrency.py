@@ -149,8 +149,10 @@ def _run_writers(db_path, n_threads, *, apply_fix, hold_seconds=0.05):
     - ``apply_fix=False`` reproduces the broken config: short busy_timeout,
       no WAL, default DEFERRED transaction mode. This is what surfaces
       "database is locked" under contention.
-    - ``apply_fix=True`` mirrors the production fix: WAL +
-      busy_timeout=30000 + IMMEDIATE transaction mode.
+    - ``apply_fix=True`` mirrors the production fix: WAL (set once on
+      the file by ``_fresh_db()`` before threads start, the same way
+      Django's ``init_command`` runs at connection-open time) +
+      per-connection busy_timeout=30000 + IMMEDIATE transaction mode.
 
     Each thread waits on a barrier so they all hit the write lock at the
     same instant. Whichever thread wins the race holds the write lock
@@ -170,8 +172,16 @@ def _run_writers(db_path, n_threads, *, apply_fix, hold_seconds=0.05):
     def writer(i):
         if apply_fix:
             con = sqlite3.connect(db_path, timeout=30, isolation_level=None)
-            # Mirror website/settings.py init_command exactly.
-            con.execute('PRAGMA journal_mode=WAL')
+            # Mirror website/settings.py init_command — except for
+            # journal_mode=WAL, which the harness sets once in
+            # ``_fresh_db()`` BEFORE any threads start. Setting WAL mode
+            # is itself a write op that needs the write lock; if every
+            # thread tries to set it concurrently before busy_timeout is
+            # in effect, the losers get SQLITE_BUSY immediately. Django
+            # avoids this in production because ``init_command`` runs at
+            # connection-open time, well before user-level contention,
+            # and WAL is sticky on the file. We replicate that here by
+            # making _fresh_db() the WAL-setter.
             con.execute('PRAGMA busy_timeout=30000')
             con.execute('PRAGMA synchronous=NORMAL')
         else:
@@ -237,15 +247,29 @@ class SqliteConcurrentWritersTest(SimpleTestCase):
             )
 
     def _fresh_db(self):
-        """Create a temp on-disk SQLite with a single test table."""
+        """Create a temp on-disk SQLite with a single test table.
+
+        We set ``journal_mode=WAL`` here, before any test threads run,
+        because flipping a database into WAL mode is itself a write op
+        that requires the write lock. If we instead let each writer
+        thread set WAL on its own connection at the same instant, the
+        thread that grabs the write lock first wins; the rest see
+        SQLITE_BUSY immediately because their per-connection
+        ``busy_timeout`` hasn't been set yet (it's the next PRAGMA in
+        line). Django's production config doesn't hit this because
+        ``init_command`` runs once when the connection opens, long
+        before user-level contention. The harness mirrors that: WAL is
+        a file-level mode, so setting it once on a fresh DB sticks for
+        every later connection.
+        """
         tmpdir = tempfile.mkdtemp(prefix='sqlite-concurrency-')
         db_path = str(Path(tmpdir) / 'test.sqlite3')
-        con = sqlite3.connect(db_path)
+        con = sqlite3.connect(db_path, isolation_level=None)
+        con.execute('PRAGMA journal_mode=WAL')
         con.execute(
             'CREATE TABLE concurrency_test '
             '(id INTEGER PRIMARY KEY AUTOINCREMENT, val TEXT NOT NULL)',
         )
-        con.commit()
         con.close()
         return db_path
 
@@ -274,7 +298,19 @@ class SqliteConcurrentWritersTest(SimpleTestCase):
 
     def test_with_fix_concurrent_writers_all_succeed(self):
         """Positive case: WAL + busy_timeout + IMMEDIATE lets every
-        writer through under the same contention pattern."""
+        writer through under the same contention pattern as the
+        negative control (n=8).
+
+        The earlier flake on this test (issue #268) was misdiagnosed as
+        contention scaling: the fix had each writer thread run ``PRAGMA
+        journal_mode=WAL`` on its own connection. That PRAGMA is itself
+        a write op needing the write lock, and it runs *before* the
+        next PRAGMA (``busy_timeout=30000``) takes effect — so losing
+        threads got SQLITE_BUSY immediately, with zero rows committed.
+        ``_fresh_db()`` now sets WAL once before any thread starts,
+        mirroring how Django's ``init_command`` runs WAL at connection
+        open. With that fix, all 8 writers succeed reliably.
+        """
         db_path = self._fresh_db()
         n_threads = 8
         errors, total_rows = _run_writers(db_path, n_threads=n_threads, apply_fix=True)

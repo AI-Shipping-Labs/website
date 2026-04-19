@@ -66,14 +66,6 @@
       <a href="{% url 'studio_dashboard' %}" class="text-sm text-accent transition-colors hover:text-foreground">Studio</a>
       {% endif %}
       <a href="{% url 'account' %}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">{{ user.email }}</a>
-      {% if is_impersonating %}
-      <form method="post" action="{% url 'studio_stop_impersonate' %}" class="inline">
-        {% csrf_token %}
-        <button type="submit" class="inline-flex items-center justify-center rounded-md border border-yellow-500 bg-transparent px-4 py-2 text-sm font-medium text-yellow-600 transition-colors hover:bg-yellow-500/10" data-testid="header-stop-impersonating">
-          Stop impersonating
-        </button>
-      </form>
-      {% endif %}
       <a href="{% url 'account_logout' %}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Log out
       </a>
@@ -138,14 +130,6 @@
         <a href="{% url 'account' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>
-        {% if is_impersonating %}
-        <form method="post" action="{% url 'studio_stop_impersonate' %}" class="mb-2">
-          {% csrf_token %}
-          <button type="submit" class="block w-full rounded-md border border-yellow-500 bg-transparent px-4 py-2 text-center text-sm font-medium text-yellow-600 transition-colors hover:bg-yellow-500/10">
-            Stop impersonating
-          </button>
-        </form>
-        {% endif %}
         <a href="{% url 'account_logout' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
           Log out
         </a>

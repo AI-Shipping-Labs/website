@@ -182,7 +182,10 @@ class ImpersonationBannerTest(TestCase):
 
 
 class HeaderStopImpersonatingButtonTest(TestCase):
-    """Tests for the 'Stop impersonating' button in the header user area."""
+    """The duplicate 'Stop impersonating' button has been removed from the
+    header dropdown and mobile menu (issue #276). The banner's 'Return to
+    your account' link is the single, canonical control.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -193,16 +196,22 @@ class HeaderStopImpersonatingButtonTest(TestCase):
             email='target@test.com', password='testpass',
         )
 
-    def test_header_button_shown_during_impersonation(self):
-        """Header shows a 'Stop impersonating' button while impersonating."""
+    def test_no_duplicate_stop_button_in_header_during_impersonation(self):
+        """While impersonating, the header must not render the duplicate
+        'Stop impersonating' button. Only the banner's 'Return to your
+        account' link should be present.
+        """
         self.client.login(email='admin@test.com', password='testpass')
         self.client.post(f'/studio/impersonate/{self.target.pk}/')
         response = self.client.get('/')
-        self.assertContains(response, 'data-testid="header-stop-impersonating"')
-        self.assertContains(response, 'Stop impersonating')
+        # Banner control is the single source of truth.
+        self.assertContains(response, 'Return to your account')
+        # Duplicate header button must be gone.
+        self.assertNotContains(response, 'data-testid="header-stop-impersonating"')
+        self.assertNotContains(response, 'Stop impersonating')
 
-    def test_header_button_hidden_normally(self):
-        """Header does not show the 'Stop impersonating' button when not impersonating."""
+    def test_no_stop_button_when_not_impersonating(self):
+        """The header has no 'Stop impersonating' button when not impersonating."""
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.get('/')
         self.assertNotContains(response, 'data-testid="header-stop-impersonating"')

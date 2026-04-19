@@ -14,7 +14,9 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.db import connection
 from django.test import Client, TestCase, tag
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN
@@ -1094,3 +1096,207 @@ class CourseTagFilterTest(TestCase):
         self.assertEqual(response.context['selected_tags'], ['python'])
         self.assertContains(response, 'Python Course')
         self.assertNotContains(response, 'Go Course')
+
+
+# ============================================================
+# Issue #282: per-module "completed/total lessons" header
+# ============================================================
+
+
+class CourseModuleProgressLabelTest(TierSetupMixin, TestCase):
+    """Module headers show ``completed/total lessons`` once the user has
+    progress in that module; plain ``total lessons`` otherwise.
+
+    Issue #282 — the count next to each module summary on the course
+    detail page becomes a fraction (e.g. ``3/10 lessons``) the moment the
+    learner ticks off any lesson in the module. Anonymous users and users
+    with zero progress see the original ``10 lessons`` form.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.course = Course.objects.create(
+            title='Module Progress Course',
+            slug='module-progress-course',
+            status='published',
+            required_level=LEVEL_OPEN,
+        )
+        # Module 1: 3 lessons — user completes one of them.
+        cls.module1 = Module.objects.create(
+            course=cls.course, title='Module One', slug='module-one', sort_order=1,
+        )
+        cls.m1_units = [
+            Unit.objects.create(
+                module=cls.module1, title=f'M1 Unit {i}',
+                slug=f'm1-unit-{i}', sort_order=i,
+            )
+            for i in range(1, 4)
+        ]
+        # Module 2: 2 lessons — user completes none.
+        cls.module2 = Module.objects.create(
+            course=cls.course, title='Module Two', slug='module-two', sort_order=2,
+        )
+        cls.m2_units = [
+            Unit.objects.create(
+                module=cls.module2, title=f'M2 Unit {i}',
+                slug=f'm2-unit-{i}', sort_order=i,
+            )
+            for i in range(1, 3)
+        ]
+
+    def _login_with_progress_in_module1(self, completed_count=1):
+        user = User.objects.create_user(email='m1prog@test.com', password='pw')
+        for unit in self.m1_units[:completed_count]:
+            UserCourseProgress.objects.create(
+                user=user, unit=unit, completed_at=timezone.now(),
+            )
+        self.client.login(email='m1prog@test.com', password='pw')
+        return user
+
+    def test_authenticated_user_with_progress_sees_fraction(self):
+        """User who completed 1 of 3 lessons in module 1 sees ``1/3 lessons``."""
+        self._login_with_progress_in_module1(completed_count=1)
+        response = self.client.get('/courses/module-progress-course')
+        self.assertContains(response, '1/3 lessons')
+
+    def test_authenticated_user_no_progress_in_module_sees_total_only(self):
+        """Module 2 has 0 progress, so its header still reads ``2 lessons``."""
+        self._login_with_progress_in_module1(completed_count=1)
+        response = self.client.get('/courses/module-progress-course')
+        # Module 2 header — no fraction, just the total.
+        self.assertContains(response, '2 lessons')
+        # Cross-check: the bare ``3 lessons`` form (module 1 totals before
+        # progress) must NOT appear, because module 1 now uses the fraction.
+        self.assertNotContains(response, '>3 lessons<')
+
+    def test_authenticated_user_with_zero_progress_sees_total_only(self):
+        """User logged in but no progress at all → all modules show plain totals."""
+        User.objects.create_user(email='zero@test.com', password='pw')
+        self.client.login(email='zero@test.com', password='pw')
+        response = self.client.get('/courses/module-progress-course')
+        self.assertContains(response, '3 lessons')
+        self.assertContains(response, '2 lessons')
+        # No fraction anywhere in the syllabus.
+        self.assertNotContains(response, '/3 lessons')
+        self.assertNotContains(response, '/2 lessons')
+
+    def test_anonymous_user_sees_total_only(self):
+        """Anonymous visitors have no progress to show — totals only."""
+        response = self.client.get('/courses/module-progress-course')
+        self.assertContains(response, '3 lessons')
+        self.assertContains(response, '2 lessons')
+        self.assertNotContains(response, '/3 lessons')
+        self.assertNotContains(response, '/2 lessons')
+
+    def test_all_lessons_completed_renders_full_fraction(self):
+        """Completing every lesson in a module shows e.g. ``3/3 lessons`` —
+        the spec explicitly chose the fraction form over a separate
+        ``Complete`` label."""
+        self._login_with_progress_in_module1(completed_count=3)
+        response = self.client.get('/courses/module-progress-course')
+        self.assertContains(response, '3/3 lessons')
+
+    def test_completed_count_by_module_in_context(self):
+        """The view exposes the per-module completion count dict for templates."""
+        user = self._login_with_progress_in_module1(completed_count=2)
+        response = self.client.get('/courses/module-progress-course')
+        ctx = response.context['completed_count_by_module']
+        self.assertEqual(ctx[self.module1.id], 2)
+        # Module 2 has no progress — absence (or 0) both render plain.
+        self.assertNotIn(self.module2.id, ctx)
+        # Sanity: the user fixture is the one we logged in as.
+        self.assertEqual(user.email, 'm1prog@test.com')
+
+    def test_anonymous_user_gets_empty_completion_dict(self):
+        """No DB lookup for anonymous users — an empty dict is enough for
+        the template to fall through to the plain ``X lessons`` form."""
+        response = self.client.get('/courses/module-progress-course')
+        self.assertEqual(response.context['completed_count_by_module'], {})
+
+    def test_progress_in_other_user_does_not_leak(self):
+        """Completion rows for a different user must not appear in this
+        user's per-module count."""
+        other = User.objects.create_user(email='other@test.com', password='pw')
+        for unit in self.m1_units:
+            UserCourseProgress.objects.create(
+                user=other, unit=unit, completed_at=timezone.now(),
+            )
+        # Logged-in user has no progress.
+        User.objects.create_user(email='clean@test.com', password='pw')
+        self.client.login(email='clean@test.com', password='pw')
+        response = self.client.get('/courses/module-progress-course')
+        # Should still see the plain totals, not 3/3.
+        self.assertContains(response, '3 lessons')
+        self.assertNotContains(response, '3/3 lessons')
+
+
+class CourseDetailModuleCountQueryGuardTest(TierSetupMixin, TestCase):
+    """N+1 guard for the per-module ``completed/total`` lookup (issue #282).
+
+    The per-module completion lookup must be a single query regardless of
+    how many modules the course has. This test creates a course with many
+    modules and asserts that doubling the module count does not double the
+    progress-related query count.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(email='nplus1@test.com', password='pw')
+
+    def _make_course(self, slug, module_count, units_per_module=2):
+        course = Course.objects.create(
+            title=f'Course {slug}', slug=slug,
+            status='published', required_level=LEVEL_OPEN,
+        )
+        for i in range(module_count):
+            module = Module.objects.create(
+                course=course, title=f'M{i}', slug=f'm-{i}', sort_order=i,
+            )
+            for j in range(units_per_module):
+                unit = Unit.objects.create(
+                    module=module, title=f'U{i}-{j}',
+                    slug=f'u-{i}-{j}', sort_order=j,
+                )
+                # Complete the first unit of every module so the per-module
+                # count branch is actually exercised.
+                if j == 0:
+                    UserCourseProgress.objects.create(
+                        user=self.user, unit=unit, completed_at=timezone.now(),
+                    )
+        return course
+
+    def test_progress_lookup_query_count_constant(self):
+        """Going from 3 to 9 modules must not 3x the query count of the
+        per-module completion branch — there must be a single batched
+        progress query, not one per module."""
+        small_course = self._make_course('small-course', module_count=3)
+        large_course = self._make_course('large-course', module_count=9)
+
+        self.client.login(email='nplus1@test.com', password='pw')
+        # Warm up the session/middleware so we don't measure unrelated
+        # one-off queries (CSRF token, session create, etc.).
+        self.client.get(f'/courses/{small_course.slug}')
+
+        with CaptureQueriesContext(connection) as small_ctx:
+            r1 = self.client.get(f'/courses/{small_course.slug}')
+        self.assertEqual(r1.status_code, 200)
+
+        with CaptureQueriesContext(connection) as large_ctx:
+            r2 = self.client.get(f'/courses/{large_course.slug}')
+        self.assertEqual(r2.status_code, 200)
+
+        # 6 extra modules must not produce 6 extra queries. Allow a small
+        # slack for incidental per-module queries elsewhere on the page,
+        # but the progress lookup itself must be batched (1 query).
+        delta = len(large_ctx.captured_queries) - len(small_ctx.captured_queries)
+        self.assertLess(
+            delta, 6,
+            msg=(
+                f'Course detail page query count grew by {delta} when going '
+                f'from 3 to 9 modules — the per-module progress lookup is '
+                f'likely N+1.\nSmall queries: {len(small_ctx.captured_queries)}, '
+                f'large queries: {len(large_ctx.captured_queries)}'
+            ),
+        )

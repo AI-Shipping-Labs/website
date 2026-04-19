@@ -1,4 +1,5 @@
 import datetime
+from collections import Counter
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -93,16 +94,27 @@ def course_detail(request, slug):
     total = course.total_units()
     completed = course.completed_units(user)
 
-    # Build set of completed unit IDs for template
-    completed_unit_ids = set()
+    # Build set of completed unit IDs and per-module completion counts for
+    # the template. Anonymous users get empty containers so the template
+    # branches always fall through to the plain "X lessons" rendering.
+    #
+    # Single query: pull (unit_id, module_id) pairs for completed progress
+    # rows in this course and derive both lookups in Python — keeps the
+    # query count constant regardless of module count (issue #282 N+1
+    # guard).
+    completed_unit_ids: set[int] = set()
+    completed_count_by_module: dict[int, int] = {}
     if user.is_authenticated:
-        completed_unit_ids = set(
-            UserCourseProgress.objects.filter(
-                user=user,
-                unit__module__course=course,
-                completed_at__isnull=False,
-            ).values_list('unit_id', flat=True)
-        )
+        progress_rows = UserCourseProgress.objects.filter(
+            user=user,
+            unit__module__course=course,
+            completed_at__isnull=False,
+        ).values_list('unit_id', 'unit__module_id')
+        module_id_counts: Counter = Counter()
+        for unit_id, module_id in progress_rows:
+            completed_unit_ids.add(unit_id)
+            module_id_counts[module_id] += 1
+        completed_count_by_module = dict(module_id_counts)
 
     # Determine CTA
     cta_message = ''
@@ -168,6 +180,7 @@ def course_detail(request, slug):
         'total_units': total,
         'completed_units': completed,
         'completed_unit_ids': completed_unit_ids,
+        'completed_count_by_module': completed_count_by_module,
         'progress_pct': progress_pct,
         'cta_message': cta_message,
         'cta_url': cta_url,

@@ -52,3 +52,19 @@ def required_tier_name(required_level):
         {{ article.required_level|required_tier_name }}
     """
     return get_required_tier_name(required_level)
+
+
+@register.filter
+def dict_get(dictionary, key):
+    """Look up a key in a dictionary. Returns None if missing or not a dict.
+
+    Templates can't subscript dicts directly (``dict[key]`` is not valid
+    template syntax), so we expose a small filter for the common case of
+    ``{value_for_id|dict_get:obj.id}``.
+
+    Usage:
+        {{ completed_count_by_module|dict_get:module.id }}
+    """
+    if isinstance(dictionary, dict):
+        return dictionary.get(key)
+    return None

@@ -29,4 +29,4 @@ def stop_impersonation(request):
         admin_user = get_object_or_404(User, pk=impersonator_id)
         # login() cycles the session, which removes _impersonator_id automatically
         login(request, admin_user, backend='django.contrib.auth.backends.ModelBackend')
-    return redirect('studio_subscriber_list')
+    return redirect('studio_user_list')

@@ -775,79 +775,87 @@ class TestScenario9StaffCreatesCampaign:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario10StaffExportsSubscribers:
-    """Staff member exports subscriber data as CSV for external analysis."""
+    """Staff member exports user/subscriber data as CSV for external analysis.
 
-    def test_subscriber_list_filter_and_csv_export(self, django_server, browser):
+    Page moved from ``/studio/subscribers/`` to ``/studio/users/`` in #271.
+    The default filter chip is "Subscribers", so the landing view still shows
+    subscriber rows.
+    """
+
+    def test_user_list_filter_and_csv_export(self, django_server, browser):
         """Given: A user logged in as admin@test.com (is_staff=True), and there are
-        5 active and 2 inactive newsletter subscribers.
-        1. Navigate to /studio/subscribers/
-        Then: Subscriber list shows counts -- 5 active and 2 inactive
-        2. Filter by 'active' subscribers
-        Then: Only the 5 active subscribers appear in the list
+        5 active and 2 inactive newsletter subscribers (each with a User row).
+        1. Navigate to /studio/users/
+        Then: With the default "Subscribers" chip, only the 5 active subscriber
+              users appear.
+        2. Switch to the "All" chip
+        Then: All 7 user rows are listed.
         3. Click the export CSV link/button
-        Then: A CSV file downloads containing subscriber data."""
+        Then: A CSV file downloads with the new column set."""
         _clear_subscribers()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
 
-        # Create 5 active subscribers
+        # Create 5 active subscribers, each backed by a real User row so the
+        # users page lists them.
         for i in range(5):
+            _create_user(f"active-{i}@test.com")
             _create_subscriber(f"active-{i}@test.com", is_active=True)
 
-        # Create 2 inactive subscribers
+        # Create 2 inactive subscribers, also backed by Users.
         for i in range(2):
+            _create_user(f"inactive-{i}@test.com")
             _create_subscriber(f"inactive-{i}@test.com", is_active=False)
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /studio/subscribers/
+        # Step 1: Navigate to /studio/users/ -- default chip is Subscribers.
         page.goto(
-            f"{django_server}/studio/subscribers/",
+            f"{django_server}/studio/users/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-
-        # Subscriber list shows counts
-        assert "5" in body  # active count
-        assert "2" in body  # inactive count
-
-        # Step 2: Filter by "active" subscribers
-        with page.expect_navigation(wait_until="domcontentloaded"):
-            page.select_option(
-                'select[name="status"]', value="active"
-            )
 
         table_body = page.locator("tbody")
         table_text = table_body.inner_text()
-
-        # Only active subscribers appear
         for i in range(5):
             assert f"active-{i}@test.com" in table_text
         for i in range(2):
             assert f"inactive-{i}@test.com" not in table_text
 
-        # Step 3: Click the export CSV link
-        # The export link preserves the current filter
+        # Step 2: Switch to the "All" chip.
+        page.locator('a[data-filter="all"]').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        table_body = page.locator("tbody")
+        table_text = table_body.inner_text()
+        for i in range(5):
+            assert f"active-{i}@test.com" in table_text
+        for i in range(2):
+            assert f"inactive-{i}@test.com" in table_text
+
+        # Step 3: Click the export CSV link -- it inherits the current filter.
         with page.expect_download() as download_info:
             page.click('a:has-text("Export CSV")')
 
         download = download_info.value
-        assert download.suggested_filename == "subscribers.csv"
+        assert download.suggested_filename == "users.csv"
 
-        # Read the CSV content and verify
         csv_path = download.path()
         with open(csv_path, "r") as f:
             csv_content = f.read()
 
+        # New column set introduced in #271
         assert "Email" in csv_content
-        assert "Subscribed At" in csv_content
-        assert "Active" in csv_content
+        assert "Joined" in csv_content
+        assert "Subscribed" in csv_content
+        assert "Tier" in csv_content
+        assert "Status" in csv_content
 
-        # Only active subscribers should be in the CSV
+        # All 7 subscribers' user rows are in the CSV (filter=all)
         for i in range(5):
             assert f"active-{i}@test.com" in csv_content
         for i in range(2):
-            assert f"inactive-{i}@test.com" not in csv_content
+            assert f"inactive-{i}@test.com" in csv_content
 # ---------------------------------------------------------------
 # Scenario 11: Staff member navigates between Studio sections
 #               using the sidebar
@@ -864,8 +872,8 @@ class TestScenario11SidebarNavigation:
         Then: User arrives at /studio/articles/
         3. Click 'Events' link in the sidebar
         Then: User arrives at /studio/events/
-        4. Click 'Subscribers' link in the sidebar
-        Then: User arrives at /studio/subscribers/
+        4. Click 'Users' link in the sidebar (renamed from 'Subscribers' in #271)
+        Then: User arrives at /studio/users/
         5. Click the 'Studio' logo/link in the sidebar
         Then: User returns to /studio/."""
         _ensure_tiers()
@@ -892,11 +900,11 @@ class TestScenario11SidebarNavigation:
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/events/" in page.url
 
-        # Step 4: Click "Subscribers" in the sidebar
+        # Step 4: Click "Users" in the sidebar
         sidebar = page.locator("aside")
-        sidebar.locator('a:has-text("Subscribers")').click()
+        sidebar.locator('a:has-text("Users")').click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/studio/subscribers/" in page.url
+        assert "/studio/users/" in page.url
 
         # Step 5: Click "Studio" logo/link in the sidebar to return
         sidebar = page.locator("aside")

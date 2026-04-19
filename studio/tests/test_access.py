@@ -56,8 +56,8 @@ class StudioAccessControlTest(TestCase):
         response = self.client.get('/studio/campaigns/')
         self.assertEqual(response.status_code, 302)
 
-    def test_anonymous_subscribers_redirects(self):
-        response = self.client.get('/studio/subscribers/')
+    def test_anonymous_users_redirects(self):
+        response = self.client.get('/studio/users/')
         self.assertEqual(response.status_code, 302)
 
     def test_anonymous_downloads_redirects(self):
@@ -102,9 +102,9 @@ class StudioAccessControlTest(TestCase):
         response = self.client.get('/studio/campaigns/')
         self.assertEqual(response.status_code, 403)
 
-    def test_non_staff_subscribers_forbidden(self):
+    def test_non_staff_users_forbidden(self):
         self.client.login(email='user@test.com', password='testpass')
-        response = self.client.get('/studio/subscribers/')
+        response = self.client.get('/studio/users/')
         self.assertEqual(response.status_code, 403)
 
     def test_non_staff_downloads_forbidden(self):
@@ -152,9 +152,9 @@ class StudioAccessControlTest(TestCase):
         response = self.client.get('/studio/campaigns/')
         self.assertEqual(response.status_code, 200)
 
-    def test_staff_subscribers_accessible(self):
+    def test_staff_users_accessible(self):
         self.client.login(email='staff@test.com', password='testpass')
-        response = self.client.get('/studio/subscribers/')
+        response = self.client.get('/studio/users/')
         self.assertEqual(response.status_code, 200)
 
     def test_staff_downloads_accessible(self):

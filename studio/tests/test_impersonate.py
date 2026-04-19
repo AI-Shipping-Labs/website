@@ -89,7 +89,7 @@ class StopImpersonationTest(TestCase):
         # Stop impersonation
         response = self.client.post('/studio/impersonate/stop/')
         self.assertEqual(response.status_code, 302)
-        self.assertIn('subscribers', response.url)
+        self.assertEqual(response.url, '/studio/users/')
         # Verify we are back to admin
         response = self.client.get('/')
         self.assertEqual(response.wsgi_request.user, self.staff)
@@ -108,11 +108,11 @@ class StopImpersonationTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
     def test_stop_without_impersonation_redirects(self):
-        """Stopping when not impersonating just redirects to subscribers."""
+        """Stopping when not impersonating just redirects to the users page."""
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.post('/studio/impersonate/stop/')
         self.assertEqual(response.status_code, 302)
-        self.assertIn('subscribers', response.url)
+        self.assertEqual(response.url, '/studio/users/')
 
 
 class ImpersonationBannerTest(TestCase):
@@ -209,36 +209,48 @@ class HeaderStopImpersonatingButtonTest(TestCase):
         self.assertNotContains(response, 'Stop impersonating')
 
 
-class SubscriberListLoginAsButtonTest(TestCase):
-    """Tests for the 'Login as' button on the subscribers page."""
+class UserListLoginAsButtonTest(TestCase):
+    """The 'Login as' button on /studio/users/ works for any User row."""
 
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
             email='admin@test.com', password='testpass', is_staff=True,
         )
-        cls.registered_user = User.objects.create_user(
+        cls.subscriber_user = User.objects.create_user(
             email='registered@test.com', password='testpass',
         )
-        cls.sub_with_account = NewsletterSubscriber.objects.create(
+        NewsletterSubscriber.objects.create(
             email='registered@test.com', is_active=True,
         )
-        cls.sub_without_account = NewsletterSubscriber.objects.create(
-            email='nouser@test.com', is_active=True,
+        cls.non_subscriber_user = User.objects.create_user(
+            email='nosub@test.com', password='testpass',
+        )
+        # A subscriber with no User account: must NOT appear at all because
+        # the page now lists Users (not subscriber rows).
+        NewsletterSubscriber.objects.create(
+            email='ghost@test.com', is_active=True,
         )
 
-    def test_login_as_button_shown_for_subscriber_with_account(self):
-        """The 'Login as' button appears for subscribers who have a user account."""
+    def test_login_as_button_present_for_subscriber_user(self):
+        """A subscriber-User shows a Login as button on the default chip."""
         self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/subscribers/')
-        self.assertContains(response, f'/studio/impersonate/{self.registered_user.pk}/')
+        response = self.client.get('/studio/users/')
+        self.assertContains(
+            response, f'/studio/impersonate/{self.subscriber_user.pk}/'
+        )
 
-    def test_login_as_button_hidden_for_subscriber_without_account(self):
-        """The 'Login as' button does not appear for email-only subscribers."""
+    def test_login_as_button_present_for_any_user(self):
+        """Login as also works for non-subscriber Users (was missing before #271)."""
         self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/subscribers/')
-        # The subscriber without an account should not have a Login as button
-        content = response.content.decode()
-        # Check that there's no impersonate URL for a nonexistent user
-        # We verify by counting the number of "Login as" buttons -- should be exactly 1
-        self.assertEqual(content.count('Login as</button>'), 1)
+        response = self.client.get('/studio/users/?filter=all')
+        self.assertContains(
+            response, f'/studio/impersonate/{self.non_subscriber_user.pk}/'
+        )
+
+    def test_subscriber_without_user_account_is_not_listed(self):
+        """Email-only subscribers are not Users, so they do not appear."""
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/studio/users/?filter=all')
+        emails = [row['email'] for row in response.context['user_rows']]
+        self.assertNotIn('ghost@test.com', emails)

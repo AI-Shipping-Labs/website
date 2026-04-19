@@ -52,7 +52,10 @@ from studio.views.projects import project_list, project_review
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
 from studio.views.settings import settings_dashboard, settings_save_group
-from studio.views.subscribers import subscriber_export_csv, subscriber_list
+from studio.views.subscribers import (
+    subscriber_export_redirect,
+    subscriber_list_redirect,
+)
 from studio.views.sync import (
     sync_all,
     sync_dashboard,
@@ -62,7 +65,12 @@ from studio.views.sync import (
     sync_trigger,
 )
 from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
-from studio.views.users import user_create, user_create_done
+from studio.views.users import (
+    user_create,
+    user_create_done,
+    user_export_csv,
+    user_list,
+)
 from studio.views.utm_analytics import (
     utm_campaign_detail as utm_analytics_campaign_detail,
 )
@@ -173,9 +181,9 @@ urlpatterns = [
         name='studio_utm_link_analytics',
     ),
 
-    # Subscribers
-    path('subscribers/', subscriber_list, name='studio_subscriber_list'),
-    path('subscribers/export', subscriber_export_csv, name='studio_subscriber_export'),
+    # Subscribers (legacy URLs, 301-redirect to /studio/users/ -- issue #271)
+    path('subscribers/', subscriber_list_redirect, name='studio_subscriber_list'),
+    path('subscribers/export', subscriber_export_redirect, name='studio_subscriber_export'),
 
     # Impersonate
     path('impersonate/<int:user_id>/', impersonate_user, name='studio_impersonate'),
@@ -198,6 +206,10 @@ urlpatterns = [
     path('users/tier-override/', tier_override_page, name='studio_tier_override'),
     path('users/tier-override/create', tier_override_create, name='studio_tier_override_create'),
     path('users/tier-override/revoke', tier_override_revoke, name='studio_tier_override_revoke'),
+
+    # Users list + CSV export (issue #271)
+    path('users/', user_list, name='studio_user_list'),
+    path('users/export', user_export_csv, name='studio_user_export'),
 
     # Manually create user (issue #234)
     path('users/new/', user_create, name='studio_user_create'),

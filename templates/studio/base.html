@@ -127,10 +127,10 @@
           <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Users</p>
           <ul class="space-y-1">
             <li>
-              <a href="{% url 'studio_subscriber_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'subscribers' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+              <a href="{% url 'studio_user_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/users/' or request.path == '/studio/users/export' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="users" class="w-4 h-4"></i>
-                <span>Subscribers</span>
+                <span>Users</span>
               </a>
             </li>
             <li>

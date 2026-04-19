@@ -342,15 +342,23 @@ SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID'
 # to Django's cache backend. The default LocMemCache is per-process, so the
 # qcluster's heartbeats are invisible to the gunicorn / runserver process —
 # the dashboard always reports "Worker NOT running" even when the cluster is
-# healthy. We use a dedicated `django_q` cache that is shared across
-# processes:
+# healthy. We use a dedicated `django_q` cache that is shared across every
+# process that can reach the application database:
 #
 # - Tests: LocMemCache. Single-process, fast, isolated per run. The
 #   cross-process behaviour is exercised explicitly in
-#   `studio/tests/test_worker_health_cache.py` via a real subprocess + a
-#   tmpdir FileBasedCache.
-# - Local dev / production: FileBasedCache by default (zero-deps,
-#   cross-process). Override the directory with `CACHE_DIR` env var.
+#   `studio/tests/test_worker_health_cache.py`.
+# - Local dev / production: DatabaseCache. Heartbeats live in a single
+#   `django_q_cache` table in the application DB, so they are visible to
+#   every process / container that talks to the same DB — works on a
+#   single host (SQLite, `make dev`) and across containers in ECS where
+#   web and worker are separate tasks sharing only the database. No
+#   shared filesystem required, no extra infra (Redis, EFS) needed.
+#
+# The cache table must exist before django-q can write to it — run
+# `python manage.py createcachetable django_q_cache` after `migrate`.
+# It is idempotent and wired into both `scripts/setup.sh` (local) and
+# `entrypoint.sh` (every container start in deploy).
 #
 # `Q_CLUSTER['cache'] = 'django_q'` (below) tells django-q to use this
 # named cache rather than `default`, so the application's own cache usage
@@ -361,11 +369,9 @@ if TESTING:
         'LOCATION': 'django-q-test',
     }
 else:
-    # FileBasedCache creates LOCATION lazily on first write — no makedirs here.
-    _cache_dir = os.environ.get('CACHE_DIR') or str(BASE_DIR / '.django_cache')
     _django_q_cache = {
-        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-        'LOCATION': _cache_dir,
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_q_cache',
     }
 CACHES = {
     'default': {

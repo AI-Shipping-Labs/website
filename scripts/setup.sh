@@ -26,6 +26,9 @@ fi
 echo "==> Running migrations"
 uv run python manage.py migrate
 
+echo "==> Creating django-q cache table (idempotent)"
+uv run python manage.py createcachetable django_q_cache
+
 echo "==> Seeding database"
 uv run python manage.py seed_data
 

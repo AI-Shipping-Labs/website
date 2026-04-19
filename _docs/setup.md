@@ -19,7 +19,7 @@ The ECS task runs two containers from the same Docker image:
 - `ai-shipping-labs` — gunicorn web server (essential)
 - `ai-shipping-labs-worker` — Django-Q2 `qcluster` background worker (non-essential)
 
-On startup, the `entrypoint.sh` script runs `manage.py migrate` before starting the main process. This means database migrations are applied automatically on every deployment.
+On startup, the `entrypoint.sh` script runs `manage.py migrate` followed by `manage.py createcachetable django_q_cache` before starting the main process. This means database migrations and the django-q cache table are applied automatically on every deployment. `createcachetable` is idempotent, so it is safe to run on every container start.
 
 The deployed version tag is set via the `VERSION` environment variable and displayed in the page footer.
 
@@ -85,22 +85,23 @@ A `200` with the full repo name means it works. A `404` means the installation i
 
 ## Cache backend (required for the worker dashboard)
 
-django-q writes cluster heartbeats to Django's cache backend. The `/studio/worker/` dashboard reads them back via `Stat.get_all()` to decide whether the cluster is alive. If the cache backend is per-process — which is the default `LocMemCache` — the gunicorn / runserver process never sees heartbeats written by the qcluster process, and the dashboard reports "Worker NOT running" forever, even when the cluster is healthy.
+django-q writes cluster heartbeats to Django's cache backend. The `/studio/worker/` dashboard reads them back via `Stat.get_all()` to decide whether the cluster is alive. If the cache backend is per-process — which is the default `LocMemCache` — the gunicorn / runserver process never sees heartbeats written by the qcluster process, and the dashboard reports "Worker NOT running" forever, even when the cluster is healthy. The same problem exists per-container: a `FileBasedCache` works on a single host but is invisible across ECS task containers because each container has its own ephemeral disk.
 
-The project ships a dedicated `django_q` cache for this. It is `LocMemCache` during tests (single-process, fast, isolated) and `FileBasedCache` everywhere else.
+The project ships a dedicated `django_q` cache for this. It is `LocMemCache` during tests (single-process, fast, isolated) and `DatabaseCache` everywhere else.
 
 | Setting | Test mode | Local dev / Production |
 |---------|-----------|------------------------|
-| `CACHES['django_q']['BACKEND']` | `locmem.LocMemCache` | `filebased.FileBasedCache` |
-| `CACHES['django_q']['LOCATION']` | `django-q-test` | `$CACHE_DIR` (default: `<project>/.django_cache`) |
+| `CACHES['django_q']['BACKEND']` | `locmem.LocMemCache` | `db.DatabaseCache` |
+| `CACHES['django_q']['LOCATION']` | `django-q-test` | `django_q_cache` (a DB table) |
 | `Q_CLUSTER['cache']` | `django_q` | `django_q` |
 
-Override the directory with `CACHE_DIR=/path/to/cache` if you need to. The directory is created lazily on first write.
+`DatabaseCache` requires a one-time table creation. It is idempotent and wired into both `scripts/setup.sh` (local) and `entrypoint.sh` (every container start). To create it manually:
 
-Approved alternatives for production:
+```bash
+uv run python manage.py createcachetable django_q_cache
+```
 
-- `FileBasedCache` (default) — works on a single host. The directory must be writable by both the web container and the worker container, and they must share the same volume. On ECS this means mounting an EFS volume into both containers.
-- `DatabaseCache` — uses a row in Postgres (`CREATE TABLE` via `manage.py createcachetable`). Survives container restarts and works across hosts. Slightly higher latency than file-based but acceptable at heartbeat frequency (every 5 s).
+Why DatabaseCache: the application database is the only thing every web and worker process is guaranteed to share, in every deployment topology — local SQLite, multi-container ECS, future hosts. No extra infrastructure (Redis, EFS) needed. The latency cost (one query per heartbeat read) is negligible at the dashboard's request rate.
 
 We deliberately do not use Redis: avoiding the operational dependency is a product decision.
 

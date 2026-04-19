@@ -3,106 +3,135 @@
 The bug fixed by issue #219: with the default ``LocMemCache``, heartbeats
 written by the ``manage.py qcluster`` process are invisible to the
 gunicorn / runserver process — so ``/studio/worker/`` always reports
-"NOT running" even when the cluster is healthy.
+"NOT running" even when the cluster is healthy. #219 swapped the named
+``django_q`` cache to ``FileBasedCache``.
 
-The fix is config-only: a shared cache backend (``FileBasedCache`` for
-local dev, also viable on production with the existing Postgres). These
-tests exercise the cross-process round trip end-to-end:
+The bug fixed by issue #273: ``FileBasedCache`` works on a single host
+but is per-container in ECS, where web and worker run as separate ECS
+tasks with their own ephemeral disks — so the same false-negative came
+back in production. #273 swaps the named ``django_q`` cache to
+``DatabaseCache`` (the application DB is the only thing every container
+shares). Both bugs are the same shape: a per-instance cache cannot carry
+heartbeats from one process to another.
 
-1. ``test_filebased_cache_round_trip_via_subprocess`` — spawn a real
-   subprocess, have it write a fake ``Stat`` heartbeat into a tmpdir
-   ``FileBasedCache``, then in this process read it back via
-   ``Stat.get_all()`` and assert the worker dashboard reports alive.
-   This is the test that would have caught the original bug — a
-   single-process LocMemCache can never produce alive=True from a
-   write done in another process.
+Tests in this module:
 
-2. ``DjangoQCacheWiringTest`` — the deployment wiring assertions:
+1. ``DatabaseCacheRoundTripTest`` — write a fake ``Stat`` heartbeat into
+   a ``DatabaseCache`` backed by the test DB using the same code path
+   ``django_q.brokers.orm.ORM.set_stat`` uses, then call
+   ``get_worker_status()`` and assert the dashboard reports alive.
+   Verifies the heartbeat row actually lives in the DB cache table —
+   that's what makes the round-trip cross-process / cross-container in
+   any deployment that shares a database.
+
+2. ``DjangoQCacheWiringTest`` — deployment wiring assertions:
    ``settings.Q_CLUSTER['cache'] == 'django_q'`` and
-   ``settings.CACHES['django_q']`` exists. This catches the case where
-   someone deletes the named cache, reverts the Q_CLUSTER pointer, or
-   points Q_CLUSTER back at ``default``.
+   ``settings.CACHES['django_q']`` exists and points at LocMemCache in
+   tests. Catches the case where someone deletes the named cache,
+   reverts the Q_CLUSTER pointer, or points Q_CLUSTER back at
+   ``default``.
 """
 
 import os
-import subprocess
-import sys
-import tempfile
 
 from django.conf import settings
+from django.core.cache import caches
+from django.core.management import call_command
+from django.db import connection
 from django.test import SimpleTestCase, TestCase, override_settings
 
-WRITER_SCRIPT = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    '_heartbeat_writer.py',
-)
+# Reuse the existing fake-heartbeat plumbing.
+CACHE_TABLE = 'test_django_q_cache'
+
+DATABASE_CACHE_OVERRIDE = {
+    'CACHES': {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        },
+        'django_q': {
+            'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+            'LOCATION': CACHE_TABLE,
+        },
+    },
+}
 
 
-def _run_writer(cache_dir, cluster_id='test-cluster', secret_key=None):
-    """Spawn the writer subprocess; return CompletedProcess for assertions.
+def _write_fake_heartbeat(cluster_id):
+    """Write a fake django-q ``Stat`` heartbeat through the named cache.
 
-    The subprocess must use the same Django ``SECRET_KEY`` as the parent —
-    django-q's ``SignedPackage`` salts heartbeats with ``SECRET_KEY`` and
-    the cluster name (``Q_CLUSTER['name']``), so a mismatched key causes
-    ``BadSignature`` and ``Stat.get_all()`` silently drops the entry.
+    Mirrors ``django_q.brokers.Broker.set_stat`` (and what the qcluster
+    Sentinel writes on every guard cycle): maintain the index list at
+    ``Conf.Q_STAT`` and store the signed payload at ``Stat.get_key(...)``.
+    The signing salt is ``Q_CLUSTER['name']`` + ``SECRET_KEY`` — both
+    must match what the parent process uses when reading, otherwise
+    ``Stat.get_all()`` silently drops the entry on ``BadSignature``.
     """
-    return subprocess.run(
-        [
-            sys.executable,
-            WRITER_SCRIPT,
-            '--cache-dir', cache_dir,
-            '--cluster-id', cluster_id,
-            '--secret-key', secret_key or settings.SECRET_KEY,
-            '--q-cluster-name', settings.Q_CLUSTER['name'],
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    from django_q.conf import Conf
+    from django_q.signing import SignedPackage
+    from django_q.status import Stat, Status
+
+    heartbeat = Status(pid=os.getpid(), cluster_id=cluster_id)
+    heartbeat.status = 'Idle'
+    heartbeat.workers = [os.getpid()]
+
+    cache = caches[Conf.CACHE]
+    key = Stat.get_key(cluster_id)
+    payload = SignedPackage.dumps(heartbeat, True)
+
+    key_list = cache.get(Conf.Q_STAT, []) or []
+    if key not in key_list:
+        key_list.append(key)
+    cache.set(Conf.Q_STAT, key_list)
+    cache.set(key, payload, 30)
+    return key
 
 
-class FileBasedCacheCrossProcessTest(TestCase):
-    """The fix: heartbeats written in a subprocess via FileBasedCache are
-    visible to the test process.
+class DatabaseCacheRoundTripTest(TestCase):
+    """A heartbeat written via ``CACHES['django_q']`` must round-trip
+    through the database, not process memory.
 
-    Uses ``TestCase`` (not ``SimpleTestCase``) because ``Stat.get_all()``
-    constructs an ORM broker, which calls ``db.close_old_connections()``
-    on init — that requires a real database connection.
+    This is the regression test for #273 (and, by construction, #219):
+    if someone reverts the named cache to ``LocMemCache``, the row is
+    written to a per-process dict and ``get_worker_status()`` will still
+    return ``alive=True`` *in this single test process* — which is why
+    the second assertion below queries the cache table directly. A
+    LocMemCache backend has no DB row, so that assertion fails.
     """
 
-    def test_filebased_cache_round_trip_via_subprocess(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = _run_writer(tmpdir, cluster_id='child-cluster')
-            self.assertEqual(
-                result.returncode, 0,
-                f'writer subprocess failed:\nstdout={result.stdout}\nstderr={result.stderr}',
-            )
-            self.assertIn('WROTE', result.stdout)
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # createcachetable is idempotent; safe to call against the test DB.
+        call_command('createcachetable', CACHE_TABLE, verbosity=0)
 
-            # Read in this (parent) process via the same cache LOCATION
-            # the subprocess wrote to.
-            override = {
-                'CACHES': {
-                    'default': {
-                        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-                    },
-                    'django_q': {
-                        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-                        'LOCATION': tmpdir,
-                    },
-                },
-            }
-            with override_settings(**override):
-                from studio.worker_health import get_worker_status
-                info = get_worker_status()
+    def test_database_cache_round_trip(self):
+        with override_settings(**DATABASE_CACHE_OVERRIDE):
+            _write_fake_heartbeat('child-cluster')
+
+            from studio.worker_health import get_worker_status
+            info = get_worker_status()
 
             self.assertTrue(
                 info['alive'],
-                'FileBasedCache should make subprocess heartbeats visible '
-                f'to the parent process. Got info={info}',
+                'DatabaseCache should make heartbeats visible to any '
+                f'process that talks to the same DB. Got info={info}',
             )
             self.assertEqual(info['cluster_count'], 1)
             self.assertEqual(info['clusters'][0]['cluster_id'], 'child-cluster')
+
+            # Prove the row actually lives in the DB cache table — that's
+            # what makes this cross-process. A LocMemCache backend would
+            # leave the table empty.
+            with connection.cursor() as cur:
+                cur.execute(f'SELECT COUNT(*) FROM {CACHE_TABLE}')
+                row_count = cur.fetchone()[0]
+            self.assertGreater(
+                row_count, 0,
+                f'Expected heartbeat rows in {CACHE_TABLE} after writing '
+                'via CACHES["django_q"]. An empty table means the cache '
+                'backend is not persisting to the DB — likely reverted '
+                'to LocMemCache or FileBasedCache.',
+            )
 
 
 class DjangoQCacheWiringTest(SimpleTestCase):
@@ -123,20 +152,16 @@ class DjangoQCacheWiringTest(SimpleTestCase):
             'CACHES["django_q"] must exist — the dedicated cluster cache.',
         )
 
-    def test_django_q_cache_is_cross_process_in_non_test_environments(self):
-        """Documented contract for production / dev environments.
-
-        Tests themselves run with LocMemCache (single-process, fast,
-        isolated). For real environments the backend must be one that
-        survives a process boundary — ``filebased`` or ``db`` are the
-        approved choices for this project. (No Redis: deliberate
-        product decision to keep the dep footprint small.)
+    def test_django_q_cache_uses_locmem_in_tests(self):
+        """Tests run in a single process, so LocMemCache is fine and
+        keeps tests fast and isolated. Cross-process behaviour is
+        exercised by ``DatabaseCacheRoundTripTest`` above using
+        ``override_settings``.
         """
-        # In tests, LocMemCache is fine — assert that's what's wired.
         backend = settings.CACHES['django_q']['BACKEND']
         self.assertEqual(
             backend, 'django.core.cache.backends.locmem.LocMemCache',
             'Tests should use LocMemCache for the django_q cache to '
             'stay isolated. Cross-process behaviour is exercised in '
-            'FileBasedCacheCrossProcessTest above.',
+            'DatabaseCacheRoundTripTest.',
         )

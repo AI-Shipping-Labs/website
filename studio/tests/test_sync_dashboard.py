@@ -1455,3 +1455,136 @@ class SyncLogModelTest(TestCase):
         log.refresh_from_db()
         self.assertTrue(log.tiers_synced)
         self.assertEqual(log.tiers_count, 3)
+
+
+class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
+    """Issue #278: when a repo card is in flight (queued or running) the
+    operator gets a one-click "See in workers" link next to the status pill,
+    so they can jump to the worker queue/job page without manual navigation.
+
+    Hidden once the repo settles into a terminal state, so it doesn't add
+    noise after the run is done.
+    """
+
+    LINK_MARKER = 'data-see-in-workers'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_link_visible_when_running(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='running',
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertContains(response, self.LINK_MARKER)
+        self.assertContains(response, 'See in workers')
+
+    def test_link_visible_when_queued(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='queued',
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertContains(response, self.LINK_MARKER)
+        self.assertContains(response, 'See in workers')
+
+    def test_link_points_to_worker_dashboard(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='running',
+        )
+        response = self.client.get('/studio/sync/')
+        body = response.content.decode()
+        idx = body.find(self.LINK_MARKER)
+        self.assertGreater(idx, -1)
+        # The href on the same anchor as the marker must target the worker
+        # dashboard. Slice back to the opening <a so we only inspect this
+        # tag, not random hrefs elsewhere on the page.
+        anchor_open = body.rfind('<a', 0, idx)
+        self.assertGreater(anchor_open, -1)
+        anchor_html = body[anchor_open:idx]
+        self.assertIn('href="/studio/worker/"', anchor_html)
+
+    def test_link_hidden_when_success(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='success',
+            last_synced_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertNotContains(response, self.LINK_MARKER)
+
+    def test_link_hidden_when_failed(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='failed',
+            last_synced_at=timezone.now(),
+        )
+        # Failed needs an error log so the watchdog/aggregator treats it as
+        # a real failure; otherwise overall_status stays None.
+        SyncLog.objects.create(
+            source=ContentSource.objects.get(),
+            status='failed',
+            errors=[{'file': 'x.md', 'error': 'boom'}],
+            finished_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertNotContains(response, self.LINK_MARKER)
+
+    def test_link_hidden_when_partial(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='partial',
+            last_synced_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertNotContains(response, self.LINK_MARKER)
+
+    def test_link_hidden_when_skipped(self):
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='skipped',
+            last_synced_at=timezone.now(),
+        )
+        response = self.client.get('/studio/sync/')
+        self.assertNotContains(response, self.LINK_MARKER)
+
+    def test_link_appears_then_disappears_across_polling_refresh(self):
+        """End-to-end: poll fragment shows the link while queued/running and
+        drops it once the source settles to a terminal state. Mirrors what
+        the dashboard's auto-refresh poller (#243) sees as the worker
+        progresses queued -> running -> success.
+        """
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='article',
+            last_sync_status='queued',
+        )
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, self.LINK_MARKER)
+
+        source.last_sync_status = 'running'
+        source.save(update_fields=['last_sync_status', 'updated_at'])
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertContains(response, self.LINK_MARKER)
+
+        source.last_sync_status = 'success'
+        source.last_synced_at = timezone.now()
+        source.save()
+        response = self.client.get('/studio/sync/?fragment=status')
+        self.assertNotContains(response, self.LINK_MARKER)

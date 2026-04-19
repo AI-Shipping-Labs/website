@@ -25,6 +25,20 @@ still in flight.
         {% if repo.overall_status %}
         {% sync_status_pill repo.overall_status repo.overall_errors_count %}
         {% endif %}
+        {% comment %}
+        Issue #278: surface a one-click jump to the worker queue when this
+        repo is in flight. ``running`` means a worker is actively chewing on
+        it; ``queued`` means the trigger landed but no worker has picked it
+        up yet — both are the moments operators want to peek at the worker
+        page. Hidden for terminal states (success / partial / failed /
+        skipped / abandoned) so the link doesn't add noise once the run is
+        over.
+        {% endcomment %}
+        {% if repo.overall_status == 'running' or repo.overall_status == 'queued' %}
+        <a href="{% url 'studio_worker' %}"
+           class="ml-2 text-xs text-muted-foreground hover:text-foreground underline"
+           data-see-in-workers>See in workers</a>
+        {% endif %}
       </div>
       <div class="flex items-center space-x-4 mt-2 text-sm text-muted-foreground">
         <span>{{ repo.sources|length }} content type{{ repo.sources|length|pluralize }}</span>

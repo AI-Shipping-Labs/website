@@ -29,3 +29,7 @@ playwright_tests/screenshots/
 
 # Django FileBasedCache (used by django-q for cluster heartbeats)
 .django_cache/
+
+# Claude Code local artifacts (agent worktrees, scheduler lock)
+.claude/worktrees/
+.claude/scheduled_tasks.lock

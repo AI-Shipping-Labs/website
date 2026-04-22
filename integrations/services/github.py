@@ -2491,6 +2491,76 @@ def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
     return stats
 
 
+def _event_requests_zoom_meeting(data):
+    """Return True when synced frontmatter requests a Zoom-backed event."""
+    location = str(data.get('location', '') or '').strip().lower()
+    platform = str(data.get('platform', '') or '').strip().lower()
+    return location == 'zoom' or platform == 'zoom'
+
+
+def _coerce_event_datetime(value):
+    """Convert synced event frontmatter values into aware datetimes."""
+    import datetime as dt
+
+    if value in (None, ''):
+        return None
+
+    if isinstance(value, dt.datetime):
+        if timezone.is_naive(value):
+            return timezone.make_aware(value, dt.timezone.utc)
+        return value
+
+    if isinstance(value, dt.date):
+        return dt.datetime.combine(value, dt.time.min, tzinfo=dt.timezone.utc)
+
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if normalized.endswith('Z'):
+            normalized = f'{normalized[:-1]}+00:00'
+        try:
+            parsed = dt.datetime.fromisoformat(normalized)
+        except ValueError:
+            parsed_date = dt.date.fromisoformat(normalized)
+            return dt.datetime.combine(
+                parsed_date, dt.time.min, tzinfo=dt.timezone.utc,
+            )
+        if timezone.is_naive(parsed):
+            return timezone.make_aware(parsed, dt.timezone.utc)
+        return parsed
+
+    raise ValueError(f'Unsupported event datetime value: {value!r}')
+
+
+def _maybe_create_zoom_meeting_for_synced_event(event, data):
+    """Best-effort Zoom meeting creation for newly synced events."""
+    if event.event_type != 'live' or event.status == 'completed':
+        return
+
+    if not data.get('start_datetime') or not _event_requests_zoom_meeting(data):
+        return
+
+    if event.zoom_meeting_id or event.zoom_join_url:
+        return
+
+    from integrations.services.zoom import ZoomAPIError, create_meeting
+
+    try:
+        result = create_meeting(event)
+    except (ZoomAPIError, requests.RequestException) as exc:
+        logger.warning(
+            'Failed to auto-create Zoom meeting for synced event %s: %s',
+            event.slug,
+            exc,
+        )
+        return
+
+    event.zoom_meeting_id = result['meeting_id']
+    event.zoom_join_url = result['join_url']
+    event.save(update_fields=['zoom_meeting_id', 'zoom_join_url'])
+
+
 def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync event YAML/markdown files from the events/ directory.
 
@@ -2632,24 +2702,23 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
                 else:
                     stats['unchanged'] += 1
             except Event.DoesNotExist:
-                # Create new event with status='completed' (content-repo events
-                # are assumed to be past events with recordings)
-                start_dt_value = published_at
-                if isinstance(start_dt_value, str):
-                    start_dt_value = dt.date.fromisoformat(start_dt_value)
-                if isinstance(start_dt_value, dt.date) and not isinstance(start_dt_value, dt.datetime):
-                    start_dt_value = dt.datetime.combine(
-                        start_dt_value, dt.time.min, tzinfo=dt.timezone.utc,
-                    )
+                # Content-repo events still default to recording-style rows
+                # unless operational frontmatter explicitly says otherwise.
+                start_dt_value = _coerce_event_datetime(data.get('start_datetime'))
+                if not start_dt_value:
+                    start_dt_value = _coerce_event_datetime(published_at)
                 if not start_dt_value:
                     start_dt_value = timezone.now()
 
                 event = Event(
                     slug=slug,
                     start_datetime=start_dt_value,
-                    status='completed',
-                    event_type='live',
-                    platform='zoom',
+                    end_datetime=_coerce_event_datetime(data.get('end_datetime')),
+                    status=data.get('status') or 'completed',
+                    event_type=data.get('event_type') or 'live',
+                    timezone=data.get('timezone') or settings.TIME_ZONE,
+                    platform=data.get('platform') or 'zoom',
+                    location=data.get('location', '') or '',
                     **content_defaults,
                 )
                 event.save()
@@ -2660,6 +2729,7 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
                     'action': 'created',
                     'content_type': 'event',
                 })
+                _maybe_create_zoom_meeting_for_synced_event(event, data)
 
         except Exception as e:
             fallback_slug = os.path.splitext(filename)[0]
@@ -3178,5 +3248,3 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
     stats['deleted'] = deleted_count
 
     return stats
-
-

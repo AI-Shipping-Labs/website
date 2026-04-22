@@ -10,8 +10,11 @@ Covers:
 import hashlib
 import hmac
 import json
+import os
+import tempfile
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -19,7 +22,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from events.models import Event
-from integrations.models import WebhookLog
+from integrations.models import ContentSource, WebhookLog
 
 User = get_user_model()
 
@@ -863,6 +866,333 @@ class EventAdminZoomCreationTest(TestCase):
         self.assertEqual(event.title, 'Existing Event Updated')
         # Zoom API should not have been called
         mock_post.assert_not_called()
+
+
+class EventSyncZoomCreationTest(TestCase):
+    """Test auto-creating Zoom meetings during event sync."""
+
+    def setUp(self):
+        from integrations.services import zoom
+
+        zoom.clear_token_cache()
+
+    def _make_source(self):
+        return ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            content_type='event',
+            content_path='events',
+        )
+
+    def _write_event_yaml(
+        self,
+        tmp_dir,
+        *,
+        slug='synced-zoom-event',
+        title='Synced Zoom Event',
+        event_type='',
+        status='',
+        start_datetime='',
+        end_datetime='',
+        timezone_name='',
+        location='',
+        platform='',
+    ):
+        events_dir = os.path.join(tmp_dir, 'events')
+        os.makedirs(events_dir, exist_ok=True)
+        with open(os.path.join(events_dir, f'{slug}.yaml'), 'w') as f:
+            f.write('content_id: "11111111-1111-1111-1111-111111111111"\n')
+            f.write(f'title: "{title}"\n')
+            f.write(f'slug: "{slug}"\n')
+            f.write('description: "Synced from content repo"\n')
+            f.write('published_at: "2026-04-22"\n')
+            if event_type:
+                f.write(f'event_type: "{event_type}"\n')
+            if status:
+                f.write(f'status: "{status}"\n')
+            if start_datetime:
+                f.write(f'start_datetime: "{start_datetime}"\n')
+            if end_datetime:
+                f.write(f'end_datetime: "{end_datetime}"\n')
+            if timezone_name:
+                f.write(f'timezone: "{timezone_name}"\n')
+            if location:
+                f.write(f'location: "{location}"\n')
+            if platform:
+                f.write(f'platform: "{platform}"\n')
+        return events_dir
+
+    def _sync_events(self, source, events_dir, commit_sha='abc1234'):
+        from integrations.services.github import _sync_events
+
+        return _sync_events(source, events_dir, commit_sha, sync_log=None)
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_sync_creates_zoom_meeting_for_location_zoom_event(
+        self, mock_create_meeting,
+    ):
+        mock_create_meeting.return_value = {
+            'meeting_id': '12345678900',
+            'join_url': 'https://zoom.us/j/12345678900',
+        }
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                event_type='live',
+                status='upcoming',
+                start_datetime='2026-05-01T18:00:00Z',
+                end_datetime='2026-05-01T19:30:00Z',
+                timezone_name='Europe/Berlin',
+                location='Zoom',
+            )
+            stats = self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='synced-zoom-event')
+        self.assertEqual(stats['errors'], [])
+        self.assertEqual(event.event_type, 'live')
+        self.assertEqual(event.status, 'upcoming')
+        self.assertEqual(
+            event.start_datetime,
+            datetime(2026, 5, 1, 18, 0, tzinfo=dt_timezone.utc),
+        )
+        self.assertEqual(
+            event.end_datetime,
+            datetime(2026, 5, 1, 19, 30, tzinfo=dt_timezone.utc),
+        )
+        self.assertEqual(event.timezone, 'Europe/Berlin')
+        self.assertEqual(event.location, 'Zoom')
+        self.assertEqual(event.zoom_meeting_id, '12345678900')
+        self.assertEqual(event.zoom_join_url, 'https://zoom.us/j/12345678900')
+        self.assertEqual(mock_create_meeting.call_count, 1)
+        self.assertEqual(mock_create_meeting.call_args.args[0].slug, event.slug)
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_sync_creates_zoom_meeting_for_platform_zoom_event(
+        self, mock_create_meeting,
+    ):
+        mock_create_meeting.return_value = {
+            'meeting_id': '22222222222',
+            'join_url': 'https://zoom.us/j/22222222222',
+        }
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='platform-zoom-event',
+                title='Platform Zoom Event',
+                event_type='live',
+                status='draft',
+                start_datetime='2026-05-03T09:00:00Z',
+                timezone_name='UTC',
+                location='Community Room',
+                platform='zoom',
+            )
+            self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='platform-zoom-event')
+        self.assertEqual(event.platform, 'zoom')
+        self.assertEqual(event.zoom_meeting_id, '22222222222')
+        self.assertEqual(event.zoom_join_url, 'https://zoom.us/j/22222222222')
+        self.assertEqual(mock_create_meeting.call_count, 1)
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_sync_without_zoom_frontmatter_does_not_create_meeting(
+        self, mock_create_meeting,
+    ):
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='recording-only-event',
+                title='Recording Only Event',
+                event_type='live',
+                status='upcoming',
+                start_datetime='2026-05-04T12:00:00Z',
+                platform='custom',
+                location='Campus',
+            )
+            self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='recording-only-event')
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+        mock_create_meeting.assert_not_called()
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_completed_sync_event_does_not_create_zoom_meeting(
+        self, mock_create_meeting,
+    ):
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='completed-zoom-event',
+                title='Completed Zoom Event',
+                event_type='live',
+                status='completed',
+                start_datetime='2026-05-05T12:00:00Z',
+                location='Zoom',
+            )
+            self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='completed-zoom-event')
+        self.assertEqual(event.status, 'completed')
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+        mock_create_meeting.assert_not_called()
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_async_sync_event_does_not_create_zoom_meeting(
+        self, mock_create_meeting,
+    ):
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='async-zoom-event',
+                title='Async Zoom Event',
+                event_type='async',
+                status='upcoming',
+                start_datetime='2026-05-05T12:00:00Z',
+                platform='zoom',
+            )
+            self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='async-zoom-event')
+        self.assertEqual(event.event_type, 'async')
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+        mock_create_meeting.assert_not_called()
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_recording_style_row_without_start_datetime_skips_zoom_creation(
+        self, mock_create_meeting,
+    ):
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='no-schedule-event',
+                title='No Schedule Event',
+                event_type='live',
+                status='upcoming',
+                location='Zoom',
+            )
+            self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='no-schedule-event')
+        self.assertEqual(event.status, 'upcoming')
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+        mock_create_meeting.assert_not_called()
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_sync_update_does_not_create_duplicate_zoom_meeting(
+        self, mock_create_meeting,
+    ):
+        mock_create_meeting.return_value = {
+            'meeting_id': '33333333333',
+            'join_url': 'https://zoom.us/j/33333333333',
+        }
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='existing-zoom-event',
+                title='Original Title',
+                event_type='live',
+                status='upcoming',
+                start_datetime='2026-05-06T12:00:00Z',
+                location='Zoom',
+            )
+            self._sync_events(source, events_dir, commit_sha='abc1234')
+
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='existing-zoom-event',
+                title='Updated Title',
+                event_type='live',
+                status='upcoming',
+                start_datetime='2026-05-06T12:00:00Z',
+                location='Zoom',
+            )
+            self._sync_events(source, events_dir, commit_sha='def5678')
+
+        event = Event.objects.get(slug='existing-zoom-event')
+        self.assertEqual(event.title, 'Updated Title')
+        self.assertEqual(event.zoom_meeting_id, '33333333333')
+        self.assertEqual(event.zoom_join_url, 'https://zoom.us/j/33333333333')
+        self.assertEqual(mock_create_meeting.call_count, 1)
+
+    @patch('integrations.services.zoom.create_meeting')
+    def test_zoom_api_failure_does_not_break_sync(self, mock_create_meeting):
+        from integrations.services.zoom import ZoomAPIError
+
+        mock_create_meeting.side_effect = ZoomAPIError(
+            'Failed to create Zoom meeting: 429',
+            status_code=429,
+        )
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='rate-limited-event',
+                title='Rate Limited Event',
+                event_type='live',
+                status='upcoming',
+                start_datetime='2026-05-07T12:00:00Z',
+                location='Zoom',
+            )
+            with self.assertLogs('integrations.services.github', level='WARNING') as logs:
+                stats = self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='rate-limited-event')
+        self.assertEqual(stats['errors'], [])
+        self.assertEqual(stats['created'], 1)
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+        self.assertIn(
+            'Failed to auto-create Zoom meeting for synced event rate-limited-event',
+            '\n'.join(logs.output),
+        )
+
+    @override_settings(
+        ZOOM_CLIENT_ID='',
+        ZOOM_CLIENT_SECRET='',
+        ZOOM_ACCOUNT_ID='',
+    )
+    def test_sync_skips_zoom_creation_when_credentials_missing(self):
+        from integrations.services import zoom
+
+        zoom.clear_token_cache()
+        source = self._make_source()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            events_dir = self._write_event_yaml(
+                tmp_dir,
+                slug='missing-creds-event',
+                title='Missing Credentials Event',
+                event_type='live',
+                status='upcoming',
+                start_datetime='2026-05-08T12:00:00Z',
+                location='Zoom',
+            )
+            with self.assertLogs('integrations.services.github', level='WARNING') as logs:
+                stats = self._sync_events(source, events_dir)
+
+        event = Event.objects.get(slug='missing-creds-event')
+        self.assertEqual(stats['errors'], [])
+        self.assertEqual(event.zoom_meeting_id, '')
+        self.assertEqual(event.zoom_join_url, '')
+        self.assertIn('Zoom OAuth credentials not configured', '\n'.join(logs.output))
 
 
 # --- Settings Configuration Test ---

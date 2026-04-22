@@ -16,18 +16,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 
+def _csv_env(name, default='', *, env=None, allow_empty=False):
+    env = os.environ if env is None else env
+    values = [
+        value.strip()
+        for value in env.get(name, default).split(',')
+        if value.strip()
+    ]
+    if values or allow_empty:
+        return values
+    return [value.strip() for value in default.split(',') if value.strip()]
+
+
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = 'django-insecure-hlmbk@+b=_0t_+&z8rrhf%+3f&_zldtutm8(n3hlk6f+=oi##4'
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = _csv_env('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
-    if origin.strip()
-]
+CSRF_TRUSTED_ORIGINS = _csv_env('CSRF_TRUSTED_ORIGINS', '', allow_empty=True)
 
 
 # Application definition

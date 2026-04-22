@@ -1,8 +1,33 @@
 import json
 import sys
 
+ALLOWED_HOSTS_BY_ENV = {
+    "dev": ["dev.aishippinglabs.com"],
+    "prod": [
+        "aishippinglabs.com",
+        "www.aishippinglabs.com",
+        "prod.aishippinglabs.com",
+    ],
+}
 
-def update_task_definition(input_file, new_tag, output_file):
+
+def _set_env_var(environment, name, value):
+    for env_var in environment:
+        if env_var["name"] == name:
+            env_var["value"] = value
+            return
+    environment.append({"name": name, "value": value})
+
+
+def _required_allowed_hosts(deploy_env):
+    return ALLOWED_HOSTS_BY_ENV.get(deploy_env, ALLOWED_HOSTS_BY_ENV["dev"])
+
+
+def _allowed_hosts_for_env(deploy_env):
+    return ",".join(_required_allowed_hosts(deploy_env))
+
+
+def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
     print(f"Updating task definition from {input_file} with tag {new_tag}")
 
     try:
@@ -15,13 +40,13 @@ def update_task_definition(input_file, new_tag, output_file):
                 container_def["image"] = f"{base_image}:{new_tag}"
 
             environment = container_def.get("environment", [])
-            version_found = False
-            for env_var in environment:
-                if env_var["name"] == "VERSION":
-                    env_var["value"] = new_tag
-                    version_found = True
-            if not version_found:
-                environment.append({"name": "VERSION", "value": new_tag})
+            _set_env_var(environment, "VERSION", new_tag)
+            _set_env_var(
+                environment,
+                "ALLOWED_HOSTS",
+                _allowed_hosts_for_env(deploy_env),
+            )
+            container_def["environment"] = environment
 
         # Validate expected containers are present
         container_names = {c["name"] for c in task_def["containerDefinitions"]}
@@ -61,8 +86,12 @@ def update_task_definition(input_file, new_tag, output_file):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: python update_task_def.py <input_file> <new_tag> <output_file>")
+    if len(sys.argv) not in {4, 5}:
+        print(
+            "Usage: python update_task_def.py <input_file> <new_tag> "
+            "<output_file> [deploy_env]"
+        )
         sys.exit(1)
 
-    update_task_definition(sys.argv[1], sys.argv[2], sys.argv[3])
+    deploy_env = sys.argv[4] if len(sys.argv) == 5 else "dev"
+    update_task_definition(sys.argv[1], sys.argv[2], sys.argv[3], deploy_env)

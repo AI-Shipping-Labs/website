@@ -31,7 +31,7 @@ Set in the ECS task definition (plain environment variables):
 |----------|---------|---------|
 | `VERSION` | `20260327-124723-02ce799` | Displayed in the page footer, set automatically by deploy scripts |
 | `DEBUG` | `1` | Django debug mode |
-| `ALLOWED_HOSTS` | `dev.aishippinglabs.com,aisl-alb-...` | Comma-separated list of allowed hosts |
+| `ALLOWED_HOSTS` | `dev.aishippinglabs.com` | Comma-separated list of allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | `https://dev.aishippinglabs.com,https://aishippinglabs.com` | Required for POST requests (login, forms) to work over HTTPS |
 | `GITHUB_APP_ID` | `3143490` | GitHub App ID for content sync |
 | `GITHUB_APP_INSTALLATION_ID` | `117839867` | GitHub App installation ID |
@@ -51,7 +51,7 @@ Fetched at runtime by the Django app (not injected via ECS):
 
 The app fetches this from Secrets Manager automatically if the `GITHUB_APP_PRIVATE_KEY` env var and `GITHUB_APP_PRIVATE_KEY_FILE` are not set. Fallback order: local PEM file → env var → Secrets Manager.
 
-When adding a new environment (e.g. prod), make sure `CSRF_TRUSTED_ORIGINS` includes all domains that will submit forms to it.
+When adding a new environment (e.g. prod), make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it. Production should include `aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com`.
 
 ### GitHub App (content sync)
 
@@ -134,7 +134,7 @@ This runs `deploy/deploy.sh` which generates a tag, logs into ECR, builds the Do
 
 - `deploy/deploy_dev.sh <tag> [env]` — fetches the current ECS task definition, swaps the image tag, registers a new revision, and updates the service. `env` defaults to `dev`.
 - `deploy/deploy_prod.sh [tag]` — promotes a tag to prod. If no tag is given, reads the current dev tag. Requires confirmation.
-- `deploy/update_task_def.py` — helper that updates the image tag and `VERSION` env var in a task definition JSON file.
+- `deploy/update_task_def.py` — helper that updates the image tag plus environment vars such as `VERSION` and `ALLOWED_HOSTS` in a task definition JSON file.
 
 ## Database access
 

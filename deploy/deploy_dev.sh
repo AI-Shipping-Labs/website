@@ -32,7 +32,7 @@ aws ecs describe-task-definition \
     > ${FILE_IN}
 
 echo "Updating task definition with new image tag..."
-python update_task_def.py ${FILE_IN} ${TAG} ${FILE_OUT}
+python update_task_def.py ${FILE_IN} ${TAG} ${FILE_OUT} ${ENV}
 
 echo "Registering new task definition..."
 aws ecs register-task-definition \

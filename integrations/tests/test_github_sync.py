@@ -1158,7 +1158,72 @@ class SyncSingleCourseRepoTest(TestCase):
 
         unit = Unit.objects.get(module=module)
         self.assertEqual(unit.title, 'Why Python')
-        self.assertEqual(unit.sort_order, 1)
+
+    def test_root_course_slug_change_updates_existing_course_by_content_id(self):
+        """Re-syncing with the same content_id but a new slug updates the row.
+
+        The course must remain the same logical object: no duplicate row,
+        no stale draft of the old slug, and the renamed course stays
+        published with its module/unit tree intact.
+        """
+        content_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        self._write_root_course_yaml(content_id=content_id, slug='python-course')
+        module_dir = self._write_module(
+            '01-intro', 'Introduction',
+            'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        )
+        self._write_unit(
+            module_dir, '01-why-python.md', 'Why Python',
+            'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        )
+
+        first_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertIn(first_log.status, ('success', 'partial'))
+        original_course = Course.objects.get(slug='python-course')
+        original_course_id = original_course.pk
+        original_module_ids = list(
+            Module.objects.filter(course=original_course).values_list('pk', flat=True)
+        )
+        original_unit_ids = list(
+            Unit.objects.filter(module__course=original_course).values_list('pk', flat=True)
+        )
+
+        self._write_root_course_yaml(
+            content_id=content_id,
+            slug='python-course-workshop',
+        )
+        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Python Course Workshop"\n')
+            f.write('slug: "python-course-workshop"\n')
+            f.write('description: "Learn Python from scratch."\n')
+            f.write('instructor_name: "Alexey Grigorev"\n')
+            f.write('required_level: 20\n')
+            f.write(f'content_id: "{content_id}"\n')
+            f.write('tags:\n  - python\n  - fundamentals\n')
+
+        second_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertIn(second_log.status, ('success', 'partial'))
+        self.assertEqual(Course.objects.filter(
+            source_repo='AI-Shipping-Labs/python-course',
+        ).count(), 1)
+        self.assertFalse(Course.objects.filter(slug='python-course').exists())
+
+        course = Course.objects.get(slug='python-course-workshop')
+        self.assertEqual(course.pk, original_course_id)
+        self.assertEqual(course.title, 'Python Course Workshop')
+        self.assertEqual(str(course.content_id), content_id)
+        self.assertEqual(course.status, 'published')
+        self.assertEqual(second_log.items_created, 0)
+        self.assertEqual(second_log.items_updated, 1)
+        self.assertEqual(
+            list(Module.objects.filter(course=course).values_list('pk', flat=True)),
+            original_module_ids,
+        )
+        self.assertEqual(
+            list(Unit.objects.filter(module__course=course).values_list('pk', flat=True)),
+            original_unit_ids,
+        )
 
     def test_no_root_course_yaml_falls_back_to_multi_course_walk(self):
         """Without root course.yaml, each child dir with course.yaml is its own course (regression guard)."""

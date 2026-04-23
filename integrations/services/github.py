@@ -1794,18 +1794,35 @@ def _sync_single_course(
             'content_id': course_content_id,
         }
 
-        # Issue #225: only count as 'updated' when content actually changed.
-        try:
-            course = Course.objects.get(
-                slug=slug, source_repo=source.repo_name,
-            )
-        except Course.DoesNotExist:
+        # Prefer the stable content_id over slug when locating an existing
+        # course row. This lets authors rename a course (slug/title/source
+        # path) without triggering a duplicate content_id insert.
+        course = Course.objects.filter(
+            content_id=course_content_id,
+            source_repo=source.repo_name,
+        ).first()
+
+        # Backward-compat fallback: older synced rows may predate content_id
+        # backfills, so still support slug-based matching when the stable-ID
+        # lookup misses.
+        if course is None:
+            course = Course.objects.filter(
+                slug=slug,
+                source_repo=source.repo_name,
+            ).first()
+
+        if course is None:
             course = Course(slug=slug, **course_defaults)
             course.save()
             created = True
             changed = True
         else:
-            if _defaults_differ(course, course_defaults):
+            identity_changed = (
+                course.slug != slug
+                or course.source_path != rel_path
+            )
+            if identity_changed or _defaults_differ(course, course_defaults):
+                course.slug = slug
                 for k, v in course_defaults.items():
                     setattr(course, k, v)
                 course.save()

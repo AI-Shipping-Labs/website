@@ -215,7 +215,10 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
             })
 
             ses_message_id = service._send_ses(
-                user.email, campaign.subject, full_html,
+                user.email,
+                campaign.subject,
+                full_html,
+                unsubscribe_url=unsubscribe_url,
             )
 
             try:

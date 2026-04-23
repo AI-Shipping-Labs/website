@@ -6,9 +6,9 @@ import logging
 import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 logger = logging.getLogger(__name__)
@@ -151,20 +151,25 @@ def subscribe_api(request):
     )
 
 
+@csrf_exempt
 def unsubscribe_api(request):
     """Unsubscribe a user from all emails via JWT token.
 
-    GET /api/unsubscribe?token={jwt}
-    Sets unsubscribed=True. Token does not expire.
+    GET /api/unsubscribe?token={jwt} renders the confirmation page.
+    POST /api/unsubscribe?token={jwt} supports mailbox-provider one-click
+    unsubscribe callbacks and returns a plain 200/400 response.
     """
     token = request.GET.get("token", "")
     if not token:
+        message = "Token is required."
+        if request.method == "POST":
+            return HttpResponse(message, status=400, content_type="text/plain")
         return render(
             request,
             "email_app/unsubscribe_result.html",
             {
                 "success": False,
-                "message": "Token is required.",
+                "message": message,
             },
         )
 
@@ -176,22 +181,28 @@ def unsubscribe_api(request):
             options={"verify_exp": False},
         )
     except jwt.InvalidTokenError:
+        message = "Invalid unsubscribe link."
+        if request.method == "POST":
+            return HttpResponse(message, status=400, content_type="text/plain")
         return render(
             request,
             "email_app/unsubscribe_result.html",
             {
                 "success": False,
-                "message": "Invalid unsubscribe link.",
+                "message": message,
             },
         )
 
     if payload.get("action") != "unsubscribe":
+        message = "Invalid unsubscribe link."
+        if request.method == "POST":
+            return HttpResponse(message, status=400, content_type="text/plain")
         return render(
             request,
             "email_app/unsubscribe_result.html",
             {
                 "success": False,
-                "message": "Invalid unsubscribe link.",
+                "message": message,
             },
         )
 
@@ -199,18 +210,24 @@ def unsubscribe_api(request):
     try:
         user = User.objects.get(pk=user_id)
     except User.DoesNotExist:
+        message = "User not found."
+        if request.method == "POST":
+            return HttpResponse(message, status=400, content_type="text/plain")
         return render(
             request,
             "email_app/unsubscribe_result.html",
             {
                 "success": False,
-                "message": "User not found.",
+                "message": message,
             },
         )
 
     if not user.unsubscribed:
         user.unsubscribed = True
         user.save(update_fields=["unsubscribed"])
+
+    if request.method == "POST":
+        return HttpResponse("Unsubscribed", content_type="text/plain")
 
     return render(
         request,

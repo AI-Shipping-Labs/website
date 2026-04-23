@@ -308,7 +308,7 @@ class VerifyEmailAPITest(TestCase):
 
 @tag('core')
 class UnsubscribeAPITest(TestCase):
-    """Test GET /api/unsubscribe?token= endpoint."""
+    """Test GET/POST /api/unsubscribe?token= endpoint."""
 
     def _make_unsubscribe_token(self, user_id):
         """Helper to generate an unsubscribe JWT token (no expiry)."""
@@ -388,6 +388,26 @@ class UnsubscribeAPITest(TestCase):
 
         user.refresh_from_db()
         self.assertTrue(user.unsubscribed)
+
+    def test_unsubscribe_post_sets_unsubscribed(self):
+        user = User.objects.create_user(email="post-unsub@example.com")
+        token = self._make_unsubscribe_token(user.pk)
+
+        response = self.client.post(
+            f"/api/unsubscribe?token={token}",
+            {"List-Unsubscribe": "One-Click"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content.decode(), "Unsubscribed")
+
+        user.refresh_from_db()
+        self.assertTrue(user.unsubscribed)
+
+    def test_unsubscribe_post_invalid_token_returns_400(self):
+        response = self.client.post("/api/unsubscribe?token=garbage")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid unsubscribe link.", response.content.decode())
 
 
 class SubscribePageTest(TestCase):

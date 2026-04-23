@@ -7,6 +7,7 @@ Covers:
 - Campaign status transitions: draft -> sending -> sent
 """
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -14,6 +15,7 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.models import TierOverride
 from email_app.models import EmailCampaign, EmailLog
 from tests.fixtures import TierSetupMixin
 
@@ -80,6 +82,28 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
         recipients = campaign.get_eligible_recipients()
         self.assertEqual(recipients.count(), 1)
         self.assertEqual(recipients.first().email, 'premium@test.com')
+
+    def test_get_eligible_recipients_includes_active_override(self):
+        """Active tier overrides count toward campaign eligibility."""
+        override_user = User.objects.create_user(
+            email='override@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+        )
+        TierOverride.objects.create(
+            user=override_user,
+            original_tier=self.free_tier,
+            override_tier=self.premium_tier,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+        campaign = EmailCampaign.objects.create(
+            subject='Premium', body='Hi', target_min_level=30,
+        )
+
+        recipients = campaign.get_eligible_recipients()
+
+        self.assertEqual(recipients.count(), 1)
+        self.assertEqual(recipients.first().email, 'override@test.com')
 
     def test_get_eligible_recipients_excludes_unsubscribed(self):
         """Unsubscribed users are excluded from recipients."""
@@ -370,6 +394,11 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(mock_service._send_ses.call_count, 2)
         sent_emails = {c[0][0] for c in mock_service._send_ses.call_args_list}
         self.assertEqual(sent_emails, {'user1@test.com', 'user2@test.com'})
+        for call in mock_service._send_ses.call_args_list:
+            self.assertEqual(
+                call.kwargs['unsubscribe_url'],
+                'http://example.com/unsub',
+            )
 
     @patch('email_app.tasks.send_campaign.EmailService')
     def test_batch_continues_on_individual_failure(self, MockService):

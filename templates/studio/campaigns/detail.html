@@ -15,6 +15,16 @@
 </div>
 
 <div class="max-w-3xl space-y-6">
+  {% if messages %}
+  <div class="space-y-2">
+    {% for message in messages %}
+    <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'warning' %}bg-yellow-500/20 text-yellow-300{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- Campaign Info -->
   <div class="bg-card border border-border rounded-lg p-6">
     <div class="grid grid-cols-2 gap-6">
@@ -52,12 +62,75 @@
     </div>
   </div>
 
+  <!-- Test Send -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h2 class="text-lg font-semibold text-foreground">Test Send</h2>
+        <p class="text-sm text-muted-foreground mt-1">
+          Sends only to the addresses below. Campaign status and sent count stay unchanged.
+        </p>
+      </div>
+      <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Manual</span>
+    </div>
+
+    <form method="post" action="{% url 'studio_campaign_test_send' campaign_id=campaign.pk %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label for="test-recipients" class="block text-sm font-medium text-foreground mb-2">
+          Test Recipients
+        </label>
+        <textarea
+          id="test-recipients"
+          name="test_recipients"
+          rows="4"
+          placeholder="alice@example.com&#10;bob@example.com, carol@example.com"
+          class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+        >{{ test_recipients }}</textarea>
+        <p class="text-xs text-muted-foreground mt-2">
+          Comma, semicolon, space, or newline separated.
+        </p>
+      </div>
+
+      <button
+        type="submit"
+        class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+      >
+        Send Test
+      </button>
+    </form>
+  </div>
+
   <!-- Preview -->
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-lg font-semibold text-foreground mb-4">Preview</h2>
     <div class="prose bg-secondary/50 rounded-lg p-6">
       {{ campaign.body|linebreaksbr }}
     </div>
+  </div>
+
+  <div class="flex justify-start gap-3">
+    {% if campaign.status == "draft" %}
+    <form method="post" action="{% url 'studio_campaign_send' campaign_id=campaign.pk %}">
+      {% csrf_token %}
+      <button
+        type="submit"
+        class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+      >
+        Send Campaign
+      </button>
+    </form>
+    {% endif %}
+
+    <form method="post" action="{% url 'studio_campaign_duplicate' campaign_id=campaign.pk %}">
+      {% csrf_token %}
+      <button
+        type="submit"
+        class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+      >
+        Duplicate Campaign
+      </button>
+    </form>
   </div>
 </div>
 {% endblock %}

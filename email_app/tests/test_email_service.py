@@ -19,6 +19,8 @@ from django.test import TestCase, override_settings, tag
 
 from email_app.models import EmailLog
 from email_app.services.email_service import EmailService, EmailServiceError
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 
 User = get_user_model()
 
@@ -207,8 +209,12 @@ class EmailServiceSESIntegrationTest(TestCase):
     """Test SES API integration (mocked)."""
 
     def setUp(self):
+        clear_config_cache()
         self.user = User.objects.create_user(email='ses@example.com')
         self.service = EmailService()
+
+    def tearDown(self):
+        clear_config_cache()
 
     @override_settings(AWS_ACCESS_KEY_ID='', AWS_SECRET_ACCESS_KEY='', AWS_SES_REGION='us-east-1')
     @patch('email_app.services.email_service.boto3')
@@ -228,6 +234,39 @@ class EmailServiceSESIntegrationTest(TestCase):
             aws_secret_access_key='',
         )
         self.assertIs(client1, client2)
+
+    @patch('email_app.services.email_service.boto3')
+    def test_ses_client_uses_integration_settings(self, mock_boto3):
+        IntegrationSetting.objects.create(
+            key='AWS_SES_REGION',
+            value='eu-west-1',
+            group='ses',
+        )
+        IntegrationSetting.objects.create(
+            key='AWS_ACCESS_KEY_ID',
+            value='db-key',
+            group='ses',
+            is_secret=True,
+        )
+        IntegrationSetting.objects.create(
+            key='AWS_SECRET_ACCESS_KEY',
+            value='db-secret',
+            group='ses',
+            is_secret=True,
+        )
+        clear_config_cache()
+
+        mock_client = MagicMock()
+        mock_boto3.client.return_value = mock_client
+
+        _ = self.service.ses_client
+
+        mock_boto3.client.assert_called_once_with(
+            'sesv2',
+            region_name='eu-west-1',
+            aws_access_key_id='db-key',
+            aws_secret_access_key='db-secret',
+        )
 
     @patch('email_app.services.email_service.boto3')
     def test_send_ses_calls_api(self, mock_boto3):
@@ -252,6 +291,62 @@ class EmailServiceSESIntegrationTest(TestCase):
             call_kwargs['Content']['Simple']['Subject']['Data'],
             'Test Subject',
         )
+        self.assertNotIn('Headers', call_kwargs['Content']['Simple'])
+
+    @patch('email_app.services.email_service.boto3')
+    def test_send_ses_adds_unsubscribe_headers_when_url_provided(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'ses-real-id'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses(
+            'recipient@example.com',
+            'Test Subject',
+            '<html><body>Hello</body></html>',
+            unsubscribe_url='https://aishippinglabs.com/api/unsubscribe?token=abc',
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['Content']['Simple']['Headers'],
+            [
+                {
+                    'Name': 'List-Unsubscribe',
+                    'Value': '<https://aishippinglabs.com/api/unsubscribe?token=abc>',
+                },
+                {
+                    'Name': 'List-Unsubscribe-Post',
+                    'Value': 'List-Unsubscribe=One-Click',
+                },
+            ],
+        )
+
+    @patch('email_app.services.email_service.boto3')
+    def test_send_ses_adds_optional_mailto_unsubscribe_header(self, mock_boto3):
+        IntegrationSetting.objects.create(
+            key='SES_UNSUBSCRIBE_EMAIL',
+            value='unsubscribe@aishippinglabs.com',
+            group='ses',
+        )
+        clear_config_cache()
+
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'ses-real-id'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses(
+            'recipient@example.com',
+            'Test Subject',
+            '<html><body>Hello</body></html>',
+            unsubscribe_url='https://aishippinglabs.com/api/unsubscribe?token=abc',
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(
+            call_kwargs['Content']['Simple']['Headers'][0]['Value'],
+            '<https://aishippinglabs.com/api/unsubscribe?token=abc>, '
+            '<mailto:unsubscribe@aishippinglabs.com>',
+        )
 
     @patch('email_app.services.email_service.boto3')
     def test_send_ses_error_raises_exception(self, mock_boto3):
@@ -274,3 +369,21 @@ class EmailServiceSESIntegrationTest(TestCase):
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['FromEmailAddress'], 'custom@example.com')
+
+    @patch('email_app.services.email_service.boto3')
+    def test_send_ses_uses_integration_setting_from_email(self, mock_boto3):
+        IntegrationSetting.objects.create(
+            key='SES_FROM_EMAIL',
+            value='sender@example.com',
+            group='ses',
+        )
+        clear_config_cache()
+
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-123'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses('to@example.com', 'Sub', '<html/>')
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(call_kwargs['FromEmailAddress'], 'sender@example.com')

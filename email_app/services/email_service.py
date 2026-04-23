@@ -21,26 +21,29 @@ from django.conf import settings
 from django.template import Context, Template
 from django.template.loader import render_to_string
 
+from integrations.config import get_config
+
 logger = logging.getLogger(__name__)
 
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / 'email_templates'
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "email_templates"
 
 # Valid transactional email types
 TRANSACTIONAL_TYPES = {
-    'welcome',
-    'payment_failed',
-    'cancellation',
-    'community_invite',
-    'lead_magnet_delivery',
-    'event_reminder',
-    'email_verification',
-    'password_reset',
-    'event_registration',
+    "welcome",
+    "payment_failed",
+    "cancellation",
+    "community_invite",
+    "lead_magnet_delivery",
+    "event_reminder",
+    "email_verification",
+    "password_reset",
+    "event_registration",
 }
 
 
 class EmailServiceError(Exception):
     """Raised when email sending fails."""
+
     pass
 
 
@@ -60,10 +63,10 @@ class EmailService:
         """Lazy-initialize the SES v2 client."""
         if self._ses_client is None:
             self._ses_client = boto3.client(
-                'sesv2',
-                region_name=getattr(settings, 'AWS_SES_REGION', 'us-east-1'),
-                aws_access_key_id=getattr(settings, 'AWS_ACCESS_KEY_ID', None),
-                aws_secret_access_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', None),
+                "sesv2",
+                region_name=get_config("AWS_SES_REGION", "us-east-1"),
+                aws_access_key_id=get_config("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=get_config("AWS_SECRET_ACCESS_KEY"),
             )
         return self._ses_client
 
@@ -85,10 +88,11 @@ class EmailService:
             context = {}
 
         # Don't send to unsubscribed users
-        if getattr(user, 'unsubscribed', False):
+        if getattr(user, "unsubscribed", False):
             logger.info(
                 'Skipping email "%s" to unsubscribed user %s',
-                template_name, user.email,
+                template_name,
+                user.email,
             )
             return None
 
@@ -99,17 +103,18 @@ class EmailService:
         unsubscribe_url = self._build_unsubscribe_url(user)
 
         # Wrap in base HTML email template
-        full_html = render_to_string('email_app/base_email.html', {
-            'subject': subject,
-            'body_html': body_html,
-            'unsubscribe_url': unsubscribe_url,
-        })
+        full_html = self.render_html_email(
+            subject,
+            body_html,
+            unsubscribe_url=unsubscribe_url,
+        )
 
         # Send via SES
         ses_message_id = self._send_ses(user.email, subject, full_html)
 
         # Log the send
         from email_app.models import EmailLog
+
         email_log = EmailLog.objects.create(
             user=user,
             email_type=template_name,
@@ -118,7 +123,9 @@ class EmailService:
 
         logger.info(
             'Sent "%s" email to %s (SES message ID: %s)',
-            template_name, user.email, ses_message_id,
+            template_name,
+            user.email,
+            ses_message_id,
         )
 
         return email_log
@@ -137,28 +144,25 @@ class EmailService:
         Raises:
             EmailServiceError: If template file not found.
         """
-        template_path = TEMPLATES_DIR / f'{template_name}.md'
+        template_path = TEMPLATES_DIR / f"{template_name}.md"
 
         if not template_path.exists():
-            raise EmailServiceError(
-                f'Email template not found: {template_name} '
-                f'(looked in {template_path})'
-            )
+            raise EmailServiceError(f"Email template not found: {template_name} (looked in {template_path})")
 
         # Parse frontmatter and body
         post = frontmatter.load(str(template_path))
 
         # Build full context with defaults
         full_context = {
-            'user_name': user.first_name or user.email.split('@')[0],
-            'user_email': user.email,
-            'site_url': getattr(settings, 'SITE_URL', 'https://aishippinglabs.com'),
-            'site_name': getattr(settings, 'SITE_NAME', 'AI Shipping Labs'),
+            "user_name": user.first_name or user.email.split("@")[0],
+            "user_email": user.email,
+            "site_url": getattr(settings, "SITE_URL", "https://aishippinglabs.com"),
+            "site_name": getattr(settings, "SITE_NAME", "AI Shipping Labs"),
         }
         full_context.update(context)
 
         # Render subject as Django template
-        subject_template = Template(post.metadata.get('subject', template_name))
+        subject_template = Template(post.metadata.get("subject", template_name))
         subject = subject_template.render(Context(full_context))
 
         # Render body as Django template first (for variable substitution)
@@ -168,7 +172,7 @@ class EmailService:
         # Convert markdown to HTML
         body_html = markdown.markdown(
             rendered_body,
-            extensions=['extra'],
+            extensions=["extra"],
         )
 
         return subject, body_html
@@ -180,24 +184,90 @@ class EmailService:
         """
         import jwt
 
-        site_url = getattr(settings, 'SITE_URL', 'https://aishippinglabs.com')
+        site_url = getattr(settings, "SITE_URL", "https://aishippinglabs.com")
         secret = settings.SECRET_KEY
 
         token = jwt.encode(
-            {'user_id': user.pk, 'action': 'unsubscribe'},
+            {"user_id": user.pk, "action": "unsubscribe"},
             secret,
-            algorithm='HS256',
+            algorithm="HS256",
         )
 
-        return f'{site_url}/api/unsubscribe?token={token}'
+        return f"{site_url}/api/unsubscribe?token={token}"
 
-    def _send_ses(self, to_email, subject, html_body):
+    def render_html_email(
+        self,
+        subject,
+        body_html,
+        *,
+        unsubscribe_url=None,
+        footer_note=None,
+    ):
+        """Wrap rendered HTML in the shared email chrome template."""
+        return render_to_string(
+            "email_app/base_email.html",
+            {
+                "subject": subject,
+                "body_html": body_html,
+                "unsubscribe_url": unsubscribe_url,
+                "footer_note": footer_note,
+            },
+        )
+
+    def render_markdown_email(
+        self,
+        subject,
+        body_markdown,
+        *,
+        unsubscribe_url=None,
+        footer_note=None,
+    ):
+        """Convert markdown to HTML and wrap it in the shared template."""
+        body_html = markdown.markdown(body_markdown, extensions=["extra"])
+        return self.render_html_email(
+            subject,
+            body_html,
+            unsubscribe_url=unsubscribe_url,
+            footer_note=footer_note,
+        )
+
+    def _build_unsubscribe_headers(self, unsubscribe_url):
+        """Build SES-compatible one-click unsubscribe headers."""
+        if not unsubscribe_url:
+            return []
+
+        header_value_parts = [f"<{unsubscribe_url}>"]
+        unsubscribe_mailto = get_config("SES_UNSUBSCRIBE_EMAIL", "").strip()
+        if unsubscribe_mailto:
+            header_value_parts.append(f"<mailto:{unsubscribe_mailto}>")
+
+        return [
+            {
+                "Name": "List-Unsubscribe",
+                "Value": ", ".join(header_value_parts),
+            },
+            {
+                "Name": "List-Unsubscribe-Post",
+                "Value": "List-Unsubscribe=One-Click",
+            },
+        ]
+
+    def _send_ses(
+        self,
+        to_email,
+        subject,
+        html_body,
+        *,
+        unsubscribe_url=None,
+    ):
         """Send an email via Amazon SES v2 SendEmail API.
 
         Args:
             to_email: Recipient email address.
             subject: Email subject line.
             html_body: Full HTML email body.
+            unsubscribe_url: Optional one-click unsubscribe URL for
+                campaign-style mail.
 
         Returns:
             str: SES message ID.
@@ -205,34 +275,37 @@ class EmailService:
         Raises:
             EmailServiceError: If SES API call fails.
         """
-        from_email = getattr(
-            settings, 'SES_FROM_EMAIL', 'community@aishippinglabs.com',
+        from_email = get_config(
+            "SES_FROM_EMAIL",
+            "community@aishippinglabs.com",
         )
+        content = {
+            "Simple": {
+                "Subject": {
+                    "Data": subject,
+                    "Charset": "UTF-8",
+                },
+                "Body": {
+                    "Html": {
+                        "Data": html_body,
+                        "Charset": "UTF-8",
+                    },
+                },
+            },
+        }
+        headers = self._build_unsubscribe_headers(unsubscribe_url)
+        if headers:
+            content["Simple"]["Headers"] = headers
 
         try:
             response = self.ses_client.send_email(
                 FromEmailAddress=from_email,
                 Destination={
-                    'ToAddresses': [to_email],
+                    "ToAddresses": [to_email],
                 },
-                Content={
-                    'Simple': {
-                        'Subject': {
-                            'Data': subject,
-                            'Charset': 'UTF-8',
-                        },
-                        'Body': {
-                            'Html': {
-                                'Data': html_body,
-                                'Charset': 'UTF-8',
-                            },
-                        },
-                    },
-                },
+                Content=content,
             )
-            return response.get('MessageId', '')
+            return response.get("MessageId", "")
         except Exception as e:
-            logger.exception('Failed to send email via SES to %s', to_email)
-            raise EmailServiceError(
-                f'SES send failed for {to_email}: {e}'
-            ) from e
+            logger.exception("Failed to send email via SES to %s", to_email)
+            raise EmailServiceError(f"SES send failed for {to_email}: {e}") from e

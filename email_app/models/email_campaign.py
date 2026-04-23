@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models import Q
+from django.utils import timezone
 
 
 class EmailCampaign(models.Model):
@@ -60,15 +62,26 @@ class EmailCampaign(models.Model):
         """Query users eligible to receive this campaign.
 
         Returns a queryset of users where:
-        - tier.level >= target_min_level
+        - effective tier level >= target_min_level
+          (base tier or active override)
         - unsubscribed = False
         - email_verified = True
         """
         User = get_user_model()
-        return User.objects.filter(
-            tier__level__gte=self.target_min_level,
-            unsubscribed=False,
-            email_verified=True,
+        return (
+            User.objects.filter(
+                unsubscribed=False,
+                email_verified=True,
+            )
+            .filter(
+                Q(tier__level__gte=self.target_min_level)
+                | Q(
+                    tier_overrides__is_active=True,
+                    tier_overrides__expires_at__gt=timezone.now(),
+                    tier_overrides__override_tier__level__gte=self.target_min_level,
+                )
+            )
+            .distinct()
         )
 
     def get_recipient_count(self):

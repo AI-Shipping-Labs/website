@@ -2,7 +2,14 @@ from django.urls import path
 
 from studio.views.announcement import announcement_banner_edit
 from studio.views.articles import article_edit, article_list
-from studio.views.campaigns import campaign_create, campaign_detail, campaign_list
+from studio.views.campaigns import (
+    campaign_create,
+    campaign_detail,
+    campaign_duplicate,
+    campaign_list,
+    campaign_send,
+    campaign_test_send,
+)
 from studio.views.content_sources import (
     content_source_create,
     content_source_created,
@@ -155,6 +162,21 @@ urlpatterns = [
     path('campaigns/', campaign_list, name='studio_campaign_list'),
     path('campaigns/new', campaign_create, name='studio_campaign_create'),
     path('campaigns/<int:campaign_id>/', campaign_detail, name='studio_campaign_detail'),
+    path(
+        'campaigns/<int:campaign_id>/duplicate',
+        campaign_duplicate,
+        name='studio_campaign_duplicate',
+    ),
+    path(
+        'campaigns/<int:campaign_id>/send',
+        campaign_send,
+        name='studio_campaign_send',
+    ),
+    path(
+        'campaigns/<int:campaign_id>/test-send',
+        campaign_test_send,
+        name='studio_campaign_test_send',
+    ),
 
     # UTM Campaigns
     path('utm-campaigns/', utm_campaign_list, name='studio_utm_campaign_list'),

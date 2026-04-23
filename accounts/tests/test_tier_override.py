@@ -599,31 +599,27 @@ class CourseAccessInteractionTest(TierOverrideTestBase):
 
 
 # ============================================================
-# Scenarios 29-30: Email campaign targeting (NOT affected)
+# Scenarios 29-30: Email campaign targeting
 # ============================================================
 
 class EmailCampaignTargetingTest(TierOverrideTestBase):
-    """Scenarios 29-30: Email campaign targeting NOT affected by override."""
+    """Scenarios 29-30: Email campaign targeting uses effective tier."""
 
-    def test_29_free_user_with_premium_override_not_targeted(self):
-        """#29: Free user with Premium override -> campaign checking
-        user.tier.level sees Free, NOT the overridden level."""
+    def test_29_free_user_with_premium_override_targeted(self):
+        """#29: Free user with Premium override is eligible for Premium campaigns."""
         user = self._make_user()
-        self._make_override(user, self.premium_tier)
+        override = self._make_override(user, self.premium_tier)
 
-        # Campaign targeting checks user.tier.level directly
-        user_tier_level = user.tier.level if user.tier else 0
-        target_min_level = LEVEL_PREMIUM
-        self.assertFalse(user_tier_level >= target_min_level)
+        effective_level = max(user.tier.level if user.tier else 0, override.override_tier.level)
+        self.assertEqual(effective_level, LEVEL_PREMIUM)
 
-    def test_30_basic_with_main_override_not_targeted(self):
-        """#30: Basic user with Main override does NOT receive Main+ campaign."""
+    def test_30_basic_with_main_override_targeted(self):
+        """#30: Basic user with Main override is eligible for Main+ campaigns."""
         user = self._make_user(tier=self.basic_tier)
-        self._make_override(user, self.main_tier)
+        override = self._make_override(user, self.main_tier)
 
-        user_tier_level = user.tier.level
-        target_min_level = LEVEL_MAIN
-        self.assertFalse(user_tier_level >= target_min_level)
+        effective_level = max(user.tier.level, override.override_tier.level)
+        self.assertEqual(effective_level, LEVEL_MAIN)
 
 
 # ============================================================

@@ -71,9 +71,14 @@
     </div>
     <div class="email-footer">
       <p>&copy; AI Shipping Labs</p>
+      {% if footer_note %}
+      <p>{{ footer_note }}</p>
+      {% endif %}
+      {% if unsubscribe_url %}
       <p>
         <a href="{{ unsubscribe_url }}">Unsubscribe</a> from all emails
       </p>
+      {% endif %}
     </div>
   </div>
 </body>

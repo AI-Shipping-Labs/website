@@ -91,6 +91,7 @@ Orchestrator picks groomed issue
 
 - Groom any `needs grooming` issues first (launch product-manager in grooming mode)
 - Pick the next groomed issues (2 at a time, in parallel when independent)
+- Before launching any SWE agent in an isolated worktree, ensure `main` has no uncommitted changes. If there are, commit them (or stash with the user's approval) first. Worktrees are created from `HEAD`, so uncommitted main changes are invisible to the agent; when the agent's branch merges back, it will overwrite or conflict with that work. Run `git status` and resolve before invoking the agent.
 - Launch software engineer with the issue number. When running multiple SWE agents in parallel, use `isolation: "worktree"` to give each agent its own copy of the repo — otherwise concurrent agents overwrite each other's file changes
 - When software engineer reports done, launch tester
 - If tester fails: relay feedback to software engineer, re-launch to fix, then re-launch tester

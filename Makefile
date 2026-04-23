@@ -1,20 +1,24 @@
-.PHONY: run dev migrate sync seed test test-core coverage playwright lint lint-fix clean
+.PHONY: run run2 dev migrate qcache sync seed test test-core coverage playwright lint lint-fix clean
 
 # Start dev server
-run: migrate
+run: qcache
 	uv run python manage.py runserver
 
 # Start dev server on port 8001
-run2: migrate
+run2: qcache
 	uv run python manage.py runserver 8001
 
 # Start dev server + django-q worker together (Ctrl-C kills both)
-dev: migrate
+dev: qcache
 	uv run honcho -f Procfile.dev start
 
 # Run migrations
 migrate:
 	uv run python manage.py migrate
+
+# Create the django-q cache table used by the local worker heartbeat cache
+qcache: migrate
+	uv run python manage.py createcachetable django_q_cache
 
 # Sync content from local content repo clone
 # Override repo path: make sync CONTENT_REPO=~/other/path

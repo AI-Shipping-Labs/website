@@ -1,13 +1,12 @@
-"""Tests for the studio Users list / CSV export and subscriber redirect shims.
+"""Tests for the Studio users list / CSV export and subscriber redirect shims."""
 
-The page lives at ``/studio/users/`` (issue #271). The old
-``/studio/subscribers/`` URLs are 301 redirect shims kept around for
-bookmarks; they are exercised at the end of the file.
-"""
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
+from accounts.models import TierOverride
 from email_app.models import NewsletterSubscriber
 from payments.models import Tier
 
@@ -19,30 +18,56 @@ class StudioUserListTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls.free_tier = Tier.objects.get(slug='free')
+        cls.main_tier = Tier.objects.get(slug='main')
+        cls.premium_tier = Tier.objects.get(slug='premium')
+
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
+            email='staff@test.com',
+            password='testpass',
+            is_staff=True,
+            unsubscribed=True,
         )
-        # A regular user who is also a newsletter subscriber.
-        cls.regular_subscriber = User.objects.create_user(
-            email='alice@test.com', password='testpass',
+        cls.alice = User.objects.create_user(
+            email='alice@test.com',
+            password='testpass',
         )
+        cls.bob = User.objects.create_user(
+            email='bob@test.com',
+            password='testpass',
+            unsubscribed=True,
+        )
+        cls.main_user = User.objects.create_user(
+            email='main@test.com',
+            password='testpass',
+            tier=cls.main_tier,
+        )
+        cls.premium_user = User.objects.create_user(
+            email='premium@test.com',
+            password='testpass',
+            tier=cls.premium_tier,
+        )
+        cls.override_user = User.objects.create_user(
+            email='override@test.com',
+            password='testpass',
+            tier=cls.free_tier,
+        )
+        TierOverride.objects.create(
+            user=cls.override_user,
+            original_tier=cls.free_tier,
+            override_tier=cls.premium_tier,
+            expires_at=timezone.now() + timedelta(days=14),
+            is_active=True,
+        )
+
+        # Legacy newsletter rows should not affect the Studio users page any more.
         NewsletterSubscriber.objects.create(
-            email='alice@test.com', is_active=True,
-        )
-        # A regular user who is NOT a subscriber.
-        cls.regular_only = User.objects.create_user(
-            email='bob@test.com', password='testpass',
-        )
-        # A subscriber with no platform user account -- should NOT appear in
-        # any chip because the page lists Users, not subscriber rows.
-        NewsletterSubscriber.objects.create(
-            email='ghost@test.com', is_active=True,
+            email='ghost@test.com',
+            is_active=True,
         )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
-
-    # --- rendering / template ---------------------------------------
 
     def test_list_returns_200(self):
         response = self.client.get('/studio/users/')
@@ -52,146 +77,128 @@ class StudioUserListTest(TestCase):
         response = self.client.get('/studio/users/')
         self.assertTemplateUsed(response, 'studio/users/list.html')
 
-    # --- default chip is Subscribers --------------------------------
-
-    def test_default_filter_is_subscribers(self):
-        """Hitting the page with no query string lands on the Subscribers chip."""
+    def test_default_filter_is_all(self):
         response = self.client.get('/studio/users/')
-        self.assertEqual(response.context['active_filter'], 'subscribers')
+        self.assertEqual(response.context['active_filter'], 'all')
 
-    def test_default_view_lists_only_subscriber_users(self):
-        """With the default chip, only Users who are active subscribers appear."""
+    def test_default_view_lists_all_users(self):
         response = self.client.get('/studio/users/')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertIn('alice@test.com', emails)
-        self.assertNotIn('bob@test.com', emails)
-        self.assertNotIn('staff@test.com', emails)
-        # Subscriber-without-account never appears -- this page lists Users.
+        self.assertEqual(
+            emails,
+            [
+                'override@test.com',
+                'premium@test.com',
+                'main@test.com',
+                'bob@test.com',
+                'alice@test.com',
+                'staff@test.com',
+            ],
+        )
         self.assertNotIn('ghost@test.com', emails)
 
-    # --- chip switching ---------------------------------------------
-
-    def test_filter_all_lists_every_user(self):
-        response = self.client.get('/studio/users/?filter=all')
+    def test_filter_paid_uses_effective_tier(self):
+        response = self.client.get('/studio/users/?filter=paid')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertIn('alice@test.com', emails)
-        self.assertIn('bob@test.com', emails)
-        self.assertIn('staff@test.com', emails)
+        self.assertEqual(
+            emails,
+            ['override@test.com', 'premium@test.com', 'main@test.com'],
+        )
 
-    def test_filter_non_subscribers(self):
-        response = self.client.get('/studio/users/?filter=non_subscribers')
+    def test_filter_main_plus_uses_effective_tier(self):
+        response = self.client.get('/studio/users/?filter=main_plus')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertNotIn('alice@test.com', emails)
-        self.assertIn('bob@test.com', emails)
-        self.assertIn('staff@test.com', emails)
+        self.assertEqual(
+            emails,
+            ['override@test.com', 'premium@test.com', 'main@test.com'],
+        )
 
-    def test_filter_staff(self):
-        response = self.client.get('/studio/users/?filter=staff')
+    def test_filter_premium_uses_effective_tier(self):
+        response = self.client.get('/studio/users/?filter=premium')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertEqual(emails, ['staff@test.com'])
+        self.assertEqual(
+            emails,
+            ['override@test.com', 'premium@test.com'],
+        )
 
-    def test_unknown_filter_falls_back_to_subscribers(self):
+    def test_filter_subscribers_uses_user_newsletter_preference(self):
+        response = self.client.get('/studio/users/?filter=subscribers')
+        emails = [row['email'] for row in response.context['user_rows']]
+        self.assertEqual(
+            emails,
+            ['override@test.com', 'premium@test.com', 'main@test.com', 'alice@test.com'],
+        )
+
+    def test_unknown_filter_falls_back_to_all(self):
         response = self.client.get('/studio/users/?filter=garbage')
-        self.assertEqual(response.context['active_filter'], 'subscribers')
-
-    # --- search box -------------------------------------------------
+        self.assertEqual(response.context['active_filter'], 'all')
 
     def test_search_filters_within_chip(self):
-        """Search narrows results within the active chip."""
-        response = self.client.get('/studio/users/?filter=all&q=alice')
+        response = self.client.get('/studio/users/?filter=paid&q=override')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertEqual(emails, ['alice@test.com'])
+        self.assertEqual(emails, ['override@test.com'])
 
     def test_search_value_preserved_in_form(self):
-        """The search box keeps its value after submitting (used by the chips)."""
-        response = self.client.get('/studio/users/?filter=all&q=alice')
-        self.assertContains(response, 'value="alice"')
+        response = self.client.get('/studio/users/?filter=paid&q=override')
+        self.assertContains(response, 'value="override"')
 
     def test_chip_links_carry_search_value(self):
-        """Switching chips preserves the active search query."""
         response = self.client.get('/studio/users/?filter=all&q=alice')
-        # Each chip link includes q=alice so clicking does not lose it.
-        # The template uses an HTML-entity ampersand for spec compliance.
         self.assertContains(response, '?filter=all&amp;q=alice')
+        self.assertContains(response, '?filter=paid&amp;q=alice')
+        self.assertContains(response, '?filter=main_plus&amp;q=alice')
+        self.assertContains(response, '?filter=premium&amp;q=alice')
         self.assertContains(response, '?filter=subscribers&amp;q=alice')
-        self.assertContains(response, '?filter=non_subscribers&amp;q=alice')
-        self.assertContains(response, '?filter=staff&amp;q=alice')
 
-    # --- row decoration ---------------------------------------------
-
-    def test_subscribed_column_yes_for_subscriber(self):
+    def test_subscribed_column_uses_user_unsubscribed_flag(self):
         response = self.client.get('/studio/users/?filter=all')
-        rows = {r['email']: r for r in response.context['user_rows']}
+        rows = {row['email']: row for row in response.context['user_rows']}
         self.assertTrue(rows['alice@test.com']['is_subscribed'])
         self.assertFalse(rows['bob@test.com']['is_subscribed'])
 
-    def test_inactive_subscriber_renders_as_not_subscribed(self):
-        """A NewsletterSubscriber row with is_active=False does not count."""
-        User.objects.create_user(email='unsubbed@test.com', password='x')
-        NewsletterSubscriber.objects.create(
-            email='unsubbed@test.com', is_active=False,
-        )
+    def test_tier_column_shows_effective_override_tier(self):
         response = self.client.get('/studio/users/?filter=all')
-        rows = {r['email']: r for r in response.context['user_rows']}
-        self.assertFalse(rows['unsubbed@test.com']['is_subscribed'])
-
-    def test_tier_column_shows_user_tier_name(self):
-        """The Tier column reflects User.tier (defaulting to 'Free')."""
-        response = self.client.get('/studio/users/?filter=all')
-        rows = {r['email']: r for r in response.context['user_rows']}
-        # Default tier on creation is 'free', whose display name is 'Free'.
-        self.assertEqual(rows['alice@test.com']['tier_name'], 'Free')
+        rows = {row['email']: row for row in response.context['user_rows']}
+        self.assertEqual(rows['override@test.com']['tier_name'], 'Premium (override)')
 
     def test_tier_column_shows_paid_tier_name(self):
-        paid = Tier.objects.exclude(slug='free').order_by('level').first()
-        self.assertIsNotNone(paid, 'tier seed migration should provide a paid tier')
-        paid_user = User.objects.create_user(email='paid@test.com', password='x')
-        paid_user.tier = paid
-        paid_user.save()
         response = self.client.get('/studio/users/?filter=all')
-        rows = {r['email']: r for r in response.context['user_rows']}
-        self.assertEqual(rows['paid@test.com']['tier_name'], paid.name)
+        rows = {row['email']: row for row in response.context['user_rows']}
+        self.assertEqual(rows['main@test.com']['tier_name'], 'Main')
+        self.assertEqual(rows['premium@test.com']['tier_name'], 'Premium')
 
     def test_status_column_marks_staff(self):
         response = self.client.get('/studio/users/?filter=all')
-        rows = {r['email']: r for r in response.context['user_rows']}
+        rows = {row['email']: row for row in response.context['user_rows']}
         self.assertEqual(rows['staff@test.com']['status'], 'Staff')
 
     def test_status_column_marks_inactive(self):
         User.objects.create_user(
-            email='deactivated@test.com', password='x', is_active=False,
+            email='deactivated@test.com',
+            password='x',
+            is_active=False,
         )
         response = self.client.get('/studio/users/?filter=all')
-        rows = {r['email']: r for r in response.context['user_rows']}
+        rows = {row['email']: row for row in response.context['user_rows']}
         self.assertEqual(rows['deactivated@test.com']['status'], 'Inactive')
 
     def test_status_column_marks_regular_active(self):
         response = self.client.get('/studio/users/?filter=all')
-        rows = {r['email']: r for r in response.context['user_rows']}
-        self.assertEqual(rows['bob@test.com']['status'], 'Active')
-
-    # --- Login as button --------------------------------------------
+        rows = {row['email']: row for row in response.context['user_rows']}
+        self.assertEqual(rows['alice@test.com']['status'], 'Active')
 
     def test_login_as_button_present_for_every_user(self):
-        """The Login as form posts to /studio/impersonate/<pk>/ for every row."""
         response = self.client.get('/studio/users/?filter=all')
-        self.assertContains(
-            response, f'/studio/impersonate/{self.regular_subscriber.pk}/'
-        )
-        self.assertContains(
-            response, f'/studio/impersonate/{self.regular_only.pk}/'
-        )
-
-    # --- counts -----------------------------------------------------
+        self.assertContains(response, f'/studio/impersonate/{self.alice.pk}/')
+        self.assertContains(response, f'/studio/impersonate/{self.override_user.pk}/')
 
     def test_counts_in_context(self):
         response = self.client.get('/studio/users/')
-        # 3 users seeded on the class + ghost subscriber has NO user
-        self.assertEqual(response.context['total_users'], 3)
-        # alice is the only user with an active subscription
-        self.assertEqual(response.context['subscriber_count'], 1)
-        self.assertEqual(response.context['non_subscriber_count'], 2)
-        self.assertEqual(response.context['staff_count'], 1)
+        self.assertEqual(response.context['total_users'], 6)
+        self.assertEqual(response.context['paid_count'], 3)
+        self.assertEqual(response.context['main_plus_count'], 3)
+        self.assertEqual(response.context['premium_count'], 2)
+        self.assertEqual(response.context['subscriber_count'], 4)
 
 
 class StudioUserExportTest(TestCase):
@@ -199,17 +206,41 @@ class StudioUserExportTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls.free_tier = Tier.objects.get(slug='free')
+        cls.main_tier = Tier.objects.get(slug='main')
+        cls.premium_tier = Tier.objects.get(slug='premium')
+
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
+            email='staff@test.com',
+            password='testpass',
+            is_staff=True,
+            unsubscribed=True,
         )
         cls.alice = User.objects.create_user(
-            email='alice@test.com', password='testpass',
-        )
-        NewsletterSubscriber.objects.create(
-            email='alice@test.com', is_active=True,
+            email='alice@test.com',
+            password='testpass',
         )
         cls.bob = User.objects.create_user(
-            email='bob@test.com', password='testpass',
+            email='bob@test.com',
+            password='testpass',
+            unsubscribed=True,
+        )
+        cls.main_user = User.objects.create_user(
+            email='main@test.com',
+            password='testpass',
+            tier=cls.main_tier,
+        )
+        cls.override_user = User.objects.create_user(
+            email='override@test.com',
+            password='testpass',
+            tier=cls.free_tier,
+        )
+        TierOverride.objects.create(
+            user=cls.override_user,
+            original_tier=cls.free_tier,
+            override_tier=cls.premium_tier,
+            expires_at=timezone.now() + timedelta(days=14),
+            is_active=True,
         )
 
     def setUp(self):
@@ -222,60 +253,65 @@ class StudioUserExportTest(TestCase):
         self.assertIn('attachment', response['Content-Disposition'])
         self.assertIn('users.csv', response['Content-Disposition'])
 
-    def test_export_header_lists_new_columns(self):
+    def test_export_header_lists_columns(self):
         response = self.client.get('/studio/users/export')
         first_line = response.content.decode().splitlines()[0]
         self.assertEqual(first_line, 'Email,Joined,Subscribed,Tier,Status')
 
-    def test_export_default_filter_is_subscribers(self):
-        """No filter query param -> only subscriber rows (matches the page)."""
+    def test_export_default_filter_is_all(self):
         response = self.client.get('/studio/users/export')
         content = response.content.decode()
         self.assertIn('alice@test.com', content)
-        self.assertNotIn('bob@test.com', content)
-        self.assertNotIn('staff@test.com', content)
+        self.assertIn('bob@test.com', content)
+        self.assertIn('main@test.com', content)
+        self.assertIn('override@test.com', content)
+        self.assertIn('staff@test.com', content)
 
-    def test_export_filter_all(self):
-        response = self.client.get('/studio/users/export?filter=all')
+    def test_export_filter_paid(self):
+        response = self.client.get('/studio/users/export?filter=paid')
+        content = response.content.decode()
+        self.assertIn('main@test.com', content)
+        self.assertIn('override@test.com', content)
+        self.assertNotIn('alice@test.com', content)
+        self.assertNotIn('bob@test.com', content)
+
+    def test_export_filter_subscribers_uses_user_preference(self):
+        response = self.client.get('/studio/users/export?filter=subscribers')
         content = response.content.decode()
         self.assertIn('alice@test.com', content)
-        self.assertIn('bob@test.com', content)
-        self.assertIn('staff@test.com', content)
-
-    def test_export_filter_staff(self):
-        response = self.client.get('/studio/users/export?filter=staff')
-        content = response.content.decode()
-        self.assertIn('staff@test.com', content)
-        self.assertNotIn('alice@test.com', content)
+        self.assertIn('main@test.com', content)
+        self.assertIn('override@test.com', content)
         self.assertNotIn('bob@test.com', content)
-
-    def test_export_filter_non_subscribers(self):
-        response = self.client.get('/studio/users/export?filter=non_subscribers')
-        content = response.content.decode()
-        self.assertNotIn('alice@test.com', content)
-        self.assertIn('bob@test.com', content)
+        self.assertNotIn('staff@test.com', content)
 
     def test_export_honours_search(self):
-        response = self.client.get('/studio/users/export?filter=all&q=alice')
+        response = self.client.get('/studio/users/export?filter=all&q=override')
         content = response.content.decode()
-        self.assertIn('alice@test.com', content)
+        self.assertIn('override@test.com', content)
+        self.assertNotIn('alice@test.com', content)
         self.assertNotIn('bob@test.com', content)
-        self.assertNotIn('staff@test.com', content)
 
     def test_export_subscribed_column_values(self):
         response = self.client.get('/studio/users/export?filter=all')
-        # Find each user's row and verify the Subscribed column.
-        # Row layout: email,joined,Yes/No,tier,status
         lines = response.content.decode().splitlines()
         alice_line = next(line for line in lines if line.startswith('alice@test.com'))
         bob_line = next(line for line in lines if line.startswith('bob@test.com'))
-        # Subscribed is the 3rd CSV cell.
         self.assertEqual(alice_line.split(',')[2], 'Yes')
         self.assertEqual(bob_line.split(',')[2], 'No')
 
+    def test_export_tier_column_shows_override_tier(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        lines = response.content.decode().splitlines()
+        override_line = next(
+            line for line in lines if line.startswith('override@test.com')
+        )
+        self.assertEqual(override_line.split(',')[3], 'Premium (override)')
+
     def test_export_non_staff_forbidden(self):
         User.objects.create_user(
-            email='regular@test.com', password='testpass', is_staff=False,
+            email='regular@test.com',
+            password='testpass',
+            is_staff=False,
         )
         self.client.logout()
         self.client.login(email='regular@test.com', password='testpass')
@@ -289,23 +325,29 @@ class SubscriberRedirectShimTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
+            email='staff@test.com',
+            password='testpass',
+            is_staff=True,
         )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_subscriber_list_redirects_permanently_to_users(self):
+    def test_subscriber_list_redirects_permanently_to_subscribers_chip(self):
         response = self.client.get('/studio/subscribers/')
         self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/users/')
+        self.assertEqual(response['Location'], '/studio/users/?filter=subscribers')
 
-    def test_subscriber_export_redirects_permanently_to_users_export(self):
+    def test_subscriber_export_redirects_permanently_to_subscribers_chip(self):
         response = self.client.get('/studio/subscribers/export')
         self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/users/export')
+        self.assertEqual(
+            response['Location'],
+            '/studio/users/export?filter=subscribers',
+        )
 
     def test_redirect_followed_lands_on_user_list(self):
         response = self.client.get('/studio/subscribers/', follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'studio/users/list.html')
+        self.assertEqual(response.context['active_filter'], 'subscribers')

@@ -6,7 +6,7 @@
 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
   <div>
     <h1 class="text-2xl font-semibold text-foreground">Users</h1>
-    <p class="text-muted-foreground mt-1">All platform users. Filter by subscriber status or staff role.</p>
+    <p class="text-muted-foreground mt-1">All platform users. Filter by effective tier or newsletter subscription.</p>
   </div>
   <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
      class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors shrink-0">
@@ -21,16 +21,23 @@
     <p class="text-xl font-semibold text-foreground">{{ total_users }}</p>
   </div>
   <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Paid</p>
+    <p class="text-xl font-semibold text-blue-400">{{ paid_count }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Main+</p>
+    <p class="text-xl font-semibold text-foreground">{{ main_plus_count }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">Premium</p>
+    <p class="text-xl font-semibold text-purple-400">{{ premium_count }}</p>
+  </div>
+</div>
+
+<div class="mb-6">
+  <div class="bg-card border border-border rounded-lg p-4 max-w-xs">
     <p class="text-sm text-muted-foreground">Subscribers</p>
     <p class="text-xl font-semibold text-green-400">{{ subscriber_count }}</p>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-4">
-    <p class="text-sm text-muted-foreground">Non-subscribers</p>
-    <p class="text-xl font-semibold text-foreground">{{ non_subscriber_count }}</p>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-4">
-    <p class="text-sm text-muted-foreground">Staff</p>
-    <p class="text-xl font-semibold text-blue-400">{{ staff_count }}</p>
   </div>
 </div>
 
@@ -45,15 +52,18 @@
     <a href="?filter={{ filter_all }}{% if search %}&amp;q={{ search }}{% endif %}"
        data-filter="{{ filter_all }}"
        class="{{ chip_base }} {% if active_filter == filter_all %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
+    <a href="?filter={{ filter_paid }}{% if search %}&amp;q={{ search }}{% endif %}"
+       data-filter="{{ filter_paid }}"
+       class="{{ chip_base }} {% if active_filter == filter_paid %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Paid</a>
+    <a href="?filter={{ filter_main_plus }}{% if search %}&amp;q={{ search }}{% endif %}"
+       data-filter="{{ filter_main_plus }}"
+       class="{{ chip_base }} {% if active_filter == filter_main_plus %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Main+</a>
+    <a href="?filter={{ filter_premium }}{% if search %}&amp;q={{ search }}{% endif %}"
+       data-filter="{{ filter_premium }}"
+       class="{{ chip_base }} {% if active_filter == filter_premium %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Premium</a>
     <a href="?filter={{ filter_subscribers }}{% if search %}&amp;q={{ search }}{% endif %}"
        data-filter="{{ filter_subscribers }}"
        class="{{ chip_base }} {% if active_filter == filter_subscribers %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Subscribers</a>
-    <a href="?filter={{ filter_non_subscribers }}{% if search %}&amp;q={{ search }}{% endif %}"
-       data-filter="{{ filter_non_subscribers }}"
-       class="{{ chip_base }} {% if active_filter == filter_non_subscribers %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Non-subscribers</a>
-    <a href="?filter={{ filter_staff }}{% if search %}&amp;q={{ search }}{% endif %}"
-       data-filter="{{ filter_staff }}"
-       class="{{ chip_base }} {% if active_filter == filter_staff %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Staff</a>
     {% endwith %}
   </div>
   <form method="get" class="flex flex-wrap items-center gap-3">

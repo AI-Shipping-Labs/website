@@ -2,12 +2,12 @@
 
 Two flows live here:
 
-1. Listing / CSV export at ``/studio/users/`` (issue #271). Replaces the older
-   ``/studio/subscribers/`` page so staff can find any platform User -- not
-   just newsletter subscribers -- and use "Login as" on them. The default
-   filter chip is "Subscribers" so the page lands on what the previous
-   subscribers list showed; chips also offer All, Non-subscribers, and Staff,
-   plus an email substring search box. CSV export honours the active filter.
+1. Listing / CSV export at ``/studio/users/`` (issue #271). The page now
+   filters primarily by effective membership tier: All, Paid, Main+, and
+   Premium, with a separate Subscribers chip for newsletter membership.
+   Tier overrides are reflected in both filtering and display so a user with
+   a temporary upgrade appears under the upgraded tier instead of their base
+   subscription row.
 
 2. Manual user provisioning (issue #234). Operators occasionally need to
    onboard someone (speakers, partners, comp accounts, support cases, fellow
@@ -28,72 +28,155 @@ import secrets
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 
-from email_app.models import NewsletterSubscriber
+from accounts.models import TierOverride
 from studio.decorators import staff_required, superuser_required
 
 User = get_user_model()
 
 
 # Filter chip values accepted on the list view and CSV export. Anything else
-# falls back to "subscribers" so the URL is forgiving but the rendered chip is
-# always one of these.
+# falls back to "all" so the page lands on the broadest operator view.
 FILTER_ALL = 'all'
+FILTER_PAID = 'paid'
+FILTER_MAIN_PLUS = 'main_plus'
+FILTER_PREMIUM = 'premium'
 FILTER_SUBSCRIBERS = 'subscribers'
-FILTER_NON_SUBSCRIBERS = 'non_subscribers'
-FILTER_STAFF = 'staff'
-VALID_FILTERS = {FILTER_ALL, FILTER_SUBSCRIBERS, FILTER_NON_SUBSCRIBERS, FILTER_STAFF}
-DEFAULT_FILTER = FILTER_SUBSCRIBERS
+VALID_FILTERS = {
+    FILTER_ALL,
+    FILTER_PAID,
+    FILTER_MAIN_PLUS,
+    FILTER_PREMIUM,
+    FILTER_SUBSCRIBERS,
+}
+DEFAULT_FILTER = FILTER_ALL
 
 
 def _normalize_filter(value):
     """Map the raw ``filter`` query param to one of ``VALID_FILTERS``.
 
-    Empty / unknown values land on the default (subscribers) so the page has
-    the same behaviour as the old subscribers list when arrived at via the
-    sidebar with no query string.
+    Empty / unknown values land on the default (all) so the page always opens
+    on the broadest operator view unless a specific chip is requested.
     """
     if value in VALID_FILTERS:
         return value
     return DEFAULT_FILTER
 
 
-def _filtered_users(active_filter, search):
-    """Return the User queryset for a given filter chip + search string.
+def _base_tier_level(user):
+    """Return the user's stored subscription level, treating null as free."""
+    if user.tier_id is None:
+        return 0
+    return user.tier.level
 
-    Subscriber membership is computed by looking up the set of emails that
-    appear in ``NewsletterSubscriber`` with ``is_active=True``. We keep the
-    set in Python rather than via a join because:
 
-    - ``NewsletterSubscriber`` is in a different app and the join field
-      (email) is not a foreign key, so a SQL join would mean raw SQL.
-    - The subscriber list is bounded (newsletter list, not user log) and
-      fits comfortably in memory.
+def _active_override_map(users):
+    """Return the active non-expired override for each listed user, if any."""
+    user_ids = [user.pk for user in users]
+    if not user_ids:
+        return {}
 
-    The same set is reused by the row decoration in ``user_list`` to render
-    the Subscribed Yes/No column without an N+1.
-    """
-    users = User.objects.select_related('tier').all()
-    if search:
-        users = users.filter(email__icontains=search)
-
-    if active_filter == FILTER_STAFF:
-        users = users.filter(is_staff=True)
-    elif active_filter == FILTER_SUBSCRIBERS:
-        active_subscriber_emails = set(
-            NewsletterSubscriber.objects.filter(is_active=True)
-            .values_list('email', flat=True)
+    overrides = (
+        TierOverride.objects
+        .filter(
+            user_id__in=user_ids,
+            is_active=True,
+            expires_at__gt=timezone.now(),
         )
-        users = users.filter(email__in=active_subscriber_emails)
-    elif active_filter == FILTER_NON_SUBSCRIBERS:
-        active_subscriber_emails = set(
-            NewsletterSubscriber.objects.filter(is_active=True)
-            .values_list('email', flat=True)
-        )
-        users = users.exclude(email__in=active_subscriber_emails)
-    # FILTER_ALL: no further filter
+        .select_related('override_tier')
+        .order_by('user_id', '-created_at')
+    )
 
-    return users
+    override_map = {}
+    for override in overrides:
+        override_map.setdefault(override.user_id, override)
+    return override_map
+
+
+def _effective_tier_level(user, override=None):
+    """Return the effective level used for Studio filtering/display."""
+    base_level = _base_tier_level(user)
+    if override is None:
+        return base_level
+    return max(base_level, override.override_tier.level)
+
+
+def _effective_tier_name(user, override=None):
+    """Return a human-readable tier label, including active overrides."""
+    base_name = user.tier.name if user.tier_id else 'Free'
+    if override is None:
+        return base_name
+
+    base_level = _base_tier_level(user)
+    override_level = override.override_tier.level
+    if override_level <= base_level:
+        return base_name
+    return f'{override.override_tier.name} (override)'
+
+
+def _matches_filter(user, active_filter, override=None):
+    """Check whether a user belongs in the active Studio chip."""
+    if active_filter == FILTER_SUBSCRIBERS:
+        return not user.unsubscribed
+
+    effective_level = _effective_tier_level(user, override)
+    if active_filter == FILTER_PAID:
+        return effective_level > 0
+    if active_filter == FILTER_MAIN_PLUS:
+        return effective_level >= 20
+    if active_filter == FILTER_PREMIUM:
+        return effective_level >= 30
+    return True
+
+
+def _build_user_listing(active_filter, search):
+    """Build filtered rows plus aggregate counts for the users page/export."""
+    all_users = list(User.objects.select_related('tier').all())
+    override_map = _active_override_map(all_users)
+    search_lower = search.lower()
+
+    user_rows = []
+    for user in all_users:
+        if search and search_lower not in user.email.lower():
+            continue
+
+        override = override_map.get(user.pk)
+        if not _matches_filter(user, active_filter, override):
+            continue
+
+        user_rows.append({
+            'pk': user.pk,
+            'email': user.email,
+            'date_joined': user.date_joined,
+            'is_subscribed': not user.unsubscribed,
+            'tier_name': _effective_tier_name(user, override),
+            'status': _user_status(user),
+        })
+
+    counts = {
+        'total_users': len(all_users),
+        'paid_count': sum(
+            1
+            for user in all_users
+            if _effective_tier_level(user, override_map.get(user.pk)) > 0
+        ),
+        'main_plus_count': sum(
+            1
+            for user in all_users
+            if _effective_tier_level(user, override_map.get(user.pk)) >= 20
+        ),
+        'premium_count': sum(
+            1
+            for user in all_users
+            if _effective_tier_level(user, override_map.get(user.pk)) >= 30
+        ),
+        'subscriber_count': sum(
+            1 for user in all_users if not user.unsubscribed
+        ),
+    }
+
+    return user_rows, counts
 
 
 def _user_status(user):
@@ -107,58 +190,26 @@ def _user_status(user):
 
 @staff_required
 def user_list(request):
-    """List platform Users with subscriber/staff filter chips.
-
-    The default filter is ``subscribers`` so the page lands showing the same
-    rows the old ``/studio/subscribers/`` page did. Each row also exposes a
-    "Login as" button that posts to the existing impersonation endpoint.
-    """
+    """List platform Users with tier and subscriber filter chips."""
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     search = request.GET.get('q', '')
 
-    users_qs = _filtered_users(active_filter, search)
-
-    # One subscriber-email lookup is reused for every row to render the
-    # "Subscribed" Yes/No column. ``filter(is_active=True)`` matches the
-    # semantics used by the subscriber chip above so the column and chip
-    # never disagree.
-    subscriber_emails = set(
-        NewsletterSubscriber.objects.filter(is_active=True)
-        .values_list('email', flat=True)
-    )
-
-    user_rows = []
-    for user in users_qs:
-        user_rows.append({
-            'pk': user.pk,
-            'email': user.email,
-            'date_joined': user.date_joined,
-            'is_subscribed': user.email in subscriber_emails,
-            'tier_name': user.tier.name if user.tier_id else 'Free',
-            'status': _user_status(user),
-        })
-
-    # Counts shown above the table so the operator sees the impact of each
-    # chip without having to click through them.
-    total_users = User.objects.count()
-    subscriber_count = User.objects.filter(
-        email__in=NewsletterSubscriber.objects.filter(is_active=True).values('email')
-    ).count()
-    non_subscriber_count = total_users - subscriber_count
-    staff_count = User.objects.filter(is_staff=True).count()
+    user_rows, counts = _build_user_listing(active_filter, search)
 
     return render(request, 'studio/users/list.html', {
         'user_rows': user_rows,
         'active_filter': active_filter,
         'search': search,
-        'total_users': total_users,
-        'subscriber_count': subscriber_count,
-        'non_subscriber_count': non_subscriber_count,
-        'staff_count': staff_count,
+        'total_users': counts['total_users'],
+        'paid_count': counts['paid_count'],
+        'main_plus_count': counts['main_plus_count'],
+        'premium_count': counts['premium_count'],
+        'subscriber_count': counts['subscriber_count'],
         'filter_all': FILTER_ALL,
+        'filter_paid': FILTER_PAID,
+        'filter_main_plus': FILTER_MAIN_PLUS,
+        'filter_premium': FILTER_PREMIUM,
         'filter_subscribers': FILTER_SUBSCRIBERS,
-        'filter_non_subscribers': FILTER_NON_SUBSCRIBERS,
-        'filter_staff': FILTER_STAFF,
     })
 
 
@@ -172,25 +223,20 @@ def user_export_csv(request):
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     search = request.GET.get('q', '')
 
-    users_qs = _filtered_users(active_filter, search)
-
-    subscriber_emails = set(
-        NewsletterSubscriber.objects.filter(is_active=True)
-        .values_list('email', flat=True)
-    )
+    user_rows, _counts = _build_user_listing(active_filter, search)
 
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="users.csv"'
 
     writer = csv.writer(response)
     writer.writerow(['Email', 'Joined', 'Subscribed', 'Tier', 'Status'])
-    for user in users_qs:
+    for row in user_rows:
         writer.writerow([
-            user.email,
-            user.date_joined.isoformat() if user.date_joined else '',
-            'Yes' if user.email in subscriber_emails else 'No',
-            user.tier.name if user.tier_id else 'Free',
-            _user_status(user),
+            row['email'],
+            row['date_joined'].isoformat() if row['date_joined'] else '',
+            'Yes' if row['is_subscribed'] else 'No',
+            row['tier_name'],
+            row['status'],
         ])
 
     return response

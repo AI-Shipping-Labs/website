@@ -4,8 +4,10 @@ from studio.views.announcement import announcement_banner_edit
 from studio.views.articles import article_edit, article_list
 from studio.views.campaigns import (
     campaign_create,
+    campaign_delete,
     campaign_detail,
     campaign_duplicate,
+    campaign_edit,
     campaign_list,
     campaign_send,
     campaign_test_send,
@@ -162,6 +164,16 @@ urlpatterns = [
     path('campaigns/', campaign_list, name='studio_campaign_list'),
     path('campaigns/new', campaign_create, name='studio_campaign_create'),
     path('campaigns/<int:campaign_id>/', campaign_detail, name='studio_campaign_detail'),
+    path(
+        'campaigns/<int:campaign_id>/edit',
+        campaign_edit,
+        name='studio_campaign_edit',
+    ),
+    path(
+        'campaigns/<int:campaign_id>/delete',
+        campaign_delete,
+        name='studio_campaign_delete',
+    ),
     path(
         'campaigns/<int:campaign_id>/duplicate',
         campaign_duplicate,

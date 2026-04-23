@@ -746,26 +746,17 @@ class TestScenario9StaffCreatesCampaign:
             'select[name="target_min_level"]', value="0"
         )
 
-        page.click('button:has-text("Create Campaign")')
+        page.click('button:has-text("Save as Draft")')
         page.wait_for_load_state("domcontentloaded")
 
-        # Then: Redirected to /studio/campaigns/
-        assert "/studio/campaigns/" in page.url
-        body = page.content()
-        assert "February Newsletter" in body
-        assert "Draft" in body
-
-        # Step 4: Click on the campaign to view detail
+        # Then: Redirected to the new campaign's detail page
+        # (issue #292: the create flow now lands on the detail page
+        # rather than the list).
         from email_app.models import EmailCampaign
         campaign = EmailCampaign.objects.get(
             subject="February Newsletter"
         )
-        page.click(
-            f'a[href="/studio/campaigns/{campaign.pk}/"]'
-        )
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Detail page shows content and recipient count
+        assert f"/studio/campaigns/{campaign.pk}/" in page.url
         body = page.content()
         assert "February Newsletter" in body
         assert "Draft" in body

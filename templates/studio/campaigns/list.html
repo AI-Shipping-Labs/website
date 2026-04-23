@@ -15,12 +15,23 @@
   </a>
 </div>
 
+{# Flash messages (e.g. after a delete redirect from the detail page) #}
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- Filters -->
 <div class="flex items-center space-x-4 mb-6">
   <form method="get" class="flex items-center space-x-4 flex-1">
     <input type="text" name="q" value="{{ search }}" placeholder="Search campaigns..."
            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <select name="status" onchange="this.form.submit()"
+    <select name="status"
             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="">All statuses</option>
       <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
@@ -31,6 +42,7 @@
   </form>
 </div>
 
+{% if campaigns %}
 <!-- Campaign List -->
 <div class="bg-card border border-border rounded-lg overflow-hidden">
   <table class="w-full">
@@ -61,16 +73,25 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.get_target_min_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.sent_count }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right">
+        <td class="px-6 py-4 text-right space-x-3">
+          {% if campaign.status == 'draft' %}
+          <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+          {% endif %}
           <a href="{% url 'studio_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-accent hover:underline">View</a>
         </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">No campaigns found.</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% else %}
+<!-- Empty state -->
+<div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="campaigns-empty-state">
+  <p class="text-muted-foreground mb-4">No campaigns found.</p>
+  <a href="{% url 'studio_campaign_create' %}"
+     class="inline-block bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    Create your first campaign
+  </a>
+</div>
+{% endif %}
 {% endblock %}

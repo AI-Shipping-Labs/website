@@ -38,14 +38,23 @@
         <option value="20" {% if campaign.target_min_level == 20 %}selected{% endif %}>Main and above</option>
         <option value="30" {% if campaign.target_min_level == 30 %}selected{% endif %}>Premium only</option>
       </select>
+      <p class="text-xs text-muted-foreground mt-1" data-testid="recipient-count-helper">
+        Will reach {{ recipient_count }} eligible recipient{{ recipient_count|pluralize }} at the current audience level. Save to refresh this count after changing the audience.
+      </p>
     </div>
   </div>
 
   <div class="flex items-center space-x-4">
+    {% if campaign %}
     <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-      {% if campaign %}Save Changes{% else %}Create Campaign{% endif %}
+      Save Changes
     </button>
-    <a href="{% url 'studio_campaign_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+    {% else %}
+    <button type="submit" class="bg-secondary text-foreground border border-border px-6 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
+      Save as Draft
+    </button>
+    {% endif %}
+    <a href="{% if campaign %}{% url 'studio_campaign_detail' campaign_id=campaign.pk %}{% else %}{% url 'studio_campaign_list' %}{% endif %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
   </div>
 </form>
 {% endblock %}

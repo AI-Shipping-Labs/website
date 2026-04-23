@@ -220,10 +220,12 @@ class WorkerQueuedToRunningTransitionTest(TestCase):
     def _run_worker(self, **kwargs):
         # Use repo_dir to bypass clone+lock; this exercises the queued→running
         # transition without needing a real git repo.
-        from integrations.services.github import sync_content_source
+
         # Build a tiny fake on-disk repo so the article syncer has nothing
         # to do but a no-op pass.
-        import tempfile, os
+        import tempfile
+
+        from integrations.services.github import sync_content_source
         d = tempfile.mkdtemp(prefix='gh-test-')
         try:
             return sync_content_source(self.source, repo_dir=d, **kwargs)
@@ -633,8 +635,10 @@ class QueuedToRunningToSuccessFlowTest(TestCase):
         self.assertEqual(queued_log.status, 'queued')
 
         # Step 2: worker picks up → running, same row updated in place.
+        import shutil
+        import tempfile
+
         from integrations.services.github import sync_content_source
-        import tempfile, shutil
         tmp = tempfile.mkdtemp(prefix='gh-test-')
         try:
             log = sync_content_source(self.source, repo_dir=tmp)

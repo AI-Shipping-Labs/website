@@ -1325,7 +1325,14 @@ def _validate_frontmatter(metadata, content_type, filepath):
         ValueError: If required fields are missing.
     """
     required = REQUIRED_FIELDS.get(content_type, [])
-    missing = [f for f in required if not metadata.get(f)]
+    # A field is "missing" when the key is absent or its value is None,
+    # an empty string, or an empty list. Crucially, ``0`` counts as
+    # present — numeric fields like ``pages_required_level`` legitimately
+    # accept zero (``LEVEL_OPEN``) and must not trip the "missing" check.
+    missing = [
+        f for f in required
+        if metadata.get(f) is None or metadata.get(f) == '' or metadata.get(f) == []
+    ]
     if missing:
         raise ValueError(
             f"Missing required field(s) in {filepath}: {', '.join(missing)}"
@@ -3341,14 +3348,17 @@ def _extract_workshop_folder_date(folder_name):
 def _sync_workshops(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Sync workshops from a ``workshops-content``-shaped repo.
 
-    Layout expected:
+    Layouts supported:
 
-    ``<repo_dir>/YYYY/YYYY-MM-DD-slug/workshop.yaml``
-    ``<repo_dir>/YYYY/YYYY-MM-DD-slug/*.md``
+    - Flat (preferred): ``<repo_dir>/YYYY-MM-DD-slug/workshop.yaml``
+    - Nested (legacy): ``<repo_dir>/YYYY/YYYY-MM-DD-slug/workshop.yaml``
 
-    Walks every ``YYYY/*/`` directory looking for ``workshop.yaml``. Folders
-    without it are silently skipped (they're code-only). Missing required
-    frontmatter is logged per-file and the rest of the sync continues.
+    At the repo root we accept any dir whose name starts with
+    ``YYYY-MM-DD-`` as a candidate workshop folder. Numeric-year dirs
+    (``YYYY``) are still descended into for backward compat with the
+    old nested layout. Folders without ``workshop.yaml`` are silently
+    skipped (code-only). Missing required frontmatter is logged per-file
+    and the rest of the sync continues.
 
     Stale workshops (folder deleted between syncs) are set to ``status='draft'``.
     The linked Event is NOT unpublished — it's standalone and may have been
@@ -3363,41 +3373,45 @@ def _sync_workshops(source, repo_dir, commit_sha, sync_log, known_images=None):
     seen_slugs = set()
     failed_slugs = set()
 
-    # Walk ``YYYY/`` top-level directories (e.g. ``2026/``). This also
-    # tolerates a flatter layout for tests where workshop folders sit at
-    # ``repo_dir/<folder>/``.
-    year_dirs = []
+    # Collect candidate workshop dirs in two passes so the flat-root and
+    # nested-YYYY layouts can coexist.
+    candidate_dirs = []
+
     for entry in sorted(os.scandir(repo_dir), key=lambda e: e.name):
         if not entry.is_dir() or entry.name.startswith('.'):
             continue
-        # Recognise numeric year dirs (``2026``, ``2025``). Any non-year
-        # top-level dir that directly contains a workshop.yaml is also
-        # treated as a workshop folder — supports a flat test layout.
+        # Numeric-year directory — descend and pick up any child folder
+        # that contains a workshop.yaml (backward compat with nested
+        # ``YYYY/YYYY-MM-DD-slug/`` layout).
         if re.fullmatch(r'\d{4}', entry.name):
-            year_dirs.append(entry.path)
-        elif os.path.isfile(os.path.join(entry.path, 'workshop.yaml')):
-            year_dirs.append(repo_dir)
-            break
+            for child in sorted(os.scandir(entry.path), key=lambda e: e.name):
+                if not child.is_dir() or child.name.startswith('.'):
+                    continue
+                if os.path.isfile(os.path.join(child.path, 'workshop.yaml')):
+                    candidate_dirs.append(child.path)
+            continue
+        # Flat-root layout: any ``YYYY-MM-DD-<slug>`` dir at the root
+        # that contains a workshop.yaml is a workshop folder.
+        if re.match(r'^\d{4}-\d{2}-\d{2}-', entry.name):
+            if os.path.isfile(os.path.join(entry.path, 'workshop.yaml')):
+                candidate_dirs.append(entry.path)
+            continue
+        # Legacy test shim: non-dated top-level dir that directly contains
+        # a workshop.yaml is still treated as a workshop folder.
+        if os.path.isfile(os.path.join(entry.path, 'workshop.yaml')):
+            candidate_dirs.append(entry.path)
 
-    # Dedup while preserving scan order (repo_dir may get appended above).
-    seen_year_dirs = []
-    for d in year_dirs:
-        if d not in seen_year_dirs:
-            seen_year_dirs.append(d)
+    # Dedup while preserving scan order.
+    seen_candidates = []
+    for d in candidate_dirs:
+        if d not in seen_candidates:
+            seen_candidates.append(d)
 
-    for year_dir in seen_year_dirs:
-        for entry in sorted(os.scandir(year_dir), key=lambda e: e.name):
-            if not entry.is_dir() or entry.name.startswith('.'):
-                continue
-            workshop_yaml = os.path.join(entry.path, 'workshop.yaml')
-            if not os.path.isfile(workshop_yaml):
-                # Code-only folder — silently skip per spec.
-                continue
-
-            _sync_single_workshop(
-                entry.path, repo_dir, source, commit_sha, stats,
-                seen_slugs, failed_slugs, known_images=known_images,
-            )
+    for workshop_path in seen_candidates:
+        _sync_single_workshop(
+            workshop_path, repo_dir, source, commit_sha, stats,
+            seen_slugs, failed_slugs, known_images=known_images,
+        )
 
     # Stale cleanup: workshops whose source folder disappeared this sync.
     # Set status to 'draft' (same pattern as _sync_courses). The linked

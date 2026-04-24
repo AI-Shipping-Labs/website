@@ -152,6 +152,53 @@ class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
         self.assertTrue(event.published)
 
 
+class WorkshopSyncFlatRootLayoutTest(_WorkshopSyncFixtureBase):
+    """Flat layout at repo root — ``YYYY-MM-DD-slug/`` with no ``YYYY/`` wrapper.
+
+    This is the real layout used by the ``workshops-content`` repo. The
+    sync walker must recognise any ``^\\d{4}-\\d{2}-\\d{2}-`` dir at the
+    repo root as a candidate workshop folder.
+    """
+
+    def test_flat_root_folder_syncs_to_workshop_and_event(self):
+        folder = '2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=h84rcRezNM4\n'
+                '  embed_url: https://www.youtube.com/embed/h84rcRezNM4\n'
+                '  required_level: 20\n'
+                '  timestamps:\n'
+                '    - { time: "00:00", title: "Intro" }\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview',
+                         body='Body.\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+        self.assertEqual(
+            Workshop.objects.count(), 1,
+            'Flat-root folder must sync into exactly one Workshop.',
+        )
+        workshop = Workshop.objects.get()
+        self.assertEqual(workshop.slug, 'demo')
+        self.assertEqual(workshop.source_path, folder)
+
+        self.assertEqual(
+            Event.objects.filter(slug='demo').count(), 1,
+            'Flat-root folder must produce exactly one linked Event.',
+        )
+        event = Event.objects.get(slug='demo')
+        self.assertEqual(workshop.event_id, event.pk)
+        self.assertEqual(event.kind, 'workshop')
+
+
 class WorkshopSyncIdempotencyTest(_WorkshopSyncFixtureBase):
     """Running sync twice must not create duplicate Workshops / Events."""
 

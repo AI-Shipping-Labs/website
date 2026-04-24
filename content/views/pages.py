@@ -1,11 +1,9 @@
-from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import build_gating_context, can_access, get_required_tier_name
 from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
 from content.tier_config import get_activities
-from events.models import Event
 
 
 def _get_selected_tags(request):
@@ -141,65 +139,6 @@ def blog_detail(request, slug):
     }
     context.update(build_gating_context(request.user, article, 'article'))
     return render(request, 'content/blog_detail.html', context)
-
-
-def recordings_list(request):
-    """Event recordings listing page with tag filtering and pagination.
-
-    Shows completed events that have a recording_url set.
-    """
-    recordings = Event.objects.filter(
-        published=True,
-    ).exclude(
-        recording_url='',
-    ).exclude(
-        recording_url__isnull=True,
-    )
-    selected_tags = _get_selected_tags(request)
-
-    # Collect all tags from recordings for the tag filter UI
-    all_tags = set()
-    for recording in recordings:
-        if recording.tags:
-            all_tags.update(recording.tags)
-    all_tags = sorted(all_tags)
-
-    # Filter by tags if provided (AND logic)
-    recordings = _filter_by_tags(recordings, selected_tags)
-
-    # Pagination: 20 recordings per page
-    paginator = Paginator(recordings, 20)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-
-    context = {
-        'recordings': page_obj,
-        'page_obj': page_obj,
-        'all_tags': all_tags,
-        'selected_tags': selected_tags,
-        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
-        'is_paginated': page_obj.has_other_pages(),
-        'base_path': '/event-recordings',
-    }
-    return render(request, 'content/recordings_list.html', context)
-
-
-def recording_detail(request, slug):
-    """Event recording detail page.
-
-    Looks up an Event by slug that is published and has a recording.
-    """
-    recording = get_object_or_404(
-        Event, slug=slug, published=True,
-    )
-    # Require the event to have a recording
-    if not recording.has_recording and not recording.recording_url:
-        from django.http import Http404
-        raise Http404
-    tag_rules = _get_tag_rules_for_tags(recording.tags)
-    context = {'recording': recording, 'tag_rules': tag_rules}
-    context.update(build_gating_context(request.user, recording, 'recording'))
-    return render(request, 'content/recording_detail.html', context)
 
 
 def projects_list(request):

@@ -121,9 +121,9 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
             date=datetime.date(2026, 2, 10),
         )
 
-        # Step 1: Navigate to /event-recordings
+        # Step 1: Navigate to /events?filter=past
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -145,7 +145,7 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
         page.wait_for_load_state("domcontentloaded")
 
         # The recording detail page loads
-        assert "/event-recordings/building-ai-agents" in page.url
+        assert "/events/building-ai-agents" in page.url
 
         body = page.content()
 
@@ -213,9 +213,9 @@ class TestScenario2VisitorFiltersRecordingsByTag:
             date=datetime.date(2026, 2, 13),
         )
 
-        # Step 1: Navigate to /event-recordings
+        # Step 1: Navigate to /events?filter=past
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -255,15 +255,15 @@ class TestScenario2VisitorFiltersRecordingsByTag:
         )
         assert "Prompt Engineering" not in cards_text
 
-        # Step 3: Navigate back to /event-recordings without filters
+        # Step 3: Navigate back to /events?filter=past without filters
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
 
-        # URL returns to /event-recordings without tag parameters
+        # URL returns to /events?filter=past without tag parameters
         assert "tag=" not in page.url
-        assert "/event-recordings" in page.url
+        assert "/events?filter=past" in page.url
 
         # All three recordings are visible again
         body = page.content()
@@ -297,9 +297,9 @@ class TestScenario3FreeUserSeesUpgradePath:
 
         context = _auth_context(browser, "free-rec@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /event-recordings
+        # Step 1: Navigate to /events?filter=past
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -386,7 +386,7 @@ class TestScenario4BasicMemberWatchesBasicRecording:
         page = context.new_page()
         # Navigate directly to the recording detail page
         page.goto(
-            f"{django_server}/event-recordings/ai-tool-breakdown-cursor",
+            f"{django_server}/events/ai-tool-breakdown-cursor",
             wait_until="domcontentloaded",
         )
 
@@ -450,7 +450,7 @@ class TestScenario5NavigateFromDetailToFilteredListing:
 
         # Step 1: Navigate to recording detail page
         page.goto(
-            f"{django_server}/event-recordings/building-chatbots",
+            f"{django_server}/events/building-chatbots",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -461,15 +461,15 @@ class TestScenario5NavigateFromDetailToFilteredListing:
 
         # Step 2: Click the "python" tag chip on the detail page
         tag_link = page.locator(
-            'a[href="/event-recordings?tag=python"]'
+            'a[href="/events?filter=past&tag=python"]'
         )
         assert tag_link.count() >= 1
         tag_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # User is taken to /event-recordings?tag=python
+        # User is taken to /events?filter=past&tag=python
         assert "tag=python" in page.url
-        assert "/event-recordings" in page.url
+        assert "/events?filter=past" in page.url
 
         body = page.content()
 
@@ -488,7 +488,7 @@ class TestScenario5NavigateFromDetailToFilteredListing:
             'a:has-text("Building Chatbots")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/event-recordings/building-chatbots" in page.url
+        assert "/events/building-chatbots" in page.url
 
         # Step 4: Click the "Back to Event Recordings" link
         back_link = page.locator(
@@ -498,9 +498,9 @@ class TestScenario5NavigateFromDetailToFilteredListing:
         back_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # User returns to /event-recordings with no filters
-        assert "/event-recordings" in page.url
-        # The back link goes to /event-recordings (no tag param)
+        # User returns to /events?filter=past with no filters
+        assert "/events?filter=past" in page.url
+        # The back link goes to /events?filter=past (no tag param)
         # Both recordings are visible
         body = page.content()
         assert "Building Chatbots" in body
@@ -528,9 +528,9 @@ class TestScenario6PaginateLargeCollection:
                 date=datetime.date(2026, 1, 1) + datetime.timedelta(days=i),
             )
 
-        # Step 1: Navigate to /event-recordings
+        # Step 1: Navigate to /events?filter=past
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
 
@@ -601,9 +601,9 @@ class TestScenario7PaginateFilteredListing:
                 date=datetime.date(2026, 3, 1) + datetime.timedelta(days=i),
             )
 
-        # Step 1: Navigate to /event-recordings?tag=agents
+        # Step 1: Navigate to /events?filter=past&tag=agents
         page.goto(
-            f"{django_server}/event-recordings?tag=agents",
+            f"{django_server}/events?filter=past&tag=agents",
             wait_until="domcontentloaded",
         )
 
@@ -643,9 +643,9 @@ class TestScenario8EmptyStateNoRecordings:
         and a helpful message, and no tag filter chips."""
         _clear_recordings()
 
-        # Step 1: Navigate to /event-recordings
+        # Step 1: Navigate to /events?filter=past
         response = page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
 
@@ -691,9 +691,9 @@ class TestScenario9EmptyStateNoMatchingTag:
             tags=["ai"],
         )
 
-        # Step 1: Navigate to /event-recordings?tag=quantum-computing
+        # Step 1: Navigate to /events?filter=past&tag=quantum-computing
         page.goto(
-            f"{django_server}/event-recordings?tag=quantum-computing",
+            f"{django_server}/events?filter=past&tag=quantum-computing",
             wait_until="domcontentloaded",
         )
 
@@ -712,14 +712,14 @@ class TestScenario9EmptyStateNoMatchingTag:
         )
         assert view_all_link.count() >= 1
         href = view_all_link.first.get_attribute("href")
-        assert "/event-recordings" in href
+        assert "/events?filter=past" in href
 
         # Step 2: Click "View all recordings"
         view_all_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
         # User returns to the full unfiltered listing
-        assert "/event-recordings" in page.url
+        assert "/events?filter=past" in page.url
         body = page.content()
         assert "Some Recording" in body
 # ---------------------------------------------------------------
@@ -747,9 +747,9 @@ class TestScenario10InsufficientTierSeesCTAWithCorrectName:
 
         context = _auth_context(browser, "basic-insuf@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /event-recordings
+        # Step 1: Navigate to /events?filter=past
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         body = page.content()

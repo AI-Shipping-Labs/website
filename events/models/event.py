@@ -48,7 +48,7 @@ class Event(models.Model):
     """Event for live or async community activities.
 
     Also stores recording data inline (previously in a separate Recording model).
-    Completed events with a recording_url are shown on /event-recordings.
+    Completed events with a recording_url are shown on /events?filter=past.
     """
 
     slug = models.SlugField(max_length=300, unique=True)
@@ -162,7 +162,7 @@ class Event(models.Model):
     )
     published = models.BooleanField(
         default=True,
-        help_text='Controls visibility on the recordings page.',
+        help_text='Controls visibility on the /events?filter=past page.',
     )
     published_at = models.DateTimeField(
         null=True, blank=True,
@@ -214,8 +214,8 @@ class Event(models.Model):
         return f'/events/{self.slug}'
 
     def get_recording_url(self):
-        """Return the URL for the recording detail page."""
-        return f'/event-recordings/{self.slug}'
+        """Returns the canonical URL for viewing the event (and its recording, if present)."""
+        return f'/events/{self.slug}'
 
     def save(self, *args, **kwargs):
         from content.utils.tags import normalize_tags

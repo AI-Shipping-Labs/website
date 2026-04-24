@@ -47,7 +47,7 @@ class HomepageMobileLayoutTest(TestCase):
     def test_view_all_recordings_link_has_tap_target(self):
         """View all recordings link should have py-2 and px-3 for adequate mobile tap target."""
         content = self._get_homepage_content()
-        match = re.search(r'<a[^>]*href="/event-recordings"[^>]*>', content)
+        match = re.search(r'<a[^>]*href="/events\?filter=past"[^>]*>', content)
         self.assertIsNotNone(match, "View all recordings link not found")
         self.assertIn("py-2", match.group(0))
         self.assertIn("px-3", match.group(0))

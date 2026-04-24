@@ -170,7 +170,7 @@ class TestScenario1CheckUnreadNotificationsViaBell:
             user=user,
             title="New recording: Workshop Recording",
             body="A new recording is available.",
-            url="/event-recordings/some-recording",
+            url="/events/some-recording",
             notification_type="new_content",
         )
         _create_notification(

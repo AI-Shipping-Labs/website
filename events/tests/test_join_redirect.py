@@ -111,12 +111,14 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
         self.assertEqual(EventJoinClick.objects.count(), 0)
 
     def test_join_redirect_past_event_with_recording_shows_link(self):
-        """Completed event with recording shows link to recording."""
+        """Completed event with recording links to the event detail page."""
         self.client.login(email='member@example.com', password='testpass123')
         response = self.client.get('/events/past-event-recording/join')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Watch the recording')
-        self.assertContains(response, '/event-recordings/past-event-recording')
+        # Link now points to the unified event detail page.
+        self.assertContains(response, '/events/past-event-recording')
+        self.assertNotContains(response, '/event-recordings/')
 
     def test_join_redirect_draft_event_404(self):
         """Draft event returns 404 for non-staff user."""

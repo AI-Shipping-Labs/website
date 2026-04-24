@@ -51,7 +51,7 @@ CONTENT_TYPES = [
         'date_field': 'start_datetime',
         'type_label': 'Event',
         'type_color': 'bg-yellow-500/20 text-yellow-400',
-        'url_func': lambda obj: f'/event-recordings/{obj.slug}' if obj.has_recording else f'/events/{obj.slug}',
+        'url_func': lambda obj: f'/events/{obj.slug}',
     },
 ]
 

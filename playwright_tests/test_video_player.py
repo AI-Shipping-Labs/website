@@ -253,7 +253,7 @@ class TestScenario1YouTubeRecordingTimestamps:
 
         # Navigate to recordings listing
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         assert "AI Workshop" in page.content()
@@ -263,7 +263,7 @@ class TestScenario1YouTubeRecordingTimestamps:
         page.wait_for_load_state("domcontentloaded")
 
         # Verify we are on the detail page
-        assert "/event-recordings/ai-workshop" in page.url
+        assert "/events/ai-workshop" in page.url
 
         # Verify YouTube embed is present
         body = page.content()
@@ -326,7 +326,7 @@ class TestScenario2LoomRecordingTimestamps:
         context = _auth_context(browser, "free-loom@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/event-recordings/product-demo",
+            f"{django_server}/events/product-demo",
             wait_until="domcontentloaded",
         )
 
@@ -523,7 +523,7 @@ class TestScenario6RecordingWithoutVideoURL:
         )
 
         response = page.goto(
-            f"{django_server}/event-recordings/community-qa",
+            f"{django_server}/events/community-qa",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -560,7 +560,7 @@ class TestScenario6RecordingWithoutVideoURL:
         assert back_link.count() >= 1
         back_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/event-recordings" in page.url
+        assert "/events?filter=past" in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Hour-long timestamps formatted correctly
 # ---------------------------------------------------------------
@@ -587,7 +587,7 @@ class TestScenario7HourLongTimestamps:
         )
 
         page.goto(
-            f"{django_server}/event-recordings/full-day-workshop",
+            f"{django_server}/events/full-day-workshop",
             wait_until="domcontentloaded",
         )
 
@@ -743,7 +743,7 @@ class TestScenario10AdminTimestampEditor:
 
         # Navigate to the public page
         page.goto(
-            f"{django_server}/event-recordings/workshop-demo",
+            f"{django_server}/events/workshop-demo",
             wait_until="domcontentloaded",
         )
 

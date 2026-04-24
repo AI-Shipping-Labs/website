@@ -540,7 +540,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
             ],
             published=True,
         )
-        response = self.client.get('/event-recordings/yt-recording')
+        response = self.client.get('/events/yt-recording')
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         # VideoPlayer should be rendered
@@ -561,7 +561,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
             recording_embed_url='https://drive.google.com/file/d/abc/preview',
             published=True,
         )
-        response = self.client.get('/event-recordings/no-video')
+        response = self.client.get('/events/no-video')
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('data-source=', content)
@@ -576,7 +576,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
             recording_embed_url='https://drive.google.com/file/d/abc/preview',
             published=True,
         )
-        response = self.client.get('/event-recordings/google-recording')
+        response = self.client.get('/events/google-recording')
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
         self.assertIn('drive.google.com', content)
@@ -595,7 +595,7 @@ class RecordingDetailVideoPlayerTest(TestCase):
             ],
             published=True,
         )
-        response = self.client.get('/event-recordings/long-recording')
+        response = self.client.get('/events/long-recording')
         content = response.content.decode()
         self.assertIn('[00:00]', content)
         self.assertIn('[1:00:00]', content)

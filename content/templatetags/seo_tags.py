@@ -108,12 +108,16 @@ def _build_course_jsonld(course):
 
 
 def _build_recording_jsonld(event):
-    """Build JSON-LD for a recording (Event with recording, VideoObject or LearningResource)."""
+    """Build JSON-LD for a recording (Event with recording, VideoObject or LearningResource).
+
+    The canonical ``url`` is the unified event detail page (``/events/<slug>``)
+    since recordings are no longer served on a separate surface.
+    """
     site_url = _get_site_url()
     video_url = getattr(event, 'recording_url', '') or getattr(
         event, 'recording_embed_url', '',
     )
-    recording_page_url = event.get_recording_url() if hasattr(event, 'get_recording_url') else event.get_absolute_url()
+    page_url = event.get_absolute_url()
 
     if video_url:
         data = {
@@ -125,7 +129,7 @@ def _build_recording_jsonld(event):
             ),
             'embedUrl': video_url,
             'uploadDate': _format_date(event),
-            'url': f'{site_url}{recording_page_url}',
+            'url': f'{site_url}{page_url}',
         }
     else:
         data = {
@@ -135,7 +139,7 @@ def _build_recording_jsonld(event):
             'description': _truncate_description(
                 getattr(event, 'description', ''),
             ),
-            'url': f'{site_url}{recording_page_url}',
+            'url': f'{site_url}{page_url}',
         }
     return data
 

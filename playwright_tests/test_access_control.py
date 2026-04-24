@@ -385,7 +385,7 @@ class TestScenario1AnonymousReadsOpenContent:
         assert "full open article content that anyone can read" in body
         assert "Upgrade to" not in body
     def test_anonymous_reads_open_recording(self, django_server, page):
-        """Anonymous visitor navigates to /event-recordings and views an
+        """Anonymous visitor navigates to /events?filter=past and views an
         open recording without any signup prompt."""
         _clear_all_content()
         _create_recording(
@@ -397,7 +397,7 @@ class TestScenario1AnonymousReadsOpenContent:
         )
 
         page.goto(
-            f"{django_server}/event-recordings",
+            f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         assert "Open Recording for All" in page.content()
@@ -775,7 +775,7 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
         context = _auth_context(browser, "premium@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/event-recordings/main-recording-prem",
+            f"{django_server}/events/main-recording-prem",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -890,7 +890,7 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
         context = _auth_context(browser, "basic@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/event-recordings/main-gated-recording",
+            f"{django_server}/events/main-gated-recording",
             wait_until="domcontentloaded",
         )
 

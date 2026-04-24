@@ -110,7 +110,7 @@ class TestScenario11BrowseSiteAsAdmin:
     Then: Seeded courses appear
     4. Navigate to /events
     Then: Seeded events appear with a mix of statuses
-    5. Navigate to /event-recordings
+    5. Navigate to /events?filter=past
     Then: Seeded recordings appear
     """
 

@@ -45,17 +45,39 @@ class BlogTagTouchTargetTest(TestCase):
 
 
 class RecordingsTagTouchTargetTest(TestCase):
-    """Recordings list tag links have min-h-[44px] for touch targets."""
+    """Past-recording tag chips on /events?filter=past have min-h-[44px]
+    for touch targets (folded into events/events_list.html as of #294).
+    """
 
-    def test_recordings_tag_links_have_min_height(self):
-        """Tag links in recordings list template include min-h-[44px]."""
-        from django.template.loader import get_template
+    def test_past_recording_tag_links_have_min_height(self):
+        """Tag links on the past-recordings section include min-h-[44px]."""
+        from datetime import timedelta
 
-        template = get_template("content/recordings_list.html")
-        source = template.template.source
-        tag_link_match = re.search(r'tag_add_url.*?class="([^"]*)"', source)
+        from django.utils import timezone
+
+        from events.models import Event
+
+        Event.objects.create(
+            title='Tagged Recording',
+            slug='tagged-recording',
+            start_datetime=timezone.now() - timedelta(days=7),
+            status='completed',
+            recording_url='https://youtube.com/watch?v=test',
+            tags=['python'],
+            published=True,
+        )
+        response = self.client.get('/events?filter=past')
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # The tag chip href is used to identify the link, then we check that
+        # its class contains the min-h-[44px] tap target.
+        tag_link_match = re.search(
+            r'<a[^>]*href="/events\?filter=past&amp;tag=python"[^>]*class="([^"]*)"',
+            content,
+        )
         self.assertIsNotNone(
-            tag_link_match, "Tag link not found in recordings_list.html"
+            tag_link_match,
+            "Past-recording tag link not found in events_list.html",
         )
         self.assertIn("min-h-[44px]", tag_link_match.group(1))
 

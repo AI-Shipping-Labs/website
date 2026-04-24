@@ -98,8 +98,10 @@ class EventListRegisteredBadgeInlineTest(TierSetupMixin, TestCase):
         self.assertLess(registered_pos - flex_wrap_start, 600)
 
 
-class EventListWatchRecordingTapTargetTest(TestCase):
-    """The 'Watch recording' link on past events should have adequate tap target."""
+class EventListPastRecordingTapTargetTest(TestCase):
+    """The past-recordings cards on /events?filter=past should have a
+    tap-friendly tag chip (min-h-[44px]).
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -109,16 +111,21 @@ class EventListWatchRecordingTapTargetTest(TestCase):
             start_datetime=timezone.now() - timedelta(days=7),
             status="completed",
             recording_url="https://youtube.com/watch?v=test",
+            tags=["python"],
+            published=True,
         )
 
-    def test_watch_recording_has_min_height(self):
-        response = self.client.get("/events")
+    def test_past_tag_chip_has_min_height(self):
+        response = self.client.get("/events?filter=past")
         content = response.content.decode()
-        # The "Watch recording" link should have min-h-[44px] for tap target
-        watch_pos = content.index("Watch recording")
-        link_start = content.rfind("<a", 0, watch_pos)
-        link_tag = content[link_start:watch_pos]
-        self.assertIn("min-h-[44px]", link_tag)
+        # Tag chip links must be tap-target-sized on mobile.
+        import re
+        match = re.search(
+            r'<a[^>]*href="/events\?filter=past&amp;tag=python"[^>]*>',
+            content,
+        )
+        self.assertIsNotNone(match, "Past tag chip not found")
+        self.assertIn("min-h-[44px]", match.group(0))
 
 
 class EventDetailRegisterButtonFullWidthMobileTest(TestCase):

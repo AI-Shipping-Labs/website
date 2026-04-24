@@ -9,3 +9,4 @@ from .peer_review import *
 from .project import *
 from .tag_rule import *
 from .tutorial import *
+from .workshop import *

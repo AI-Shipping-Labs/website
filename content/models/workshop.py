@@ -1,0 +1,244 @@
+"""Workshop content type (issue #295).
+
+A Workshop is a multi-page learning artifact (pages + linked YouTube recording +
+optional code folder) that doesn't fit into ``Article``, ``Course``, or
+``Event`` on its own. It is synced from the public ``AI-Shipping-Labs/workshops-content``
+repo and exposes a split gating rule: the page content is available at one
+tier level, the recording is available at an equal-or-higher tier level.
+
+Public ``/workshops/`` views are intentionally out of scope for this issue —
+they will be added in a follow-up. This module ships models + the helper
+methods the sync pipeline and admin need.
+"""
+
+import markdown as md_lib
+from django.core.exceptions import ValidationError
+from django.db import models
+
+from content.access import VISIBILITY_CHOICES, get_user_level
+
+
+def render_markdown(text):
+    """Convert markdown to HTML with syntax highlighting.
+
+    Duplicates the helper from ``course.py`` to avoid cross-module coupling
+    between content types. The extensions list must stay in sync with the
+    one used by other content types so workshop pages render consistently
+    with course units and articles.
+    """
+    return md_lib.markdown(
+        text,
+        extensions=[
+            'fenced_code',
+            'codehilite',
+            'tables',
+            'attr_list',
+            'md_in_html',
+        ],
+        extension_configs={
+            'codehilite': {
+                'css_class': 'codehilite',
+                'guess_lang': False,
+            },
+        },
+    )
+
+
+STATUS_CHOICES = [
+    ('draft', 'Draft'),
+    ('published', 'Published'),
+]
+
+
+class Workshop(models.Model):
+    """A multi-page workshop with an optional linked recording.
+
+    A Workshop is a synced content type keyed by ``content_id`` (stable UUID
+    from ``workshop.yaml``) and ``slug``. Its pages live in
+    :class:`WorkshopPage` rows; the recording, timestamps, and materials live
+    on a linked :class:`events.Event` row (so workshops reuse the recording
+    rendering pipeline without duplicating fields).
+
+    Gating is split:
+
+    - ``pages_required_level`` gates the page content.
+    - ``recording_required_level`` gates the recording, and must be
+      ``>= pages_required_level`` — validated in :meth:`clean` AND in the
+      sync parser. Fails closed to avoid leaking the recording under the
+      page gate.
+    """
+
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text='Stable UUID from frontmatter for linking user-generated data.',
+    )
+    slug = models.SlugField(max_length=300, unique=True)
+    title = models.CharField(max_length=300)
+    description = models.TextField(
+        blank=True, default='',
+        help_text='Markdown description shown on the workshop landing page.',
+    )
+    description_html = models.TextField(
+        blank=True, default='',
+        help_text='Auto-rendered HTML from description markdown.',
+    )
+    date = models.DateField(
+        help_text='Workshop date (used for ordering and the auto-created Event).',
+    )
+    instructor_name = models.CharField(max_length=200, blank=True, default='')
+    tags = models.JSONField(default=list, blank=True)
+    cover_image_url = models.URLField(max_length=500, blank=True, default='')
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='draft',
+    )
+    pages_required_level = models.IntegerField(
+        default=10,
+        choices=VISIBILITY_CHOICES,
+        help_text='Minimum tier level required to view workshop pages.',
+    )
+    recording_required_level = models.IntegerField(
+        default=20,
+        choices=VISIBILITY_CHOICES,
+        help_text=(
+            'Minimum tier level required to watch the recording. Must be '
+            '>= pages_required_level.'
+        ),
+    )
+    code_repo_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text='GitHub folder URL with the workshop code.',
+    )
+    event = models.OneToOneField(
+        'events.Event',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='workshop',
+        help_text='Linked Event row that carries the recording metadata.',
+    )
+    source_repo = models.CharField(
+        max_length=300, blank=True, null=True, default=None,
+        help_text='GitHub repo this content was synced from.',
+    )
+    source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+        help_text='File path within the source repo.',
+    )
+    source_commit = models.CharField(
+        max_length=40, blank=True, null=True, default=None,
+        help_text='Git commit SHA of the last sync.',
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date']
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        """Forward-compat URL for the (not-yet-built) public workshop page."""
+        return f'/workshops/{self.slug}'
+
+    def clean(self):
+        """Validate that the recording gate is at least as strict as the page gate."""
+        super().clean()
+        if self.recording_required_level < self.pages_required_level:
+            raise ValidationError({
+                'recording_required_level': (
+                    'Recording gate must be at least as strict as the page '
+                    'gate (recording_required_level >= pages_required_level).'
+                ),
+            })
+
+    def save(self, *args, **kwargs):
+        """Normalize tags, validate gate ordering, render description markdown."""
+        from content.utils.tags import normalize_tags
+
+        self.tags = normalize_tags(self.tags)
+
+        # Validate gate ordering on every save so both admin and sync go
+        # through the same invariant. ValidationError is the Django
+        # conventional way to signal bad data here; callers that want to
+        # catch it can wrap the save in a try/except.
+        if self.recording_required_level < self.pages_required_level:
+            raise ValidationError({
+                'recording_required_level': (
+                    'Recording gate must be at least as strict as the page '
+                    'gate (recording_required_level >= pages_required_level).'
+                ),
+            })
+
+        if self.description:
+            self.description_html = render_markdown(self.description)
+        else:
+            self.description_html = ''
+
+        super().save(*args, **kwargs)
+
+    def user_can_access_pages(self, user):
+        """Return True when ``user``'s effective level >= pages gate."""
+        return get_user_level(user) >= self.pages_required_level
+
+    def user_can_access_recording(self, user):
+        """Return True when ``user``'s effective level >= recording gate."""
+        return get_user_level(user) >= self.recording_required_level
+
+
+class WorkshopPage(models.Model):
+    """A single markdown page within a workshop, ordered by ``sort_order``."""
+
+    content_id = models.UUIDField(
+        unique=True, null=True, blank=True,
+        help_text=(
+            'Stable UUID. Derived from (repo_name, source_path) when the '
+            'page markdown has no explicit content_id.'
+        ),
+    )
+    workshop = models.ForeignKey(
+        Workshop, on_delete=models.CASCADE, related_name='pages',
+    )
+    slug = models.SlugField(max_length=300)
+    title = models.CharField(max_length=300)
+    sort_order = models.IntegerField(default=0)
+    body = models.TextField(
+        blank=True, default='',
+        help_text='Markdown body of the page.',
+    )
+    body_html = models.TextField(
+        blank=True, default='',
+        help_text='Auto-rendered HTML from body markdown.',
+    )
+    source_path = models.CharField(
+        max_length=500, blank=True, null=True, default=None,
+    )
+    source_commit = models.CharField(
+        max_length=40, blank=True, null=True, default=None,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order']
+        unique_together = [('workshop', 'slug')]
+
+    def __str__(self):
+        return f'{self.workshop.title} — {self.title}'
+
+    def save(self, *args, **kwargs):
+        """Render body markdown to HTML on save."""
+        if self.body:
+            self.body_html = render_markdown(self.body)
+        else:
+            self.body_html = ''
+
+        # Honour update_fields (some sync paths use it).
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if 'body' in update_fields:
+                update_fields.add('body_html')
+            kwargs['update_fields'] = list(update_fields)
+        super().save(*args, **kwargs)

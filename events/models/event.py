@@ -43,6 +43,13 @@ EVENT_PLATFORM_CHOICES = [
     ('custom', 'Custom URL'),
 ]
 
+EVENT_KIND_CHOICES = [
+    ('standard', 'Standard'),
+    ('workshop', 'Workshop'),
+    ('meetup', 'Meetup'),
+    ('q_and_a', 'Q&A'),
+]
+
 
 class Event(models.Model):
     """Event for live or async community activities.
@@ -65,6 +72,15 @@ class Event(models.Model):
         max_length=10,
         choices=EVENT_TYPE_CHOICES,
         default='live',
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=EVENT_KIND_CHOICES,
+        default='standard',
+        help_text=(
+            'Event sub-type used by the unified events feed: standard '
+            'recording, workshop (linked to a Workshop row), meetup, or Q&A.'
+        ),
     )
     platform = models.CharField(
         max_length=20,

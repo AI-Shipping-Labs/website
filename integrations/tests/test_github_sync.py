@@ -1837,7 +1837,8 @@ class SeedContentSourcesCommandTest(TestCase):
         call_command('seed_content_sources', stdout=out)
         # 4 entries from the AI-Shipping-Labs/content monorepo
         # + 1 entry for AI-Shipping-Labs/python-course (single-course repo)
-        self.assertEqual(ContentSource.objects.count(), 5)
+        # + 1 entry for AI-Shipping-Labs/workshops-content (public, issue #295)
+        self.assertEqual(ContentSource.objects.count(), 6)
 
     def test_seed_is_idempotent(self):
         from io import StringIO
@@ -1845,7 +1846,7 @@ class SeedContentSourcesCommandTest(TestCase):
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 5)
+        self.assertEqual(ContentSource.objects.count(), 6)
 
     def test_seed_creates_expected_repos(self):
         from io import StringIO
@@ -1856,17 +1857,23 @@ class SeedContentSourcesCommandTest(TestCase):
         expected = {
             'AI-Shipping-Labs/content',
             'AI-Shipping-Labs/python-course',
+            'AI-Shipping-Labs/workshops-content',
         }
         self.assertEqual(repos, expected)
 
-    def test_all_sources_are_private(self):
+    def test_content_sources_privacy(self):
+        """Content monorepo + python-course are private; workshops-content is public."""
         from io import StringIO
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertTrue(
-            all(s.is_private for s in ContentSource.objects.all())
-        )
+        privacy_by_repo = {
+            s.repo_name: s.is_private
+            for s in ContentSource.objects.all()
+        }
+        self.assertTrue(privacy_by_repo['AI-Shipping-Labs/content'])
+        self.assertTrue(privacy_by_repo['AI-Shipping-Labs/python-course'])
+        self.assertFalse(privacy_by_repo['AI-Shipping-Labs/workshops-content'])
 
     def test_content_types_correct(self):
         from io import StringIO
@@ -1874,7 +1881,10 @@ class SeedContentSourcesCommandTest(TestCase):
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         types = set(ContentSource.objects.values_list('content_type', flat=True))
-        self.assertEqual(types, {'article', 'course', 'project', 'interview_question'})
+        self.assertEqual(
+            types,
+            {'article', 'course', 'project', 'interview_question', 'workshop'},
+        )
 
     def test_content_paths_correct(self):
         from io import StringIO
@@ -1897,6 +1907,9 @@ class SeedContentSourcesCommandTest(TestCase):
         )
         self.assertEqual(
             paths[('AI-Shipping-Labs/python-course', 'course')], '',
+        )
+        self.assertEqual(
+            paths[('AI-Shipping-Labs/workshops-content', 'workshop')], '',
         )
 
 

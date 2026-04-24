@@ -109,14 +109,14 @@ class RecordingViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
 
     def test_list_has_view_on_site_link(self):
         response = self.client.get('/studio/recordings/')
-        self.assertContains(response, 'href="/event-recordings/my-recording"')
+        self.assertContains(response, 'href="/events/my-recording"')
         self.assertContains(response, 'target="_blank"')
 
     def test_edit_has_view_on_site_link(self):
         response = self.client.get(
             f'/studio/recordings/{self.recording.pk}/edit',
         )
-        self.assertContains(response, 'href="/event-recordings/my-recording"')
+        self.assertContains(response, 'href="/events/my-recording"')
         self.assertContains(response, 'target="_blank"')
 
 

@@ -12,19 +12,61 @@
       <div class="mb-12">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Events</p>
         <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-          Community Events & Workshops
+          Community Events &amp; Workshops
         </h1>
         <p class="mt-4 text-lg text-muted-foreground">
           Join live workshops, coding sessions, and community activities. Register for upcoming events or watch recordings of past ones.
         </p>
       </div>
 
-      <!-- View Toggle -->
+      <!-- View Toggle (List / Calendar) -->
       <div class="flex gap-2 mb-6">
         <a href="{% url 'events_list' %}" class="px-3 py-1 rounded bg-accent text-white text-sm">List</a>
         <a href="{% url 'events_calendar' %}" class="px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors">Calendar</a>
       </div>
 
+      <!-- Filter segmented control -->
+      <div class="flex flex-wrap gap-2 mb-8" role="tablist" aria-label="Event filter">
+        <a href="/events"
+           role="tab"
+           aria-selected="{% if filter_mode == 'all' %}true{% else %}false{% endif %}"
+           data-testid="events-filter-all"
+           class="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors min-h-[44px]
+           {% if filter_mode == 'all' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+          All
+        </a>
+        <a href="/events?filter=upcoming"
+           role="tab"
+           aria-selected="{% if filter_mode == 'upcoming' %}true{% else %}false{% endif %}"
+           data-testid="events-filter-upcoming"
+           class="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors min-h-[44px]
+           {% if filter_mode == 'upcoming' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+          Upcoming
+        </a>
+        <a href="/events?filter=past"
+           role="tab"
+           aria-selected="{% if filter_mode == 'past' %}true{% else %}false{% endif %}"
+           data-testid="events-filter-past"
+           class="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors min-h-[44px]
+           {% if filter_mode == 'past' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80{% endif %}">
+          Past recordings
+        </a>
+      </div>
+
+      {% if filter_mode == 'past' and selected_tags %}
+      <!-- Active tag filter indicator -->
+      <div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="active-tag-filters">
+        <span>Filtered by:</span>
+        {% for tag in selected_tags %}
+        <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
+          {{ tag }}
+        </span>
+        {% endfor %}
+        <a href="/events?filter=past" class="text-xs text-accent hover:underline">Clear</a>
+      </div>
+      {% endif %}
+
+      {% if show_upcoming %}
       <!-- Upcoming Events -->
       <div class="mb-16">
         <h2 class="mb-6 flex items-center gap-2 text-2xl font-semibold tracking-tight">
@@ -112,15 +154,84 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
 
+      {% if show_past %}
       <!-- Past Events -->
-      <div>
+      <div data-testid="events-past-section">
         <h2 class="mb-6 flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          {% if filter_mode == 'past' %}
+          <i data-lucide="video" class="h-6 w-6 text-accent"></i>
+          Past recordings
+          {% else %}
           <i data-lucide="archive" class="h-6 w-6 text-muted-foreground"></i>
           Past
+          {% endif %}
         </h2>
 
         {% if past_events %}
+        {% if filter_mode == 'past' %}
+        <!-- Past recordings: rich card matching the old /event-recordings listing -->
+        <div class="space-y-8">
+          {% for event in past_events %}
+          <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+            <a href="/events/{{ event.slug }}">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="video" class="h-5 w-5 text-accent"></i>
+                    <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
+                      {% if event.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ event.title }}
+                    </h2>
+                  </div>
+                  <p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description }}</p>
+                  <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                    <span class="flex items-center gap-1.5">
+                      <i data-lucide="calendar" class="h-4 w-4"></i>
+                      {{ event.formatted_date }}
+                    </span>
+                  </div>
+                  {% if event.tags %}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {% for tag in event.tags %}
+                    <a href="/events?filter=past&amp;tag={{ tag }}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]" onclick="event.stopPropagation();">{{ tag }}</a>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
+                </div>
+                <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
+              </div>
+            </a>
+          </article>
+          {% endfor %}
+        </div>
+
+        {% if is_paginated %}
+        <nav class="mt-12 flex flex-wrap items-center justify-center gap-2" aria-label="Pagination">
+          {% if page_obj.has_previous %}
+          <a href="?filter=past{% for tag in selected_tags %}&amp;tag={{ tag }}{% endfor %}&amp;page={{ page_obj.previous_page_number }}"
+             class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground min-h-[44px]">
+            <i data-lucide="chevron-left" class="h-4 w-4"></i>
+            Previous
+          </a>
+          {% endif %}
+
+          <span class="px-4 py-2 text-sm text-muted-foreground">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+          </span>
+
+          {% if page_obj.has_next %}
+          <a href="?filter=past{% for tag in selected_tags %}&amp;tag={{ tag }}{% endfor %}&amp;page={{ page_obj.next_page_number }}"
+             class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:border-accent/50 hover:text-foreground min-h-[44px]">
+            Next
+            <i data-lucide="chevron-right" class="h-4 w-4"></i>
+          </a>
+          {% endif %}
+        </nav>
+        {% endif %}
+
+        {% else %}
+        <!-- Compact past list for the default "all" view -->
         <div class="space-y-4">
           {% for event in past_events %}
           <article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
@@ -144,10 +255,10 @@
                 </div>
                 <div class="flex items-center gap-3">
                   {% if event.has_recording %}
-                  <a href="/event-recordings/{{ event.slug }}" class="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/30 transition-colors min-h-[44px] min-w-[44px] justify-center" onclick="event.stopPropagation();">
+                  <span class="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1.5 text-xs font-medium text-accent">
                     <i data-lucide="play" class="h-3 w-3"></i>
-                    Watch recording
-                  </a>
+                    Recording available
+                  </span>
                   {% endif %}
                   <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
                 </div>
@@ -156,12 +267,26 @@
           </article>
           {% endfor %}
         </div>
+        {% endif %}
+
         {% else %}
         <div class="rounded-lg border border-border bg-card p-8 text-center">
+          {% if filter_mode == 'past' and selected_tags %}
+          <i data-lucide="video" class="mx-auto h-12 w-12 text-muted-foreground"></i>
+          <p class="mt-4 text-muted-foreground">
+            No events match this filter.
+            <a href="/events?filter=past" class="text-accent hover:underline">View all recordings</a>
+          </p>
+          {% elif filter_mode == 'past' %}
+          <i data-lucide="video" class="mx-auto h-12 w-12 text-muted-foreground"></i>
+          <p class="mt-4 text-muted-foreground">No recordings yet. Check back soon!</p>
+          {% else %}
           <p class="text-muted-foreground">No past events yet.</p>
+          {% endif %}
         </div>
         {% endif %}
       </div>
+      {% endif %}
     </div>
   </section>
 </main>

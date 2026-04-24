@@ -394,7 +394,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_does_not_see_video(self):
-        response = self.client.get('/event-recordings/gated-recording')
+        response = self.client.get('/events/gated-recording')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'youtube.com/embed')
         self.assertContains(response, 'Upgrade to Main to watch this recording')

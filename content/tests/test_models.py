@@ -67,7 +67,7 @@ class EventRecordingModelTest(TestCase):
         self.assertEqual(self.recording.get_absolute_url(), '/events/test-recording')
 
     def test_get_recording_url(self):
-        self.assertEqual(self.recording.get_recording_url(), '/event-recordings/test-recording')
+        self.assertEqual(self.recording.get_recording_url(), '/events/test-recording')
 
     def test_formatted_date(self):
         self.assertEqual(self.recording.formatted_date(), 'July 20, 2025')

@@ -552,17 +552,27 @@ class RecordingDetailSEOTest(TestCase):
         )
 
     def test_recording_detail_has_canonical_url(self):
-        response = self.client.get('/event-recordings/ai-agents-workshop')
+        response = self.client.get('/events/ai-agents-workshop')
         content = response.content.decode()
         self.assertIn(
-            '<link rel="canonical" href="https://aishippinglabs.com/event-recordings/ai-agents-workshop">',
+            '<link rel="canonical" href="https://aishippinglabs.com/events/ai-agents-workshop">',
             content,
         )
 
     def test_recording_detail_has_video_jsonld(self):
-        response = self.client.get('/event-recordings/ai-agents-workshop')
+        response = self.client.get('/events/ai-agents-workshop')
         content = response.content.decode()
         self.assertIn('"@type": "VideoObject"', content)
+
+    def test_recording_detail_video_jsonld_url_uses_events(self):
+        response = self.client.get('/events/ai-agents-workshop')
+        content = response.content.decode()
+        # VideoObject's url must point to /events/<slug>, never /event-recordings/<slug>.
+        self.assertIn(
+            '"url": "https://aishippinglabs.com/events/ai-agents-workshop"',
+            content,
+        )
+        self.assertNotIn('/event-recordings/', content)
 
 
 class EventDetailSEOTest(TestCase):
@@ -787,14 +797,18 @@ class SitemapTest(TestCase):
         self.assertNotIn('/events/draft-event', content)
 
     def test_sitemap_includes_open_recording(self):
+        # Completed-with-recording events now live on /events/<slug>
+        # (EventSitemap covers all non-draft events including recordings).
         response = self.client.get('/sitemap.xml')
         content = response.content.decode()
-        self.assertIn('/event-recordings/open-recording', content)
+        self.assertIn('/events/open-recording', content)
 
-    def test_sitemap_excludes_gated_recording(self):
+    def test_sitemap_has_no_event_recordings_urls(self):
+        # The legacy /event-recordings/* URLs must no longer appear in the
+        # sitemap after consolidating under /events.
         response = self.client.get('/sitemap.xml')
         content = response.content.decode()
-        self.assertNotIn('/event-recordings/gated-recording', content)
+        self.assertNotIn('/event-recordings/', content)
 
     def test_sitemap_includes_project(self):
         response = self.client.get('/sitemap.xml')

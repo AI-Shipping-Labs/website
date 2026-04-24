@@ -233,7 +233,7 @@
             Workshop recordings with embedded content, timestamps, descriptions, and materials. Learn from hands-on sessions on building AI agents and practical systems.
           </p>
         </div>
-        <a href="/event-recordings" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
+        <a href="/events?filter=past" class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10 hover:text-accent/80">
           View all recordings
           <i data-lucide="arrow-right" class="h-4 w-4"></i>
         </a>
@@ -263,7 +263,7 @@
             </div>
             {% endif %}
           </div>
-          <a href="/event-recordings/{{ recording.slug }}" class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
+          <a href="/events/{{ recording.slug }}" class="mt-6 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors hover:text-accent/80">
             View resource
             <i data-lucide="arrow-right" class="h-4 w-4 transition-transform group-hover:translate-x-1"></i>
           </a>

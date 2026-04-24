@@ -394,7 +394,7 @@ class MultiTagFilteringBlogTest(TestCase):
 
 
 class MultiTagFilteringRecordingsTest(TestCase):
-    """Test multi-tag filtering on /event-recordings."""
+    """Test multi-tag filtering on /events?filter=past."""
 
     def setUp(self):
         self.client = Client()
@@ -408,7 +408,7 @@ class MultiTagFilteringRecordingsTest(TestCase):
         )
 
     def test_multi_tag_filter(self):
-        response = self.client.get('/event-recordings?tag=python&tag=workshop')
+        response = self.client.get('/events?filter=past&tag=python&tag=workshop')
         self.assertContains(response, 'Both R')
         self.assertNotContains(response, 'Python R')
 
@@ -721,7 +721,7 @@ class TagRuleInjectionRecordingTest(TestCase):
         )
 
     def test_tag_rule_rendered_on_recording(self):
-        response = self.client.get('/event-recordings/ai-recording')
+        response = self.client.get('/events/ai-recording')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'tag-rule-component')
         self.assertContains(response, 'AI Roadmap')

@@ -437,7 +437,7 @@ def _get_recent_content(user_level):
             'type': 'recording',
             'title': recording.title,
             'description': recording.description,
-            'url': recording.get_recording_url(),
+            'url': recording.get_absolute_url(),
             'date': recording.start_datetime.date(),
             'icon': 'video',
         })
@@ -480,7 +480,7 @@ def _get_quick_actions(user_level):
         {
             'title': 'View Recordings',
             'description': 'Watch event recordings and workshops',
-            'url': '/event-recordings',
+            'url': '/events?filter=past',
             'icon': 'video',
         },
     ]

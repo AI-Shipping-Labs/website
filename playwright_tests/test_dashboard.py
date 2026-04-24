@@ -954,7 +954,7 @@ class TestScenario9MemberReadsNotificationFromDashboard:
             user=user,
             title="New recording: AI Workshop",
             body="A workshop recording is now available.",
-            url="/event-recordings/ai-workshop",
+            url="/events/ai-workshop",
         )
         _create_notification(
             user=user,

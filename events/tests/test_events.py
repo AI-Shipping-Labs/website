@@ -369,9 +369,9 @@ class EventsListSpotsRemainingTest(TestCase):
 
 
 class EventsListRecordingLinkTest(TestCase):
-    """Test past events show recording link if has_recording is True."""
+    """Test past events show the recording indicator on the default /events view."""
 
-    def test_completed_event_with_recording_shows_link(self):
+    def test_completed_event_with_recording_shows_indicator(self):
         Event.objects.create(
             title='Recorded Event',
             slug='recorded-event',
@@ -380,10 +380,14 @@ class EventsListRecordingLinkTest(TestCase):
             recording_url='https://youtube.com/watch?v=test',
         )
         response = self.client.get('/events')
-        self.assertContains(response, 'Watch recording')
-        self.assertContains(response, '/event-recordings/recorded-event')
+        # The card itself already links to /events/<slug>. The past section
+        # shows a small "Recording available" indicator for such events.
+        self.assertContains(response, 'Recording available')
+        self.assertContains(response, '/events/recorded-event')
+        # Must not link out to the old standalone recording surface.
+        self.assertNotContains(response, '/event-recordings/')
 
-    def test_completed_event_without_recording_no_link(self):
+    def test_completed_event_without_recording_no_indicator(self):
         Event.objects.create(
             title='No Recording Event',
             slug='no-recording-event',
@@ -391,7 +395,7 @@ class EventsListRecordingLinkTest(TestCase):
             status='completed',
         )
         response = self.client.get('/events')
-        self.assertNotContains(response, 'Watch recording')
+        self.assertNotContains(response, 'Recording available')
 
 
 # --- Event Detail Page Tests ---
@@ -490,9 +494,9 @@ class EventDetailPageTest(TestCase):
 
 
 class EventDetailRecordingLinkTest(TestCase):
-    """Test completed event shows recording link on detail page."""
+    """Test completed event shows the recording inline on detail page."""
 
-    def test_completed_with_recording_shows_link(self):
+    def test_completed_with_recording_shows_inline_block(self):
         Event.objects.create(
             title='Completed Event',
             slug='completed-event',
@@ -501,10 +505,12 @@ class EventDetailRecordingLinkTest(TestCase):
             recording_url='https://youtube.com/watch?v=test',
         )
         response = self.client.get('/events/completed-event')
-        self.assertContains(response, 'Watch the recording')
-        self.assertContains(response, '/event-recordings/completed-event')
+        # Recording block is rendered inline, identified by data-testid.
+        self.assertContains(response, 'data-testid="event-recording-block"')
+        # No link out to a separate recording surface.
+        self.assertNotContains(response, '/event-recordings/')
 
-    def test_completed_without_recording_no_link(self):
+    def test_completed_without_recording_no_block(self):
         Event.objects.create(
             title='No Rec Event',
             slug='no-rec-event',
@@ -512,7 +518,7 @@ class EventDetailRecordingLinkTest(TestCase):
             status='completed',
         )
         response = self.client.get('/events/no-rec-event')
-        self.assertNotContains(response, 'Watch the recording')
+        self.assertNotContains(response, 'data-testid="event-recording-block"')
 
 
 # --- Access Control Tests ---

@@ -4,6 +4,7 @@ from datetime import date
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -12,8 +13,45 @@ from content.access import (
     can_access,
     get_required_tier_name,
 )
+from content.models import TagRule
 from events.models import Event, EventJoinClick, EventRegistration
 from payments.models import Tier
+
+VALID_EVENTS_FILTERS = {'all', 'upcoming', 'past'}
+
+
+def _get_selected_tags(request):
+    """Extract selected tags from query params. Supports ?tag=X&tag=Y."""
+    return [t.strip() for t in request.GET.getlist('tag') if t.strip()]
+
+
+def _filter_by_tags(queryset, selected_tags):
+    """Filter a queryset by multiple tags with AND logic.
+
+    Returns a filtered queryset containing only items that have ALL selected tags.
+    """
+    if not selected_tags:
+        return queryset
+    matching_ids = []
+    for obj in queryset:
+        obj_tags = set(obj.tags or [])
+        if all(tag in obj_tags for tag in selected_tags):
+            matching_ids.append(obj.pk)
+    return queryset.filter(pk__in=matching_ids)
+
+
+def _get_tag_rules_for_tags(tags):
+    """Return TagRule objects that match any of the given tags.
+
+    Returns dict with 'after_content' and 'sidebar' lists.
+    """
+    if not tags:
+        return {'after_content': [], 'sidebar': []}
+    rules = TagRule.objects.filter(tag__in=tags)
+    result = {'after_content': [], 'sidebar': []}
+    for rule in rules:
+        result[rule.position].append(rule)
+    return result
 
 
 def events_calendar(request, year=None, month=None):
@@ -106,17 +144,68 @@ def events_calendar(request, year=None, month=None):
 
 
 def events_list(request):
-    """Events calendar page with Upcoming and Past sections."""
+    """Events list page with Upcoming and Past sections.
+
+    Accepts ``?filter=`` with values ``all`` (default), ``upcoming``, or
+    ``past``. The past surface is equivalent to the old
+    ``/event-recordings`` page: it filters to completed events that have a
+    recording URL, supports tag filtering via ``?tag=``, and paginates at
+    20 per page.
+    """
     # Exclude draft events from public listing
     events = Event.objects.exclude(status='draft')
+
+    filter_mode = request.GET.get('filter', 'all').strip().lower()
+    if filter_mode not in VALID_EVENTS_FILTERS:
+        filter_mode = 'all'
+
+    selected_tags = _get_selected_tags(request)
 
     upcoming_events = events.filter(
         status__in=['upcoming', 'live'],
     ).order_by('start_datetime')
 
-    past_events = events.filter(
+    # For the "past" surface we only show completed events with a recording
+    # (and honor the ``published`` flag, matching the old /event-recordings
+    # list). The default "all" view also includes cancelled events and does
+    # not require a recording.
+    past_with_recording_qs = events.filter(
+        status='completed',
+        published=True,
+    ).exclude(
+        recording_url='',
+    ).exclude(
+        recording_url__isnull=True,
+    ).order_by('-start_datetime')
+
+    past_all_qs = events.filter(
         status__in=['completed', 'cancelled'],
     ).order_by('-start_datetime')
+
+    # Collect all tags from past-with-recording events for the tag filter UI
+    all_past_tags = set()
+    for event in past_with_recording_qs:
+        if event.tags:
+            all_past_tags.update(event.tags)
+    all_past_tags = sorted(all_past_tags)
+
+    # Apply tag filtering only on past-with-recording list.
+    past_filtered = _filter_by_tags(past_with_recording_qs, selected_tags)
+
+    # Paginate the past-with-recording list (20 per page) when filter=past.
+    page_obj = None
+    is_paginated = False
+    if filter_mode == 'past':
+        paginator = Paginator(past_filtered, 20)
+        page_number = request.GET.get('page')
+        page_obj = paginator.get_page(page_number)
+        is_paginated = page_obj.has_other_pages()
+        past_events = page_obj
+    elif filter_mode == 'all':
+        past_events = past_all_qs
+    else:
+        # upcoming: we don't render past section
+        past_events = past_all_qs.none()
 
     # Annotate events with registration info for authenticated users
     user = request.user
@@ -129,9 +218,18 @@ def events_list(request):
         )
 
     context = {
+        'filter_mode': filter_mode,
+        'show_upcoming': filter_mode in ('all', 'upcoming'),
+        'show_past': filter_mode in ('all', 'past'),
         'upcoming_events': upcoming_events,
         'past_events': past_events,
+        'page_obj': page_obj,
+        'is_paginated': is_paginated,
+        'all_past_tags': all_past_tags,
+        'selected_tags': selected_tags,
+        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'registered_event_ids': registered_event_ids,
+        'base_path': '/events',
     }
     return render(request, 'events/events_list.html', context)
 
@@ -152,15 +250,12 @@ def event_join_redirect(request, slug):
     if not is_registered:
         return redirect('event_detail', slug=event.slug)
 
-    # Past events show an unavailable page
+    # Past events show an unavailable page. The "Back to event" link there
+    # already surfaces the inline recording on /events/<slug>.
     if event.status in ('completed', 'cancelled'):
-        recording_url = ''
-        if event.has_recording:
-            recording_url = event.get_recording_url()
         return render(request, 'events/join_unavailable.html', {
             'event': event,
             'reason': 'past',
-            'recording_url': recording_url,
         })
 
     # No join URL yet
@@ -195,8 +290,14 @@ def event_detail(request, slug):
             event=event, user=user,
         ).exists()
 
-    # Build gating context for unauthorized users
-    gating = build_gating_context(user, event, 'event')
+    # Build gating context. For completed events with a recording, use
+    # 'recording' so the CTA reads "watch this recording" instead of
+    # "join this event".
+    is_completed_recording = (
+        event.status == 'completed' and event.has_recording
+    )
+    gating_content_type = 'recording' if is_completed_recording else 'event'
+    gating = build_gating_context(user, event, gating_content_type)
 
     # Determine if we should show the Zoom join link
     show_zoom_link = (
@@ -208,12 +309,16 @@ def event_detail(request, slug):
     # Determine required tier name for CTA
     required_tier_name = get_required_tier_name(event.required_level)
 
+    # Tag-rule components rendered after recording content.
+    tag_rules = _get_tag_rules_for_tags(event.tags)
+
     context = {
         'event': event,
         'has_access': has_access,
         'is_registered': is_registered,
         'show_zoom_link': show_zoom_link,
         'required_tier_name': required_tier_name,
+        'tag_rules': tag_rules,
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)

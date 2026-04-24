@@ -4,8 +4,7 @@ Django sitemaps for all public content.
 Includes:
 - Published articles with required_level=0
 - All published courses (always public)
-- All events (upcoming/completed)
-- Published recordings with required_level=0
+- All events (upcoming/completed, including recordings) at /events/<slug>
 - Published projects with required_level=0
 - Published tutorials with required_level=0
 - Tag pages (index + individual tags)
@@ -71,28 +70,6 @@ class EventSitemap(Sitemap):
         return obj.get_absolute_url()
 
 
-class RecordingSitemap(Sitemap):
-    """Sitemap for published, open recordings (events with recordings)."""
-    changefreq = 'weekly'
-    priority = 0.7
-
-    def items(self):
-        return Event.objects.filter(
-            published=True,
-            required_level=0,
-        ).exclude(
-            recording_url='',
-        ).exclude(
-            recording_url__isnull=True,
-        ).order_by('-start_datetime')
-
-    def lastmod(self, obj):
-        return obj.updated_at
-
-    def location(self, obj):
-        return obj.get_recording_url()
-
-
 class ProjectSitemap(Sitemap):
     """Sitemap for published, open projects."""
     changefreq = 'weekly'
@@ -139,7 +116,6 @@ class StaticViewSitemap(Sitemap):
             'home',
             'about',
             'blog_list',
-            'recordings_list',
             'projects_list',
             'courses_list',
             'events_list',
@@ -192,7 +168,6 @@ sitemaps = {
     'articles': ArticleSitemap,
     'courses': CourseSitemap,
     'events': EventSitemap,
-    'recordings': RecordingSitemap,
     'projects': ProjectSitemap,
     'tutorials': TutorialSitemap,
     'tags': TagSitemap,

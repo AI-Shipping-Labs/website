@@ -213,21 +213,21 @@ class RecordingsListViewTest(TestCase):
         )
 
     def test_recordings_list_status_code(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertEqual(response.status_code, 200)
 
     def test_recordings_list_template(self):
-        response = self.client.get('/event-recordings')
-        self.assertTemplateUsed(response, 'content/recordings_list.html')
+        response = self.client.get('/events?filter=past')
+        self.assertTemplateUsed(response, 'events/events_list.html')
 
     def test_recordings_list_contains_recording(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertContains(response, 'Workshop 1')
 
     def test_recordings_list_empty(self):
         Event.objects.all().delete()
-        response = self.client.get('/event-recordings')
-        self.assertContains(response, 'No resources yet')
+        response = self.client.get('/events?filter=past')
+        self.assertContains(response, 'No recordings yet')
 
 
 class RecordingDetailViewTest(TestCase):
@@ -250,15 +250,15 @@ class RecordingDetailViewTest(TestCase):
         )
 
     def test_recording_detail_status_code(self):
-        response = self.client.get('/event-recordings/workshop-detail')
+        response = self.client.get('/events/workshop-detail')
         self.assertEqual(response.status_code, 200)
 
     def test_recording_detail_template(self):
-        response = self.client.get('/event-recordings/workshop-detail')
-        self.assertTemplateUsed(response, 'content/recording_detail.html')
+        response = self.client.get('/events/workshop-detail')
+        self.assertTemplateUsed(response, 'events/event_detail.html')
 
     def test_recording_detail_contains_content(self):
-        response = self.client.get('/event-recordings/workshop-detail')
+        response = self.client.get('/events/workshop-detail')
         content = response.content.decode()
         self.assertIn('Workshop Detail', content)
         self.assertIn('Workshop description', content)
@@ -270,7 +270,7 @@ class RecordingDetailViewTest(TestCase):
         self.assertIn('00:00', content)
 
     def test_recording_detail_404(self):
-        response = self.client.get('/event-recordings/nonexistent')
+        response = self.client.get('/events/nonexistent')
         self.assertEqual(response.status_code, 404)
 
 

@@ -658,7 +658,7 @@ class TestScenario9CompletedEventWithRecording:
         page.wait_for_load_state("domcontentloaded")
 
         # Then: Navigates to the recording page
-        assert "/event-recordings/past-workshop-recording" in page.url
+        assert "/events/past-workshop-recording" in page.url
 # ---------------------------------------------------------------
 # Scenario 10: Visitor views a completed event that has no
 #               recording yet

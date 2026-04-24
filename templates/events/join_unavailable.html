@@ -13,8 +13,8 @@
       </div>
       <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">This event has ended</h1>
       <p class="mt-4 text-muted-foreground">{{ event.title }} is no longer active.</p>
-      {% if recording_url %}
-      <a href="{{ recording_url }}"
+      {% if event.has_recording %}
+      <a href="{{ event.get_absolute_url }}"
          class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
         <i data-lucide="play-circle" class="h-4 w-4"></i>
         Watch the recording

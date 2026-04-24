@@ -1,9 +1,9 @@
-"""Tests for Event Recordings - updated for unified Event model (issue #158).
+"""Tests for Event Recordings - unified under /events?filter=past (issue #294).
 
 Covers:
 - Event recording fields (published_at, video_url property, has_recording, etc.)
 - Published_at sync with published flag
-- Tag filtering on /event-recordings via ?tag=X
+- Tag filtering on /events?filter=past via ?tag=X
 - Pagination (20 recordings per page)
 - Detail page: video player for authorized, gated CTA for unauthorized
 - Detail page: materials listed as links
@@ -133,7 +133,7 @@ class EventRecordingFieldsTest(TestCase):
 
     def test_get_recording_url(self):
         event = Event(slug='my-recording')
-        self.assertEqual(event.get_recording_url(), '/event-recordings/my-recording')
+        self.assertEqual(event.get_recording_url(), '/events/my-recording')
 
     def test_formatted_date(self):
         event = Event(start_datetime=timezone.make_aware(
@@ -145,7 +145,7 @@ class EventRecordingFieldsTest(TestCase):
 
 
 class RecordingsListTagFilteringTest(TestCase):
-    """Test tag filtering on /event-recordings via ?tag=X query param."""
+    """Test tag filtering on /events?filter=past via ?tag=X query param."""
 
     @classmethod
     def setUpTestData(cls):
@@ -169,47 +169,47 @@ class RecordingsListTagFilteringTest(TestCase):
         )
 
     def test_no_filter_shows_all(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Agent Workshop')
         self.assertContains(response, 'Django Workshop')
         self.assertContains(response, 'MCP Workshop')
 
     def test_filter_by_python_tag(self):
-        response = self.client.get('/event-recordings?tag=python')
+        response = self.client.get('/events?filter=past&tag=python')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Agent Workshop')
         self.assertContains(response, 'Django Workshop')
         self.assertNotContains(response, 'MCP Workshop')
 
     def test_filter_by_agents_tag(self):
-        response = self.client.get('/event-recordings?tag=agents')
+        response = self.client.get('/events?filter=past&tag=agents')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Agent Workshop')
         self.assertContains(response, 'MCP Workshop')
         self.assertNotContains(response, 'Django Workshop')
 
     def test_filter_by_nonexistent_tag(self):
-        response = self.client.get('/event-recordings?tag=nonexistent')
+        response = self.client.get('/events?filter=past&tag=nonexistent')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Agent Workshop')
         self.assertNotContains(response, 'Django Workshop')
         self.assertNotContains(response, 'MCP Workshop')
 
     def test_tag_links_in_listing(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         content = response.content.decode()
-        self.assertIn('?tag=python', content)
-        self.assertIn('?tag=agents', content)
-        self.assertIn('?tag=django', content)
-        self.assertIn('?tag=mcp', content)
+        self.assertIn('tag=python', content)
+        self.assertIn('tag=agents', content)
+        self.assertIn('tag=django', content)
+        self.assertIn('tag=mcp', content)
 
     def test_current_tag_in_context(self):
-        response = self.client.get('/event-recordings?tag=python')
+        response = self.client.get('/events?filter=past&tag=python')
         self.assertEqual(response.context['current_tag'], 'python')
 
     def test_empty_tag_ignored(self):
-        response = self.client.get('/event-recordings?tag=')
+        response = self.client.get('/events?filter=past&tag=')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Agent Workshop')
         self.assertContains(response, 'Django Workshop')
@@ -220,7 +220,7 @@ class RecordingsListTagFilteringTest(TestCase):
 
 
 class RecordingsListPaginationTest(TestCase):
-    """Test pagination on /event-recordings (20 per page)."""
+    """Test pagination on /events?filter=past (20 per page)."""
 
     @classmethod
     def setUpTestData(cls):
@@ -233,25 +233,25 @@ class RecordingsListPaginationTest(TestCase):
             )
 
     def test_first_page_has_20_items(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertEqual(response.status_code, 200)
         page_obj = response.context['page_obj']
         self.assertEqual(len(page_obj), 20)
 
     def test_second_page_has_remaining_items(self):
-        response = self.client.get('/event-recordings?page=2')
+        response = self.client.get('/events?filter=past&page=2')
         self.assertEqual(response.status_code, 200)
         page_obj = response.context['page_obj']
         self.assertEqual(len(page_obj), 5)
 
     def test_pagination_controls_shown(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         content = response.content.decode()
         self.assertIn('Page 1 of 2', content)
         self.assertIn('Next', content)
 
     def test_previous_link_on_page_2(self):
-        response = self.client.get('/event-recordings?page=2')
+        response = self.client.get('/events?filter=past&page=2')
         content = response.content.decode()
         self.assertIn('Previous', content)
 
@@ -259,7 +259,7 @@ class RecordingsListPaginationTest(TestCase):
         Event.objects.all().delete()
         for i in range(5):
             _create_recording_event(f'small-recording-{i}')
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertFalse(response.context['is_paginated'])
 
     def test_pagination_preserves_tag_filter(self):
@@ -269,12 +269,12 @@ class RecordingsListPaginationTest(TestCase):
                 f'tagged-rec-{i:02d}',
                 tags=['python'],
             )
-        response = self.client.get('/event-recordings?tag=python')
+        response = self.client.get('/events?filter=past&tag=python')
         content = response.content.decode()
         self.assertIn('tag=python', content)
 
     def test_invalid_page_number_shows_last(self):
-        response = self.client.get('/event-recordings?page=999')
+        response = self.client.get('/events?filter=past&page=999')
         self.assertEqual(response.status_code, 200)
         page_obj = response.context['page_obj']
         self.assertEqual(page_obj.number, 2)
@@ -297,39 +297,39 @@ class RecordingsListDisplayTest(TestCase):
         )
 
     def test_shows_title(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertContains(response, 'Workshop Display Test')
 
     def test_shows_description(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertContains(response, 'Workshop description here')
 
     def test_shows_date(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertContains(response, 'July 20, 2025')
 
     def test_shows_tags(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertContains(response, 'agents')
         self.assertContains(response, 'python')
 
     def test_tags_are_clickable_links(self):
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         content = response.content.decode()
-        self.assertIn('href="/event-recordings?tag=agents"', content)
-        self.assertIn('href="/event-recordings?tag=python"', content)
+        self.assertIn('href="/events?filter=past&amp;tag=agents"', content)
+        self.assertIn('href="/events?filter=past&amp;tag=python"', content)
 
     # Listing-page lock-icon tests removed in #261 (covered by
     # `playwright_tests/test_event_recordings.py` and Rule 4).
 
     def test_empty_list_message(self):
         Event.objects.all().delete()
-        response = self.client.get('/event-recordings')
-        self.assertContains(response, 'No resources yet')
+        response = self.client.get('/events?filter=past')
+        self.assertContains(response, 'No recordings yet')
 
     def test_unpublished_not_shown(self):
         _create_recording_event('draft-recording', published=False)
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertNotContains(response, 'Draft Recording')
 
     def test_event_without_recording_not_shown(self):
@@ -338,7 +338,7 @@ class RecordingsListDisplayTest(TestCase):
             start_datetime=timezone.now(), status='completed',
             recording_url='', published=True,
         )
-        response = self.client.get('/event-recordings')
+        response = self.client.get('/events?filter=past')
         self.assertNotContains(response, 'No Recording Event')
 
 
@@ -371,38 +371,38 @@ class RecordingDetailDisplayTest(TestCase):
         )
 
     def test_status_code_200(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertEqual(response.status_code, 200)
 
     def test_template_used(self):
-        response = self.client.get('/event-recordings/detail-workshop')
-        self.assertTemplateUsed(response, 'content/recording_detail.html')
+        response = self.client.get('/events/detail-workshop')
+        self.assertTemplateUsed(response, 'events/event_detail.html')
 
     def test_shows_title(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'Detail Workshop')
 
     def test_shows_description(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'Workshop for detail testing')
 
     def test_shows_date(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'July 20, 2025')
 
     def test_shows_tags(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'python')
         self.assertContains(response, 'agents')
 
     def test_tags_are_clickable_links(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         content = response.content.decode()
-        self.assertIn('href="/event-recordings?tag=python"', content)
-        self.assertIn('href="/event-recordings?tag=agents"', content)
+        self.assertIn('href="/events?filter=past&amp;tag=python"', content)
+        self.assertIn('href="/events?filter=past&amp;tag=agents"', content)
 
     def test_shows_materials(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'Materials')
         self.assertContains(response, 'Slides PDF')
         self.assertContains(response, 'GitHub Repo')
@@ -410,37 +410,37 @@ class RecordingDetailDisplayTest(TestCase):
         self.assertContains(response, 'https://github.com/example/repo')
 
     def test_shows_core_tools(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'Core Tools')
         self.assertContains(response, 'Python')
         self.assertContains(response, 'Django')
 
     def test_shows_learning_objectives(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'Build an API')
         self.assertContains(response, 'Deploy to production')
 
     def test_shows_outcome(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         self.assertContains(response, 'A working API deployment')
 
     def test_shows_timestamps(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         content = response.content.decode()
         self.assertIn('Introduction', content)
         self.assertIn('Setting up', content)
 
     def test_404_for_nonexistent_slug(self):
-        response = self.client.get('/event-recordings/nonexistent')
+        response = self.client.get('/events/nonexistent')
         self.assertEqual(response.status_code, 404)
 
-    def test_404_for_unpublished(self):
-        _create_recording_event('draft-detail', published=False)
-        response = self.client.get('/event-recordings/draft-detail')
+    def test_draft_status_404(self):
+        _create_recording_event('drafted-detail', status='draft')
+        response = self.client.get('/events/drafted-detail')
         self.assertEqual(response.status_code, 404)
 
     def test_title_tag_format(self):
-        response = self.client.get('/event-recordings/detail-workshop')
+        response = self.client.get('/events/detail-workshop')
         content = response.content.decode()
         self.assertIn('<title>Detail Workshop | AI Shipping Labs</title>', content)
 
@@ -479,12 +479,12 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_sees_open_recording_video(self):
-        response = self.client.get('/event-recordings/open-recording')
+        response = self.client.get('/events/open-recording')
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['is_gated'])
 
     def test_anonymous_blocked_on_gated_recording(self):
-        response = self.client.get('/event-recordings/gated-recording')
+        response = self.client.get('/events/gated-recording')
         self.assertEqual(response.status_code, 200)
         # No video, no materials, gating CTA + pricing link rendered.
         self.assertNotContains(response, 'youtube.com/embed')
@@ -497,7 +497,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         user.tier = self.main_tier
         user.save()
         self.client.login(email='main@test.com', password='testpass')
-        response = self.client.get('/event-recordings/gated-recording')
+        response = self.client.get('/events/gated-recording')
         self.assertNotContains(response, 'Upgrade to Main')
         self.assertContains(response, 'Secret Slides')
 
@@ -507,7 +507,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
 
 class RecordingTagFilterTest(TestCase):
     """Behaviour previously covered by Playwright Scenario 6 on
-    /event-recordings. Filtering happens via ?tag= and resolves
+    /events?filter=past. Filtering happens via ?tag= and resolves
     server-side; no JS required.
     """
 
@@ -524,12 +524,12 @@ class RecordingTagFilterTest(TestCase):
 
         # The unfiltered listing surfaces a chip whose href triggers
         # the python filter.
-        listing = self.client.get('/event-recordings')
+        listing = self.client.get('/events?filter=past')
         self.assertEqual(listing.status_code, 200)
-        self.assertContains(listing, '?tag=python')
+        self.assertContains(listing, 'tag=python')
 
         # Following ?tag=python: only the python recording remains.
-        filtered = self.client.get('/event-recordings?tag=python')
+        filtered = self.client.get('/events?filter=past&tag=python')
         self.assertEqual(filtered.status_code, 200)
         self.assertContains(filtered, 'Python Recording')
         self.assertNotContains(filtered, 'Go Recording')

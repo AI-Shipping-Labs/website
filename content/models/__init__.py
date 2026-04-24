@@ -10,3 +10,4 @@ from .project import *
 from .site_config import *
 from .tag_rule import *
 from .tutorial import *
+from .workshop import *

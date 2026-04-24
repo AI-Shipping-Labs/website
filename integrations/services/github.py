@@ -64,6 +64,8 @@ REQUIRED_FIELDS = {
     'project': ['title'],
     'curated_link': ['title', 'url', 'item_id'],
     'download': ['title'],
+    'workshop': ['content_id', 'slug', 'title', 'pages_required_level'],
+    'workshop_page': ['title'],
 }
 
 # Sync lock timeout in minutes
@@ -129,6 +131,18 @@ def _derive_readme_content_id(repo_name, module_source_path):
     stable across syncs and unique across modules/repos.
     """
     key = f'{repo_name}:{module_source_path}:readme'
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
+
+
+def _derive_workshop_page_content_id(repo_name, page_source_path):
+    """Derive a stable UUIDv5 content_id for a workshop page.
+
+    Workshop pages are markdown files under ``YYYY/<date-slug>/*.md``. Authors
+    rarely want to hand-write a UUID for every page, so the sync derives a
+    stable one from ``(repo_name, source_path)``. Mirror
+    :func:`_derive_readme_content_id` but namespaced for workshop pages.
+    """
+    key = f'{repo_name}:{page_source_path}:workshop_page'
     return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
@@ -1265,6 +1279,7 @@ def _get_sync_function(content_type):
         'project': _sync_projects,
         'interview_question': _sync_interview_questions,
         'event': _sync_events,
+        'workshop': _sync_workshops,
     }
     func = sync_functions.get(content_type)
     if not func:
@@ -3265,3 +3280,584 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
     stats['deleted'] = deleted_count
 
     return stats
+
+
+# ===========================================================================
+# Workshop sync (issue #295)
+# ===========================================================================
+#
+# Workshops live under ``YYYY/YYYY-MM-DD-slug/`` folders in the public
+# ``AI-Shipping-Labs/workshops-content`` repo. Each folder may contain a
+# ``workshop.yaml`` describing the workshop plus a series of numbered
+# ``NN-name.md`` pages. Folders without ``workshop.yaml`` are code-only and
+# silently skipped.
+#
+# The pipeline mirrors ``_sync_courses`` in shape (single-entry helper +
+# stale cleanup) but is flatter — there is no module layer between a
+# Workshop and its WorkshopPage rows.
+
+
+def _coerce_workshop_date(value):
+    """Parse a workshop ``date:`` frontmatter value into a ``datetime.date``.
+
+    Accepts strings (ISO format) and ``datetime.date`` / ``datetime.datetime``
+    values (PyYAML often parses an ISO date directly into a ``date``).
+    Returns ``None`` on empty input so the caller can decide whether to fall
+    back to the folder-name date prefix.
+    """
+    import datetime as dt
+
+    if value in (None, ''):
+        return None
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    if isinstance(value, str):
+        return dt.date.fromisoformat(value.strip())
+    raise ValueError(f'Unsupported workshop date value: {value!r}')
+
+
+def _extract_workshop_folder_date(folder_name):
+    """Pull a ``YYYY-MM-DD`` prefix out of a workshop folder name if present.
+
+    Folder names follow the ``YYYY-MM-DD-slug`` convention. Returns a
+    ``datetime.date`` on a match or ``None`` otherwise. Used as a fallback
+    when ``workshop.yaml`` omits the ``date:`` key.
+    """
+    import datetime as dt
+
+    match = re.match(r'^(\d{4})-(\d{2})-(\d{2})', folder_name)
+    if not match:
+        return None
+    try:
+        return dt.date(
+            int(match.group(1)), int(match.group(2)), int(match.group(3)),
+        )
+    except ValueError:
+        return None
+
+
+def _sync_workshops(source, repo_dir, commit_sha, sync_log, known_images=None):
+    """Sync workshops from a ``workshops-content``-shaped repo.
+
+    Layout expected:
+
+    ``<repo_dir>/YYYY/YYYY-MM-DD-slug/workshop.yaml``
+    ``<repo_dir>/YYYY/YYYY-MM-DD-slug/*.md``
+
+    Walks every ``YYYY/*/`` directory looking for ``workshop.yaml``. Folders
+    without it are silently skipped (they're code-only). Missing required
+    frontmatter is logged per-file and the rest of the sync continues.
+
+    Stale workshops (folder deleted between syncs) are set to ``status='draft'``.
+    The linked Event is NOT unpublished — it's standalone and may have been
+    edited independently in Studio.
+    """
+    from content.models import Workshop
+
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
+    seen_slugs = set()
+    failed_slugs = set()
+
+    # Walk ``YYYY/`` top-level directories (e.g. ``2026/``). This also
+    # tolerates a flatter layout for tests where workshop folders sit at
+    # ``repo_dir/<folder>/``.
+    year_dirs = []
+    for entry in sorted(os.scandir(repo_dir), key=lambda e: e.name):
+        if not entry.is_dir() or entry.name.startswith('.'):
+            continue
+        # Recognise numeric year dirs (``2026``, ``2025``). Any non-year
+        # top-level dir that directly contains a workshop.yaml is also
+        # treated as a workshop folder — supports a flat test layout.
+        if re.fullmatch(r'\d{4}', entry.name):
+            year_dirs.append(entry.path)
+        elif os.path.isfile(os.path.join(entry.path, 'workshop.yaml')):
+            year_dirs.append(repo_dir)
+            break
+
+    # Dedup while preserving scan order (repo_dir may get appended above).
+    seen_year_dirs = []
+    for d in year_dirs:
+        if d not in seen_year_dirs:
+            seen_year_dirs.append(d)
+
+    for year_dir in seen_year_dirs:
+        for entry in sorted(os.scandir(year_dir), key=lambda e: e.name):
+            if not entry.is_dir() or entry.name.startswith('.'):
+                continue
+            workshop_yaml = os.path.join(entry.path, 'workshop.yaml')
+            if not os.path.isfile(workshop_yaml):
+                # Code-only folder — silently skip per spec.
+                continue
+
+            _sync_single_workshop(
+                entry.path, repo_dir, source, commit_sha, stats,
+                seen_slugs, failed_slugs, known_images=known_images,
+            )
+
+    # Stale cleanup: workshops whose source folder disappeared this sync.
+    # Set status to 'draft' (same pattern as _sync_courses). The linked
+    # Event is intentionally left alone — it stands on its own.
+    stale = Workshop.objects.filter(
+        source_repo=source.repo_name,
+        status='published',
+    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
+    for ws in stale:
+        stats['items_detail'].append({
+            'title': ws.title,
+            'slug': ws.slug,
+            'action': 'deleted',
+            'content_type': 'workshop',
+        })
+    deleted_count = stale.count()
+    stale.update(status='draft')
+    stats['deleted'] += deleted_count
+
+    return stats
+
+
+def _sync_single_workshop(
+    workshop_dir, repo_dir, source, commit_sha, stats,
+    seen_slugs, failed_slugs, known_images=None,
+):
+    """Parse one ``workshop.yaml`` folder into a ``Workshop`` with pages.
+
+    Mirrors ``_sync_single_course`` but without a module layer. Validates
+    frontmatter (including the split-gate rule) before writing anything and
+    logs per-file errors to ``stats['errors']`` rather than aborting the sync.
+    """
+    # Deferred imports: the integrations service is loaded by the Django
+    # AppConfig chain, and importing content/events models at module-top
+    # would tie those apps' import timing to this one. Matches the pattern
+    # used by every other ``_sync_*`` helper in this file.
+    from content.access import VISIBILITY_CHOICES
+    from content.models import Workshop
+
+    yaml_path = os.path.join(workshop_dir, 'workshop.yaml')
+    data = None
+    try:
+        data = _parse_yaml_file(yaml_path)
+        rel_path = os.path.relpath(workshop_dir, repo_dir)
+        yaml_rel_path = os.path.relpath(yaml_path, repo_dir)
+
+        # Required frontmatter: content_id, slug, title, pages_required_level.
+        _validate_frontmatter(data, 'workshop', yaml_rel_path)
+
+        workshop_content_id = data.get('content_id')
+        slug = data.get('slug')
+        title = data.get('title')
+        pages_required_level = data.get('pages_required_level')
+
+        # Validate pages_required_level is a legal visibility tier level.
+        valid_levels = {level for level, _ in VISIBILITY_CHOICES}
+        if pages_required_level not in valid_levels:
+            raise ValueError(
+                f'Invalid pages_required_level={pages_required_level!r}; '
+                f'must be one of {sorted(valid_levels)}'
+            )
+
+        # Recording block (optional). When present and ``url`` is set,
+        # ``required_level`` must be set AND must be >= pages_required_level.
+        # Fails closed — missing or too-low gate means no workshop row.
+        recording = data.get('recording') or {}
+        if not isinstance(recording, dict):
+            raise ValueError(
+                f'recording must be a mapping/dict, got {type(recording).__name__}'
+            )
+        recording_url = recording.get('url', '') or ''
+        if recording_url:
+            recording_required_level = recording.get('required_level')
+            if recording_required_level is None:
+                raise ValueError(
+                    'recording.url is set but recording.required_level is '
+                    'missing — refusing to leak the recording under the '
+                    'pages_required_level gate.'
+                )
+            if recording_required_level not in valid_levels:
+                raise ValueError(
+                    f'Invalid recording.required_level='
+                    f'{recording_required_level!r}; must be one of '
+                    f'{sorted(valid_levels)}'
+                )
+            if recording_required_level < pages_required_level:
+                raise ValueError(
+                    f'recording.required_level ({recording_required_level}) '
+                    f'must be >= pages_required_level ({pages_required_level}).'
+                )
+        else:
+            # No recording URL — default the gate to pages_required_level
+            # so the model invariant holds. When the recording is added
+            # later, the author must update the yaml with a proper level.
+            recording_required_level = pages_required_level
+
+        # Slug collision check across sources.
+        if _check_slug_collision(Workshop, slug, source.repo_name, rel_path):
+            stats['errors'].append({
+                'file': yaml_rel_path,
+                'error': (
+                    f"Slug collision: '{slug}' already exists from a "
+                    f"different source. Skipped."
+                ),
+            })
+            failed_slugs.add(slug)
+            return
+
+        seen_slugs.add(slug)
+
+        # Workshop date: prefer ``date:`` frontmatter, fall back to the
+        # ``YYYY-MM-DD`` prefix on the folder name.
+        workshop_date = _coerce_workshop_date(data.get('date'))
+        if workshop_date is None:
+            workshop_date = _extract_workshop_folder_date(
+                os.path.basename(workshop_dir.rstrip(os.sep)),
+            )
+        if workshop_date is None:
+            raise ValueError(
+                'workshop.yaml is missing a `date:` and the folder name '
+                "doesn't start with YYYY-MM-DD — can't infer workshop date."
+            )
+
+        # Cover image — rewrite relative paths to CDN URLs like course.yaml.
+        cover_image_url = rewrite_cover_image_url(
+            data.get('cover_image', '') or data.get('cover_image_url', ''),
+            source, yaml_rel_path,
+        )
+
+        workshop_defaults = {
+            'title': title,
+            'description': data.get('description', '') or '',
+            'date': workshop_date,
+            'instructor_name': data.get('instructor_name', '') or '',
+            'tags': data.get('tags', []) or [],
+            'cover_image_url': cover_image_url,
+            'status': 'published',
+            'pages_required_level': pages_required_level,
+            'recording_required_level': recording_required_level,
+            'code_repo_url': data.get('code_repo_url', '') or '',
+            'source_repo': source.repo_name,
+            'source_path': rel_path,
+            'source_commit': commit_sha,
+            'content_id': workshop_content_id,
+        }
+
+        # Find by content_id (stable) first, then slug (backward compat).
+        workshop = Workshop.objects.filter(
+            content_id=workshop_content_id,
+            source_repo=source.repo_name,
+        ).first()
+        if workshop is None:
+            workshop = Workshop.objects.filter(
+                slug=slug,
+                source_repo=source.repo_name,
+            ).first()
+
+        if workshop is None:
+            workshop = Workshop(slug=slug, **workshop_defaults)
+            workshop.save()
+            created = True
+            changed = True
+        else:
+            identity_changed = (
+                workshop.slug != slug
+                or workshop.source_path != rel_path
+            )
+            if identity_changed or _defaults_differ(workshop, workshop_defaults):
+                workshop.slug = slug
+                for k, v in workshop_defaults.items():
+                    setattr(workshop, k, v)
+                workshop.save()
+                created = False
+                changed = True
+            else:
+                created = False
+                changed = False
+
+        if changed:
+            action = 'created' if created else 'updated'
+            if created:
+                stats['created'] += 1
+            else:
+                stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': title,
+                'slug': slug,
+                'action': action,
+                'content_type': 'workshop',
+            })
+        else:
+            stats['unchanged'] += 1
+
+        # Link or create the Event. Shared slug — ``/events/<slug>`` and
+        # ``/workshops/<slug>`` live under different prefixes.
+        _link_or_create_workshop_event(
+            workshop, data, recording, recording_required_level,
+            workshop_date, source, rel_path, yaml_rel_path, commit_sha, stats,
+        )
+
+        # Sync pages — every *.md file in the folder except README.md.
+        _sync_workshop_pages(
+            workshop, workshop_dir, repo_dir, source.repo_name,
+            commit_sha, stats, known_images=known_images,
+        )
+
+    except Exception as e:
+        try:
+            failed_slug = (data or {}).get(
+                'slug', os.path.basename(workshop_dir.rstrip(os.sep)),
+            )
+        except Exception:
+            failed_slug = os.path.basename(workshop_dir.rstrip(os.sep))
+        failed_slugs.add(failed_slug)
+        stats['errors'].append({
+            'file': os.path.relpath(yaml_path, repo_dir),
+            'error': str(e),
+        })
+        logger.warning(
+            'Error syncing workshop %s: %s',
+            os.path.basename(workshop_dir.rstrip(os.sep)), e,
+        )
+
+
+def _link_or_create_workshop_event(
+    workshop, data, recording, recording_required_level, workshop_date,
+    source, rel_path, yaml_rel_path, commit_sha, stats,
+):
+    """Attach a matching ``Event`` to ``workshop``, creating one if missing.
+
+    Idempotency: if an Event already exists with ``slug == workshop.slug``
+    we link to it and update *content* fields only (recording metadata,
+    title, description, tags, etc.). Operational fields — ``start_datetime``,
+    ``end_datetime``, ``status``, ``zoom_*`` — are intentionally left
+    alone. Running the sync a second time never creates a second Event.
+
+    The Event carries its own ``content_id`` separate from the Workshop's
+    (they're different models). We mint a stable UUIDv5 keyed by
+    ``(repo, source_path)`` so re-syncs pick up the same event row.
+    """
+    import datetime as dt
+
+    # Deferred imports: same rationale as _sync_single_workshop — content
+    # and events models are loaded lazily to keep the integrations app
+    # importable independently of the content app's readiness.
+    from content.models import Workshop
+    from events.models import Event
+
+    # Content fields we always update from the workshop.yaml
+    tags = data.get('tags', []) or []
+    materials = recording.get('materials', []) or []
+    timestamps = recording.get('timestamps', []) or []
+    recording_url = recording.get('url', '') or ''
+    recording_embed_url = recording.get('embed_url', '') or ''
+
+    content_defaults = {
+        'title': workshop.title,
+        'description': workshop.description,
+        'tags': tags,
+        'cover_image_url': workshop.cover_image_url,
+        'recording_url': recording_url,
+        'recording_embed_url': recording_embed_url,
+        'timestamps': timestamps,
+        'materials': materials,
+        'required_level': recording_required_level,
+        'speaker_name': workshop.instructor_name,
+        'kind': 'workshop',
+        'content_id': _derive_workshop_event_content_id(
+            source.repo_name, rel_path,
+        ),
+        'source_repo': source.repo_name,
+        'source_path': yaml_rel_path,
+        'source_commit': commit_sha,
+    }
+
+    # Look up by slug first — that's the idempotent key per the spec.
+    event = Event.objects.filter(slug=workshop.slug).first()
+    if event is None:
+        start_dt = dt.datetime.combine(
+            workshop_date, dt.time.min, tzinfo=dt.timezone.utc,
+        )
+        event = Event(
+            slug=workshop.slug,
+            start_datetime=start_dt,
+            event_type='async',
+            status='completed',
+            published=True,
+            **content_defaults,
+        )
+        event.save()
+        stats['items_detail'].append({
+            'title': workshop.title,
+            'slug': workshop.slug,
+            'action': 'created',
+            'content_type': 'event',
+        })
+        stats['created'] += 1
+    else:
+        # Existing Event: update *content* fields only. Operational fields
+        # (start_datetime, status, zoom_*, event_type, published) are not
+        # in content_defaults so they're never touched.
+        if _defaults_differ(event, content_defaults):
+            for k, v in content_defaults.items():
+                setattr(event, k, v)
+            event.save()
+            stats['items_detail'].append({
+                'title': event.title,
+                'slug': event.slug,
+                'action': 'updated',
+                'content_type': 'event',
+            })
+            stats['updated'] += 1
+        else:
+            stats['unchanged'] += 1
+
+    # Link the Workshop to the Event if not already linked (or if linked
+    # to a stale event row). Use update() to avoid re-running Workshop.save()
+    # and the render pipeline.
+    if workshop.event_id != event.pk:
+        Workshop.objects.filter(pk=workshop.pk).update(event=event)
+        workshop.event_id = event.pk
+
+
+def _derive_workshop_event_content_id(repo_name, workshop_source_path):
+    """Stable UUIDv5 for the Event row linked to a workshop.
+
+    Deliberately distinct from the Workshop's ``content_id`` — Event and
+    Workshop are different models with different stable IDs. Keyed on
+    ``(repo_name, source_path)`` so re-syncs reuse the same Event row.
+    """
+    key = f'{repo_name}:{workshop_source_path}:workshop_event'
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
+
+
+def _sync_workshop_pages(
+    workshop, workshop_dir, repo_dir, repo_name, commit_sha, stats,
+    known_images=None,
+):
+    """Sync ``*.md`` pages under a workshop folder into ``WorkshopPage`` rows.
+
+    Filename convention: ``NN-slug.md`` where ``NN`` is the sort order
+    (e.g. ``01-overview.md`` -> ``sort_order=1, slug='overview'``).
+    Frontmatter ``slug`` / ``sort_order`` override the filename-derived
+    values. ``README.md`` is excluded (workshops don't surface READMEs
+    in the page list — they'd clash with the auto-derived index page).
+
+    Pages whose source files disappeared are hard-deleted — unlike
+    course units, WorkshopPages don't carry user progress yet, so a
+    soft-delete layer would be dead weight.
+    """
+    from content.models import WorkshopPage
+
+    seen_paths = set()
+
+    for filename in sorted(os.listdir(workshop_dir)):
+        if (
+            not filename.endswith('.md')
+            or filename.upper() == 'README.MD'
+            or filename.startswith('.')
+        ):
+            continue
+
+        filepath = os.path.join(workshop_dir, filename)
+        if not os.path.isfile(filepath):
+            continue
+        rel_path = os.path.relpath(filepath, repo_dir)
+
+        try:
+            metadata, body = _parse_markdown_file(filepath)
+
+            # Required field: title (body without a title would render poorly).
+            _validate_frontmatter(metadata, 'workshop_page', rel_path)
+
+            # Derive slug / sort_order from filename unless overridden.
+            sort_order = metadata.get(
+                'sort_order', extract_sort_order(filename),
+            )
+            slug = metadata.get('slug', derive_slug(filename))
+
+            # content_id: explicit in frontmatter, or derive stable UUID.
+            content_id = metadata.get('content_id')
+            if not content_id:
+                content_id = _derive_workshop_page_content_id(
+                    repo_name, rel_path,
+                )
+
+            seen_paths.add(rel_path)
+
+            # Rewrite relative image URLs and flag broken references so the
+            # sync report surfaces them (same pattern as articles/units).
+            base_dir = os.path.dirname(rel_path)
+            if known_images is not None:
+                _check_broken_image_refs(
+                    body, rel_path, repo_name, base_dir,
+                    known_images, stats['errors'],
+                )
+            body = rewrite_image_urls(body, repo_name, base_dir)
+
+            defaults = {
+                'title': metadata['title'],
+                'slug': slug,
+                'sort_order': sort_order,
+                'body': body,
+                'source_path': rel_path,
+                'source_commit': commit_sha,
+                'content_id': content_id,
+            }
+
+            try:
+                page = WorkshopPage.objects.get(
+                    workshop=workshop, source_path=rel_path,
+                )
+            except WorkshopPage.DoesNotExist:
+                page = WorkshopPage(workshop=workshop, **defaults)
+                page.save()
+                created = True
+                changed = True
+            else:
+                if _defaults_differ(page, defaults):
+                    for k, v in defaults.items():
+                        setattr(page, k, v)
+                    page.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            if not changed:
+                stats['unchanged'] += 1
+                continue
+
+            action = 'created' if created else 'updated'
+            if created:
+                stats['created'] += 1
+            else:
+                stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': page.title,
+                'slug': page.slug,
+                'action': action,
+                'content_type': 'workshop_page',
+            })
+
+        except Exception as e:
+            stats['errors'].append({'file': rel_path, 'error': str(e)})
+            logger.warning('Error syncing workshop page %s: %s', rel_path, e)
+
+    # Hard-delete pages whose source files disappeared.
+    stale = WorkshopPage.objects.filter(workshop=workshop).exclude(
+        source_path__in=seen_paths,
+    )
+    deleted_count = stale.count()
+    if deleted_count:
+        for p in stale:
+            stats['items_detail'].append({
+                'title': p.title,
+                'slug': p.slug,
+                'action': 'deleted',
+                'content_type': 'workshop_page',
+            })
+        stale.delete()
+        stats['deleted'] += deleted_count

@@ -64,7 +64,7 @@ class _WorkshopSyncFixtureBase(TestCase):
     def _write_workshop_yaml(
         self, folder='2026/2026-04-21-demo', *, content_id=SAMPLE_WORKSHOP_UUID,
         slug='demo', title='Demo Workshop',
-        pages_required_level=10, extra_yaml='',
+        pages_required_level=10, landing_required_level=None, extra_yaml='',
     ):
         body = (
             f'content_id: {content_id}\n'
@@ -72,8 +72,11 @@ class _WorkshopSyncFixtureBase(TestCase):
             f'title: "{title}"\n'
             f'date: 2026-04-21\n'
             f'pages_required_level: {pages_required_level}\n'
-            f'instructor_name: "Alexey Grigorev"\n'
-        ) + extra_yaml
+        )
+        if landing_required_level is not None:
+            body += f'landing_required_level: {landing_required_level}\n'
+        body += 'instructor_name: "Alexey Grigorev"\n'
+        body += extra_yaml
         self._write(f'{folder}/workshop.yaml', body)
 
     def _write_page(self, folder, filename, *, title, body='Page body.\n',
@@ -445,6 +448,92 @@ class WorkshopSyncRecordingGateValidationTest(_WorkshopSyncFixtureBase):
         self.assertTrue(
             any('required_level' in err.get('error', '') for err in sync_log.errors),
             f'Expected a gate-ordering error, got: {sync_log.errors}',
+        )
+
+
+class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
+    """Landing gate is optional, defaults to 0, must be <= pages gate."""
+
+    def test_landing_required_level_defaults_to_zero_when_omitted(self):
+        """workshop.yaml without the key syncs and yields landing=0."""
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(folder, '01-p.md', title='P')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+        self.assertEqual(Workshop.objects.count(), 1)
+        self.assertEqual(
+            Workshop.objects.get().landing_required_level, 0,
+        )
+
+    def test_landing_required_level_explicit_value_persists(self):
+        """Explicit landing=10 with pages=20 is valid and persisted."""
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            pages_required_level=20,
+            landing_required_level=10,
+        )
+        self._write_page(folder, '01-p.md', title='P')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+        self.assertEqual(Workshop.objects.count(), 1)
+        workshop = Workshop.objects.get()
+        self.assertEqual(workshop.landing_required_level, 10)
+        self.assertEqual(workshop.pages_required_level, 20)
+
+    def test_landing_gate_above_pages_gate_rejects_workshop(self):
+        """landing=20 with pages=10 fails closed — no Workshop row."""
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            pages_required_level=10,
+            landing_required_level=20,
+        )
+        self._write_page(folder, '01-p.md', title='P')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(
+            Workshop.objects.count(), 0,
+            'Fails closed: landing gate must be <= pages gate.',
+        )
+        self.assertTrue(
+            any('landing_required_level' in err.get('error', '')
+                for err in sync_log.errors),
+            f'Expected a landing_required_level error, got: {sync_log.errors}',
+        )
+
+    def test_invalid_landing_required_level_rejects_workshop(self):
+        """A landing_required_level not in VISIBILITY_CHOICES is rejected."""
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            pages_required_level=10,
+            landing_required_level=7,  # not a valid tier level
+        )
+        self._write_page(folder, '01-p.md', title='P')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(
+            Workshop.objects.count(), 0,
+            'Fails closed: invalid landing_required_level rejects workshop.',
+        )
+        self.assertTrue(
+            any('landing_required_level' in err.get('error', '')
+                for err in sync_log.errors),
+            f'Expected a landing_required_level error, got: {sync_log.errors}',
         )
 
 

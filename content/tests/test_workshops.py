@@ -28,6 +28,7 @@ class WorkshopModelValidationTest(TierSetupMixin, TestCase):
             'slug': 'clean-test',
             'title': 'Clean Test',
             'date': date(2026, 4, 21),
+            'landing_required_level': 0,
             'pages_required_level': 10,
             'recording_required_level': 20,
         }
@@ -65,6 +66,82 @@ class WorkshopModelValidationTest(TierSetupMixin, TestCase):
             Workshop.objects.filter(slug='clean-test').exists(),
             'Workshop with inverted gates must not be persisted.',
         )
+
+    def test_clean_accepts_full_chain(self):
+        """landing=0, pages=10, recording=20 — strict chain is valid."""
+        ws = self._make_workshop(
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        ws.clean()  # no exception
+
+    def test_clean_accepts_all_equal(self):
+        """landing=pages=recording=10 — equal values are valid."""
+        ws = self._make_workshop(
+            landing_required_level=10,
+            pages_required_level=10,
+            recording_required_level=10,
+        )
+        ws.clean()  # no exception
+
+    def test_clean_rejects_landing_above_pages(self):
+        """landing > pages must raise with the landing field flagged."""
+        ws = self._make_workshop(
+            landing_required_level=20,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            ws.clean()
+        self.assertIn('landing_required_level', ctx.exception.error_dict)
+
+    def test_clean_rejects_landing_above_recording(self):
+        """landing > recording is caught (transitively via pages check).
+
+        With landing=30, pages=30, recording=10 the pages<=recording edge
+        also fails. Either edge surfacing is acceptable — what matters is
+        that the row does not validate and one of the two failing fields
+        is named in the error_dict.
+        """
+        ws = self._make_workshop(
+            landing_required_level=30,
+            pages_required_level=30,
+            recording_required_level=10,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            ws.clean()
+        flagged = set(ctx.exception.error_dict.keys())
+        self.assertTrue(
+            flagged & {'landing_required_level', 'recording_required_level'},
+            f'Expected landing_* or recording_* in error_dict, got: {flagged}',
+        )
+
+    def test_save_rejects_landing_above_pages(self):
+        """save() must not persist a Workshop with landing > pages."""
+        ws = self._make_workshop(
+            slug='landing-above-pages',
+            landing_required_level=20,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        with self.assertRaises(ValidationError):
+            ws.save()
+        self.assertFalse(
+            Workshop.objects.filter(slug='landing-above-pages').exists(),
+            'Workshop with landing > pages must not be persisted.',
+        )
+
+    def test_landing_defaults_to_zero(self):
+        """A Workshop created without landing_required_level gets 0."""
+        ws = Workshop.objects.create(
+            slug='landing-default',
+            title='Default',
+            date=date(2026, 4, 21),
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        self.assertEqual(ws.landing_required_level, 0)
 
     def test_save_renders_description_markdown(self):
         ws = Workshop.objects.create(
@@ -147,6 +224,45 @@ class WorkshopSplitGatingTest(TierSetupMixin, TestCase):
         )
         self.assertTrue(self.workshop.user_can_access_pages(staff))
         self.assertTrue(self.workshop.user_can_access_recording(staff))
+
+    def test_user_can_access_landing_by_tier(self):
+        """Landing=10, pages=20, recording=30 — check all four tiers."""
+        workshop = Workshop.objects.create(
+            slug='landing-gated',
+            title='Landing Gated',
+            date=date(2026, 4, 21),
+            landing_required_level=10,   # Basic
+            pages_required_level=20,     # Main
+            recording_required_level=30,  # Premium
+        )
+        # Landing gate (10)
+        self.assertFalse(workshop.user_can_access_landing(self.user_free))
+        self.assertTrue(workshop.user_can_access_landing(self.user_basic))
+        self.assertTrue(workshop.user_can_access_landing(self.user_main))
+        self.assertTrue(workshop.user_can_access_landing(self.user_premium))
+        # Pages gate (20)
+        self.assertFalse(workshop.user_can_access_pages(self.user_basic))
+        self.assertTrue(workshop.user_can_access_pages(self.user_main))
+        self.assertTrue(workshop.user_can_access_pages(self.user_premium))
+        # Recording gate (30)
+        self.assertFalse(workshop.user_can_access_recording(self.user_main))
+        self.assertTrue(workshop.user_can_access_recording(self.user_premium))
+
+    def test_staff_bypasses_landing_gate(self):
+        """Staff pass user_can_access_landing regardless of landing level."""
+        workshop = Workshop.objects.create(
+            slug='landing-premium',
+            title='Premium Landing',
+            date=date(2026, 4, 21),
+            landing_required_level=30,
+            pages_required_level=30,
+            recording_required_level=30,
+        )
+        staff = User.objects.create_user(
+            email='landing-staff@example.com', password='pw',
+            tier=self.free_tier, is_staff=True,
+        )
+        self.assertTrue(workshop.user_can_access_landing(staff))
 
 
 class WorkshopAdminSmokeTest(TierSetupMixin, TestCase):

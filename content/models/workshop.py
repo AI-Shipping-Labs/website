@@ -59,13 +59,21 @@ class Workshop(models.Model):
     on a linked :class:`events.Event` row (so workshops reuse the recording
     rendering pipeline without duplicating fields).
 
-    Gating is split:
+    Gating is split across three levels, forming a monotonically-increasing
+    chain that must hold at all times:
 
-    - ``pages_required_level`` gates the page content.
+    - ``landing_required_level`` gates the workshop landing page (title,
+      description, metadata). Typically ``0`` so free visitors can see what
+      the workshop is about before signing up.
+    - ``pages_required_level`` gates the tutorial page content, and must be
+      ``>= landing_required_level``.
     - ``recording_required_level`` gates the recording, and must be
-      ``>= pages_required_level`` — validated in :meth:`clean` AND in the
-      sync parser. Fails closed to avoid leaking the recording under the
-      page gate.
+      ``>= pages_required_level``.
+
+    The invariant
+    ``landing_required_level <= pages_required_level <= recording_required_level``
+    is validated in :meth:`clean`, :meth:`save`, and the sync parser. Fails
+    closed so the recording is never leaked under a looser gate.
     """
 
     content_id = models.UUIDField(
@@ -90,6 +98,14 @@ class Workshop(models.Model):
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default='draft',
+    )
+    landing_required_level = models.IntegerField(
+        default=0,
+        choices=VISIBILITY_CHOICES,
+        help_text=(
+            'Minimum tier level required to view the workshop landing page. '
+            'Must be <= pages_required_level.'
+        ),
     )
     pages_required_level = models.IntegerField(
         default=10,
@@ -142,8 +158,15 @@ class Workshop(models.Model):
         return f'/workshops/{self.slug}'
 
     def clean(self):
-        """Validate that the recording gate is at least as strict as the page gate."""
+        """Validate the three-gate chain landing <= pages <= recording."""
         super().clean()
+        if self.landing_required_level > self.pages_required_level:
+            raise ValidationError({
+                'landing_required_level': (
+                    'Landing gate must be at most as strict as the page '
+                    'gate (landing_required_level <= pages_required_level).'
+                ),
+            })
         if self.recording_required_level < self.pages_required_level:
             raise ValidationError({
                 'recording_required_level': (
@@ -162,6 +185,13 @@ class Workshop(models.Model):
         # through the same invariant. ValidationError is the Django
         # conventional way to signal bad data here; callers that want to
         # catch it can wrap the save in a try/except.
+        if self.landing_required_level > self.pages_required_level:
+            raise ValidationError({
+                'landing_required_level': (
+                    'Landing gate must be at most as strict as the page '
+                    'gate (landing_required_level <= pages_required_level).'
+                ),
+            })
         if self.recording_required_level < self.pages_required_level:
             raise ValidationError({
                 'recording_required_level': (
@@ -176,6 +206,10 @@ class Workshop(models.Model):
             self.description_html = ''
 
         super().save(*args, **kwargs)
+
+    def user_can_access_landing(self, user):
+        """Return True when ``user``'s effective level >= landing gate."""
+        return get_user_level(user) >= self.landing_required_level
 
     def user_can_access_pages(self, user):
         """Return True when ``user``'s effective level >= pages gate."""

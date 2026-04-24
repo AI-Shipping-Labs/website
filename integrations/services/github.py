@@ -3474,6 +3474,21 @@ def _sync_single_workshop(
                 f'must be one of {sorted(valid_levels)}'
             )
 
+        # Landing gate (optional, default 0). Must be <= pages gate.
+        # Fails closed so a misconfigured yaml can never leak gated
+        # content under a stricter gate than intended.
+        landing_required_level = data.get('landing_required_level', 0)
+        if landing_required_level not in valid_levels:
+            raise ValueError(
+                f'Invalid landing_required_level={landing_required_level!r}; '
+                f'must be one of {sorted(valid_levels)}'
+            )
+        if landing_required_level > pages_required_level:
+            raise ValueError(
+                f'landing_required_level ({landing_required_level}) must be '
+                f'<= pages_required_level ({pages_required_level}).'
+            )
+
         # Recording block (optional). When present and ``url`` is set,
         # ``required_level`` must be set AND must be >= pages_required_level.
         # Fails closed — missing or too-low gate means no workshop row.
@@ -3549,6 +3564,7 @@ def _sync_single_workshop(
             'tags': data.get('tags', []) or [],
             'cover_image_url': cover_image_url,
             'status': 'published',
+            'landing_required_level': landing_required_level,
             'pages_required_level': pages_required_level,
             'recording_required_level': recording_required_level,
             'code_repo_url': data.get('code_repo_url', '') or '',

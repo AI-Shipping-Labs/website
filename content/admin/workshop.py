@@ -19,11 +19,15 @@ class WorkshopAdmin(admin.ModelAdmin):
 
     list_display = [
         'title', 'slug', 'date', 'status',
+        'landing_required_level',
         'pages_required_level', 'recording_required_level',
         'event', 'updated_at',
     ]
     list_display_links = ['title']
-    list_filter = ['status', 'pages_required_level', 'recording_required_level']
+    list_filter = [
+        'status', 'landing_required_level',
+        'pages_required_level', 'recording_required_level',
+    ]
     search_fields = ['title', 'slug', 'description']
     prepopulated_fields = {'slug': ('title',)}
     raw_id_fields = ['event']
@@ -40,7 +44,8 @@ class WorkshopAdmin(admin.ModelAdmin):
         }),
         ('Access', {
             'fields': (
-                'status', 'pages_required_level', 'recording_required_level',
+                'status', 'landing_required_level',
+                'pages_required_level', 'recording_required_level',
             ),
         }),
         ('Linking', {

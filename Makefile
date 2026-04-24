@@ -1,4 +1,4 @@
-.PHONY: run run2 dev migrate qcache sync seed test test-core coverage playwright lint lint-fix clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright lint lint-fix clean
 
 # Start dev server
 run: qcache
@@ -7,6 +7,10 @@ run: qcache
 # Start dev server on port 8001
 run2: qcache
 	uv run python manage.py runserver 8001
+
+# Start django-q worker
+worker: qcache
+	uv run python manage.py qcluster
 
 # Start dev server + django-q worker together (Ctrl-C kills both)
 dev: qcache

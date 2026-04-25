@@ -2208,53 +2208,6 @@ def _build_workshop_page_lookup(
     return lookup
 
 
-def _strip_leading_h1(body):
-    """Strip a leading H1 heading from ``body`` when present.
-
-    GitHub renders ``README.md`` files with the leading ``# Title`` shown
-    above the body. The workshop landing template already renders the
-    workshop title above the description, so we strip that first H1 to
-    avoid a duplicated heading. Only the FIRST non-blank line is inspected;
-    a deeper H1 (e.g. inside content) is preserved.
-
-    Recognised forms:
-        # Title at top
-        # Title at top\n=== underline (setext-h1)
-
-    Returns the body unchanged when the first non-blank content isn't an H1.
-    """
-    if not body:
-        return body
-
-    lines = body.splitlines(keepends=True)
-    # Find first non-blank line index.
-    first_idx = None
-    for i, line in enumerate(lines):
-        if line.strip():
-            first_idx = i
-            break
-    if first_idx is None:
-        return body
-
-    first = lines[first_idx]
-    stripped = first.strip()
-
-    # ATX H1: "# Heading" (but NOT "## Heading", "###...").
-    if re.match(r'^#\s+\S', stripped) and not stripped.startswith('##'):
-        del lines[first_idx]
-        return ''.join(lines)
-
-    # Setext H1: "Heading\n=====" — the next non-blank line is "=" * n.
-    if first_idx + 1 < len(lines):
-        next_line = lines[first_idx + 1].strip()
-        if next_line and re.fullmatch(r'=+', next_line):
-            # Remove both the heading text and the underline.
-            del lines[first_idx:first_idx + 2]
-            return ''.join(lines)
-
-    return body
-
-
 def _resolve_workshop_landing_copy(
     workshop_dir, data, rel_path, page_lookup, workshop_slug, repo_name,
     sync_errors,
@@ -2282,6 +2235,13 @@ def _resolve_workshop_landing_copy(
     returns ``''``. The workshop sync still proceeds — copy errors never
     skip the workshop row.
 
+    The file-read + frontmatter-strip + leading-H1-strip phase is delegated
+    to the content-type-agnostic helper
+    :func:`content.utils.copy_file.resolve_copy_file_content` (issue #307).
+    Workshop-specific concerns (image-URL rewriting, intra-workshop link
+    rewriting, the "yaml description shadowed by file" info note) stay
+    here.
+
     Args:
         workshop_dir: Absolute path to the workshop folder.
         data: Parsed ``workshop.yaml`` dict.
@@ -2297,88 +2257,47 @@ def _resolve_workshop_landing_copy(
         str: Fully-processed markdown body, or empty string when no source
         applies.
     """
+    from content.utils.copy_file import resolve_copy_file_content
     from content.utils.md_links import rewrite_workshop_md_links
 
     explicit_copy_file = data.get('copy_file')
     yaml_description = data.get('description', '') or ''
 
-    source_filename = None  # the file we ultimately read
-    explicit_set = bool(explicit_copy_file)
-
-    if explicit_set:
-        # Validate explicit copy_file before touching disk so authors get
-        # actionable error messages rather than IOError surprises.
-        if not isinstance(explicit_copy_file, str):
-            sync_errors.append({
-                'file': rel_path,
-                'error': (
-                    f'copy_file {explicit_copy_file!r} must be a string '
-                    f'filename'
-                ),
-            })
-            return ''
-
-        candidate = explicit_copy_file.strip()
-        if '/' in candidate or '..' in candidate or candidate.startswith('.'):
-            # Reject path traversal AND subdir paths AND hidden-file refs.
-            # ``..`` in any position blocks both ``../foo.md`` and
-            # ``foo/../bar.md``. ``/`` blocks subdirectories.
-            sync_errors.append({
-                'file': rel_path,
-                'error': (
-                    f'copy_file {explicit_copy_file!r} must be a filename '
-                    f'in the workshop folder, not a path'
-                ),
-            })
-            return ''
-        if not candidate.lower().endswith('.md'):
-            sync_errors.append({
-                'file': rel_path,
-                'error': (
-                    f'copy_file {explicit_copy_file!r} must be a .md file'
-                ),
-            })
-            return ''
-
-        candidate_path = os.path.join(workshop_dir, candidate)
-        if not os.path.isfile(candidate_path):
-            sync_errors.append({
-                'file': rel_path,
-                'error': (
-                    f'copy_file {explicit_copy_file!r} not found in '
-                    f'{rel_path}'
-                ),
-            })
-            return ''
-
-        source_filename = candidate
-    else:
-        # Implicit fallback: README.md if it exists. Missing README is NOT
-        # an error — it's just absence of a default.
-        readme_path = os.path.join(workshop_dir, 'README.md')
-        if os.path.isfile(readme_path):
-            source_filename = 'README.md'
-
-    if source_filename is None:
-        # No file source. Fall back to yaml description (current behavior).
-        return yaml_description
-
-    # We have a file to read.
-    source_path = os.path.join(workshop_dir, source_filename)
     try:
-        _, body = _parse_markdown_file(source_path)
+        body, error = resolve_copy_file_content(
+            workshop_dir, explicit_copy_file, default='README.md',
+        )
     except Exception as e:
-        # Treat parse failure on an explicit copy_file as an error so
-        # authors notice. Implicit README parse failure is a soft warning
-        # only — this matches the "missing README is not an error" rule
-        # but flags concrete corruption.
+        # Treat parse failure on a resolved copy_file as an error so authors
+        # notice. The helper does not catch IO/parse errors itself — that is
+        # a caller policy decision.
+        attempted = (
+            explicit_copy_file.strip()
+            if isinstance(explicit_copy_file, str) and explicit_copy_file
+            else 'README.md'
+        )
         sync_errors.append({
             'file': rel_path,
             'error': (
-                f'Failed to read landing copy from {source_filename}: {e}'
+                f'Failed to read landing copy from {attempted}: {e}'
             ),
         })
         return ''
+
+    if error is not None:
+        sync_errors.append({'file': rel_path, 'error': error})
+        return ''
+
+    if body is None:
+        # No file source resolved (no copy_file declared and no README.md).
+        # Fall back to yaml description (current behavior).
+        return yaml_description
+
+    # We resolved a file. Determine which filename so we can pass an
+    # accurate ``source_path`` to the rewriters and emit the shadow note.
+    source_filename = (
+        explicit_copy_file.strip() if explicit_copy_file else 'README.md'
+    )
 
     # Inform authors when the yaml description is being shadowed so they
     # can clean up the redundant field. Info-level (logger.info) plus a
@@ -2398,12 +2317,6 @@ def _resolve_workshop_landing_copy(
     if not body or not body.strip():
         # File present but empty / only frontmatter — leave description
         # empty. No error per the spec.
-        return ''
-
-    # Strip leading H1 so the landing template doesn't render a duplicate
-    # heading on top of the workshop title.
-    body = _strip_leading_h1(body)
-    if not body.strip():
         return ''
 
     # Rewrite relative image URLs using the workshop folder as the base

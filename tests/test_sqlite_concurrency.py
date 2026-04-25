@@ -215,7 +215,17 @@ def _run_writers(db_path, n_threads, *, apply_fix, hold_seconds=0.05):
         finally:
             con.close()
 
-    threads = [threading.Thread(target=writer, args=(i,)) for i in range(n_threads)]
+    # daemon=True ensures the python interpreter can exit even if a writer
+    # thread is wedged inside sqlite C code (e.g. blocked in ``sqlite3_step``
+    # waiting on the write lock). ``Thread.join(timeout=60)`` returns control
+    # after the timeout, but a non-daemon thread that is still alive in C
+    # code keeps the process alive at interpreter shutdown — manifesting in
+    # CI as a multi-hour hang after the test method already returned. See
+    # https://github.com/AI-Shipping-Labs/website/issues/270.
+    threads = [
+        threading.Thread(target=writer, args=(i,), daemon=True)
+        for i in range(n_threads)
+    ]
     for t in threads:
         t.start()
     for t in threads:

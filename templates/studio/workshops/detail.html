@@ -1,0 +1,232 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Workshop: {{ workshop.title }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_workshop_list' %}" class="hover:text-foreground">Workshops</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{{ workshop.title }}</span>
+  </div>
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <h1 class="text-2xl font-semibold text-foreground" data-testid="workshop-title">{{ workshop.title }}</h1>
+    <div class="flex items-center gap-3">
+      <a href="{{ workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
+         data-testid="view-on-site"
+         class="text-sm text-muted-foreground hover:text-foreground flex items-center space-x-1">
+        <i data-lucide="external-link" class="w-4 h-4"></i>
+        <span>View on site</span>
+      </a>
+      <a href="{% url 'studio_workshop_edit' workshop_id=workshop.pk %}"
+         data-testid="edit-workshop-link"
+         class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center space-x-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+{% if messages %}
+<div class="max-w-3xl mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'warning' %}bg-yellow-500/20 text-yellow-300{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="max-w-4xl space-y-6">
+
+  {# Synced banner: shows source_repo, source_path, source_commit + Edit on GitHub #}
+  {% include "studio/includes/synced_banner.html" with obj=workshop is_synced=workshop.source_repo github_edit_url=github_edit_url %}
+
+  <!-- Details card -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Details</h2>
+    <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <dt class="text-muted-foreground">Slug</dt>
+        <dd class="text-foreground font-mono mt-1">{{ workshop.slug }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Date</dt>
+        <dd class="text-foreground mt-1">{{ workshop.date|date:"M d, Y" }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Instructor</dt>
+        <dd class="text-foreground mt-1">{{ workshop.instructor_name|default:"—" }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Tags</dt>
+        <dd class="text-foreground mt-1">
+          {% if workshop.tags %}
+            {% for tag in workshop.tags %}
+              <span class="inline-block text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground mr-1">{{ tag }}</span>
+            {% endfor %}
+          {% else %}
+            &mdash;
+          {% endif %}
+        </dd>
+      </div>
+      {% if workshop.cover_image_url %}
+      <div class="md:col-span-2">
+        <dt class="text-muted-foreground">Cover image</dt>
+        <dd class="mt-2">
+          <img src="{{ workshop.cover_image_url }}" alt="{{ workshop.title }} cover"
+               class="rounded-lg border border-border max-w-md" loading="lazy">
+          <p class="text-xs text-muted-foreground mt-1 break-all">{{ workshop.cover_image_url }}</p>
+        </dd>
+      </div>
+      {% endif %}
+      {% if workshop.description_html %}
+      <div class="md:col-span-2">
+        <dt class="text-muted-foreground">Description</dt>
+        <dd class="text-foreground mt-2 prose prose-sm prose-invert max-w-none">
+          {{ workshop.description_html|safe }}
+        </dd>
+      </div>
+      {% endif %}
+    </dl>
+  </div>
+
+  <!-- Access card: status + 3 gates -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-foreground">Access</h2>
+      <span class="text-xs text-muted-foreground">
+        Invariant: landing &le; pages &le; recording
+      </span>
+    </div>
+    <dl class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+      <div>
+        <dt class="text-muted-foreground">Status</dt>
+        <dd class="mt-1">
+          <span class="text-xs px-2 py-1 rounded-full {% if workshop.status == 'published' %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}" data-testid="workshop-status-pill">
+            {{ workshop.get_status_display }}
+          </span>
+        </dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Landing gate</dt>
+        <dd class="text-foreground mt-1" data-testid="landing-gate">{{ workshop.get_landing_required_level_display }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Pages gate</dt>
+        <dd class="text-foreground mt-1" data-testid="pages-gate">{{ workshop.get_pages_required_level_display }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Recording gate</dt>
+        <dd class="text-foreground mt-1" data-testid="recording-gate">{{ workshop.get_recording_required_level_display }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Linked event -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Linked event</h2>
+    {% if workshop.event_id %}
+    <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <dt class="text-muted-foreground">Title</dt>
+        <dd class="text-foreground mt-1">{{ workshop.event.title }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Slug</dt>
+        <dd class="text-foreground font-mono mt-1">{{ workshop.event.slug }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Kind</dt>
+        <dd class="text-foreground mt-1">{{ workshop.event.get_kind_display }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Status</dt>
+        <dd class="text-foreground mt-1">{{ workshop.event.get_status_display }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Recording URL</dt>
+        <dd class="text-foreground mt-1 break-all">
+          {% if workshop.event.recording_url %}
+            <a href="{{ workshop.event.recording_url }}" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline">{{ workshop.event.recording_url }}</a>
+          {% else %}
+            &mdash;
+          {% endif %}
+        </dd>
+      </div>
+      <div class="md:col-span-2">
+        <a href="{% url 'studio_event_edit' event_id=workshop.event_id %}"
+           data-testid="edit-event-link"
+           class="text-sm text-accent hover:underline">Edit event in Studio &rarr;</a>
+      </div>
+    </dl>
+    {% else %}
+    <p class="text-sm text-muted-foreground">
+      &mdash; No linked event. The sync pipeline normally creates one for each
+      workshop yaml file; rerun a sync if you expected a row here.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- Code repo -->
+  {% if workshop.code_repo_url %}
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-3">Code repo</h2>
+    <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
+       class="text-sm text-accent hover:underline break-all flex items-center gap-2">
+      <i data-lucide="github" class="w-4 h-4 flex-shrink-0"></i>
+      <span>{{ workshop.code_repo_url }}</span>
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- Pages -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Pages</h2>
+    <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-4 text-sm text-blue-300">
+      Page bodies are synced from GitHub. To edit them, update the markdown in
+      <code class="font-mono text-xs">workshops-content</code> and re-sync.
+    </div>
+    {% if pages_with_urls %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
+            <th class="px-3 py-2">#</th>
+            <th class="px-3 py-2">Title</th>
+            <th class="px-3 py-2">Slug</th>
+            <th class="px-3 py-2">Last synced</th>
+            <th class="px-3 py-2 text-right">Source</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border" data-testid="workshop-pages-rows">
+          {% for entry in pages_with_urls %}
+          <tr>
+            <td class="px-3 py-3 text-muted-foreground">{{ entry.page.sort_order }}</td>
+            <td class="px-3 py-3 text-foreground">{{ entry.page.title }}</td>
+            <td class="px-3 py-3 text-muted-foreground font-mono text-xs">{{ entry.page.slug }}</td>
+            <td class="px-3 py-3 text-muted-foreground font-mono text-xs">
+              {% if entry.page.source_commit %}{{ entry.page.source_commit|truncatechars:10 }}{% else %}&mdash;{% endif %}
+            </td>
+            <td class="px-3 py-3 text-right">
+              {% if entry.github_url %}
+              <a href="{{ entry.github_url }}" target="_blank" rel="noopener noreferrer"
+                 data-testid="page-source-link"
+                 class="text-accent hover:underline">View source on GitHub</a>
+              {% else %}
+              <span class="text-muted-foreground">&mdash;</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-sm text-muted-foreground">No pages synced yet.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

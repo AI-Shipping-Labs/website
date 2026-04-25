@@ -16,6 +16,13 @@ _MODEL_CONTENT_TYPE_MAP = {
     'CuratedLink': 'resource',
     'Event': 'event',
     'InterviewCategory': 'interview_question',
+    # Workshop and WorkshopPage share one ContentSource entry
+    # (content_type='workshop' on the workshops-content repo). The map lets
+    # ``get_github_edit_url`` resolve the right ContentSource for both —
+    # the content_path is empty in production but the lookup still needs the
+    # mapping to find the right source row. See issue #297.
+    'Workshop': 'workshop',
+    'WorkshopPage': 'workshop',
 }
 
 

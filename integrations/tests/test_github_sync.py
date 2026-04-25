@@ -1891,7 +1891,10 @@ class SeedContentSourcesCommandTest(TestCase):
         types = set(ContentSource.objects.values_list('content_type', flat=True))
         self.assertEqual(
             types,
-            {'article', 'course', 'project', 'interview_question', 'event', 'workshop'},
+            {
+                'article', 'course', 'project', 'interview_question',
+                'event', 'workshop', 'instructor',
+            },
         )
 
     def test_content_paths_correct(self):

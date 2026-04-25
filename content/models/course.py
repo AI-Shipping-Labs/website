@@ -54,6 +54,18 @@ class Course(models.Model):
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
     instructor_name = models.CharField(max_length=200, blank=True, default='')
     instructor_bio = models.TextField(blank=True, default='')
+    instructors = models.ManyToManyField(
+        'content.Instructor',
+        through='content.CourseInstructor',
+        related_name='courses',
+        blank=True,
+        help_text=(
+            'Instructors teaching this course. Order is controlled via the '
+            'CourseInstructor.position field. The first instructor is mirrored '
+            'into the legacy instructor_name/instructor_bio fields by the '
+            'sync pipeline.'
+        ),
+    )
     required_level = models.IntegerField(
         default=0,
         choices=VISIBILITY_CHOICES,

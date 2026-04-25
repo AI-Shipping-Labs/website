@@ -4,6 +4,7 @@ from .course import *
 from .curated_link import *
 from .download import *
 from .enrollment import *
+from .instructor import *
 from .interview_category import *
 from .peer_review import *
 from .project import *

@@ -10,6 +10,7 @@ CONTENT_TYPE_CHOICES = [
     ('interview_question', 'Interview Question'),
     ('event', 'Event'),
     ('workshop', 'Workshop'),
+    ('instructor', 'Instructor'),
 ]
 
 SYNC_STATUS_CHOICES = [

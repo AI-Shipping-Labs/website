@@ -23,6 +23,12 @@ from django.shortcuts import get_object_or_404, render
 
 from content.access import get_required_tier_name
 from content.models import Workshop
+from content.templatetags.video_utils import (
+    append_query_param,
+    detect_video_source,
+    format_timestamp,
+    parse_video_timestamp,
+)
 from content.views.pages import _filter_by_tags, _get_selected_tags
 
 
@@ -137,18 +143,132 @@ def workshop_detail(request, slug):
     return render(request, 'content/workshop_detail.html', context)
 
 
+def _build_timestamps_with_pages(event, workshop):
+    """Annotate ``event.timestamps`` with the matching tutorial page (if any).
+
+    Returns a list of dicts ``{time_seconds, formatted_time, label,
+    tutorial_page}`` so the template can render the timestamp button
+    plus an optional ``-> Tutorial: <title>`` sub-link without doing
+    any time-parsing in Django template logic.
+
+    Both timestamp shapes are accepted:
+    - ``{time_seconds, label}`` (legacy / canonical)
+    - ``{time, title}`` (workshop YAML)
+
+    Pages are matched by exact-second equality. Duplicate ``video_start``
+    values resolve to the page with the lowest ``sort_order`` (i.e. the
+    first page reached in iteration order).
+    """
+    if not event:
+        return []
+    raw = event.timestamps or []
+
+    # Build a {seconds: page} map from the workshop's pages. Iterate in
+    # sort_order so setdefault keeps the lowest-ordered page on collision.
+    page_by_seconds = {}
+    for page in workshop.pages.all().order_by('sort_order'):
+        if not page.video_start:
+            continue
+        try:
+            seconds = parse_video_timestamp(page.video_start)
+        except ValueError:
+            continue
+        page_by_seconds.setdefault(seconds, page)
+
+    annotated = []
+    for ts in raw:
+        if not isinstance(ts, dict):
+            continue
+        # Resolve the integer seconds. Same logic as
+        # video_utils.normalize_timestamps but also returns the matched
+        # page so the template can render the sub-link.
+        if 'time_seconds' in ts:
+            try:
+                seconds = int(ts.get('time_seconds') or 0)
+            except (TypeError, ValueError):
+                continue
+        elif 'time' in ts:
+            try:
+                seconds = parse_video_timestamp(ts.get('time'))
+            except ValueError:
+                continue
+        else:
+            continue
+
+        if seconds < 0:
+            continue
+
+        label = ts.get('label') or ts.get('title') or ''
+        annotated.append({
+            'time_seconds': seconds,
+            'formatted_time': format_timestamp(seconds),
+            'label': label,
+            'tutorial_page': page_by_seconds.get(seconds),
+        })
+    return annotated
+
+
 def workshop_video(request, slug):
     """Video page: embedded recording + materials, gated by recording level.
 
     Lifted from the recording panel in ``templates/events/event_detail.html``
     so the video, timestamps, and materials render with the same player
     component used everywhere else on the site.
+
+    When loaded with a ``?t=MM:SS`` query string and the user has access
+    to the recording, the embed is initialised at that offset. Each
+    timestamp on the page that exact-matches a tutorial page's
+    ``video_start`` shows a "-> Tutorial: <title>" sub-link.
     """
     workshop = _resolve_workshop(slug)
     user = request.user
 
     context = _build_landing_context(workshop, user)
-    context['event'] = workshop.event
+    event = workshop.event
+    context['event'] = event
+
+    # Only parse ?t= and build the inverse-link map when the user can
+    # actually watch the recording. Below the gate the player isn't
+    # rendered, so any work here is wasted (and the spec calls this out
+    # explicitly: "no ?t= parsing happens" when the paywall renders).
+    embed_start_seconds = None
+    timestamps_with_pages = []
+    video_id = None
+    video_source_type = None
+    recording_embed_url_with_start = ''
+
+    if context['can_access_recording'] and event:
+        raw_t = request.GET.get('t', '')
+        if raw_t:
+            try:
+                embed_start_seconds = parse_video_timestamp(raw_t)
+            except ValueError:
+                # Malformed ?t= silently ignored — the page still
+                # renders 200 and the embed plays from 0.
+                embed_start_seconds = None
+
+        timestamps_with_pages = _build_timestamps_with_pages(event, workshop)
+
+        if event.recording_url:
+            video_source_type, video_id = detect_video_source(
+                event.recording_url,
+            )
+
+        # Build the start-augmented embed URL for the legacy iframe path.
+        if event.recording_embed_url:
+            recording_embed_url_with_start = append_query_param(
+                event.recording_embed_url,
+                'start',
+                embed_start_seconds,
+            )
+
+    context.update({
+        'embed_start_seconds': embed_start_seconds,
+        'timestamps_with_pages': timestamps_with_pages,
+        'video_id': video_id,
+        'video_source_type': video_source_type,
+        'recording_embed_url_with_start': recording_embed_url_with_start,
+    })
     return render(request, 'content/workshop_video.html', context)
 
 
@@ -171,11 +291,36 @@ def workshop_page_detail(request, slug, page_slug):
     next_page = pages[idx + 1] if idx + 1 < len(pages) else None
 
     context = _build_landing_context(workshop, request.user)
+    is_gated = not context['can_access_pages']
+
+    # Show the "Watch this section" bar above the H1 only when:
+    # - the page has a video_start timestamp, AND
+    # - the user can access the recording, AND
+    # - the page itself isn't gated (a user blocked from the body
+    #   shouldn't see a watch link to the recording either, even if
+    #   their tier somehow grants recording access).
+    show_watch_bar = (
+        bool(page.video_start)
+        and context['can_access_recording']
+        and not is_gated
+    )
+    if show_watch_bar:
+        # Same-tab link (no target=_blank) so the user lands on the
+        # video page in the normal navigation flow.
+        watch_bar_url = (
+            f'{workshop.get_absolute_url()}/video?t={page.video_start}'
+        )
+    else:
+        watch_bar_url = ''
+
     context.update({
         'page': page,
         'pages': pages,
         'prev_page': prev_page,
         'next_page': next_page,
-        'is_gated': not context['can_access_pages'],
+        'is_gated': is_gated,
+        'show_watch_bar': show_watch_bar,
+        'watch_bar_url': watch_bar_url,
+        'watch_bar_label': page.video_start,
     })
     return render(request, 'content/workshop_page_detail.html', context)

@@ -609,3 +609,81 @@ class WorkshopSeedContentSourceTest(TestCase):
             ).count(),
             1,
         )
+
+
+class WorkshopPageVideoStartSyncTest(_WorkshopSyncFixtureBase):
+    """Sync parses ``video_start`` from page frontmatter (issue #302).
+
+    Valid timestamps are stored verbatim. Invalid timestamps log to
+    ``stats['errors']`` and the field is stored empty (so the watch bar
+    is not shown for that page until the author fixes the value).
+    """
+
+    def test_valid_video_start_persisted(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(
+            folder, '01-page.md', title='P',
+            extra_frontmatter='video_start: "16:00"\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.errors, [])
+        page = WorkshopPage.objects.get(slug='page')
+        self.assertEqual(page.video_start, '16:00')
+
+    def test_invalid_video_start_logged_and_stored_empty(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(
+            folder, '01-page.md', title='P',
+            extra_frontmatter='video_start: "not-a-time"\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        page = WorkshopPage.objects.get(slug='page')
+        # Field stored empty so the watch bar is hidden until fixed.
+        self.assertEqual(page.video_start, '')
+        # Error is logged with the offending value and the file path.
+        self.assertTrue(
+            any(
+                'video_start' in err.get('error', '')
+                and 'not-a-time' in err.get('error', '')
+                for err in sync_log.errors
+            ),
+            f'Expected a video_start error, got: {sync_log.errors}',
+        )
+
+    def test_missing_video_start_is_not_an_error(self):
+        # Pages without the key sync cleanly with video_start=''.
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(folder, '01-page.md', title='P')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.errors, [])
+        page = WorkshopPage.objects.get(slug='page')
+        self.assertEqual(page.video_start, '')
+
+    def test_resync_with_unchanged_video_start_is_idempotent(self):
+        # Acceptance criterion: re-syncing a workshop with the same
+        # content does not bump items_updated.
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(
+            folder, '01-page.md', title='P',
+            extra_frontmatter='video_start: "16:00"\n',
+        )
+
+        first = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(first.errors, [])
+        self.assertGreaterEqual(first.items_created, 1)
+
+        second = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(second.errors, [])
+        # Second sync is a no-op — no updates and no creates.
+        self.assertEqual(second.items_created, 0)
+        self.assertEqual(second.items_updated, 0)

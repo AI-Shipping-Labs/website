@@ -246,6 +246,15 @@ class WorkshopPage(models.Model):
         blank=True, default='',
         help_text='Auto-rendered HTML from body markdown.',
     )
+    video_start = models.CharField(
+        max_length=10, blank=True, default='',
+        help_text=(
+            'Optional MM:SS or H:MM:SS timestamp marking where this page '
+            'begins in the linked workshop recording. When set, a "Watch '
+            'this section" link is shown above the page title for users '
+            'with recording access.'
+        ),
+    )
     source_path = models.CharField(
         max_length=500, blank=True, null=True, default=None,
     )

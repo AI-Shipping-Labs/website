@@ -687,3 +687,140 @@ class WorkshopPageVideoStartSyncTest(_WorkshopSyncFixtureBase):
         # Second sync is a no-op — no updates and no creates.
         self.assertEqual(second.items_created, 0)
         self.assertEqual(second.items_updated, 0)
+
+
+class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
+    """Integration: cross-page ``.md`` links are rewritten at sync time (issue #301).
+
+    The rewriter is the only thing standing between authors writing
+    ``[10-qa.md](10-qa.md)`` and the rendered page producing a 404 link.
+    Validates that after sync:
+    - The stored markdown body has the rewritten URL.
+    - The rendered ``body_html`` has the rewritten URL and substituted title.
+    - Custom labels are preserved verbatim; only the URL is swapped.
+    - Anchor fragments survive.
+    - Broken sibling links surface as ``SyncLog.errors`` entries naming the
+      missing filename and the workshop slug.
+    """
+
+    def test_cross_page_links_resolve_to_platform_urls(self):
+        folder = '2026-04-21-end-to-end-agent-deployment'
+        self._write_workshop_yaml(
+            folder=folder,
+            slug='end-to-end-agent-deployment',
+            title='End-to-end agent deployment',
+        )
+        # Three pages cross-linking each other so we cover forward,
+        # backward, and self-named-text references.
+        self._write_page(
+            folder, '01-overview.md', title='Welcome and overview',
+            body=(
+                'The agentic-RAG explanation is in '
+                '[02-starting-notebook.md](02-starting-notebook.md).\n'
+                'See [10-qa.md](10-qa.md) for why and how.\n'
+                'For tmux details see [the Q&A page](10-qa.md#tmux).\n'
+            ),
+        )
+        self._write_page(
+            folder, '02-starting-notebook.md',
+            title='Part 1: The starting notebook',
+            body='Background lives in [01-overview.md](01-overview.md).\n',
+        )
+        self._write_page(
+            folder, '10-qa.md', title='Q&A: side discussions',
+            body='Back to the [start](01-overview.md).\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            sync_log.errors, [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+
+        workshop = Workshop.objects.get(slug='end-to-end-agent-deployment')
+        overview = WorkshopPage.objects.get(workshop=workshop, slug='overview')
+
+        # Stored markdown has the rewritten links — the bare filename is
+        # gone and replaced with the title.
+        self.assertIn(
+            '[Part 1: The starting notebook]'
+            '(/workshops/end-to-end-agent-deployment/tutorial/starting-notebook)',
+            overview.body,
+        )
+        self.assertIn(
+            '[Q&A: side discussions]'
+            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            overview.body,
+        )
+        self.assertIn(
+            '[the Q&A page]'
+            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            overview.body,
+        )
+        self.assertNotIn('](10-qa.md)', overview.body)
+        self.assertNotIn('](02-starting-notebook.md)', overview.body)
+
+        # Rendered HTML carries the right hrefs.
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment/tutorial/qa"',
+            overview.body_html,
+        )
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment/tutorial/qa#tmux"',
+            overview.body_html,
+        )
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment/tutorial/starting-notebook"',
+            overview.body_html,
+        )
+        # And no leftover bare-filename hrefs.
+        self.assertNotIn('href="10-qa.md"', overview.body_html)
+        self.assertNotIn('href="02-starting-notebook.md"', overview.body_html)
+
+        # Backward reference (page 02 -> page 01) resolves too.
+        starting = WorkshopPage.objects.get(
+            workshop=workshop, slug='starting-notebook',
+        )
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment/tutorial/overview"',
+            starting.body_html,
+        )
+
+    def test_broken_cross_page_link_surfaces_in_sync_log(self):
+        folder = '2026-04-21-end-to-end-agent-deployment'
+        self._write_workshop_yaml(
+            folder=folder,
+            slug='end-to-end-agent-deployment',
+            title='End-to-end agent deployment',
+        )
+        # 99-deleted.md does not exist on disk.
+        self._write_page(
+            folder, '01-overview.md', title='Welcome and overview',
+            body='Old: [gone](99-deleted.md).\n',
+        )
+        self._write_page(
+            folder, '10-qa.md', title='Q&A: side discussions',
+            body='Body.\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        # The page itself still synced — the rewriter never aborts the page.
+        workshop = Workshop.objects.get(slug='end-to-end-agent-deployment')
+        overview = WorkshopPage.objects.get(workshop=workshop, slug='overview')
+        # Broken link is left intact (visible to the author in the rendered
+        # page) so they can spot it.
+        self.assertIn('[gone](99-deleted.md)', overview.body)
+        self.assertIn('href="99-deleted.md"', overview.body_html)
+
+        # And the SyncLog has a warning naming the missing file and workshop.
+        broken_link_errors = [
+            e for e in sync_log.errors
+            if '99-deleted.md' in e.get('error', '')
+        ]
+        self.assertEqual(len(broken_link_errors), 1)
+        msg = broken_link_errors[0]['error']
+        self.assertIn('99-deleted.md', msg)
+        self.assertIn('end-to-end-agent-deployment', msg)
+        # The error is attributed to the source page that contained the link.
+        self.assertIn('01-overview.md', broken_link_errors[0]['file'])

@@ -1870,19 +1870,17 @@ class SeedContentSourcesCommandTest(TestCase):
         }
         self.assertEqual(repos, expected)
 
-    def test_content_sources_privacy(self):
-        """Content monorepo + python-course are private; workshops-content is public."""
+    def test_content_sources_are_private(self):
+        """All seeded content sources are marked private (require GitHub App auth)."""
         from io import StringIO
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        privacy_by_repo = {
-            s.repo_name: s.is_private
-            for s in ContentSource.objects.all()
-        }
-        self.assertTrue(privacy_by_repo['AI-Shipping-Labs/content'])
-        self.assertTrue(privacy_by_repo['AI-Shipping-Labs/python-course'])
-        self.assertFalse(privacy_by_repo['AI-Shipping-Labs/workshops-content'])
+        for source in ContentSource.objects.all():
+            self.assertTrue(
+                source.is_private,
+                f"Expected {source.repo_name} to be marked private",
+            )
 
     def test_content_types_correct(self):
         from io import StringIO

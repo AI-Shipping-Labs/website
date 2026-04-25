@@ -49,7 +49,7 @@ DEFAULT_SOURCES = [
         'repo_name': 'AI-Shipping-Labs/workshops-content',
         'content_type': 'workshop',
         'content_path': '',
-        'is_private': False,
+        'is_private': True,
     },
 ]
 

@@ -1,6 +1,27 @@
 <!-- Synced content banner: shows when content is managed in GitHub -->
 <!-- Requires: is_synced, github_edit_url, obj (the content object) -->
+{% load studio_filters %}
 {% if is_synced %}
+{# Surface flash messages here so the per-object Re-sync source button #}
+{# (issue #281) has a visible landing place on every studio detail page #}
+{# that includes the banner — most form templates don't render messages #}
+{# themselves. Workshop forms still render their own messages block; the #}
+{# Django messages framework consumes messages on first iteration so a #}
+{# duplicate render is safely a no-op. #}
+{% if messages %}
+<div class="mb-6 space-y-2" data-testid="synced-banner-messages">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm
+              {% if message.tags == 'error' %}bg-red-500/20 text-red-400
+              {% elif message.tags == 'warning' %}bg-yellow-500/20 text-yellow-300
+              {% elif message.tags == 'success' %}bg-green-500/20 text-green-400
+              {% else %}bg-blue-500/20 text-blue-400{% endif %}"
+       data-testid="flash-{{ message.tags|default:'info' }}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6" data-testid="synced-banner">
   <div class="flex items-start space-x-3">
     <svg class="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
@@ -16,6 +37,17 @@
         {% if obj.get_absolute_url %}
         <a href="{{ obj.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
            class="text-sm text-blue-400 hover:text-blue-300 underline">View on site</a>
+        {% endif %}
+        {% if obj.source_repo %}
+        <form method="post"
+              action="{% url 'studio_sync_object_trigger' model_name=obj|model_name object_id=obj.pk %}"
+              class="inline"
+              data-testid="resync-source-form">
+          {% csrf_token %}
+          <button type="submit"
+                  class="text-sm text-blue-400 hover:text-blue-300 underline bg-transparent border-0 p-0 cursor-pointer"
+                  data-testid="resync-source-button">Re-sync source</button>
+        </form>
         {% endif %}
       </div>
     </div>

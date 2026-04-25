@@ -4,9 +4,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Maps Django model name to ContentSource.content_type.
-# Used to look up the content_path prefix for GitHub URLs.
-_MODEL_CONTENT_TYPE_MAP = {
+# Maps Django model name (Python class name) to ContentSource.content_type.
+# Used to look up the content_path prefix for GitHub URLs and to resolve the
+# matching ContentSource for the per-object Re-sync button (issue #281).
+MODEL_CONTENT_TYPE_MAP = {
     'Article': 'article',
     'Course': 'course',
     'Module': 'course',
@@ -24,6 +25,10 @@ _MODEL_CONTENT_TYPE_MAP = {
     'Workshop': 'workshop',
     'WorkshopPage': 'workshop',
 }
+
+# Backwards-compatibility alias: existing code (and one test) imports the
+# private name ``_MODEL_CONTENT_TYPE_MAP``. Keep both bound to the same dict.
+_MODEL_CONTENT_TYPE_MAP = MODEL_CONTENT_TYPE_MAP
 
 
 def is_synced(obj):

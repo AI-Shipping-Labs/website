@@ -963,3 +963,169 @@ def sync_status(request, source_id):
         'last_sync_status': source.last_sync_status,
         'last_synced_at': source.last_synced_at.isoformat() if source.last_synced_at else None,
     })
+
+
+# Allowlist of model_name URL parameters mapped to (app_label, ModelClassName).
+# The Re-sync source button on Studio detail pages POSTs to a URL containing
+# the model_name. We resolve the model via Django's app registry rather than
+# importing every model up-front — keeps studio/views/sync.py free of cross-app
+# imports. Synced models only; the workshop_page entry exists because workshop
+# pages share their parent workshop's ``source_repo`` and the include is
+# always called with ``obj=workshop`` so the WorkshopPage class itself never
+# needs to be loaded by name. Issue #281.
+_OBJECT_TRIGGER_MODEL_ALLOWLIST = {
+    'article': ('content', 'Article'),
+    'course': ('content', 'Course'),
+    'module': ('content', 'Module'),
+    'unit': ('content', 'Unit'),
+    'project': ('content', 'Project'),
+    'download': ('content', 'Download'),
+    'curatedlink': ('content', 'CuratedLink'),
+    'event': ('events', 'Event'),
+    'recording': ('events', 'Event'),
+    'interviewcategory': ('content', 'InterviewCategory'),
+    'workshop': ('content', 'Workshop'),
+    'workshoppage': ('content', 'WorkshopPage'),
+}
+
+
+def _safe_redirect_target(request, fallback_url):
+    """Return a same-host HTTP_REFERER if present, otherwise ``fallback_url``.
+
+    Mirrors the standard "redirect back to where the user came from" pattern
+    but defends against open-redirect by only honouring referers from the
+    same host. ``fallback_url`` is an already-resolved URL string.
+    """
+    referer = request.META.get('HTTP_REFERER', '')
+    if not referer:
+        return fallback_url
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(referer)
+    except Exception:
+        return fallback_url
+    # Empty netloc means a relative URL — same-host by definition.
+    if not parsed.netloc:
+        return referer
+    request_host = request.get_host()
+    if parsed.netloc == request_host:
+        return referer
+    return fallback_url
+
+
+@staff_required
+@require_POST
+def sync_object_trigger(request, model_name, object_id):
+    """Trigger a re-sync from a Studio detail page's "Re-sync source" button.
+
+    Resolves the matching ``ContentSource`` from the object's ``source_repo``
+    plus its model-derived ``content_type`` and enqueues the same async task
+    used by the dashboard ``Sync now`` button. The button is rendered by
+    ``synced_banner.html`` only when the object has a ``source_repo``, but
+    the view still guards each precondition so a hand-crafted POST cannot
+    crash the server. See issue #281.
+
+    Redirects back to the page that triggered the click (same-host
+    ``HTTP_REFERER``), falling back to ``/studio/sync/`` so the operator can
+    watch progress on the dashboard.
+    """
+    from django.apps import apps
+
+    from studio.utils import MODEL_CONTENT_TYPE_MAP
+
+    fallback_url = redirect('studio_sync_dashboard').url
+
+    key = (model_name or '').lower()
+    entry = _OBJECT_TRIGGER_MODEL_ALLOWLIST.get(key)
+    if entry is None:
+        # Unknown / not-allowlisted model — 404 to mirror the
+        # ``get_object_or_404`` behaviour for a missing object.
+        from django.http import Http404
+        raise Http404(f'Unknown model: {model_name!r}')
+
+    app_label, class_name = entry
+    try:
+        Model = apps.get_model(app_label, class_name)
+    except LookupError:
+        from django.http import Http404
+        raise Http404(f'Model not registered: {app_label}.{class_name}')
+
+    obj = get_object_or_404(Model, pk=object_id)
+
+    source_repo = getattr(obj, 'source_repo', '') or ''
+    if not source_repo:
+        messages.error(
+            request,
+            'This object has no source_repo set, so it cannot be re-synced. '
+            'Manually-created content is not synced from GitHub.',
+        )
+        return redirect(_safe_redirect_target(request, fallback_url))
+
+    content_type = MODEL_CONTENT_TYPE_MAP.get(class_name)
+    if content_type is None:
+        # Should be impossible given the allowlist, but guard anyway.
+        messages.error(
+            request,
+            f'No content_type mapping for model {class_name}.',
+        )
+        return redirect(_safe_redirect_target(request, fallback_url))
+
+    try:
+        source = ContentSource.objects.get(
+            repo_name=source_repo,
+            content_type=content_type,
+        )
+    except ContentSource.DoesNotExist:
+        messages.error(
+            request,
+            f'No content source is configured for {source_repo} '
+            f'({content_type}). Add one under Sync Dashboard '
+            'before re-syncing this object.',
+        )
+        return redirect(_safe_redirect_target(request, fallback_url))
+
+    try:
+        try:
+            from django_q.tasks import async_task
+            async_task(
+                'integrations.services.github.sync_content_source',
+                source,
+                task_name=f'sync-{source.repo_name}-{source.content_type}',
+            )
+            # Issue #274: mark queued only AFTER the enqueue succeeded so
+            # we don't lie about an in-flight sync that never landed.
+            _mark_source_queued(source)
+            warning = _worker_warning_suffix()
+            base_msg = format_html(
+                'Sync queued for {repo} ({content_type}). Watch progress at '
+                '<a href="/studio/sync/" class="underline">/studio/sync/</a>'
+                '{warning}',
+                repo=source.repo_name,
+                content_type=source.content_type,
+                warning=warning,
+            )
+            if warning:
+                messages.warning(request, base_msg)
+            else:
+                messages.success(request, base_msg)
+        except ImportError:
+            # django_q is optional in test/dev shells — fall back to a
+            # synchronous run so the operator's click still does something.
+            sync_content_source(source)
+            messages.success(
+                request,
+                f'Sync completed for {source.repo_name} '
+                f'({source.content_type}).',
+            )
+    except Exception as exc:
+        logger.exception(
+            'Error triggering object re-sync for %s (%s)',
+            source.repo_name, source.content_type,
+        )
+        messages.error(
+            request,
+            f'Re-sync failed for {source.repo_name} '
+            f'({source.content_type}): {exc}',
+        )
+
+    return redirect(_safe_redirect_target(request, fallback_url))

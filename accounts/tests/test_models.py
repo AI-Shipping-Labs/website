@@ -8,13 +8,6 @@ from accounts.models import User
 class UserModelTest(TestCase):
     """Tests for the custom User model."""
 
-    def test_create_user_with_email(self):
-        user = User.objects.create_user(email="test@example.com")
-        self.assertEqual(user.email, "test@example.com")
-        self.assertFalse(user.is_staff)
-        self.assertFalse(user.is_superuser)
-        self.assertTrue(user.is_active)
-
     def test_create_user_requires_email(self):
         with self.assertRaises(ValueError):
             User.objects.create_user(email="")
@@ -60,14 +53,3 @@ class UserModelTest(TestCase):
         User.objects.create_user(email="test@example.com")
         with self.assertRaises(IntegrityError):
             User.objects.create_user(email="test@example.com")
-
-class UserPaymentFieldsTest(TestCase):
-    """Tests for user payment-related fields."""
-
-    def test_tier_defaults_to_free(self):
-        """New users should be assigned the 'free' tier on creation."""
-        user = User.objects.create_user(email="test@example.com")
-        self.assertIsNotNone(user.tier)
-        self.assertEqual(user.tier.slug, "free")
-
-

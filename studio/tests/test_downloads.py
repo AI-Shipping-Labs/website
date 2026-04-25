@@ -1,22 +1,16 @@
 """Tests for studio download management views."""
 
-from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import TestCase
 
 from content.models import Download
+from tests.fixtures import StaffUserMixin
 
-User = get_user_model()
 
-
-class StudioDownloadListTest(TestCase):
+class StudioDownloadListTest(StaffUserMixin, TestCase):
     """Test download list view."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
 
     def test_list_returns_200(self):
         response = self.client.get('/studio/downloads/')
@@ -48,15 +42,11 @@ class StudioDownloadListTest(TestCase):
         self.assertNotContains(response, 'Java Guide')
 
 
-class StudioDownloadCreateRemovedTest(TestCase):
+class StudioDownloadCreateRemovedTest(StaffUserMixin, TestCase):
     """Test that download create URL has been removed."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
 
     def test_create_url_returns_404(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario11StaffCreatesDownloadViaStudio::test_download_create_url_removed_and_download_visible_publicly
@@ -66,15 +56,11 @@ class StudioDownloadCreateRemovedTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class StudioDownloadEditTest(TestCase):
+class StudioDownloadEditTest(StaffUserMixin, TestCase):
     """Test download editing."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.download = Download.objects.create(
             title='Edit DL', slug='edit-dl',
             file_url='https://example.com/file.pdf',

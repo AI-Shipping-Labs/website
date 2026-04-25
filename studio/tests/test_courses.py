@@ -9,23 +9,17 @@ Verifies:
 - Module reorder API
 """
 
-from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import TestCase
 
 from content.models import Course, Module, Unit
+from tests.fixtures import StaffUserMixin
 
-User = get_user_model()
 
-
-class StudioCourseListTest(TestCase):
+class StudioCourseListTest(StaffUserMixin, TestCase):
     """Test course list view."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
 
     def test_list_returns_200(self):
         response = self.client.get('/studio/courses/')
@@ -59,30 +53,22 @@ class StudioCourseListTest(TestCase):
         self.assertContains(response, 'No courses found')
 
 
-class StudioCourseCreateRemovedTest(TestCase):
+class StudioCourseCreateRemovedTest(StaffUserMixin, TestCase):
     """Test that course create URL has been removed."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
 
     def test_create_url_returns_404(self):
         response = self.client.get('/studio/courses/new')
         self.assertEqual(response.status_code, 404)
 
 
-class StudioCourseEditTest(TestCase):
+class StudioCourseEditTest(StaffUserMixin, TestCase):
     """Test course edit form."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.course = Course.objects.create(
             title='Edit Course', slug='edit-course', status='draft',
         )
@@ -118,15 +104,11 @@ class StudioCourseEditTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class StudioModuleCreateTest(TestCase):
+class StudioModuleCreateTest(StaffUserMixin, TestCase):
     """Test module creation within a course."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.course = Course.objects.create(
             title='Course', slug='module-test', status='draft',
         )
@@ -161,15 +143,11 @@ class StudioModuleCreateTest(TestCase):
         )
 
 
-class StudioUnitCreateTest(TestCase):
+class StudioUnitCreateTest(StaffUserMixin, TestCase):
     """Test unit creation within a module."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.course = Course.objects.create(
             title='Course', slug='unit-test', status='draft',
         )
@@ -197,15 +175,11 @@ class StudioUnitCreateTest(TestCase):
         )
 
 
-class StudioUnitEditTest(TestCase):
+class StudioUnitEditTest(StaffUserMixin, TestCase):
     """Test unit editing."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.course = Course.objects.create(
             title='Course', slug='unit-edit', status='draft',
         )
@@ -255,15 +229,11 @@ class StudioUnitEditTest(TestCase):
         )
 
 
-class StudioModuleReorderTest(TestCase):
+class StudioModuleReorderTest(StaffUserMixin, TestCase):
     """Test module reorder API."""
 
     def setUp(self):
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.course = Course.objects.create(
             title='Reorder', slug='reorder', status='draft',
         )

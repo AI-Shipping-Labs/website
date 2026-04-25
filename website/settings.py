@@ -141,6 +141,10 @@ MIDDLEWARE = [
     # ALLOWED_HOSTS validation. See website/middleware.py.
     'website.middleware.HealthCheckMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Serves /static/* from STATIC_ROOT in production (DEBUG=False).
+    # Must come right after SecurityMiddleware so static responses still
+    # get security headers but skip session / auth / CSRF processing.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'integrations.middleware.RemoveTrailingSlashMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -238,6 +242,17 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# WhiteNoise: serve hashed, compressed static files in production. The
+# Dockerfile runs `collectstatic --noinput` so STATIC_ROOT is populated
+# at build time. Manifest storage adds content-hash suffixes so static
+# URLs can be cached far-future without staleness.
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

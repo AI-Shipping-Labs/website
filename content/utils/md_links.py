@@ -14,6 +14,12 @@ This module provides :func:`rewrite_md_links`, which scans a markdown body for
 ``[label](path.md)`` style links (including optional ``#anchor`` fragments) and
 rewrites them to absolute platform URLs using the supplied unit-slug lookup.
 
+Workshop pages get a parallel helper, :func:`rewrite_workshop_md_links`, that
+operates on the flat workshop folder layout (no ``..``, no subdirs) and adds
+title-swap behaviour: when a link's visible text is just the bare filename,
+the rewriter substitutes the target page's title so authors don't have to
+repeat themselves.
+
 Resolution rules (see issue #226):
 
 - Sibling ``02-setup.md`` -> ``/courses/<course>/<module>/<unit-slug>``
@@ -228,6 +234,133 @@ def rewrite_md_links(
     # rewriting entirely (defensive: callers should always supply it).
     if not course_slug:
         return body
+
+    return _MD_LINK_RE.sub(_replace, body)
+
+
+def rewrite_workshop_md_links(
+    body,
+    workshop_slug,
+    page_lookup,
+    source_path=None,
+    sync_errors=None,
+):
+    """Rewrite intra-workshop ``.md`` links in ``body`` to platform URLs.
+
+    Workshops live in flat folders (``YYYY-MM-DD-<slug>/<NN-page>.md``), so
+    valid intra-workshop links are sibling references only — no ``..`` or
+    nested subfolders. The rewriter resolves each sibling ``.md`` filename to
+    ``/workshops/<workshop_slug>/tutorial/<page_slug>`` (no trailing slash).
+
+    Beyond URL resolution, when the link's visible text equals the bare
+    filename (modulo surrounding whitespace, case-insensitive) the rewriter
+    swaps the text for the target page's title. This means authors can write
+    ``[10-qa.md](10-qa.md)`` and readers see the title verbatim — without
+    forcing authors to repeat the title in every link.
+
+    Args:
+        body: Raw markdown text.
+        workshop_slug: ``Workshop.slug`` of the workshop owning this body.
+        page_lookup: Mapping ``{filename: {'slug', 'title', 'url'}}`` covering
+            every ``.md`` page in the workshop folder. ``filename`` is the
+            on-disk basename (e.g. ``"10-qa.md"``); the value is the destination
+            metadata used to assemble the rewritten link.
+        source_path: Repo-relative path of the file being rewritten, used only
+            for log/warning messages.
+        sync_errors: Optional list to append warning records to. Each record
+            has shape ``{'file': source_path, 'error': '...'}`` so it surfaces
+            on the SyncLog.
+
+    Returns:
+        str: The body with internal ``.md`` links rewritten where possible.
+    """
+    if not body:
+        return body
+
+    if not workshop_slug:
+        # Defensive: without a workshop slug we can't construct platform URLs.
+        return body
+
+    page_lookup = page_lookup or {}
+
+    def _warn(message):
+        logger.warning(message)
+        if sync_errors is not None:
+            sync_errors.append({
+                'file': source_path or '',
+                'error': message,
+            })
+
+    # Build a case-insensitive index once so each link only pays the cost of
+    # one extra lookup, not a linear scan through page_lookup.
+    case_insensitive_index = {
+        name.lower(): name for name in page_lookup
+    }
+
+    def _lookup_filename(filename):
+        """Return the canonical filename matching ``filename``, or None."""
+        if filename in page_lookup:
+            return filename
+        return case_insensitive_index.get(filename.lower())
+
+    def _resolve(target):
+        """Return (page_meta, fragment) for a resolvable link, else None."""
+        if not target or target.startswith('#') or _is_external(target):
+            return None
+
+        if '#' in target:
+            path_part, _, fragment = target.partition('#')
+            fragment = '#' + fragment
+        else:
+            path_part = target
+            fragment = ''
+
+        if not path_part.lower().endswith('.md'):
+            return None
+
+        # Strip a leading "./" — same intent the author had with a sibling
+        # link. Anything else with a slash escapes the flat workshop folder.
+        if path_part.startswith('./'):
+            path_part = path_part[2:]
+
+        if path_part.startswith('/') or '/' in path_part or path_part.startswith('..'):
+            _warn(
+                f'Cross-workshop or out-of-tree link "{target}" in '
+                f'{source_path or "(unknown file)"} left as-is.'
+            )
+            return None
+
+        canonical = _lookup_filename(path_part)
+        if canonical is None:
+            _warn(
+                f'Unresolvable .md link "{target}" in '
+                f'{source_path or "(unknown file)"}: '
+                f'no page found for filename "{path_part}" in workshop '
+                f'"{workshop_slug}".'
+            )
+            return None
+
+        return page_lookup[canonical], fragment, canonical
+
+    def _replace(match):
+        target = match.group('target')
+        resolved = _resolve(target)
+        if resolved is None:
+            return match.group(0)
+        page_meta, fragment, canonical = resolved
+        url = page_meta.get('url') or (
+            f'/workshops/{workshop_slug}/tutorial/{page_meta["slug"]}'
+        )
+        title = match.group('title') or ''
+        label = match.group('label')
+
+        # Title swap: if the visible label is just the filename (with optional
+        # surrounding whitespace, case-insensitive), replace it with the
+        # target page's title so readers don't see "10-qa.md" as link text.
+        if label.strip().lower() == canonical.lower():
+            label = page_meta.get('title') or label
+
+        return f'[{label}]({url}{fragment}{title})'
 
     return _MD_LINK_RE.sub(_replace, body)
 

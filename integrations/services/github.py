@@ -2082,6 +2082,62 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None):
     return lookup
 
 
+def _build_workshop_page_lookup(workshop_dir, workshop_slug):
+    """Build a ``{filename: {'slug', 'title', 'url'}}`` map for a workshop folder.
+
+    Used by :func:`rewrite_workshop_md_links` (issue #301) so we can resolve
+    intra-workshop sibling ``.md`` links to platform URLs and substitute
+    page titles when the link's visible text is the bare filename.
+
+    Slug derivation mirrors :func:`_sync_workshop_pages`: frontmatter ``slug``
+    overrides, otherwise :func:`derive_slug` strips the numeric prefix and
+    ``.md`` extension. Files missing a frontmatter ``title`` are skipped from
+    the lookup — they won't sync as pages either, so a link to them stays
+    unresolved and surfaces as a broken-link warning the same way courses do.
+    ``README.md`` and dotfiles are excluded (workshops don't surface a
+    README page).
+    """
+    lookup = {}
+    if not os.path.isdir(workshop_dir):
+        return lookup
+
+    for filename in sorted(os.listdir(workshop_dir)):
+        if (
+            not filename.endswith('.md')
+            or filename.upper() == 'README.MD'
+            or filename.startswith('.')
+        ):
+            continue
+
+        filepath = os.path.join(workshop_dir, filename)
+        if not os.path.isfile(filepath):
+            continue
+
+        # Best-effort: a parse error here just means we can't resolve links
+        # to this file. We don't want link rewriting to ever fail the sync.
+        try:
+            metadata, _ = _parse_markdown_file(filepath)
+        except Exception:
+            continue
+
+        title = metadata.get('title')
+        if not title:
+            # Page won't sync (validation requires title), so it can't be a
+            # link target. Skip the lookup so the rewriter emits the standard
+            # "no page found" warning if anyone links to it.
+            continue
+
+        slug = metadata.get('slug') or derive_slug(filename)
+        url = f'/workshops/{workshop_slug}/tutorial/{slug}'
+        lookup[filename] = {
+            'slug': slug,
+            'title': title,
+            'url': url,
+        }
+
+    return lookup
+
+
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
                          known_images=None, course_ignore_patterns=None):
     """Sync modules and units for a course.
@@ -3779,6 +3835,13 @@ def _sync_workshop_pages(
     soft-delete layer would be dead weight.
     """
     from content.models import WorkshopPage
+    from content.utils.md_links import rewrite_workshop_md_links
+
+    # Issue #301: build a {filename -> page-meta} lookup once per workshop so
+    # the link rewriter can resolve sibling ``.md`` links across all pages
+    # (including forward references, e.g. page 02 linking to page 10) before
+    # any individual page is parsed.
+    page_lookup = _build_workshop_page_lookup(workshop_dir, workshop.slug)
 
     seen_paths = set()
 
@@ -3825,6 +3888,16 @@ def _sync_workshop_pages(
                     known_images, stats['errors'],
                 )
             body = rewrite_image_urls(body, repo_name, base_dir)
+            # Issue #301: rewrite intra-workshop ``.md`` links to platform
+            # URLs. Run on the raw markdown (before WorkshopPage.save() calls
+            # markdown.markdown()) so the rewriter doesn't have to parse HTML.
+            body = rewrite_workshop_md_links(
+                body,
+                workshop_slug=workshop.slug,
+                page_lookup=page_lookup,
+                source_path=rel_path,
+                sync_errors=stats.get('errors'),
+            )
 
             defaults = {
                 'title': metadata['title'],

@@ -48,15 +48,6 @@ def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
             )
             container_def["environment"] = environment
 
-        # Validate expected containers are present
-        container_names = {c["name"] for c in task_def["containerDefinitions"]}
-        expected = {"ai-shipping-labs", "ai-shipping-labs-worker"}
-        missing = expected - container_names
-        if missing:
-            print(f"ERROR: Missing containers in task definition: {missing}")
-            print("This likely means the task definition was manually edited incorrectly.")
-            sys.exit(1)
-
         # Remove fields not allowed in register-task-definition
         for key in [
             "status",

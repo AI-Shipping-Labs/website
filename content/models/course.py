@@ -1,6 +1,7 @@
 import markdown as md_lib
 from django.conf import settings
 from django.db import models
+from django.db.models import Prefetch
 
 from content.access import VISIBILITY_CHOICES, get_required_tier_name
 from content.markdown_extensions import (
@@ -203,9 +204,16 @@ class Course(models.Model):
         ).exclude(unit__slug='readme', unit__sort_order=-1).count()
 
     def get_syllabus(self):
-        """Return modules with their units, ordered by sort_order."""
-        modules = self.modules.prefetch_related('units').order_by('sort_order')
-        return modules
+        """Return modules with their units, ordered by sort_order.
+
+        Units are prefetched ordered by ``sort_order``. Callers can iterate
+        ``module.units.all()`` and rely on the prefetch cache — chaining
+        ``.order_by()`` on top would force a fresh ``SELECT`` per module
+        (one query per module), which is the N+1 pattern issue #287 fixed.
+        """
+        return self.modules.prefetch_related(
+            Prefetch('units', queryset=Unit.objects.order_by('sort_order')),
+        ).order_by('sort_order')
 
     def get_next_unit_for(self, user):
         """Return the next unfinished unit for the given user.

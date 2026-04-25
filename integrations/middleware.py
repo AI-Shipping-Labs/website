@@ -1,6 +1,6 @@
 """Middleware for URL redirects and trailing slash removal."""
 
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 
 
@@ -26,29 +26,45 @@ class RemoveTrailingSlashMiddleware:
                 return HttpResponsePermanentRedirect(new_path)
         return self.get_response(request)
 
-# --- Announcement banner in-process cache --------------------------------
-# Keep a module-level reference to the singleton so we don't hit the DB on
-# every request. Cleared after the banner is saved in the studio view.
-_ANNOUNCEMENT_BANNER_CACHE: dict = {'value': None, 'loaded': False}
+# --- Announcement banner cross-process cache -----------------------------
+# The banner singleton is read on every public page request, so we cache the
+# row in the cross-process ``django_q`` cache (DatabaseCache in production,
+# LocMemCache in tests) instead of a module-level dict. A module-level dict
+# is per-process, so any save in Studio or the Django admin only invalidates
+# the worker that handled the POST — every other gunicorn / django-q worker
+# would keep serving the stale value until restart. See issue #288.
+_BANNER_CACHE_KEY = 'announcement_banner:v1'
+_BANNER_CACHE_TTL = 300  # 5 minutes — matches REDIRECT_CACHE_TIMEOUT below.
+# Sentinel for "no row exists". ``cache.get`` returns ``None`` for both
+# "missing key" and "stored value of None", so we need a distinct marker to
+# avoid hitting the DB on every request when the banner row is absent.
+_BANNER_CACHE_MISSING = '__missing__'
 
 
 def get_announcement_banner():
     """Return the AnnouncementBanner singleton or None if no row exists.
 
-    The result is cached in-process. Call ``clear_announcement_banner_cache``
-    after saving the banner to invalidate.
+    The result is cached in the cross-process ``django_q`` cache. Call
+    ``clear_announcement_banner_cache`` after saving the banner to invalidate.
     """
-    if not _ANNOUNCEMENT_BANNER_CACHE['loaded']:
-        from integrations.models import AnnouncementBanner
-        _ANNOUNCEMENT_BANNER_CACHE['value'] = AnnouncementBanner.objects.filter(pk=1).first()
-        _ANNOUNCEMENT_BANNER_CACHE['loaded'] = True
-    return _ANNOUNCEMENT_BANNER_CACHE['value']
+    cached = caches['django_q'].get(_BANNER_CACHE_KEY)
+    if cached == _BANNER_CACHE_MISSING:
+        return None
+    if cached is not None:
+        return cached
+    from integrations.models import AnnouncementBanner
+    banner = AnnouncementBanner.objects.filter(pk=1).first()
+    caches['django_q'].set(
+        _BANNER_CACHE_KEY,
+        banner if banner is not None else _BANNER_CACHE_MISSING,
+        _BANNER_CACHE_TTL,
+    )
+    return banner
 
 
 def clear_announcement_banner_cache():
-    """Clear the in-process announcement banner cache."""
-    _ANNOUNCEMENT_BANNER_CACHE['value'] = None
-    _ANNOUNCEMENT_BANNER_CACHE['loaded'] = False
+    """Clear the cross-process announcement banner cache."""
+    caches['django_q'].delete(_BANNER_CACHE_KEY)
 
 
 REDIRECT_CACHE_KEY = 'active_redirects'

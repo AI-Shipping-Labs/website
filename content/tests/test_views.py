@@ -150,7 +150,8 @@ class BlogListViewTest(TestCase):
     def test_blog_list_empty(self):
         Article.objects.all().delete()
         response = self.client.get('/blog')
-        self.assertContains(response, 'No posts yet')
+        # Post-launch empty-state copy (issue #319).
+        self.assertContains(response, 'No articles match this filter yet')
 
 
 class BlogDetailViewTest(TestCase):

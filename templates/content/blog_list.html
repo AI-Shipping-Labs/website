@@ -79,12 +79,12 @@
           No articles found with the selected tags.
           <a href="/blog" class="text-accent hover:underline">View all articles</a>
           {% else %}
-          No posts yet. Check back soon for articles on AI engineering, MLOps, and production systems.
+          No articles match this filter yet. Browse all articles or subscribe for new ones.
           {% endif %}
         </p>
         {% if not selected_tags and not user.is_authenticated %}
         <a href="/#newsletter" class="mt-4 inline-flex items-center gap-2 text-accent hover:underline">
-          Subscribe to get notified
+          Get articles in the Friday newsletter
           <i data-lucide="arrow-right" class="h-4 w-4"></i>
         </a>
         {% endif %}

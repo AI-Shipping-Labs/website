@@ -12,7 +12,12 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from accounts.models import User
+from payments.exceptions import WebhookPermanentError
 from payments.models import ConversionAttribution, Tier, WebhookEvent
+
+# Re-exported so callers can ``from payments.services import WebhookPermanentError``
+# without needing to know the exception lives in ``payments.exceptions``.
+__all__ = ["WebhookPermanentError"]
 
 logger = logging.getLogger(__name__)
 
@@ -644,13 +649,31 @@ def is_event_already_processed(event_id):
     return WebhookEvent.objects.filter(stripe_event_id=event_id).exists()
 
 
-def record_processed_event(event_id, event_type, payload=None):
-    """Record that a webhook event has been processed."""
+def record_processed_event(
+    event_id,
+    event_type,
+    payload=None,
+    status=WebhookEvent.STATUS_PROCESSED,
+    error_message="",
+):
+    """Record that a webhook event has reached a terminal state.
+
+    A ``WebhookEvent`` row means "do not run the handler for this event
+    id again" — it represents either a clean handler run (``processed``)
+    or a permanent, non-retryable failure (``failed_permanent``).
+    Transient failures (generic ``Exception``) MUST NOT call this so
+    Stripe's retry can re-run the handler.
+
+    Idempotent via ``get_or_create``: if a concurrent retry beats us to
+    the row, the existing row stays and we don't overwrite its status.
+    """
     WebhookEvent.objects.get_or_create(
         stripe_event_id=event_id,
         defaults={
             "event_type": event_type,
             "payload": payload or {},
+            "status": status,
+            "error_message": error_message,
         },
     )
 

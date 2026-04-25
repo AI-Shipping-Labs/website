@@ -19,6 +19,7 @@ from django.core import mail
 from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
+from payments.exceptions import WebhookPermanentError
 from payments.models import Tier, WebhookEvent
 from payments.services import (
     handle_checkout_completed,
@@ -912,3 +913,255 @@ class WebhookIdempotencyTest(TestCase):
             mock_send_mail.call_count, 1,
             "Duplicate invoice.payment_failed must not send a second email.",
         )
+
+
+@tag('core')
+@override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
+class WebhookHandlerFailureTest(TestCase):
+    """Tests for the "only mark processed after handler succeeds" semantics.
+
+    Regression coverage for finding #17 in the 2026-04-20 audit: a
+    transient handler failure must NOT create a ``WebhookEvent`` row,
+    so that Stripe's retry passes the idempotency short-circuit and
+    runs the handler again.
+
+    A permanent handler failure (``WebhookPermanentError``) must DO the
+    opposite — create a terminal row and return 200 — so Stripe stops
+    retrying and the on-call has a record to investigate.
+    """
+
+    def _post_checkout_event(self, event_id, user):
+        """Build and POST a valid checkout.session.completed event.
+
+        Returns the response. The caller decides what assertions to run.
+        Uses a per-call payload that points at the given user with
+        ``tier_slug=basic`` so happy-path runs upgrade them to basic.
+        """
+        event_data = _make_event_payload(
+            event_id,
+            "checkout.session.completed",
+            {
+                "id": f"cs_{event_id}",
+                "customer": f"cus_{event_id}",
+                "customer_details": {"email": user.email},
+                # No subscription — this avoids the live Stripe API call
+                # path inside the handler (_get_subscription_period_end
+                # etc.) which would otherwise try to hit the network.
+                "subscription": "",
+                "client_reference_id": str(user.pk),
+                "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
+            },
+        )
+        payload = json.dumps(event_data).encode()
+        sig = _build_stripe_signature(payload)
+        return self.client.post(
+            WEBHOOK_URL,
+            data=payload,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=sig,
+        )
+
+    # ------------------------------------------------------------------
+    # Scenario 1 — canonical regression: transient failure leaves no row
+    # ------------------------------------------------------------------
+    def test_transient_handler_failure_leaves_no_row_so_stripe_retry_succeeds(self):
+        """First delivery raises generic Exception → no row, 500.
+
+        Stripe's retry then runs the real handler, the user's tier
+        updates exactly once, and exactly one ``WebhookEvent`` row exists.
+        Without the fix, the second delivery would short-circuit on the
+        bogus row recorded by the first failure and the user's tier
+        would stay on ``free`` forever.
+        """
+        free_tier = Tier.objects.get(slug="free")
+        basic_tier = Tier.objects.get(slug="basic")
+        user = User.objects.create_user(email="retry@test.com")
+        user.tier = free_tier
+        user.save(update_fields=["tier"])
+
+        event_id = "evt_retry_1"
+
+        # Patch the EVENT_HANDLERS dispatch entry so the FIRST call
+        # raises and the SECOND call runs the real handler. We use a
+        # closure with a counter rather than ``side_effect=[exc, real]``
+        # because ``side_effect`` as a list calls the values, not the
+        # callables, on each invocation.
+        call_count = {"n": 0}
+
+        def flaky_handler(obj_dict):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RuntimeError("DB lock")
+            return handle_checkout_completed(obj_dict)
+
+        with patch.dict(
+            "payments.views.webhooks.EVENT_HANDLERS",
+            {"checkout.session.completed": flaky_handler},
+        ):
+            # First delivery: transient failure.
+            response1 = self._post_checkout_event(event_id, user)
+            self.assertEqual(response1.status_code, 500)
+            self.assertEqual(
+                WebhookEvent.objects.filter(stripe_event_id=event_id).count(),
+                0,
+                "Transient handler failure must NOT create a WebhookEvent row.",
+            )
+            user.refresh_from_db()
+            self.assertEqual(
+                user.tier, free_tier,
+                "Patched handler raised before doing work; tier must not have changed.",
+            )
+
+            # Second delivery: same event id, same payload — Stripe's retry.
+            response2 = self._post_checkout_event(event_id, user)
+
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(response2.json()["status"], "ok")
+        self.assertEqual(
+            WebhookEvent.objects.filter(
+                stripe_event_id=event_id,
+                status=WebhookEvent.STATUS_PROCESSED,
+            ).count(),
+            1,
+            "Retry must record exactly one processed WebhookEvent row.",
+        )
+        self.assertEqual(
+            WebhookEvent.objects.filter(stripe_event_id=event_id).count(),
+            1,
+            "Exactly one WebhookEvent row total — no duplicate from the failed attempt.",
+        )
+        user.refresh_from_db()
+        self.assertEqual(
+            user.tier, basic_tier,
+            "Retry must update the user's tier to the purchased tier.",
+        )
+        self.assertEqual(
+            call_count["n"], 2,
+            "Handler must have been invoked twice: once failing, once succeeding.",
+        )
+
+    # ------------------------------------------------------------------
+    # Scenario 2 — permanent failure records terminal row, Stripe stops
+    # ------------------------------------------------------------------
+    def test_permanent_handler_failure_records_failed_permanent_and_returns_200(self):
+        """Handler raises WebhookPermanentError → row with failed_permanent, 200.
+
+        Stripe must stop retrying. Future deliveries of the same event
+        id short-circuit on the row, regardless of its status.
+        """
+        user = User.objects.create_user(email="perm@test.com")
+        event_id = "evt_perm_1"
+
+        call_count = {"n": 0}
+
+        def perm_failing_handler(obj_dict):
+            call_count["n"] += 1
+            raise WebhookPermanentError("malformed metadata")
+
+        with patch.dict(
+            "payments.views.webhooks.EVENT_HANDLERS",
+            {"checkout.session.completed": perm_failing_handler},
+        ):
+            # First delivery: permanent failure.
+            response1 = self._post_checkout_event(event_id, user)
+            self.assertEqual(
+                response1.status_code, 200,
+                "Permanent failure must return 200 so Stripe stops retrying.",
+            )
+            self.assertEqual(
+                WebhookEvent.objects.filter(
+                    stripe_event_id=event_id,
+                    status=WebhookEvent.STATUS_FAILED_PERMANENT,
+                ).count(),
+                1,
+                "Permanent failure must record exactly one failed_permanent row.",
+            )
+
+            # Second delivery: short-circuit, handler not called again.
+            response2 = self._post_checkout_event(event_id, user)
+
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(response2.json()["status"], "already_processed")
+        self.assertEqual(
+            WebhookEvent.objects.filter(stripe_event_id=event_id).count(),
+            1,
+            "Re-delivery of a permanent-failure event must not duplicate the row.",
+        )
+        self.assertEqual(
+            call_count["n"], 1,
+            "Handler must NOT be invoked again after a permanent failure.",
+        )
+
+    def test_permanent_failure_row_carries_error_message(self):
+        """The failed_permanent row stores the exception summary for debugging.
+
+        On-call needs to see why the event was marked terminal without
+        having to reach for Stripe Dashboard logs. The view truncates the
+        message to 1000 chars (``repr(exc)[:1000]``) — we just confirm
+        non-empty and contains the message string.
+        """
+        user = User.objects.create_user(email="perm_msg@test.com")
+        event_id = "evt_perm_msg_1"
+
+        def perm_failing_handler(obj_dict):
+            raise WebhookPermanentError("malformed metadata: missing tier_slug")
+
+        with patch.dict(
+            "payments.views.webhooks.EVENT_HANDLERS",
+            {"checkout.session.completed": perm_failing_handler},
+        ):
+            self._post_checkout_event(event_id, user)
+
+        row = WebhookEvent.objects.get(stripe_event_id=event_id)
+        self.assertEqual(row.status, WebhookEvent.STATUS_FAILED_PERMANENT)
+        self.assertIn("malformed metadata", row.error_message)
+
+    # ------------------------------------------------------------------
+    # Scenario 3 — happy path still records as processed
+    # ------------------------------------------------------------------
+    def test_happy_path_records_status_processed(self):
+        """Clean handler return → row with status=processed, 200 ok.
+
+        Guards the default value on the new ``status`` field — a
+        regression that defaulted to anything else would still create a
+        row but with the wrong status.
+        """
+        basic_tier = Tier.objects.get(slug="basic")
+        user = User.objects.create_user(email="happy@test.com")
+
+        response = self._post_checkout_event("evt_happy_1", user)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        rows = WebhookEvent.objects.filter(stripe_event_id="evt_happy_1")
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.first().status, WebhookEvent.STATUS_PROCESSED)
+        user.refresh_from_db()
+        self.assertEqual(user.tier, basic_tier)
+
+    # ------------------------------------------------------------------
+    # Scenario 4 — error logs include the event id and event type
+    # ------------------------------------------------------------------
+    def test_transient_failure_logs_include_event_id_and_type(self):
+        """On 500, on-call can find the event id + type in the log line.
+
+        Without these, debugging a Stripe retry storm against the logs
+        is nearly impossible — you have nothing to grep for.
+        """
+        user = User.objects.create_user(email="log@test.com")
+        event_id = "evt_log_1"
+
+        def failing_handler(obj_dict):
+            raise RuntimeError("boom")
+
+        with patch.dict(
+            "payments.views.webhooks.EVENT_HANDLERS",
+            {"checkout.session.completed": failing_handler},
+        ):
+            with self.assertLogs("payments.views.webhooks", level="ERROR") as captured:
+                response = self._post_checkout_event(event_id, user)
+
+        self.assertEqual(response.status_code, 500)
+        log_blob = "\n".join(captured.output)
+        self.assertIn(event_id, log_blob)
+        self.assertIn("checkout.session.completed", log_blob)

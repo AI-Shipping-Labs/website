@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
+from content.markdown_extensions import MermaidExtension
 
 
 def render_markdown(text):
@@ -10,6 +11,7 @@ def render_markdown(text):
     return md.markdown(
         text,
         extensions=[
+            MermaidExtension(),
             'fenced_code',
             'codehilite',
             'tables',

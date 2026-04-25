@@ -16,6 +16,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from content.access import VISIBILITY_CHOICES, get_user_level
+from content.markdown_extensions import MermaidExtension
 
 
 def render_markdown(text):
@@ -29,6 +30,7 @@ def render_markdown(text):
     return md_lib.markdown(
         text,
         extensions=[
+            MermaidExtension(),
             'fenced_code',
             'codehilite',
             'tables',

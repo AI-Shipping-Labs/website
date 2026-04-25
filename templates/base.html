@@ -535,6 +535,11 @@
       window.attachCodeCopyButtons = attachCopyButtons;
     })();
   </script>
+
+  <!-- Mermaid diagram renderer (issue #300). Lazy-loads the CDN bundle
+       only when at least one <div class="mermaid"> is on the page. -->
+  <script type="module" src="{% static 'js/mermaid-render.js' %}" defer></script>
+
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

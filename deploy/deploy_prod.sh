@@ -16,8 +16,11 @@ if [ -z "$DEV_TAG" ]; then
         --task-definition ${TASK_DEF} \
         > ${FILE_IN}
 
+    # Multiple containers (web + qcluster) carry the same VERSION env, so jq
+    # returns one line per container. Collapse to a single value before
+    # passing to deploy_dev.sh — otherwise word-splitting eats the env arg.
     DEV_TAG=$(
-        jq '.taskDefinition.containerDefinitions[].environment[] | select(.name == "VERSION").value' -r ${FILE_IN}
+        jq '.taskDefinition.containerDefinitions[].environment[] | select(.name == "VERSION").value' -r ${FILE_IN} | sort -u | head -1
     )
 
     rm -f ${FILE_IN}

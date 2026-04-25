@@ -30,7 +30,7 @@ Set in the ECS task definition (plain environment variables):
 | Variable | Example | Purpose |
 |----------|---------|---------|
 | `VERSION` | `20260327-124723-02ce799` | Displayed in the page footer, set automatically by deploy scripts |
-| `DEBUG` | `1` | Django debug mode |
+| `DEBUG` | `false` | Django debug mode. Truthy values: `1`, `true`, `yes`. Anything else (including `0`, `false`, `no`, empty) is falsy. Production must set this to `false` to enforce the `SECRET_KEY` guard. |
 | `ALLOWED_HOSTS` | `dev.aishippinglabs.com` | Comma-separated list of allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | `https://dev.aishippinglabs.com,https://aishippinglabs.com` | Required for POST requests (login, forms) to work over HTTPS |
 | `GITHUB_APP_ID` | `3143490` | GitHub App ID for content sync |
@@ -41,7 +41,7 @@ Set via AWS Secrets Manager (injected as ECS secrets):
 | Variable | Secret ID | Purpose |
 |----------|-----------|---------|
 | `DATABASE_URL` | `ai-shipping-labs/database-url` (dev) / `ai-shipping-labs/database-url-prod` (prod) | PostgreSQL connection string |
-| `SECRET_KEY` | `ai-shipping-labs/django-secret-key` | Django secret key |
+| `SECRET_KEY` | `ai-shipping-labs/django-secret-key` | Django secret key. Required at startup when `DEBUG=false`: the app raises `ImproperlyConfigured` and exits if it is unset, empty, or equal to the in-tree dev fallback. The fallback `django-insecure-dev-only-do-not-use-in-production` is rejected on purpose so a copy-paste from local dev cannot satisfy the production guard. |
 
 Fetched at runtime by the Django app (not injected via ECS):
 

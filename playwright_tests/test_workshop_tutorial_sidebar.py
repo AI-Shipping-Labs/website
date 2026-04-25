@@ -179,7 +179,22 @@ class TestSidebarFitsColumnOnLongTitle:
             )
 
             page.evaluate('window.scrollTo(0, 800)')
-            page.wait_for_timeout(150)
+            # Poll for scroll to settle rather than sleeping a fixed
+            # 150ms — exits as soon as the requested scroll position is
+            # observable (#290). The fixture page may not be tall enough
+            # to reach 800px, so cap against the actual maximum scroll.
+            page.wait_for_function(
+                """
+                () => {
+                  const max = Math.max(
+                    document.documentElement.scrollHeight - window.innerHeight,
+                    0
+                  );
+                  return window.scrollY >= Math.min(800, max);
+                }
+                """,
+                timeout=2000,
+            )
 
             # Take an after-scroll screenshot for review.
             page.screenshot(

@@ -192,9 +192,10 @@ class TestPagesWithoutDiagramsSkipMermaidDownload:
             f'/workshops/architecture-walk-through/tutorial/setup',
             wait_until='domcontentloaded',
         )
-        # Give the script a chance to evaluate; the dynamic import would
-        # fire here if the page had any div.mermaid nodes.
-        page.wait_for_timeout(500)
+        # The assertion below is "no CDN requests fired"; wait for the
+        # network to actually idle instead of sleeping a fixed 500ms so
+        # any in-flight import would have to complete first (#290).
+        page.wait_for_load_state('networkidle', timeout=3000)
 
         # Sanity check: no mermaid divs on this page.
         assert page.locator('div.mermaid').count() == 0
@@ -301,8 +302,29 @@ class TestMermaidEscapesHtmlSpecialCharacters:
         page.locator('[data-testid="page-body"]').wait_for(
             state='attached', timeout=2000,
         )
-        # Wait briefly for mermaid to attempt the render.
-        page.wait_for_timeout(2000)
+        # Wait for mermaid to either finish (post-render marker) or for
+        # the network to idle if it bailed out, instead of a fixed 2s
+        # sleep (#290). A mermaid-rendered diagram either gets an SVG
+        # child or a `data-processed="true"` attribute on the div.
+        try:
+            page.wait_for_function(
+                """
+                () => {
+                  const nodes = document.querySelectorAll('div.mermaid');
+                  if (nodes.length === 0) return false;
+                  return Array.from(nodes).every(
+                    n => n.getAttribute('data-processed') === 'true'
+                       || n.querySelector('svg') !== null
+                  );
+                }
+                """,
+                timeout=3000,
+            )
+        except Exception:
+            # Mermaid may bail entirely on the malicious source; fall
+            # back to a network-idle wait so any in-flight CDN fetch or
+            # dialog dispatch would have completed by now.
+            page.wait_for_load_state('networkidle', timeout=3000)
 
         assert dialogs == [], (
             f'unexpected dialogs fired: {dialogs!r}'

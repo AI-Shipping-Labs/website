@@ -1319,6 +1319,9 @@ class TestScenario13SyncQueuedButtonConfirmation:
         # Wait ~1 second, then dispatch a second submit on the same form.
         # If the previous timer was not cleared, it would fire ~500ms
         # after this point and the label would revert too early.
+        # Intentional fixed wait: this test verifies a clearTimeout race
+        # window — replacing it with an element-state wait would defeat
+        # the purpose of the assertion. See issue #290.
         page.wait_for_timeout(1000)
         page.evaluate(
             """
@@ -1333,6 +1336,9 @@ class TestScenario13SyncQueuedButtonConfirmation:
         # 1100ms after the second submit (i.e., ~2100ms after the first
         # submit's timer was set), the label must still say "Sync queued"
         # — proves the second submit reset the timer.
+        # Intentional fixed wait: timer-window assertion (clearTimeout
+        # race). An element-state wait would not exercise the race.
+        # See issue #290.
         page.wait_for_timeout(1100)
         assert "Sync queued" in sync_btn_text.inner_text()
 

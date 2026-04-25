@@ -121,8 +121,13 @@ class TestFoldableSidebarToggle:
         assert floating.is_visible(), "Floating toggle should appear when collapsed"
 
         # Aside has computed width 0 (or near it) when collapsed.
-        # CSS uses a 200ms transition; wait for the animation to finish.
-        page.wait_for_timeout(400)
+        # CSS uses a 200ms transition; poll until the post-transition
+        # width is observable instead of sleeping a fixed 400ms (#290).
+        page.wait_for_function(
+            "document.getElementById('content-sidebar-aside')"
+            ".getBoundingClientRect().width <= 1",
+            timeout=2000,
+        )
         aside_width = page.evaluate(
             "document.getElementById('content-sidebar-aside').getBoundingClientRect().width"
         )

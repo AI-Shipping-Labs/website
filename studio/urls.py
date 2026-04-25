@@ -69,6 +69,7 @@ from studio.views.sync import (
     sync_all,
     sync_dashboard,
     sync_history,
+    sync_object_trigger,
     sync_repo_trigger,
     sync_status,
     sync_trigger,
@@ -326,6 +327,15 @@ urlpatterns = [
     path('sync/history/', sync_history, name='studio_sync_history'),
     path('sync/<uuid:source_id>/trigger/', sync_trigger, name='studio_sync_trigger'),
     path('sync/<uuid:source_id>/status/', sync_status, name='studio_sync_status'),
+    # Per-object Re-sync source button (issue #281). Registered before the
+    # ``<path:repo_name>`` route so the literal ``object/`` prefix isn't
+    # swallowed by the path converter (which would treat ``object`` as the
+    # first segment of a repo name).
+    path(
+        'sync/object/<str:model_name>/<int:object_id>/trigger/',
+        sync_object_trigger,
+        name='studio_sync_object_trigger',
+    ),
     # Per-repo sync uses ``<path:repo_name>`` because repo names contain a
     # slash (e.g. ``AI-Shipping-Labs/content``). See issue #232.
     path(

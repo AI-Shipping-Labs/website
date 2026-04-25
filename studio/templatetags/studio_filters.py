@@ -14,6 +14,25 @@ def dict_get(dictionary, key):
     return None
 
 
+@register.filter
+def model_name(obj):
+    """Return the lowercase Django model name for ``obj``.
+
+    Templates can't read ``obj._meta.model_name`` directly (any attribute
+    starting with an underscore is blocked by the template engine), so
+    expose the value via a filter. Used by the synced banner's Re-sync
+    source button (issue #281) to build the ``/studio/sync/object/<model>/``
+    URL without each include site having to hand-pass the model name.
+    Returns an empty string for ``None`` or anything without an ``_meta``.
+    """
+    if obj is None:
+        return ''
+    meta = getattr(obj, '_meta', None)
+    if meta is None:
+        return ''
+    return getattr(meta, 'model_name', '') or ''
+
+
 def _sync_status_label(status, error_count=0):
     """Return the human-readable label for a sync status.
 

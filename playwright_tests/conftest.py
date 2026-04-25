@@ -69,7 +69,10 @@ def _start_django_server():
             urllib.request.urlopen(f"{DJANGO_BASE_URL}/", timeout=2)
             return thread
         except (urllib.error.URLError, ConnectionError, OSError):
-            time.sleep(0.5)
+            # Intentional: server-startup probe, not a test wait. There is
+            # no Playwright `page` here (the server is starting up); we
+            # poll the listening socket via urllib instead. See issue #290.
+            time.sleep(0.5)  # noqa: PLR0915
     raise RuntimeError("Django dev server did not start in time")
 
 

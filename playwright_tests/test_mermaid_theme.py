@@ -572,7 +572,9 @@ class TestNoDiagramNoBandwidthAcrossThemes:
                 f'/workshops/theme-plain-walkthrough/tutorial/setup',
                 wait_until='domcontentloaded',
             )
-            page.wait_for_timeout(500)
+            # Wait for network idle instead of sleeping 500ms — assertion
+            # below is "no CDN requests fired" (#290).
+            page.wait_for_load_state('networkidle', timeout=3000)
 
             # Sanity: no diagrams on this page.
             assert page.locator('div.mermaid').count() == 0
@@ -585,7 +587,9 @@ class TestNoDiagramNoBandwidthAcrossThemes:
                 "() => !document.documentElement.classList.contains('dark')",
                 timeout=3000,
             )
-            page.wait_for_timeout(500)
+            # Same as above — wait for any post-toggle re-render attempt
+            # to either fire and complete or settle (#290).
+            page.wait_for_load_state('networkidle', timeout=3000)
 
             assert cdn_requests == [], (
                 f'expected zero requests to {MERMAID_CDN_HOST} on a '
@@ -642,9 +646,27 @@ class TestXssStaysEscapedAfterRerender:
             page.locator('[data-testid="page-body"]').wait_for(
                 state='attached', timeout=2000,
             )
-            # Give the initial render a chance to attempt to fire (or
-            # safely fail if the payload makes Mermaid bail).
-            page.wait_for_timeout(2000)
+            # Wait for mermaid to finish (or bail) on the malicious
+            # source instead of sleeping 2s (#290). Mermaid marks
+            # rendered diagrams with `data-processed="true"` or an SVG
+            # child; if it fails to even attempt that, network-idle is
+            # an acceptable fallback.
+            try:
+                page.wait_for_function(
+                    """
+                    () => {
+                      const nodes = document.querySelectorAll('div.mermaid');
+                      if (nodes.length === 0) return false;
+                      return Array.from(nodes).every(
+                        n => n.getAttribute('data-processed') === 'true'
+                           || n.querySelector('svg') !== null
+                      );
+                    }
+                    """,
+                    timeout=3000,
+                )
+            except Exception:
+                page.wait_for_load_state('networkidle', timeout=3000)
 
             # Toggle to trigger a re-render.
             page.locator(
@@ -654,8 +676,23 @@ class TestXssStaysEscapedAfterRerender:
                 "() => document.documentElement.classList.contains('dark')",
                 timeout=3000,
             )
-            # Allow the re-render to attempt.
-            page.wait_for_timeout(2000)
+            # Same wait for the post-toggle re-render attempt (#290).
+            try:
+                page.wait_for_function(
+                    """
+                    () => {
+                      const nodes = document.querySelectorAll('div.mermaid');
+                      if (nodes.length === 0) return false;
+                      return Array.from(nodes).every(
+                        n => n.getAttribute('data-processed') === 'true'
+                           || n.querySelector('svg') !== null
+                      );
+                    }
+                    """,
+                    timeout=3000,
+                )
+            except Exception:
+                page.wait_for_load_state('networkidle', timeout=3000)
 
             assert dialogs == [], (
                 f'no dialog should fire during initial render or '

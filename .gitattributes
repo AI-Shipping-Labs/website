@@ -1,0 +1,8 @@
+# Force LF line endings for files that run inside Linux containers.
+# Without this, Windows checkouts (with core.autocrlf=true, the Git for
+# Windows default) get CRLF endings, and entrypoint.sh's `#!/bin/sh\r`
+# shebang resolves to `/bin/sh\r` which doesn't exist — the container
+# boot fails with "exec /app/entrypoint.sh: no such file or directory".
+*.sh text eol=lf
+Dockerfile text eol=lf
+Procfile* text eol=lf

@@ -1835,10 +1835,11 @@ class SeedContentSourcesCommandTest(TestCase):
         from django.core.management import call_command
         out = StringIO()
         call_command('seed_content_sources', stdout=out)
-        # 4 entries from the AI-Shipping-Labs/content monorepo
+        # 5 entries from the AI-Shipping-Labs/content monorepo
+        # (article, course, project, interview_question, event)
         # + 1 entry for AI-Shipping-Labs/python-course (single-course repo)
         # + 1 entry for AI-Shipping-Labs/workshops-content (public, issue #295)
-        self.assertEqual(ContentSource.objects.count(), 6)
+        self.assertEqual(ContentSource.objects.count(), 7)
 
     def test_seed_is_idempotent(self):
         from io import StringIO
@@ -1846,7 +1847,7 @@ class SeedContentSourcesCommandTest(TestCase):
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 6)
+        self.assertEqual(ContentSource.objects.count(), 7)
 
     def test_seed_creates_expected_repos(self):
         from io import StringIO
@@ -1883,7 +1884,7 @@ class SeedContentSourcesCommandTest(TestCase):
         types = set(ContentSource.objects.values_list('content_type', flat=True))
         self.assertEqual(
             types,
-            {'article', 'course', 'project', 'interview_question', 'workshop'},
+            {'article', 'course', 'project', 'interview_question', 'event', 'workshop'},
         )
 
     def test_content_paths_correct(self):
@@ -1905,6 +1906,7 @@ class SeedContentSourcesCommandTest(TestCase):
             paths[('AI-Shipping-Labs/content', 'interview_question')],
             'interview-questions',
         )
+        self.assertEqual(paths[('AI-Shipping-Labs/content', 'event')], 'events')
         self.assertEqual(
             paths[('AI-Shipping-Labs/python-course', 'course')], '',
         )

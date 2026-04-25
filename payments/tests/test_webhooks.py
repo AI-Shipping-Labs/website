@@ -15,6 +15,7 @@ import json
 import time
 from unittest.mock import patch
 
+from django.core import mail
 from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
@@ -119,6 +120,96 @@ class WebhookSignatureValidationTest(TestCase):
             HTTP_STRIPE_SIGNATURE=sig,
         )
         self.assertEqual(response.status_code, 200)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
+    def test_tampered_payload_returns_400_and_no_side_effects(self):
+        """Replaying a captured signature against a modified payload is rejected.
+
+        The realistic attack: an attacker captures a valid Stripe-Signature
+        header from a legitimate request, mutates the JSON body to swap
+        the tier from ``basic`` to ``premium`` (or any field they control),
+        and replays. Stripe's HMAC binds the signature to the exact bytes
+        of the body, so the verifier must reject this and the endpoint
+        must produce zero side effects: no WebhookEvent row, no tier
+        change on the targeted user, and no email.
+        """
+        free_tier = Tier.objects.get(slug="free")
+        user = User.objects.create_user(email="tampered@test.com")
+        user.tier = free_tier
+        user.save(update_fields=["tier"])
+
+        # Payload A — what the attacker captured. Build a valid signature
+        # for these exact bytes.
+        payload_a = json.dumps(
+            _make_event_payload(
+                "evt_tamper_1",
+                "checkout.session.completed",
+                {
+                    "id": "cs_tamper",
+                    "customer": "cus_tamper",
+                    "customer_details": {"email": "tampered@test.com"},
+                    "subscription": "sub_tamper",
+                    "client_reference_id": str(user.pk),
+                    "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
+                },
+            )
+        ).encode()
+        sig = _build_stripe_signature(payload_a)
+
+        # Payload B — same event id and shape, but tier_slug flipped to
+        # ``premium``. The attacker is trying to upgrade the user without
+        # paying. Stripe's HMAC over payload_a does NOT cover payload_b,
+        # so verify_webhook_signature must raise and the endpoint must
+        # return 400.
+        payload_b = json.dumps(
+            _make_event_payload(
+                "evt_tamper_1",
+                "checkout.session.completed",
+                {
+                    "id": "cs_tamper",
+                    "customer": "cus_tamper",
+                    "customer_details": {"email": "tampered@test.com"},
+                    "subscription": "sub_tamper",
+                    "client_reference_id": str(user.pk),
+                    "metadata": {"tier_slug": "premium", "user_id": str(user.pk)},
+                },
+            )
+        ).encode()
+        # Sanity check: the tamper actually mutated the bytes, otherwise
+        # the test is meaningless. (assertNotEqual on bytes is fine.)
+        self.assertNotEqual(payload_a, payload_b)
+
+        webhook_count_before = WebhookEvent.objects.count()
+        outbox_len_before = len(mail.outbox)
+
+        response = self.client.post(
+            WEBHOOK_URL,
+            data=payload_b,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=sig,
+        )
+
+        # The endpoint must reject the request.
+        self.assertEqual(response.status_code, 400)
+        # No WebhookEvent row was recorded — the request was rejected
+        # before the idempotency layer.
+        self.assertEqual(
+            WebhookEvent.objects.count(),
+            webhook_count_before,
+            "Tampered payload must not produce a WebhookEvent row.",
+        )
+        # The user's tier must not have moved off ``free``.
+        user.refresh_from_db()
+        self.assertEqual(
+            user.tier, free_tier,
+            "Tampered payload must not change the user's tier.",
+        )
+        # No email was sent.
+        self.assertEqual(
+            len(mail.outbox),
+            outbox_len_before,
+            "Tampered payload must not send any email.",
+        )
 
     @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
     def test_unhandled_event_type_returns_200(self):
@@ -621,7 +712,14 @@ class WebhookIdempotencyTest(TestCase):
         self.assertEqual(event.payload, {"test": True})
 
     def test_duplicate_event_processing_does_not_corrupt_data(self):
-        """Processing the same event twice does not change the result."""
+        """Processing the same event twice does not change the result.
+
+        The handler itself does not record WebhookEvent rows (that is the
+        view's job), so we only need to confirm tier/customer fields stay
+        stable on re-processing. The DB-side idempotency assertion lives
+        in ``test_duplicate_webhook_request_returns_already_processed``,
+        which exercises the full request path.
+        """
         user = User.objects.create_user(email="idempotent@test.com")
         basic_tier = Tier.objects.get(slug="basic")
 
@@ -634,11 +732,22 @@ class WebhookIdempotencyTest(TestCase):
             "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
         }
 
+        # Snapshot side-effect counters before any processing so we can
+        # assert that re-processing produces zero net change.
+        webhook_count_before = WebhookEvent.objects.count()
+        outbox_len_before = len(mail.outbox)
+
         # Process first time
         handle_checkout_completed(session_data)
         user.refresh_from_db()
         self.assertEqual(user.tier, basic_tier)
         self.assertEqual(user.stripe_customer_id, "cus_idemp")
+
+        # Snapshot counters AFTER the first call so we can assert the
+        # second call is a true no-op (zero delta in WebhookEvent rows
+        # and zero delta in mail.outbox).
+        webhook_count_after_first = WebhookEvent.objects.count()
+        outbox_len_after_first = len(mail.outbox)
 
         # Process second time (should produce the same result)
         handle_checkout_completed(session_data)
@@ -646,9 +755,43 @@ class WebhookIdempotencyTest(TestCase):
         self.assertEqual(user.tier, basic_tier)
         self.assertEqual(user.stripe_customer_id, "cus_idemp")
 
+        # The second call must not record any extra WebhookEvent row or
+        # send any extra email. A regression that double-records would
+        # increase WebhookEvent.count by 1; a regression that double-
+        # emails would grow mail.outbox.
+        self.assertEqual(
+            WebhookEvent.objects.count() - webhook_count_after_first,
+            0,
+            "Second handle_checkout_completed call must not create a WebhookEvent row.",
+        )
+        self.assertEqual(
+            len(mail.outbox) - outbox_len_after_first,
+            0,
+            "Second handle_checkout_completed call must not send any email.",
+        )
+        # Sanity: confirm the handler itself didn't write WebhookEvent
+        # rows on the first call either (recording is the view's job).
+        self.assertEqual(
+            WebhookEvent.objects.count(),
+            webhook_count_before,
+            "handle_checkout_completed must not create WebhookEvent rows itself.",
+        )
+        self.assertEqual(
+            len(mail.outbox),
+            outbox_len_before,
+            "handle_checkout_completed must not send email on success.",
+        )
+
     @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
     def test_duplicate_webhook_request_returns_already_processed(self):
-        """Sending the same webhook event twice returns already_processed on second call."""
+        """Sending the same webhook event twice returns already_processed on second call.
+
+        Also asserts the database-side invariant: regardless of how many
+        times Stripe re-sends an event with the same event_id, exactly
+        one WebhookEvent row exists for that id and no extra emails are
+        sent. A regression that bypasses the idempotency short-circuit
+        would create a second row and grow mail.outbox.
+        """
         user = User.objects.create_user(email="dupe@test.com")
 
         event_data = _make_event_payload(
@@ -666,6 +809,8 @@ class WebhookIdempotencyTest(TestCase):
         payload = json.dumps(event_data).encode()
         sig = _build_stripe_signature(payload)
 
+        outbox_len_before = len(mail.outbox)
+
         # First request
         response1 = self.client.post(
             WEBHOOK_URL,
@@ -675,6 +820,12 @@ class WebhookIdempotencyTest(TestCase):
         )
         self.assertEqual(response1.status_code, 200)
         self.assertEqual(response1.json()["status"], "ok")
+        # After the first POST, exactly one WebhookEvent row exists for
+        # evt_dupe_1 — confirm before we re-post.
+        self.assertEqual(
+            WebhookEvent.objects.filter(stripe_event_id="evt_dupe_1").count(),
+            1,
+        )
 
         # Second request with same event ID
         response2 = self.client.post(
@@ -685,3 +836,79 @@ class WebhookIdempotencyTest(TestCase):
         )
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["status"], "already_processed")
+
+        # The second POST must not create a duplicate WebhookEvent row.
+        self.assertEqual(
+            WebhookEvent.objects.filter(stripe_event_id="evt_dupe_1").count(),
+            1,
+            "Duplicate webhook POST must not create a second WebhookEvent row.",
+        )
+        # Successful checkout completion does not send mail; if it did,
+        # idempotency would also have to suppress it. Either way, the
+        # outbox length must not have changed across the two POSTs.
+        self.assertEqual(
+            len(mail.outbox),
+            outbox_len_before,
+            "Duplicate webhook POST must not send extra email.",
+        )
+
+    @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
+    @patch("payments.services.send_mail")
+    def test_duplicate_invoice_payment_failed_sends_only_one_email(
+        self, mock_send_mail,
+    ):
+        """An invoice.payment_failed event re-delivered by Stripe must email once.
+
+        Stripe retries failed webhook deliveries. The endpoint's
+        idempotency short-circuit (``is_event_already_processed``) must
+        prevent the failure-notification email from going out a second
+        time, otherwise users get spammed every time Stripe retries.
+        """
+        # Set up a paying user so the failure handler can find them by
+        # stripe_customer_id. Reuses the same shape as the existing
+        # InvoicePaymentFailedHandlerTest tests.
+        basic_tier = Tier.objects.get(slug="basic")
+        user = User.objects.create_user(email="payfail-dupe@test.com")
+        user.tier = basic_tier
+        user.stripe_customer_id = "cus_payfail_dupe"
+        user.save(update_fields=["tier", "stripe_customer_id"])
+
+        event_data = _make_event_payload(
+            "evt_payfail_dupe_1",
+            "invoice.payment_failed",
+            {
+                "customer": "cus_payfail_dupe",
+                "customer_email": "payfail-dupe@test.com",
+            },
+        )
+        payload = json.dumps(event_data).encode()
+        sig = _build_stripe_signature(payload)
+
+        # First delivery — handler runs, send_mail is called once.
+        response1 = self.client.post(
+            WEBHOOK_URL,
+            data=payload,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=sig,
+        )
+        self.assertEqual(response1.status_code, 200)
+        self.assertEqual(response1.json()["status"], "ok")
+        self.assertEqual(
+            mock_send_mail.call_count, 1,
+            "First invoice.payment_failed delivery must send exactly one email.",
+        )
+
+        # Second delivery (same event id) — short-circuited as
+        # already_processed, send_mail must NOT be called again.
+        response2 = self.client.post(
+            WEBHOOK_URL,
+            data=payload,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=sig,
+        )
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(response2.json()["status"], "already_processed")
+        self.assertEqual(
+            mock_send_mail.call_count, 1,
+            "Duplicate invoice.payment_failed must not send a second email.",
+        )

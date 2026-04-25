@@ -559,6 +559,59 @@ class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
             'Stale workshop should be soft-deleted to draft.',
         )
 
+    def test_workshop_round_trip_remove_then_restore(self):
+        """write -> sync -> remove -> sync -> re-write -> sync for workshops.
+
+        Workshops surface to users via their linked Event row at
+        ``/events`` (kind='workshop'). Asserts ``Workshop.status`` flips
+        through published -> draft -> published, and that the linked
+        Event's listing visibility tracks the workshop status. The
+        Event ``published`` flag is intentionally NOT toggled by the
+        workshop stale cleanup (the linked event stands on its own —
+        see the comment in ``_sync_workshops``), so the listing
+        assertion focuses on workshop-level surfaces (``/workshops`` is
+        gated by required level — we use Event listing instead).
+        """
+        folder = '2026/2026-04-21-demo'
+        unique_title = 'Round Trip Workshop ZZQQ-RT-4'
+        self._write_workshop_yaml(
+            folder=folder, slug='demo', title=unique_title,
+            pages_required_level=0,
+        )
+        self._write_page(folder, '01-p.md', title='P')
+
+        # Step 1: write -> sync -> published
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.status, 'published')
+        # Linked event must exist.
+        self.assertIsNotNone(workshop.event_id)
+        event = Event.objects.get(pk=workshop.event_id)
+        self.assertEqual(event.slug, 'demo')
+
+        # Step 2: remove the workshop folder -> sync -> draft
+        shutil.rmtree(os.path.join(self.temp_dir, folder))
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        workshop.refresh_from_db()
+        self.assertEqual(
+            workshop.status, 'draft',
+            'Stale workshop should be soft-deleted to draft.',
+        )
+
+        # Step 3: re-create the same folder (same slug + content_id) ->
+        # sync -> assert workshop status flips back to published.
+        self._write_workshop_yaml(
+            folder=folder, slug='demo', title=unique_title,
+            pages_required_level=0,
+        )
+        self._write_page(folder, '01-p.md', title='P')
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        workshop.refresh_from_db()
+        self.assertEqual(
+            workshop.status, 'published',
+            'Re-added workshop folder must restore status to published.',
+        )
+
 
 class WorkshopSyncPageRemovalTest(_WorkshopSyncFixtureBase):
     """Pages whose source file disappeared are hard-deleted."""

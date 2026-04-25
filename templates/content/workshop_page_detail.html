@@ -20,7 +20,7 @@
              unit sidebar uses. -->
         <aside class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
           <div class="lg:sticky lg:top-28">
-            <a href="{{ workshop.get_absolute_url }}" class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0" data-testid="sidebar-back-to-workshop">
+            <a href="{{ workshop.get_absolute_url }}" title="{{ workshop.title }}" class="mb-4 flex w-full items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0" data-testid="sidebar-back-to-workshop">
               <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
               <span class="truncate">{{ workshop.title }}</span>
             </a>

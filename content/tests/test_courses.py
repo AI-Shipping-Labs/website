@@ -1300,3 +1300,126 @@ class CourseDetailModuleCountQueryGuardTest(TierSetupMixin, TestCase):
                 f'large queries: {len(large_ctx.captured_queries)}'
             ),
         )
+
+
+class ApiCourseDetailQueryGuardTest(TierSetupMixin, TestCase):
+    """N+1 regression guard for ``GET /api/courses/{slug}`` (issue #287).
+
+    Before the fix, ``api_course_detail`` chained ``.order_by('sort_order')``
+    on each module's prefetched units queryset, which busts the prefetch
+    cache and forces a fresh ``SELECT`` per module. This made the JSON API
+    grow linearly with module count (9 → 14 queries when going from a
+    5-module course to a 10-module course).
+
+    The fix pushes unit ordering into the prefetch via
+    ``Prefetch('units', queryset=Unit.objects.order_by('sort_order'))`` in
+    ``Course.get_syllabus()``, and drops the redundant ``.order_by()`` in
+    the view. This test asserts:
+
+    1. Anonymous and authenticated query counts are below the targets
+       called out in the issue (≤6 anon, ≤9 auth).
+    2. The query count is constant across a 5-module course and a
+       10-module course — the only way that can hold is if the per-unit
+       fetch is a single batched prefetch, not one query per module.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='api-nplus1@test.com', password='pw',
+        )
+        cls.small = cls._make_course('api-q-small', n_modules=5, n_units=4)
+        cls.large = cls._make_course('api-q-large', n_modules=10, n_units=5)
+
+    @staticmethod
+    def _make_course(slug, n_modules, n_units):
+        course = Course.objects.create(
+            title=slug, slug=slug, status='published',
+            required_level=LEVEL_OPEN,
+        )
+        for m_i in range(n_modules):
+            module = Module.objects.create(
+                course=course, title=f'M{m_i}',
+                slug=f'm-{m_i}', sort_order=m_i,
+            )
+            for u_i in range(n_units):
+                Unit.objects.create(
+                    module=module, title=f'U{m_i}-{u_i}',
+                    slug=f'u-{m_i}-{u_i}', sort_order=u_i,
+                )
+        return course
+
+    def _measure(self, client, url):
+        # Warm up auth/session middleware so the first call's one-off
+        # queries (session create, etc.) don't pollute the measurement.
+        client.get(url)
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+        return len(ctx.captured_queries)
+
+    def test_anonymous_query_count_is_constant_and_below_target(self):
+        client = Client()
+        small_count = self._measure(client, f'/api/courses/{self.small.slug}')
+        large_count = self._measure(client, f'/api/courses/{self.large.slug}')
+
+        self.assertLessEqual(
+            small_count, 6,
+            msg=(
+                f'Anonymous /api/courses/{self.small.slug} took '
+                f'{small_count} queries (expected ≤ 6 — was 9 before the '
+                f'fix). Issue #287.'
+            ),
+        )
+        self.assertLessEqual(
+            large_count, 6,
+            msg=(
+                f'Anonymous /api/courses/{self.large.slug} took '
+                f'{large_count} queries (expected ≤ 6 — was 14 before the '
+                f'fix). Issue #287.'
+            ),
+        )
+        self.assertEqual(
+            small_count, large_count,
+            msg=(
+                f'Anonymous /api/courses/{{slug}} query count must be '
+                f'constant in module count — got {small_count} for the '
+                f'5-module course and {large_count} for the 10-module '
+                f'course. The N+1 from chaining .order_by() on a '
+                f'prefetched relation has likely returned. Issue #287.'
+            ),
+        )
+
+    def test_authenticated_query_count_is_constant_and_below_target(self):
+        client = Client()
+        client.login(email='api-nplus1@test.com', password='pw')
+        small_count = self._measure(client, f'/api/courses/{self.small.slug}')
+        large_count = self._measure(client, f'/api/courses/{self.large.slug}')
+
+        self.assertLessEqual(
+            small_count, 9,
+            msg=(
+                f'Authenticated /api/courses/{self.small.slug} took '
+                f'{small_count} queries (expected ≤ 9 — was 12 before the '
+                f'fix). Issue #287.'
+            ),
+        )
+        self.assertLessEqual(
+            large_count, 9,
+            msg=(
+                f'Authenticated /api/courses/{self.large.slug} took '
+                f'{large_count} queries (expected ≤ 9 — was 17 before the '
+                f'fix). Issue #287.'
+            ),
+        )
+        self.assertEqual(
+            small_count, large_count,
+            msg=(
+                f'Authenticated /api/courses/{{slug}} query count must be '
+                f'constant in module count — got {small_count} for the '
+                f'5-module course and {large_count} for the 10-module '
+                f'course. The N+1 from chaining .order_by() on a '
+                f'prefetched relation has likely returned. Issue #287.'
+            ),
+        )

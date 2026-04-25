@@ -281,11 +281,15 @@ def api_course_detail(request, slug):
     total = course.total_units()
     completed = course.completed_units(user)
 
-    # Build syllabus
+    # Build syllabus. ``modules`` comes from ``Course.get_syllabus()`` which
+    # prefetches units already ordered by ``sort_order``; iterating
+    # ``module.units.all()`` reads from the prefetch cache. Adding an extra
+    # ``.order_by()`` here would force a fresh SELECT per module (N+1) — see
+    # issue #287.
     syllabus = []
     for module in modules:
         units_data = []
-        for unit in module.units.all().order_by('sort_order'):
+        for unit in module.units.all():
             unit_info = {
                 'id': unit.pk,
                 'title': unit.title,
@@ -354,7 +358,9 @@ def module_overview(request, course_slug, module_slug):
     user = request.user
 
     has_access = can_access(user, course)
-    units = list(module.units.all().order_by('sort_order'))
+    # ``Unit.Meta.ordering = ['sort_order']`` already guarantees ordering;
+    # an explicit ``.order_by()`` would be redundant. Issue #287.
+    units = list(module.units.all())
 
     completed_unit_ids: set[int] = set()
     if user.is_authenticated:

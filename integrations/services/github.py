@@ -410,30 +410,50 @@ def _fetch_repo_file(repo_full_name, path, branch, token):
         return None
 
 
-def _parse_frontmatter_text(text):
+def _parse_frontmatter_text(text, filepath=None):
     """Parse YAML frontmatter from a markdown text string.
 
-    Returns the metadata dict, or an empty dict if no frontmatter is present
-    or it fails to parse.
+    Returns ``(metadata_dict, error_str_or_None)``. ``metadata_dict`` is
+    ``{}`` when no frontmatter is present or parsing fails. ``error_str`` is
+    ``None`` on success and a human-readable parse error otherwise — callers
+    can use it to distinguish "no frontmatter" from "broken frontmatter" and
+    skip detection rules for the latter (issue #286).
+
+    The ``python-frontmatter`` library wraps YAML parse failures as
+    ``yaml.YAMLError`` subclasses, so we only need to catch ``YAMLError``
+    here.
     """
     if not text:
-        return {}
+        return {}, None
     try:
         post = frontmatter.loads(text)
-        return dict(post.metadata or {})
-    except Exception:
-        return {}
+    except yaml.YAMLError as exc:
+        label = filepath or '<frontmatter>'
+        logger.warning('Failed to parse frontmatter in %s: %s', label, exc)
+        return {}, f'Failed to parse frontmatter in {label}: {exc}'
+    return dict(post.metadata or {}), None
 
 
-def _parse_yaml_text(text):
-    """Parse a YAML document from a string. Returns ``{}`` on failure."""
+def _parse_yaml_text(text, filepath=None):
+    """Parse a YAML document from a string.
+
+    Returns ``(data_dict_or_None, error_str_or_None)``. ``data_dict`` is
+    ``{}`` when ``text`` is empty, the parsed mapping on success, or
+    ``None`` when parsing fails or the document is not a mapping (e.g.
+    a YAML list or scalar at the top level). ``error_str`` is ``None`` on
+    success and a human-readable parse error otherwise (issue #286).
+    """
     if not text:
-        return {}
+        return {}, None
     try:
         data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return {}
-    return data if isinstance(data, dict) else {}
+    except yaml.YAMLError as exc:
+        label = filepath or '<yaml>'
+        logger.warning('Failed to parse YAML in %s: %s', label, exc)
+        return None, f'Failed to parse {label}: {exc}'
+    if not isinstance(data, dict):
+        return None, None
+    return data, None
 
 
 def _interview_question_filename(name):
@@ -568,7 +588,12 @@ def detect_content_sources(repo_full_name, *, force_refresh=False):
         fetched += 1
         if text is None:
             continue
-        data = _parse_yaml_text(text)
+        data, parse_error = _parse_yaml_text(text, filepath=path)
+        # Skip detection rules for files that failed to parse — the warning
+        # was already logged. Detection must not classify a malformed file
+        # as if it had no ``start_datetime`` (issue #286).
+        if parse_error is not None or data is None:
+            continue
         if 'start_datetime' in data:
             parent = path.rsplit('/', 1)[0] if '/' in path else ''
             event_dirs_with_match.add(parent)
@@ -588,7 +613,11 @@ def detect_content_sources(repo_full_name, *, force_refresh=False):
         fetched += 1
         if text is None:
             continue
-        meta = _parse_frontmatter_text(text)
+        meta, parse_error = _parse_frontmatter_text(text, filepath=path)
+        # A malformed-frontmatter file must not be classified into any
+        # detection bucket; the warning was already logged (issue #286).
+        if parse_error is not None:
+            continue
         parent = path.rsplit('/', 1)[0] if '/' in path else ''
 
         if meta.get('difficulty') and meta.get('author'):
@@ -1302,8 +1331,20 @@ def _parse_markdown_file(filepath):
 
     Returns:
         tuple: (metadata dict, body string)
+
+    Raises:
+        ValueError: When the YAML frontmatter cannot be parsed. The
+            message has the form ``Failed to parse frontmatter in
+            <basename>: <yaml.YAMLError>`` (issue #286). The original
+            ``YAMLError`` is preserved as ``__cause__``.
     """
-    post = frontmatter.load(filepath, encoding='utf-8')
+    try:
+        post = frontmatter.load(filepath, encoding='utf-8')
+    except yaml.YAMLError as exc:
+        basename = os.path.basename(filepath)
+        raise ValueError(
+            f'Failed to parse frontmatter in {basename}: {exc}'
+        ) from exc
     return dict(post.metadata), post.content
 
 
@@ -1315,9 +1356,33 @@ def _parse_yaml_file(filepath):
 
     Returns:
         dict: Parsed YAML data.
+
+    Raises:
+        ValueError: When the file content is not valid YAML or the loaded
+            YAML is not a mapping (issue #286). The message has the form
+            ``Failed to parse <basename>: <yaml.YAMLError>`` for parse
+            failures, or ``Invalid YAML in <filepath>: expected a mapping,
+            got <type>`` for top-level lists/scalars. Previously a top-level
+            YAML list or scalar would silently slip through
+            ``yaml.safe_load(f) or {}`` because the truthy list never
+            triggered the ``or {}`` fallback.
     """
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f) or {}
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        basename = os.path.basename(filepath)
+        raise ValueError(
+            f'Failed to parse {basename}: {exc}'
+        ) from exc
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError(
+            f'Invalid YAML in {filepath}: expected a mapping, got '
+            f'{type(data).__name__}'
+        )
+    return data
 
 
 def _validate_frontmatter(metadata, content_type, filepath):
@@ -1977,7 +2042,7 @@ def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
     return stats
 
 
-def _build_course_unit_lookup(course_dir, course_ignore_patterns=None):
+def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=None):
     """Build a ``{module_slug: {filename: unit_slug}}`` map for a course tree.
 
     Used by the markdown link rewriter (issue #226) so we can resolve sibling
@@ -2002,6 +2067,11 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None):
         course_ignore_patterns: List of glob patterns from the course-level
             ``ignore:`` key, relative to ``course_dir``. Same shape as the
             value passed to :func:`_sync_course_modules`.
+        stats: Optional sync stats dict. When provided, parse failures for
+            ``module.yaml`` or unit ``.md`` files are appended to
+            ``stats['errors']`` so they surface in the SyncLog instead of
+            being silently swallowed (issue #286). When ``None``, parse
+            failures are only logged.
     """
     lookup = {}
     if not os.path.isdir(course_dir):
@@ -2030,11 +2100,26 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None):
 
         # Best-effort: skip modules whose YAML can't be parsed. We don't want
         # link rewriting to ever fail the sync, so a parse error here just
-        # means those modules' units can't be link targets.
+        # means those modules' units can't be link targets. Surface the
+        # error to ``stats['errors']`` when available so staff see it in the
+        # SyncLog instead of silently losing the module (issue #286).
+        # ``_parse_yaml_file`` now wraps yaml errors as ``ValueError`` with
+        # a ``Failed to parse module.yaml: ...`` prefix, so the message we
+        # record matches the documented format without a separate prefix.
         try:
             module_data = _parse_yaml_file(module_yaml_path) or {}
-        except Exception:
+        except ValueError as exc:
             module_data = {}
+            rel_module_yaml = os.path.relpath(module_yaml_path, course_dir)
+            logger.warning(
+                'Failed to parse %s while building course unit lookup: %s',
+                module_yaml_path, exc,
+            )
+            if stats is not None:
+                stats['errors'].append({
+                    'file': rel_module_yaml,
+                    'error': str(exc),
+                })
         module_slug = module_data.get('slug') or derive_slug(entry.name)
 
         # Module-level ignore patterns are relative to the module dir,
@@ -2067,8 +2152,21 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None):
 
             try:
                 metadata, _ = _parse_markdown_file(filepath)
-            except Exception:
+            except ValueError as exc:
+                # _parse_markdown_file now raises ValueError with a
+                # ``Failed to parse frontmatter in <filename>: ...`` prefix
+                # when frontmatter YAML fails (issue #286).
                 metadata = {}
+                rel_md = os.path.relpath(filepath, course_dir)
+                logger.warning(
+                    'Failed to parse frontmatter in %s while building '
+                    'course unit lookup: %s', filepath, exc,
+                )
+                if stats is not None:
+                    stats['errors'].append({
+                        'file': rel_md,
+                        'error': str(exc),
+                    })
 
             if filename.lower() == 'readme.md':
                 # README is the module overview, not a unit (issue #222).
@@ -2355,6 +2453,12 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
     # markdown link rewriter (issue #226) can resolve sibling and cross-module
     # `.md` links to platform URLs. Pass course-level ignore patterns so the
     # lookup mirrors what _sync_module_units actually persists (issue #233).
+    #
+    # We deliberately don't pass ``stats`` here: the sync loop below
+    # (_sync_course_modules) and ``_sync_module_units`` already catch and
+    # record parse errors for each ``module.yaml`` and unit ``.md`` file
+    # they touch. Forwarding ``stats`` to the lookup would record those
+    # same errors twice (issue #286).
     unit_lookup = _build_course_unit_lookup(
         course_dir, course_ignore_patterns=course_ignore_patterns,
     )

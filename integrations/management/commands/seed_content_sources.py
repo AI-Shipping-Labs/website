@@ -34,6 +34,12 @@ DEFAULT_SOURCES = [
         'is_private': True,
     },
     {
+        'repo_name': 'AI-Shipping-Labs/content',
+        'content_type': 'event',
+        'content_path': 'events',
+        'is_private': True,
+    },
+    {
         'repo_name': 'AI-Shipping-Labs/python-course',
         'content_type': 'course',
         'content_path': '',

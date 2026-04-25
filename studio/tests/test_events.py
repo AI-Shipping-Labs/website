@@ -14,27 +14,18 @@ Verifies:
 
 from datetime import datetime
 
-from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import TestCase
 from django.utils import timezone
 
 from events.models import Event
+from tests.fixtures import StaffUserMixin
 
-User = get_user_model()
 
-
-class StudioEventListTest(TestCase):
+class StudioEventListTest(StaffUserMixin, TestCase):
     """Test event list view."""
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-
     def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
 
     def test_list_returns_200(self):
         response = self.client.get('/studio/events/')
@@ -83,18 +74,11 @@ class StudioEventListTest(TestCase):
         self.assertNotContains(response, 'Java Workshop')
 
 
-class StudioEventCreateURLTest(TestCase):
+class StudioEventCreateURLTest(StaffUserMixin, TestCase):
     """Test that the event create URL returns 404."""
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-
     def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
 
     def test_create_url_get_returns_404(self):
         response = self.client.get('/studio/events/new')
@@ -114,18 +98,11 @@ class StudioEventCreateURLTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class StudioEventEditTest(TestCase):
+class StudioEventEditTest(StaffUserMixin, TestCase):
     """Test event editing with pre-populated date/time/duration fields."""
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-
     def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.event = Event.objects.create(
             title='Edit Event', slug='edit-event',
             start_datetime=datetime(2026, 6, 1, 10, 0),
@@ -238,18 +215,11 @@ class StudioEventEditTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class StudioEventSyncedTest(TestCase):
+class StudioEventSyncedTest(StaffUserMixin, TestCase):
     """Test that synced events show GitHub link and have read-only content fields."""
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-
     def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.event = Event.objects.create(
             title='Synced Event', slug='synced-event',
             description='Original description',
@@ -356,18 +326,11 @@ class StudioEventSyncedTest(TestCase):
         self.assertNotContains(response, 'data-testid="synced-banner"')
 
 
-class StudioEventCreateZoomTest(TestCase):
+class StudioEventCreateZoomTest(StaffUserMixin, TestCase):
     """Test Studio endpoint for creating Zoom meetings for events."""
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-
     def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
+        self.client.login(**self.staff_credentials)
         self.event = Event.objects.create(
             title='Live Event', slug='live-event',
             event_type='live',

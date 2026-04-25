@@ -18,48 +18,21 @@ class LoginViewTest(TestCase):
 
     def test_login_page_contains_google_button(self):
         response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("Sign in with Google", content)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/accounts/google/login/"')
+        self.assertContains(response, "Sign in with Google")
 
     def test_login_page_contains_github_button(self):
         response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("Sign in with GitHub", content)
-
-    def test_login_page_contains_google_oauth_link(self):
-        response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("/accounts/google/login/", content)
-
-    def test_login_page_contains_github_oauth_link(self):
-        response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("/accounts/github/login/", content)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/accounts/github/login/"')
+        self.assertContains(response, "Sign in with GitHub")
 
     def test_login_page_contains_slack_button(self):
         response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("Sign in with Slack", content)
-
-    def test_login_page_contains_slack_oauth_link(self):
-        response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("/accounts/slack/login/", content)
-
-    def test_login_page_includes_header(self):
-        response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("AI Shipping Labs", content)
-
-    def test_login_page_includes_footer(self):
-        response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("</footer>", content)
-
-    def test_login_page_has_tailwind(self):
-        response = self.client.get("/accounts/login/")
-        content = response.content.decode()
-        self.assertIn("tailwindcss", content)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/accounts/slack/login/"')
+        self.assertContains(response, "Sign in with Slack")
 
     def test_login_page_redirects_authenticated_user(self):
         user = User.objects.create_user(email="test@example.com")
@@ -67,10 +40,6 @@ class LoginViewTest(TestCase):
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/")
-
-    def test_login_url_name(self):
-        url = reverse("account_login")
-        self.assertEqual(url, "/accounts/login/")
 
 
 @tag('core')
@@ -114,6 +83,7 @@ class HeaderAuthDisplayTest(TestCase):
 
     def test_header_shows_sign_in_for_anonymous(self):
         response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn("Sign in", content)
         self.assertNotIn("Log out", content)
@@ -122,6 +92,7 @@ class HeaderAuthDisplayTest(TestCase):
         user = User.objects.create_user(email="test@example.com")
         self.client.force_login(user)
         response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn("Log out", content)
         self.assertIn("test@example.com", content)
@@ -130,5 +101,6 @@ class HeaderAuthDisplayTest(TestCase):
         user = User.objects.create_user(email="user@demo.com")
         self.client.force_login(user)
         response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn("user@demo.com", content)

@@ -185,6 +185,7 @@ class OverrideLifecycleTest(TierOverrideTestBase):
 # Scenarios 9-13: Self-upgrade/downgrade during override
 # ============================================================
 
+@tag('core')
 class SelfUpgradeDuringOverrideTest(TierOverrideTestBase):
     """Scenarios 9-13: Self-upgrade/downgrade during override."""
 
@@ -265,6 +266,7 @@ class SelfUpgradeDuringOverrideTest(TierOverrideTestBase):
 # Scenarios 14-15: Sequential overrides
 # ============================================================
 
+@tag('core')
 class SequentialOverridesTest(TierOverrideTestBase):
     """Scenarios 14-15: Sequential overrides."""
 
@@ -526,6 +528,7 @@ class BillingInteractionsTest(TierOverrideTestBase):
 # Scenarios 25-26: Slack community access (NOT affected)
 # ============================================================
 
+@tag('core')
 class SlackAccessTest(TierOverrideTestBase):
     """Scenarios 25-26: Slack community access NOT affected by override."""
 
@@ -782,6 +785,7 @@ class AccountPageDisplayTest(TierOverrideTestBase):
 # Scenarios 39-40: Event access with override
 # ============================================================
 
+@tag('core')
 class EventAccessWithOverrideTest(TierOverrideTestBase):
     """Scenarios 39-40: Event access with override."""
 
@@ -811,6 +815,7 @@ class EventAccessWithOverrideTest(TierOverrideTestBase):
 # Scenarios 41-42: Voting/poll access with override
 # ============================================================
 
+@tag('core')
 class PollAccessWithOverrideTest(TierOverrideTestBase):
     """Scenarios 41-42: Voting/poll access with override."""
 
@@ -839,6 +844,7 @@ class PollAccessWithOverrideTest(TierOverrideTestBase):
 # Scenarios 43-44: Download access with override
 # ============================================================
 
+@tag('core')
 class DownloadAccessWithOverrideTest(TierOverrideTestBase):
     """Scenarios 43-44: Download access with override."""
 

@@ -2082,7 +2082,9 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None):
     return lookup
 
 
-def _build_workshop_page_lookup(workshop_dir, workshop_slug):
+def _build_workshop_page_lookup(
+    workshop_dir, workshop_slug, workshop_title=None, copy_file=None,
+):
     """Build a ``{filename: {'slug', 'title', 'url'}}`` map for a workshop folder.
 
     Used by :func:`rewrite_workshop_md_links` (issue #301) so we can resolve
@@ -2094,8 +2096,25 @@ def _build_workshop_page_lookup(workshop_dir, workshop_slug):
     ``.md`` extension. Files missing a frontmatter ``title`` are skipped from
     the lookup — they won't sync as pages either, so a link to them stays
     unresolved and surfaces as a broken-link warning the same way courses do.
-    ``README.md`` and dotfiles are excluded (workshops don't surface a
-    README page).
+    ``README.md`` and dotfiles are excluded from the tutorial-page list
+    (workshops don't surface a README page) but ``README.md`` is added as a
+    virtual entry pointing at the workshop landing URL when the file exists,
+    so ``[README.md](README.md)`` links resolve cleanly (issue #304).
+
+    Args:
+        workshop_dir: Absolute path to the workshop folder.
+        workshop_slug: ``Workshop.slug`` for URL construction.
+        workshop_title: ``Workshop.title``, used for the title-substitution
+            rule on the virtual ``README.md`` (and ``copy_file``) entries.
+            Optional for backwards compat; when omitted the virtual entries
+            are skipped (older callers fall back to plain tutorial-page
+            lookups).
+        copy_file: Optional resolved ``copy_file`` value from
+            ``workshop.yaml``. When set to a non-README ``.md`` filename,
+            adds an additional virtual entry mapping that filename to the
+            workshop landing URL (so a link like
+            ``[01-intro.md](01-intro.md)`` rewrites to ``/workshops/<slug>``
+            instead of the tutorial URL).
     """
     lookup = {}
     if not os.path.isdir(workshop_dir):
@@ -2135,7 +2154,261 @@ def _build_workshop_page_lookup(workshop_dir, workshop_slug):
             'url': url,
         }
 
+    # Virtual entries (issue #304): point ``[README.md](README.md)`` and
+    # any explicit ``copy_file`` reference at the workshop landing URL
+    # rather than emitting an unresolvable-link warning. The title-swap
+    # rule from #301 surfaces the workshop title as the visible link text
+    # when the link label equals the bare filename.
+    if workshop_title:
+        landing_url = f'/workshops/{workshop_slug}'
+        readme_path = os.path.join(workshop_dir, 'README.md')
+        if os.path.isfile(readme_path):
+            lookup['README.md'] = {
+                'slug': '',
+                'title': workshop_title,
+                'url': landing_url,
+            }
+        if copy_file:
+            # Only register the copy_file virtual entry when it's a plain
+            # filename (no path components), it's a .md file, the file
+            # exists, and it isn't already README.md (which we already
+            # handled above). Validation errors are reported by
+            # _resolve_workshop_landing_copy; here we just want to be
+            # defensive so a malformed copy_file never produces a misleading
+            # link rewrite.
+            if (
+                isinstance(copy_file, str)
+                and copy_file
+                and '/' not in copy_file
+                and '..' not in copy_file
+                and copy_file.lower().endswith('.md')
+                and copy_file.upper() != 'README.MD'
+            ):
+                copy_path = os.path.join(workshop_dir, copy_file)
+                if os.path.isfile(copy_path):
+                    lookup[copy_file] = {
+                        'slug': '',
+                        'title': workshop_title,
+                        'url': landing_url,
+                    }
+
     return lookup
+
+
+def _strip_leading_h1(body):
+    """Strip a leading H1 heading from ``body`` when present.
+
+    GitHub renders ``README.md`` files with the leading ``# Title`` shown
+    above the body. The workshop landing template already renders the
+    workshop title above the description, so we strip that first H1 to
+    avoid a duplicated heading. Only the FIRST non-blank line is inspected;
+    a deeper H1 (e.g. inside content) is preserved.
+
+    Recognised forms:
+        # Title at top
+        # Title at top\n=== underline (setext-h1)
+
+    Returns the body unchanged when the first non-blank content isn't an H1.
+    """
+    if not body:
+        return body
+
+    lines = body.splitlines(keepends=True)
+    # Find first non-blank line index.
+    first_idx = None
+    for i, line in enumerate(lines):
+        if line.strip():
+            first_idx = i
+            break
+    if first_idx is None:
+        return body
+
+    first = lines[first_idx]
+    stripped = first.strip()
+
+    # ATX H1: "# Heading" (but NOT "## Heading", "###...").
+    if re.match(r'^#\s+\S', stripped) and not stripped.startswith('##'):
+        del lines[first_idx]
+        return ''.join(lines)
+
+    # Setext H1: "Heading\n=====" — the next non-blank line is "=" * n.
+    if first_idx + 1 < len(lines):
+        next_line = lines[first_idx + 1].strip()
+        if next_line and re.fullmatch(r'=+', next_line):
+            # Remove both the heading text and the underline.
+            del lines[first_idx:first_idx + 2]
+            return ''.join(lines)
+
+    return body
+
+
+def _resolve_workshop_landing_copy(
+    workshop_dir, data, rel_path, page_lookup, workshop_slug, repo_name,
+    sync_errors,
+):
+    """Resolve the markdown body for a workshop's landing description.
+
+    Resolution order (issue #304):
+
+    1. ``copy_file:`` set in yaml -> read that file (validate first).
+    2. Unset ``copy_file`` AND ``README.md`` exists -> read ``README.md``.
+    3. Neither file resolves AND yaml has ``description:`` -> use it as-is.
+    4. None of the above -> empty string. No error.
+
+    When a file source resolves alongside a yaml ``description``, the file
+    wins; an info-level note is logged so authors notice the redundant yaml
+    field.
+
+    The returned body has been frontmatter-stripped, leading-H1-stripped,
+    image-URL-rewritten, and intra-workshop-link-rewritten — ready to be
+    assigned to ``Workshop.description``. ``Workshop.save()`` re-renders
+    ``description_html`` exactly once via ``render_markdown``.
+
+    Errors with explicit ``copy_file`` settings (missing file, non-md,
+    path traversal/subdir) are appended to ``sync_errors`` and the function
+    returns ``''``. The workshop sync still proceeds — copy errors never
+    skip the workshop row.
+
+    Args:
+        workshop_dir: Absolute path to the workshop folder.
+        data: Parsed ``workshop.yaml`` dict.
+        rel_path: Repo-relative path of the workshop folder (used for
+            error messages and image URL rewriting).
+        page_lookup: Pre-built ``{filename: {...}}`` map; passed to the
+            link rewriter.
+        workshop_slug: ``Workshop.slug`` for the link rewriter.
+        repo_name: Source repo name for image CDN URL rewriting.
+        sync_errors: Mutable list to append error / info records to.
+
+    Returns:
+        str: Fully-processed markdown body, or empty string when no source
+        applies.
+    """
+    from content.utils.md_links import rewrite_workshop_md_links
+
+    explicit_copy_file = data.get('copy_file')
+    yaml_description = data.get('description', '') or ''
+
+    source_filename = None  # the file we ultimately read
+    explicit_set = bool(explicit_copy_file)
+
+    if explicit_set:
+        # Validate explicit copy_file before touching disk so authors get
+        # actionable error messages rather than IOError surprises.
+        if not isinstance(explicit_copy_file, str):
+            sync_errors.append({
+                'file': rel_path,
+                'error': (
+                    f'copy_file {explicit_copy_file!r} must be a string '
+                    f'filename'
+                ),
+            })
+            return ''
+
+        candidate = explicit_copy_file.strip()
+        if '/' in candidate or '..' in candidate or candidate.startswith('.'):
+            # Reject path traversal AND subdir paths AND hidden-file refs.
+            # ``..`` in any position blocks both ``../foo.md`` and
+            # ``foo/../bar.md``. ``/`` blocks subdirectories.
+            sync_errors.append({
+                'file': rel_path,
+                'error': (
+                    f'copy_file {explicit_copy_file!r} must be a filename '
+                    f'in the workshop folder, not a path'
+                ),
+            })
+            return ''
+        if not candidate.lower().endswith('.md'):
+            sync_errors.append({
+                'file': rel_path,
+                'error': (
+                    f'copy_file {explicit_copy_file!r} must be a .md file'
+                ),
+            })
+            return ''
+
+        candidate_path = os.path.join(workshop_dir, candidate)
+        if not os.path.isfile(candidate_path):
+            sync_errors.append({
+                'file': rel_path,
+                'error': (
+                    f'copy_file {explicit_copy_file!r} not found in '
+                    f'{rel_path}'
+                ),
+            })
+            return ''
+
+        source_filename = candidate
+    else:
+        # Implicit fallback: README.md if it exists. Missing README is NOT
+        # an error — it's just absence of a default.
+        readme_path = os.path.join(workshop_dir, 'README.md')
+        if os.path.isfile(readme_path):
+            source_filename = 'README.md'
+
+    if source_filename is None:
+        # No file source. Fall back to yaml description (current behavior).
+        return yaml_description
+
+    # We have a file to read.
+    source_path = os.path.join(workshop_dir, source_filename)
+    try:
+        _, body = _parse_markdown_file(source_path)
+    except Exception as e:
+        # Treat parse failure on an explicit copy_file as an error so
+        # authors notice. Implicit README parse failure is a soft warning
+        # only — this matches the "missing README is not an error" rule
+        # but flags concrete corruption.
+        sync_errors.append({
+            'file': rel_path,
+            'error': (
+                f'Failed to read landing copy from {source_filename}: {e}'
+            ),
+        })
+        return ''
+
+    # Inform authors when the yaml description is being shadowed so they
+    # can clean up the redundant field. Info-level (logger.info) plus a
+    # SyncLog entry so it's visible without grepping logs.
+    if yaml_description.strip():
+        msg = (
+            f'workshop.yaml description: is shadowed by '
+            f'{source_filename} for workshop landing in {rel_path}'
+        )
+        logger.info(msg)
+        sync_errors.append({
+            'file': rel_path,
+            'error': msg,
+            'severity': 'info',
+        })
+
+    if not body or not body.strip():
+        # File present but empty / only frontmatter — leave description
+        # empty. No error per the spec.
+        return ''
+
+    # Strip leading H1 so the landing template doesn't render a duplicate
+    # heading on top of the workshop title.
+    body = _strip_leading_h1(body)
+    if not body.strip():
+        return ''
+
+    # Rewrite relative image URLs using the workshop folder as the base
+    # path (same as tutorial pages would).
+    body = rewrite_image_urls(body, repo_name, rel_path)
+
+    # Rewrite intra-workshop ``.md`` links (including the README virtual
+    # entry that points back at the landing — useful when copy_file is a
+    # tutorial file that itself links to README).
+    body = rewrite_workshop_md_links(
+        body,
+        workshop_slug=workshop_slug,
+        page_lookup=page_lookup,
+        source_path=os.path.join(rel_path, source_filename),
+        sync_errors=sync_errors,
+    )
+
+    return body
 
 
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
@@ -3612,9 +3885,30 @@ def _sync_single_workshop(
             source, yaml_rel_path,
         )
 
+        # Issue #304: build the page lookup once and reuse it for the
+        # landing-description copy_file resolution AND the per-page
+        # rewriting in _sync_workshop_pages. The lookup includes virtual
+        # entries for README.md (and an explicit copy_file when set), so
+        # ``[README.md](README.md)`` resolves to the landing URL instead
+        # of emitting a broken-link warning.
+        page_lookup = _build_workshop_page_lookup(
+            workshop_dir, slug, workshop_title=title,
+            copy_file=data.get('copy_file'),
+        )
+
+        # Resolve the landing description: copy_file (explicit) -> README.md
+        # (implicit default) -> yaml description: -> empty. The body is
+        # frontmatter-stripped, leading-H1-stripped, image-URL-rewritten,
+        # and intra-workshop-link-rewritten. ``Workshop.save()`` will then
+        # render description_html through render_markdown exactly once.
+        landing_description = _resolve_workshop_landing_copy(
+            workshop_dir, data, rel_path, page_lookup, slug,
+            source.repo_name, stats['errors'],
+        )
+
         workshop_defaults = {
             'title': title,
-            'description': data.get('description', '') or '',
+            'description': landing_description,
             'date': workshop_date,
             'instructor_name': data.get('instructor_name', '') or '',
             'tags': data.get('tags', []) or [],
@@ -3685,9 +3979,13 @@ def _sync_single_workshop(
         )
 
         # Sync pages — every *.md file in the folder except README.md.
+        # Pass the pre-built page_lookup so the rewriter sees the same
+        # virtual entries (README.md, copy_file) we used for the landing
+        # description.
         _sync_workshop_pages(
             workshop, workshop_dir, repo_dir, source.repo_name,
             commit_sha, stats, known_images=known_images,
+            page_lookup=page_lookup,
         )
 
     except Exception as e:
@@ -3820,7 +4118,7 @@ def _derive_workshop_event_content_id(repo_name, workshop_source_path):
 
 def _sync_workshop_pages(
     workshop, workshop_dir, repo_dir, repo_name, commit_sha, stats,
-    known_images=None,
+    known_images=None, page_lookup=None,
 ):
     """Sync ``*.md`` pages under a workshop folder into ``WorkshopPage`` rows.
 
@@ -3833,6 +4131,13 @@ def _sync_workshop_pages(
     Pages whose source files disappeared are hard-deleted — unlike
     course units, WorkshopPages don't carry user progress yet, so a
     soft-delete layer would be dead weight.
+
+    ``page_lookup`` is an optional pre-built ``{filename -> page-meta}``
+    map (issue #304) — when supplied, it's reused as-is so the same
+    virtual entries (README.md, copy_file) seen by the landing
+    description resolver are also visible to the per-page rewriter. When
+    omitted (legacy callers, tests), the lookup is built locally without
+    the README virtual entry.
     """
     # Function-scoped imports keep the integrations service decoupled
     # from content app readiness (matches the pattern used elsewhere in
@@ -3842,11 +4147,15 @@ def _sync_workshop_pages(
     from content.templatetags.video_utils import parse_video_timestamp
     from content.utils.md_links import rewrite_workshop_md_links
 
-    # Issue #301: build a {filename -> page-meta} lookup once per workshop so
-    # the link rewriter can resolve sibling ``.md`` links across all pages
-    # (including forward references, e.g. page 02 linking to page 10) before
-    # any individual page is parsed.
-    page_lookup = _build_workshop_page_lookup(workshop_dir, workshop.slug)
+    # Issue #301/#304: build a {filename -> page-meta} lookup once per
+    # workshop so the link rewriter can resolve sibling ``.md`` links
+    # across all pages. Reuse the caller-provided lookup when present
+    # (issue #304 hoists this to ``_sync_single_workshop`` so the same
+    # lookup serves both landing-description and per-page rewriting).
+    if page_lookup is None:
+        page_lookup = _build_workshop_page_lookup(
+            workshop_dir, workshop.slug, workshop_title=workshop.title,
+        )
 
     seen_paths = set()
 

@@ -824,3 +824,417 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
         self.assertIn('end-to-end-agent-deployment', msg)
         # The error is attributed to the source page that contained the link.
         self.assertIn('01-overview.md', broken_link_errors[0]['file'])
+
+
+class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
+    """Workshop landing description sourced from copy_file / README (issue #304).
+
+    Resolution priority:
+    1. ``copy_file: <name>`` set in workshop.yaml
+    2. Implicit ``README.md`` at the workshop folder root
+    3. Yaml ``description:``
+    4. Empty string (no error)
+
+    File source wins over yaml ``description:``; processing strips
+    frontmatter, leading H1, rewrites image URLs and intra-workshop
+    .md links. ``Workshop.save()`` then renders ``description_html``
+    once via ``render_markdown``.
+    """
+
+    def _write_yaml_no_description(self, folder, slug='demo', extra=''):
+        """Write a minimal workshop.yaml WITHOUT a description: field."""
+        self._write_workshop_yaml(
+            folder=folder, slug=slug, extra_yaml=extra,
+        )
+
+    def test_implicit_readme_becomes_description(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(folder)
+        # README starts with an H1 (GitHub-friendly) and contains a paragraph
+        # plus a fenced code block. The H1 should be stripped by sync;
+        # paragraphs and code block are preserved.
+        self._write(
+            f'{folder}/README.md',
+            '# Demo Workshop\n\n'
+            'Welcome to the demo workshop.\n\n'
+            'A second paragraph here.\n\n'
+            '```python\nprint("hi")\n```\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            [e for e in sync_log.errors if e.get('severity') != 'info'],
+            [],
+            f'Expected no errors, got: {sync_log.errors}',
+        )
+
+        workshop = Workshop.objects.get(slug='demo')
+        # Markdown body excludes the leading H1 (we don't want to duplicate
+        # the workshop title rendered above the description).
+        self.assertNotIn('# Demo Workshop', workshop.description)
+        self.assertIn('Welcome to the demo workshop.', workshop.description)
+        self.assertIn('A second paragraph here.', workshop.description)
+        self.assertIn('```python', workshop.description)
+
+        # description_html was rendered through render_markdown — codehilite
+        # class on the fenced code block confirms the pipeline ran.
+        self.assertIn('codehilite', workshop.description_html)
+        self.assertIn('Welcome to the demo workshop.', workshop.description_html)
+        # The leading H1 must NOT be re-introduced in the rendered HTML.
+        self.assertNotIn('<h1>Demo Workshop</h1>', workshop.description_html)
+
+    def test_explicit_copy_file_wins(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(
+            folder, extra='copy_file: 01-intro.md\n',
+        )
+        # README also exists but copy_file overrides it.
+        self._write(f'{folder}/README.md', '# README body\n\nReadme content.\n')
+        self._write_page(
+            folder, '01-intro.md', title='Intro',
+            body='# Intro heading\n\nIntro body content.\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            [e for e in sync_log.errors if e.get('severity') != 'info'],
+            [],
+        )
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIn('Intro body content.', workshop.description)
+        self.assertNotIn('Readme content.', workshop.description)
+        # Leading H1 from the source file should still be stripped.
+        self.assertNotIn('# Intro heading', workshop.description)
+
+        # 01-intro.md is also still synced as a tutorial page.
+        page = WorkshopPage.objects.get(workshop=workshop, slug='intro')
+        self.assertEqual(page.title, 'Intro')
+
+    def test_yaml_description_used_when_no_file_source(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml='description: "Plain yaml description."\n',
+        )
+        # No README, no copy_file -> falls through to yaml description.
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, 'Plain yaml description.')
+        self.assertIn('Plain yaml description.', workshop.description_html)
+
+    def test_no_description_no_readme_no_copy_file_yields_empty(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(folder)
+        # Need at least one tutorial page to make the sync produce a
+        # workshop row (workshop sync requires no pages, but include one
+        # to mirror real layouts).
+        self._write_page(folder, '01-only.md', title='Only')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        # No errors at all when nothing is configured.
+        self.assertEqual(sync_log.errors, [])
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, '')
+        self.assertEqual(workshop.description_html, '')
+
+    def test_file_wins_over_yaml_description_with_info_log(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml='description: "Stale yaml description."\n',
+        )
+        self._write(
+            f'{folder}/README.md',
+            'README body wins.\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIn('README body wins.', workshop.description)
+        self.assertNotIn('Stale yaml description.', workshop.description)
+
+        # An info-level note flags the shadowed yaml description.
+        info_entries = [
+            e for e in sync_log.errors
+            if e.get('severity') == 'info'
+            and 'shadowed' in e.get('error', '')
+        ]
+        self.assertEqual(
+            len(info_entries), 1,
+            f'Expected exactly one shadowing info note, got: {sync_log.errors}',
+        )
+
+    def test_copy_file_missing_logs_error_workshop_still_synced(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(
+            folder, extra='copy_file: missing.md\n',
+        )
+        # Add a page so the workshop is non-trivial.
+        self._write_page(folder, '01-page.md', title='Page')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        # The workshop row IS still created; copy_file errors do NOT skip.
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, '')
+        self.assertEqual(workshop.description_html, '')
+        # Page sync still ran.
+        self.assertTrue(
+            WorkshopPage.objects.filter(workshop=workshop, slug='page').exists(),
+        )
+
+        not_found = [
+            e for e in sync_log.errors
+            if 'missing.md' in e.get('error', '')
+            and 'not found' in e.get('error', '')
+        ]
+        self.assertEqual(len(not_found), 1, sync_log.errors)
+
+    def test_copy_file_non_md_logs_error(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(
+            folder, extra='copy_file: notes.txt\n',
+        )
+        self._write(f'{folder}/notes.txt', 'plain text body')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, '')
+        self.assertTrue(
+            any(
+                'notes.txt' in e.get('error', '')
+                and '.md' in e.get('error', '')
+                for e in sync_log.errors
+            ),
+            sync_log.errors,
+        )
+
+    def test_copy_file_path_traversal_logs_error(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(
+            folder, extra='copy_file: ../other/README.md\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, '')
+        self.assertTrue(
+            any(
+                'must be a filename' in e.get('error', '')
+                for e in sync_log.errors
+            ),
+            sync_log.errors,
+        )
+
+    def test_copy_file_subdir_logs_error(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(
+            folder, extra='copy_file: subdir/foo.md\n',
+        )
+        self._write(f'{folder}/subdir/foo.md', 'body')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, '')
+        self.assertTrue(
+            any(
+                'must be a filename' in e.get('error', '')
+                for e in sync_log.errors
+            ),
+            sync_log.errors,
+        )
+
+    def test_copy_file_empty_file_no_error_empty_description(self):
+        # Use README.md for the empty-file case so it doesn't also get
+        # picked up by the tutorial-page sync (page sync ignores README.md
+        # by name; arbitrary blank .md files would fail title validation).
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(folder)
+        self._write(f'{folder}/README.md', '')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, '')
+        # No error when the file exists but is blank — the spec is explicit.
+        self.assertEqual(
+            [
+                e for e in sync_log.errors
+                if 'README.md' in e.get('error', '')
+                and e.get('severity') != 'info'
+            ],
+            [],
+            sync_log.errors,
+        )
+
+    def test_copy_file_only_frontmatter_no_error_empty_description(self):
+        # Use the README.md path for the only-frontmatter case so the
+        # workshop-page sync doesn't ALSO try to ingest the file (workshop
+        # pages skip README.md by filename, so we don't get crossover noise).
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(folder)
+        self._write(
+            f'{folder}/README.md',
+            '---\ntitle: Stub\n---\n',
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop.description, '')
+        self.assertEqual(
+            [
+                e for e in sync_log.errors
+                if 'README.md' in e.get('error', '')
+                and e.get('severity') != 'info'
+            ],
+            [],
+            sync_log.errors,
+        )
+
+    def test_copy_file_error_isolated_other_workshops_sync(self):
+        # Workshop A has a broken copy_file; workshop B is fine.
+        self._write_workshop_yaml(
+            folder='2026/2026-04-21-broken',
+            content_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
+            slug='broken',
+            extra_yaml='copy_file: nope.md\n',
+        )
+        self._write_page(
+            '2026/2026-04-21-broken', '01-x.md', title='X',
+        )
+        self._write_workshop_yaml(
+            folder='2026/2026-04-21-good',
+            content_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
+            slug='good',
+        )
+        self._write(
+            '2026/2026-04-21-good/README.md',
+            'Good workshop description.\n',
+        )
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        # Both workshops created.
+        broken = Workshop.objects.get(slug='broken')
+        good = Workshop.objects.get(slug='good')
+        self.assertEqual(broken.description, '')
+        self.assertIn('Good workshop description.', good.description)
+
+    def test_readme_link_resolves_to_workshop_landing(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(folder, slug='ws')
+        self._write(
+            f'{folder}/README.md',
+            'README content.\n',
+        )
+        self._write_page(
+            folder, '10-qa.md', title='Q&A',
+            body=(
+                'See [README.md](README.md) and '
+                '[the overview](README.md#getting-started) and '
+                '[case-insensitive](readme.MD).\n'
+            ),
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        # No "Unresolvable .md link" warning naming README.md.
+        readme_link_errors = [
+            e for e in sync_log.errors
+            if 'README.md' in e.get('error', '')
+            and 'Unresolvable' in e.get('error', '')
+        ]
+        self.assertEqual(
+            readme_link_errors, [],
+            f'Expected no README.md unresolvable warnings, got: '
+            f'{readme_link_errors}',
+        )
+
+        page = WorkshopPage.objects.get(slug='qa')
+        # Bare-filename label gets title-substituted to the workshop title.
+        self.assertIn('[Demo Workshop](/workshops/ws)', page.body)
+        # Custom label preserved with anchor.
+        self.assertIn(
+            '[the overview](/workshops/ws#getting-started)',
+            page.body,
+        )
+        # Case-insensitive match still resolves.
+        self.assertIn('](/workshops/ws)', page.body)
+
+    def test_copy_file_links_to_landing_via_virtual_lookup(self):
+        # When copy_file points at 01-intro.md, that filename also routes
+        # to the landing for cross-page links (the file IS still synced as
+        # a tutorial page, but a `[01-intro.md](01-intro.md)` reference
+        # is treated as "the canonical landing source").
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(
+            folder, slug='ws', extra='copy_file: 01-intro.md\n',
+        )
+        self._write_page(
+            folder, '01-intro.md', title='Intro',
+            body='Intro body.\n',
+        )
+        self._write_page(
+            folder, '02-next.md', title='Next',
+            body='Read [01-intro.md](01-intro.md).\n',
+        )
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        next_page = WorkshopPage.objects.get(slug='next')
+        # 01-intro.md routes to the workshop landing, not the tutorial URL,
+        # and the visible label is title-substituted to the workshop title.
+        self.assertIn('[Demo Workshop](/workshops/ws)', next_page.body)
+        self.assertNotIn(
+            '/workshops/ws/tutorial/intro', next_page.body,
+        )
+
+    def test_readme_image_url_rewritten_on_landing(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(folder, slug='ws')
+        self._write(
+            f'{folder}/README.md',
+            'See ![arch](images/architecture.png)\n',
+        )
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='ws')
+        # The image path is rewritten to a CDN-prefixed URL — bare path
+        # is gone.
+        self.assertNotIn('](images/architecture.png)', workshop.description)
+        self.assertIn('architecture.png', workshop.description)
+        # The rewrite uses the configured CDN base; check the prefix.
+        from integrations.config import get_config
+        cdn_base = get_config('CONTENT_CDN_BASE', '/static/content-images')
+        self.assertIn(cdn_base, workshop.description)
+
+    def test_resync_with_unchanged_readme_is_idempotent(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_yaml_no_description(folder, slug='ws')
+        self._write(f'{folder}/README.md', '# Title\n\nBody.\n')
+        self._write_page(folder, '01-only.md', title='Only')
+
+        first = sync_content_source(self.source, repo_dir=self.temp_dir)
+        # Filter out info-level shadowing notes when counting errors.
+        self.assertEqual(
+            [e for e in first.errors if e.get('severity') != 'info'], [],
+        )
+        self.assertGreaterEqual(first.items_created, 1)
+
+        second = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            [e for e in second.errors if e.get('severity') != 'info'], [],
+        )
+        # No work to do on the second sync — description stays the same.
+        self.assertEqual(second.items_created, 0)
+        self.assertEqual(second.items_updated, 0)

@@ -459,3 +459,113 @@ class RewriteWorkshopMdLinksTest(TestCase):
             '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
             result,
         )
+
+
+# Lookup that includes the README.md virtual entry produced by
+# ``_build_workshop_page_lookup`` post issue #304. README.md routes to the
+# workshop landing URL (no /tutorial/ prefix) and uses ``slug=''`` plus the
+# workshop title so the title-substitution rule surfaces a friendly label.
+WORKSHOP_LOOKUP_WITH_README = {
+    '01-overview.md': {
+        'slug': 'overview',
+        'title': 'Welcome and overview',
+        'url': '/workshops/end-to-end-agent-deployment/tutorial/overview',
+    },
+    '10-qa.md': {
+        'slug': 'qa',
+        'title': 'Q&A: side discussions',
+        'url': '/workshops/end-to-end-agent-deployment/tutorial/qa',
+    },
+    'README.md': {
+        'slug': '',
+        'title': 'Production Agents',
+        'url': '/workshops/end-to-end-agent-deployment',
+    },
+}
+
+
+class RewriteWorkshopMdLinksReadmeVirtualEntryTest(TestCase):
+    """Issue #304: README.md (and copy_file) virtual entries route to the
+    workshop landing URL with the workshop title as the substituted label."""
+
+    workshop_slug = 'end-to-end-agent-deployment'
+
+    def _rewrite(self, body, lookup=None, **kwargs):
+        kwargs.setdefault('workshop_slug', self.workshop_slug)
+        kwargs.setdefault(
+            'page_lookup', lookup or WORKSHOP_LOOKUP_WITH_README,
+        )
+        return rewrite_workshop_md_links(body, **kwargs)
+
+    def test_readme_md_link_rewrites_to_workshop_landing_with_title(self):
+        body = 'See [README.md](README.md).'
+        result = self._rewrite(body)
+        # No /tutorial/ in the URL — README routes to the bare landing.
+        self.assertIn(
+            '[Production Agents](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+        self.assertNotIn('](README.md)', result)
+        self.assertNotIn('/tutorial/', result)
+
+    def test_readme_md_link_with_custom_label_preserves_label(self):
+        body = 'See [the intro](README.md).'
+        result = self._rewrite(body)
+        self.assertIn(
+            '[the intro](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+
+    def test_readme_md_link_anchor_preserved(self):
+        body = 'See [link](README.md#setup).'
+        result = self._rewrite(body)
+        self.assertIn(
+            '[link](/workshops/end-to-end-agent-deployment#setup)',
+            result,
+        )
+
+    def test_readme_md_link_emits_no_warning(self):
+        # The whole point of #304: README links no longer surface as
+        # broken-link warnings on SyncLog.
+        body = 'See [README.md](README.md).'
+        errors = []
+        self._rewrite(body, sync_errors=errors)
+        self.assertEqual(errors, [])
+
+    def test_readme_md_case_insensitive_resolves_to_landing(self):
+        # readme.md, Readme.md, README.MD all map to the README.md entry.
+        for variant in ('readme.md', 'Readme.md', 'README.MD'):
+            body = f'See [x]({variant}).'
+            result = self._rewrite(body)
+            self.assertIn(
+                '[x](/workshops/end-to-end-agent-deployment)',
+                result,
+                f'Failed for variant {variant!r}: {result}',
+            )
+
+    def test_copy_file_virtual_entry_routes_to_landing(self):
+        # When copy_file: 01-intro.md, the rewriter sees a virtual entry for
+        # 01-intro.md that points at the landing URL (overriding the
+        # tutorial-page entry the same filename would otherwise produce).
+        lookup = {
+            # 01-intro.md is overridden to point at the landing — this
+            # mirrors what _build_workshop_page_lookup does when
+            # copy_file is set.
+            '01-intro.md': {
+                'slug': '',
+                'title': 'Production Agents',
+                'url': '/workshops/end-to-end-agent-deployment',
+            },
+            '02-next.md': {
+                'slug': 'next',
+                'title': 'Next',
+                'url': '/workshops/end-to-end-agent-deployment/tutorial/next',
+            },
+        }
+        body = 'See [01-intro.md](01-intro.md).'
+        result = self._rewrite(body, lookup=lookup)
+        self.assertIn(
+            '[Production Agents](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+        self.assertNotIn('/tutorial/intro', result)

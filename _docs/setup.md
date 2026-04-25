@@ -1,5 +1,7 @@
 # Infrastructure and Deployment
 
+If you are an operator bringing up a fresh environment (not a developer running locally), see [`_docs/configuration.md`](configuration.md) first — it covers the OAuth login + Studio integration setup. This file documents infrastructure, CI/CD, ECS env vars, and bastion / remote-DB access.
+
 ## Infrastructure
 
 The app runs on AWS ECS Fargate behind an ALB, with Docker images stored in ECR.

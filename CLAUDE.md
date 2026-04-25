@@ -6,6 +6,7 @@ AI Shipping Labs community platform — a Django-based website replacing the cur
 
 - Product: [`_docs/product.md`](_docs/product.md) — what the site is, user personas, tiers, feature inventory, terminology
 - Process: [`_docs/PROCESS.md`](_docs/PROCESS.md) — development workflow, agent definitions, issue lifecycle, how to pick issues
+- Configuration: [`_docs/configuration.md`](_docs/configuration.md) — operator setup guide for OAuth login + every integration on a fresh environment
 - Specs: `specs/` folder (14 requirement specs with data models, APIs, acceptance criteria)
 - Issues: GitHub Issues on [AI-Shipping-Labs/website](https://github.com/AI-Shipping-Labs/website/issues)
 - Agents: `.claude/agents/` (product-manager, software-engineer, tester, oncall-engineer)

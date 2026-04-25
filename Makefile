@@ -18,6 +18,7 @@ dev: qcache
 
 # Run migrations
 migrate:
+	uv run python manage.py makemigrations
 	uv run python manage.py migrate
 
 # Create the django-q cache table used by the local worker heartbeat cache

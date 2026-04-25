@@ -88,7 +88,7 @@ class ContentSource(models.Model):
 
     class Meta:
         ordering = ['repo_name']
-        unique_together = [('repo_name', 'content_type')]
+        unique_together = [('repo_name', 'content_type', 'content_path')]
 
     def __str__(self):
         return f'{self.repo_name} ({self.content_type})'

@@ -146,6 +146,10 @@ schedule('myapp.tasks.cleanup', cron='0 * * * *', name='hourly-cleanup')
 
 **Monitor jobs** in Django admin at `/admin/django_q/` (queued, successful, failed tasks, and schedules).
 
+## Configuration (production / staging operators)
+
+Past `make setup`, every integration (OAuth login, Stripe, SES, Slack, GitHub App, S3, Zoom, YouTube) is configured from `Studio > Settings`. Operators bringing up a fresh environment should follow [_docs/configuration.md](_docs/configuration.md) — it documents the platform env vars that cannot live in Studio (e.g. `SECRET_KEY`, `CSRF_TRUSTED_ORIGINS`), the exact key list per integration group, the webhook URLs to register with each provider, and an end-to-end smoke test.
+
 ## Deployment
 
 See [_docs/setup.md](_docs/setup.md) for infrastructure details, CI/CD, manual deployment, database access, and admin user creation.

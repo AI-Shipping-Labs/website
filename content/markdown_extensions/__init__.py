@@ -5,9 +5,18 @@ content/events models so the rendering output stays consistent regardless
 of content type.
 """
 
+from content.markdown_extensions.external_links import (
+    ExternalLinksExtension,
+    ExternalLinksTreeprocessor,
+)
 from content.markdown_extensions.mermaid import (
     MermaidExtension,
     MermaidPreprocessor,
 )
 
-__all__ = ['MermaidExtension', 'MermaidPreprocessor']
+__all__ = [
+    'ExternalLinksExtension',
+    'ExternalLinksTreeprocessor',
+    'MermaidExtension',
+    'MermaidPreprocessor',
+]

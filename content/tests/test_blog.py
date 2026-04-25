@@ -150,8 +150,13 @@ class MarkdownRenderingTest(TestCase):
         self.assertIn('<em>italic</em>', html)
 
     def test_links_rendered(self):
+        # External links are rewritten to open in a new tab (issue #303),
+        # so we assert on the href + Click here body and the
+        # target/rel separately rather than on a literal anchor string.
         html = render_markdown('[Click here](https://example.com)')
-        self.assertIn('<a href="https://example.com">Click here</a>', html)
+        self.assertIn('href="https://example.com"', html)
+        self.assertIn('>Click here</a>', html)
+        self.assertIn('target="_blank"', html)
 
     def test_images_rendered(self):
         html = render_markdown('![Alt text](https://example.com/image.png)')

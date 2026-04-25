@@ -30,7 +30,7 @@
       <div class="mx-auto max-w-3xl text-center">
         <p class="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-sm text-muted-foreground">
           <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
-          Invite-only community
+          Action-oriented builders. Now open.
         </p>
 
         <h1 class="text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl" style="text-wrap: balance;">
@@ -45,7 +45,7 @@
 
         <div class="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <a href="/#newsletter" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto">
-            Subscribe for updates
+            Get the Friday newsletter
             <i data-lucide="arrow-right" class="h-4 w-4"></i>
           </a>
           <a href="/#tiers" class="inline-flex w-full items-center justify-center rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary sm:w-auto">
@@ -272,7 +272,7 @@
       </div>
       {% else %}
       <div class="mt-12 rounded-lg border border-border bg-card p-8 text-center">
-        <p class="text-muted-foreground">Event recordings coming soon. Check back for workshops and learning materials.</p>
+        <p class="text-muted-foreground">New event recordings drop after each live session. The newsletter has them first.</p>
       </div>
       {% endif %}
     </div>
@@ -336,9 +336,9 @@
       </div>
       {% else %}
       <div class="mt-12 rounded-lg border border-border bg-card p-8 text-center">
-        <p class="text-muted-foreground">We're drafting the first articles now. Sign up below to get them in your inbox the moment they drop.</p>
+        <p class="text-muted-foreground">New articles drop every Friday. Get them in your inbox the moment they go live.</p>
         <div class="mt-6 flex justify-center">
-          <a href="https://alexeyondata.substack.com/subscribe" target="_blank" rel="noopener noreferrer"
+          <a href="/#newsletter"
              class="inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20">
             Subscribe to the newsletter
           </a>
@@ -416,7 +416,7 @@
       </div>
       {% else %}
       <div class="mt-12 rounded-lg border border-border bg-background p-8 text-center">
-        <p class="text-muted-foreground">Project ideas coming soon. Check back for pet and portfolio project ideas.</p>
+        <p class="text-muted-foreground">Project ideas land here as the community ships them. Subscribe below to see new ones first.</p>
       </div>
       {% endif %}
     </div>
@@ -475,7 +475,7 @@
   <section id="newsletter" class="border-t border-border bg-card py-16 sm:py-24 lg:py-32">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-2xl">
-        {% include "includes/subscribe_form.html" with heading="Ready to turn your AI ideas into real projects?" description="Subscribe to the free newsletter and get notified when the community opens. Join action-oriented builders who are shipping practical AI products." only %}
+        {% include "includes/subscribe_form.html" with heading="Stop shipping alone." description="Join builders trading drafts, demos, and standups every week. Action-oriented people who actually ship -- not just study." only %}
       </div>
     </div>
   </section>

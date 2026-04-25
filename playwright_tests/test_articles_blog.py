@@ -741,12 +741,11 @@ class TestScenario9EmptyBlog:
         body = page.content()
 
         # Friendly empty state message
-        assert "No posts yet" in body
-        assert "AI engineering" in body
+        assert "No articles match this filter yet" in body
 
         # Subscribe link
         subscribe_link = page.locator(
-            'a:has-text("Subscribe to get notified")'
+            'a:has-text("Get articles in the Friday newsletter")'
         )
         assert subscribe_link.count() >= 1
 @pytest.mark.django_db(transaction=True)

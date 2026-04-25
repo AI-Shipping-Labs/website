@@ -68,7 +68,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
     def test_free_tier_shows_zero_price_and_subscribe_button(self, django_server, page):
         """
         Read the Free tier card -- verify it shows currency 0 with /forever
-        and a Subscribe button (not Join).
+        and a Get the newsletter button (not Join).
         """
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
@@ -87,10 +87,10 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         ).filter(has_text="/forever").inner_text()
         assert "/forever" in period_text
 
-        # Check Subscribe button exists (not Join)
+        # Check Get the newsletter button exists (not Join)
         cta = free_card.locator("a")
         cta_text = cta.inner_text()
-        assert cta_text.strip() == "Subscribe"
+        assert cta_text.strip() == "Get the newsletter"
     def test_free_tier_features_include_newsletter_and_open_content(
         self, django_server
     , page):
@@ -103,7 +103,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         assert "Newsletter emails" in features_text
         assert "Access to open content" in features_text
     def test_free_subscribe_button_navigates_to_newsletter(self, django_server, page):
-        """Click the Subscribe button on the Free tier and verify navigation."""
+        """Click the Get the newsletter button on the Free tier and verify navigation."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
@@ -213,14 +213,14 @@ class TestScenario2CompareAllFourTiers:
             badge = card.locator("text=Most Popular")
             assert badge.count() == 0
     def test_paid_tiers_show_join_free_shows_subscribe(self, django_server, page):
-        """Verify paid tiers show Join, Free shows Subscribe."""
+        """Verify paid tiers show Join, Free shows Get the newsletter."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
-        # Free -> Subscribe
+        # Free -> Get the newsletter
         free_card = _get_tier_card_by_name(page, "Free")
         free_cta = free_card.locator("a").last
-        assert free_cta.inner_text().strip() == "Subscribe"
+        assert free_cta.inner_text().strip() == "Get the newsletter"
 
         # Paid tiers -> Join
         for tier_name in ["Basic", "Main", "Premium"]:
@@ -509,8 +509,8 @@ class TestScenario6PremiumAnnualStripeLink:
 @pytest.mark.django_db
 class TestScenario7FreeSubscribeFlow:
     """
-    Scenario 7: Free-tier subscriber clicks Subscribe and starts the
-    newsletter signup flow.
+    Scenario 7: Free-tier subscriber clicks Get the newsletter and starts
+    the newsletter signup flow.
     """
 
     def test_free_tier_has_no_join_button(self, django_server, page):
@@ -522,7 +522,7 @@ class TestScenario7FreeSubscribeFlow:
         join_buttons = free_card.locator("a.tier-cta-link")
         assert join_buttons.count() == 0
     def test_free_subscribe_links_to_newsletter(self, django_server, page):
-        """Verify the Subscribe button links to /#newsletter."""
+        """Verify the Get the newsletter button links to /#newsletter."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
@@ -546,7 +546,7 @@ class TestScenario7FreeSubscribeFlow:
     def test_subscribe_click_navigates_to_newsletter_section(
         self, django_server
     , page):
-        """Click Subscribe and verify navigation to /#newsletter."""
+        """Click Get the newsletter and verify navigation to /#newsletter."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )

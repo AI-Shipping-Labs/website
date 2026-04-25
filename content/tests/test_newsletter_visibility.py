@@ -28,12 +28,15 @@ class FooterNewsletterTest(TierSetupMixin, TestCase):
     def test_anonymous_user_sees_newsletter_form_in_footer(self):
         response = self.client.get("/about")
         self.assertContains(response, 'name="email"')
-        self.assertContains(response, "Subscribe to the free newsletter")
+        # Post-launch footer copy (issue #319).
+        self.assertContains(response, "Build AI in public, with a group.")
+        self.assertContains(response, "Free Friday newsletter")
 
     def test_authenticated_user_does_not_see_newsletter_form_in_footer(self):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/about")
-        self.assertNotContains(response, "Subscribe to the free newsletter")
+        # Authenticated members do not see the footer signup block.
+        self.assertNotContains(response, "Build AI in public, with a group.")
         self.assertNotContains(
             response, 'class="subscribe-form', msg_prefix="footer"
         )
@@ -89,15 +92,21 @@ class BlogEmptyStateSubscribeTest(TierSetupMixin, TestCase):
 
     def test_anonymous_user_sees_subscribe_link_in_empty_blog(self):
         response = self.client.get("/blog")
-        self.assertContains(response, "Subscribe to get notified")
+        # Post-launch CTA copy (issue #319).
+        self.assertContains(response, "Get articles in the Friday newsletter")
         self.assertContains(response, '/#newsletter')
 
     def test_authenticated_user_does_not_see_subscribe_link_in_empty_blog(self):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/blog")
-        self.assertNotContains(response, "Subscribe to get notified")
+        self.assertNotContains(
+            response, "Get articles in the Friday newsletter"
+        )
 
     def test_authenticated_user_still_sees_empty_state_text(self):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/blog")
-        self.assertContains(response, "No posts yet")
+        # Post-launch empty-state copy (issue #319).
+        self.assertContains(
+            response, "No articles match this filter yet"
+        )

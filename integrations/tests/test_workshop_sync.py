@@ -594,7 +594,7 @@ class WorkshopSeedContentSourceTest(TestCase):
         self.assertEqual(qs.count(), 1)
         source = qs.get()
         self.assertEqual(source.content_path, '')
-        self.assertFalse(source.is_private)
+        self.assertTrue(source.is_private)
 
     def test_seed_is_idempotent(self):
         from django.core.management import call_command

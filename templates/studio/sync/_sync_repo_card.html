@@ -18,7 +18,12 @@ still in flight.
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
     <div class="flex-1 min-w-0">
       <div class="flex flex-wrap items-center gap-2">
-        <h2 class="text-lg font-semibold text-foreground">{{ repo.repo_name }}</h2>
+        <h2 class="text-lg font-semibold text-foreground">
+          <a href="https://github.com/{{ repo.repo_name }}"
+             target="_blank" rel="noopener"
+             class="hover:text-accent hover:underline"
+             title="View repository on GitHub">{{ repo.repo_name }}</a>
+        </h2>
         {% if repo.is_private %}
         <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400">Private</span>
         {% endif %}
@@ -70,6 +75,12 @@ still in flight.
           <span class="sync-btn-text">Force resync</span>
         </button>
       </form>
+      <a href="/admin/integrations/contentsource/?q={{ repo.repo_name|urlencode }}"
+         target="_blank" rel="noopener"
+         class="px-4 py-2 text-sm border border-border text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors inline-flex items-center space-x-1"
+         title="Edit ContentSource rows for this repo in Django admin">
+        <span>Edit in admin</span>
+      </a>
     </div>
   </div>
 

@@ -3836,11 +3836,19 @@ def _sync_workshop_pages(
                 'content_id': content_id,
             }
 
-            try:
-                page = WorkshopPage.objects.get(
+            # Look up by (workshop, slug) — that's the unique-constraint
+            # key. Falling back to (workshop, source_path) misses when a
+            # file is renamed but slug stays the same, then INSERT would
+            # collide on the unique constraint instead of doing an update.
+            page = WorkshopPage.objects.filter(
+                workshop=workshop, slug=slug,
+            ).first()
+            if page is None:
+                page = WorkshopPage.objects.filter(
                     workshop=workshop, source_path=rel_path,
-                )
-            except WorkshopPage.DoesNotExist:
+                ).first()
+
+            if page is None:
                 page = WorkshopPage(workshop=workshop, **defaults)
                 page.save()
                 created = True

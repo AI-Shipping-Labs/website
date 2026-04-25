@@ -14,7 +14,15 @@ Includes:
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
 
-from content.models import Article, Course, Download, Project, Tutorial
+from content.models import (
+    Article,
+    Course,
+    Download,
+    Project,
+    Tutorial,
+    Workshop,
+    WorkshopPage,
+)
 from events.models import Event
 
 
@@ -106,6 +114,40 @@ class TutorialSitemap(Sitemap):
         return obj.get_absolute_url()
 
 
+class WorkshopSitemap(Sitemap):
+    """Sitemap for published workshop landing pages."""
+    changefreq = 'weekly'
+    priority = 0.8
+
+    def items(self):
+        return Workshop.objects.filter(
+            status='published',
+        ).order_by('-date')
+
+    def lastmod(self, obj):
+        return obj.updated_at
+
+    def location(self, obj):
+        return obj.get_absolute_url()
+
+
+class WorkshopPageSitemap(Sitemap):
+    """Sitemap for tutorial pages of published workshops."""
+    changefreq = 'weekly'
+    priority = 0.6
+
+    def items(self):
+        return WorkshopPage.objects.filter(
+            workshop__status='published',
+        ).select_related('workshop').order_by('workshop_id', 'sort_order')
+
+    def lastmod(self, obj):
+        return obj.updated_at
+
+    def location(self, obj):
+        return obj.get_absolute_url()
+
+
 class StaticViewSitemap(Sitemap):
     """Sitemap for static pages."""
     changefreq = 'monthly'
@@ -121,6 +163,7 @@ class StaticViewSitemap(Sitemap):
             'events_list',
             'downloads_list',
             'tutorials_list',
+            'workshops_list',
             'collection_list',
             'tags_index',
         ]
@@ -170,6 +213,8 @@ sitemaps = {
     'events': EventSitemap,
     'projects': ProjectSitemap,
     'tutorials': TutorialSitemap,
+    'workshops': WorkshopSitemap,
+    'workshop_pages': WorkshopPageSitemap,
     'tags': TagSitemap,
     'static': StaticViewSitemap,
 }

@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% load access_tags %}
+{% load seo_tags %}
+
+{% block title %}{{ workshop.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{{ workshop.description|truncatechars:160 }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ workshop.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags workshop %}{% endblock %}
+{% block structured_data %}{% structured_data workshop %}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <article class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="/workshops" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="back-to-workshops">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Workshops
+      </a>
+
+      {% if workshop.cover_image_url %}
+      <div class="mb-8 overflow-hidden rounded-lg">
+        <img src="{{ workshop.cover_image_url }}" alt="{{ workshop.title }}" class="w-full object-cover">
+      </div>
+      {% endif %}
+
+      <header class="mb-12">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="graduation-cap" class="h-4 w-4"></i>
+            Workshop
+          </span>
+          {% if workshop.pages_required_level > 0 %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            {{ workshop.pages_required_level|required_tier_name }}+
+          </span>
+          {% endif %}
+        </div>
+
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;" data-testid="workshop-title">
+          {{ workshop.title }}
+        </h1>
+
+        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {{ workshop.date|date:"F j, Y" }}
+          </span>
+          {% if workshop.instructor_name %}
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="user" class="h-4 w-4"></i>
+            {{ workshop.instructor_name }}
+          </span>
+          {% endif %}
+        </div>
+
+        {% if workshop.tags %}
+        <div class="mt-4 flex flex-wrap gap-2">
+          {% for tag in workshop.tags %}
+          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </header>
+
+      {% if not can_access_landing %}
+      <!-- Landing-level paywall: every section is gated. Show only the
+           upgrade card so the visitor sees a single, clear CTA. -->
+      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="workshop-landing-paywall">
+        <div class="mb-4">
+          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ landing_cta_message }}</p>
+        <p class="mt-2 text-sm text-muted-foreground">Get full access to this workshop and more with a membership.</p>
+        <a href="{{ landing_cta_url }}"
+           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+           data-testid="workshop-landing-upgrade-cta">
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+          View Pricing
+        </a>
+      </div>
+      {% else %}
+
+      <!-- Description (always shown when landing is accessible) -->
+      {% if workshop.description_html %}
+      <div class="prose mb-12" data-testid="workshop-description">
+        {{ workshop.description_html|safe }}
+      </div>
+      {% endif %}
+
+      <!-- Section nav: video + tutorial cards link out to the dedicated
+           pages. Each one shows its own access state so the visitor knows
+           up-front what they would be unlocking. -->
+      <div class="grid gap-4 sm:grid-cols-2 mb-12">
+        <!-- Video card -->
+        <a href="{% url 'workshop_video' workshop.slug %}"
+           class="group flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
+           data-testid="workshop-video-link">
+          <div class="mb-3 flex items-center gap-3">
+            <div class="rounded-lg bg-accent/10 p-2">
+              <i data-lucide="play" class="h-5 w-5 text-accent"></i>
+            </div>
+            <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">Watch the recording</h2>
+          </div>
+          <p class="text-sm text-muted-foreground flex-1">
+            {% if can_access_recording %}
+              Full workshop video with timestamps and downloadable materials.
+            {% elif can_access_pages %}
+              Recording available with {{ recording_tier_name }}+.
+            {% else %}
+              Recording available with {{ recording_tier_name }}+.
+            {% endif %}
+          </p>
+          {% if not can_access_recording %}
+          <span class="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="workshop-video-locked">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            {{ recording_tier_name }}+
+          </span>
+          {% endif %}
+        </a>
+
+        <!-- Tutorial card -->
+        {% if first_page %}
+        <a href="{{ first_page.get_absolute_url }}"
+           class="group flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
+           data-testid="workshop-tutorial-link">
+          <div class="mb-3 flex items-center gap-3">
+            <div class="rounded-lg bg-accent/10 p-2">
+              <i data-lucide="book-open" class="h-5 w-5 text-accent"></i>
+            </div>
+            <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">Follow the tutorial</h2>
+          </div>
+          <p class="text-sm text-muted-foreground flex-1">
+            {{ pages|length }} page{{ pages|length|pluralize }} of step-by-step instructions you can work through at your own pace.
+          </p>
+          {% if not can_access_pages %}
+          <span class="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="workshop-tutorial-locked">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            {{ pages_tier_name }}+
+          </span>
+          {% endif %}
+        </a>
+        {% else %}
+        <div class="flex flex-col rounded-lg border border-dashed border-border bg-card/50 p-6">
+          <div class="mb-3 flex items-center gap-3">
+            <div class="rounded-lg bg-muted p-2">
+              <i data-lucide="book-open" class="h-5 w-5 text-muted-foreground"></i>
+            </div>
+            <h2 class="text-lg font-semibold text-muted-foreground">Tutorial coming soon</h2>
+          </div>
+          <p class="text-sm text-muted-foreground">No pages have been published for this workshop yet.</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Code repo button -->
+      {% if workshop.code_repo_url %}
+      <div class="mb-12">
+        <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent"
+           data-testid="workshop-code-repo-link">
+          <i data-lucide="github" class="h-4 w-4"></i>
+          View code on GitHub
+          <i data-lucide="external-link" class="h-3 w-3"></i>
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- Pages list (issue #296 ACs require this on the landing page). When
+           the user is below the pages gate the rows still render but link
+           into the page detail view, which shows the upgrade card. -->
+      {% if pages %}
+      <div class="mb-12" data-testid="workshop-pages-list">
+        <h2 class="text-2xl font-semibold tracking-tight mb-4">Tutorial pages</h2>
+        <ol class="space-y-1">
+          {% for page in pages %}
+          <li>
+            <a href="{{ page.get_absolute_url }}"
+               class="group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-accent/50 hover:bg-card/80"
+               data-testid="workshop-page-row">
+              <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">{{ forloop.counter }}</span>
+              <span class="flex-1 truncate text-sm text-foreground group-hover:text-accent transition-colors">{{ page.title }}</span>
+              {% if not can_access_pages %}
+              <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0" data-testid="workshop-page-lock-icon"></i>
+              {% else %}
+              <i data-lucide="chevron-right" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+              {% endif %}
+            </a>
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+
+      <!-- Pages-level paywall (only when pages are gated). Surfaces a
+           single, prominent CTA so the visitor doesn't have to click into
+           a page to learn that they need to upgrade. -->
+      {% if not can_access_pages %}
+      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="workshop-pages-paywall">
+        <div class="mb-4">
+          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
+        </div>
+        <p class="text-lg font-semibold text-foreground">{{ pages_cta_message }}</p>
+        <p class="mt-2 text-sm text-muted-foreground">Get full access to this workshop and more with a membership.</p>
+        <a href="{{ pages_cta_url }}"
+           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+           data-testid="workshop-pages-upgrade-cta">
+          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+          View Pricing
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- Cross-link back to the linked event (if any) -->
+      {% if event %}
+      <div class="mt-12 rounded-lg border border-border bg-card p-5" data-testid="workshop-event-cross-link">
+        <a href="{{ event.get_absolute_url }}"
+           class="group flex items-center gap-3 text-sm">
+          <i data-lucide="calendar" class="h-5 w-5 text-accent"></i>
+          <span class="flex-1 text-muted-foreground group-hover:text-foreground transition-colors">
+            Saw this on the events timeline? View the event page
+          </span>
+          <i data-lucide="arrow-right" class="h-4 w-4 text-muted-foreground group-hover:text-accent transition-colors"></i>
+        </a>
+      </div>
+      {% endif %}
+
+      {% endif %}
+    </div>
+  </article>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

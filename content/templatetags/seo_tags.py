@@ -107,6 +107,41 @@ def _build_course_jsonld(course):
     return data
 
 
+def _build_workshop_jsonld(workshop):
+    """Build JSON-LD for a Workshop (Course schema).
+
+    Workshops are structured learning artefacts with a recording, a code
+    repo, and ordered pages — ``Course`` is the closest schema.org type.
+    The ``hasCourseInstance`` block carries the workshop date so search
+    engines can show it as a dated learning event.
+    """
+    site_url = _get_site_url()
+    data = {
+        '@context': 'https://schema.org',
+        '@type': 'Course',
+        'name': workshop.title,
+        'description': _truncate_description(
+            getattr(workshop, 'description', ''),
+        ),
+        'provider': {
+            '@type': 'Organization',
+            'name': SITE_NAME,
+            'url': site_url,
+        },
+        'url': f'{site_url}{workshop.get_absolute_url()}',
+    }
+    if getattr(workshop, 'cover_image_url', ''):
+        data['image'] = workshop.cover_image_url
+    workshop_date = getattr(workshop, 'date', None)
+    if workshop_date:
+        data['hasCourseInstance'] = {
+            '@type': 'CourseInstance',
+            'courseMode': 'online',
+            'startDate': workshop_date.isoformat(),
+        }
+    return data
+
+
 def _build_recording_jsonld(event):
     """Build JSON-LD for a recording (Event with recording, VideoObject or LearningResource).
 
@@ -307,6 +342,7 @@ JSONLD_BUILDERS = {
     'unit': _build_unit_jsonld,
     'project': _build_article_jsonld,  # Projects use Article schema
     'tutorial': _build_article_jsonld,  # Tutorials use Article schema
+    'workshop': _build_workshop_jsonld,
 }
 
 
@@ -341,7 +377,7 @@ def _get_og_type(obj):
     content_type = _get_content_type(obj)
     if content_type == 'event':
         return 'event'
-    if content_type in ('article', 'project', 'tutorial'):
+    if content_type in ('article', 'project', 'tutorial', 'workshop'):
         return 'article'
     return 'website'
 

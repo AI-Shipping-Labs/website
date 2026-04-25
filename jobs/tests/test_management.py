@@ -48,7 +48,14 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='event-reminders').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='expire-tier-overrides').count(), 1)
 
-    def test_total_schedules_created(self):
-        """Command creates exactly the expected number of schedules."""
+    def test_no_unexpected_schedules_created(self):
+        """Command does not create any schedules outside the expected set."""
         call_command('setup_schedules')
-        self.assertEqual(Schedule.objects.count(), 4)
+        names = set(Schedule.objects.values_list('name', flat=True))
+        expected = {
+            'health-check',
+            'cleanup-webhook-logs',
+            'event-reminders',
+            'expire-tier-overrides',
+        }
+        self.assertEqual(names, expected)

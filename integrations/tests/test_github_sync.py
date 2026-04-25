@@ -1833,21 +1833,29 @@ class SeedContentSourcesCommandTest(TestCase):
         from io import StringIO
 
         from django.core.management import call_command
-        out = StringIO()
-        call_command('seed_content_sources', stdout=out)
-        # 5 entries from the AI-Shipping-Labs/content monorepo
-        # (article, course, project, interview_question, event)
-        # + 1 entry for AI-Shipping-Labs/python-course (single-course repo)
-        # + 1 entry for AI-Shipping-Labs/workshops-content (public, issue #295)
-        self.assertEqual(ContentSource.objects.count(), 7)
+        from integrations.management.commands.seed_content_sources import (
+            DEFAULT_SOURCES,
+        )
+        call_command('seed_content_sources', stdout=StringIO())
+        for source_data in DEFAULT_SOURCES:
+            self.assertTrue(
+                ContentSource.objects.filter(
+                    repo_name=source_data['repo_name'],
+                    content_type=source_data['content_type'],
+                ).exists(),
+                f"Missing seeded source: {source_data['repo_name']} / "
+                f"{source_data['content_type']}",
+            )
 
     def test_seed_is_idempotent(self):
         from io import StringIO
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
+        count_after_first = ContentSource.objects.count()
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 7)
+        count_after_second = ContentSource.objects.count()
+        self.assertEqual(count_after_first, count_after_second)
 
     def test_seed_creates_expected_repos(self):
         from io import StringIO

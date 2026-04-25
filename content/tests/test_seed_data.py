@@ -83,14 +83,15 @@ class SeedDataCommandTest(TestCase):
     def test_creates_newsletter_subscribers(self):
         """Command creates confirmed newsletter subscribers."""
         run_seed()
-        subs = NewsletterSubscriber.objects.filter(
-            email__in=[
-                'newsletter1@test.com', 'newsletter2@test.com',
-                'newsletter3@test.com', 'newsletter4@test.com',
-                'newsletter5@test.com',
-            ],
+        expected_emails = {
+            'newsletter1@test.com', 'newsletter2@test.com',
+            'newsletter3@test.com', 'newsletter4@test.com',
+            'newsletter5@test.com',
+        }
+        subs = NewsletterSubscriber.objects.filter(email__in=expected_emails)
+        self.assertEqual(
+            set(subs.values_list('email', flat=True)), expected_emails,
         )
-        self.assertEqual(subs.count(), 5)
         for sub in subs:
             self.assertTrue(sub.is_active)
 

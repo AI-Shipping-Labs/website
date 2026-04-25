@@ -261,6 +261,10 @@ class WorkshopPage(models.Model):
     def __str__(self):
         return f'{self.workshop.title} — {self.title}'
 
+    def get_absolute_url(self):
+        """Public URL for this tutorial page within its workshop."""
+        return f'/workshops/{self.workshop.slug}/tutorial/{self.slug}'
+
     def save(self, *args, **kwargs):
         """Render body markdown to HTML on save."""
         if self.body:

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load access_tags %}
+{% load tag_filters %}
+
+{% block title %}Workshops | AI Shipping Labs{% endblock %}
+{% block meta_description %}Live and recorded workshops on AI engineering — multi-page tutorials with recording and code repo.{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-5xl px-6 lg:px-8">
+      <div class="mb-12">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Workshops</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Hands-on Workshops
+        </h1>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Multi-page workshops with a recorded session, runnable code, and a step-by-step writeup. Watch the recording, follow the tutorial, and ship something real.
+        </p>
+      </div>
+
+      {% if workshops %}
+      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="workshops-grid">
+        {% for workshop in workshops %}
+        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="workshop-card">
+          <a href="{{ workshop.get_absolute_url }}">
+            {% if workshop.cover_image_url %}
+            <div class="aspect-video w-full overflow-hidden bg-muted">
+              <img src="{{ workshop.cover_image_url }}" alt="{{ workshop.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
+            </div>
+            {% else %}
+            <div class="aspect-video w-full bg-muted flex items-center justify-center">
+              <i data-lucide="graduation-cap" class="h-12 w-12 text-muted-foreground"></i>
+            </div>
+            {% endif %}
+            <div class="p-6">
+              <div class="flex flex-wrap items-center gap-2 mb-3">
+                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
+                  <i data-lucide="graduation-cap" class="h-3 w-3"></i>
+                  Workshop
+                </span>
+                {% if workshop.pages_required_level > 0 %}
+                <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
+                  <i data-lucide="lock" class="h-3 w-3"></i>
+                  {{ workshop.pages_required_level|required_tier_name }}+
+                </span>
+                {% endif %}
+              </div>
+              <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+                {{ workshop.title }}
+              </h2>
+              <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {% if workshop.instructor_name %}
+                <span class="flex items-center gap-1">
+                  <i data-lucide="user" class="h-3 w-3"></i>
+                  {{ workshop.instructor_name }}
+                </span>
+                {% endif %}
+                <span class="flex items-center gap-1">
+                  <i data-lucide="calendar" class="h-3 w-3"></i>
+                  {{ workshop.date|date:"M j, Y" }}
+                </span>
+              </div>
+              {% if workshop.description_html %}
+              <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ workshop.description_html|striptags|truncatechars:140 }}</p>
+              {% endif %}
+              {% if workshop.tags %}
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                {% for tag in workshop.tags %}
+                <span class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+          </a>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="rounded-lg border border-border bg-card p-12 text-center" data-testid="workshops-empty-state">
+        <i data-lucide="graduation-cap" class="mx-auto h-12 w-12 text-muted-foreground"></i>
+        <p class="mt-4 text-lg text-muted-foreground">
+          {% if selected_tags %}
+          No workshops found with the selected tags.
+          <a href="/workshops" class="text-accent hover:underline">View all workshops</a>
+          {% else %}
+          No workshops published yet. Check back soon.
+          {% endif %}
+        </p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

@@ -1,0 +1,357 @@
+"""Playwright E2E tests for the public Workshop surface (issue #296).
+
+Covers the user-flow scenarios in the issue:
+- Anonymous visitor browses the catalog and lands on a gated landing page.
+- Free user hits the pages paywall on the landing.
+- Basic user reads tutorial pages but sees the recording paywall.
+- Basic user navigates between tutorial pages with prev/next.
+- Main user gets full access (recording embed + unlocked pages).
+- Past events card switches link target to /workshops/<slug>.
+- Sitemap includes workshop URLs.
+- Draft workshop is not publicly accessible.
+
+Usage:
+    uv run pytest playwright_tests/test_workshops.py -v
+"""
+
+import datetime
+import os
+
+import pytest
+
+from playwright_tests.conftest import (
+    auth_context as _auth_context,
+)
+from playwright_tests.conftest import (
+    create_user as _create_user,
+)
+
+os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
+from django.db import connection  # noqa: E402
+
+
+def _clear_workshops():
+    """Delete every Workshop, WorkshopPage, and Event so each scenario
+    starts from a known state."""
+    from content.models import Workshop, WorkshopPage
+    from events.models import Event
+    WorkshopPage.objects.all().delete()
+    Workshop.objects.all().delete()
+    Event.objects.all().delete()
+    connection.close()
+
+
+def _create_workshop(
+    slug='ws',
+    title='Production Agents',
+    landing=0,
+    pages=10,
+    recording=20,
+    pages_data=None,
+    with_event=True,
+    recording_url='https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    materials=None,
+    code_repo_url='https://github.com/example/repo',
+    description='Workshop description body.',
+    instructor='Alexey',
+    status='published',
+):
+    """Create a workshop with optional linked event + pages."""
+    from django.utils import timezone
+
+    from content.models import Workshop, WorkshopPage
+    from events.models import Event
+
+    event = None
+    if with_event:
+        event = Event.objects.create(
+            slug=f'{slug}-event',
+            title=title,
+            start_datetime=timezone.now(),
+            status='completed',
+            kind='workshop',
+            recording_url=recording_url,
+            materials=materials or [],
+            published=True,
+        )
+
+    workshop = Workshop.objects.create(
+        slug=slug,
+        title=title,
+        date=datetime.date(2026, 4, 21),
+        status=status,
+        landing_required_level=landing,
+        pages_required_level=pages,
+        recording_required_level=recording,
+        description=description,
+        instructor_name=instructor,
+        code_repo_url=code_repo_url,
+        event=event,
+    )
+
+    pages_data = pages_data or [
+        ('intro', 'Introduction', '# Welcome\n\nThis is the intro.'),
+        ('setup', 'Setup', '## Step 1\n\nInstall dependencies.'),
+        ('deploy', 'Deploy', '## Final step\n\nShip it.'),
+    ]
+    for i, (s, t, body) in enumerate(pages_data, start=1):
+        WorkshopPage.objects.create(
+            workshop=workshop, slug=s, title=t,
+            sort_order=i, body=body,
+        )
+
+    connection.close()
+    return workshop
+
+
+# ----------------------------------------------------------------------
+# Scenario 1: Anonymous visitor discovers the catalog and the gated
+# landing page (no SEO body fully behind a wall — title still visible).
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestVisitorBrowsesCatalog:
+    def test_visitor_sees_catalog_and_lands_on_paywalled_landing(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop()
+
+        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+        body = page.content()
+
+        # Catalog renders the workshop card with title, instructor, date,
+        # tier badge.
+        assert 'Production Agents' in body
+        assert 'data-testid="workshop-tier-badge"' in body
+        assert 'Basic+' in body
+
+        # Click the workshop card to land on the landing page.
+        page.locator('a:has-text("Production Agents")').first.click()
+        page.wait_for_load_state('domcontentloaded')
+
+        assert '/workshops/ws' in page.url
+        body = page.content()
+
+        # Title is visible for SEO + a single paywall card.
+        assert 'data-testid="workshop-title"' in body
+        assert 'data-testid="workshop-pages-paywall"' in body
+        assert 'Upgrade to Basic to access this workshop' in body
+
+        # Pricing CTA goes to /pricing
+        upgrade_cta = page.locator(
+            '[data-testid="workshop-pages-upgrade-cta"]',
+        )
+        assert upgrade_cta.get_attribute('href') == '/pricing'
+
+
+# ----------------------------------------------------------------------
+# Scenario 2: Basic user — pages unlocked, recording locked.
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestBasicUserReadsPagesButNotRecording:
+    def test_basic_user_sees_unlocked_pages_and_locked_recording(
+        self, browser, django_server,
+    ):
+        _clear_workshops()
+        _create_workshop()
+        _create_user('basic@test.com', tier_slug='basic')
+
+        ctx = _auth_context(browser, 'basic@test.com')
+        page = ctx.new_page()
+        page.goto(
+            f'{django_server}/workshops/ws',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+
+        # Pages paywall must NOT render.
+        assert 'data-testid="workshop-pages-paywall"' not in body
+        # Page rows should NOT have lock icons.
+        assert 'data-testid="workshop-page-lock-icon"' not in body
+        # Video card surfaces the recording-tier lock.
+        assert 'data-testid="workshop-video-locked"' in body
+        # Code repo link is visible.
+        assert 'data-testid="workshop-code-repo-link"' in body
+
+        # Click the first tutorial page row.
+        page.locator(
+            'a:has-text("Introduction")',
+        ).first.click()
+        page.wait_for_load_state('domcontentloaded')
+        assert '/workshops/ws/tutorial/intro' in page.url
+
+        body = page.content()
+        # Body renders, sidebar highlights current page.
+        assert 'data-testid="page-body"' in body
+        assert 'data-testid="sidebar-current-page"' in body
+        assert 'data-testid="page-paywall"' not in body
+
+        ctx.close()
+
+    def test_basic_user_navigates_prev_next(
+        self, browser, django_server,
+    ):
+        _clear_workshops()
+        _create_workshop()
+        _create_user('basic@test.com', tier_slug='basic')
+
+        ctx = _auth_context(browser, 'basic@test.com')
+        page = ctx.new_page()
+        # First page: Next visible, Prev absent.
+        page.goto(
+            f'{django_server}/workshops/ws/tutorial/intro',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'data-testid="page-next-btn"' in body
+        assert 'data-testid="page-prev-btn"' not in body
+
+        # Middle page: Both visible.
+        page.goto(
+            f'{django_server}/workshops/ws/tutorial/setup',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'data-testid="page-next-btn"' in body
+        assert 'data-testid="page-prev-btn"' in body
+
+        # Last page: Prev visible, Next absent.
+        page.goto(
+            f'{django_server}/workshops/ws/tutorial/deploy',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+        assert 'data-testid="page-prev-btn"' in body
+        assert 'data-testid="page-next-btn"' not in body
+
+        ctx.close()
+
+
+# ----------------------------------------------------------------------
+# Scenario 3: Main user — full access (recording embed renders).
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestMainUserHasFullAccess:
+    def test_main_user_sees_recording_and_pages(
+        self, browser, django_server,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            materials=[
+                {
+                    'title': 'Slides',
+                    'url': 'https://example.com/slides.pdf',
+                    'type': 'pdf',
+                },
+            ],
+        )
+        _create_user('main@test.com', tier_slug='main')
+
+        ctx = _auth_context(browser, 'main@test.com')
+        page = ctx.new_page()
+        page.goto(
+            f'{django_server}/workshops/ws/video',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+
+        # Recording paywall does NOT render.
+        assert 'data-testid="video-paywall"' not in body
+        # Either the embedded YouTube iframe or the video_player tag rendered.
+        assert (
+            'data-testid="video-player"' in body
+            or 'iframe' in body.lower()
+        )
+        # Materials list rendered.
+        assert 'data-testid="video-materials"' in body
+        assert 'Slides' in body
+
+        ctx.close()
+
+
+# ----------------------------------------------------------------------
+# Scenario 4: Past-events card redirects to workshop writeup.
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestEventsPastCardLinksToWorkshop:
+    def test_past_event_card_links_to_workshop(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='ws',
+            title='Production Agents',
+            landing=0,
+            pages=0,
+            recording=0,
+        )
+
+        page.goto(
+            f'{django_server}/events?filter=past',
+            wait_until='domcontentloaded',
+        )
+        body = page.content()
+
+        assert 'data-testid="past-card-workshop-badge"' in body
+        # The past card link points to /workshops/<slug>.
+        link = page.locator('[data-testid="past-card-workshop-link"]').first
+        assert link.get_attribute('href') == '/workshops/ws'
+
+
+# ----------------------------------------------------------------------
+# Scenario 5: Sitemap exposes published workshop landing + pages.
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopSitemap:
+    def test_sitemap_lists_workshop_urls(self, django_server, page):
+        _clear_workshops()
+        _create_workshop(
+            slug='ws-sitemap',
+            title='Sitemap WS',
+            pages_data=[('only-page', 'Only', 'body')],
+        )
+
+        page.goto(f'{django_server}/sitemap.xml')
+        # response.text() doesn't exist on the page object — read content.
+        body = page.content()
+        assert '/workshops/ws-sitemap' in body
+        assert '/workshops/ws-sitemap/tutorial/only-page' in body
+
+
+# ----------------------------------------------------------------------
+# Scenario 6: Draft workshop is hidden everywhere.
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestDraftWorkshopHidden:
+    def test_draft_not_in_catalog_and_404_on_detail(
+        self, django_server, page,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            slug='draft-ws', title='Hidden Draft Workshop', status='draft',
+        )
+
+        page.goto(f'{django_server}/workshops')
+        # 'Hidden' alone collides with Tailwind's `hidden` utility class —
+        # use a workshop-specific phrase that wouldn't appear elsewhere.
+        assert 'Hidden Draft Workshop' not in page.content()
+
+        response = page.goto(f'{django_server}/workshops/draft-ws')
+        assert response is not None and response.status == 404
+
+        response = page.goto(
+            f'{django_server}/workshops/draft-ws/tutorial/intro',
+        )
+        assert response is not None and response.status == 404

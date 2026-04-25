@@ -175,11 +175,21 @@
         <div class="space-y-8">
           {% for event in past_events %}
           <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+            {% if event.kind == 'workshop' and event.workshop %}
+            <a href="{{ event.workshop.get_absolute_url }}" data-testid="past-card-workshop-link">
+            {% else %}
             <a href="/events/{{ event.slug }}">
+            {% endif %}
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2 mb-2">
                     <i data-lucide="video" class="h-5 w-5 text-accent"></i>
+                    {% if event.kind == 'workshop' and event.workshop %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="past-card-workshop-badge">
+                      <i data-lucide="graduation-cap" class="h-3 w-3"></i>
+                      Workshop
+                    </span>
+                    {% endif %}
                     <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                       {% if event.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ event.title }}
                     </h2>
@@ -235,13 +245,23 @@
         <div class="space-y-4">
           {% for event in past_events %}
           <article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+            {% if event.kind == 'workshop' and event.workshop %}
+            <a href="{{ event.workshop.get_absolute_url }}" data-testid="past-card-workshop-link">
+            {% else %}
             <a href="/events/{{ event.slug }}">
+            {% endif %}
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2 mb-1 flex-wrap">
                     <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
                       {{ event.get_event_type_display }}
                     </span>
+                    {% if event.kind == 'workshop' and event.workshop %}
+                    <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="past-card-workshop-badge">
+                      <i data-lucide="graduation-cap" class="h-3 w-3"></i>
+                      Workshop
+                    </span>
+                    {% endif %}
                     {% if event.status == 'cancelled' %}
                     <span class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-400">
                       Cancelled

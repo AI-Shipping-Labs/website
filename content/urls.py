@@ -44,6 +44,12 @@ from content.views.peer_review import (
     review_form,
 )
 from content.views.tags import tags_detail, tags_index
+from content.views.workshops import (
+    workshop_detail,
+    workshop_page_detail,
+    workshop_video,
+    workshops_list,
+)
 
 urlpatterns = [
     path('', home, name='home'),
@@ -78,6 +84,22 @@ urlpatterns = [
     # Tags
     path('tags', tags_index, name='tags_index'),
     path('tags/<slug:tag>', tags_detail, name='tags_detail'),
+    # Workshops (issue #296). Three-section layout: landing, video, per-page
+    # tutorial. Each section gates against its own field on Workshop. The
+    # video / tutorial routes come before the bare slug route so URL
+    # resolution doesn't fall into <slug>/<page_slug> when they shouldn't.
+    path('workshops', workshops_list, name='workshops_list'),
+    path('workshops/<slug:slug>', workshop_detail, name='workshop_detail'),
+    path(
+        'workshops/<slug:slug>/video',
+        workshop_video,
+        name='workshop_video',
+    ),
+    path(
+        'workshops/<slug:slug>/tutorial/<slug:page_slug>',
+        workshop_page_detail,
+        name='workshop_page_detail',
+    ),
     # Courses
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),

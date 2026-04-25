@@ -636,6 +636,67 @@ class SyncArticlesTest(TestCase):
         self.assertFalse(article.published)
         self.assertEqual(article.status, 'draft')
 
+    def test_article_round_trip_remove_then_restore(self):
+        """write -> sync -> remove -> sync -> re-write -> sync.
+
+        Asserts the model flag (``published``) AND the public ``/blog``
+        listing visibility flip at each step. A model-flag-only test
+        would miss a regression where the queryset on the listing view
+        forgot to filter on ``published=True``.
+        """
+        stable_content_id = '99999999-9999-9999-9999-999999999999'
+        unique_title = 'Round Trip Article ZZQQ-RT-1'
+
+        def write_file():
+            self._write_article(
+                'roundtrip.md',
+                {
+                    'title': unique_title,
+                    'slug': 'roundtrip-article',
+                    'description': 'Round trip test',
+                    'date': '2026-01-15',
+                    'page_type': 'blog',
+                    'content_id': stable_content_id,
+                },
+                'Round trip body content.',
+            )
+
+        def remove_file():
+            os.remove(os.path.join(self.temp_dir, 'roundtrip.md'))
+
+        # Step 1: write yaml -> sync -> assert published
+        write_file()
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        article = Article.objects.get(slug='roundtrip-article')
+        self.assertTrue(article.published)
+        self.assertEqual(article.status, 'published')
+        # Public listing must include the title.
+        response = self.client.get('/blog')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, unique_title)
+
+        # Step 2: remove yaml -> sync -> assert soft-deleted
+        remove_file()
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        article.refresh_from_db()
+        self.assertFalse(article.published)
+        self.assertEqual(article.status, 'draft')
+        # Public listing must hide the title now.
+        response = self.client.get('/blog')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, unique_title)
+
+        # Step 3: re-add yaml -> sync -> assert restored
+        write_file()
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        article.refresh_from_db()
+        self.assertTrue(article.published)
+        self.assertEqual(article.status, 'published')
+        # Listing must include it again.
+        response = self.client.get('/blog')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, unique_title)
+
     def test_sync_does_not_soft_delete_direct_admin_edits(self):
         """Articles with source_repo = null (direct admin edits) are not touched."""
         Article.objects.create(
@@ -860,6 +921,63 @@ class SyncCoursesTest(TestCase):
         sync_content_source(self.source, repo_dir=self.temp_dir)
         course = Course.objects.get(slug='stale-course')
         self.assertEqual(course.status, 'draft')
+
+    def test_course_round_trip_remove_then_restore(self):
+        """write -> sync -> remove -> sync -> re-write -> sync for courses.
+
+        Asserts ``Course.status`` and ``/courses`` listing visibility
+        flip at each step.
+        """
+        import shutil as _shutil
+        unique_title = 'Round Trip Course ZZQQ-RT-2'
+
+        # Step 1: write course folder -> sync -> assert published
+        course_dir = self._create_course_structure()
+        # Override the title so the listing assertion is unambiguous
+        # (the helper uses 'Python for Data AI', which is generic).
+        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
+            f.write(f'title: "{unique_title}"\n')
+            f.write('slug: "python-data-ai"\n')
+            f.write('description: "Round trip course test"\n')
+            f.write('instructor_name: "Test Instructor"\n')
+            f.write('required_level: 0\n')
+            f.write('content_id: "22222222-2222-2222-2222-222222222222"\n')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        course = Course.objects.get(slug='python-data-ai')
+        self.assertEqual(course.status, 'published')
+        # Public catalog must include the course title.
+        response = self.client.get('/courses')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, unique_title)
+
+        # Step 2: remove the entire course folder -> sync -> assert draft
+        _shutil.rmtree(course_dir)
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        course.refresh_from_db()
+        self.assertEqual(course.status, 'draft')
+        # Catalog must hide the soft-deleted course.
+        response = self.client.get('/courses')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, unique_title)
+
+        # Step 3: re-create the same folder (same slug + content_id) ->
+        # sync -> assert restored to published.
+        course_dir = self._create_course_structure()
+        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
+            f.write(f'title: "{unique_title}"\n')
+            f.write('slug: "python-data-ai"\n')
+            f.write('description: "Round trip course test"\n')
+            f.write('instructor_name: "Test Instructor"\n')
+            f.write('required_level: 0\n')
+            f.write('content_id: "22222222-2222-2222-2222-222222222222"\n')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        course.refresh_from_db()
+        self.assertEqual(course.status, 'published')
+        response = self.client.get('/courses')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, unique_title)
 
     def test_sync_ignores_legacy_is_free_key_in_yaml(self):
         """A leftover `is_free` key in course.yaml must not break sync.
@@ -1565,6 +1683,67 @@ class SyncResourcesTest(TestCase):
         sync_content_source(event_source, repo_dir=self.temp_dir)
         recording = Event.objects.get(slug='stale-rec')
         self.assertFalse(recording.published)
+
+    def test_event_round_trip_remove_then_restore(self):
+        """write -> sync -> remove -> sync -> re-write -> sync for events.
+
+        Recordings sync via the events code path (``content_type='event'``,
+        ``content_path='recordings'``), so this also exercises the
+        recording lifecycle. Asserts ``Event.published`` and ``/events``
+        listing visibility flip at each step.
+        """
+        event_source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/resources',
+            content_type='event',
+            content_path='recordings',
+        )
+        rec_dir = os.path.join(self.temp_dir, 'recordings')
+        os.makedirs(rec_dir, exist_ok=True)
+        rec_file = os.path.join(rec_dir, 'roundtrip-event.yaml')
+        unique_title = 'Round Trip Event ZZQQ-RT-3'
+
+        def write_file():
+            with open(rec_file, 'w') as f:
+                f.write(f'title: "{unique_title}"\n')
+                f.write('slug: "roundtrip-event"\n')
+                f.write('description: "Round trip event test"\n')
+                f.write('video_url: "https://youtube.com/watch?v=rt-3"\n')
+                f.write('published_at: "2026-01-15"\n')
+                f.write(
+                    'content_id: "88888888-8888-8888-8888-888888888888"\n'
+                )
+
+        # Step 1: write yaml -> sync -> assert published
+        write_file()
+        sync_content_source(event_source, repo_dir=self.temp_dir)
+        event = Event.objects.get(slug='roundtrip-event')
+        self.assertTrue(event.published)
+        # Past-events surface lists completed events with a recording url
+        # and ``published=True``. The synced event has a video_url and is
+        # status='completed' by default — confirm it appears on the list.
+        response = self.client.get('/events?filter=past')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, unique_title)
+
+        # Step 2: remove yaml -> sync -> assert published=False
+        os.remove(rec_file)
+        sync_content_source(event_source, repo_dir=self.temp_dir)
+        event.refresh_from_db()
+        self.assertFalse(event.published)
+        # Past-events surface filters on ``published=True``, so the
+        # soft-deleted event must disappear.
+        response = self.client.get('/events?filter=past')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, unique_title)
+
+        # Step 3: re-write yaml -> sync -> assert restored
+        write_file()
+        sync_content_source(event_source, repo_dir=self.temp_dir)
+        event.refresh_from_db()
+        self.assertTrue(event.published)
+        response = self.client.get('/events?filter=past')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, unique_title)
 
 
 # ===========================================================================

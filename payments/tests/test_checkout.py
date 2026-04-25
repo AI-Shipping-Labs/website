@@ -32,8 +32,18 @@ class CreateCheckoutViewTest(TestCase):
         self.basic_tier.stripe_price_id_yearly = "price_basic_yearly"
         self.basic_tier.save()
 
-    def test_requires_authentication(self):
-        """Unauthenticated requests are redirected to login."""
+    @patch("payments.views.checkout.create_checkout_session")
+    def test_requires_authentication(self, mock_create):
+        """Unauthenticated requests are redirected to login.
+
+        Also asserts that ``create_checkout_session`` is never called for
+        an anonymous request. Without this side-effect assertion a future
+        regression that called Stripe before the auth gate (e.g. JSON
+        parsing pulled into a decorator that ran the service early) would
+        still pass on the redirect alone — but a real Stripe Checkout
+        Session would be created on Stripe's side every time a logged-out
+        user hit the endpoint.
+        """
         response = self.client.post(
             "/api/checkout/create",
             data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
@@ -41,6 +51,10 @@ class CreateCheckoutViewTest(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response.url)
+        self.assertEqual(
+            mock_create.call_count, 0,
+            "create_checkout_session must not be called for an anonymous request.",
+        )
 
     def test_requires_post_method(self):
         """GET requests return 405."""

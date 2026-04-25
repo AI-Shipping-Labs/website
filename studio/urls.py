@@ -36,6 +36,11 @@ from studio.views.enrollments import (
     enrollment_list,
     enrollment_unenroll,
 )
+from studio.views.enrollments_redirects import (
+    enrollment_create_redirect,
+    enrollment_list_redirect,
+    enrollment_unenroll_redirect,
+)
 from studio.views.events import event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.notifications import (
@@ -142,10 +147,32 @@ urlpatterns = [
     path('courses/<int:course_id>/access/grant/', course_access_grant, name='studio_course_access_grant'),
     path('courses/<int:course_id>/access/<int:access_id>/revoke/', course_access_revoke, name='studio_course_access_revoke'),
 
-    # Enrollments (issue #236)
-    path('enrollments/', enrollment_list, name='studio_enrollment_list'),
-    path('enrollments/create', enrollment_create, name='studio_enrollment_create'),
-    path('enrollments/<int:enrollment_id>/unenroll', enrollment_unenroll, name='studio_enrollment_unenroll'),
+    # Enrollments scoped to a course (issue #293; superseding #236)
+    path(
+        'courses/<int:course_id>/enrollments/',
+        enrollment_list,
+        name='studio_course_enrollment_list',
+    ),
+    path(
+        'courses/<int:course_id>/enrollments/create',
+        enrollment_create,
+        name='studio_course_enrollment_create',
+    ),
+    path(
+        'courses/<int:course_id>/enrollments/<int:enrollment_id>/unenroll',
+        enrollment_unenroll,
+        name='studio_course_enrollment_unenroll',
+    ),
+
+    # Legacy enrollment URLs -- 301/307 redirect to the course-scoped pages
+    # (issue #293). The names are intentionally not exposed; nothing should
+    # reverse() these.
+    path('enrollments/', enrollment_list_redirect),
+    path('enrollments/create', enrollment_create_redirect),
+    path(
+        'enrollments/<int:enrollment_id>/unenroll',
+        enrollment_unenroll_redirect,
+    ),
 
     # Articles
     path('articles/', article_list, name='studio_article_list'),

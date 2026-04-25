@@ -184,6 +184,11 @@
       <i data-lucide="users" class="w-4 h-4"></i>
       <span>Manage Peer Reviews</span>
     </a>
+    <a href="{% url 'studio_course_enrollment_list' course_id=course.pk %}"
+       class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
+      <i data-lucide="user-check" class="w-4 h-4"></i>
+      <span>Manage Enrollments</span>
+    </a>
     {% endif %}
   </div>
 </form>

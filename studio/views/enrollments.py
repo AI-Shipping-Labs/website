@@ -1,8 +1,9 @@
-"""Studio enrollments management — issue #236.
+"""Studio enrollments management — issue #236, refactored for #293.
 
-Lists all course Enrollment rows with optional course filter, and lets
-admins manually enroll/unenroll a user (creates rows with
-``source='admin'``).
+Each Studio course now exposes its enrollments under
+``/studio/courses/<course_id>/enrollments/`` instead of a top-level tab. The
+queryset, status filter, and admin-source manual-enroll behaviour are
+unchanged; only the surface (URL + scoping) moves.
 """
 
 from django.contrib import messages
@@ -19,92 +20,79 @@ User = get_user_model()
 
 
 @staff_required
-def enrollment_list(request):
-    """List all enrollments, filterable by course.
+def enrollment_list(request, course_id):
+    """List enrollments for a single course.
 
-    Query params:
-        course: optional Course pk to filter on.
-        status: 'active' (default) or 'all' to also show unenrolled rows.
+    The course is taken from the URL path (``course_id``) — the previous
+    ``?course=`` query-param branch is gone. The ``status`` filter still
+    accepts ``active`` (default) and ``all``.
     """
-    course_id_raw = request.GET.get('course', '')
+    course = get_object_or_404(Course, pk=course_id)
     status = request.GET.get('status', 'active')
 
     enrollments = (
         Enrollment.objects
+        .filter(course=course)
         .select_related('user', 'course')
         .order_by('-enrolled_at')
     )
 
-    course_id = None
-    course_filter = None
-    if course_id_raw:
-        try:
-            course_id = int(course_id_raw)
-        except ValueError:
-            course_id = None
-        if course_id is not None:
-            enrollments = enrollments.filter(course_id=course_id)
-            course_filter = Course.objects.filter(pk=course_id).first()
-
     if status == 'active':
         enrollments = enrollments.filter(unenrolled_at__isnull=True)
 
-    courses = Course.objects.order_by('title').only('id', 'title')
-
-    return render(request, 'studio/enrollments/list.html', {
+    return render(request, 'studio/courses/enrollments_list.html', {
+        'course': course,
         'enrollments': enrollments,
-        'courses': courses,
-        'selected_course_id': course_id,
-        'course_filter': course_filter,
         'status': status,
     })
 
 
 @staff_required
 @require_POST
-def enrollment_create(request):
-    """Manually enroll a user in a course (source='admin').
+def enrollment_create(request, course_id):
+    """Manually enroll a user in this course (source='admin').
 
-    Idempotent: if an active enrollment already exists, surface an info
-    message and don't create a duplicate.
+    The course is taken from the URL path. Email comes from POST. Idempotent:
+    if an active enrollment already exists, surface an info message and
+    don't create a duplicate.
     """
-    email = request.POST.get('email', '').strip()
-    course_id_raw = request.POST.get('course_id', '').strip()
-
-    if not email or not course_id_raw:
-        messages.error(request, 'Email and course are required.')
-        return redirect('studio_enrollment_list')
-
-    try:
-        course_id = int(course_id_raw)
-    except ValueError:
-        messages.error(request, 'Invalid course.')
-        return redirect('studio_enrollment_list')
-
     course = get_object_or_404(Course, pk=course_id)
+    email = request.POST.get('email', '').strip()
+
+    if not email:
+        messages.error(request, 'Email is required.')
+        return redirect('studio_course_enrollment_list', course_id=course.pk)
+
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
         messages.error(request, f'No user found with email "{email}".')
-        return redirect('studio_enrollment_list')
+        return redirect('studio_course_enrollment_list', course_id=course.pk)
 
     existing = Enrollment.objects.filter(
         user=user, course=course, unenrolled_at__isnull=True,
     ).first()
     if existing:
         messages.info(request, f'{email} is already enrolled in "{course.title}".')
-        return redirect('studio_enrollment_list')
+        return redirect('studio_course_enrollment_list', course_id=course.pk)
 
     Enrollment.objects.create(user=user, course=course, source=SOURCE_ADMIN)
     messages.success(request, f'Enrolled {email} in "{course.title}".')
-    return redirect('studio_enrollment_list')
+    return redirect('studio_course_enrollment_list', course_id=course.pk)
 
 
 @staff_required
 @require_POST
-def enrollment_unenroll(request, enrollment_id):
-    """Soft-delete (unenroll) an enrollment row."""
-    enrollment = get_object_or_404(Enrollment, pk=enrollment_id)
+def enrollment_unenroll(request, course_id, enrollment_id):
+    """Soft-delete (unenroll) an enrollment row.
+
+    Cross-course safety: the enrollment must belong to the course in the URL.
+    A mismatched ``enrollment_id`` returns 404 instead of unenrolling someone
+    on the wrong course.
+    """
+    enrollment = get_object_or_404(
+        Enrollment, pk=enrollment_id, course_id=course_id,
+    )
     if enrollment.unenrolled_at is None:
         enrollment.unenrolled_at = timezone.now()
         enrollment.save(update_fields=['unenrolled_at'])
@@ -112,4 +100,4 @@ def enrollment_unenroll(request, enrollment_id):
             request,
             f'Unenrolled {enrollment.user.email} from "{enrollment.course.title}".',
         )
-    return redirect('studio_enrollment_list')
+    return redirect('studio_course_enrollment_list', course_id=course_id)

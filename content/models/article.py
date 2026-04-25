@@ -5,7 +5,10 @@ from django.db import models
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
-from content.markdown_extensions import MermaidExtension
+from content.markdown_extensions import (
+    ExternalLinksExtension,
+    MermaidExtension,
+)
 from content.utils.h1 import strip_leading_title_h1
 
 
@@ -15,6 +18,7 @@ def render_markdown(text):
         text,
         extensions=[
             MermaidExtension(),
+            ExternalLinksExtension(),
             'fenced_code',
             'codehilite',
             'tables',

@@ -123,6 +123,11 @@
             {% endif %}
           </div>
           {% endif %}
+
+          <!-- Q&A Section -->
+          {% if page.content_id %}
+          {% include "comments/_qa_section.html" with content_id=page.content_id user_authenticated=user.is_authenticated %}
+          {% endif %}
           {% endif %}
         </div>
       </div>
@@ -130,4 +135,8 @@
   </div>
 </main>
 {% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% include "comments/_qa_script.html" %}
 {% endblock %}

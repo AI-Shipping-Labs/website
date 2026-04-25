@@ -1,0 +1,30 @@
+<div class="mt-12 mb-12" id="qa-section" data-content-id="{{ content_id }}">
+  <h2 class="mb-6 flex items-center gap-2 text-xl font-semibold tracking-tight">
+    <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
+    Questions &amp; Answers (<span id="qa-count">0</span>)
+  </h2>
+
+  {% if user_authenticated %}
+  <div class="mb-8">
+    <textarea
+      id="qa-new-question"
+      rows="3"
+      placeholder="Ask a question about this lesson..."
+      class="w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+    ></textarea>
+    <button
+      type="button"
+      id="qa-post-btn"
+      class="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+    >
+      Post Question
+    </button>
+  </div>
+  {% else %}
+  <div class="mb-8 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
+    <a href="/accounts/login/" class="text-accent hover:underline">Sign in</a> to ask questions
+  </div>
+  {% endif %}
+
+  <div id="qa-list"></div>
+</div>

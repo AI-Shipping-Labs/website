@@ -3778,7 +3778,12 @@ def _sync_workshop_pages(
     course units, WorkshopPages don't carry user progress yet, so a
     soft-delete layer would be dead weight.
     """
+    # Function-scoped imports keep the integrations service decoupled
+    # from content app readiness (matches the pattern used elsewhere in
+    # this file). parse_video_timestamp is imported here so the diff
+    # against #301 stays localised to this function.
     from content.models import WorkshopPage
+    from content.templatetags.video_utils import parse_video_timestamp
 
     seen_paths = set()
 
@@ -3826,11 +3831,36 @@ def _sync_workshop_pages(
                 )
             body = rewrite_image_urls(body, repo_name, base_dir)
 
+            # Parse and validate the optional `video_start` frontmatter
+            # key. Stored verbatim as a string when valid; logged to
+            # stats['errors'] and stored as '' when malformed. Format:
+            # MM:SS or H:MM:SS (see parse_video_timestamp).
+            raw_video_start = (metadata.get('video_start') or '')
+            if isinstance(raw_video_start, str):
+                raw_video_start = raw_video_start.strip()
+            else:
+                raw_video_start = str(raw_video_start).strip()
+            video_start = ''
+            if raw_video_start:
+                try:
+                    parse_video_timestamp(raw_video_start)
+                except ValueError as exc:
+                    stats['errors'].append({
+                        'file': rel_path,
+                        'error': (
+                            f'Invalid video_start={raw_video_start!r} '
+                            f'(must be MM:SS or H:MM:SS): {exc}'
+                        ),
+                    })
+                else:
+                    video_start = raw_video_start
+
             defaults = {
                 'title': metadata['title'],
                 'slug': slug,
                 'sort_order': sort_order,
                 'body': body,
+                'video_start': video_start,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
                 'content_id': content_id,

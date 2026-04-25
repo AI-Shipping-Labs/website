@@ -1833,6 +1833,7 @@ class SeedContentSourcesCommandTest(TestCase):
         from io import StringIO
 
         from django.core.management import call_command
+
         from integrations.management.commands.seed_content_sources import (
             DEFAULT_SOURCES,
         )

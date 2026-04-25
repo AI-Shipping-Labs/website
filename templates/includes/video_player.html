@@ -70,7 +70,8 @@
       playerVars: {
         enablejsapi: 1,
         modestbranding: 1,
-        rel: 0
+        rel: 0{% if start_seconds %},
+        start: {{ start_seconds|stringformat:"d" }}{% endif %}
       }
     });
   }

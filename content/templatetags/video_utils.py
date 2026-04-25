@@ -139,13 +139,145 @@ def parse_time_input(time_str):
     return 0
 
 
-def prepare_video_context(video_url, timestamps=None):
+# Strict integer-component pattern: digits only, no signs, no whitespace
+# inside a component. Used by parse_video_timestamp.
+_TIMESTAMP_COMPONENT = re.compile(r'^\d+$')
+
+
+def parse_video_timestamp(value):
+    """Parse a ``MM:SS`` or ``H:MM:SS`` workshop timestamp into seconds.
+
+    Strict parser used for ``WorkshopPage.video_start`` and the ``?t=``
+    query param on the workshop video page. Unlike ``parse_time_input``,
+    malformed input raises ``ValueError`` so callers can decide whether
+    to log a warning, skip the value, or fall back to 0.
+
+    Accepts (returns int seconds):
+      "0:00", "00:00", "0:00:00", "16:00", "1:23:45", "1:00:00"
+
+    Rejects (raises ``ValueError``):
+      "", "  ", None, "16", "1:2:3:4", "1:60", "abc:def", "-1:00",
+      "1:60:00" (minutes >= 60 in H:MM:SS form)
+
+    Each component must be all digits (zero-padded or bare). Negative
+    values, signs, and non-digit characters are rejected. In ``MM:SS``
+    form, both components may be >= 60 (an old YAML quirk where authors
+    wrote ``"75:00"`` instead of ``"1:15:00"``); in ``H:MM:SS`` form,
+    minutes and seconds must be < 60.
+    """
+    if value is None:
+        raise ValueError('timestamp is None')
+    if not isinstance(value, str):
+        raise ValueError(f'timestamp must be a string, got {type(value).__name__}')
+    s = value.strip()
+    if not s:
+        raise ValueError('timestamp is empty')
+
+    parts = s.split(':')
+    if len(parts) not in (2, 3):
+        raise ValueError(
+            f'timestamp {value!r} must have 2 or 3 components separated by ":"'
+        )
+
+    for part in parts:
+        if not _TIMESTAMP_COMPONENT.match(part):
+            raise ValueError(
+                f'timestamp component {part!r} is not a non-negative integer'
+            )
+
+    if len(parts) == 2:
+        minutes, seconds = int(parts[0]), int(parts[1])
+        return minutes * 60 + seconds
+
+    hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
+    if minutes >= 60:
+        raise ValueError(
+            f'timestamp {value!r}: minutes must be < 60 in H:MM:SS form'
+        )
+    if seconds >= 60:
+        raise ValueError(
+            f'timestamp {value!r}: seconds must be < 60 in H:MM:SS form'
+        )
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def append_query_param(url, key, value):
+    """Return ``url`` with ``?key=value`` (or ``&key=value``) appended.
+
+    Used to add a ``start=N`` parameter to ``recording_embed_url`` on the
+    fallback iframe path of the workshop video page. Returns ``url``
+    unchanged when ``url`` is empty or ``value`` is ``None``.
+    """
+    if not url or value is None:
+        return url
+    sep = '&' if '?' in url else '?'
+    return f'{url}{sep}{key}={value}'
+
+
+def normalize_timestamps(timestamps):
+    """Normalize a heterogeneous list of timestamp dicts into a uniform shape.
+
+    Two shapes circulate in the codebase:
+
+    - Recording / course-unit shape: ``{time_seconds: int, label: str}``
+      (the canonical admin/JSON storage format).
+    - Workshop YAML shape: ``{time: "MM:SS", title: str}`` (authored in
+      ``workshop.yaml`` and stored verbatim on the linked Event).
+
+    Each input dict is converted to ``{time_seconds, label, formatted_time}``.
+    Entries with an unparseable ``time`` string are skipped (returning a
+    zero-row would mislead the click-to-seek handler).
+    """
+    if not timestamps:
+        return []
+
+    normalized = []
+    for ts in timestamps:
+        if not isinstance(ts, dict):
+            continue
+
+        # Resolve the integer time. Prefer time_seconds when present
+        # because it's already in the right shape; fall back to parsing
+        # the workshop-style "time" string.
+        if 'time_seconds' in ts:
+            try:
+                time_seconds = int(ts.get('time_seconds') or 0)
+            except (TypeError, ValueError):
+                continue
+        elif 'time' in ts:
+            try:
+                time_seconds = parse_video_timestamp(ts.get('time'))
+            except ValueError:
+                continue
+        else:
+            continue
+
+        if time_seconds < 0:
+            continue
+
+        # Label can come from either key. Prefer "label" (canonical) and
+        # fall back to "title" (workshop YAML).
+        label = ts.get('label') or ts.get('title') or ''
+
+        normalized.append({
+            'time_seconds': time_seconds,
+            'label': label,
+            'formatted_time': format_timestamp(time_seconds),
+        })
+    return normalized
+
+
+def prepare_video_context(video_url, timestamps=None, start_seconds=None):
     """
     Prepare template context for rendering a video player.
 
     Args:
         video_url: The URL of the video
-        timestamps: Optional list of dicts with 'time_seconds' and 'label' keys
+        timestamps: Optional list of dicts with 'time_seconds'/'label'
+            (canonical) or 'time'/'title' (workshop YAML) keys.
+        start_seconds: Optional integer seconds to seek to on initial
+            load. Propagated to the YouTube ``playerVars.start`` and the
+            Loom ``?t=`` URL parameter.
 
     Returns:
         Dict with all data needed to render the video player template.
@@ -159,27 +291,22 @@ def prepare_video_context(video_url, timestamps=None):
         'embed_url': None,
         'timestamps': [],
         'has_timestamps': False,
+        'start_seconds': start_seconds,
     }
 
     if source_type == 'youtube' and video_id:
         context['embed_url'] = get_youtube_embed_url(video_id)
     elif source_type == 'loom' and video_id:
-        context['embed_url'] = get_loom_embed_url(video_id)
+        context['embed_url'] = get_loom_embed_url(
+            video_id,
+            time_seconds=start_seconds,
+        )
     elif source_type == 'self_hosted':
         context['embed_url'] = video_url
 
-    if timestamps:
-        formatted_timestamps = []
-        for ts in timestamps:
-            time_seconds = ts.get('time_seconds', 0)
-            label = ts.get('label', '')
-            formatted_timestamps.append({
-                'time_seconds': time_seconds,
-                'label': label,
-                'formatted_time': format_timestamp(time_seconds),
-            })
-        context['timestamps'] = formatted_timestamps
-        context['has_timestamps'] = len(formatted_timestamps) > 0
+    formatted_timestamps = normalize_timestamps(timestamps)
+    context['timestamps'] = formatted_timestamps
+    context['has_timestamps'] = len(formatted_timestamps) > 0
 
     return context
 

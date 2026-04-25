@@ -66,6 +66,15 @@
             <span class="text-foreground truncate">{{ page.title }}</span>
           </div>
 
+          {% if show_watch_bar %}
+          <a href="{{ watch_bar_url }}"
+             class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/20"
+             data-testid="watch-this-section">
+            <i data-lucide="play" class="h-3.5 w-3.5"></i>
+            Watch this section ({{ watch_bar_label }})
+          </a>
+          {% endif %}
+
           <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl mb-8" data-testid="page-title">{{ page.title }}</h1>
 
           {% if is_gated %}

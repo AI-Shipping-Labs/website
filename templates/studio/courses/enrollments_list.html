@@ -1,11 +1,18 @@
 {% extends "studio/base.html" %}
 
-{% block studio_title %}Enrollments{% endblock %}
+{% block studio_title %}Enrollments - {{ course.title }}{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_course_list' %}" class="hover:text-foreground">Courses</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="hover:text-foreground">{{ course.title }}</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">Enrollments</span>
+  </div>
   <h1 class="text-2xl font-semibold text-foreground">Enrollments</h1>
-  <p class="text-muted-foreground mt-1">Course enrollments across all users. Filter by course or manually enroll a user.</p>
+  <p class="text-muted-foreground mt-1">Manage who is enrolled in "{{ course.title }}".</p>
 </div>
 
 <!-- Messages -->
@@ -20,45 +27,23 @@
 {% endif %}
 
 <!-- Manual enroll form -->
-<div class="bg-card border border-border rounded-lg p-6 mb-8">
+<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">Enroll a user</h2>
-  <form method="post" action="{% url 'studio_enrollment_create' %}" class="grid gap-4 sm:grid-cols-3 sm:items-end">
+  <form method="post" action="{% url 'studio_course_enrollment_create' course_id=course.pk %}" class="flex items-end space-x-4">
     {% csrf_token %}
-    <div>
+    <div class="flex-1">
       <label class="block text-sm font-medium text-foreground mb-1" for="enroll-email">User email</label>
       <input id="enroll-email" type="email" name="email" required placeholder="user@example.com"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1" for="enroll-course">Course</label>
-      <select id="enroll-course" name="course_id" required
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-        <option value="">— Choose a course —</option>
-        {% for c in courses %}
-        <option value="{{ c.pk }}">{{ c.title }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Enroll user
-      </button>
-    </div>
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Enroll user
+    </button>
   </form>
 </div>
 
 <!-- Filters -->
 <form method="get" class="mb-6 flex flex-wrap items-end gap-3">
-  <div>
-    <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1" for="filter-course">Course</label>
-    <select id="filter-course" name="course" onchange="this.form.submit()"
-            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <option value="">All courses</option>
-      {% for c in courses %}
-      <option value="{{ c.pk }}" {% if c.pk == selected_course_id %}selected{% endif %}>{{ c.title }}</option>
-      {% endfor %}
-    </select>
-  </div>
   <div>
     <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1" for="filter-status">Status</label>
     <select id="filter-status" name="status" onchange="this.form.submit()"
@@ -67,8 +52,8 @@
       <option value="all" {% if status == 'all' %}selected{% endif %}>Including unenrolled</option>
     </select>
   </div>
-  {% if selected_course_id or status != 'active' %}
-  <a href="{% url 'studio_enrollment_list' %}" class="text-sm text-accent hover:underline">Reset</a>
+  {% if status != 'active' %}
+  <a href="{% url 'studio_course_enrollment_list' course_id=course.pk %}" class="text-sm text-accent hover:underline">Reset</a>
   {% endif %}
 </form>
 
@@ -78,7 +63,6 @@
     <thead class="bg-secondary">
       <tr>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Course</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unenrolled</th>
@@ -89,7 +73,6 @@
       {% for enr in enrollments %}
       <tr class="hover:bg-secondary/50 transition-colors" data-testid="enrollment-row">
         <td class="px-6 py-4 text-sm text-foreground">{{ enr.user.email }}</td>
-        <td class="px-6 py-4 text-sm text-foreground">{{ enr.course.title }}</td>
         <td class="px-6 py-4">
           <span class="text-xs px-2 py-1 rounded-full
             {% if enr.source == 'manual' %}bg-blue-500/20 text-blue-400
@@ -104,8 +87,8 @@
         </td>
         <td class="px-6 py-4 text-right">
           {% if not enr.unenrolled_at %}
-          <form method="post" action="{% url 'studio_enrollment_unenroll' enrollment_id=enr.pk %}" class="inline"
-                onsubmit="return confirm('Unenroll {{ enr.user.email }} from {{ enr.course.title }}?');">
+          <form method="post" action="{% url 'studio_course_enrollment_unenroll' course_id=course.pk enrollment_id=enr.pk %}" class="inline"
+                onsubmit="return confirm('Unenroll {{ enr.user.email }} from {{ course.title }}?');">
             {% csrf_token %}
             <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline" data-testid="unenroll-row-btn">Unenroll</button>
           </form>
@@ -116,8 +99,8 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">
-          {% if selected_course_id %}No enrollments for this course.{% else %}No enrollments yet.{% endif %}
+        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">
+          No enrollments for this course yet.
         </td>
       </tr>
       {% endfor %}

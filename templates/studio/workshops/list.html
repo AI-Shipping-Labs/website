@@ -1,0 +1,117 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Workshops{% endblock %}
+
+{% block studio_content %}
+<div class="flex items-center justify-between mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Workshops</h1>
+    <p class="text-muted-foreground mt-1">Manage workshop landing pages, gating, and re-syncs.</p>
+    {% worker_status_inline %}
+  </div>
+  <form method="post" action="{% url 'studio_workshop_resync' %}">
+    {% csrf_token %}
+    <button type="submit"
+            data-testid="workshop-resync-btn"
+            class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm font-medium text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
+      <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+      <span>Re-sync workshops</span>
+    </button>
+  </form>
+</div>
+
+{% if messages %}
+<div class="mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'warning' %}bg-yellow-500/20 text-yellow-300{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Filters -->
+<div class="mb-6">
+  <form method="get" class="flex flex-wrap items-center gap-3">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search workshops..."
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+    <select name="status"
+            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="">All statuses</option>
+      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+      <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
+    </select>
+    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
+  </form>
+</div>
+
+{% if workshops %}
+<div class="bg-card border border-border rounded-lg overflow-x-auto">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Landing gate</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages gate</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Recording gate</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Linked event</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last synced</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border" data-testid="workshop-rows">
+      {% for workshop in workshops %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="workshop-row">
+        <td class="px-6 py-4">
+          <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ workshop.title }}</a>
+          <p class="text-xs text-muted-foreground mt-1">{{ workshop.slug }}</p>
+          {% if workshop.source_repo %}<span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400" data-testid="synced-badge">synced</span>{% endif %}
+        </td>
+        <td class="px-6 py-4">
+          <span class="text-xs px-2 py-1 rounded-full {% if workshop.status == 'published' %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+            {{ workshop.get_status_display }}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.date|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.get_landing_required_level_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.get_pages_required_level_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.get_recording_required_level_display }}</td>
+        <td class="px-6 py-4 text-sm">
+          {% if workshop.event_id %}
+          <a href="{% url 'studio_event_edit' event_id=workshop.event_id %}" class="text-accent hover:underline">{{ workshop.event.title|truncatechars:36 }}</a>
+          {% else %}
+          <span class="text-muted-foreground">&mdash;</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground font-mono">
+          {% if workshop.source_commit %}{{ workshop.source_commit|truncatechars:10 }}{% else %}&mdash;{% endif %}
+        </td>
+        <td class="px-6 py-4 text-right space-x-3 whitespace-nowrap">
+          <a href="{{ workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
+             class="text-sm text-muted-foreground hover:text-foreground"
+             data-testid="view-on-site">View on site</a>
+          <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}" class="text-sm text-accent hover:underline">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center" data-testid="workshops-empty-state">
+  {% if search or status_filter %}
+  <p class="text-muted-foreground mb-4">No workshops match your filters.</p>
+  <a href="{% url 'studio_workshop_list' %}" class="text-sm text-accent hover:underline">Clear filters</a>
+  {% else %}
+  <p class="text-muted-foreground mb-4">No workshops yet. Sync your workshops repo to populate this list.</p>
+  <a href="{% url 'studio_sync_dashboard' %}"
+     class="inline-block bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    Open sync dashboard
+  </a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

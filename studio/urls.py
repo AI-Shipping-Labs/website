@@ -112,6 +112,12 @@ from studio.views.worker import (
     worker_status,
     worker_task_detail,
 )
+from studio.views.workshops import (
+    workshop_detail,
+    workshop_edit,
+    workshop_list,
+    workshop_resync,
+)
 
 urlpatterns = [
     # Dashboard
@@ -152,6 +158,14 @@ urlpatterns = [
     path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
     path('events/<int:event_id>/notify', event_notify, name='studio_event_notify'),
     path('events/<int:event_id>/announce-slack', event_announce_slack, name='studio_event_announce_slack'),
+
+    # Workshops (issue #297)
+    # ``resync/`` is registered before ``<int:workshop_id>/`` so the
+    # literal string isn't swallowed by the int converter.
+    path('workshops/', workshop_list, name='studio_workshop_list'),
+    path('workshops/resync/', workshop_resync, name='studio_workshop_resync'),
+    path('workshops/<int:workshop_id>/', workshop_detail, name='studio_workshop_detail'),
+    path('workshops/<int:workshop_id>/edit', workshop_edit, name='studio_workshop_edit'),
 
     # Recordings
     path('recordings/', recording_list, name='studio_recording_list'),

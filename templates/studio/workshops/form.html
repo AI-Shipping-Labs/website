@@ -1,0 +1,180 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Edit Workshop: {{ workshop.title }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_workshop_list' %}" class="hover:text-foreground">Workshops</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}" class="hover:text-foreground">{{ workshop.title }}</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">Edit</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">Edit Workshop</h1>
+  <p class="text-muted-foreground mt-1 text-sm">
+    Most fields are managed in the workshops-content repo and shown here read-only.
+    Only the fields below this banner are editable in Studio.
+  </p>
+</div>
+
+{% if messages %}
+<div class="max-w-3xl mb-6 space-y-2">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="max-w-3xl space-y-6">
+
+  {% include "studio/includes/synced_banner.html" with obj=workshop is_synced=workshop.source_repo github_edit_url=github_edit_url %}
+
+  <!-- Read-only yaml-sourced fields. Rendered as <dd>/<p> so there's no
+       visual hint they could be edited (no greyed-out <input>s). -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-4">From workshop.yaml (read-only)</h2>
+    <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div>
+        <dt class="text-muted-foreground">Title</dt>
+        <dd class="text-foreground mt-1">{{ workshop.title }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Slug</dt>
+        <dd class="text-foreground font-mono mt-1">{{ workshop.slug }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Date</dt>
+        <dd class="text-foreground mt-1">{{ workshop.date|date:"M d, Y" }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Instructor</dt>
+        <dd class="text-foreground mt-1">{{ workshop.instructor_name|default:"—" }}</dd>
+      </div>
+      <div class="md:col-span-2">
+        <dt class="text-muted-foreground">Tags</dt>
+        <dd class="text-foreground mt-1">
+          {% if workshop.tags %}
+            {% for tag in workshop.tags %}
+              <span class="inline-block text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground mr-1">{{ tag }}</span>
+            {% endfor %}
+          {% else %}
+            &mdash;
+          {% endif %}
+        </dd>
+      </div>
+      {% if workshop.code_repo_url %}
+      <div class="md:col-span-2">
+        <dt class="text-muted-foreground">Code repo</dt>
+        <dd class="text-foreground mt-1 break-all">
+          <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline">{{ workshop.code_repo_url }}</a>
+        </dd>
+      </div>
+      {% endif %}
+      {% if workshop.description %}
+      <div class="md:col-span-2">
+        <dt class="text-muted-foreground">Description</dt>
+        <dd class="text-foreground mt-1 prose prose-sm prose-invert max-w-none">{{ workshop.description_html|safe }}</dd>
+      </div>
+      {% endif %}
+    </dl>
+  </div>
+
+  <!-- Editable fields. -->
+  <form method="post" class="bg-card border border-border rounded-lg p-6 space-y-5" data-testid="workshop-edit-form">
+    {% csrf_token %}
+    <h2 class="text-lg font-semibold text-foreground">Editable in Studio</h2>
+
+    <div>
+      <label for="status" class="block text-sm font-medium text-foreground mb-1">Status</label>
+      <select id="status" name="status"
+              data-testid="status-select"
+              class="w-full bg-secondary border {% if form_errors.status %}border-red-500{% else %}border-border{% endif %} rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="draft" {% if submitted.status == 'draft' %}selected{% endif %}>Draft</option>
+        <option value="published" {% if submitted.status == 'published' %}selected{% endif %}>Published</option>
+      </select>
+      {% if form_errors.status %}
+      <p class="mt-1 text-xs text-red-400" data-testid="error-status">{{ form_errors.status }}</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <label for="cover_image_url" class="block text-sm font-medium text-foreground mb-1">Cover Image URL</label>
+      <input id="cover_image_url" type="url" name="cover_image_url" value="{{ submitted.cover_image_url|default:'' }}"
+             data-testid="cover-image-input"
+             class="w-full bg-secondary border {% if form_errors.cover_image_url %}border-red-500{% else %}border-border{% endif %} rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      {% if form_errors.cover_image_url %}
+      <p class="mt-1 text-xs text-red-400">{{ form_errors.cover_image_url }}</p>
+      {% endif %}
+    </div>
+
+    <div class="border-t border-border pt-5">
+      <h3 class="text-sm font-medium text-foreground mb-1">Access gates</h3>
+      <p class="text-xs text-muted-foreground mb-4">
+        Three-gate chain — landing &le; pages &le; recording. Validation will reject
+        any combination that violates this invariant.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label for="landing_required_level" class="block text-sm font-medium text-foreground mb-1">Landing gate</label>
+          <select id="landing_required_level" name="landing_required_level"
+                  data-testid="landing-gate-select"
+                  class="w-full bg-secondary border {% if form_errors.landing_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+            {% for value, label in tier_level_choices %}
+            <option value="{{ value }}" {% if submitted.landing_required_level == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if form_errors.landing_required_level %}
+          <p class="mt-1 text-xs text-red-400" data-testid="error-landing">{{ form_errors.landing_required_level }}</p>
+          {% endif %}
+          <p class="mt-1 text-xs text-muted-foreground">Who can see the workshop landing page.</p>
+        </div>
+
+        <div>
+          <label for="pages_required_level" class="block text-sm font-medium text-foreground mb-1">Pages gate</label>
+          <select id="pages_required_level" name="pages_required_level"
+                  data-testid="pages-gate-select"
+                  class="w-full bg-secondary border {% if form_errors.pages_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+            {% for value, label in tier_level_choices %}
+            <option value="{{ value }}" {% if submitted.pages_required_level == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if form_errors.pages_required_level %}
+          <p class="mt-1 text-xs text-red-400" data-testid="error-pages">{{ form_errors.pages_required_level }}</p>
+          {% endif %}
+          <p class="mt-1 text-xs text-muted-foreground">Who can read tutorial pages.</p>
+        </div>
+
+        <div>
+          <label for="recording_required_level" class="block text-sm font-medium text-foreground mb-1">Recording gate</label>
+          <select id="recording_required_level" name="recording_required_level"
+                  data-testid="recording-gate-select"
+                  class="w-full bg-secondary border {% if form_errors.recording_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+            {% for value, label in tier_level_choices %}
+            <option value="{{ value }}" {% if submitted.recording_required_level == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if form_errors.recording_required_level %}
+          <p class="mt-1 text-xs text-red-400" data-testid="error-recording">{{ form_errors.recording_required_level }}</p>
+          {% endif %}
+          <p class="mt-1 text-xs text-muted-foreground">Who can watch the recording.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-4 pt-2">
+      <button type="submit"
+              data-testid="save-workshop-btn"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Save changes
+      </button>
+      <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}"
+         class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

@@ -10,6 +10,19 @@ ALLOWED_HOSTS_BY_ENV = {
     ],
 }
 
+# Django 4+ requires scheme-qualified origins. CSRF middleware uses these
+# to validate the Origin / Referer header on POST over HTTPS, in addition
+# to ALLOWED_HOSTS. Without this, any form POST in prod (login, payments,
+# studio, etc.) fails with 403.
+CSRF_TRUSTED_ORIGINS_BY_ENV = {
+    "dev": ["https://dev.aishippinglabs.com"],
+    "prod": [
+        "https://aishippinglabs.com",
+        "https://www.aishippinglabs.com",
+        "https://prod.aishippinglabs.com",
+    ],
+}
+
 
 def _set_env_var(environment, name, value):
     for env_var in environment:
@@ -25,6 +38,12 @@ def _required_allowed_hosts(deploy_env):
 
 def _allowed_hosts_for_env(deploy_env):
     return ",".join(_required_allowed_hosts(deploy_env))
+
+
+def _csrf_trusted_origins_for_env(deploy_env):
+    return ",".join(
+        CSRF_TRUSTED_ORIGINS_BY_ENV.get(deploy_env, CSRF_TRUSTED_ORIGINS_BY_ENV["dev"])
+    )
 
 
 def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
@@ -45,6 +64,11 @@ def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
                 environment,
                 "ALLOWED_HOSTS",
                 _allowed_hosts_for_env(deploy_env),
+            )
+            _set_env_var(
+                environment,
+                "CSRF_TRUSTED_ORIGINS",
+                _csrf_trusted_origins_for_env(deploy_env),
             )
             container_def["environment"] = environment
 

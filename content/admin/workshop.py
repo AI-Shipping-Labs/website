@@ -1,7 +1,7 @@
 """Django admin for Workshop + WorkshopPage (issue #295)."""
 from django.contrib import admin
 
-from content.models import Workshop, WorkshopPage
+from content.models import Workshop, WorkshopInstructor, WorkshopPage
 
 
 class WorkshopPageInline(admin.StackedInline):
@@ -11,6 +11,15 @@ class WorkshopPageInline(admin.StackedInline):
     ordering = ['sort_order']
     fields = ['title', 'slug', 'sort_order', 'body']
     classes = ['collapse']
+
+
+class WorkshopInstructorInline(admin.TabularInline):
+    """Inline editor for Workshop-Instructor through rows with ordering."""
+    model = WorkshopInstructor
+    extra = 0
+    ordering = ['position']
+    fields = ['instructor', 'position']
+    raw_id_fields = ['instructor']
 
 
 @admin.register(Workshop)
@@ -31,7 +40,7 @@ class WorkshopAdmin(admin.ModelAdmin):
     search_fields = ['title', 'slug', 'description']
     prepopulated_fields = {'slug': ('title',)}
     raw_id_fields = ['event']
-    inlines = [WorkshopPageInline]
+    inlines = [WorkshopInstructorInline, WorkshopPageInline]
     ordering = ['-date']
     readonly_fields = ['created_at', 'updated_at']
 

@@ -2,7 +2,15 @@ from django import forms
 from django.contrib import admin
 
 from content.admin.widgets import TimestampEditorWidget
-from content.models import Cohort, Course, CourseAccess, Module, Unit, UserCourseProgress
+from content.models import (
+    Cohort,
+    Course,
+    CourseAccess,
+    CourseInstructor,
+    Module,
+    Unit,
+    UserCourseProgress,
+)
 
 # ---------------------------------------------------------------------------
 # Unit form with all fields including timestamps widget
@@ -61,6 +69,15 @@ class ModuleInline(admin.TabularInline):
     show_change_link = True
 
 
+class CourseInstructorInline(admin.TabularInline):
+    """Inline editor for Course-Instructor through rows with ordering."""
+    model = CourseInstructor
+    extra = 0
+    ordering = ['position']
+    fields = ['instructor', 'position']
+    raw_id_fields = ['instructor']
+
+
 # ---------------------------------------------------------------------------
 # Admin actions
 # ---------------------------------------------------------------------------
@@ -105,7 +122,7 @@ class CourseAdmin(admin.ModelAdmin):
     search_fields = ['title', 'description', 'instructor_name']
     prepopulated_fields = {'slug': ('title',)}
     actions = [publish_courses, unpublish_courses]
-    inlines = [ModuleInline, CohortInline]
+    inlines = [CourseInstructorInline, ModuleInline, CohortInline]
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
     readonly_fields = ['created_at', 'updated_at']

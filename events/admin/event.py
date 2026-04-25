@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from content.admin.widgets import TimestampEditorWidget
-from events.models import Event, EventRegistration
+from events.models import Event, EventInstructor, EventRegistration
 
 
 def make_upcoming(modeladmin, request, queryset):
@@ -101,6 +101,15 @@ class EventRegistrationInline(admin.TabularInline):
     can_delete = True
 
 
+class EventInstructorInline(admin.TabularInline):
+    """Inline editor for Event-Instructor through rows with ordering."""
+    model = EventInstructor
+    extra = 0
+    ordering = ['position']
+    fields = ['instructor', 'position']
+    raw_id_fields = ['instructor']
+
+
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     form = EventAdminForm
@@ -116,7 +125,7 @@ class EventAdmin(admin.ModelAdmin):
         make_upcoming, make_live, make_completed, make_cancelled,
         publish_recordings, unpublish_recordings,
     ]
-    inlines = [EventRegistrationInline]
+    inlines = [EventInstructorInline, EventRegistrationInline]
 
     fieldsets = (
         (None, {

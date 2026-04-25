@@ -96,6 +96,18 @@ class Workshop(models.Model):
         help_text='Workshop date (used for ordering and the auto-created Event).',
     )
     instructor_name = models.CharField(max_length=200, blank=True, default='')
+    instructors = models.ManyToManyField(
+        'content.Instructor',
+        through='content.WorkshopInstructor',
+        related_name='workshops',
+        blank=True,
+        help_text=(
+            'Instructors teaching this workshop. Order is controlled via the '
+            'WorkshopInstructor.position field. The first instructor is '
+            'mirrored into the legacy instructor_name field by the sync '
+            'pipeline.'
+        ),
+    )
     tags = models.JSONField(default=list, blank=True)
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
     status = models.CharField(

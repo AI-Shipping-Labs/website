@@ -194,6 +194,18 @@ class Event(models.Model):
         blank=True, default='',
         help_text='Speaker bio from content repo frontmatter.',
     )
+    instructors = models.ManyToManyField(
+        'content.Instructor',
+        through='events.EventInstructor',
+        related_name='events',
+        blank=True,
+        help_text=(
+            'Instructors / speakers for this event. Order is controlled via '
+            'the EventInstructor.position field. The first instructor is '
+            'mirrored into the legacy speaker_name/speaker_bio fields by the '
+            'sync pipeline.'
+        ),
+    )
     cover_image_url = models.URLField(
         max_length=500, blank=True, default='',
         help_text='Cover image URL from content repo.',
@@ -321,3 +333,27 @@ class Event(models.Model):
 
     def formatted_time(self):
         return self.start_datetime.strftime('%H:%M UTC')
+
+
+class EventInstructor(models.Model):
+    """Through model linking Event -> Instructor with display order.
+
+    Lives in the events app (alongside Event) so the cross-app FK direction
+    is clean: events depends on content (Instructor), not the other way.
+    """
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    instructor = models.ForeignKey(
+        'content.Instructor', on_delete=models.PROTECT,
+    )
+    position = models.PositiveIntegerField(
+        default=0,
+        help_text='Display order; 0 is the primary speaker.',
+    )
+
+    class Meta:
+        ordering = ['position']
+        unique_together = [('event', 'instructor')]
+
+    def __str__(self):
+        return f'{self.event} - {self.instructor} (#{self.position})'

@@ -95,6 +95,11 @@ class CourseAdminCRUDTest(TestCase):
             'cohorts-INITIAL_FORMS': '0',
             'cohorts-MIN_NUM_FORMS': '0',
             'cohorts-MAX_NUM_FORMS': '1000',
+            # CourseInstructor through-model inline (issue #308)
+            'courseinstructor_set-TOTAL_FORMS': '0',
+            'courseinstructor_set-INITIAL_FORMS': '0',
+            'courseinstructor_set-MIN_NUM_FORMS': '0',
+            'courseinstructor_set-MAX_NUM_FORMS': '1000',
             # Peer review fields
             'peer_review_enabled': '',
             'peer_review_count': '3',

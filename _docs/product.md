@@ -285,6 +285,7 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Curated Link | An external resource link categorized by type (tool, model, course) | Resource, bookmark, collection item |
 | Download | A downloadable file (PDF, slides, notebook) | Asset, attachment |
 | Event | A scheduled activity (live or async) with registration | Meeting, session, webinar |
+| Instructor | A person who teaches courses, workshops, or speaks at events; identified by a stable `instructor_id` slug and referenced from yaml | Speaker, presenter, author |
 | Poll | A vote on a topic or course idea | Survey, questionnaire |
 | Option | A choice within a poll that members can vote on | Answer, item |
 | Proposal | A member-submitted option for a poll | Suggestion |

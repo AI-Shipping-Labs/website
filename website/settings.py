@@ -136,6 +136,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Must run before SecurityMiddleware/CommonMiddleware so that ALB
+    # health checks (which use the container's VPC IP as Host) don't trip
+    # ALLOWED_HOSTS validation. See website/middleware.py.
+    'website.middleware.HealthCheckMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'integrations.middleware.RemoveTrailingSlashMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

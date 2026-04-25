@@ -2,13 +2,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
-from django.http import HttpResponse
 from django.urls import include, path
 from django.views.generic import RedirectView
-
-
-def health_check(request):
-    return HttpResponse("OK", status=200)
 
 from accounts.urls import account_urlpatterns, auth_api_urlpatterns
 from content.sitemaps import sitemaps
@@ -17,8 +12,8 @@ from notifications.urls import api_urlpatterns as notification_api_urlpatterns
 from notifications.urls import page_urlpatterns as notification_page_urlpatterns
 
 urlpatterns = [
-    # Health check endpoint for load balancer (no trailing slash to avoid redirect)
-    path('ping', health_check),
+    # /ping is served by website.middleware.HealthCheckMiddleware so the
+    # ALB's IP-based health checks don't trip ALLOWED_HOSTS.
     # Integrations URLs must come before admin/ to allow /admin/sync/ to resolve
     path('', include('integrations.urls')),
     path('admin/', admin.site.urls),

@@ -189,6 +189,17 @@ def _consolidate_reverse(apps, schema_editor):
 
 class Migration(migrations.Migration):
 
+    # Run each operation in its own transaction. The data step
+    # (``_consolidate_forwards``) issues UPDATEs and DELETEs that queue
+    # deferred FK trigger events on ``integrations_synclog`` /
+    # ``integrations_contentsource``. With the default ``atomic = True``,
+    # the subsequent ``AlterUniqueTogether`` runs in the same transaction
+    # and Postgres rejects the ALTER with
+    # ``cannot ALTER TABLE "integrations_contentsource" because it has
+    # pending trigger events``. Splitting per-operation transactions lets
+    # the deferred triggers fire after the data step commits. Issue #336.
+    atomic = False
+
     dependencies = [
         ('integrations', '0020_alter_contentsource_unique_together'),
     ]

@@ -4,10 +4,11 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
-from content.access import can_access, get_active_override, get_user_level
+from content.access import get_active_override, get_user_level
 from content.models import (
     Article,
     Course,
+    CourseAccess,
     CuratedLink,
     Enrollment,
     Project,
@@ -333,13 +334,24 @@ def _get_in_progress_courses(user, user_level):
     for unit in units_qs:
         units_by_course[unit.module.course_id].append(unit)
 
+    # Batch-fetch individual CourseAccess grants for all enrolled courses
+    # in a single query. Avoids N+1 from calling can_access() per course
+    # (issue #346): can_access() falls back to a CourseAccess.exists()
+    # query whenever the user's tier level is below required_level.
+    granted_course_ids = set(
+        CourseAccess.objects.filter(
+            user=user, course_id__in=course_ids,
+        ).values_list('course_id', flat=True)
+    )
+
     result = []
     for cid, course in course_by_id.items():
-        # Hide enrollments the user no longer has access to. Uses
-        # can_access() so individual CourseAccess grants (purchase or
-        # admin grant) keep the course visible even when the user's
-        # tier level is below the course's required_level.
-        if not can_access(user, course):
+        # Hide enrollments the user no longer has access to. Mirrors the
+        # logic of content.access.can_access(): tier level must meet
+        # required_level, OR the user must hold an individual
+        # CourseAccess grant (purchase or admin grant). Both inputs are
+        # already batched above — no per-course DB call here.
+        if course.required_level > user_level and cid not in granted_course_ids:
             continue
         total = unit_counts.get(cid, 0)
         if total == 0:

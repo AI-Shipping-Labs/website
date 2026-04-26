@@ -14,10 +14,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from content.access import get_active_override, get_user_level
+from content.access import LEVEL_MAIN, get_active_override, get_user_level
 from content.models import (
     Article,
     Course,
+    CourseAccess,
     Enrollment,
     Module,
     Unit,
@@ -70,16 +71,18 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
         """With 5 enrolled-in-progress courses, query count is constant (not 5+).
 
         Issue #236: queries are sourced from Enrollment now, not inferred
-        from progress rows. Total constant queries:
+        from progress rows. Issue #346 added a batched CourseAccess query
+        to replace the per-course can_access() N+1. Total constant queries:
           1. Active enrollments + course (select_related)
           2. Per-course total unit counts (annotate)
           3. Per-course completed unit ids (UserCourseProgress)
           4. All units across enrolled courses (resolve next_unit in Python)
+          5. Individual CourseAccess grants for enrolled courses
         """
         from content.views.home import _get_in_progress_courses
         user_level = get_user_level(self.user)
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(5):
             result = _get_in_progress_courses(self.user, user_level)
 
         self.assertEqual(len(result), 5)
@@ -95,7 +98,7 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
         user_level = get_user_level(self.user)
 
         # Add 5 more enrolled in-progress courses (10 total) and assert
-        # the query count stays at 4 — proving the dashboard query is
+        # the query count stays at 5 — proving the dashboard query is
         # not N+1.
         now = timezone.now()
         for i in range(5, 10):
@@ -119,7 +122,7 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
                     completed_at=now - timedelta(hours=10 - i),
                 )
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(5):
             result = _get_in_progress_courses(self.user, user_level)
         self.assertEqual(len(result), 10)
         for item in result:
@@ -137,6 +140,116 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
         with self.assertNumQueries(1):
             result = _get_in_progress_courses(other_user, user_level)
         self.assertEqual(result, [])
+
+
+class BelowTierWithCourseAccessQueryCountTest(TierSetupMixin, TestCase):
+    """Issue #346: Basic-tier user enrolled in Main-tier courses must not
+    cause an N+1 from per-course can_access() / CourseAccess.exists().
+
+    Before the fix, the dashboard issued one extra `CourseAccess.exists()`
+    query per enrolled course whose `required_level` exceeded the user's
+    tier level. After the fix, all CourseAccess grants are fetched in a
+    single batched query and membership-checked in Python, so the query
+    count is constant and matches the happy-path test (5 queries).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(
+            email='below-tier@example.com', password='testpass',
+        )
+        cls.user.tier = cls.basic_tier
+        cls.user.save()
+
+        now = timezone.now()
+        # Enroll in 5 courses requiring Main. User is on Basic, so the
+        # only courses that should appear are the 2 with explicit
+        # CourseAccess grants.
+        cls.courses = []
+        for i in range(5):
+            course = Course.objects.create(
+                title=f'Locked Course {i}', slug=f'locked-course-{i}',
+                status='published', required_level=LEVEL_MAIN,
+            )
+            cls.courses.append(course)
+            Enrollment.objects.create(user=cls.user, course=course)
+            module = Module.objects.create(
+                course=course, title=f'Mod {i}', slug=f'locked-mod-{i}',
+                sort_order=0,
+            )
+            units = []
+            for j in range(4):
+                unit = Unit.objects.create(
+                    module=module, title=f'Unit {i}-{j}',
+                    slug=f'locked-unit-{i}-{j}', sort_order=j,
+                )
+                units.append(unit)
+            for j in range(2):
+                UserCourseProgress.objects.create(
+                    user=cls.user, unit=units[j],
+                    completed_at=now - timedelta(hours=10 - i),
+                )
+
+        # Grant individual access to 2 of the 5 locked courses.
+        CourseAccess.objects.create(
+            user=cls.user, course=cls.courses[0], access_type='purchased',
+        )
+        CourseAccess.objects.create(
+            user=cls.user, course=cls.courses[1], access_type='granted',
+        )
+
+    def test_query_count_constant_when_below_tier(self):
+        """With 5 enrolled but only 2 accessible via CourseAccess, query
+        count must equal the happy-path 5 (no N+1 from can_access).
+        """
+        from content.views.home import _get_in_progress_courses
+        user_level = get_user_level(self.user)
+
+        with self.assertNumQueries(5):
+            result = _get_in_progress_courses(self.user, user_level)
+
+        # Only the 2 courses with CourseAccess grants surface; the other
+        # 3 are filtered out because the user's Basic tier is below the
+        # course's required Main level.
+        self.assertEqual(len(result), 2)
+        returned_ids = {item['course'].id for item in result}
+        self.assertEqual(
+            returned_ids,
+            {self.courses[0].id, self.courses[1].id},
+        )
+
+    def test_query_count_does_not_scale_with_locked_enrollments(self):
+        """Adding more locked-but-accessed enrollments must not increase
+        the query count. This is the core N+1 guard for issue #346.
+        """
+        from content.views.home import _get_in_progress_courses
+
+        # Add 5 more Main-tier enrollments (10 total) — none with
+        # CourseAccess. Pre-fix this would add 5 extra .exists() queries
+        # to the previous test's count.
+        for i in range(5, 10):
+            course = Course.objects.create(
+                title=f'Locked Course {i}', slug=f'locked-course-{i}',
+                status='published', required_level=LEVEL_MAIN,
+            )
+            Enrollment.objects.create(user=self.user, course=course)
+            module = Module.objects.create(
+                course=course, title=f'Mod {i}', slug=f'locked-mod-{i}',
+                sort_order=0,
+            )
+            for j in range(4):
+                Unit.objects.create(
+                    module=module, title=f'Unit {i}-{j}',
+                    slug=f'locked-unit-{i}-{j}', sort_order=j,
+                )
+
+        user_level = get_user_level(self.user)
+        with self.assertNumQueries(5):
+            result = _get_in_progress_courses(self.user, user_level)
+
+        # Still only 2 results (the originally-granted courses).
+        self.assertEqual(len(result), 2)
 
 
 class DuplicateOverrideQueryTest(TierSetupMixin, TestCase):
@@ -257,15 +370,17 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         - Session + auth (3 queries)
         - User with select_related tier (included in auth)
         - get_active_override (1 query)
-        - In-progress courses: progress + annotation (2 queries)
+        - In-progress courses: enrollments + unit-counts + progress +
+          units + CourseAccess grants (5 queries; CourseAccess added in #346)
         - Upcoming events (1 query)
         - Recent content: articles + recordings (2 queries)
         - Active polls (1 query)
         - Notifications (1 query)
         - Template-level queries (poll vote/option counts, etc.)
 
-        Total must stay under 20. Before this fix, N+1 on courses alone
-        could cause 5+ extra queries per in-progress course.
+        Total must stay under 25. Before #181 fix, N+1 on courses alone
+        could cause 5+ extra queries per in-progress course; #346 added
+        a single batched CourseAccess query to eliminate a second N+1.
         """
         self.client.login(email='totalq@example.com', password='testpass')
 
@@ -280,7 +395,7 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'content/dashboard.html')
         self.assertLess(
-            len(ctx), 20,
-            f"Dashboard used {len(ctx)} queries (limit: 20). "
+            len(ctx), 25,
+            f"Dashboard used {len(ctx)} queries (limit: 25). "
             f"Possible N+1 regression.",
         )

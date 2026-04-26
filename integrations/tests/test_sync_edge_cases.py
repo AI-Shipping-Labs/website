@@ -888,3 +888,255 @@ class ProjectSyncMarkdownRenderingTest(TestCase):
         project = Project.objects.get(slug='code-project')
         self.assertIn('<code', project.content_html)
         self.assertIn('print', project.content_html)
+
+
+# ===========================================================================
+# Scenario: Module rename — folder renamed, same module.yaml content
+# ===========================================================================
+
+
+class ModuleRenameIdempotencyTest(TestCase):
+    """Renaming a module folder updates the existing Module row in place.
+
+    Counterpart to ``CourseRenameIdempotencyTest`` and
+    ``UnitRenameIdempotencyTest`` — named by intent so
+    ``grep -rn '^class ModuleRenameIdempotencyTest' integrations/tests/``
+    finds the test that proves a module-folder rename does not produce
+    a duplicate Module row or a unique-constraint violation.
+
+    Module has no ``content_id`` field; the sync looks up an existing
+    Module by ``(course, source_path)`` first, then falls back to
+    ``(course, slug)``. This test exercises the slug-fallback path: the
+    folder name (and thus ``source_path``) changes, but the slug —
+    derived from the folder name unless overridden — is held stable
+    via an explicit ``slug:`` in ``module.yaml``.
+    """
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='test-org/python-course',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_course_yaml(self):
+        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Python Course"\n')
+            f.write('slug: "python-course"\n')
+            f.write('description: "Test course."\n')
+            f.write('instructor_name: "Test"\n')
+            f.write('required_level: 0\n')
+            f.write('content_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"\n')
+
+    def _write_module(self, folder_name, slug='intro', sort_order=1):
+        module_dir = os.path.join(self.temp_dir, folder_name)
+        os.makedirs(module_dir, exist_ok=True)
+        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
+            f.write('title: "Introduction"\n')
+            f.write(f'slug: "{slug}"\n')
+            f.write(f'sort_order: {sort_order}\n')
+        with open(os.path.join(module_dir, '01-why-python.md'), 'w') as f:
+            f.write('---\n')
+            f.write('title: "Why Python"\n')
+            f.write('sort_order: 1\n')
+            f.write('content_id: "cccccccc-cccc-cccc-cccc-cccccccccccc"\n')
+            f.write('---\n')
+            f.write('Body.\n')
+        return module_dir
+
+    def test_rename_module_folder_keeps_module_pk_and_updates_source_path(self):
+        original_folder = 'module-1'
+        renamed_folder = 'module-1-renamed'
+
+        # First sync — create the course/module/unit tree.
+        self._write_course_yaml()
+        self._write_module(original_folder, slug='intro')
+
+        first_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            first_log.errors, [],
+            f'First sync errors: {first_log.errors}',
+        )
+        course = Course.objects.get(slug='python-course')
+        original_module = Module.objects.get(course=course, slug='intro')
+        original_module_pk = original_module.pk
+        self.assertEqual(original_module.source_path, original_folder)
+        original_unit = Unit.objects.get(module=original_module)
+        original_unit_pk = original_unit.pk
+
+        # Rename the folder on disk. Same slug in module.yaml, same
+        # unit content_id — only the folder path changes.
+        import shutil as _shutil
+        _shutil.move(
+            os.path.join(self.temp_dir, original_folder),
+            os.path.join(self.temp_dir, renamed_folder),
+        )
+
+        second_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            second_log.errors, [],
+            f'Second sync errors: {second_log.errors}',
+        )
+
+        # Exactly one Module — no duplicate from the rename.
+        self.assertEqual(
+            Module.objects.filter(course=course).count(), 1,
+            'Folder rename must not create a duplicate Module row.',
+        )
+        # Same Module pk — the slug-fallback lookup found the existing row.
+        module_after = Module.objects.get(course=course, slug='intro')
+        self.assertEqual(module_after.pk, original_module_pk)
+        # ``source_path`` updated to the new folder.
+        self.assertEqual(module_after.source_path, renamed_folder)
+        # Stats: 0 created, at least 1 updated (the module),
+        # 0 deleted (no soft-delete of the old module).
+        self.assertEqual(second_log.items_created, 0)
+        self.assertGreaterEqual(second_log.items_updated, 1)
+        self.assertEqual(second_log.items_deleted, 0)
+
+        # Unit pk preserved too — the same Unit row was found via
+        # content_id and its ``source_path`` updated to the new path.
+        unit_after = Unit.objects.get(module=module_after)
+        self.assertEqual(unit_after.pk, original_unit_pk)
+        self.assertEqual(
+            unit_after.source_path,
+            f'{renamed_folder}/01-why-python.md',
+        )
+
+
+# ===========================================================================
+# Scenario: Unit rename — file renamed AND body changed, same content_id
+# ===========================================================================
+
+
+class UnitRenameIdempotencyTest(TestCase):
+    """Renaming a unit file with body change updates the existing Unit row
+    via the ``content_id``-based lookup.
+
+    Distinct from ``UnitRenameMigrationTest`` (above), which exercises the
+    content-hash-based migration path: there the body is identical, so the
+    sync falls back to matching by content hash and migrating
+    ``UserCourseProgress`` rows.
+
+    Here the body changes too — content hash matching cannot help. The
+    test guards the ``content_id``-first lookup added in #310 / #311
+    (``_sync_module_units``): an author renaming a unit's filename and
+    rewriting its body in the same commit must not produce a duplicate
+    Unit row and must not soft-delete the existing one.
+    """
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='test-org/python-course',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_course_yaml(self):
+        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Python Course"\n')
+            f.write('slug: "python-course"\n')
+            f.write('description: "Test course."\n')
+            f.write('instructor_name: "Test"\n')
+            f.write('required_level: 0\n')
+            f.write('content_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"\n')
+
+    def _write_module_yaml(self, module_dir):
+        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
+            f.write('title: "Module"\n')
+            f.write('sort_order: 1\n')
+
+    def _write_unit(self, module_dir, filename, *, content_id, body, slug=None,
+                    title='Unit Title'):
+        with open(os.path.join(module_dir, filename), 'w') as f:
+            f.write('---\n')
+            f.write(f'title: "{title}"\n')
+            if slug is not None:
+                f.write(f'slug: "{slug}"\n')
+            f.write('sort_order: 1\n')
+            f.write(f'content_id: "{content_id}"\n')
+            f.write('---\n')
+            f.write(body)
+
+    def test_rename_unit_file_with_body_change_keeps_pk(self):
+        unit_content_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+        original_filename = 'intro.md'
+        renamed_filename = 'welcome.md'
+        old_body = 'Original body for the intro unit.\n'
+        new_body = 'A completely different body after rewrite.\n'
+
+        # First sync — create the unit at the original filename.
+        self._write_course_yaml()
+        module_dir = os.path.join(self.temp_dir, 'module-1')
+        os.makedirs(module_dir, exist_ok=True)
+        self._write_module_yaml(module_dir)
+        # Use an explicit ``slug:`` so the slug-derived-from-filename
+        # path doesn't change between syncs — this test is focused on
+        # the content_id lookup, not on slug stability.
+        self._write_unit(
+            module_dir, original_filename,
+            content_id=unit_content_id,
+            slug='intro',
+            title='Intro',
+            body=old_body,
+        )
+
+        first_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            first_log.errors, [],
+            f'First sync errors: {first_log.errors}',
+        )
+        original_unit = Unit.objects.get()
+        original_unit_pk = original_unit.pk
+        original_hash = original_unit.content_hash
+        self.assertIn(original_filename, original_unit.source_path)
+
+        # Now: rename the file AND change the body. Same content_id,
+        # same slug — but a different filename and a different content
+        # hash. Only the content_id lookup can find the row.
+        os.remove(os.path.join(module_dir, original_filename))
+        self._write_unit(
+            module_dir, renamed_filename,
+            content_id=unit_content_id,
+            slug='intro',
+            title='Intro',
+            body=new_body,
+        )
+
+        second_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            second_log.errors, [],
+            f'Second sync errors: {second_log.errors}',
+        )
+
+        # No duplicate Unit, no soft-delete of the original.
+        self.assertEqual(
+            Unit.objects.count(), 1,
+            'File rename + body change must not create a duplicate Unit.',
+        )
+        self.assertEqual(
+            second_log.items_deleted, 0,
+            'Existing Unit must not be soft-deleted on rename.',
+        )
+
+        unit_after = Unit.objects.get()
+        # Same pk — content_id lookup found the existing row.
+        self.assertEqual(unit_after.pk, original_unit_pk)
+        # source_path updated to the new filename.
+        self.assertIn(renamed_filename, unit_after.source_path)
+        self.assertNotIn(original_filename, unit_after.source_path)
+        # Body updated.
+        self.assertEqual(unit_after.body.strip(), new_body.strip())
+        # Content hash recomputed from the new body.
+        self.assertNotEqual(unit_after.content_hash, original_hash)
+
+        # Stats: exactly 1 update for the unit (the course + module are
+        # unchanged and stay in the unchanged bucket).
+        self.assertEqual(second_log.items_created, 0)
+        self.assertEqual(second_log.items_updated, 1)

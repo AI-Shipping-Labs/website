@@ -138,5 +138,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ block.super }}
+{% include "_partials/mermaid_script.html" %}
 {% include "comments/_qa_script.html" %}
 {% endblock %}

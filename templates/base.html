@@ -537,10 +537,11 @@
     })();
   </script>
 
-  <!-- Mermaid diagram renderer (issue #300). Lazy-loads the CDN bundle
-       only when at least one <div class="mermaid"> is on the page. -->
-  <script type="module" src="{% static 'js/mermaid-render.js' %}" defer></script>
-
+  {% comment %}
+    Mermaid diagram renderer (issue #300) is lazy-loaded per page via
+    ``templates/_partials/mermaid_script.html`` — included only from
+    templates that render markdown-derived HTML (issue #320).
+  {% endcomment %}
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

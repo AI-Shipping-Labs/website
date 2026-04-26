@@ -677,9 +677,6 @@ def _build_repos_context():
         repo = {
             'repo_name': source.repo_name,
             'source': source,
-            # Kept as a single-element list for backward compat with templates
-            # that still iterate ``repo.sources``.
-            'sources': [source],
             'is_private': source.is_private,
             'last_synced_at': source.last_synced_at,
             'any_running': source.last_sync_status in ('running', 'queued'),

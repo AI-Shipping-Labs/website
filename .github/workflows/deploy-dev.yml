@@ -5,9 +5,6 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - ".github/**"
-      - "deploy/**"
-      - ".claude/**"
       - "_docs/**"
       - "specs/**"
       - ".prod-versions"
@@ -93,3 +90,27 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+
+      - name: Verify deploy landed
+        run: |
+          set -e
+          EXPECTED_HASH=${GITHUB_SHA:0:7}
+          MAX_ATTEMPTS=30      # 30 × 10s = 5 min total
+          SLEEP_SECONDS=10
+          DEPLOYED=""
+          echo "Polling https://dev.aishippinglabs.com/ for version matching ${EXPECTED_HASH}..."
+          for i in $(seq 1 ${MAX_ATTEMPTS}); do
+            DEPLOYED=$(curl -fsSL --max-time 10 https://dev.aishippinglabs.com/ 2>/dev/null \
+              | grep -oE 'version [0-9]{8}-[0-9]{6}-[a-f0-9]{7,}' \
+              | head -1 \
+              || echo "")
+            if [ -n "${DEPLOYED}" ] && echo "${DEPLOYED}" | grep -qE "${EXPECTED_HASH}"; then
+              echo "::notice ::Dev verified — serving ${DEPLOYED} (matches commit ${EXPECTED_HASH}) after ${i} attempt(s)."
+              exit 0
+            fi
+            echo "Attempt ${i}/${MAX_ATTEMPTS}: serving '${DEPLOYED:-<unreachable>}'; expected ${EXPECTED_HASH}. Sleeping ${SLEEP_SECONDS}s..."
+            sleep ${SLEEP_SECONDS}
+          done
+          echo "::error ::Verification timeout — dev never served ${EXPECTED_HASH} after $((MAX_ATTEMPTS * SLEEP_SECONDS))s. Last seen: '${DEPLOYED:-<unreachable>}'."
+          echo "Possible causes: ECS rollout stalled, ALB cutover is slower than expected, or the new tasks are unhealthy."
+          exit 1

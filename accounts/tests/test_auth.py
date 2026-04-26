@@ -1,7 +1,24 @@
+from allauth.socialaccount.models import SocialApp
+from django.contrib.sites.models import Site
 from django.test import TestCase, tag
 from django.urls import reverse
 
 from accounts.models import User
+
+
+def _configure_provider(provider, name):
+    """Create a configured ``SocialApp`` for ``provider`` so the login
+    template renders the matching "Sign in with X" button. Issue #322
+    gates each button on a non-empty ``client_id``.
+    """
+    app = SocialApp.objects.create(
+        provider=provider,
+        name=name,
+        client_id=f'{provider}-cid',
+        secret=f'{provider}-secret',
+    )
+    app.sites.add(Site.objects.get_current())
+    return app
 
 
 @tag('core')
@@ -17,18 +34,21 @@ class LoginViewTest(TestCase):
         self.assertTemplateUsed(response, "accounts/login.html")
 
     def test_login_page_contains_google_button(self):
+        _configure_provider('google', 'Google')
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'href="/accounts/google/login/"')
         self.assertContains(response, "Sign in with Google")
 
     def test_login_page_contains_github_button(self):
+        _configure_provider('github', 'GitHub')
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'href="/accounts/github/login/"')
         self.assertContains(response, "Sign in with GitHub")
 
     def test_login_page_contains_slack_button(self):
+        _configure_provider('slack', 'Slack')
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'href="/accounts/slack/login/"')

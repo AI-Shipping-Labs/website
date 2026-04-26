@@ -4,8 +4,8 @@
 
 {% block studio_content %}
 <div class="mb-8">
-  <h1 class="text-2xl font-semibold text-foreground">Integration Settings</h1>
-  <p class="text-muted-foreground mt-1">Configure credentials for external integrations. Values saved here take priority over environment variables.</p>
+  <h1 class="text-2xl font-semibold text-foreground">Settings</h1>
+  <p class="text-muted-foreground mt-1">Configure how users sign in and how the platform talks to external services. Values saved here take priority over environment variables.</p>
 </div>
 
 <!-- Messages -->
@@ -19,65 +19,37 @@
 </div>
 {% endif %}
 
-<div class="space-y-6">
-  {% for group in groups %}
-  <div class="bg-card border border-border rounded-lg p-6">
-    <!-- Group header -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center space-x-3">
-        <h2 class="text-lg font-semibold text-foreground">{{ group.label }}</h2>
-        <span class="px-2 py-0.5 text-xs rounded-full
-          {% if group.status == 'configured' %}bg-green-500/20 text-green-400
-          {% elif group.status == 'partial' %}bg-yellow-500/20 text-yellow-400
-          {% else %}bg-red-500/20 text-red-400{% endif %}">
-          {% if group.status == 'configured' %}Configured
-          {% elif group.status == 'partial' %}Partial ({{ group.keys_set }}/{{ group.total_keys }})
-          {% else %}Not configured{% endif %}
-        </span>
-      </div>
-    </div>
-
-    <!-- Settings form -->
-    <form method="post" action="{% url 'studio_settings_save' group.name %}">
-      {% csrf_token %}
-      <div class="space-y-4">
-        {% for field in group.fields %}
-        <div>
-          <label for="field-{{ field.key }}" class="block text-sm font-medium text-gray-300 mb-1">{{ field.description }}</label>
-          <div class="flex items-center gap-2">
-            {% if field.multiline %}
-              <textarea id="field-{{ field.key }}" name="{{ field.key }}" rows="6"
-                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">{{ field.current_value }}</textarea>
-            {% elif field.is_secret %}
-              <div class="relative w-full">
-                <input type="password" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
-                  class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent pr-16">
-                <button type="button" onclick="toggleReveal(this)"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1">Show</button>
-              </div>
-            {% else %}
-              <input type="text" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
-                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
-            {% endif %}
-            {% if field.source == 'env' %}
-              <span class="text-xs text-gray-500 whitespace-nowrap">(from env)</span>
-            {% endif %}
-          </div>
-          <p class="mt-0.5 text-xs text-gray-500 font-mono">{{ field.key }}</p>
-        </div>
-        {% endfor %}
-      </div>
-
-      <div class="mt-6 flex justify-end">
-        <button type="submit"
-          class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-          Save {{ group.label }}
-        </button>
-      </div>
-    </form>
+<!-- Zone 1: Auth & Login (OAuth login providers, backed by SocialApp) -->
+<section id="auth-login" class="mb-10">
+  <div class="mb-4 border-b border-border pb-3">
+    <h2 class="text-xl font-semibold text-foreground">Auth &amp; Login</h2>
+    <p class="text-sm text-muted-foreground mt-1">
+      OAuth providers users see on the login page. Configure one row here for every "Sign in with X" button you want enabled.
+    </p>
   </div>
-  {% endfor %}
-</div>
+
+  <div class="space-y-6">
+    {% for provider in auth_providers %}
+      {% include "studio/settings/_auth_card.html" with provider=provider %}
+    {% endfor %}
+  </div>
+</section>
+
+<!-- Zone 2: Integrations (outbound service credentials, backed by IntegrationSetting) -->
+<section id="integrations">
+  <div class="mb-4 border-b border-border pb-3">
+    <h2 class="text-xl font-semibold text-foreground">Integrations</h2>
+    <p class="text-sm text-muted-foreground mt-1">
+      Credentials the platform uses to talk to external services (payments, email, video, content sync). Different from login providers above.
+    </p>
+  </div>
+
+  <div class="space-y-6">
+    {% for group in groups %}
+      {% include "studio/settings/_integration_card.html" with group=group %}
+    {% endfor %}
+  </div>
+</section>
 
 <script>
 function toggleReveal(btn) {
@@ -88,6 +60,26 @@ function toggleReveal(btn) {
   } else {
     input.type = 'password';
     btn.textContent = 'Show';
+  }
+}
+
+// Vanilla copy-to-clipboard for the auth-card callback URL.
+// Uses navigator.clipboard.writeText so we don't ship a JS library.
+function copyCallbackUrl(btn) {
+  var card = btn.closest('[id^="auth-"]');
+  if (!card) { return; }
+  var codeEl = card.querySelector('[data-callback-url]');
+  if (!codeEl) { return; }
+  var url = codeEl.textContent.trim();
+  var label = btn.querySelector('[data-copy-label]');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(function() {
+      if (label) {
+        var prev = label.textContent;
+        label.textContent = 'Copied';
+        setTimeout(function() { label.textContent = prev; }, 1500);
+      }
+    });
   }
 }
 </script>

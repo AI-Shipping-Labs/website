@@ -1,13 +1,21 @@
-"""Studio views for integration settings management.
+"""Studio views for integration and auth-login settings management.
 
 Provides:
-- /studio/settings/ - Dashboard showing all integration groups with their keys
-- /studio/settings/<group_name>/save/ - Save settings for a specific group
+
+- ``/studio/settings/`` — dashboard with two zones: Auth & Login (OAuth
+  providers backed by ``SocialApp``) and Integrations (outbound service
+  credentials backed by ``IntegrationSetting``).
+- ``/studio/settings/<group_name>/save/`` — save settings for a specific
+  integration group.
+- ``/studio/settings/auth/<provider>/save/`` — save OAuth credentials
+  for a single login provider.
 """
 
 import os
 
+from django.conf import settings as django_settings
 from django.contrib import messages
+from django.contrib.sites.models import Site
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -15,6 +23,11 @@ from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import INTEGRATION_GROUPS, get_group_by_name
 from studio.decorators import staff_required
+from studio.services.auth_settings import (
+    get_all_auth_providers,
+    is_supported_provider,
+    save_auth_provider,
+)
 
 
 def _build_group_context(group_def, db_settings):
@@ -77,7 +90,7 @@ def _build_group_context(group_def, db_settings):
 
 @staff_required
 def settings_dashboard(request):
-    """Display all integration groups with current values."""
+    """Render the two-zone settings dashboard (Auth & Login + Integrations)."""
     db_settings = dict(
         IntegrationSetting.objects.values_list('key', 'value')
     )
@@ -86,8 +99,15 @@ def settings_dashboard(request):
     for group_def in INTEGRATION_GROUPS:
         groups.append(_build_group_context(group_def, db_settings))
 
+    auth_providers = get_all_auth_providers(
+        django_settings.SITE_BASE_URL,
+        django_settings.SOCIALACCOUNT_PROVIDERS,
+    )
+
     return render(request, 'studio/settings/dashboard.html', {
         'groups': groups,
+        'auth_providers': auth_providers,
+        'site_base_url': django_settings.SITE_BASE_URL,
     })
 
 
@@ -119,3 +139,33 @@ def settings_save_group(request, group_name):
     clear_config_cache()
     messages.success(request, f'{group_def["label"]} settings saved ({saved_count} keys).')
     return redirect('studio_settings')
+
+
+@staff_required
+@require_POST
+def settings_save_auth_provider(request, provider):
+    """Save OAuth credentials for a single login provider.
+
+    Mirrors ``settings_save_group`` but writes to ``SocialApp`` instead
+    of ``IntegrationSetting``. Whitelists the provider against
+    ``SUPPORTED_PROVIDERS`` so only Google / GitHub / Slack are touched —
+    a typo in the URL renders an error message rather than creating a
+    bogus row.
+    """
+    if not is_supported_provider(provider):
+        messages.error(request, f'Unknown auth provider: {provider}')
+        return redirect('studio_settings')
+
+    client_id = request.POST.get('client_id', '').strip()
+    secret = request.POST.get('client_secret', '').strip()
+    site = Site.objects.get_current()
+
+    save_auth_provider(provider, client_id, secret, site)
+
+    messages.success(
+        request,
+        f'{provider.capitalize()} OAuth credentials saved.',
+    )
+    # Redirect back to the card the operator just saved so they can
+    # confirm the status badge flipped without scrolling.
+    return redirect(f'/studio/settings/#auth-{provider}')

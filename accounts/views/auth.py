@@ -4,6 +4,7 @@ import json
 import logging
 
 import jwt
+from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -22,10 +23,28 @@ JWT_ALGORITHM = "HS256"
 
 @ensure_csrf_cookie
 def login_view(request):
-    """Render the login page with Google and GitHub OAuth buttons."""
+    """Render the login page with Google, GitHub and Slack OAuth buttons.
+
+    Each "Sign in with X" button is gated on the matching ``SocialApp``
+    having a non-empty ``client_id`` — otherwise the redirect would 500
+    inside allauth. Studio settings clears credentials to disable a
+    provider, so this gate is the operator's off switch (see issue #322).
+    """
     if request.user.is_authenticated:
         return redirect("/")
-    return render(request, "accounts/login.html")
+
+    configured_providers = set(
+        SocialApp.objects.exclude(client_id='').values_list('provider', flat=True)
+    )
+    return render(
+        request,
+        "accounts/login.html",
+        {
+            'oauth_google_enabled': 'google' in configured_providers,
+            'oauth_github_enabled': 'github' in configured_providers,
+            'oauth_slack_enabled': 'slack' in configured_providers,
+        },
+    )
 
 
 @ensure_csrf_cookie

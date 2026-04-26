@@ -21,6 +21,7 @@ import datetime
 import os
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -45,7 +46,16 @@ def _create_recording(
     published=True,
     date=None,
 ):
-    """Create a Recording via ORM."""
+    """Create a completed event with a recording via ORM.
+
+    The events/recordings unification merged Recording into Event. This
+    helper keeps the legacy external kwargs (`youtube_url`, `date`) so call
+    sites do not change, and translates them to the new field names:
+      youtube_url -> recording_url
+      date        -> start_datetime (timezone-aware)
+    The event is created with status='completed' so it shows up on
+    /events?filter=past.
+    """
     from events.models import Event
 
     if timestamps is None:
@@ -57,17 +67,22 @@ def _create_recording(
     if date is None:
         date = datetime.date.today()
 
+    start_dt = timezone.make_aware(
+        datetime.datetime.combine(date, datetime.time(12, 0))
+    )
+
     recording = Event(
         title=title,
         slug=slug,
         description=description,
-        youtube_url=youtube_url,
+        recording_url=youtube_url,
         timestamps=timestamps,
         materials=materials,
         tags=tags,
         required_level=required_level,
         published=published,
-        date=date,
+        start_datetime=start_dt,
+        status="completed",
     )
     recording.save()
     connection.close()
@@ -490,18 +505,18 @@ class TestScenario5NavigateFromDetailToFilteredListing:
         page.wait_for_load_state("domcontentloaded")
         assert "/events/building-chatbots" in page.url
 
-        # Step 4: Click the "Back to Event Recordings" link
+        # Step 4: Click the "Back to Events" link (post-unification text;
+        # the recording detail page now lives under /events).
         back_link = page.locator(
-            'a:has-text("Back to Event Recordings")'
+            'a:has-text("Back to Events")'
         )
         assert back_link.count() >= 1
         back_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # User returns to /events?filter=past with no filters
-        assert "/events?filter=past" in page.url
-        # The back link goes to /events?filter=past (no tag param)
-        # Both recordings are visible
+        # User returns to /events with no filters; both recordings are
+        # visible (in the past-events section of the unified page).
+        assert "/events" in page.url
         body = page.content()
         assert "Building Chatbots" in body
         assert "Deploy with Docker" in body
@@ -654,16 +669,16 @@ class TestScenario8EmptyStateNoRecordings:
 
         body = page.content()
 
-        # Heading is present (& is HTML-encoded as &amp;)
+        # Heading is present. After the events/recordings unification, the
+        # /events?filter=past page renders the canonical events heading
+        # 'Community Events & Workshops'.
         heading = page.locator("h1")
+        assert "Community Events" in heading.inner_text()
         assert "Workshops" in heading.inner_text()
-        assert "Learning Materials" in heading.inner_text()
 
-        # Helpful empty state message
-        assert (
-            "No resources yet. Check back soon for workshops and learning materials."
-            in body
-        )
+        # Helpful empty state message (post-unification copy on
+        # /events?filter=past).
+        assert "No recordings yet. Check back soon!" in body
 
         # No recording cards (empty state)
         recording_cards = page.locator("article")
@@ -703,10 +718,10 @@ class TestScenario9EmptyStateNoMatchingTag:
         recording_cards = page.locator("article")
         assert recording_cards.count() == 0
 
-        # Empty state message
-        assert "No recordings found with the selected tags." in body
+        # Empty state message (post-unification copy on /events?filter=past).
+        assert "No events match this filter." in body
 
-        # "View all recordings" link
+        # "View all recordings" link points back to /events?filter=past.
         view_all_link = page.locator(
             'a:has-text("View all recordings")'
         )

@@ -13,7 +13,10 @@ Tests cover all 11 BDD scenarios from the issue:
 - Staff member creates an email campaign targeting a specific audience
 - Staff member exports subscriber data as CSV for external analysis
 - Staff member navigates between Studio sections using the sidebar
-- Staff member creates an event with scheduling details and verifies it appears publicly
+
+Note: the original Scenario 12 ("Staff member creates an event...")
+was removed in commit 004fcc5 (closes #166). Events now sync from
+the content repo and the create-event view no longer exists.
 
 Usage:
     uv run pytest playwright_tests/test_studio_panel.py -v
@@ -907,66 +910,8 @@ class TestScenario11SidebarNavigation:
         assert page.url.rstrip("/").endswith("/studio")
         assert "Dashboard" in page.content()
 # ---------------------------------------------------------------
-# Scenario 12: Staff member creates an event and verifies it
-#               appears publicly
+# Scenario 12 (deleted): Staff member creates an event via
+# /studio/events/new and verifies it appears publicly. Removed in
+# commit 004fcc5 (closes #166): events now sync from the content
+# repo and the create-event view was removed.
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario12StaffCreatesEvent:
-    """Staff member creates an event with scheduling details and verifies it appears publicly."""
-
-    def test_create_event_visible_on_events_page(self, django_server, browser):
-        """Given: A user logged in as admin@test.com (is_staff=True)
-        1. Navigate to /studio/events/new
-        2. Fill in the title, set event_type to live, set a future start_datetime,
-           set status to upcoming, set required_level to 0, submit
-        Then: User is redirected to the event edit page
-        3. Navigate to /events
-        Then: 'AI Workshop March 2026' appears in the upcoming events listing."""
-        _clear_events()
-        _ensure_tiers()
-        _create_staff_user("admin@test.com")
-
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to /studio/events/new
-        page.goto(
-            f"{django_server}/studio/events/new",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-        assert "New Event" in body
-
-        # Step 2: Fill in the event form
-        page.fill('input[name="title"]', "AI Workshop March 2026")
-        page.fill('input[name="slug"]', "ai-workshop-march-2026")
-        page.select_option(
-            'select[name="event_type"]', value="live"
-        )
-        page.fill('input[name="event_date"]', "15/03/2026")
-        page.fill('input[name="event_time"]', "14:00")
-        page.fill('input[name="duration_hours"]', "2")
-        page.select_option(
-            'select[name="status"]', value="upcoming"
-        )
-        page.select_option(
-            'select[name="required_level"]', value="0"
-        )
-
-        # Submit the form
-        page.click('button[type="submit"]')
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Redirected to the event edit page
-        assert "/studio/events/" in page.url
-        assert "/edit" in page.url
-
-        # Step 3: Navigate to /events
-        page.goto(
-            f"{django_server}/events",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Then: "AI Workshop March 2026" appears
-        assert "AI Workshop March 2026" in body

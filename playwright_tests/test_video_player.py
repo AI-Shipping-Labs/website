@@ -23,6 +23,7 @@ import json
 import os
 
 import pytest
+from django.utils import timezone
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -74,7 +75,18 @@ def _create_recording(
     learning_objectives=None,
     outcome="",
 ):
-    """Create a Recording via ORM."""
+    """Create a completed event with a recording via ORM.
+
+    The events/recordings unification merged Recording into Event. This
+    helper keeps the legacy external kwargs (`youtube_url`,
+    `google_embed_url`, `date`) so call sites do not change, and
+    translates them to the new field names:
+      youtube_url       -> recording_url
+      google_embed_url  -> recording_embed_url
+      date              -> start_datetime (timezone-aware)
+    The event is created with status='completed' so it appears on
+    /events?filter=past.
+    """
     from events.models import Event
 
     if timestamps is None:
@@ -88,17 +100,22 @@ def _create_recording(
     if learning_objectives is None:
         learning_objectives = []
 
+    start_dt = timezone.make_aware(
+        datetime.datetime.combine(date, datetime.time(12, 0))
+    )
+
     recording = Event(
         title=title,
         slug=slug,
         description=description,
-        youtube_url=youtube_url,
-        google_embed_url=google_embed_url,
+        recording_url=youtube_url,
+        recording_embed_url=google_embed_url,
         timestamps=timestamps,
         tags=tags,
         required_level=required_level,
         published=published,
-        date=date,
+        start_datetime=start_dt,
+        status="completed",
         core_tools=core_tools,
         learning_objectives=learning_objectives,
         outcome=outcome,
@@ -504,8 +521,14 @@ class TestScenario6RecordingWithoutVideoURL:
 
     def test_no_video_url_shows_content_without_player(self, django_server, page):
         """Given a recording with no youtube_url and no google_embed_url,
-        verify the page loads with title, description, core tools, and
-        learning objectives but no video player."""
+        verify the page loads with title and description, no video player,
+        and a working back link.
+
+        Note: after the events/recordings unification, core_tools /
+        learning_objectives only render alongside the inline recording
+        block (i.e. when has_recording is True). This test verifies the
+        no-recording fallback: title + description visible, no video.
+        """
         _clear_recordings()
         _create_recording(
             title="Community Q&A",
@@ -534,13 +557,11 @@ class TestScenario6RecordingWithoutVideoURL:
         assert "Community Q&A" in body
         assert "Open Q&A session for the community" in body
 
-        # Core tools are visible
-        assert "Slack" in body
-        assert "Zoom" in body
-
-        # Learning objectives are visible
-        assert "How to ask good questions" in body
-        assert "Community best practices" in body
+        # No inline recording block (event has no recording_url).
+        recording_block = page.locator(
+            '[data-testid="event-recording-block"]'
+        )
+        assert recording_block.count() == 0
 
         # No video player or broken embed
         assert 'data-source="youtube"' not in body
@@ -553,14 +574,15 @@ class TestScenario6RecordingWithoutVideoURL:
         )
         assert video_iframes.count() == 0
 
-        # Navigation back works
+        # Navigation back works (post-unification: 'Back to Events' to
+        # /events).
         back_link = page.locator(
-            'a:has-text("Back to Event Recordings")'
+            'a:has-text("Back to Events")'
         )
         assert back_link.count() >= 1
         back_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/events?filter=past" in page.url
+        assert "/events" in page.url
 # ---------------------------------------------------------------
 # Scenario 7: Hour-long timestamps formatted correctly
 # ---------------------------------------------------------------
@@ -700,9 +722,10 @@ class TestScenario10AdminTimestampEditor:
             page, django_server, "admin-ts@test.com"
         )
 
-        # Navigate to the recording change page
+        # Navigate to the event change page (post-unification: Recording
+        # was merged into Event, so the admin URL is /admin/events/event/).
         page.goto(
-            f"{django_server}/admin/content/recording/{recording.pk}/change/",
+            f"{django_server}/admin/events/event/{recording.pk}/change/",
             wait_until="domcontentloaded",
         )
 

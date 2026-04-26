@@ -87,7 +87,16 @@ def _create_recording(
     date=None,
     tags=None,
 ):
-    """Helper to create a Recording directly via the ORM."""
+    """Helper to create a completed event with a recording via the ORM.
+
+    The events/recordings unification merged Recording into Event. This
+    helper keeps the legacy external kwargs (`youtube_url`, `date`) so
+    call sites do not change, and translates them internally:
+      youtube_url -> recording_url
+      date        -> start_datetime (timezone-aware)
+    The event is created with status='completed' so it appears on
+    /events?filter=past.
+    """
     from events.models import Event
 
     if tags is None:
@@ -95,14 +104,19 @@ def _create_recording(
     if date is None:
         date = datetime.date.today()
 
+    start_dt = timezone.make_aware(
+        datetime.datetime.combine(date, datetime.time(12, 0))
+    )
+
     recording = Event(
         title=title,
         slug=slug,
         description=description,
-        youtube_url=youtube_url,
+        recording_url=youtube_url,
         required_level=required_level,
         published=published,
-        date=date,
+        start_datetime=start_dt,
+        status="completed",
         tags=tags,
     )
     recording.save()

@@ -1,11 +1,11 @@
 """
 Playwright E2E tests for Studio Event Date/Time Picker UX (Issue #107).
 
-Tests cover all 4 BDD scenarios from the issue:
-- Staff creates an event using the date/time picker and verifies saved data
-- Staff edits an existing event and sees pre-populated date/time fields
-- Staff leaves Duration blank and gets a 1-hour default
-- Staff cannot accidentally save an ambiguous datetime from the old raw input
+Note: Three scenarios that targeted /studio/events/new were removed in
+commit 004fcc5 ("Remove event creation from Studio, make synced events
+read-only", closes #166). Events now sync from the content repo and the
+create-event view no longer exists. The remaining tests cover the still-
+existing /studio/events/<id>/edit route.
 
 Usage:
     uv run pytest playwright_tests/test_studio_event_datetime.py -v
@@ -57,79 +57,10 @@ def _create_event(title, slug, start_datetime=None, end_datetime=None, **kwargs)
 
 
 # ---------------------------------------------------------------
-# Scenario 1: Staff creates an event using the date/time picker
-#              and verifies saved data
+# Scenario 1 (deleted): Staff creates an event via /studio/events/new.
+# Removed in commit 004fcc5 (closes #166): events now sync from the
+# content repo, and the create-event view was removed.
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario1StaffCreatesEventWithDateTimePicker:
-    """Staff creates an event using the date/time picker and verifies saved data."""
-
-    def test_create_event_with_separate_date_time_duration(
-        self, django_server
-    , browser):
-        """Given: A staff user is logged in and navigates to /studio/events/new.
-        1. Observe the form -- separate Date and Time fields are visible; no raw datetime-local input
-        2. Click the Date field -- a calendar picker appears
-        3. Enter a date, time, and duration
-        4. Fill in a title and other required fields, then click 'Create Event'
-        Then: Redirected to the edit page for the new event
-        Then: The database has correct start_datetime and end_datetime."""
-        _clear_events()
-        _create_staff_user("staff-create@test.com")
-
-        context = _auth_context(browser, "staff-create@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to /studio/events/new
-        page.goto(
-            f"{django_server}/studio/events/new",
-            wait_until="domcontentloaded",
-        )
-        body = page.content()
-
-        # Separate Date and Time fields are visible
-        date_field = page.locator('input[name="event_date"]')
-        time_field = page.locator('input[name="event_time"]')
-        duration_field = page.locator('input[name="duration_hours"]')
-
-        assert date_field.count() == 1
-        assert time_field.count() == 1
-        assert duration_field.count() == 1
-
-        # No raw datetime-local input
-        datetime_local_inputs = page.locator('input[type="datetime-local"]')
-        assert datetime_local_inputs.count() == 0
-
-        # Step 2: Click the Date field -- calendar picker script is loaded
-        assert "flatpickr" in body
-
-        # Step 3: Enter date, time, and duration manually
-        date_field.fill("15/03/2026")
-        time_field.fill("14:30")
-        duration_field.fill("2")
-
-        # Step 4: Fill in title and required fields
-        page.locator('input[name="title"]').fill("Picker Test Event")
-        page.locator('input[name="slug"]').fill("picker-test-event")
-
-        # Submit the form
-        page.locator('button[type="submit"]').click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Redirected to the edit page (URL contains /edit)
-        assert "/edit" in page.url
-        assert "/studio/events/" in page.url
-
-        # Then: Verify in DB
-        from events.models import Event
-        event = Event.objects.get(slug="picker-test-event")
-        assert event.start_datetime.year == 2026
-        assert event.start_datetime.month == 3
-        assert event.start_datetime.day == 15
-        assert event.start_datetime.hour == 14
-        assert event.start_datetime.minute == 30
-        assert event.end_datetime.hour == 16
-        assert event.end_datetime.minute == 30
 # ---------------------------------------------------------------
 # Scenario 2: Staff edits an existing event and sees pre-populated
 #              date/time fields
@@ -201,54 +132,11 @@ class TestScenario2StaffEditsEventPrePopulated:
         assert event_db.end_datetime.hour == 12
         assert event_db.end_datetime.minute == 0
 # ---------------------------------------------------------------
-# Scenario 3: Staff leaves Duration blank and gets a 1-hour default
+# Scenario 3 (deleted): Duration blank defaults to 1 hour on
+# /studio/events/new. Removed in commit 004fcc5 (closes #166):
+# events now sync from the content repo and the create-event view
+# was removed.
 # ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario3DurationDefaultsToOneHour:
-    """Staff leaves Duration blank and gets a 1-hour default."""
-
-    def test_blank_duration_defaults_to_one_hour(
-        self, django_server
-    , browser):
-        """Given: A staff user is logged in and navigates to /studio/events/new.
-        1. Enter a date and time but leave Duration blank
-        2. Submit the form with a title and other required fields
-        Then: The event is created with end_datetime = start_datetime + 1 hour."""
-        _clear_events()
-        _create_staff_user("staff-default@test.com")
-
-        context = _auth_context(browser, "staff-default@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/studio/events/new",
-            wait_until="domcontentloaded",
-        )
-
-        # Fill in required fields
-        page.locator('input[name="title"]').fill("Default Duration Event")
-        page.locator('input[name="slug"]').fill("default-duration-event")
-        page.locator('input[name="event_date"]').fill("20/06/2026")
-        page.locator('input[name="event_time"]').fill("09:00")
-
-        # Clear the duration field (leave it blank)
-        duration_field = page.locator('input[name="duration_hours"]')
-        duration_field.fill("")
-
-        # Submit the form
-        page.locator('button[type="submit"]').click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Redirected to edit page
-        assert "/edit" in page.url
-
-        # Then: Verify in DB
-        from events.models import Event
-        event = Event.objects.get(slug="default-duration-event")
-        assert event.start_datetime.hour == 9
-        assert event.start_datetime.minute == 0
-        assert event.end_datetime.hour == 10
-        assert event.end_datetime.minute == 0
 # ---------------------------------------------------------------
 # Scenario 4: Staff cannot accidentally save an ambiguous datetime
 #              from the old raw input
@@ -256,39 +144,13 @@ class TestScenario3DurationDefaultsToOneHour:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario4NoDatetimeLocalInput:
-    """Staff cannot accidentally save an ambiguous datetime from the old raw input."""
+    """Staff cannot accidentally save an ambiguous datetime from the old raw input.
 
-    def test_no_datetime_local_input_on_create_form(
-        self, django_server
-    , browser):
-        """Given: A staff user is logged in and navigates to /studio/events/new.
-        Then: There is no datetime-local type input visible on the form.
-        Then: Only the separate Date and Time text/picker fields are present."""
-        _clear_events()
-        _create_staff_user("staff-noraw@test.com")
+    Note: the create-form variant was removed in commit 004fcc5 (closes
+    #166) — /studio/events/new no longer exists. Only the edit-form
+    variant remains.
+    """
 
-        context = _auth_context(browser, "staff-noraw@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/studio/events/new",
-            wait_until="domcontentloaded",
-        )
-
-        # No datetime-local type input
-        datetime_local_inputs = page.locator('input[type="datetime-local"]')
-        assert datetime_local_inputs.count() == 0
-
-        # The separate Date and Time fields are present
-        date_field = page.locator('input[name="event_date"]')
-        time_field = page.locator('input[name="event_time"]')
-        assert date_field.count() == 1
-        assert time_field.count() == 1
-
-        # No old start_datetime or end_datetime fields
-        old_start = page.locator('input[name="start_datetime"]')
-        old_end = page.locator('input[name="end_datetime"]')
-        assert old_start.count() == 0
-        assert old_end.count() == 0
     def test_no_datetime_local_input_on_edit_form(
         self, django_server
     , browser):

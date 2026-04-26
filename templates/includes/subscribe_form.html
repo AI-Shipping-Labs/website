@@ -1,10 +1,11 @@
-{# Reusable newsletter subscribe form partial.
-     Include with: include "includes/subscribe_form.html"
-     Optional context variables:
-       - heading: Custom heading text
-       - description: Custom description text
-       - redirect_to: URL to redirect after verification (lead magnet flow)
-#}
+{% comment %}
+  Reusable newsletter subscribe form partial.
+  Include with: include "includes/subscribe_form.html"
+  Optional context variables:
+    - heading: Custom heading text
+    - description: Custom description text
+    - redirect_to: URL to redirect after verification (lead magnet flow)
+{% endcomment %}
 
 <div class="subscribe-form-container rounded-2xl border border-border bg-background p-8 sm:p-10" data-redirect-to="{{ redirect_to|default:'' }}">
   <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">

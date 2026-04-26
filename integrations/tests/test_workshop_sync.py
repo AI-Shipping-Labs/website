@@ -1286,3 +1286,97 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         # No work to do on the second sync — description stays the same.
         self.assertEqual(second.items_created, 0)
         self.assertEqual(second.items_updated, 0)
+
+
+class WorkshopRenameIdempotencyTest(_WorkshopSyncFixtureBase):
+    """Renaming a workshop folder while keeping the same ``content_id`` and
+    ``slug`` updates the existing Workshop row in place — no duplicate, no
+    soft-delete of pages, no errors, no orphan Event row.
+
+    Counterpart to ``CourseRenameIdempotencyTest`` /
+    ``UnitRenameIdempotencyTest`` in ``test_github_sync.py`` /
+    ``test_sync_edge_cases.py``. The class is named by intent so an
+    engineer searching for "where is the workshop-rename idempotency
+    test" can find it in one ``grep``.
+    """
+
+    def test_rename_workshop_folder_preserves_workshop_and_event_pks(self):
+        original_folder = '2026/2026-04-21-demo'
+        renamed_folder = '2026/2026-04-21-demo-renamed'
+        content_id = SAMPLE_WORKSHOP_UUID
+
+        # First sync at the original folder.
+        self._write_workshop_yaml(
+            folder=original_folder, content_id=content_id,
+            slug='demo', title='Demo Workshop',
+            extra_yaml=(
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=h84rcRezNM4\n'
+                '  required_level: 20\n'
+            ),
+        )
+        self._write_page(original_folder, '01-overview.md', title='Overview')
+        self._write_page(original_folder, '02-setup.md', title='Setup')
+
+        first_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(first_log.errors, [])
+
+        original_workshop = Workshop.objects.get(slug='demo')
+        original_workshop_pk = original_workshop.pk
+        original_event_pk = original_workshop.event_id
+        self.assertIsNotNone(original_event_pk)
+        self.assertEqual(original_workshop.source_path, original_folder)
+        original_page_pks = set(
+            WorkshopPage.objects.filter(workshop=original_workshop)
+            .values_list('pk', flat=True)
+        )
+        self.assertEqual(len(original_page_pks), 2)
+
+        # Move the folder on disk: same ``content_id``, same ``slug``,
+        # same page filenames — only the parent path changes.
+        shutil.move(
+            os.path.join(self.temp_dir, original_folder),
+            os.path.join(self.temp_dir, renamed_folder),
+        )
+
+        # Second sync after the rename.
+        second_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertEqual(
+            second_log.errors, [],
+            f'Expected no errors after rename, got: {second_log.errors}',
+        )
+
+        # No duplicate Workshop, no duplicate Event.
+        self.assertEqual(
+            Workshop.objects.count(), 1,
+            'Folder rename must not create a duplicate Workshop.',
+        )
+        self.assertEqual(
+            Event.objects.filter(slug='demo').count(), 1,
+            'Folder rename must not create a duplicate Event.',
+        )
+
+        # Same Workshop pk, same Event pk — match by content_id / slug,
+        # not by source_path.
+        workshop_after = Workshop.objects.get(slug='demo')
+        self.assertEqual(workshop_after.pk, original_workshop_pk)
+        self.assertEqual(workshop_after.event_id, original_event_pk)
+
+        # ``source_path`` updated to the new folder — proves the lookup
+        # went through the ``content_id`` path (not the legacy
+        # ``source_path`` path which would have missed and inserted).
+        self.assertEqual(workshop_after.source_path, renamed_folder)
+        self.assertEqual(str(workshop_after.content_id), content_id)
+
+        # Workshop is still published (no soft-delete to ``draft``).
+        self.assertEqual(workshop_after.status, 'published')
+
+        # Pages preserved — same pks, no duplicates.
+        page_pks_after = set(
+            WorkshopPage.objects.filter(workshop=workshop_after)
+            .values_list('pk', flat=True)
+        )
+        self.assertEqual(
+            page_pks_after, original_page_pks,
+            'Workshop pages must keep their pks after a folder rename.',
+        )

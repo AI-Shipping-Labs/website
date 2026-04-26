@@ -2252,3 +2252,361 @@ class S3ImageUploadTest(TestCase):
         self.assertEqual(result['uploaded'], 0)
         self.assertEqual(len(result['errors']), 1)
         self.assertIn('Access Denied', result['errors'][0]['error'])
+
+
+# ===========================================================================
+# Walker tests — named by intent for spec coverage (issue #310 / #330)
+# ===========================================================================
+#
+# The three classes below are organised by intent (walker happy path,
+# walker idempotency, course rename idempotency) so an engineer searching
+# for "where is the walker happy path test" or "where is the
+# course-rename idempotency test" can find them in a single
+# ``grep -rn '^class WalkerHappyPathTest' integrations/tests/``.
+#
+# The behaviour they assert is also exercised by the per-content-type
+# classes higher in this file (``SyncArticlesTest``, ``SyncCoursesTest``,
+# ``SyncProjectsTest``, ``SyncResourcesTest``,
+# ``SyncSingleCourseRepoTest``). These named classes do not replace
+# those — both organisations coexist.
+
+
+class _WalkerFixtureBase(TestCase):
+    """Mixed-content fixture shared by the walker tests.
+
+    Drops one of every primary content type into a single temp repo:
+
+    - one article at the repo root
+    - one project under ``projects/``
+    - one course folder with one module and one unit
+    - one recording yaml under ``recordings/``
+
+    The combined fixture exercises the single ``_sync_repo`` walker that
+    #310 introduced — every content type goes through one classify pass
+    and one dispatch loop, so no file may be double-claimed (e.g. a
+    course unit md must not also become an Article).
+    """
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/walker-fixture',
+        )
+        self.temp_dir = tempfile.mkdtemp(prefix='walker-fixture-')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    # Stable content_ids so the fixture is deterministic across runs.
+    ARTICLE_CONTENT_ID = '11111111-1111-1111-1111-111111111111'
+    PROJECT_CONTENT_ID = '22222222-2222-2222-2222-222222222222'
+    COURSE_CONTENT_ID = '33333333-3333-3333-3333-333333333333'
+    MODULE_UNIT_CONTENT_ID = '44444444-4444-4444-4444-444444444444'
+    RECORDING_CONTENT_ID = '55555555-5555-5555-5555-555555555555'
+
+    ARTICLE_SLUG = 'walker-article'
+    PROJECT_SLUG = 'walker-project'
+    COURSE_SLUG = 'walker-course'
+    MODULE_DIRNAME = 'module-01'
+    UNIT_FILENAME = 'unit-01.md'
+    RECORDING_SLUG = 'walker-recording'
+
+    def _write_mixed_fixture(self):
+        # Article at repo root.
+        article_path = os.path.join(self.temp_dir, f'{self.ARTICLE_SLUG}.md')
+        with open(article_path, 'w') as f:
+            f.write('---\n')
+            f.write('title: "Walker Article"\n')
+            f.write(f'slug: "{self.ARTICLE_SLUG}"\n')
+            f.write('description: "An article."\n')
+            f.write('date: "2026-01-15"\n')
+            f.write('author: "Test"\n')
+            f.write(f'content_id: "{self.ARTICLE_CONTENT_ID}"\n')
+            f.write('---\n')
+            f.write('Article body.\n')
+
+        # Project under projects/ — the dispatcher buckets path-shaped
+        # content by location.
+        projects_dir = os.path.join(self.temp_dir, 'projects')
+        os.makedirs(projects_dir, exist_ok=True)
+        project_path = os.path.join(projects_dir, f'{self.PROJECT_SLUG}.md')
+        with open(project_path, 'w') as f:
+            f.write('---\n')
+            f.write('title: "Walker Project"\n')
+            f.write(f'slug: "{self.PROJECT_SLUG}"\n')
+            f.write('description: "A project."\n')
+            f.write('difficulty: "beginner"\n')
+            f.write('date: "2026-01-15"\n')
+            f.write(f'content_id: "{self.PROJECT_CONTENT_ID}"\n')
+            f.write('---\n')
+            f.write('Project body.\n')
+
+        # Course with one module + one unit.
+        course_dir = os.path.join(self.temp_dir, self.COURSE_SLUG)
+        os.makedirs(course_dir, exist_ok=True)
+        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Walker Course"\n')
+            f.write(f'slug: "{self.COURSE_SLUG}"\n')
+            f.write('description: "A course."\n')
+            f.write('instructor_name: "Test"\n')
+            f.write('required_level: 0\n')
+            f.write(f'content_id: "{self.COURSE_CONTENT_ID}"\n')
+
+        module_dir = os.path.join(course_dir, self.MODULE_DIRNAME)
+        os.makedirs(module_dir, exist_ok=True)
+        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
+            f.write('title: "Module 1"\n')
+            f.write('sort_order: 1\n')
+
+        with open(os.path.join(module_dir, self.UNIT_FILENAME), 'w') as f:
+            f.write('---\n')
+            f.write('title: "Unit 1"\n')
+            f.write('sort_order: 1\n')
+            f.write(f'content_id: "{self.MODULE_UNIT_CONTENT_ID}"\n')
+            f.write('---\n')
+            f.write('Unit body.\n')
+
+        # Recording under recordings/ — surfaces as an Event row.
+        recordings_dir = os.path.join(self.temp_dir, 'recordings')
+        os.makedirs(recordings_dir, exist_ok=True)
+        with open(
+            os.path.join(recordings_dir, f'{self.RECORDING_SLUG}.yaml'), 'w',
+        ) as f:
+            f.write('title: "Walker Recording"\n')
+            f.write(f'slug: "{self.RECORDING_SLUG}"\n')
+            f.write('description: "A recording."\n')
+            f.write('video_url: "https://www.youtube.com/watch?v=walker"\n')
+            f.write('published_at: "2026-01-15"\n')
+            f.write(f'content_id: "{self.RECORDING_CONTENT_ID}"\n')
+
+
+class WalkerHappyPathTest(_WalkerFixtureBase):
+    """One sync pass over a mixed-content repo creates one row per type.
+
+    Wraps the per-type assertions ``SyncArticlesTest.test_sync_creates_article``,
+    ``SyncProjectsTest.test_sync_creates_project``,
+    ``SyncCoursesTest.test_sync_creates_course_with_modules_and_units``, and
+    ``SyncResourcesTest.test_sync_recordings`` in a single fixture so the
+    walker is exercised end-to-end, not piecemeal.
+
+    Asserts no file is double-claimed: the course's unit ``.md`` must
+    NOT also produce an Article row, and the recording's yaml must NOT
+    also produce some other content type. This is the "no overlapping
+    claim" guard from the #310 spec risk callout.
+    """
+
+    def test_walker_creates_one_row_per_content_type(self):
+        self._write_mixed_fixture()
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertIn(
+            sync_log.status, ('success', 'partial'),
+            f'Expected success/partial, got {sync_log.status}; '
+            f'errors: {sync_log.errors}',
+        )
+
+        # Exactly one row per content type — no double-claim.
+        self.assertEqual(
+            Article.objects.filter(source_repo=self.source.repo_name).count(),
+            1,
+            'Walker must create exactly one Article. Double-claim '
+            'regression: a course unit .md was also classified as an article.',
+        )
+        self.assertEqual(
+            Project.objects.filter(source_repo=self.source.repo_name).count(),
+            1,
+        )
+        self.assertEqual(
+            Course.objects.filter(source_repo=self.source.repo_name).count(),
+            1,
+        )
+        course = Course.objects.get(slug=self.COURSE_SLUG)
+        self.assertEqual(Module.objects.filter(course=course).count(), 1)
+        self.assertEqual(
+            Unit.objects.filter(module__course=course).count(), 1,
+        )
+        self.assertEqual(
+            Event.objects.filter(
+                source_repo=self.source.repo_name,
+                slug=self.RECORDING_SLUG,
+            ).count(),
+            1,
+        )
+
+        # No Article was created from the unit ``.md`` (which lives
+        # inside a course folder) — the walker dispatched it correctly.
+        self.assertFalse(
+            Article.objects.filter(slug='unit-01').exists(),
+            'Course unit .md leaked into Article rows.',
+        )
+
+
+class WalkerIdempotencyTest(_WalkerFixtureBase):
+    """Running the walker twice over identical content is a no-op.
+
+    Wraps ``SyncArticlesUnchangedTest``, ``SyncProjectsUnchangedTest``,
+    ``SyncCoursesUnchangedTest``, ``SyncResourcesUnchangedTest`` (and
+    friends) at the walker level: one fixture, one assertion shape.
+    Asserts the second pass reports zero ``items_created``, zero
+    ``items_updated``, ``items_unchanged > 0``, zero ``items_deleted``,
+    no errors, and every row's pk is preserved.
+    """
+
+    def test_second_sync_is_a_noop(self):
+        self._write_mixed_fixture()
+
+        first = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertIn(first.status, ('success', 'partial'),
+                      f'First sync errors: {first.errors}')
+
+        # Snapshot pks of every row created.
+        article_pk = Article.objects.get(slug=self.ARTICLE_SLUG).pk
+        project_pk = Project.objects.get(slug=self.PROJECT_SLUG).pk
+        course = Course.objects.get(slug=self.COURSE_SLUG)
+        course_pk = course.pk
+        module = Module.objects.get(course=course)
+        module_pk = module.pk
+        unit_pk = Unit.objects.get(module=module).pk
+        event_pk = Event.objects.get(slug=self.RECORDING_SLUG).pk
+
+        # Second sync — same fixture, no changes on disk.
+        second = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(
+            second.errors, [],
+            f'Second sync produced errors: {second.errors}',
+        )
+        self.assertEqual(second.items_created, 0)
+        self.assertEqual(second.items_updated, 0)
+        self.assertGreater(
+            second.items_unchanged, 0,
+            'Second sync must record at least one unchanged row.',
+        )
+        self.assertEqual(second.items_deleted, 0)
+
+        # Every pk preserved.
+        self.assertEqual(Article.objects.get(slug=self.ARTICLE_SLUG).pk, article_pk)
+        self.assertEqual(Project.objects.get(slug=self.PROJECT_SLUG).pk, project_pk)
+        self.assertEqual(Course.objects.get(slug=self.COURSE_SLUG).pk, course_pk)
+        self.assertEqual(Module.objects.get(course_id=course_pk).pk, module_pk)
+        self.assertEqual(
+            Unit.objects.get(module_id=module_pk).pk, unit_pk,
+        )
+        self.assertEqual(
+            Event.objects.get(slug=self.RECORDING_SLUG).pk, event_pk,
+        )
+
+
+class CourseRenameIdempotencyTest(TestCase):
+    """Re-syncing with the same ``content_id`` but a new slug updates the
+    existing Course row in place.
+
+    Mirrors the assertions of
+    ``SyncSingleCourseRepoTest.test_root_course_slug_change_updates_existing_course_by_content_id``
+    in a class named by intent so a spec-coverage grep finds it. The
+    original test stays in ``SyncSingleCourseRepoTest`` for engineers
+    debugging single-course-repo behaviour.
+    """
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/course-rename',
+        )
+        self.temp_dir = tempfile.mkdtemp(prefix='course-rename-')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_root_course_yaml(self, *, slug, content_id):
+        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
+            f.write('title: "Course Title"\n')
+            f.write(f'slug: "{slug}"\n')
+            f.write('description: "Course description."\n')
+            f.write('instructor_name: "Test"\n')
+            f.write('required_level: 0\n')
+            f.write(f'content_id: "{content_id}"\n')
+
+    def _write_module_with_unit(self):
+        module_dir = os.path.join(self.temp_dir, '01-intro')
+        os.makedirs(module_dir, exist_ok=True)
+        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
+            f.write('title: "Intro"\n')
+            f.write('sort_order: 1\n')
+        with open(os.path.join(module_dir, '01-why.md'), 'w') as f:
+            f.write('---\n')
+            f.write('title: "Why"\n')
+            f.write('sort_order: 1\n')
+            f.write('content_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"\n')
+            f.write('---\n')
+            f.write('Body.\n')
+
+    def test_slug_change_with_same_content_id_updates_course_in_place(self):
+        content_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        original_slug = 'python-course'
+        renamed_slug = 'python-course-workshop'
+
+        self._write_root_course_yaml(
+            slug=original_slug, content_id=content_id,
+        )
+        self._write_module_with_unit()
+
+        first_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertIn(first_log.status, ('success', 'partial'))
+
+        original_course = Course.objects.get(slug=original_slug)
+        original_course_pk = original_course.pk
+        original_module_pks = list(
+            Module.objects.filter(course=original_course)
+            .values_list('pk', flat=True)
+        )
+        original_unit_pks = list(
+            Unit.objects.filter(module__course=original_course)
+            .values_list('pk', flat=True)
+        )
+
+        # Rewrite the course.yaml with a new slug but the same content_id.
+        self._write_root_course_yaml(
+            slug=renamed_slug, content_id=content_id,
+        )
+
+        second_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertIn(second_log.status, ('success', 'partial'))
+
+        # No duplicate Course row, no stale draft of the old slug.
+        self.assertEqual(
+            Course.objects.filter(source_repo=self.source.repo_name).count(),
+            1,
+            'Slug change with same content_id must not duplicate the Course.',
+        )
+        self.assertFalse(
+            Course.objects.filter(slug=original_slug).exists(),
+            'Old slug must be gone — no stale draft row.',
+        )
+
+        course_after = Course.objects.get(slug=renamed_slug)
+        self.assertEqual(course_after.pk, original_course_pk)
+        self.assertEqual(str(course_after.content_id), content_id)
+        # Course stays published — no soft-delete on the slug change.
+        self.assertEqual(course_after.status, 'published')
+
+        # Stats: 0 created, 1 updated.
+        self.assertEqual(second_log.items_created, 0)
+        self.assertEqual(second_log.items_updated, 1)
+
+        # Module + Unit pks preserved — the rename did not cascade.
+        self.assertEqual(
+            list(
+                Module.objects.filter(course=course_after)
+                .values_list('pk', flat=True)
+            ),
+            original_module_pks,
+        )
+        self.assertEqual(
+            list(
+                Unit.objects.filter(module__course=course_after)
+                .values_list('pk', flat=True)
+            ),
+            original_unit_pks,
+        )

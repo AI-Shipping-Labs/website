@@ -175,30 +175,16 @@ def validate_webhook_signature(request, secret):
 
 
 def find_content_source(repo_full_name):
-    """Find ContentSource(s) by repo name.
+    """Find a ContentSource by repo name.
 
     Args:
         repo_full_name: Full repo name (e.g. "AI-Shipping-Labs/content").
 
     Returns:
-        ContentSource queryset (may contain multiple sources for monorepo).
+        ContentSource or None. ``repo_name`` is unique, so at most one row
+        matches.
     """
-    return ContentSource.objects.filter(repo_name=repo_full_name)
-
-
-def find_content_source_single(repo_full_name):
-    """Find a single ContentSource by repo name (legacy, for backward compat).
-
-    Args:
-        repo_full_name: Full repo name.
-
-    Returns:
-        ContentSource or None.
-    """
-    try:
-        return ContentSource.objects.filter(repo_name=repo_full_name).first()
-    except ContentSource.DoesNotExist:
-        return None
+    return ContentSource.objects.filter(repo_name=repo_full_name).first()
 
 
 def generate_github_app_token():

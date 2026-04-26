@@ -15,7 +15,7 @@ from payments.models import Tier
 
 
 @override_settings(
-    SITE_URL='https://aishippinglabs.com',
+    SITE_BASE_URL='https://aishippinglabs.com',
     SES_FROM_EMAIL='community@aishippinglabs.com',
 )
 class GenerateIcsTest(TestCase):
@@ -143,7 +143,7 @@ class GenerateIcsTest(TestCase):
 
 
 @override_settings(
-    SITE_URL='https://aishippinglabs.com',
+    SITE_BASE_URL='https://aishippinglabs.com',
     SES_FROM_EMAIL='community@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
@@ -296,7 +296,7 @@ class SendRegistrationConfirmationTest(TestCase):
 
 
 @override_settings(
-    SITE_URL='https://aishippinglabs.com',
+    SITE_BASE_URL='https://aishippinglabs.com',
     SES_FROM_EMAIL='community@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',

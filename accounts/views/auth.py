@@ -91,7 +91,7 @@ def _send_verification_email(user):
         user: User model instance.
     """
     token = _generate_verification_token(user.pk)
-    site_url = getattr(settings, "SITE_URL", "https://aishippinglabs.com")
+    site_url = settings.SITE_BASE_URL
     verify_url = f"{site_url}/api/verify-email?token={token}"
 
     try:
@@ -110,7 +110,7 @@ def _send_password_reset_email(user):
         user: User model instance.
     """
     token = _generate_password_reset_token(user.pk)
-    site_url = getattr(settings, "SITE_URL", "https://aishippinglabs.com")
+    site_url = settings.SITE_BASE_URL
     reset_url = f"{site_url}/api/password-reset?token={token}"
 
     try:

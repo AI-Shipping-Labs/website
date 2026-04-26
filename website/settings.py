@@ -174,6 +174,7 @@ TEMPLATES = [
                 'website.context_processors.site_context',
                 'website.context_processors.impersonation_context',
                 'website.context_processors.announcement_banner_context',
+                'website.context_processors.studio_env_mismatch_context',
             ],
         },
     },
@@ -268,8 +269,15 @@ ANALYTICS_COOKIE_DOMAIN = os.environ.get('ANALYTICS_COOKIE_DOMAIN', '') or None
 # Site configuration
 VERSION = os.getenv("VERSION", "N/A")
 SITE_NAME = 'AI Shipping Labs'
-SITE_URL = 'https://aishippinglabs.com'
-# Base URL used by UTM link generation when destinations are paths
+# Canonical, env-driven base URL used by every URL-generating call site
+# (unsubscribe links, calendar invites, password resets, OAuth redirect
+# URIs, share URLs, OG / canonical meta tags, Slack announcement links,
+# UTM campaign destinations). Set this per environment via the
+# SITE_BASE_URL env var; the literal default below is a safety net so
+# settings always exposes the attribute, but production deploys MUST
+# override it. The Studio host-mismatch banner (see
+# website.context_processors.studio_env_mismatch_context) warns when the
+# configured value disagrees with the request host.
 SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com')
 SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who want to turn AI ideas into real projects.'
 

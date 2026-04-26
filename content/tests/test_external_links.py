@@ -44,7 +44,7 @@ class ExternalLinksExportsTest(TestCase):
         self.assertIs(PkgTree, ExternalLinksTreeprocessor)
 
 
-@override_settings(SITE_URL='https://aishippinglabs.com')
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class ExternalLinkRewriteTest(TestCase):
     """The happy path: an external link must gain target=_blank and a
     rel attribute that contains the noopener token."""
@@ -70,7 +70,7 @@ class ExternalLinkRewriteTest(TestCase):
         self.assertRegex(html, r'rel="[^"]*\bnoopener\b[^"]*"')
 
 
-@override_settings(SITE_URL='https://aishippinglabs.com')
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class InternalLinkLeftAloneTest(TestCase):
     """Internal links must not gain ``target`` or ``rel`` attributes.
     These cases are the regression guard for the rewrite logic."""
@@ -119,7 +119,7 @@ class InternalLinkLeftAloneTest(TestCase):
         self.assertNotIn('target=', html)
 
 
-@override_settings(SITE_URL='https://aishippinglabs.com')
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class AuthorOverridesPreservedTest(TestCase):
     """Authors can override the default behaviour with ``target="_self"``
     or by writing their own raw ``<a>`` tag — the extension must respect
@@ -156,11 +156,11 @@ class AuthorOverridesPreservedTest(TestCase):
 
 
 class SiteHostDetectionTest(TestCase):
-    """Same-domain detection must use ``settings.SITE_URL`` and treat
-    both apex + www as internal. An unset SITE_URL means everything
-    absolute is external (the safe default)."""
+    """Same-domain detection must use ``settings.SITE_BASE_URL`` and
+    treat both apex + www as internal. An unset SITE_BASE_URL means
+    everything absolute is external (the safe default)."""
 
-    @override_settings(SITE_URL='https://aishippinglabs.com')
+    @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
     def test_apex_and_www_both_internal_when_site_url_apex(self):
         for url in (
             'https://aishippinglabs.com/about',
@@ -170,10 +170,10 @@ class SiteHostDetectionTest(TestCase):
             self.assertIn(f'href="{url}"', html)
             self.assertNotIn('target=', html, msg=f'failed for {url}')
 
-    @override_settings(SITE_URL='https://www.aishippinglabs.com')
+    @override_settings(SITE_BASE_URL='https://www.aishippinglabs.com')
     def test_apex_and_www_both_internal_when_site_url_www(self):
-        # When SITE_URL itself is configured with the www subdomain, the
-        # apex domain must still be recognised as internal.
+        # When SITE_BASE_URL itself is configured with the www subdomain,
+        # the apex domain must still be recognised as internal.
         for url in (
             'https://aishippinglabs.com/about',
             'https://www.aishippinglabs.com/about',
@@ -182,27 +182,38 @@ class SiteHostDetectionTest(TestCase):
             self.assertIn(f'href="{url}"', html)
             self.assertNotIn('target=', html, msg=f'failed for {url}')
 
-    @override_settings(SITE_URL='')
+    @override_settings(SITE_BASE_URL='')
     def test_empty_site_url_treats_all_http_as_external(self):
-        # Safer default: when SITE_URL is unset, every absolute http(s)
-        # URL is rewritten, even ones pointing at our own domain.
+        # Safer default: when SITE_BASE_URL is unset, every absolute
+        # http(s) URL is rewritten, even ones pointing at our own
+        # domain.
         html = render_article_md(
             '[home](https://aishippinglabs.com/about)'
         )
         self.assertIn('target="_blank"', html)
         self.assertRegex(html, r'rel="[^"]*\bnoopener\b[^"]*"')
 
-    @override_settings(SITE_URL='https://staging.example.com')
+    @override_settings(SITE_BASE_URL='https://staging.example.com')
     def test_other_site_url_keeps_aishippinglabs_external(self):
-        # If SITE_URL points elsewhere (e.g. staging), then a link to the
-        # production domain is correctly seen as external.
+        # If SITE_BASE_URL points elsewhere (e.g. staging), then a link
+        # to the production domain is correctly seen as external.
         html = render_article_md(
             '[main site](https://aishippinglabs.com/about)'
         )
         self.assertIn('target="_blank"', html)
 
+    @override_settings(SITE_BASE_URL='http://localhost:8000')
+    def test_localhost_dev_keeps_prod_url_external(self):
+        # On dev (SITE_BASE_URL=http://localhost:8000), a stray
+        # https://aishippinglabs.com link in synced content should still
+        # be treated as external — the safer default for dev sends.
+        html = render_article_md(
+            '[prod home](https://aishippinglabs.com/about)'
+        )
+        self.assertIn('target="_blank"', html)
 
-@override_settings(SITE_URL='https://aishippinglabs.com')
+
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class MermaidCoexistenceTest(TestCase):
     """The external_links treeprocessor must not interfere with the
     mermaid stash. Mermaid blocks become ``<div class="mermaid">``
@@ -235,7 +246,7 @@ class MermaidCoexistenceTest(TestCase):
         self.assertIn('<div class="mermaid">', html)
 
 
-@override_settings(SITE_URL='https://aishippinglabs.com')
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class SharedAcrossHelpersTest(TestCase):
     """All four ``render_markdown`` helpers share the same extension
     list, so an external link rendered through each must be rewritten
@@ -265,7 +276,7 @@ class SharedAcrossHelpersTest(TestCase):
         self.assertRegex(html, r'rel="[^"]*\bnoopener\b[^"]*"')
 
 
-@override_settings(SITE_URL='https://aishippinglabs.com')
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class IdempotenceTest(TestCase):
     """Re-running the rewrite over already-rewritten output must be a
     no-op (no doubled noopener tokens, no target reset). This matters

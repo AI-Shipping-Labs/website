@@ -299,11 +299,12 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_client.send_email.return_value = {'MessageId': 'ses-real-id'}
         mock_boto3.client.return_value = mock_client
 
+        unsubscribe_url = 'https://example.test/api/unsubscribe?token=abc'
         self.service._send_ses(
             'recipient@example.com',
             'Test Subject',
             '<html><body>Hello</body></html>',
-            unsubscribe_url='https://aishippinglabs.com/api/unsubscribe?token=abc',
+            unsubscribe_url=unsubscribe_url,
         )
 
         call_kwargs = mock_client.send_email.call_args[1]
@@ -312,7 +313,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             [
                 {
                     'Name': 'List-Unsubscribe',
-                    'Value': '<https://aishippinglabs.com/api/unsubscribe?token=abc>',
+                    'Value': f'<{unsubscribe_url}>',
                 },
                 {
                     'Name': 'List-Unsubscribe-Post',
@@ -334,17 +335,18 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_client.send_email.return_value = {'MessageId': 'ses-real-id'}
         mock_boto3.client.return_value = mock_client
 
+        unsubscribe_url = 'https://example.test/api/unsubscribe?token=abc'
         self.service._send_ses(
             'recipient@example.com',
             'Test Subject',
             '<html><body>Hello</body></html>',
-            unsubscribe_url='https://aishippinglabs.com/api/unsubscribe?token=abc',
+            unsubscribe_url=unsubscribe_url,
         )
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(
             call_kwargs['Content']['Simple']['Headers'][0]['Value'],
-            '<https://aishippinglabs.com/api/unsubscribe?token=abc>, '
+            f'<{unsubscribe_url}>, '
             '<mailto:unsubscribe@aishippinglabs.com>',
         )
 
@@ -387,3 +389,31 @@ class EmailServiceSESIntegrationTest(TestCase):
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['FromEmailAddress'], 'sender@example.com')
+
+
+class BuildUnsubscribeUrlTest(TestCase):
+    """Regression test for issue #321: the unsubscribe link must use
+    SITE_BASE_URL so dev/staging sends don't ship the prod hostname."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(email='unsub@example.com')
+        self.service = EmailService()
+
+    @override_settings(SITE_BASE_URL='https://dev.aishippinglabs.com')
+    def test_unsubscribe_url_uses_dev_site_base_url(self):
+        url = self.service._build_unsubscribe_url(self.user)
+        self.assertTrue(
+            url.startswith('https://dev.aishippinglabs.com/api/unsubscribe?token='),
+            msg=f'Expected dev host in unsubscribe URL, got: {url}',
+        )
+        self.assertNotIn('aishippinglabs.com/api/unsubscribe', url.replace(
+            'dev.aishippinglabs.com', 'PLACEHOLDER',
+        ))
+
+    @override_settings(SITE_BASE_URL='http://localhost:8000')
+    def test_unsubscribe_url_uses_localhost_site_base_url(self):
+        url = self.service._build_unsubscribe_url(self.user)
+        self.assertTrue(
+            url.startswith('http://localhost:8000/api/unsubscribe?token='),
+            msg=f'Expected localhost in unsubscribe URL, got: {url}',
+        )

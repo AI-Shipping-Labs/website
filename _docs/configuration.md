@@ -14,7 +14,7 @@ These variables are read at process start, before the DB is reachable, or used b
 | `DEBUG` | always | Must be `false` in prod. Truthy values: `1`, `true`, `yes`. Anything else (including empty) is falsy. |
 | `ALLOWED_HOSTS` | always | Comma-separated. Default `localhost,127.0.0.1`. Production must list every host that serves the site (e.g. `aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com`). |
 | `CSRF_TRUSTED_ORIGINS` | always over HTTPS | Comma-separated full origins with scheme (e.g. `https://aishippinglabs.com,https://www.aishippinglabs.com`). Required for any POST over HTTPS — login, forms, and Studio save buttons all break without it. |
-| `SITE_BASE_URL` | always | e.g. `https://aishippinglabs.com`. Used to build absolute URLs in emails, unsubscribe links, and the values that go into provider redirect URIs. Default `https://aishippinglabs.com`. |
+| `SITE_BASE_URL` | always | e.g. `https://aishippinglabs.com`. Used to build absolute URLs in emails, unsubscribe links, calendar invites, password resets, share URLs, OG / canonical meta tags, and provider redirect URIs. Default `https://aishippinglabs.com`. Studio shows an amber banner on every `/studio/` page when the configured host disagrees with the request host (scheme / host / port mismatch) so operators can spot stale env config before it ships outbound links. |
 | `DATABASE_URL` | always in prod | PostgreSQL connection string parsed by `dj_database_url`. Default is a local SQLite file. |
 | `SLACK_ENABLED` | always | Must be set to `true` to enable any Slack integration (bot OR login app credentials read at startup). Off by default to prevent dev environments from posting to real channels. |
 | `VERSION` | optional | Build tag shown in the page footer. Set automatically by deploy scripts. |
@@ -273,7 +273,7 @@ This doc is locked against TODAY's codebase. As the linked issues ship, update t
 
 | Trigger | What changes in the doc |
 |---------|-------------------------|
-| #321 ships | Add a note in section 1 that Studio warns on host mismatch with `SITE_BASE_URL`. Remove any vestigial `SITE_URL` references. |
+| #321 ships | Done — section 1 mentions Studio's host-mismatch banner; the legacy `SITE_URL` setting was deleted. |
 | #322 ships | Replace the "Until #322 ships" paragraph in section 3 with "Configure in Studio > Settings > Auth & Login". |
 | #323 ships | Add a one-liner in section 13: "You can export and import settings via Studio (with a secret-handling policy)." |
 | #324 ships | Add one sentence in section 1: "Studio shows a source badge per field — `db` or `env` — so you can see which value is winning." |

@@ -121,7 +121,7 @@ def _build_description(event):
             parts.append(f'- {obj}')
 
     parts.append('')
-    parts.append('AI Shipping Labs - https://aishippinglabs.com')
+    parts.append(f'AI Shipping Labs - {settings.SITE_BASE_URL}')
 
     return '\n'.join(parts)
 

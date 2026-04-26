@@ -69,7 +69,7 @@ def _send_subscribe_verification_email(user, redirect_to=None):
         redirect_to: Optional download URL for lead magnet flow.
     """
     token = _generate_verification_token(user.pk, redirect_to=redirect_to)
-    site_url = getattr(settings, "SITE_URL", "https://aishippinglabs.com")
+    site_url = settings.SITE_BASE_URL
     verify_url = f"{site_url}/api/verify-email?token={token}"
 
     try:

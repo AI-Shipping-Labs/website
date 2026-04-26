@@ -67,6 +67,7 @@ def _build_group_context(group_def, db_settings):
             'description': key_def.get('description', key),
             'is_secret': key_def.get('is_secret', False),
             'multiline': key_def.get('multiline', False),
+            'is_boolean': key_def.get('is_boolean', False),
             'current_value': current_value,
             'source': source,
         })
@@ -127,7 +128,10 @@ def settings_save_group(request, group_name):
     saved_count = 0
     for key_def in group_def['keys']:
         key = key_def['key']
-        value = request.POST.get(key, '')
+        if key_def.get('is_boolean'):
+            value = 'true' if request.POST.get(key) == 'true' else 'false'
+        else:
+            value = request.POST.get(key, '')
 
         IntegrationSetting.objects.update_or_create(
             key=key,

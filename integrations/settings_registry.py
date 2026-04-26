@@ -21,7 +21,7 @@ INTEGRATION_GROUPS = [
             {'key': 'STRIPE_SECRET_KEY', 'is_secret': True, 'description': 'Server-side Stripe API key. Get from Stripe Dashboard > Developers > API keys. Without this checkout fails.'},
             {'key': 'STRIPE_WEBHOOK_SECRET', 'is_secret': True, 'description': 'Verifies that webhook callbacks really came from Stripe. Get from Stripe Dashboard > Webhooks > [your endpoint].'},
             {'key': 'STRIPE_PUBLISHABLE_KEY', 'is_secret': False, 'description': 'Public Stripe key embedded in the frontend. Get from Stripe Dashboard > Developers > API keys.'},
-            {'key': 'STRIPE_CHECKOUT_ENABLED', 'is_secret': False, 'description': 'Set true to use hosted Stripe Checkout sessions; false to use payment links.'},
+            {'key': 'STRIPE_CHECKOUT_ENABLED', 'is_secret': False, 'is_boolean': True, 'description': 'Set true to use hosted Stripe Checkout sessions; false to use payment links.'},
             {'key': 'STRIPE_CUSTOMER_PORTAL_URL', 'is_secret': False, 'description': 'Stripe-hosted page where members manage their subscription. Get from Stripe Dashboard > Settings > Billing > Customer portal.'},
         ],
     },
@@ -43,7 +43,7 @@ INTEGRATION_GROUPS = [
             {'key': 'AWS_SECRET_ACCESS_KEY', 'is_secret': True, 'description': 'AWS secret key paired with the access key above. Without these no email is sent.'},
             {'key': 'AWS_SES_REGION', 'is_secret': False, 'description': 'AWS region for SES (e.g. eu-west-1). Must match the verified domain region.'},
             {'key': 'SES_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for transactional and campaign email. Must be verified in SES.'},
-            {'key': 'SES_WEBHOOK_VALIDATION_ENABLED', 'is_secret': False, 'description': 'Set true to verify SNS bounce/complaint signatures (recommended in production).'},
+            {'key': 'SES_WEBHOOK_VALIDATION_ENABLED', 'is_secret': False, 'is_boolean': True, 'description': 'Set true to verify SNS bounce/complaint signatures (recommended in production).'},
         ],
     },
     {
@@ -85,7 +85,7 @@ INTEGRATION_GROUPS = [
         'name': 'slack',
         'label': 'Slack',
         'keys': [
-            {'key': 'SLACK_ENABLED', 'is_secret': False, 'description': 'Set true to enable Slack bot posting and event listening. Off by default to keep dev/test silent.'},
+            {'key': 'SLACK_ENABLED', 'is_secret': False, 'is_boolean': True, 'description': 'Set true to enable Slack bot posting and event listening. Off by default to keep dev/test silent.'},
             {'key': 'SLACK_BOT_TOKEN', 'is_secret': True, 'description': 'Slack bot user OAuth token (xoxb-...). Used to post announcements and read community channel events.'},
             {'key': 'SLACK_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Comma-separated channel IDs the bot watches for community signals (mentions, reactions).'},
             {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Channel ID where the bot posts new content and event announcements.'},

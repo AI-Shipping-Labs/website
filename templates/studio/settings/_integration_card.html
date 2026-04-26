@@ -31,7 +31,17 @@ Context:
       <div>
         <label for="field-{{ field.key }}" class="block text-sm font-medium text-gray-300 mb-1">{{ field.description }}</label>
         <div class="flex items-center gap-2">
-          {% if field.multiline %}
+          {% if field.is_boolean %}
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox"
+                     id="field-{{ field.key }}"
+                     name="{{ field.key }}"
+                     value="true"
+                     {% if field.current_value|lower == "true" %}checked{% endif %}
+                     class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-accent focus:ring-accent focus:ring-offset-0">
+              <span class="text-sm text-gray-300">Enabled</span>
+            </label>
+          {% elif field.multiline %}
             <textarea id="field-{{ field.key }}" name="{{ field.key }}" rows="6"
               autocomplete="off"
               data-1p-ignore="true"

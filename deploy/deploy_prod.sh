@@ -7,23 +7,13 @@ cd "$(dirname "$0")"
 DEV_TAG=$1
 
 if [ -z "$DEV_TAG" ]; then
-    echo "No tag provided. Fetching tag from the dev environment."
-    TASK_DEF="ai-shipping-labs-dev"
-
-    FILE_IN="${TASK_DEF}-current.json"
-
-    aws ecs describe-task-definition \
-        --task-definition ${TASK_DEF} \
-        > ${FILE_IN}
-
-    # Multiple containers (web + qcluster) carry the same VERSION env, so jq
-    # returns one line per container. Collapse to a single value before
-    # passing to deploy_dev.sh — otherwise word-splitting eats the env arg.
-    DEV_TAG=$(
-        jq '.taskDefinition.containerDefinitions[].environment[] | select(.name == "VERSION").value' -r ${FILE_IN} | sort -u | head -1
-    )
-
-    rm -f ${FILE_IN}
+    echo "No tag provided. Fetching tag from dev /ping endpoint."
+    DEV_TAG=$(curl -fsSL --max-time 10 https://dev.aishippinglabs.com/ping)
+    if [ -z "$DEV_TAG" ]; then
+        echo "ERROR: failed to read dev /ping for auto-detect."
+        exit 1
+    fi
+    echo "Auto-detected dev tag: ${DEV_TAG}"
 fi
 
 echo "Deploying ${DEV_TAG} to prod"

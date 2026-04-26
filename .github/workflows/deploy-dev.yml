@@ -10,6 +10,10 @@ on:
       - ".prod-versions"
       - "*.md"
 
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Unit & Integration Tests
@@ -40,7 +44,8 @@ jobs:
         run: uv run python manage.py migrate
 
       - name: Run unit and integration tests
-        run: uv run python manage.py test --parallel auto
+        # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342
+        run: uv run python manage.py test --parallel 4
 
   deploy:
     name: Deploy to Dev

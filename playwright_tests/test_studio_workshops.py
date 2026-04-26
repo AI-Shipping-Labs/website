@@ -48,7 +48,7 @@ def _clear_workshops():
     WorkshopPage.objects.all().delete()
     Workshop.objects.all().delete()
     Event.objects.filter(kind='workshop').delete()
-    ContentSource.objects.filter(content_type='workshop').delete()
+    ContentSource.objects.filter(repo_name='AI-Shipping-Labs/workshops-content').delete()
     connection.close()
 
 
@@ -110,13 +110,12 @@ def _create_workshop(
 
 
 def _create_workshop_source():
-    """Insert a ContentSource for content_type='workshop'."""
+    """Insert a ContentSource for the workshops repo."""
     from integrations.models import ContentSource
 
     src, _ = ContentSource.objects.get_or_create(
         repo_name='AI-Shipping-Labs/workshops-content',
-        content_type='workshop',
-        defaults={'content_path': '', 'is_private': False},
+        defaults={'is_private': False},
     )
     connection.close()
     return src

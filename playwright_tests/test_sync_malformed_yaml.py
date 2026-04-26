@@ -9,9 +9,9 @@ Scenarios:
    soft-delete).
 3. A broken module yaml does not stop other modules in the same course
    from syncing — the Studio sync history shows just one error entry.
-4. Admin registers two content sources for the same repo with different
-   ``content_path`` values; the new ``unique_together`` allows it but
-   the old triple still raises uniqueness validation.
+
+Scenario 4 (two sources sharing a repo_name) was removed in issue #310;
+``repo_name`` is now globally UNIQUE.
 """
 
 import os
@@ -20,7 +20,6 @@ import tempfile
 import uuid
 
 import pytest
-from django.db import IntegrityError, transaction
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -61,7 +60,6 @@ def _make_course_source():
 
     src = ContentSource.objects.create(
         repo_name='AI-Shipping-Labs/courses',
-        content_type='course',
     )
     connection.close()
     return src
@@ -324,63 +322,8 @@ class TestBrokenModuleYamlIsolated:
         context.close()
 
 
-# ---------------------------------------------------------------------------
-# Scenario 4: Admin registers two content sources with different paths
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db(transaction=True)
-class TestRegisterTwoSourcesDifferentPaths:
-    """Confirms the relaxed ``unique_together`` (issue #286) at the model
-    layer. The Studio admin form delegates uniqueness to model-level
-    validation, so an integration-style assertion here is sufficient.
-    """
-
-    def test_two_sources_same_repo_and_type_different_paths(
-        self, django_server, browser,
-    ):
-        from integrations.models import ContentSource
-
-        _ensure_tiers()
-        _reset_state()
-        _create_staff_user('admin@test.com')
-
-        # The new constraint allows two article sources for the same repo
-        # so long as ``content_path`` differs.
-        ContentSource.objects.create(
-            repo_name='my-org/content',
-            content_type='article',
-            content_path='blog',
-        )
-        ContentSource.objects.create(
-            repo_name='my-org/content',
-            content_type='article',
-            content_path='tutorials',
-        )
-
-        # Same triple as the first row -> IntegrityError.
-        with pytest.raises(IntegrityError):
-            with transaction.atomic():
-                ContentSource.objects.create(
-                    repo_name='my-org/content',
-                    content_type='article',
-                    content_path='blog',
-                )
-        connection.close()
-
-        # The dashboard renders both rows as separate entries.
-        context = _auth_context(browser, 'admin@test.com')
-        page = context.new_page()
-        page.goto(
-            f'{django_server}/studio/sync/',
-            wait_until='domcontentloaded',
-        )
-        body = page.content()
-        # The repo name appears (twice — once per source).
-        assert body.count('my-org/content') >= 2, (
-            'Expected the repo to appear twice on the dashboard '
-            '(once per source row)'
-        )
-
-        connection.close()
-        context.close()
+# Scenario 4 (TestRegisterTwoSourcesDifferentPaths) was deleted as part of
+# issue #310. Two ContentSource rows can no longer share a ``repo_name`` —
+# the new schema enforces ``repo_name`` UNIQUE — so the behaviour the test
+# exercised is gone. The replacement uniqueness assertion lives in the
+# Django integration tests for ContentSource.

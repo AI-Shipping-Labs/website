@@ -7,7 +7,6 @@ Handles:
 - Content sync: parse markdown/YAML, upload images, upsert content
 """
 
-import base64
 import hashlib
 import hmac
 import logging
@@ -44,15 +43,6 @@ GITHUB_API_BASE = 'https://api.github.com'
 # Cache key + TTL for the repositories accessible to the GitHub App installation.
 INSTALLATION_REPOS_CACHE_KEY = 'github_installation_repositories'
 INSTALLATION_REPOS_CACHE_TIMEOUT = 60  # seconds
-
-# Cache key prefix + TTL for content-type detection results per repo.
-DETECT_CONTENT_CACHE_KEY_PREFIX = 'github_detect_content:'
-DETECT_CONTENT_CACHE_TIMEOUT = 60  # seconds
-
-# Hard upper bound on the number of files we will fetch frontmatter from when
-# auto-detecting content types for a repo. Prevents runaway API usage on huge
-# repos (the recursive tree listing already gives us file paths cheaply).
-DETECT_FRONTMATTER_FETCH_LIMIT = 200
 
 # Required frontmatter fields per content type
 REQUIRED_FIELDS = {
@@ -334,128 +324,6 @@ def clear_installation_repositories_cache():
     cache.delete(INSTALLATION_REPOS_CACHE_KEY)
 
 
-def _get_repo_metadata(repo_full_name, token):
-    """Return the repository metadata dict from ``GET /repos/{owner}/{repo}``.
-
-    Used by detection to discover the default branch (the tree listing requires
-    a branch ref).
-    """
-    response = requests.get(
-        f'{GITHUB_API_BASE}/repos/{repo_full_name}',
-        headers={
-            'Authorization': f'token {token}',
-            'Accept': 'application/vnd.github+json',
-        },
-        timeout=15,
-    )
-    if response.status_code != 200:
-        raise GitHubSyncError(
-            f'Failed to fetch repo metadata for {repo_full_name}: '
-            f'{response.status_code} {response.text}'
-        )
-    return response.json()
-
-
-def _list_repo_tree(repo_full_name, branch, token):
-    """List all paths in the repo via the recursive Git Trees API.
-
-    Returns a list of dicts: ``{'path': str, 'type': 'blob'|'tree'}``.
-
-    Uses the recursive tree listing so we get the entire repo structure in a
-    single request (no per-directory walking, no clone). The trees API caps
-    at ~100k entries with a ``truncated`` flag; for our repos this is fine.
-    """
-    response = requests.get(
-        f'{GITHUB_API_BASE}/repos/{repo_full_name}/git/trees/{branch}',
-        headers={
-            'Authorization': f'token {token}',
-            'Accept': 'application/vnd.github+json',
-        },
-        params={'recursive': '1'},
-        timeout=15,
-    )
-    if response.status_code != 200:
-        raise GitHubSyncError(
-            f'Failed to list tree for {repo_full_name}@{branch}: '
-            f'{response.status_code} {response.text}'
-        )
-    payload = response.json() or {}
-    return payload.get('tree', []) or []
-
-
-def _fetch_repo_file(repo_full_name, path, branch, token):
-    """Fetch a single file's text contents via the GitHub Contents API.
-
-    Returns the decoded UTF-8 string, or ``None`` if the file is binary,
-    too large, or unreadable.
-    """
-    response = requests.get(
-        f'{GITHUB_API_BASE}/repos/{repo_full_name}/contents/{path}',
-        headers={
-            'Authorization': f'token {token}',
-            'Accept': 'application/vnd.github+json',
-        },
-        params={'ref': branch},
-        timeout=15,
-    )
-    if response.status_code != 200:
-        return None
-    payload = response.json() or {}
-    if payload.get('encoding') != 'base64':
-        return None
-    raw = payload.get('content') or ''
-    try:
-        return base64.b64decode(raw).decode('utf-8')
-    except (ValueError, UnicodeDecodeError):
-        return None
-
-
-def _parse_frontmatter_text(text, filepath=None):
-    """Parse YAML frontmatter from a markdown text string.
-
-    Returns ``(metadata_dict, error_str_or_None)``. ``metadata_dict`` is
-    ``{}`` when no frontmatter is present or parsing fails. ``error_str`` is
-    ``None`` on success and a human-readable parse error otherwise — callers
-    can use it to distinguish "no frontmatter" from "broken frontmatter" and
-    skip detection rules for the latter (issue #286).
-
-    The ``python-frontmatter`` library wraps YAML parse failures as
-    ``yaml.YAMLError`` subclasses, so we only need to catch ``YAMLError``
-    here.
-    """
-    if not text:
-        return {}, None
-    try:
-        post = frontmatter.loads(text)
-    except yaml.YAMLError as exc:
-        label = filepath or '<frontmatter>'
-        logger.warning('Failed to parse frontmatter in %s: %s', label, exc)
-        return {}, f'Failed to parse frontmatter in {label}: {exc}'
-    return dict(post.metadata or {}), None
-
-
-def _parse_yaml_text(text, filepath=None):
-    """Parse a YAML document from a string.
-
-    Returns ``(data_dict_or_None, error_str_or_None)``. ``data_dict`` is
-    ``{}`` when ``text`` is empty, the parsed mapping on success, or
-    ``None`` when parsing fails or the document is not a mapping (e.g.
-    a YAML list or scalar at the top level). ``error_str`` is ``None`` on
-    success and a human-readable parse error otherwise (issue #286).
-    """
-    if not text:
-        return {}, None
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
-        label = filepath or '<yaml>'
-        logger.warning('Failed to parse YAML in %s: %s', label, exc)
-        return None, f'Failed to parse {label}: {exc}'
-    if not isinstance(data, dict):
-        return None, None
-    return data, None
-
-
 def _interview_question_filename(name):
     """Return True if a root-level filename looks like an interview question.
 
@@ -471,202 +339,6 @@ def _interview_question_filename(name):
         return False
     # Allow lowercase letters, digits, and dashes only.
     return all(c.islower() or c.isdigit() or c == '-' for c in base)
-
-
-def detect_content_sources(repo_full_name, *, force_refresh=False):
-    """Auto-detect ``ContentSource`` rows we should create for ``repo_full_name``.
-
-    Walks the repo via the recursive Git Trees API and inspects a small sample
-    of files via the Contents API to look for the structural signals listed in
-    issue #213. Result is a list of ``{content_type, content_path, summary}``
-    dicts; an empty list means "nothing recognized" and the caller should show
-    an actionable error.
-
-    Detection rules (priority order):
-
-    - ``course.yaml`` at the root  -> ``course`` at ``''``
-    - ``<dir>/course.yaml``        -> ``course`` at ``<dir>``
-    - YAML with ``start_datetime`` -> ``event`` at the file's directory
-    - Markdown with ``difficulty`` AND ``author`` frontmatter
-                                    -> ``project`` at the file's directory
-    - Markdown with ``date:``      -> ``article`` at the file's directory
-    - ``<root>/<topic>.md`` (lowercase kebab-case, not README, not consumed
-      above) -> ``interview_question`` at ``''``
-
-    Each detected ``(content_type, content_path)`` pair is reported once even
-    if many files match, so the monorepo case yields one row per directory.
-    Results are cached for ``DETECT_CONTENT_CACHE_TIMEOUT`` seconds.
-    """
-    cache_key = f'{DETECT_CONTENT_CACHE_KEY_PREFIX}{repo_full_name}'
-    if not force_refresh:
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-    token = generate_github_app_token()
-    metadata = _get_repo_metadata(repo_full_name, token)
-    branch = metadata.get('default_branch') or 'main'
-
-    tree = _list_repo_tree(repo_full_name, branch, token)
-
-    # Bucket file paths by directory and extension for cheap iteration.
-    yaml_paths = []
-    md_paths = []
-    course_yaml_dirs = set()  # dirs that contain a ``course.yaml`` (or '' for root)
-    for entry in tree:
-        if entry.get('type') != 'blob':
-            continue
-        path = entry.get('path') or ''
-        if not path:
-            continue
-        if path.startswith('.git/'):
-            continue
-        name = path.rsplit('/', 1)[-1]
-        if name == 'course.yaml':
-            parent = path.rsplit('/', 1)[0] if '/' in path else ''
-            course_yaml_dirs.add(parent)
-            continue
-        if name.lower().endswith(('.yaml', '.yml')):
-            yaml_paths.append(path)
-        elif name.lower().endswith('.md'):
-            md_paths.append(path)
-
-    detections = []
-    seen_keys = set()  # (content_type, content_path) pairs already added
-
-    def _add(content_type, content_path, summary):
-        key = (content_type, content_path)
-        if key in seen_keys:
-            return
-        seen_keys.add(key)
-        detections.append({
-            'content_type': content_type,
-            'content_path': content_path,
-            'summary': summary,
-        })
-
-    # Rule 1+2: course.yaml at root or in a single subdirectory.
-    # If course.yaml lives at the root, register ``course`` at ``''``.
-    # If course.yaml lives in subdirs (e.g. ``courses/foo/course.yaml``), the
-    # multi-course layout is handled by registering the parent directory
-    # ``courses/``. We collapse all matching sibling-of-course.yaml dirs to
-    # their common parent so a monorepo with many courses gets one source.
-    if '' in course_yaml_dirs:
-        _add('course', '', 'course.yaml found at repo root')
-    nested = course_yaml_dirs - {''}
-    if nested:
-        # Group by the parent of the course.yaml's containing dir.
-        # For ``courses/foo/course.yaml`` parent dir is ``courses/foo``,
-        # grandparent is ``courses``. We register the grandparent as the
-        # content path so the multi-course sync sees ``courses/<slug>/``.
-        course_parents = set()
-        for d in nested:
-            parts = d.split('/')
-            if len(parts) >= 1:
-                course_parents.add(parts[0])
-        for parent in sorted(course_parents):
-            _add('course', parent, f'course.yaml found under {parent}/')
-
-    # Track files we've fetched so we don't re-fetch and so we can attribute
-    # ownership: a markdown file claimed by ``project`` should not also count
-    # as ``article`` even though it likely has a ``date:``.
-    fetched = 0
-    project_dirs_with_match = set()
-    article_dirs_with_match = set()
-    event_dirs_with_match = set()
-
-    # Cap how many files we sample. The tree already constrains us; this is
-    # belt-and-braces.
-    yaml_sample = yaml_paths[:DETECT_FRONTMATTER_FETCH_LIMIT]
-    md_sample = md_paths[:DETECT_FRONTMATTER_FETCH_LIMIT]
-
-    # Rule 3: events. YAML files with ``start_datetime``.
-    for path in yaml_sample:
-        if fetched >= DETECT_FRONTMATTER_FETCH_LIMIT:
-            break
-        text = _fetch_repo_file(repo_full_name, path, branch, token)
-        fetched += 1
-        if text is None:
-            continue
-        data, parse_error = _parse_yaml_text(text, filepath=path)
-        # Skip detection rules for files that failed to parse — the warning
-        # was already logged. Detection must not classify a malformed file
-        # as if it had no ``start_datetime`` (issue #286).
-        if parse_error is not None or data is None:
-            continue
-        if 'start_datetime' in data:
-            parent = path.rsplit('/', 1)[0] if '/' in path else ''
-            event_dirs_with_match.add(parent)
-
-    for parent in sorted(event_dirs_with_match):
-        label = parent or 'repo root'
-        _add('event', parent, f'YAML files with start_datetime found in {label}')
-
-    # Rules 4 + 5: project (difficulty + author) and article (date) markdown.
-    for path in md_sample:
-        if fetched >= DETECT_FRONTMATTER_FETCH_LIMIT:
-            break
-        name = path.rsplit('/', 1)[-1]
-        if name.upper() == 'README.MD':
-            continue
-        text = _fetch_repo_file(repo_full_name, path, branch, token)
-        fetched += 1
-        if text is None:
-            continue
-        meta, parse_error = _parse_frontmatter_text(text, filepath=path)
-        # A malformed-frontmatter file must not be classified into any
-        # detection bucket; the warning was already logged (issue #286).
-        if parse_error is not None:
-            continue
-        parent = path.rsplit('/', 1)[0] if '/' in path else ''
-
-        if meta.get('difficulty') and meta.get('author'):
-            project_dirs_with_match.add(parent)
-            continue  # don't double-claim as article
-        if meta.get('date'):
-            article_dirs_with_match.add(parent)
-
-    for parent in sorted(project_dirs_with_match):
-        label = parent or 'repo root'
-        _add('project', parent, f'markdown with difficulty + author found in {label}')
-
-    for parent in sorted(article_dirs_with_match):
-        label = parent or 'repo root'
-        _add('article', parent, f'markdown with date frontmatter found in {label}')
-
-    # Rule 6: interview-question convention. Lowercase kebab-case ``.md`` files
-    # at the repo root that we did not already classify as article/project.
-    consumed_root_md = (
-        '' in article_dirs_with_match or '' in project_dirs_with_match
-    )
-    if not consumed_root_md:
-        root_md = [
-            p for p in md_paths
-            if '/' not in p and _interview_question_filename(p)
-        ]
-        if root_md:
-            _add(
-                'interview_question', '',
-                f'{len(root_md)} root-level markdown files matching '
-                'interview-question convention',
-            )
-
-    cache.set(cache_key, detections, DETECT_CONTENT_CACHE_TIMEOUT)
-    return detections
-
-
-def clear_detect_content_sources_cache(repo_full_name=None):
-    """Drop the cached detection results.
-
-    With no argument, drops every cached detection. With ``repo_full_name``,
-    drops just that one entry (used by the "Refresh repo list" button).
-    """
-    if repo_full_name is None:
-        # No public way to enumerate keys with the local-memory cache; clear
-        # the whole cache as a safe fallback.
-        cache.clear()
-        return
-    cache.delete(f'{DETECT_CONTENT_CACHE_KEY_PREFIX}{repo_full_name}')
 
 
 def _resolve_local_repo_sha(repo_dir):
@@ -1153,16 +825,10 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
             # have a value.
             commit_sha = _resolve_local_repo_sha(repo_dir) or 'test-commit-sha'
 
-        # Resolve content subdirectory
+        # The walker now operates on the whole repo and dispatches per file —
+        # no more per-source ``content_path`` slicing. Edge Case 5: Max files
+        # guard still applies; we just count over the whole repo.
         content_dir = repo_dir
-        if source.content_path:
-            content_dir = os.path.join(repo_dir, source.content_path)
-            if not os.path.isdir(content_dir):
-                raise GitHubSyncError(
-                    f'Content path {source.content_path!r} not found in repo'
-                )
-
-        # Edge Case 5: Max files guard
         file_count = _count_content_files(content_dir)
         if file_count > source.max_files:
             raise GitHubSyncError(
@@ -1190,10 +856,11 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
         # Collect known image paths for broken reference checks (Edge Case 8)
         known_images = _collect_image_paths(content_dir)
 
-        # Dispatch to content-type-specific sync
-        sync_func = _get_sync_function(source.content_type)
-        stats = sync_func(source, content_dir, commit_sha, sync_log,
-                          known_images=known_images)
+        # One walker for the entire repo. The walker dispatches each file to
+        # the appropriate leaf parser based on filename, frontmatter, and
+        # location. See ``_sync_repo``.
+        stats = _sync_repo(source, content_dir, commit_sha, sync_log,
+                           known_images=known_images)
 
         # Merge S3 errors into stats
         all_errors = s3_errors + stats.get('errors', [])
@@ -1270,7 +937,7 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
                     async_task(
                         'integrations.services.github.sync_content_source',
                         source,
-                        task_name=f'sync-{source.repo_name}-{source.content_type}-followup',
+                        task_name=f'sync-{source.repo_name}-followup',
                     )
                 except ImportError:
                     sync_content_source(source)
@@ -1305,22 +972,294 @@ def _sync_tiers_yaml(repo_dir):
         return {'synced': False, 'count': 0}
 
 
-def _get_sync_function(content_type):
-    """Return the sync function for a given content type."""
-    sync_functions = {
-        'article': _sync_articles,
-        'course': _sync_courses,
-        'resource': _sync_resources,
-        'project': _sync_projects,
-        'interview_question': _sync_interview_questions,
-        'event': _sync_events,
-        'workshop': _sync_workshops,
-        'instructor': _sync_instructors,
+def _classify_repo_files(repo_dir, classify_errors=None):
+    """First-pass walk: classify every file in the repo for dispatch.
+
+    Returns a dict with per-type lists of repo-relative paths plus a list
+    of claimed course/workshop directories (relative to ``repo_dir``).
+
+    The walker prunes course and workshop subtrees: any file under a path
+    that contains a ``course.yaml`` or ``workshop.yaml`` ancestor is
+    handled by the course/workshop parser, not by the article/event/etc.
+    leaf parsers. This is the path-claim ordering risk called out in
+    issue #310 — a course unit ``.md`` with a ``date:`` field would
+    otherwise get double-claimed as an Article.
+
+    Returns:
+        dict with keys:
+          ``course_dirs`` — list of absolute paths to course root dirs
+              (each contains a ``course.yaml``).
+          ``workshop_dirs`` — list of absolute paths to workshop root
+              dirs (each contains a ``workshop.yaml``).
+          ``article_files`` — list of repo-relative paths to ``.md``
+              files identified as articles (have ``date:`` frontmatter,
+              not under a course/workshop dir, not in special subdirs).
+          ``project_files`` — list of repo-relative paths to ``.md``
+              files identified as projects (``difficulty`` + ``author``).
+          ``event_files`` — list of repo-relative paths to YAML files
+              with ``start_datetime``.
+          ``instructor_files`` — list of YAML files under an
+              ``instructors/`` subtree.
+          ``curated_link_files`` — list of ``.md`` files under a
+              ``curated-links/`` subtree.
+          ``download_files`` — list of YAML files under a ``downloads/``
+              subtree.
+          ``interview_files`` — list of root-level ``.md`` files matching
+              the interview-question convention (lowercase kebab-case,
+              not README) AND having no special frontmatter.
+    """
+    course_dirs = []
+    workshop_dirs = []
+    claimed_prefixes = []  # rel paths (with trailing /) of claimed subtrees
+
+    # Pass 1: find course.yaml and workshop.yaml to identify claimed subtrees.
+    for root, dirs, files in os.walk(repo_dir, topdown=True):
+        # Skip .git
+        dirs[:] = [d for d in dirs if d != '.git' and not d.startswith('.git')]
+        if 'course.yaml' in files:
+            course_dirs.append(root)
+            rel = os.path.relpath(root, repo_dir)
+            prefix = '' if rel == '.' else rel + os.sep
+            claimed_prefixes.append(prefix)
+            # Don't descend further: course parser handles its own subtree.
+            dirs[:] = []
+            continue
+        if 'workshop.yaml' in files:
+            workshop_dirs.append(root)
+            rel = os.path.relpath(root, repo_dir)
+            prefix = '' if rel == '.' else rel + os.sep
+            claimed_prefixes.append(prefix)
+            dirs[:] = []
+            continue
+
+    def _is_under_claimed(rel_path):
+        for prefix in claimed_prefixes:
+            if not prefix:
+                # The repo root itself is a claimed dir (single-course mode)
+                # which means EVERY file at the root is claimed by the
+                # course parser. The course parser will pick the ones it
+                # wants; everything else is silently ignored.
+                return True
+            if rel_path.startswith(prefix):
+                return True
+        return False
+
+    article_files = []
+    project_files = []
+    event_files = []
+    instructor_files = []
+    curated_link_files = []
+    download_files = []
+    interview_files = []
+
+    # Pass 2: walk every file and classify by inspection. We re-walk so
+    # subtree pruning is independent of the first pass — callers don't
+    # rely on path order within categories anyway.
+    for root, dirs, files in os.walk(repo_dir, topdown=True):
+        dirs[:] = [d for d in dirs if d != '.git' and not d.startswith('.git')]
+
+        for filename in files:
+            filepath = os.path.join(root, filename)
+            rel_path = os.path.relpath(filepath, repo_dir)
+
+            # tiers.yaml is handled separately in sync_content_source.
+            if rel_path == 'tiers.yaml':
+                continue
+            # course.yaml / workshop.yaml are dispatched by their subtree.
+            if filename in ('course.yaml', 'workshop.yaml'):
+                continue
+            # Any file under a claimed subtree is owned by the
+            # course/workshop parser — skip it for everything else.
+            if _is_under_claimed(rel_path):
+                continue
+
+            # Path-component checks for special directories.
+            parts = rel_path.split(os.sep)
+            ext = os.path.splitext(filename)[1].lower()
+
+            if 'instructors' in parts and ext in ('.yaml', '.yml'):
+                instructor_files.append(rel_path)
+                continue
+            if 'curated-links' in parts and ext == '.md':
+                curated_link_files.append(rel_path)
+                continue
+            if 'downloads' in parts and ext in ('.yaml', '.yml'):
+                download_files.append(rel_path)
+                continue
+
+            # Files under an ``events/`` or ``recordings/`` subtree:
+            # events, regardless of whether the YAML contains a
+            # ``start_datetime`` (legacy recording-only events have
+            # only ``published_at``). This mirrors the directory-based
+            # dispatch the old per-type orchestrators used.
+            if (
+                ('events' in parts or 'recordings' in parts)
+                and ext in ('.yaml', '.yml', '.md')
+            ):
+                event_files.append(rel_path)
+                continue
+
+            if ext in ('.yaml', '.yml'):
+                # YAML with start_datetime -> event (catches events that
+                # live outside an ``events/`` subtree).
+                try:
+                    data = _parse_yaml_file(filepath)
+                except ValueError as exc:
+                    # Malformed YAML — record an error so the dashboard
+                    # surfaces it, then skip classification.
+                    if classify_errors is not None:
+                        classify_errors.append({
+                            'file': rel_path,
+                            'error': str(exc),
+                        })
+                    continue
+                if 'start_datetime' in data or 'published_at' in data:
+                    # ``published_at``-only files were treated as
+                    # recording-style events by the legacy orchestrator;
+                    # preserve that.
+                    event_files.append(rel_path)
+                continue
+
+            if ext == '.md':
+                if filename.upper() == 'README.MD':
+                    continue
+                # Path-based dispatch for the monorepo's well-known
+                # subtrees first so a partially-formed frontmatter still
+                # gets routed correctly. The article/project per-file
+                # parsers do their own validation and will surface a
+                # SyncLog error when frontmatter is missing.
+                if 'blog' in parts:
+                    article_files.append(rel_path)
+                    continue
+                if 'projects' in parts:
+                    project_files.append(rel_path)
+                    continue
+                if 'interview-questions' in parts:
+                    interview_files.append(rel_path)
+                    continue
+                try:
+                    metadata, _body = _parse_markdown_file(filepath)
+                except ValueError:
+                    # Hand the file to the article dispatcher anyway so
+                    # its per-file try/except records the parse error
+                    # AND adds the filename-derived slug to
+                    # ``failed_slugs`` (excluding it from stale-cleanup
+                    # soft-delete). Articles are the most permissive
+                    # default for unclassified markdown.
+                    article_files.append(rel_path)
+                    continue
+                # Project: ``difficulty`` claims it. ``author`` alone
+                # was historically the project marker but plenty of
+                # articles also carry ``author``; ``difficulty`` is the
+                # discriminator we keep.
+                if metadata.get('difficulty'):
+                    project_files.append(rel_path)
+                    continue
+                # Article: has a date field.
+                if metadata.get('date'):
+                    article_files.append(rel_path)
+                    continue
+                # Interview question: root-level kebab-case .md with no
+                # special frontmatter we already matched.
+                if (
+                    '/' not in rel_path
+                    and os.sep not in rel_path
+                    and _interview_question_filename(filename)
+                ):
+                    interview_files.append(rel_path)
+                    continue
+                # else: silently ignore (README, docs, etc.)
+
+    return {
+        'course_dirs': course_dirs,
+        'workshop_dirs': workshop_dirs,
+        'article_files': article_files,
+        'project_files': project_files,
+        'event_files': event_files,
+        'instructor_files': instructor_files,
+        'curated_link_files': curated_link_files,
+        'download_files': download_files,
+        'interview_files': interview_files,
     }
-    func = sync_functions.get(content_type)
-    if not func:
-        raise GitHubSyncError(f'Unknown content type: {content_type}')
-    return func
+
+
+def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
+    """Walk a cloned repo and dispatch each content file to its parser.
+
+    Issue #310. Replaces the per-content-type orchestrators
+    (``_sync_articles``, ``_sync_courses``, ``_sync_workshops``,
+    ``_sync_events``, ``_sync_resources``, ``_sync_instructors``,
+    ``_sync_projects``, ``_sync_interview_questions``).
+
+    Returns the same ``stats`` shape they did:
+    ``{created, updated, unchanged, deleted, errors, items_detail}``.
+
+    Walker contract:
+
+    - One classification pass identifies course / workshop subtrees and
+      buckets every other file by content type via filename + frontmatter
+      + location.
+    - Course / workshop subtrees are handed off to the dedicated single
+      parsers (``_sync_single_course`` / ``_sync_single_workshop``), so
+      a course unit ``.md`` with a ``date:`` field never gets
+      double-claimed as an Article.
+    - Per-type dispatch handlers process their assigned files, then
+      perform stale-content cleanup against the union of seen + failed
+      slugs/ids for that type.
+    """
+    stats = {
+        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
+        'errors': [], 'items_detail': [],
+    }
+    # Errors raised while classifying files (broken YAML/frontmatter)
+    # are recorded into ``stats['errors']`` so they surface on the
+    # SyncLog the same way the legacy per-type orchestrators did.
+    classified = _classify_repo_files(
+        repo_dir, classify_errors=stats['errors'],
+    )
+
+    # Each dispatch helper runs even when its file list is empty so the
+    # stale-content cleanup sweep fires. Without this, deleting the last
+    # course/workshop/article from the repo would leave the matching
+    # rows ``status='published'`` forever.
+    _dispatch_courses(
+        source, repo_dir, classified['course_dirs'],
+        commit_sha, stats, known_images=known_images,
+    )
+    _dispatch_workshops(
+        source, repo_dir, classified['workshop_dirs'],
+        commit_sha, stats, known_images=known_images,
+    )
+    _dispatch_articles(
+        source, repo_dir, classified['article_files'],
+        commit_sha, stats, known_images=known_images,
+    )
+    _dispatch_projects(
+        source, repo_dir, classified['project_files'],
+        commit_sha, stats, known_images=known_images,
+    )
+    _dispatch_events(
+        source, repo_dir, classified['event_files'],
+        commit_sha, stats, known_images=known_images,
+    )
+    _dispatch_instructors(
+        source, repo_dir, classified['instructor_files'],
+        commit_sha, stats,
+    )
+    _dispatch_curated_links(
+        source, repo_dir, classified['curated_link_files'],
+        commit_sha, stats,
+    )
+    _dispatch_downloads(
+        source, repo_dir, classified['download_files'],
+        commit_sha, stats,
+    )
+    _dispatch_interview_questions(
+        source, repo_dir, classified['interview_files'],
+        commit_sha, stats, known_images=known_images,
+    )
+
+    return stats
 
 
 def _parse_markdown_file(filepath):
@@ -1592,186 +1531,199 @@ def release_sync_lock(source):
     return was_requested
 
 
-def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync blog articles from the repo."""
+def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
+                       known_images=None):
+    """Walker dispatch handler: process article markdown files.
+
+    Iterates ``file_list`` (repo-relative paths) and upserts an ``Article``
+    row for each. Performs same-source slug-collision warnings and the
+    stale-content soft-delete sweep at the end. Mirrors the body of the
+    legacy ``_sync_articles`` orchestrator but takes its file list from
+    the walker rather than walking the tree itself.
+    """
     from content.models import Article
 
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
     seen_slugs = set()
     failed_slugs = set()
 
-    # Find all .md files (excluding README)
-    for root, dirs, files in os.walk(repo_dir):
-        # Skip .git directory
-        if '.git' in root:
-            continue
-        for filename in files:
-            if not filename.endswith('.md') or filename.upper() == 'README.MD':
+    for rel_path in file_list:
+        filepath = os.path.join(repo_dir, rel_path)
+        filename = os.path.basename(rel_path)
+        current_slug = None  # Track slug for error handling
+
+        try:
+            metadata, body = _parse_markdown_file(filepath)
+
+            # Derive slug before validation so we can track failures
+            current_slug = metadata.get('slug', os.path.splitext(filename)[0])
+
+            # Edge Case 7: Frontmatter validation
+            _validate_frontmatter(metadata, 'article', rel_path)
+
+            # Require content_id in frontmatter
+            content_id = metadata.get('content_id')
+            if not content_id:
+                msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
                 continue
 
-            filepath = os.path.join(root, filename)
-            rel_path = os.path.relpath(filepath, repo_dir)
-            current_slug = None  # Track slug for error handling
-
-            try:
-                metadata, body = _parse_markdown_file(filepath)
-
-                # Derive slug before validation so we can track failures
-                current_slug = metadata.get('slug', os.path.splitext(filename)[0])
-
-                # Edge Case 7: Frontmatter validation
-                _validate_frontmatter(metadata, 'article', rel_path)
-
-                # Require content_id in frontmatter
-                content_id = metadata.get('content_id')
-                if not content_id:
-                    msg = f'Skipping {rel_path}: missing content_id in frontmatter'
-                    logger.warning(msg)
-                    stats['errors'].append({'file': rel_path, 'error': msg})
-                    continue
-
-                # Edge Case 2: Check slug collision across sources
-                if _check_slug_collision(Article, current_slug, source.repo_name, rel_path):
-                    stats['errors'].append({
-                        'file': rel_path,
-                        'error': (
-                            f"Slug collision: '{current_slug}' already exists from a "
-                            f"different source. Skipped."
-                        ),
-                    })
-                    failed_slugs.add(current_slug)
-                    continue
-
-                # Warn on same-source slug collision (last-file-wins)
-                if current_slug in seen_slugs:
-                    logger.warning(
-                        'Same-source slug collision: %s appears multiple '
-                        'times in %s. Last file wins.',
-                        current_slug, source.repo_name,
-                    )
-
-                seen_slugs.add(current_slug)
-
-                # Rewrite image URLs
-                base_dir = os.path.dirname(rel_path)
-
-                # Edge Case 8: Check for broken image references
-                if known_images is not None:
-                    _check_broken_image_refs(
-                        body, rel_path, source.repo_name, base_dir,
-                        known_images, stats['errors'],
-                    )
-
-                body = rewrite_image_urls(body, source.repo_name, base_dir)
-
-                # Extract page_type and data from frontmatter
-                page_type = metadata.get('page_type', 'blog')
-                data = metadata.get('data', {})
-
-                defaults = {
-                    'title': metadata.get('title', current_slug),
-                    'description': metadata.get('description', ''),
-                    'content_markdown': body,
-                    'author': metadata.get('author', ''),
-                    'tags': metadata.get('tags', []),
-                    'cover_image_url': rewrite_cover_image_url(
-                        metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
-                        source, rel_path,
-                    ),
-                    'required_level': metadata.get('required_level', 0),
-                    'published': True,
-                    'source_repo': source.repo_name,
-                    'source_path': rel_path,
-                    'source_commit': commit_sha,
-                    'page_type': page_type,
-                    'data_json': data,
-                    'content_id': content_id,
-                }
-
-                # Parse date
-                date_str = metadata.get('date')
-                if date_str:
-                    from datetime import date as date_type
-                    if isinstance(date_str, str):
-                        defaults['date'] = date_type.fromisoformat(date_str)
-                    elif isinstance(date_str, date_type):
-                        defaults['date'] = date_str
-                else:
-                    defaults['date'] = timezone.now().date()
-
-                # Pre-derive description so the no-change comparison below
-                # matches what Article.save() would persist. Article.save()
-                # auto-fills description from the first 200 chars of
-                # content_markdown when description is empty; if we left
-                # defaults['description'] = '' we'd see a spurious diff on
-                # every re-sync (issue #225).
-                if not defaults['description'] and body:
-                    defaults['description'] = body[:200]
-
-                # Issue #225: only mark as 'updated' when content actually
-                # changed. Look up first; if found and unchanged, skip the
-                # save and don't bump items_updated / items_detail.
-                try:
-                    article = Article.objects.get(
-                        slug=current_slug, source_repo=source.repo_name,
-                    )
-                except Article.DoesNotExist:
-                    article = Article(
-                        slug=current_slug, **defaults,
-                    )
-                    article.save()
-                    created = True
-                    changed = True
-                else:
-                    if _defaults_differ(article, defaults):
-                        for k, v in defaults.items():
-                            setattr(article, k, v)
-                        article.save()
-                        created = False
-                        changed = True
-                    else:
-                        created = False
-                        changed = False
-
-                # Expand widgets after save (save already rendered markdown to HTML)
-                # Only re-run when we actually saved — for an unchanged row the
-                # rendered HTML is already correct.
-                if changed and article.data_json:
-                    from content.utils.widgets import expand_widgets
-                    expanded = expand_widgets(article.content_html, article.data_json)
-                    Article.objects.filter(pk=article.pk).update(content_html=expanded)
-
-                if not changed:
-                    stats['unchanged'] += 1
-                    continue
-
-                action = 'created' if created else 'updated'
-                if created:
-                    stats['created'] += 1
-                else:
-                    stats['updated'] += 1
-                stats['items_detail'].append({
-                    'title': defaults['title'],
-                    'slug': current_slug,
-                    'action': action,
-                    'content_type': 'article',
-                })
-
-            except Exception as e:
-                # Track the slug as failed so it's excluded from cleanup.
-                # Use filename-based slug as safe fallback, plus current_slug
-                # if it was derived from metadata before the error.
-                failed_slugs.add(os.path.splitext(filename)[0])
-                if current_slug:
-                    failed_slugs.add(current_slug)
+            # Edge Case 2: Check slug collision across sources
+            if _check_slug_collision(Article, current_slug, source.repo_name, rel_path):
                 stats['errors'].append({
                     'file': rel_path,
-                    'error': str(e),
+                    'error': (
+                        f"Slug collision: '{current_slug}' already exists from a "
+                        f"different source. Skipped."
+                    ),
                 })
-                logger.warning('Error syncing article %s: %s', rel_path, e)
+                failed_slugs.add(current_slug)
+                continue
+
+            # Warn on same-source slug collision (last-file-wins)
+            if current_slug in seen_slugs:
+                logger.warning(
+                    'Same-source slug collision: %s appears multiple '
+                    'times in %s. Last file wins.',
+                    current_slug, source.repo_name,
+                )
+
+            seen_slugs.add(current_slug)
+
+            # Rewrite image URLs
+            base_dir = os.path.dirname(rel_path)
+
+            # Edge Case 8: Check for broken image references
+            if known_images is not None:
+                _check_broken_image_refs(
+                    body, rel_path, source.repo_name, base_dir,
+                    known_images, stats['errors'],
+                )
+
+            body = rewrite_image_urls(body, source.repo_name, base_dir)
+
+            # Extract page_type and data from frontmatter
+            page_type = metadata.get('page_type', 'blog')
+            data = metadata.get('data', {})
+
+            defaults = {
+                'title': metadata.get('title', current_slug),
+                'description': metadata.get('description', ''),
+                'content_markdown': body,
+                'author': metadata.get('author', ''),
+                'tags': metadata.get('tags', []),
+                'cover_image_url': rewrite_cover_image_url(
+                    metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
+                    source, rel_path,
+                ),
+                'required_level': metadata.get('required_level', 0),
+                'published': True,
+                'source_repo': source.repo_name,
+                'source_path': rel_path,
+                'source_commit': commit_sha,
+                'page_type': page_type,
+                'data_json': data,
+                'content_id': content_id,
+            }
+
+            # Parse date
+            date_str = metadata.get('date')
+            if date_str:
+                from datetime import date as date_type
+                if isinstance(date_str, str):
+                    defaults['date'] = date_type.fromisoformat(date_str)
+                elif isinstance(date_str, date_type):
+                    defaults['date'] = date_str
+            else:
+                defaults['date'] = timezone.now().date()
+
+            # Pre-derive description so the no-change comparison below
+            # matches what Article.save() would persist. Article.save()
+            # auto-fills description from the first 200 chars of
+            # content_markdown when description is empty; if we left
+            # defaults['description'] = '' we'd see a spurious diff on
+            # every re-sync (issue #225).
+            if not defaults['description'] and body:
+                defaults['description'] = body[:200]
+
+            # Idempotent lookup: prefer content_id within this source's
+            # repo (issue #311 / #310), fall back to slug, then to
+            # source_path. This lets authors rename articles without
+            # triggering a duplicate insert.
+            article = Article.objects.filter(
+                content_id=content_id,
+                source_repo=source.repo_name,
+            ).first()
+            if article is None:
+                article = Article.objects.filter(
+                    slug=current_slug,
+                    source_repo=source.repo_name,
+                ).first()
+            if article is None:
+                article = Article.objects.filter(
+                    source_repo=source.repo_name,
+                    source_path=rel_path,
+                ).first()
+
+            if article is None:
+                article = Article(
+                    slug=current_slug, **defaults,
+                )
+                article.save()
+                created = True
+                changed = True
+            else:
+                identity_changed = (
+                    article.slug != current_slug
+                    or article.source_path != rel_path
+                )
+                if identity_changed or _defaults_differ(article, defaults):
+                    article.slug = current_slug
+                    for k, v in defaults.items():
+                        setattr(article, k, v)
+                    article.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            # Expand widgets after save (save already rendered markdown to HTML)
+            # Only re-run when we actually saved — for an unchanged row the
+            # rendered HTML is already correct.
+            if changed and article.data_json:
+                from content.utils.widgets import expand_widgets
+                expanded = expand_widgets(article.content_html, article.data_json)
+                Article.objects.filter(pk=article.pk).update(content_html=expanded)
+
+            if not changed:
+                stats['unchanged'] += 1
+                continue
+
+            action = 'created' if created else 'updated'
+            if created:
+                stats['created'] += 1
+            else:
+                stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': defaults['title'],
+                'slug': current_slug,
+                'action': action,
+                'content_type': 'article',
+            })
+
+        except Exception as e:
+            # Track the slug as failed so it's excluded from cleanup.
+            # Use filename-based slug as safe fallback, plus current_slug
+            # if it was derived from metadata before the error.
+            failed_slugs.add(os.path.splitext(filename)[0])
+            if current_slug:
+                failed_slugs.add(current_slug)
+            stats['errors'].append({
+                'file': rel_path,
+                'error': str(e),
+            })
+            logger.warning('Error syncing article %s: %s', rel_path, e)
 
     # Edge Case 3: Exclude failed_slugs from stale-content cleanup
     stale_articles = Article.objects.filter(
@@ -1788,9 +1740,48 @@ def _sync_articles(source, repo_dir, commit_sha, sync_log, known_images=None):
         })
     deleted_count = stale_articles.count()
     stale_articles.update(published=False, status='draft')
-    stats['deleted'] = deleted_count
+    stats['deleted'] += deleted_count
 
-    return stats
+
+def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
+                      known_images=None):
+    """Walker dispatch handler: process course directories.
+
+    Iterates ``course_dirs`` (absolute paths to dirs containing
+    ``course.yaml``) and upserts a ``Course`` row plus its Modules and
+    Units for each. Performs the stale-Course soft-delete sweep at the
+    end. Replaces the legacy ``_sync_courses`` orchestrator.
+    """
+    from content.models import Course
+
+    seen_course_slugs = set()
+    failed_course_slugs = set()
+
+    for course_dir in course_dirs:
+        _sync_single_course(
+            course_dir, repo_dir, source, commit_sha, stats,
+            seen_course_slugs, failed_course_slugs,
+            known_images=known_images,
+        )
+
+    # Edge Case 3: Exclude failed slugs from stale-content cleanup
+    stale_courses = Course.objects.filter(
+        source_repo=source.repo_name,
+        status='published',
+    ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs)
+
+    for course in stale_courses:
+        stats['items_detail'].append({
+            'title': course.title,
+            'slug': course.slug,
+            'action': 'deleted',
+            'content_type': 'course',
+            'course_id': course.pk,
+            'course_slug': course.slug,
+        })
+    deleted_count = stale_courses.count()
+    stale_courses.update(status='draft')
+    stats['deleted'] += deleted_count
 
 
 def _sync_single_course(
@@ -1972,74 +1963,6 @@ def _sync_single_course(
             'Error syncing course %s: %s',
             os.path.basename(course_dir.rstrip(os.sep)), e,
         )
-
-
-def _sync_courses(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync courses with modules and units from the repo.
-
-    Two modes:
-
-    - Single-course mode: if ``course.yaml`` exists at ``repo_dir`` root, the
-      whole repo_dir is treated as one course. Modules are immediate child
-      directories. This wins over multi-course mode if both shapes are
-      present (any child course.yaml files are ignored - those child dirs
-      are interpreted as modules, and skipped if they have no module.yaml).
-    - Multi-course mode: otherwise, each child directory containing a
-      ``course.yaml`` is processed as its own course (legacy behavior used
-      by the AI-Shipping-Labs/content monorepo's ``courses/`` subtree).
-    """
-    from content.models import Course
-
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
-    seen_course_slugs = set()
-    failed_course_slugs = set()
-
-    root_course_yaml = os.path.join(repo_dir, 'course.yaml')
-    if os.path.exists(root_course_yaml):
-        # Single-course mode: repo_dir IS the course directory.
-        _sync_single_course(
-            repo_dir, repo_dir, source, commit_sha, stats,
-            seen_course_slugs, failed_course_slugs, known_images=known_images,
-        )
-    else:
-        # Multi-course mode: each child dir with course.yaml is a course.
-        for entry in os.scandir(repo_dir):
-            if not entry.is_dir() or entry.name.startswith('.'):
-                continue
-
-            course_yaml_path = os.path.join(entry.path, 'course.yaml')
-            if not os.path.exists(course_yaml_path):
-                continue
-
-            _sync_single_course(
-                entry.path, repo_dir, source, commit_sha, stats,
-                seen_course_slugs, failed_course_slugs,
-                known_images=known_images,
-            )
-
-    # Edge Case 3: Exclude failed slugs from stale-content cleanup
-    stale_courses = Course.objects.filter(
-        source_repo=source.repo_name,
-        status='published',
-    ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs)
-
-    for course in stale_courses:
-        stats['items_detail'].append({
-            'title': course.title,
-            'slug': course.slug,
-            'action': 'deleted',
-            'content_type': 'course',
-            'course_id': course.pk,
-            'course_slug': course.slug,
-        })
-    deleted_count = stale_courses.count()
-    stale_courses.update(status='draft')
-    stats['deleted'] += deleted_count
-
-    return stats
 
 
 def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=None):
@@ -2499,12 +2422,21 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
                 'source_repo': repo_name,
                 'source_commit': commit_sha,
             }
-            # Issue #225: only count as 'updated' when content actually changed.
-            try:
-                module = Module.objects.get(
-                    course=course, source_path=rel_path,
-                )
-            except Module.DoesNotExist:
+            # Issue #310: prefer source_path lookup, fall back to
+            # (course, slug). Module has no content_id field, but the
+            # (course, slug) fallback lets a dir-rename that keeps the
+            # slug stay idempotent — without it the source_path-based
+            # lookup misses and the unique (course, slug) constraint
+            # fires on insert.
+            module = Module.objects.filter(
+                course=course, source_path=rel_path,
+            ).first()
+            if module is None:
+                module = Module.objects.filter(
+                    course=course, slug=slug,
+                ).first()
+
+            if module is None:
                 module = Module(
                     course=course, source_path=rel_path, **module_defaults,
                 )
@@ -2512,7 +2444,12 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
                 created = True
                 changed = True
             else:
-                if _defaults_differ(module, module_defaults):
+                identity_changed = (
+                    module.source_path != rel_path
+                    or module.slug != slug
+                )
+                if identity_changed or _defaults_differ(module, module_defaults):
+                    module.source_path = rel_path
                     for k, v in module_defaults.items():
                         setattr(module, k, v)
                     module.save()
@@ -2780,12 +2717,28 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             else:
                 defaults['body'] = body
 
-            # Issue #225: only count as 'updated' when content actually changed.
-            try:
-                unit = Unit.objects.get(
+            # Issue #310/#311: prefer content_id-first lookup so renaming
+            # a unit's filename or slug doesn't trigger a duplicate insert
+            # (which then fails with a unique-constraint violation when the
+            # stale row's slug collides). Fall back to source_path for
+            # legacy rows that predate content_id, and to (module, slug)
+            # so a rename within the same module that updates only the
+            # filename is found.
+            unit = Unit.objects.filter(
+                content_id=unit_content_id,
+                source_repo=repo_name,
+                module=module,
+            ).first()
+            if unit is None:
+                unit = Unit.objects.filter(
+                    module=module, slug=slug,
+                ).first()
+            if unit is None:
+                unit = Unit.objects.filter(
                     module=module, source_path=rel_path,
-                )
-            except Unit.DoesNotExist:
+                ).first()
+
+            if unit is None:
                 unit = Unit(
                     module=module, source_path=rel_path, **defaults,
                 )
@@ -2793,7 +2746,12 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 created = True
                 changed = True
             else:
-                if _defaults_differ(unit, defaults):
+                identity_changed = (
+                    unit.source_path != rel_path
+                    or unit.slug != slug
+                )
+                if identity_changed or _defaults_differ(unit, defaults):
+                    unit.source_path = rel_path
                     for k, v in defaults.items():
                         setattr(unit, k, v)
                     unit.save()
@@ -2859,34 +2817,6 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     deleted_count = stale_units.count()
     stale_units.delete()
     stats['deleted'] += deleted_count
-
-
-def _sync_resources(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync resources: curated links and downloads.
-
-    Note: recordings are now synced via _sync_events (content_type='event').
-    """
-
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
-
-    # Sync curated links
-    links_dir = os.path.join(repo_dir, 'curated-links')
-    if os.path.isdir(links_dir):
-        _sync_curated_links(
-            source, links_dir, repo_dir, commit_sha, stats,
-        )
-
-    # Sync downloads
-    downloads_dir = os.path.join(repo_dir, 'downloads')
-    if os.path.isdir(downloads_dir):
-        _sync_downloads(
-            source, downloads_dir, repo_dir, commit_sha, stats,
-        )
-
-    return stats
 
 
 def _event_requests_zoom_meeting(data):
@@ -2959,13 +2889,12 @@ def _maybe_create_zoom_meeting_for_synced_event(event, data):
     event.save(update_fields=['zoom_meeting_id', 'zoom_join_url'])
 
 
-def _sync_instructors(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync Instructor rows from yaml files in ``instructors/``.
+def _dispatch_instructors(source, repo_dir, file_list, commit_sha, stats):
+    """Walker dispatch handler: process instructor YAML files.
 
-    Mirrors :func:`_sync_events` in shape: walk ``*.yaml``/``*.yml`` files
-    in ``repo_dir`` (caller already resolved ``content_path``), require
-    ``id`` + ``name``, upsert by ``(instructor_id, source_repo)`` falling
-    back to ``instructor_id`` only.
+    ``file_list`` is the set of repo-relative ``.yaml``/``.yml`` paths
+    under any ``instructors/`` subtree, classified by
+    ``_classify_repo_files``.
 
     Edge cases:
 
@@ -2980,20 +2909,12 @@ def _sync_instructors(source, repo_dir, commit_sha, sync_log, known_images=None)
     """
     from content.models import Instructor
 
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
-
     seen_ids = set()
     failed_ids = set()
 
-    for filename in sorted(os.listdir(repo_dir)):
-        if not (filename.endswith('.yaml') or filename.endswith('.yml')):
-            continue
-
-        filepath = os.path.join(repo_dir, filename)
-        rel_path = os.path.relpath(filepath, repo_dir)
+    for rel_path in sorted(file_list):
+        filepath = os.path.join(repo_dir, rel_path)
+        data = None
 
         try:
             data = _parse_yaml_file(filepath)
@@ -3124,8 +3045,6 @@ def _sync_instructors(source, repo_dir, commit_sha, sync_log, known_images=None)
     deleted_count = stale.count()
     stale.update(status='draft')
     stats['deleted'] += deleted_count
-
-    return stats
 
 
 def _resolve_instructors_for_yaml(data, rel_path, stats):
@@ -3298,32 +3217,28 @@ def _attach_instructors_to_event(event, resolved, stats):
         event.save(update_fields=changed_fields)
 
 
-def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync event YAML/markdown files from the events/ directory.
+def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
+                     known_images=None):
+    """Walker dispatch handler: process event YAML files.
+
+    ``file_list`` is the set of repo-relative paths classified by
+    ``_classify_repo_files`` as having a ``start_datetime`` field.
 
     Upserts into the Event model. Only updates content fields; operational
-    fields (start_datetime, zoom_join_url, status, etc.) are never overwritten
-    by sync if the event already exists.
+    fields (start_datetime, zoom_join_url, status, etc.) are never
+    overwritten by sync if the event already exists.
     """
     import datetime as dt
 
     from events.models import Event
 
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
     seen_slugs = set()
     failed_slugs = set()
+    data = None  # ensure name is bound for the except clause
 
-    events_dir = repo_dir  # content_path already resolved by caller
-
-    for filename in os.listdir(events_dir):
-        if not (filename.endswith('.yaml') or filename.endswith('.yml') or filename.endswith('.md')):
-            continue
-
-        filepath = os.path.join(events_dir, filename)
-        rel_path = os.path.relpath(filepath, repo_dir)
+    for rel_path in sorted(file_list):
+        filepath = os.path.join(repo_dir, rel_path)
+        filename = os.path.basename(rel_path)
 
         try:
             # Parse YAML or markdown with frontmatter
@@ -3488,11 +3403,18 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
             failed_slugs.add(failed_slug)
             stats['errors'].append({'file': rel_path, 'error': str(e)})
 
-    # Soft-delete: if a synced event file is removed, set published=False
+    # Soft-delete: if a synced event file is removed, set published=False.
+    # Workshop-linked events (``kind='workshop'``) are managed by
+    # ``_sync_single_workshop`` / ``_link_or_create_workshop_event``, so
+    # exclude them here — otherwise the events dispatcher's cleanup
+    # would unpublish a freshly-created workshop event because no event
+    # YAML existed for it.
     stale = Event.objects.filter(
         source_repo=source.repo_name,
         published=True,
-    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
+    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs).exclude(
+        kind='workshop',
+    )
     for ev in stale:
         stats['items_detail'].append({
             'title': ev.title,
@@ -3504,22 +3426,21 @@ def _sync_events(source, repo_dir, commit_sha, sync_log, known_images=None):
     stale.update(published=False)
     stats['deleted'] += deleted_count
 
-    return stats
 
+def _dispatch_curated_links(source, repo_dir, file_list, commit_sha, stats):
+    """Walker dispatch handler: process curated link markdown files.
 
-def _sync_curated_links(source, links_dir, repo_dir, commit_sha, stats):
-    """Sync curated links from individual markdown files."""
+    ``file_list`` is the set of repo-relative ``.md`` paths under any
+    ``curated-links/`` subtree, classified by ``_classify_repo_files``.
+    """
     from content.models import CuratedLink
 
     seen_item_ids = set()
     failed_item_ids = set()
 
-    for filename in os.listdir(links_dir):
-        if not filename.endswith('.md'):
-            continue
-
-        filepath = os.path.join(links_dir, filename)
-        rel_path = os.path.relpath(filepath, repo_dir)
+    for rel_path in file_list:
+        filepath = os.path.join(repo_dir, rel_path)
+        filename = os.path.basename(rel_path)
 
         try:
             metadata, body = _parse_markdown_file(filepath)
@@ -3618,19 +3539,21 @@ def _sync_curated_links(source, links_dir, repo_dir, commit_sha, stats):
     stats['deleted'] += deleted_count
 
 
-def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
-    """Sync download YAML files."""
+def _dispatch_downloads(source, repo_dir, file_list, commit_sha, stats):
+    """Walker dispatch handler: process download YAML files.
+
+    ``file_list`` is the set of repo-relative ``.yaml``/``.yml`` paths
+    under any ``downloads/`` subtree, classified by
+    ``_classify_repo_files``.
+    """
     from content.models import Download
 
     seen_slugs = set()
     failed_slugs = set()
 
-    for filename in os.listdir(downloads_dir):
-        if not filename.endswith('.yaml') and not filename.endswith('.yml'):
-            continue
-
-        filepath = os.path.join(downloads_dir, filename)
-        rel_path = os.path.relpath(filepath, repo_dir)
+    for rel_path in file_list:
+        filepath = os.path.join(repo_dir, rel_path)
+        filename = os.path.basename(rel_path)
 
         try:
             data = _parse_yaml_file(filepath)
@@ -3743,145 +3666,157 @@ def _sync_downloads(source, downloads_dir, repo_dir, commit_sha, stats):
     stats['deleted'] += deleted_count
 
 
-def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync project markdown files from the repo."""
+def _dispatch_projects(source, repo_dir, file_list, commit_sha, stats,
+                       known_images=None):
+    """Walker dispatch handler: process project markdown files.
+
+    ``file_list`` is the set of repo-relative ``.md`` paths classified by
+    ``_classify_repo_files`` as having both ``difficulty`` and ``author``
+    frontmatter fields.
+    """
     from datetime import date as date_type
 
     from content.models import Project
 
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
     seen_slugs = set()
     failed_slugs = set()
+    metadata = {}
 
-    for root, dirs, files in os.walk(repo_dir):
-        if '.git' in root:
-            continue
-        for filename in files:
-            if not filename.endswith('.md') or filename.upper() == 'README.MD':
+    for rel_path in file_list:
+        filepath = os.path.join(repo_dir, rel_path)
+        filename = os.path.basename(rel_path)
+
+        try:
+            metadata, body = _parse_markdown_file(filepath)
+            slug = metadata.get('slug', os.path.splitext(filename)[0])
+
+            # Edge Case 7: Frontmatter validation
+            _validate_frontmatter(metadata, 'project', rel_path)
+
+            # Require content_id in frontmatter
+            project_content_id = metadata.get('content_id')
+            if not project_content_id:
+                msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
                 continue
 
-            filepath = os.path.join(root, filename)
-            rel_path = os.path.relpath(filepath, repo_dir)
-
-            try:
-                metadata, body = _parse_markdown_file(filepath)
-                slug = metadata.get('slug', os.path.splitext(filename)[0])
-
-                # Edge Case 7: Frontmatter validation
-                _validate_frontmatter(metadata, 'project', rel_path)
-
-                # Require content_id in frontmatter
-                project_content_id = metadata.get('content_id')
-                if not project_content_id:
-                    msg = f'Skipping {rel_path}: missing content_id in frontmatter'
-                    logger.warning(msg)
-                    stats['errors'].append({'file': rel_path, 'error': msg})
-                    continue
-
-                # Edge Case 2: Slug collision across sources
-                if _check_slug_collision(Project, slug, source.repo_name, rel_path):
-                    stats['errors'].append({
-                        'file': rel_path,
-                        'error': (
-                            f"Slug collision: '{slug}' already exists from a "
-                            f"different source. Skipped."
-                        ),
-                    })
-                    failed_slugs.add(slug)
-                    continue
-
-                seen_slugs.add(slug)
-
-                base_dir = os.path.dirname(rel_path)
-
-                # Edge Case 8: Check broken image references
-                if known_images is not None:
-                    _check_broken_image_refs(
-                        body, rel_path, source.repo_name, base_dir,
-                        known_images, stats['errors'],
-                    )
-
-                body = rewrite_image_urls(body, source.repo_name, base_dir)
-
-                defaults = {
-                    'title': metadata.get('title', slug),
-                    'description': metadata.get('description', ''),
-                    'content_markdown': body,
-                    'author': metadata.get('author', ''),
-                    'tags': metadata.get('tags', []),
-                    'difficulty': metadata.get('difficulty', ''),
-                    'source_code_url': metadata.get('source_code_url', ''),
-                    'demo_url': metadata.get('demo_url', ''),
-                    'cover_image_url': rewrite_cover_image_url(
-                        metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
-                        source, rel_path,
+            # Edge Case 2: Slug collision across sources
+            if _check_slug_collision(Project, slug, source.repo_name, rel_path):
+                stats['errors'].append({
+                    'file': rel_path,
+                    'error': (
+                        f"Slug collision: '{slug}' already exists from a "
+                        f"different source. Skipped."
                     ),
-                    'required_level': metadata.get('required_level', 0),
-                    'published': True,
-                    'source_repo': source.repo_name,
-                    'source_path': rel_path,
-                    'source_commit': commit_sha,
-                    'content_id': project_content_id,
-                }
+                })
+                failed_slugs.add(slug)
+                continue
 
-                date_val = metadata.get('date')
-                if date_val:
-                    if isinstance(date_val, str):
-                        defaults['date'] = date_type.fromisoformat(date_val)
-                    elif isinstance(date_val, date_type):
-                        defaults['date'] = date_val
-                else:
-                    defaults['date'] = timezone.now().date()
+            seen_slugs.add(slug)
 
-                # Issue #225: only count as 'updated' when content actually changed.
-                try:
-                    project = Project.objects.get(
-                        slug=slug, source_repo=source.repo_name,
-                    )
-                except Project.DoesNotExist:
-                    project = Project(slug=slug, **defaults)
+            base_dir = os.path.dirname(rel_path)
+
+            # Edge Case 8: Check broken image references
+            if known_images is not None:
+                _check_broken_image_refs(
+                    body, rel_path, source.repo_name, base_dir,
+                    known_images, stats['errors'],
+                )
+
+            body = rewrite_image_urls(body, source.repo_name, base_dir)
+
+            defaults = {
+                'title': metadata.get('title', slug),
+                'description': metadata.get('description', ''),
+                'content_markdown': body,
+                'author': metadata.get('author', ''),
+                'tags': metadata.get('tags', []),
+                'difficulty': metadata.get('difficulty', ''),
+                'source_code_url': metadata.get('source_code_url', ''),
+                'demo_url': metadata.get('demo_url', ''),
+                'cover_image_url': rewrite_cover_image_url(
+                    metadata.get('cover_image', '') or metadata.get('cover_image_url', ''),
+                    source, rel_path,
+                ),
+                'required_level': metadata.get('required_level', 0),
+                'published': True,
+                'source_repo': source.repo_name,
+                'source_path': rel_path,
+                'source_commit': commit_sha,
+                'content_id': project_content_id,
+            }
+
+            date_val = metadata.get('date')
+            if date_val:
+                if isinstance(date_val, str):
+                    defaults['date'] = date_type.fromisoformat(date_val)
+                elif isinstance(date_val, date_type):
+                    defaults['date'] = date_val
+            else:
+                defaults['date'] = timezone.now().date()
+
+            # Idempotent lookup: prefer content_id, fall back to slug,
+            # then to source_path. Issue #310/#311.
+            project = Project.objects.filter(
+                content_id=project_content_id,
+                source_repo=source.repo_name,
+            ).first()
+            if project is None:
+                project = Project.objects.filter(
+                    slug=slug, source_repo=source.repo_name,
+                ).first()
+            if project is None:
+                project = Project.objects.filter(
+                    source_repo=source.repo_name, source_path=rel_path,
+                ).first()
+
+            if project is None:
+                project = Project(slug=slug, **defaults)
+                project.save()
+                created = True
+                changed = True
+            else:
+                identity_changed = (
+                    project.slug != slug
+                    or project.source_path != rel_path
+                )
+                if identity_changed or _defaults_differ(project, defaults):
+                    project.slug = slug
+                    for k, v in defaults.items():
+                        setattr(project, k, v)
                     project.save()
-                    created = True
+                    created = False
                     changed = True
                 else:
-                    if _defaults_differ(project, defaults):
-                        for k, v in defaults.items():
-                            setattr(project, k, v)
-                        project.save()
-                        created = False
-                        changed = True
-                    else:
-                        created = False
-                        changed = False
+                    created = False
+                    changed = False
 
-                if not changed:
-                    stats['unchanged'] += 1
-                    continue
+            if not changed:
+                stats['unchanged'] += 1
+                continue
 
-                action = 'created' if created else 'updated'
-                if created:
-                    stats['created'] += 1
-                else:
-                    stats['updated'] += 1
-                stats['items_detail'].append({
-                    'title': defaults['title'],
-                    'slug': slug,
-                    'action': action,
-                    'content_type': 'project',
-                })
+            action = 'created' if created else 'updated'
+            if created:
+                stats['created'] += 1
+            else:
+                stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': defaults['title'],
+                'slug': slug,
+                'action': action,
+                'content_type': 'project',
+            })
 
-            except Exception as e:
-                fallback_slug = os.path.splitext(filename)[0]
-                try:
-                    failed_slug = metadata.get('slug', fallback_slug)
-                except Exception:
-                    failed_slug = fallback_slug
-                failed_slugs.add(failed_slug)
-                stats['errors'].append({'file': rel_path, 'error': str(e)})
-                logger.warning('Error syncing project %s: %s', rel_path, e)
+        except Exception as e:
+            fallback_slug = os.path.splitext(filename)[0]
+            try:
+                failed_slug = metadata.get('slug', fallback_slug)
+            except Exception:
+                failed_slug = fallback_slug
+            failed_slugs.add(failed_slug)
+            stats['errors'].append({'file': rel_path, 'error': str(e)})
+            logger.warning('Error syncing project %s: %s', rel_path, e)
 
     # Soft-delete stale projects, excluding failed slugs
     stale = Project.objects.filter(
@@ -3897,88 +3832,81 @@ def _sync_projects(source, repo_dir, commit_sha, sync_log, known_images=None):
         })
     deleted_count = stale.count()
     stale.update(published=False, status='pending_review')
-    stats['deleted'] = deleted_count
-
-    return stats
+    stats['deleted'] += deleted_count
 
 
-def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync interview question categories from markdown files."""
+def _dispatch_interview_questions(source, repo_dir, file_list, commit_sha,
+                                  stats, known_images=None):
+    """Walker dispatch handler: process interview-question markdown files.
+
+    ``file_list`` is the set of repo-relative ``.md`` paths classified by
+    ``_classify_repo_files`` as root-level lowercase-kebab-case files
+    that don't qualify as articles or projects.
+    """
     from content.models import InterviewCategory
 
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
     seen_slugs = set()
 
-    # Walk for all .md files (excluding README)
-    for root, dirs, files in os.walk(repo_dir):
-        if '.git' in root:
-            continue
-        for filename in files:
-            if not filename.endswith('.md') or filename.upper() == 'README.MD':
-                continue
+    for rel_path in file_list:
+        filepath = os.path.join(repo_dir, rel_path)
+        filename = os.path.basename(rel_path)
 
-            filepath = os.path.join(root, filename)
-            rel_path = os.path.relpath(filepath, repo_dir)
+        try:
+            metadata, body = _parse_markdown_file(filepath)
+            slug = os.path.splitext(filename)[0]
+            seen_slugs.add(slug)
 
+            defaults = {
+                'title': metadata.get('title', slug.replace('-', ' ').title()),
+                'description': metadata.get('description', ''),
+                'status': metadata.get('status', ''),
+                'sections_json': metadata.get('sections', []),
+                'body_markdown': body,
+                'source_repo': source.repo_name,
+                'source_path': rel_path,
+                'source_commit': commit_sha,
+            }
+
+            # Issue #225: only count as 'updated' when content actually changed.
             try:
-                metadata, body = _parse_markdown_file(filepath)
-                slug = os.path.splitext(filename)[0]
-                seen_slugs.add(slug)
-
-                defaults = {
-                    'title': metadata.get('title', slug.replace('-', ' ').title()),
-                    'description': metadata.get('description', ''),
-                    'status': metadata.get('status', ''),
-                    'sections_json': metadata.get('sections', []),
-                    'body_markdown': body,
-                    'source_repo': source.repo_name,
-                    'source_path': rel_path,
-                    'source_commit': commit_sha,
-                }
-
-                # Issue #225: only count as 'updated' when content actually changed.
-                try:
-                    obj = InterviewCategory.objects.get(slug=slug)
-                except InterviewCategory.DoesNotExist:
-                    obj = InterviewCategory(slug=slug, **defaults)
+                obj = InterviewCategory.objects.get(slug=slug)
+            except InterviewCategory.DoesNotExist:
+                obj = InterviewCategory(slug=slug, **defaults)
+                obj.save()
+                created = True
+                changed = True
+            else:
+                if _defaults_differ(obj, defaults):
+                    for k, v in defaults.items():
+                        setattr(obj, k, v)
                     obj.save()
-                    created = True
+                    created = False
                     changed = True
                 else:
-                    if _defaults_differ(obj, defaults):
-                        for k, v in defaults.items():
-                            setattr(obj, k, v)
-                        obj.save()
-                        created = False
-                        changed = True
-                    else:
-                        created = False
-                        changed = False
+                    created = False
+                    changed = False
 
-                if not changed:
-                    stats['unchanged'] += 1
-                    continue
+            if not changed:
+                stats['unchanged'] += 1
+                continue
 
-                action = 'created' if created else 'updated'
-                if created:
-                    stats['created'] += 1
-                else:
-                    stats['updated'] += 1
-                stats['items_detail'].append({
-                    'title': defaults['title'],
-                    'slug': slug,
-                    'action': action,
-                    'content_type': 'interview_question',
-                })
+            action = 'created' if created else 'updated'
+            if created:
+                stats['created'] += 1
+            else:
+                stats['updated'] += 1
+            stats['items_detail'].append({
+                'title': defaults['title'],
+                'slug': slug,
+                'action': action,
+                'content_type': 'interview_question',
+            })
 
-            except Exception as e:
-                stats['errors'].append({'file': rel_path, 'error': str(e)})
-                logger.warning(
-                    'Error syncing interview question %s: %s', rel_path, e,
-                )
+        except Exception as e:
+            stats['errors'].append({'file': rel_path, 'error': str(e)})
+            logger.warning(
+                'Error syncing interview question %s: %s', rel_path, e,
+            )
 
     # Delete stale categories from this repo
     stale = InterviewCategory.objects.filter(
@@ -3993,9 +3921,7 @@ def _sync_interview_questions(source, repo_dir, commit_sha, sync_log, known_imag
         })
     deleted_count = stale.count()
     stale.delete()
-    stats['deleted'] = deleted_count
-
-    return stats
+    stats['deleted'] += deleted_count
 
 
 # ===========================================================================
@@ -4054,77 +3980,29 @@ def _extract_workshop_folder_date(folder_name):
         return None
 
 
-def _sync_workshops(source, repo_dir, commit_sha, sync_log, known_images=None):
-    """Sync workshops from a ``workshops-content``-shaped repo.
+def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
+                        known_images=None):
+    """Walker dispatch handler: process workshop directories.
 
-    Layouts supported:
+    ``workshop_dirs`` is the list of absolute paths to dirs containing
+    ``workshop.yaml`` (collected by ``_classify_repo_files``).
 
-    - Flat (preferred): ``<repo_dir>/YYYY-MM-DD-slug/workshop.yaml``
-    - Nested (legacy): ``<repo_dir>/YYYY/YYYY-MM-DD-slug/workshop.yaml``
-
-    At the repo root we accept any dir whose name starts with
-    ``YYYY-MM-DD-`` as a candidate workshop folder. Numeric-year dirs
-    (``YYYY``) are still descended into for backward compat with the
-    old nested layout. Folders without ``workshop.yaml`` are silently
-    skipped (code-only). Missing required frontmatter is logged per-file
-    and the rest of the sync continues.
-
-    Stale workshops (folder deleted between syncs) are set to ``status='draft'``.
-    The linked Event is NOT unpublished — it's standalone and may have been
-    edited independently in Studio.
+    Stale workshops (folder deleted between syncs) are set to
+    ``status='draft'``. The linked Event is NOT unpublished — it's
+    standalone and may have been edited independently in Studio.
     """
     from content.models import Workshop
 
-    stats = {
-        'created': 0, 'updated': 0, 'unchanged': 0, 'deleted': 0,
-        'errors': [], 'items_detail': [],
-    }
     seen_slugs = set()
     failed_slugs = set()
 
-    # Collect candidate workshop dirs in two passes so the flat-root and
-    # nested-YYYY layouts can coexist.
-    candidate_dirs = []
-
-    for entry in sorted(os.scandir(repo_dir), key=lambda e: e.name):
-        if not entry.is_dir() or entry.name.startswith('.'):
-            continue
-        # Numeric-year directory — descend and pick up any child folder
-        # that contains a workshop.yaml (backward compat with nested
-        # ``YYYY/YYYY-MM-DD-slug/`` layout).
-        if re.fullmatch(r'\d{4}', entry.name):
-            for child in sorted(os.scandir(entry.path), key=lambda e: e.name):
-                if not child.is_dir() or child.name.startswith('.'):
-                    continue
-                if os.path.isfile(os.path.join(child.path, 'workshop.yaml')):
-                    candidate_dirs.append(child.path)
-            continue
-        # Flat-root layout: any ``YYYY-MM-DD-<slug>`` dir at the root
-        # that contains a workshop.yaml is a workshop folder.
-        if re.match(r'^\d{4}-\d{2}-\d{2}-', entry.name):
-            if os.path.isfile(os.path.join(entry.path, 'workshop.yaml')):
-                candidate_dirs.append(entry.path)
-            continue
-        # Legacy test shim: non-dated top-level dir that directly contains
-        # a workshop.yaml is still treated as a workshop folder.
-        if os.path.isfile(os.path.join(entry.path, 'workshop.yaml')):
-            candidate_dirs.append(entry.path)
-
-    # Dedup while preserving scan order.
-    seen_candidates = []
-    for d in candidate_dirs:
-        if d not in seen_candidates:
-            seen_candidates.append(d)
-
-    for workshop_path in seen_candidates:
+    for workshop_path in workshop_dirs:
         _sync_single_workshop(
             workshop_path, repo_dir, source, commit_sha, stats,
             seen_slugs, failed_slugs, known_images=known_images,
         )
 
     # Stale cleanup: workshops whose source folder disappeared this sync.
-    # Set status to 'draft' (same pattern as _sync_courses). The linked
-    # Event is intentionally left alone — it stands on its own.
     stale = Workshop.objects.filter(
         source_repo=source.repo_name,
         status='published',
@@ -4139,8 +4017,6 @@ def _sync_workshops(source, repo_dir, commit_sha, sync_log, known_images=None):
     deleted_count = stale.count()
     stale.update(status='draft')
     stats['deleted'] += deleted_count
-
-    return stats
 
 
 def _sync_single_workshop(

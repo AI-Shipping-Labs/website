@@ -279,7 +279,6 @@ class UnitLookupRespectsIgnoresEndToEndTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/courses',
-            content_type='course',
         )
         self.temp_dir = tempfile.mkdtemp()
 

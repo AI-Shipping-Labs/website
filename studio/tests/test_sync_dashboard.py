@@ -37,46 +37,24 @@ class StudioSyncDashboardTest(TestCase):
     def test_dashboard_shows_repo_name(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog/',
         )
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'AI-Shipping-Labs/content')
 
-    def test_dashboard_groups_sources_by_repo(self):
-        """Multiple content types from same repo appear as one card."""
+    def test_dashboard_one_card_per_repo(self):
+        """Issue #310: one ContentSource per repo, one card per repo."""
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog/',
         )
         ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
+            repo_name='AI-Shipping-Labs/python-course',
         )
         response = self.client.get('/studio/sync/')
-        # Context should have exactly one repo entry
-        self.assertEqual(len(response.context['repos']), 1)
-        self.assertEqual(len(response.context['repos'][0]['sources']), 2)
-
-    def test_dashboard_shows_content_type_count(self):
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
-        )
-        response = self.client.get('/studio/sync/')
-        self.assertContains(response, '2 content types')
+        self.assertEqual(len(response.context['repos']), 2)
 
     def test_dashboard_shows_sync_status(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -86,7 +64,6 @@ class StudioSyncDashboardTest(TestCase):
     def test_dashboard_shows_never_synced(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'Never synced')
@@ -98,7 +75,6 @@ class StudioSyncDashboardTest(TestCase):
     def test_dashboard_has_sync_all_button(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'Sync All')
@@ -109,7 +85,6 @@ class StudioSyncDashboardTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/')
         self.assertContains(
@@ -125,12 +100,6 @@ class StudioSyncDashboardTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
         )
         response = self.client.get('/studio/sync/')
         html = response.content.decode()
@@ -149,17 +118,6 @@ class StudioSyncDashboardTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
         )
         response = self.client.get('/studio/sync/')
         html = response.content.decode()
@@ -181,7 +139,6 @@ class StudioSyncDashboardTest(TestCase):
         """Dashboard shows per-content-type breakdown from latest sync."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -202,7 +159,6 @@ class StudioSyncDashboardTest(TestCase):
     def test_dashboard_shows_tiers_synced(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -225,7 +181,6 @@ class StudioSyncDashboardTest(TestCase):
 
         course_src = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -234,12 +189,15 @@ class StudioSyncDashboardTest(TestCase):
             batch_id=batch_id,
             status='success',
             items_updated=10,
+            items_detail=[
+                {'title': 'C', 'slug': 'c', 'action': 'updated',
+                 'content_type': 'course'},
+            ],
             finished_at=timezone.now(),
         )
 
         content_project_src = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -248,6 +206,10 @@ class StudioSyncDashboardTest(TestCase):
             batch_id=batch_id,
             status='success',
             items_updated=10,
+            items_detail=[
+                {'title': 'P', 'slug': 'p', 'action': 'updated',
+                 'content_type': 'project'},
+            ],
             finished_at=timezone.now(),
         )
 
@@ -266,7 +228,6 @@ class StudioSyncDashboardTest(TestCase):
         """Changed items are listed with links."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -323,7 +284,6 @@ class StudioSyncDashboardUnchangedTest(TestCase):
         """The per-content-type table row shows the unchanged count cell."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -355,7 +315,6 @@ class StudioSyncDashboardUnchangedTest(TestCase):
         """The compact summary above the table includes ``N unchanged``."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -375,7 +334,6 @@ class StudioSyncDashboardUnchangedTest(TestCase):
         """First-syncs (no unchanged items) must not render an empty pill."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -395,7 +353,6 @@ class StudioSyncDashboardUnchangedTest(TestCase):
         """Unchanged counts use muted/secondary color, never green/blue/red."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -488,7 +445,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         """Course-type per_type entry carries a course_breakdown list."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -507,7 +463,10 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         repos = {r['repo_name']: r for r in response.context['repos']}
         course_card = repos['AI-Shipping-Labs/python-course']
         per_type = course_card['last_batch']['per_type']
-        self.assertEqual(len(per_type), 1)
+        # Issue #310: items_detail is bucketed by content_type so a course
+        # sync with units and modules produces three per_type rows
+        # (Course/Module/Unit). The first row carries the breakdown.
+        self.assertEqual(per_type[0]['content_type'], 'course')
         self.assertIn('course_breakdown', per_type[0])
 
         # The breakdown must list courses, modules, and units in that order.
@@ -519,7 +478,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         """Per-level counts equal the number of items at each level."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -548,7 +506,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         """Per-level rows distinguish created vs updated counts."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -599,7 +556,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         """
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -623,7 +579,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         """The expandable list includes every changed unit title."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -653,7 +608,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         unit = Unit.objects.create(module=module, title='U', slug='u')
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -690,7 +644,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         """Article/project/etc. rows still render with the original layout."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -738,7 +691,6 @@ class StudioSyncDashboardCourseTreeTest(TestCase):
     def _make_course_source(self, repo='AI-Shipping-Labs/python-course'):
         return ContentSource.objects.create(
             repo_name=repo,
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -1034,7 +986,6 @@ class StudioSyncDashboardCourseTreeTest(TestCase):
         """
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -1116,7 +1067,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
     def test_fragment_returns_200(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/?fragment=status')
         self.assertEqual(response.status_code, 200)
@@ -1124,7 +1074,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
     def test_fragment_uses_partial_template(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/?fragment=status')
         self.assertTemplateUsed(response, 'studio/sync/_repos_section.html')
@@ -1135,7 +1084,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/?fragment=status')
         body = response.content.decode()
@@ -1148,7 +1096,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
     def test_fragment_includes_repo_cards(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/?fragment=status')
         self.assertContains(response, 'AI-Shipping-Labs/content')
@@ -1157,7 +1104,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
     def test_fragment_marks_any_running_true_when_a_source_is_running(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='running',
         )
         response = self.client.get('/studio/sync/?fragment=status')
@@ -1166,7 +1112,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
     def test_fragment_marks_any_running_false_when_nothing_running(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -1180,7 +1125,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='running',
         )
         response = self.client.get('/studio/sync/?fragment=status')
@@ -1194,7 +1138,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
         """
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='running',
         )
         # First fetch: still running.
@@ -1225,7 +1168,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
         """
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -1273,7 +1215,6 @@ class StudioSyncDashboardLiveIndicatorTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'id="sync-live-indicator"')
@@ -1286,7 +1227,6 @@ class StudioSyncDashboardLiveIndicatorTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'id="sync-repos-wrapper"')
@@ -1305,8 +1245,6 @@ class StudioSyncHistoryTest(TestCase):
         )
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog/',
         )
 
     def setUp(self):
@@ -1363,12 +1301,12 @@ class StudioSyncHistoryTest(TestCase):
         self.assertContains(response, 'Back to Content Sync')
 
     def test_history_aggregates_batch(self):
-        """Logs with same batch_id are aggregated into one entry."""
+        """Logs with same batch_id are aggregated into one entry. Issue
+        #310: with one source per repo, a multi-source Sync All batch
+        spans multiple repos."""
         batch_id = uuid.uuid4()
         source2 = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
+            repo_name='AI-Shipping-Labs/python-course',
         )
         SyncLog.objects.create(
             source=self.source,
@@ -1385,7 +1323,6 @@ class StudioSyncHistoryTest(TestCase):
             finished_at=timezone.now(),
         )
         response = self.client.get('/studio/sync/history/')
-        # Should show aggregated count and source count
         self.assertContains(response, '2 sources')
 
     def test_history_shows_tiers_synced(self):
@@ -1424,7 +1361,6 @@ class StudioSyncTriggerTest(TestCase):
         )
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
 
     def setUp(self):
@@ -1470,21 +1406,14 @@ class StudioSyncTriggerTest(TestCase):
         """Regression for #232: posting to /studio/sync/<id>/trigger/ must
         sync only that source, not every configured source.
         """
-        # Create additional sources to make sure they're NOT triggered.
+        # Create additional source for a different repo to make sure
+        # it's NOT triggered.
         other = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
+            repo_name='AI-Shipping-Labs/python-course',
         )
         self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
-        # Exactly one async_task call (vs three if it had hit sync_all).
+        # Exactly one async_task call (vs two if it had hit sync_all).
         mock_async.assert_called_once()
-        # The single call must be for the targeted source, not the others.
         synced_source = mock_async.call_args[0][1]
         self.assertEqual(synced_source.pk, self.source.pk)
         self.assertNotEqual(synced_source.pk, other.pk)
@@ -1504,51 +1433,26 @@ class StudioSyncRepoTriggerTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
-    def test_repo_trigger_fans_out_to_all_sources(self, mock_async):
+    def test_repo_trigger_enqueues_one_task(self, mock_async):
         """Posting to /studio/sync/<repo_name>/trigger-repo/ enqueues one
-        task per ContentSource sharing that repo_name.
+        task for the repo's ContentSource. Issue #310: one source per
+        repo, fan-out is trivially 1.
         """
-        article = ContentSource.objects.create(
+        source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-        )
-        course = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
-        )
-        project = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
         )
         response = self.client.post(
             '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(mock_async.call_count, 3)
-        # Every call must target a ContentSource from the targeted repo.
-        synced_pks = {call.args[1].pk for call in mock_async.call_args_list}
-        self.assertEqual(synced_pks, {article.pk, course.pk, project.pk})
+        self.assertEqual(mock_async.call_count, 1)
+        self.assertEqual(mock_async.call_args.args[1].pk, source.pk)
 
     @patch('django_q.tasks.async_task')
-    def test_repo_trigger_creates_one_batch_id(self, mock_async):
-        """All fan-out calls share one batch_id so the batch shows up as a
-        single row in history and the dashboard aggregator finds them.
-        """
+    def test_repo_trigger_creates_batch_id(self, mock_async):
+        """The trigger creates a batch_id for the enqueued task."""
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
         )
         self.client.post(
             '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
@@ -1557,37 +1461,24 @@ class StudioSyncRepoTriggerTest(TestCase):
             call.kwargs.get('batch_id')
             for call in mock_async.call_args_list
         ]
-        self.assertEqual(len(batch_ids), 3)
+        self.assertEqual(len(batch_ids), 1)
         self.assertIsNotNone(batch_ids[0])
-        self.assertEqual(len(set(batch_ids)), 1)
 
     @patch('django_q.tasks.async_task')
     def test_repo_trigger_doesnt_touch_other_repos(self, mock_async):
-        """Posting for one repo must NOT enqueue tasks for any other repo's
-        sources (regression for the bug where the per-row button hit
-        /studio/sync/all/).
-        """
+        """Posting for one repo must NOT enqueue tasks for any other repo."""
         target = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
-        other_repo_course = ContentSource.objects.create(
+        other = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
-            content_path='units/',
-        )
-        other_repo_article = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/python-course',
-            content_type='article',
-            content_path='posts/',
         )
         self.client.post(
             '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
         )
         synced_pks = {call.args[1].pk for call in mock_async.call_args_list}
         self.assertEqual(synced_pks, {target.pk})
-        self.assertNotIn(other_repo_course.pk, synced_pks)
-        self.assertNotIn(other_repo_article.pk, synced_pks)
+        self.assertNotIn(other.pk, synced_pks)
 
     @patch('django_q.tasks.async_task')
     def test_repo_trigger_redirects_to_sync_dashboard(self, mock_async):
@@ -1596,7 +1487,6 @@ class StudioSyncRepoTriggerTest(TestCase):
         """
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.post(
             '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
@@ -1608,19 +1498,12 @@ class StudioSyncRepoTriggerTest(TestCase):
     def test_repo_trigger_flash_names_the_repo(self, mock_async):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
         )
         response = self.client.post(
             '/studio/sync/AI-Shipping-Labs/content/trigger-repo/',
             follow=True,
         )
         self.assertContains(response, 'AI-Shipping-Labs/content')
-        self.assertContains(response, '2 sources')
         # Flash message includes a link back to the worker page so operators
         # can still watch the queue (consistent with sync_trigger / sync_all).
         self.assertContains(response, '/studio/worker/')
@@ -1635,7 +1518,6 @@ class StudioSyncRepoTriggerTest(TestCase):
     def test_repo_trigger_requires_post(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         response = self.client.get(
             '/studio/sync/AI-Shipping-Labs/content/trigger-repo/'
@@ -1645,7 +1527,6 @@ class StudioSyncRepoTriggerTest(TestCase):
     def test_repo_trigger_requires_staff(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         client = Client()
         response = client.post(
@@ -1673,7 +1554,6 @@ class StudioSyncAllTest(TestCase):
         can watch every per-source row update in place (see issue #239)."""
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
         response = self.client.post('/studio/sync/all/')
         self.assertEqual(response.status_code, 302)
@@ -1683,12 +1563,9 @@ class StudioSyncAllTest(TestCase):
     def test_sync_all_triggers_all_sources(self, mock_async):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
         )
         self.client.post('/studio/sync/all/')
         self.assertEqual(mock_async.call_count, 2)
@@ -1697,16 +1574,12 @@ class StudioSyncAllTest(TestCase):
     def test_sync_all_passes_batch_id(self, mock_async):
         """Sync All passes a shared batch_id to all source syncs."""
         ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='article',
+            repo_name='AI-Shipping-Labs/blog',
         )
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
         )
         self.client.post('/studio/sync/all/')
-        # Both calls should have the same batch_id kwarg
         batch_ids = [call.kwargs.get('batch_id') for call in mock_async.call_args_list]
         self.assertEqual(len(batch_ids), 2)
         self.assertIsNotNone(batch_ids[0])
@@ -1738,7 +1611,6 @@ class StudioSyncStatusTest(TestCase):
         )
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -1759,7 +1631,6 @@ class StudioSyncStatusTest(TestCase):
     def test_status_returns_null_for_never_synced(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project',
         )
         response = self.client.get(f'/studio/sync/{source.pk}/status/')
         data = json.loads(response.content)
@@ -1803,7 +1674,6 @@ class SyncLogModelTest(TestCase):
     def setUpTestData(cls):
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
 
     def test_batch_id_groups_logs(self):
@@ -1812,9 +1682,7 @@ class SyncLogModelTest(TestCase):
             source=self.source, batch_id=batch_id, status='success',
         )
         source2 = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses/',
+            repo_name='AI-Shipping-Labs/python-course',
         )
         SyncLog.objects.create(
             source=source2, batch_id=batch_id, status='success',
@@ -1867,7 +1735,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
     def test_link_visible_when_running(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='running',
         )
         response = self.client.get('/studio/sync/')
@@ -1877,7 +1744,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
     def test_link_visible_when_queued(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='queued',
         )
         response = self.client.get('/studio/sync/')
@@ -1887,7 +1753,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
     def test_link_points_to_worker_dashboard(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='running',
         )
         response = self.client.get('/studio/sync/')
@@ -1905,7 +1770,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
     def test_link_hidden_when_success(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -1915,7 +1779,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
     def test_link_hidden_when_failed(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='failed',
             last_synced_at=timezone.now(),
         )
@@ -1933,7 +1796,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
     def test_link_hidden_when_partial(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='partial',
             last_synced_at=timezone.now(),
         )
@@ -1943,7 +1805,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
     def test_link_hidden_when_skipped(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='skipped',
             last_synced_at=timezone.now(),
         )
@@ -1958,7 +1819,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
         """
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='queued',
         )
         response = self.client.get('/studio/sync/?fragment=status')
@@ -1974,177 +1834,3 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
         source.save()
         response = self.client.get('/studio/sync/?fragment=status')
         self.assertNotContains(response, self.LINK_MARKER)
-
-
-class StudioSyncDashboardCollapsedCommitTest(TestCase):
-    """Issue #279 - collapse repeated commit SHAs to one line per repo.
-
-    The main content repo has 6 sources sharing the same SHA after a sync.
-    Rendering one line per source produced visual noise. The dashboard now
-    collapses to a single ``Commit: <short>`` line when every source in
-    the repo points at the same SHA, and falls back to the per-content-type
-    breakdown when sources actually diverge.
-    """
-
-    SHA_A = 'a' * 40
-    SHA_B = 'b' * 40
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-
-    def test_unique_commit_set_when_all_sources_share_sha(self):
-        """3 sources at the same SHA → ``unique_commit`` populated, no per-type fallback."""
-        for ct in ('article', 'project', 'event'):
-            ContentSource.objects.create(
-                repo_name='AI-Shipping-Labs/content',
-                content_type=ct,
-                content_path=f'{ct}s/',
-                last_synced_commit=self.SHA_A,
-                last_sync_status='success',
-                last_synced_at=timezone.now(),
-            )
-        response = self.client.get('/studio/sync/')
-        repo = response.context['repos'][0]
-        self.assertIsNotNone(repo['unique_commit'])
-        self.assertEqual(repo['unique_commit']['last_synced_commit'], self.SHA_A)
-        self.assertEqual(repo['unique_commit']['short_synced_commit'], self.SHA_A[:7])
-        self.assertIn(self.SHA_A, repo['unique_commit']['synced_commit_url'])
-
-    def test_collapsed_commit_renders_single_line(self):
-        """3 sources at same SHA renders ONE ``Commit: <short>`` line.
-
-        Counts ``data-source-commit`` markers — one per rendered SHA cell.
-        Collapsed view = exactly 1; per-type fallback = 1 per source.
-        """
-        for ct in ('article', 'project', 'event'):
-            ContentSource.objects.create(
-                repo_name='AI-Shipping-Labs/content',
-                content_type=ct,
-                content_path=f'{ct}s/',
-                last_synced_commit=self.SHA_A,
-                last_sync_status='success',
-                last_synced_at=timezone.now(),
-            )
-        response = self.client.get('/studio/sync/')
-        body = response.content.decode()
-        self.assertEqual(body.count('data-source-commit'), 1)
-        self.assertIn('Commit:', body)
-        # The short SHA is rendered in the single line.
-        self.assertIn(self.SHA_A[:7], body)
-        # Per-content-type labels in the SHA strip (e.g. "Article:") must
-        # NOT render when collapsed. We scope the check to the commit
-        # strip section only — the per-type results table below still
-        # uses display names like "Article" in its rows.
-        commits_idx = body.find('data-repo-commits')
-        commits_end = body.find('</div>', commits_idx)
-        commits_section = body[commits_idx:commits_end]
-        self.assertNotIn('Article:', commits_section)
-        self.assertNotIn('Project:', commits_section)
-
-    def test_diverging_shas_fall_back_to_per_type_breakdown(self):
-        """2 sources at DIFFERENT SHAs renders one line per source."""
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            last_synced_commit=self.SHA_A,
-            last_sync_status='success',
-            last_synced_at=timezone.now(),
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
-            last_synced_commit=self.SHA_B,
-            last_sync_status='success',
-            last_synced_at=timezone.now(),
-        )
-        response = self.client.get('/studio/sync/')
-        repo = response.context['repos'][0]
-        self.assertIsNone(repo['unique_commit'])
-        body = response.content.decode()
-        # Both SHAs visible — per-content-type breakdown rendered.
-        self.assertIn(self.SHA_A[:7], body)
-        self.assertIn(self.SHA_B[:7], body)
-        # Two SHA cells, one per source.
-        self.assertEqual(body.count('data-source-commit'), 2)
-
-    def test_missing_sha_treated_as_same_when_others_match(self):
-        """One source has SHA, others have nothing → still collapsed.
-
-        Acceptance criterion: "If only one source has a commit and others
-        have none, shows the one commit (treat 'missing' as same)."
-        """
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            last_synced_commit=self.SHA_A,
-            last_sync_status='success',
-            last_synced_at=timezone.now(),
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            content_path='projects/',
-            last_synced_commit='',
-        )
-        response = self.client.get('/studio/sync/')
-        repo = response.context['repos'][0]
-        self.assertIsNotNone(repo['unique_commit'])
-        self.assertEqual(repo['unique_commit']['short_synced_commit'], self.SHA_A[:7])
-        body = response.content.decode()
-        self.assertEqual(body.count('data-source-commit'), 1)
-
-    def test_single_source_repo_shows_one_commit_line(self):
-        """A single-source repo (e.g., python-course) renders one line — same as today."""
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
-            last_synced_commit=self.SHA_A,
-            last_sync_status='success',
-            last_synced_at=timezone.now(),
-        )
-        response = self.client.get('/studio/sync/')
-        body = response.content.decode()
-        self.assertEqual(body.count('data-source-commit'), 1)
-        self.assertIn(self.SHA_A[:7], body)
-
-    def test_polling_fragment_uses_same_collapsed_logic(self):
-        """The ?fragment=status endpoint must also collapse — otherwise the
-        view would flicker between collapsed (full reload) and expanded
-        (poll refresh). Acceptance criterion: "Polling endpoint preserves
-        the same logic — no flicker between collapsed and expanded view
-        across refreshes."
-        """
-        for ct in ('article', 'project', 'event'):
-            ContentSource.objects.create(
-                repo_name='AI-Shipping-Labs/content',
-                content_type=ct,
-                content_path=f'{ct}s/',
-                last_synced_commit=self.SHA_A,
-                last_sync_status='success',
-                last_synced_at=timezone.now(),
-            )
-        response = self.client.get('/studio/sync/?fragment=status')
-        body = response.content.decode()
-        self.assertEqual(body.count('data-source-commit'), 1)
-        self.assertIn('Commit:', body)
-
-    def test_unique_commit_none_when_no_sync_recorded(self):
-        """Never-synced repo: no commit strip at all (existing behavior)."""
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-        )
-        response = self.client.get('/studio/sync/')
-        repo = response.context['repos'][0]
-        self.assertIsNone(repo['unique_commit'])
-        self.assertEqual(repo['sources_with_commits'], [])
-        body = response.content.decode()
-        self.assertEqual(body.count('data-source-commit'), 0)

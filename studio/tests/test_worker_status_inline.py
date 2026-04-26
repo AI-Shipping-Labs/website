@@ -177,7 +177,6 @@ class SyncSubmitRedirectTest(TestCase):
         )
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
 
     def setUp(self):
@@ -231,13 +230,12 @@ class SyncSubmitRedirectTest(TestCase):
 
     @patch('django_q.tasks.async_task')
     def test_sync_all_flash_mentions_count_and_links_to_worker(self, _mock_async):
+        # Issue #310: one source per repo. Use distinct repo_names.
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project',
         )
         ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
+            repo_name='AI-Shipping-Labs/python-course',
         )
         with patch('studio.worker_health.Stat.get_all', return_value=[_fake_cluster()]):
             response = self.client.post('/studio/sync/all/', follow=True)

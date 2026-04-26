@@ -75,12 +75,10 @@ class ContentSourceModelTest(TestCase):
     def test_create_content_source(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
             webhook_secret='secret123',
             is_private=False,
         )
         self.assertEqual(source.repo_name, 'AI-Shipping-Labs/blog')
-        self.assertEqual(source.content_type, 'article')
         self.assertFalse(source.is_private)
         self.assertIsNone(source.last_synced_at)
         self.assertIsNone(source.last_sync_status)
@@ -91,47 +89,33 @@ class ContentSourceModelTest(TestCase):
     def test_content_source_str(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
-        self.assertEqual(str(source), 'AI-Shipping-Labs/blog (article)')
+        self.assertEqual(str(source), 'AI-Shipping-Labs/blog')
 
     def test_content_source_short_name(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
         self.assertEqual(source.short_name, 'blog')
 
     def test_repo_name_unique(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
         with self.assertRaises(IntegrityError):
             ContentSource.objects.create(
                 repo_name='AI-Shipping-Labs/blog',
-                content_type='article',
             )
-
-    def test_content_type_choices(self):
-        for ct in ['article', 'course', 'resource', 'project', 'interview_question']:
-            source = ContentSource.objects.create(
-                repo_name=f'test-org/{ct}-repo',
-                content_type=ct,
-            )
-            self.assertEqual(source.content_type, ct)
 
     def test_is_private_default_false(self):
         source = ContentSource.objects.create(
             repo_name='test/repo',
-            content_type='article',
         )
         self.assertFalse(source.is_private)
 
     def test_private_source(self):
         source = ContentSource.objects.create(
             repo_name='test/private-repo',
-            content_type='course',
             is_private=True,
         )
         self.assertTrue(source.is_private)
@@ -148,7 +132,6 @@ class SyncLogModelTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
 
     def test_create_sync_log(self):
@@ -349,25 +332,17 @@ class FindContentSourceTest(TestCase):
     def test_find_existing_source(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog',
         )
         found = find_content_source('AI-Shipping-Labs/content')
         self.assertEqual(found.first().pk, source.pk)
 
-    def test_find_multiple_sources_for_monorepo(self):
+    def test_find_returns_single_source_per_repo(self):
+        # Issue #310: one ContentSource per repo (unique repo_name).
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog',
-        )
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='courses',
         )
         found = find_content_source('AI-Shipping-Labs/content')
-        self.assertEqual(found.count(), 2)
+        self.assertEqual(found.count(), 1)
 
     def test_find_nonexistent_source(self):
         found = find_content_source('nonexistent/repo')
@@ -421,7 +396,6 @@ class GitHubWebhookEndpointTest(TestCase):
         self.client = Client()
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
             webhook_secret=TEST_WEBHOOK_SECRET,
         )
 
@@ -560,7 +534,6 @@ class SyncArticlesTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -797,7 +770,6 @@ class SyncProjectsTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/projects',
-            content_type='project',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -848,7 +820,6 @@ class SyncCoursesTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/courses',
-            content_type='course',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -1034,8 +1005,6 @@ class SyncCoursePerLevelDetailTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
-            content_path='',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -1201,8 +1170,6 @@ class SyncSingleCourseRepoTest(TestCase):
         # ContentSource with content_path='' - root of repo is the course root.
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
-            content_path='',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -1484,7 +1451,6 @@ class SyncResourcesTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/resources',
-            content_type='resource',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -1493,12 +1459,9 @@ class SyncResourcesTest(TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_sync_recordings(self):
-        # Recordings are now synced as events via content_type='event'
-        event_source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/resources',
-            content_type='event',
-            content_path='recordings',
-        )
+        # Recordings are now synced as events. With one ContentSource
+        # per repo (issue #310), the existing self.source is reused.
+        event_source = self.source
         rec_dir = os.path.join(self.temp_dir, 'recordings')
         os.makedirs(rec_dir)
         with open(os.path.join(rec_dir, 'my-workshop.yaml'), 'w') as f:
@@ -1667,12 +1630,9 @@ class SyncResourcesTest(TestCase):
         self.assertEqual(dl.source_repo, 'AI-Shipping-Labs/resources')
 
     def test_sync_soft_deletes_stale_recordings(self):
-        # Recordings are now synced as events via content_type='event'
-        event_source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/resources',
-            content_type='event',
-            content_path='recordings',
-        )
+        # Recordings are synced as events. Issue #310: one source per
+        # repo, so the existing ``self.source`` is reused.
+        event_source = self.source
         Event.objects.create(
             title='Stale', slug='stale-rec', start_datetime=timezone.now(),
             source_repo='AI-Shipping-Labs/resources',
@@ -1687,16 +1647,10 @@ class SyncResourcesTest(TestCase):
     def test_event_round_trip_remove_then_restore(self):
         """write -> sync -> remove -> sync -> re-write -> sync for events.
 
-        Recordings sync via the events code path (``content_type='event'``,
-        ``content_path='recordings'``), so this also exercises the
-        recording lifecycle. Asserts ``Event.published`` and ``/events``
-        listing visibility flip at each step.
+        Issue #310: with one source per repo, recordings and events
+        flow through the same ``ContentSource``.
         """
-        event_source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/resources',
-            content_type='event',
-            content_path='recordings',
-        )
+        event_source = self.source
         rec_dir = os.path.join(self.temp_dir, 'recordings')
         os.makedirs(rec_dir, exist_ok=True)
         rec_file = os.path.join(rec_dir, 'roundtrip-event.yaml')
@@ -1752,36 +1706,25 @@ class SyncResourcesTest(TestCase):
 
 
 class SyncFailureTest(TestCase):
-    """Test sync failure handling."""
+    """Test sync failure handling.
 
-    def test_sync_with_invalid_content_type(self):
-        source = ContentSource.objects.create(
-            repo_name='test/invalid',
-            content_type='article',
-        )
-        # Manually set an invalid content type after creation
-        ContentSource.objects.filter(pk=source.pk).update(content_type='invalid')
-        source.refresh_from_db()
+    Issue #310 dropped per-type ContentSource rows, so the historical
+    "invalid content_type" failure path no longer exists. Sync failures
+    now come from clone errors, missing repo dirs, the max_files guard,
+    or per-file parser errors. The latter is exercised throughout
+    :mod:`integrations.tests.test_malformed_yaml`. The max_files guard
+    is exercised here.
+    """
 
-        temp_dir = tempfile.mkdtemp()
-        try:
-            sync_log = sync_content_source(source, repo_dir=temp_dir)
-            self.assertEqual(sync_log.status, 'failed')
-            self.assertTrue(len(sync_log.errors) > 0)
-        finally:
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_sync_failure_updates_source(self):
-        source = ContentSource.objects.create(
-            repo_name='test/fail',
-            content_type='article',
-        )
-        ContentSource.objects.filter(pk=source.pk).update(content_type='invalid')
-        source.refresh_from_db()
+    def test_max_files_guard_fails_sync(self):
+        source = ContentSource.objects.create(repo_name='test/fail')
+        source.max_files = 0
+        source.save()
 
         temp_dir = tempfile.mkdtemp()
         try:
+            with open(os.path.join(temp_dir, 'a.md'), 'w') as f:
+                f.write('---\ntitle: x\n---\n')
             sync_content_source(source, repo_dir=temp_dir)
             source.refresh_from_db()
             self.assertEqual(source.last_sync_status, 'failed')
@@ -1870,7 +1813,6 @@ class AdminSyncDashboardTest(TestCase):
         self.client.login(email='admin@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
 
     def test_dashboard_accessible_to_staff(self):
@@ -1888,7 +1830,6 @@ class AdminSyncDashboardTest(TestCase):
     def test_dashboard_shows_all_sources(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/courses',
-            content_type='course',
         )
         response = self.client.get('/admin/sync/')
         self.assertContains(response, 'AI-Shipping-Labs/blog')
@@ -1921,7 +1862,6 @@ class AdminSyncHistoryTest(TestCase):
         self.client.login(email='admin@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
 
     def test_history_page_accessible(self):
@@ -1954,7 +1894,6 @@ class AdminSyncTriggerTest(TestCase):
         self.client.login(email='admin@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
 
     def test_trigger_sync_redirects(self):
@@ -1989,7 +1928,6 @@ class AdminSyncAllTest(TestCase):
     def test_sync_all_redirects(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
         with patch('integrations.views.admin_sync.sync_content_source'):
             response = self.client.post('/admin/sync/all/')
@@ -2021,10 +1959,8 @@ class SeedContentSourcesCommandTest(TestCase):
             self.assertTrue(
                 ContentSource.objects.filter(
                     repo_name=source_data['repo_name'],
-                    content_type=source_data['content_type'],
                 ).exists(),
-                f"Missing seeded source: {source_data['repo_name']} / "
-                f"{source_data['content_type']}",
+                f"Missing seeded source: {source_data['repo_name']}",
             )
 
     def test_seed_is_idempotent(self):
@@ -2062,46 +1998,13 @@ class SeedContentSourcesCommandTest(TestCase):
                 f"Expected {source.repo_name} to be marked private",
             )
 
-    def test_content_types_correct(self):
+    def test_seeds_exactly_three_rows(self):
+        """Issue #310: one ContentSource per canonical repo (3 total)."""
         from io import StringIO
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        types = set(ContentSource.objects.values_list('content_type', flat=True))
-        self.assertEqual(
-            types,
-            {
-                'article', 'course', 'project', 'interview_question',
-                'event', 'workshop', 'instructor',
-            },
-        )
-
-    def test_content_paths_correct(self):
-        from io import StringIO
-
-        from django.core.management import call_command
-        call_command('seed_content_sources', stdout=StringIO())
-        # Two sources have content_type='course' (the monorepo's courses/
-        # subtree and the standalone python-course repo). Look them up by
-        # (repo_name, content_type) instead.
-        paths = {
-            (s.repo_name, s.content_type): s.content_path
-            for s in ContentSource.objects.all()
-        }
-        self.assertEqual(paths[('AI-Shipping-Labs/content', 'article')], 'blog')
-        self.assertEqual(paths[('AI-Shipping-Labs/content', 'course')], 'courses')
-        self.assertEqual(paths[('AI-Shipping-Labs/content', 'project')], 'projects')
-        self.assertEqual(
-            paths[('AI-Shipping-Labs/content', 'interview_question')],
-            'interview-questions',
-        )
-        self.assertEqual(paths[('AI-Shipping-Labs/content', 'event')], 'events')
-        self.assertEqual(
-            paths[('AI-Shipping-Labs/python-course', 'course')], '',
-        )
-        self.assertEqual(
-            paths[('AI-Shipping-Labs/workshops-content', 'workshop')], '',
-        )
+        self.assertEqual(ContentSource.objects.count(), 3)
 
 
 # ===========================================================================
@@ -2158,7 +2061,6 @@ class DirectAdminEditFlagTest(TestCase):
 
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
         )
         temp_dir = tempfile.mkdtemp()
         try:
@@ -2199,7 +2101,6 @@ class S3ImageUploadTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/content',
-            content_type='article',
         )
         self.temp_dir = tempfile.mkdtemp()
         # Create a test image file

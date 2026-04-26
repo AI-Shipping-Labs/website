@@ -2,17 +2,6 @@ import uuid
 
 from django.db import models
 
-CONTENT_TYPE_CHOICES = [
-    ('article', 'Article'),
-    ('course', 'Course'),
-    ('resource', 'Resource'),
-    ('project', 'Project'),
-    ('interview_question', 'Interview Question'),
-    ('event', 'Event'),
-    ('workshop', 'Workshop'),
-    ('instructor', 'Instructor'),
-]
-
 SYNC_STATUS_CHOICES = [
     ('success', 'Success'),
     ('partial', 'Partial'),
@@ -24,20 +13,19 @@ SYNC_STATUS_CHOICES = [
 
 
 class ContentSource(models.Model):
-    """A GitHub repository configured as a content source for the platform."""
+    """A GitHub repository configured as a content source for the platform.
+
+    One row per repo. The sync walker (``_sync_repo`` in
+    :mod:`integrations.services.github`) walks the cloned repo on disk and
+    dispatches per-file based on filename + frontmatter + location, so we
+    no longer need separate rows per ``(repo, content_type, content_path)``
+    triple. See issue #310.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     repo_name = models.CharField(
-        max_length=300,
+        max_length=300, unique=True,
         help_text="Full GitHub repo name (e.g. AI-Shipping-Labs/content).",
-    )
-    content_type = models.CharField(
-        max_length=30, choices=CONTENT_TYPE_CHOICES,
-        help_text="Type of content this repo contains.",
-    )
-    content_path = models.CharField(
-        max_length=300, blank=True, default='',
-        help_text="Subdirectory within the repo to sync from (e.g. blog/). Empty means repo root.",
     )
     webhook_secret = models.CharField(
         max_length=200, blank=True, default='',
@@ -88,10 +76,9 @@ class ContentSource(models.Model):
 
     class Meta:
         ordering = ['repo_name']
-        unique_together = [('repo_name', 'content_type', 'content_path')]
 
     def __str__(self):
-        return f'{self.repo_name} ({self.content_type})'
+        return self.repo_name
 
     @property
     def short_name(self):

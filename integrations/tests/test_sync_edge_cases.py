@@ -53,7 +53,6 @@ class _ArticleSyncTestBase(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -267,7 +266,6 @@ class ConcurrentSyncSkipTest(TestCase):
         then it fails."""
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
             sync_locked_at=timezone.now(),  # Recent lock
         )
 
@@ -300,7 +298,6 @@ class SkipPathStaleSourceTest(TestCase):
         # delete it from the DB to simulate the race.
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
         )
         stale_source = ContentSource.objects.get(pk=source.pk)
         ContentSource.objects.filter(pk=source.pk).delete()
@@ -321,7 +318,6 @@ class SkipPathStaleSourceTest(TestCase):
         then a SyncLog row with status='skipped' is written."""
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
             sync_locked_at=timezone.now(),  # Lock is held by another worker
         )
 
@@ -352,7 +348,6 @@ class StaleLockReclaimTest(TestCase):
         then the lock is acquired."""
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
             sync_locked_at=timezone.now() - timedelta(minutes=15),
         )
 
@@ -374,7 +369,6 @@ class WebhookFloodTest(TestCase):
         then when the running sync completes, it returns True for follow-up."""
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
             sync_locked_at=timezone.now(),
         )
 
@@ -396,7 +390,6 @@ class WebhookFloodTest(TestCase):
         """When no follow-up was requested, release returns False."""
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
             sync_locked_at=timezone.now(),
             sync_requested=False,
         )
@@ -570,7 +563,6 @@ class UnitRenameMigrationTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/courses',
-            content_type='course',
         )
         self.temp_dir = tempfile.mkdtemp()
         self.user = User.objects.create_user(
@@ -701,7 +693,6 @@ class ContentSourceNewFieldsTest(TestCase):
     def test_new_fields_defaults(self):
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
         )
         self.assertIsNone(source.sync_locked_at)
         self.assertFalse(source.sync_requested)
@@ -711,7 +702,6 @@ class ContentSourceNewFieldsTest(TestCase):
     def test_sync_locked_at_can_be_set(self):
         source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
         )
         now = timezone.now()
         source.sync_locked_at = now
@@ -751,7 +741,6 @@ class WebhookDeduplicationTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/blog',
-            content_type='article',
             webhook_secret='test-secret',
         )
 
@@ -845,8 +834,6 @@ class ProjectSyncMarkdownRenderingTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/content',
-            content_type='project',
-            content_path='projects',
         )
         self.temp_dir = tempfile.mkdtemp()
         self.projects_dir = os.path.join(self.temp_dir, 'projects')

@@ -27,7 +27,6 @@ class RewriteCoverImageUrlTest(TestCase):
     def setUpTestData(cls):
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             webhook_secret='secret',
         )
 
@@ -86,7 +85,6 @@ class ArticleCoverImageSyncTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -98,6 +96,11 @@ class ArticleCoverImageSyncTest(TestCase):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         if 'content_id' not in frontmatter_dict:
             frontmatter_dict['content_id'] = str(uuid.uuid4())
+        # date: is required for the walker (issue #310) to bucket the
+        # file as an article. Default it here when the test didn't set
+        # one explicitly.
+        if 'date' not in frontmatter_dict:
+            frontmatter_dict['date'] = '2026-04-24'
         lines = ['---']
         for key, value in frontmatter_dict.items():
             if isinstance(value, list):
@@ -162,7 +165,6 @@ class CourseCoverImageSyncTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -227,7 +229,6 @@ class ProjectCoverImageSyncTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -239,6 +240,11 @@ class ProjectCoverImageSyncTest(TestCase):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         if 'content_id' not in frontmatter_dict:
             frontmatter_dict['content_id'] = str(uuid.uuid4())
+        # Issue #310: the walker classifies a markdown file as a project
+        # when it carries a ``difficulty:`` field (independent of the
+        # author/title check). Default it so legacy fixtures still route.
+        if 'difficulty' not in frontmatter_dict:
+            frontmatter_dict['difficulty'] = 'beginner'
         lines = ['---']
         for key, value in frontmatter_dict.items():
             if isinstance(value, list):

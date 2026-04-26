@@ -1,7 +1,9 @@
 """
-Management command to seed the four default GitHub content sources.
+Management command to seed the three default GitHub content sources.
 
-Idempotent: running twice does not create duplicates.
+Issue #310: with one ``ContentSource`` per repo, three rows cover the
+canonical AI-Shipping-Labs repos. Idempotent — re-running does not create
+duplicates.
 """
 
 from django.core.management.base import BaseCommand
@@ -9,54 +11,9 @@ from django.core.management.base import BaseCommand
 from integrations.models import ContentSource
 
 DEFAULT_SOURCES = [
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'article',
-        'content_path': 'blog',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'course',
-        'content_path': 'courses',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'project',
-        'content_path': 'projects',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'interview_question',
-        'content_path': 'interview-questions',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'event',
-        'content_path': 'events',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/content',
-        'content_type': 'instructor',
-        'content_path': 'instructors',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/python-course',
-        'content_type': 'course',
-        'content_path': '',
-        'is_private': True,
-    },
-    {
-        'repo_name': 'AI-Shipping-Labs/workshops-content',
-        'content_type': 'workshop',
-        'content_path': '',
-        'is_private': True,
-    },
+    {'repo_name': 'AI-Shipping-Labs/content', 'is_private': True},
+    {'repo_name': 'AI-Shipping-Labs/python-course', 'is_private': True},
+    {'repo_name': 'AI-Shipping-Labs/workshops-content', 'is_private': True},
 ]
 
 
@@ -68,11 +25,7 @@ class Command(BaseCommand):
         for source_data in DEFAULT_SOURCES:
             _, created = ContentSource.objects.get_or_create(
                 repo_name=source_data['repo_name'],
-                content_type=source_data['content_type'],
-                defaults={
-                    'content_path': source_data.get('content_path', ''),
-                    'is_private': source_data['is_private'],
-                },
+                defaults={'is_private': source_data['is_private']},
             )
             if created:
                 count += 1

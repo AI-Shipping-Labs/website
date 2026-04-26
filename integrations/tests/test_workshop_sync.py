@@ -45,8 +45,6 @@ class _WorkshopSyncFixtureBase(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
-            content_path='',
             is_private=False,
         )
         self.temp_dir = tempfile.mkdtemp(prefix='workshop-sync-')
@@ -642,11 +640,9 @@ class WorkshopSeedContentSourceTest(TestCase):
         call_command('seed_content_sources')
         qs = ContentSource.objects.filter(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
         )
         self.assertEqual(qs.count(), 1)
         source = qs.get()
-        self.assertEqual(source.content_path, '')
         self.assertTrue(source.is_private)
 
     def test_seed_is_idempotent(self):
@@ -658,7 +654,6 @@ class WorkshopSeedContentSourceTest(TestCase):
         self.assertEqual(
             ContentSource.objects.filter(
                 repo_name='AI-Shipping-Labs/workshops-content',
-                content_type='workshop',
             ).count(),
             1,
         )

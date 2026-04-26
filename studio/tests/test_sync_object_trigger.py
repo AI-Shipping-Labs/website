@@ -201,7 +201,6 @@ class SyncObjectTriggerAccessControlTest(TestCase):
         cls.article = _make_article()
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
 
     def test_anonymous_user_redirected_to_login(self):
@@ -290,7 +289,6 @@ class SyncObjectTriggerSuccessTest(TestCase):
         self.article = _make_article()
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
 
     @patch('django_q.tasks.async_task')
@@ -373,18 +371,18 @@ class SyncObjectTriggerWorkshopTest(TestCase):
         self.workshop = _make_workshop()
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
         )
 
     @patch('django_q.tasks.async_task')
-    def test_workshop_resync_uses_workshop_content_type(self, mock_async):
+    def test_workshop_resync_uses_workshop_repo(self, mock_async):
         self.client.post(
             f'/studio/sync/object/workshop/{self.workshop.pk}/trigger/',
         )
         self.assertEqual(mock_async.call_count, 1)
-        # The resolved ContentSource is the workshop one, not some other.
+        # Issue #310: the resolved ContentSource is the workshops repo.
         self.assertEqual(
-            mock_async.call_args.args[1].content_type, 'workshop',
+            mock_async.call_args.args[1].repo_name,
+            'AI-Shipping-Labs/workshops-content',
         )
         # And a queued SyncLog row exists for it.
         log = SyncLog.objects.get(source=self.source)
@@ -415,19 +413,21 @@ class SyncObjectTriggerCourseUnitInheritsCourseTest(TestCase):
         )
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course',
         )
 
     @patch('django_q.tasks.async_task')
-    def test_course_target_uses_course_content_type(self, mock_async):
+    def test_course_target_uses_course_repo(self, mock_async):
         # POSTing with the course's pk (the banner template uses
         # ``obj=course`` on the unit edit page) hits the course source.
         self.client.post(
             f'/studio/sync/object/course/{self.course.pk}/trigger/',
         )
         self.assertEqual(mock_async.call_count, 1)
+        # Issue #310: the resolved ContentSource is the content repo
+        # (one source per repo, no per-type lookup).
         self.assertEqual(
-            mock_async.call_args.args[1].content_type, 'course',
+            mock_async.call_args.args[1].repo_name,
+            'AI-Shipping-Labs/content',
         )
 
 
@@ -531,7 +531,6 @@ class SyncObjectTriggerWorkerWarningTest(TestCase):
         self.article = _make_article()
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
 
     @patch('django_q.tasks.async_task')
@@ -568,7 +567,6 @@ class SyncObjectTriggerRedirectTest(TestCase):
         self.article = _make_article()
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
 
     @patch('django_q.tasks.async_task')

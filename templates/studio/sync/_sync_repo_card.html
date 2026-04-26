@@ -46,7 +46,6 @@ still in flight.
         {% endif %}
       </div>
       <div class="flex items-center space-x-4 mt-2 text-sm text-muted-foreground">
-        <span>{{ repo.sources|length }} content type{{ repo.sources|length|pluralize }}</span>
         {% if repo.last_synced_at %}
         <span data-repo-last-synced>Last synced: {{ repo.last_synced_at|timesince }} ago</span>
         {% else %}
@@ -85,43 +84,20 @@ still in flight.
   </div>
 
   {% comment %}
-  Synced commit SHA per content source (issue #235). One row per source
-  in the repo, since separate ContentSource rows can sit at different
-  commits when sub-syncs fail independently.
-
-  Issue #279: when every source in the repo points at the same SHA
-  (treating "missing" as same), collapse to one ``Commit: <short>`` line
-  instead of N identical per-content-type rows. If they diverge, fall
-  back to the per-content-type breakdown so the operator can see which
-  source is stale.
+  Synced commit SHA — one source per repo means one commit per card
+  (issue #310, simplifying #279). Hidden when never synced so a
+  newly-registered repo card stays clean.
   {% endcomment %}
-  {% if repo.unique_commit %}
+  {% if repo.last_synced_commit %}
   <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" data-repo-commits>
     <span class="inline-flex items-center gap-1">
       <span>Commit:</span>
-      <a href="{{ repo.unique_commit.synced_commit_url }}"
+      <a href="{{ repo.synced_commit_url }}"
          target="_blank" rel="noopener"
          class="font-mono text-accent hover:underline"
          title="View commit on GitHub"
-         data-source-commit>{{ repo.unique_commit.short_synced_commit }}</a>
+         data-source-commit>{{ repo.short_synced_commit }}</a>
     </span>
-  </div>
-  {% elif repo.sources_with_commits %}
-  <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" data-repo-commits>
-    {% for s in repo.sources_with_commits %}
-      <span class="inline-flex items-center gap-1">
-        <span>{{ s.get_content_type_display }}:</span>
-        {% if s.last_synced_commit %}
-          <a href="{{ s.synced_commit_url }}"
-             target="_blank" rel="noopener"
-             class="font-mono text-accent hover:underline"
-             title="View commit on GitHub"
-             data-source-commit>{{ s.short_synced_commit }}</a>
-        {% else %}
-          <span class="font-mono text-muted-foreground italic" data-source-commit>not synced</span>
-        {% endif %}
-      </span>
-    {% endfor %}
   </div>
   {% endif %}
 

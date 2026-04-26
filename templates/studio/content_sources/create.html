@@ -9,9 +9,7 @@
   </a>
   <h1 class="text-2xl font-semibold text-foreground mt-2">Add Content Source</h1>
   <p class="text-muted-foreground mt-1">
-    Register a new GitHub repository for content sync. Pick from the list of
-    repositories the GitHub App installation can access &mdash; we'll detect
-    the content type(s) automatically by inspecting the repo on GitHub.
+    Pick a repository and we'll register it for sync.
   </p>
 </div>
 
@@ -48,7 +46,6 @@
   {% else %}
   <form method="post" action="{% url 'studio_content_source_create' %}">
     {% csrf_token %}
-    <input type="hidden" name="step" value="detect">
 
     <div class="mb-6">
       <div class="flex items-center justify-between mb-1">
@@ -80,16 +77,16 @@
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">
       <p class="text-xs text-muted-foreground mt-1">
         Used to validate GitHub webhook signatures. Leave blank and we'll
-        generate a secure random one. We'll display the final value once on
-        the next screen so you can paste it into the GitHub webhook
-        configuration.
+        generate a secure random one. The final value is shown in the
+        success flash on the next page so you can paste it into the
+        GitHub webhook configuration.
       </p>
     </div>
 
     <div class="flex items-center gap-3">
       <button type="submit"
               class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Detect content types
+        Add content source
       </button>
       <a href="{% url 'studio_sync_dashboard' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
         Cancel

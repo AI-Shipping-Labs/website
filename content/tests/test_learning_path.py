@@ -181,8 +181,6 @@ class SyncLearningPathArticleTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog',
         )
         self.temp_dir = tempfile.mkdtemp()
         self.blog_dir = os.path.join(self.temp_dir, 'blog')

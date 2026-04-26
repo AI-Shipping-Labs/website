@@ -18,10 +18,10 @@ class SyncLogInline(admin.TabularInline):
 @admin.register(ContentSource)
 class ContentSourceAdmin(admin.ModelAdmin):
     list_display = [
-        'repo_name', 'content_type', 'is_private',
+        'repo_name', 'is_private',
         'last_synced_at', 'last_sync_status',
     ]
-    list_filter = ['content_type', 'is_private', 'last_sync_status']
+    list_filter = ['is_private', 'last_sync_status']
     search_fields = ['repo_name']
     readonly_fields = ['id', 'last_synced_at', 'last_sync_status', 'last_sync_log']
     inlines = [SyncLogInline]

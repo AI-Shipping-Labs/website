@@ -13,11 +13,7 @@
 
   <!-- Source Info -->
   <div class="bg-card border border-border rounded-xl p-6 mb-8">
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div>
-        <p class="text-xs text-muted-foreground uppercase tracking-wider">Content Type</p>
-        <p class="text-foreground font-medium mt-1">{{ source.content_type }}</p>
-      </div>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
       <div>
         <p class="text-xs text-muted-foreground uppercase tracking-wider">Visibility</p>
         <p class="text-foreground font-medium mt-1">{% if source.is_private %}Private{% else %}Public{% endif %}</p>

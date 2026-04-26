@@ -125,13 +125,18 @@ def _create_workshop():
     return ws
 
 
-def _create_source(repo_name, content_type, content_path=''):
+def _create_source(repo_name, content_type=None, content_path=''):
+    """Create a ContentSource by repo_name.
+
+    ``content_type`` and ``content_path`` are accepted for call-site
+    compatibility but ignored — issue #310 dropped per-type rows in
+    favour of one row per repo.
+    """
     from integrations.models import ContentSource
 
     src, _ = ContentSource.objects.get_or_create(
         repo_name=repo_name,
-        content_type=content_type,
-        defaults={'content_path': content_path, 'is_private': False},
+        defaults={'is_private': False},
     )
     connection.close()
     return src

@@ -1,60 +1,31 @@
 """Tests for surfacing malformed YAML / frontmatter parse errors (issue #286).
 
-The previous behaviour swallowed parse errors silently inside three helpers:
-
-- ``_parse_yaml_text`` (used by ``detect_content_sources`` for events)
-- ``_parse_frontmatter_text`` (used by ``detect_content_sources`` for
-  articles/projects)
-- ``_build_course_unit_lookup`` (used while syncing courses)
-
-This file pins the new contract: malformed inputs are logged with file
-context, classified out of detection rules, and recorded into
-``stats['errors']`` (and therefore ``SyncLog.errors``) when stats are
-available. ``_parse_yaml_file`` also raises ``ValueError`` for non-mapping
+The previous behaviour swallowed parse errors silently. This file pins the
+new contract: malformed inputs are logged with file context, classified
+out of detection rules, and recorded into ``stats['errors']`` (and
+therefore ``SyncLog.errors``) when stats are available.
+``_parse_yaml_file`` also raises ``ValueError`` for non-mapping
 top-level YAML (a list/scalar) instead of returning it silently.
 
-Also covers the relaxed ``ContentSource.unique_together`` that now
-includes ``content_path``.
+Issue #310: ``ContentSource`` no longer carries ``content_type`` or
+``content_path`` — the walker dispatches per file. Test fixtures are
+updated accordingly.
 """
 
-import base64
 import os
 import shutil
 import tempfile
 import uuid
-from unittest.mock import MagicMock, patch
 
-from django.core.cache import cache
-from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from content.models import Course, Module
 from integrations.models import ContentSource
 from integrations.services.github import (
     _build_course_unit_lookup,
-    _parse_frontmatter_text,
     _parse_yaml_file,
-    _parse_yaml_text,
-    detect_content_sources,
     sync_content_source,
 )
-
-# ============================================================================
-# Helpers
-# ============================================================================
-
-
-def _b64(text):
-    return base64.b64encode(text.encode('utf-8')).decode('ascii')
-
-
-def _mock_response(status_code, json_payload=None):
-    response = MagicMock()
-    response.status_code = status_code
-    response.json.return_value = json_payload or {}
-    response.text = ''
-    return response
-
 
 # ============================================================================
 # Scenario: Malformed course.yaml during sync
@@ -68,7 +39,6 @@ class MalformedCourseYamlTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/courses',
-            content_type='course',
         )
         self.temp_dir = tempfile.mkdtemp()
         self.course_dir = os.path.join(self.temp_dir, 'machine-learning-zoomcamp')
@@ -124,7 +94,6 @@ class MalformedModuleYamlTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/courses',
-            content_type='course',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -214,53 +183,6 @@ class MalformedModuleYamlTest(TestCase):
 
 
 # ============================================================================
-# Scenario: Malformed event YAML is recorded; no Event row is created
-# ============================================================================
-
-
-class MalformedEventYamlTest(TestCase):
-    """A malformed event ``.yaml`` produces an error in the SyncLog and
-    leaves no Event row behind."""
-
-    def setUp(self):
-        self.source = ContentSource.objects.create(
-            repo_name='test-org/events',
-            content_type='event',
-            content_path='events',
-        )
-        self.temp_dir = tempfile.mkdtemp()
-        self.events_dir = os.path.join(self.temp_dir, 'events')
-        os.makedirs(self.events_dir)
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_malformed_event_yaml_recorded(self):
-        from events.models.event import Event
-
-        # Write a malformed event yaml.
-        bad_path = os.path.join(self.events_dir, 'broken-event.yaml')
-        with open(bad_path, 'w') as f:
-            f.write('start_datetime: [[invalid\n')
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
-
-        # An error pointing at the file is recorded.
-        event_errors = [
-            e for e in sync_log.errors
-            if 'broken-event.yaml' in e.get('file', '')
-        ]
-        self.assertTrue(
-            event_errors,
-            f'Expected an error for broken-event.yaml; '
-            f'got {sync_log.errors!r}',
-        )
-
-        # No Event row was created.
-        self.assertFalse(Event.objects.filter(slug='broken-event').exists())
-
-
-# ============================================================================
 # Scenario: Top-level YAML is a list, not a mapping
 # ============================================================================
 
@@ -321,7 +243,6 @@ class CourseYamlListBubblesAsErrorTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/courses',
-            content_type='course',
         )
         self.temp_dir = tempfile.mkdtemp()
         self.course_dir = os.path.join(self.temp_dir, 'list-course')
@@ -350,249 +271,6 @@ class CourseYamlListBubblesAsErrorTest(TestCase):
         self.assertFalse(
             Course.objects.filter(source_repo='test-org/courses').exists(),
         )
-
-
-# ============================================================================
-# Scenario: detect_content_sources skips malformed files
-# ============================================================================
-
-
-@override_settings(
-    GITHUB_APP_ID='12345',
-    GITHUB_APP_PRIVATE_KEY='fake-key',
-    GITHUB_APP_INSTALLATION_ID='67890',
-)
-class DetectContentSourcesMalformedTest(TestCase):
-    """Malformed YAML/frontmatter must not bucket files into detection
-    rules. They are logged and ignored (issue #286)."""
-
-    def setUp(self):
-        cache.clear()
-
-    def tearDown(self):
-        cache.clear()
-
-    def _router(self, repo_meta, tree_entries, file_contents):
-        def _r(url, **_kwargs):
-            if '/git/trees/' in url:
-                return _mock_response(200, {'tree': tree_entries})
-            if '/contents/' in url:
-                path = url.split('/contents/', 1)[1]
-                text = file_contents.get(path)
-                if text is None:
-                    return _mock_response(404)
-                return _mock_response(200, {
-                    'encoding': 'base64',
-                    'content': _b64(text),
-                })
-            return _mock_response(200, repo_meta)
-        return _r
-
-    @patch('integrations.services.github.generate_github_app_token',
-           return_value='tok')
-    @patch('integrations.services.github.requests.get')
-    def test_malformed_event_yaml_is_skipped(self, mock_get, _tok):
-        repo_meta = {'default_branch': 'main'}
-        tree_entries = [
-            # Malformed event yaml at events/bad.yaml.
-            {'type': 'blob', 'path': 'events/bad.yaml'},
-        ]
-        # Has start_datetime but the YAML is not parseable.
-        file_contents = {
-            'events/bad.yaml': 'start_datetime: [[broken\n',
-        }
-        mock_get.side_effect = self._router(
-            repo_meta, tree_entries, file_contents,
-        )
-
-        with self.assertLogs(
-            'integrations.services.github', level='WARNING',
-        ) as cm:
-            detections = detect_content_sources(
-                'org/repo', force_refresh=True,
-            )
-
-        # No event detection because the file failed to parse.
-        event_dets = [d for d in detections if d['content_type'] == 'event']
-        self.assertEqual(event_dets, [])
-        # Warning was logged with the parse error.
-        joined = '\n'.join(cm.output)
-        self.assertIn('Failed to parse YAML', joined)
-        self.assertIn('events/bad.yaml', joined)
-
-    @patch('integrations.services.github.generate_github_app_token',
-           return_value='tok')
-    @patch('integrations.services.github.requests.get')
-    def test_malformed_frontmatter_skipped_for_article_detection(
-        self, mock_get, _tok,
-    ):
-        repo_meta = {'default_branch': 'main'}
-        tree_entries = [
-            {'type': 'blob', 'path': 'blog/post.md'},
-        ]
-        # Would be classified as ``article`` (has ``date:``) — but the
-        # frontmatter is malformed.
-        file_contents = {
-            'blog/post.md': '---\ntitle: "x"\ndate: [[broken\n---\nbody\n',
-        }
-        mock_get.side_effect = self._router(
-            repo_meta, tree_entries, file_contents,
-        )
-
-        with self.assertLogs(
-            'integrations.services.github', level='WARNING',
-        ) as cm:
-            detections = detect_content_sources(
-                'org/repo', force_refresh=True,
-            )
-
-        # No article detection because frontmatter parse failed.
-        article_dets = [
-            d for d in detections if d['content_type'] == 'article'
-        ]
-        self.assertEqual(article_dets, [])
-        # Warning was logged.
-        joined = '\n'.join(cm.output)
-        self.assertIn('Failed to parse frontmatter', joined)
-        self.assertIn('blog/post.md', joined)
-
-    @patch('integrations.services.github.generate_github_app_token',
-           return_value='tok')
-    @patch('integrations.services.github.requests.get')
-    def test_well_formed_files_still_detected_alongside_malformed(
-        self, mock_get, _tok,
-    ):
-        repo_meta = {'default_branch': 'main'}
-        tree_entries = [
-            {'type': 'blob', 'path': 'events/good.yaml'},
-            {'type': 'blob', 'path': 'events/bad.yaml'},
-            {'type': 'blob', 'path': 'blog/good-post.md'},
-            {'type': 'blob', 'path': 'blog/bad-post.md'},
-        ]
-        file_contents = {
-            'events/good.yaml': (
-                'start_datetime: "2026-05-01T18:00:00Z"\n'
-                'title: "Good event"\n'
-            ),
-            'events/bad.yaml': 'start_datetime: [[broken\n',
-            'blog/good-post.md': '---\ntitle: "ok"\ndate: "2026-01-01"\n---\nx',
-            'blog/bad-post.md': '---\ntitle: "x"\ndate: [[broken\n---\nbody',
-        }
-        mock_get.side_effect = self._router(
-            repo_meta, tree_entries, file_contents,
-        )
-
-        detections = detect_content_sources(
-            'org/repo', force_refresh=True,
-        )
-
-        types = {d['content_type'] for d in detections}
-        self.assertIn('event', types)
-        self.assertIn('article', types)
-
-
-# ============================================================================
-# Scenario: ContentSource unique_together on (repo, type, path)
-# ============================================================================
-
-
-class ContentSourceUniqueTogetherTest(TestCase):
-    """The new ``unique_together`` allows two sources to share
-    ``(repo_name, content_type)`` as long as ``content_path`` differs."""
-
-    def test_same_repo_and_type_different_paths_allowed(self):
-        ContentSource.objects.create(
-            repo_name='my-org/content',
-            content_type='article',
-            content_path='blog',
-        )
-        # Same repo + type, different path — must succeed.
-        ContentSource.objects.create(
-            repo_name='my-org/content',
-            content_type='article',
-            content_path='tutorials',
-        )
-        self.assertEqual(
-            ContentSource.objects.filter(
-                repo_name='my-org/content',
-                content_type='article',
-            ).count(),
-            2,
-        )
-
-    def test_full_triple_duplicate_rejected(self):
-        ContentSource.objects.create(
-            repo_name='my-org/content',
-            content_type='article',
-            content_path='blog',
-        )
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                ContentSource.objects.create(
-                    repo_name='my-org/content',
-                    content_type='article',
-                    content_path='blog',
-                )
-
-
-# ============================================================================
-# Direct unit tests for the parse helpers
-# ============================================================================
-
-
-class ParseHelpersUnitTest(TestCase):
-    """Cover the ``(data, error)`` tuple shape introduced for issue #286."""
-
-    def test_parse_yaml_text_success(self):
-        data, err = _parse_yaml_text('foo: bar\n')
-        self.assertEqual(data, {'foo': 'bar'})
-        self.assertIsNone(err)
-
-    def test_parse_yaml_text_failure_returns_error(self):
-        with self.assertLogs(
-            'integrations.services.github', level='WARNING',
-        ):
-            data, err = _parse_yaml_text(
-                'foo: [[[broken', filepath='x.yaml',
-            )
-        self.assertIsNone(data)
-        self.assertIsNotNone(err)
-        self.assertTrue(err.startswith('Failed to parse x.yaml:'))
-
-    def test_parse_yaml_text_list_returns_none(self):
-        # Top-level list is not a mapping -> ``data`` is None, no error.
-        data, err = _parse_yaml_text('- a\n- b\n')
-        self.assertIsNone(data)
-        self.assertIsNone(err)
-
-    def test_parse_yaml_text_empty(self):
-        data, err = _parse_yaml_text('')
-        self.assertEqual(data, {})
-        self.assertIsNone(err)
-
-    def test_parse_frontmatter_text_success(self):
-        text = '---\ntitle: ok\n---\nbody\n'
-        meta, err = _parse_frontmatter_text(text)
-        self.assertEqual(meta, {'title': 'ok'})
-        self.assertIsNone(err)
-
-    def test_parse_frontmatter_text_failure_returns_error(self):
-        text = '---\ntitle: [[[broken\n---\nbody\n'
-        with self.assertLogs(
-            'integrations.services.github', level='WARNING',
-        ):
-            meta, err = _parse_frontmatter_text(text, filepath='post.md')
-        self.assertEqual(meta, {})
-        self.assertIsNotNone(err)
-        self.assertTrue(
-            err.startswith('Failed to parse frontmatter in post.md:'),
-        )
-
-    def test_parse_frontmatter_text_no_frontmatter_no_error(self):
-        # Markdown without frontmatter — meta is empty but no parse error.
-        meta, err = _parse_frontmatter_text('just body text\n')
-        self.assertEqual(meta, {})
-        self.assertIsNone(err)
 
 
 # ============================================================================

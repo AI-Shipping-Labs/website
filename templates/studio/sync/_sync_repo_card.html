@@ -74,7 +74,7 @@ still in flight.
           <span class="sync-btn-text">Force resync</span>
         </button>
       </form>
-      <a href="/admin/integrations/contentsource/?q={{ repo.repo_name|urlencode }}"
+      <a href="/admin/integrations/contentsource/{{ repo.source.pk }}/change/"
          target="_blank" rel="noopener"
          class="px-4 py-2 text-sm border border-border text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors inline-flex items-center space-x-1"
          title="Edit ContentSource rows for this repo in Django admin">

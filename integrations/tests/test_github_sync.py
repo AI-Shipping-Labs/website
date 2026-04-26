@@ -334,19 +334,20 @@ class FindContentSourceTest(TestCase):
             repo_name='AI-Shipping-Labs/content',
         )
         found = find_content_source('AI-Shipping-Labs/content')
-        self.assertEqual(found.first().pk, source.pk)
+        self.assertEqual(found.pk, source.pk)
 
     def test_find_returns_single_source_per_repo(self):
         # Issue #310: one ContentSource per repo (unique repo_name).
-        ContentSource.objects.create(
+        source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
         found = find_content_source('AI-Shipping-Labs/content')
-        self.assertEqual(found.count(), 1)
+        self.assertIsNotNone(found)
+        self.assertEqual(found.pk, source.pk)
 
     def test_find_nonexistent_source(self):
         found = find_content_source('nonexistent/repo')
-        self.assertFalse(found.exists())
+        self.assertIsNone(found)
 
 
 # ===========================================================================

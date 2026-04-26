@@ -57,19 +57,17 @@ def github_webhook(request):
             status=400,
         )
 
-    # Find all content sources for this repo (monorepo may have multiple)
-    sources = find_content_source(repo_full_name)
-    if not sources.exists():
+    source = find_content_source(repo_full_name)
+    if source is None:
         logger.warning('GitHub webhook for unknown repo: %s', repo_full_name)
         return JsonResponse(
             {'error': 'Unknown repository'},
             status=404,
         )
 
-    # Validate webhook signature using the first source's webhook_secret
-    first_source = sources.first()
-    if first_source.webhook_secret:
-        if not validate_webhook_signature(request, first_source.webhook_secret):
+    # Validate webhook signature using the source's webhook_secret
+    if source.webhook_secret:
+        if not validate_webhook_signature(request, source.webhook_secret):
             logger.warning(
                 'Invalid GitHub webhook signature for repo %s', repo_full_name,
             )
@@ -96,23 +94,21 @@ def github_webhook(request):
                 minutes=SYNC_LOCK_TIMEOUT_MINUTES,
             )
 
-            for source in sources:
-                # Edge Case 9: Update last_webhook_at on every webhook
-                source.last_webhook_at = now
-                source.save(update_fields=['last_webhook_at', 'updated_at'])
+            # Edge Case 9: Update last_webhook_at on every webhook
+            source.last_webhook_at = now
+            source.save(update_fields=['last_webhook_at', 'updated_at'])
 
-                # Edge Case 9: Webhook dedup - if sync is already running,
-                # set sync_requested flag instead of enqueuing
-                if (source.sync_locked_at
-                        and source.sync_locked_at >= stale_threshold):
-                    source.sync_requested = True
-                    source.save(update_fields=['sync_requested', 'updated_at'])
-                    logger.info(
-                        'Sync already running for %s, setting sync_requested flag.',
-                        source.repo_name,
-                    )
-                    continue
-
+            # Edge Case 9: Webhook dedup - if sync is already running,
+            # set sync_requested flag instead of enqueuing
+            if (source.sync_locked_at
+                    and source.sync_locked_at >= stale_threshold):
+                source.sync_requested = True
+                source.save(update_fields=['sync_requested', 'updated_at'])
+                logger.info(
+                    'Sync already running for %s, setting sync_requested flag.',
+                    source.repo_name,
+                )
+            else:
                 # Try to enqueue as a background job.
                 # ``force=True`` (issue #235): the webhook payload tells us
                 # a new commit just landed, so we trust it without

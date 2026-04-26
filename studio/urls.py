@@ -64,7 +64,11 @@ from studio.views.peer_reviews import (
 from studio.views.projects import project_list, project_review
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
-from studio.views.settings import settings_dashboard, settings_save_group
+from studio.views.settings import (
+    settings_dashboard,
+    settings_save_auth_provider,
+    settings_save_group,
+)
 from studio.views.subscribers import (
     subscriber_export_redirect,
     subscriber_list_redirect,
@@ -302,6 +306,15 @@ urlpatterns = [
 
     # Settings
     path('settings/', settings_dashboard, name='studio_settings'),
+    # Auth provider save URL is registered BEFORE the generic
+    # ``<group_name>/save/`` route so the literal ``auth/`` prefix isn't
+    # swallowed by the str converter (it would otherwise treat ``auth``
+    # as the integration group name).
+    path(
+        'settings/auth/<str:provider>/save/',
+        settings_save_auth_provider,
+        name='studio_settings_save_auth',
+    ),
     path('settings/<str:group_name>/save/', settings_save_group, name='studio_settings_save'),
 
     # Worker Status

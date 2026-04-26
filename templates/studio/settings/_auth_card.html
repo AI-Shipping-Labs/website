@@ -1,0 +1,109 @@
+{% comment %}
+Single OAuth login provider card (Google / GitHub / Slack). Backed by an
+``allauth.socialaccount.models.SocialApp`` row. Visual language matches
+``_integration_card.html`` but adds callback-URL display + copy button +
+Configure-at link + read-only scopes.
+
+Context:
+  provider: dict from `studio.services.auth_settings.get_auth_provider_data`
+    with provider/label/name/configure_url/callback_url/scopes/client_id/
+    secret/is_configured.
+{% endcomment %}
+<div class="bg-card border border-border rounded-lg p-6" id="auth-{{ provider.provider }}">
+  <!-- Card header: label + Configured/Not configured badge -->
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center space-x-3">
+      <h3 class="text-lg font-semibold text-foreground">{{ provider.label }}</h3>
+      <span class="px-2 py-0.5 text-xs rounded-full
+        {% if provider.is_configured %}bg-green-500/20 text-green-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+        {% if provider.is_configured %}Configured{% else %}Not configured{% endif %}
+      </span>
+    </div>
+  </div>
+
+  <p class="text-sm text-muted-foreground mb-4">
+    Lets users click "Sign in with {{ provider.name }}" on the login page.
+  </p>
+
+  <!-- Configure-at external link + callback URL + scopes -->
+  <div class="space-y-3 mb-5">
+    <div class="text-sm">
+      <span class="text-gray-400">Configure at:</span>
+      <a href="{{ provider.configure_url }}" target="_blank" rel="noopener noreferrer"
+         class="text-accent hover:underline inline-flex items-center gap-1">
+        {{ provider.configure_url }}
+        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7v7m0-7L10 14m-4-7H5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-1"/>
+        </svg>
+      </a>
+    </div>
+
+    <div class="text-sm">
+      <div class="text-gray-400 mb-1">Callback URL (paste this into the provider console):</div>
+      <div class="flex items-center gap-2">
+        <code class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-xs text-gray-200 font-mono break-all"
+              data-callback-url>{{ provider.callback_url }}</code>
+        <button type="button"
+                onclick="copyCallbackUrl(this)"
+                aria-label="Copy callback URL"
+                class="px-2 py-2 text-xs text-gray-400 hover:text-gray-200 border border-gray-600 rounded transition-colors">
+          <span data-copy-label>Copy</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="text-sm">
+      <span class="text-gray-400">Scopes:</span>
+      {% for scope in provider.scopes %}
+      <span class="ml-1 inline-block px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded font-mono">{{ scope }}</span>
+      {% empty %}
+      <span class="text-xs text-gray-500">(none configured)</span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Save form: client_id + client_secret -->
+  <form method="post" action="{% url 'studio_settings_save_auth' provider.provider %}">
+    {% csrf_token %}
+    <div class="space-y-4">
+      <div>
+        <label for="auth-{{ provider.provider }}-client-id" class="block text-sm font-medium text-gray-300 mb-1">
+          Client ID
+        </label>
+        <input type="text"
+               id="auth-{{ provider.provider }}-client-id"
+               name="client_id"
+               value="{{ provider.client_id }}"
+               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
+        <p class="mt-1 text-xs text-gray-500">
+          Public identifier issued by {{ provider.name }}. Safe to share. Without this the "Sign in with {{ provider.name }}" button does nothing.
+        </p>
+      </div>
+
+      <div>
+        <label for="auth-{{ provider.provider }}-client-secret" class="block text-sm font-medium text-gray-300 mb-1">
+          Client Secret
+        </label>
+        <div class="relative w-full">
+          <input type="password"
+                 id="auth-{{ provider.provider }}-client-secret"
+                 name="client_secret"
+                 value="{{ provider.secret }}"
+                 class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent pr-16">
+          <button type="button" onclick="toggleReveal(this)"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1">Show</button>
+        </div>
+        <p class="mt-1 text-xs text-gray-500">
+          Secret credential issued by {{ provider.name }}. Treat like a password. Rotated when compromised.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-6 flex justify-end">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Save {{ provider.name }}
+      </button>
+    </div>
+  </form>
+</div>

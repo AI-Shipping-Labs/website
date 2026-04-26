@@ -16,7 +16,9 @@ import json
 from unittest.mock import patch
 
 import jwt
+from allauth.socialaccount.models import SocialApp
 from django.conf import settings
+from django.contrib.sites.models import Site
 from django.test import TestCase, tag
 from django.urls import reverse
 
@@ -628,6 +630,19 @@ class RegisterPageTest(TestCase):
 
 class LoginPageEmailPasswordTest(TestCase):
     """Tests that login page now includes email+password form."""
+
+    @classmethod
+    def setUpTestData(cls):
+        # OAuth buttons + divider only render when at least one
+        # ``SocialApp`` row is configured (issue #322 gating). Seed two
+        # so the existing assertions for Google + GitHub buttons hold.
+        site = Site.objects.get_current()
+        for provider, name in (('google', 'Google'), ('github', 'GitHub')):
+            app = SocialApp.objects.create(
+                provider=provider, name=name,
+                client_id=f'{provider}-cid', secret=f'{provider}-sec',
+            )
+            app.sites.add(site)
 
     def test_login_page_contains_email_input(self):
         resp = self.client.get("/accounts/login/")

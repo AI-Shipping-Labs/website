@@ -39,7 +39,7 @@ Test: visit `/studio/settings/` and confirm 8 integration groups are listed (Str
 
 ## 3. OAuth login providers
 
-Until #322 ships, OAuth provider credentials are stored as Django `SocialApp` rows, not as Studio settings. Configure each provider via Django admin at `{SITE_BASE_URL}/admin/socialaccount/socialapp/add/`. Once #322 ships, the same fields will be available under Studio > Settings > Auth & Login; this section will be updated to point there.
+Configure in Studio > Settings > Auth & Login. Each provider has its own card with the callback URL ready to copy + the developer-console link.
 
 Per provider, fill in: Provider, Name, Client id, Secret key, and assign your site (`aishippinglabs.com` or equivalent) to the "Chosen sites" box.
 
@@ -274,6 +274,6 @@ This doc is locked against TODAY's codebase. As the linked issues ship, update t
 | Trigger | What changes in the doc |
 |---------|-------------------------|
 | #321 ships | Done — section 1 mentions Studio's host-mismatch banner; the legacy `SITE_URL` setting was deleted. |
-| #322 ships | Replace the "Until #322 ships" paragraph in section 3 with "Configure in Studio > Settings > Auth & Login". |
+| #322 ships | Done — section 3 points to Studio > Settings > Auth & Login; the legacy "configure via Django admin" path was removed. |
 | #323 ships | Add a one-liner in section 13: "You can export and import settings via Studio (with a secret-handling policy)." |
 | #324 ships | Add one sentence in section 1: "Studio shows a source badge per field — `db` or `env` — so you can see which value is winning." |

@@ -2,6 +2,10 @@
 
 Each group defines the integration service and its configurable keys.
 The 'multiline' flag indicates keys that need a textarea (e.g. PEM keys).
+
+Each ``description`` is a short answer to: what does it do, where do I
+get it, what breaks without it. Kept to one sentence so the dashboard
+stays scannable. See issue #322 for the locked rewrites.
 """
 
 INTEGRATION_GROUPS = [
@@ -9,79 +13,79 @@ INTEGRATION_GROUPS = [
         'name': 'stripe',
         'label': 'Stripe',
         'keys': [
-            {'key': 'STRIPE_SECRET_KEY', 'is_secret': True, 'description': 'Stripe secret API key'},
-            {'key': 'STRIPE_WEBHOOK_SECRET', 'is_secret': True, 'description': 'Stripe webhook signing secret'},
-            {'key': 'STRIPE_PUBLISHABLE_KEY', 'is_secret': False, 'description': 'Stripe publishable key'},
-            {'key': 'STRIPE_CHECKOUT_ENABLED', 'is_secret': False, 'description': 'Enable Stripe Checkout Sessions (true/false)'},
-            {'key': 'STRIPE_CUSTOMER_PORTAL_URL', 'is_secret': False, 'description': 'Stripe customer portal URL'},
+            {'key': 'STRIPE_SECRET_KEY', 'is_secret': True, 'description': 'Server-side Stripe API key. Get from Stripe Dashboard > Developers > API keys. Without this checkout fails.'},
+            {'key': 'STRIPE_WEBHOOK_SECRET', 'is_secret': True, 'description': 'Verifies that webhook callbacks really came from Stripe. Get from Stripe Dashboard > Webhooks > [your endpoint].'},
+            {'key': 'STRIPE_PUBLISHABLE_KEY', 'is_secret': False, 'description': 'Public Stripe key embedded in the frontend. Get from Stripe Dashboard > Developers > API keys.'},
+            {'key': 'STRIPE_CHECKOUT_ENABLED', 'is_secret': False, 'description': 'Set true to use hosted Stripe Checkout sessions; false to use payment links.'},
+            {'key': 'STRIPE_CUSTOMER_PORTAL_URL', 'is_secret': False, 'description': 'Stripe-hosted page where members manage their subscription. Get from Stripe Dashboard > Settings > Billing > Customer portal.'},
         ],
     },
     {
         'name': 'zoom',
         'label': 'Zoom',
         'keys': [
-            {'key': 'ZOOM_CLIENT_ID', 'is_secret': True, 'description': 'Zoom OAuth client ID'},
-            {'key': 'ZOOM_CLIENT_SECRET', 'is_secret': True, 'description': 'Zoom OAuth client secret'},
-            {'key': 'ZOOM_ACCOUNT_ID', 'is_secret': True, 'description': 'Zoom account ID'},
-            {'key': 'ZOOM_WEBHOOK_SECRET_TOKEN', 'is_secret': True, 'description': 'Zoom webhook secret token'},
+            {'key': 'ZOOM_CLIENT_ID', 'is_secret': True, 'description': 'Zoom Server-to-Server OAuth app client ID. Without this we cannot create or fetch meetings.'},
+            {'key': 'ZOOM_CLIENT_SECRET', 'is_secret': True, 'description': 'Zoom OAuth client secret. Get from your Zoom app under Marketplace > Build App > S2S OAuth.'},
+            {'key': 'ZOOM_ACCOUNT_ID', 'is_secret': True, 'description': 'Zoom account UUID the OAuth app belongs to. Found in the Zoom Marketplace app settings.'},
+            {'key': 'ZOOM_WEBHOOK_SECRET_TOKEN', 'is_secret': True, 'description': 'Verifies Zoom webhook callbacks (event start, recording ready). Set in the Zoom app event subscription.'},
         ],
     },
     {
         'name': 'ses',
         'label': 'Email (SES)',
         'keys': [
-            {'key': 'AWS_ACCESS_KEY_ID', 'is_secret': True, 'description': 'AWS access key ID'},
-            {'key': 'AWS_SECRET_ACCESS_KEY', 'is_secret': True, 'description': 'AWS secret access key'},
-            {'key': 'AWS_SES_REGION', 'is_secret': False, 'description': 'AWS SES region (e.g. us-east-1)'},
-            {'key': 'SES_FROM_EMAIL', 'is_secret': False, 'description': 'From email address for SES'},
-            {'key': 'SES_WEBHOOK_VALIDATION_ENABLED', 'is_secret': False, 'description': 'Enable SES webhook validation (true/false)'},
+            {'key': 'AWS_ACCESS_KEY_ID', 'is_secret': True, 'description': 'AWS access key for an IAM user with SES send + suppression-list permissions.'},
+            {'key': 'AWS_SECRET_ACCESS_KEY', 'is_secret': True, 'description': 'AWS secret key paired with the access key above. Without these no email is sent.'},
+            {'key': 'AWS_SES_REGION', 'is_secret': False, 'description': 'AWS region for SES (e.g. eu-west-1). Must match the verified domain region.'},
+            {'key': 'SES_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for transactional and campaign email. Must be verified in SES.'},
+            {'key': 'SES_WEBHOOK_VALIDATION_ENABLED', 'is_secret': False, 'description': 'Set true to verify SNS bounce/complaint signatures (recommended in production).'},
         ],
     },
     {
         'name': 's3_recordings',
         'label': 'S3 Recordings',
         'keys': [
-            {'key': 'AWS_S3_RECORDINGS_BUCKET', 'is_secret': False, 'description': 'S3 bucket for event recordings'},
-            {'key': 'AWS_S3_RECORDINGS_REGION', 'is_secret': False, 'description': 'S3 region for recordings'},
+            {'key': 'AWS_S3_RECORDINGS_BUCKET', 'is_secret': False, 'description': 'S3 bucket where event recordings are uploaded after processing.'},
+            {'key': 'AWS_S3_RECORDINGS_REGION', 'is_secret': False, 'description': 'AWS region of the recordings bucket (e.g. eu-west-1).'},
         ],
     },
     {
         'name': 's3_content',
         'label': 'S3 Content Images',
         'keys': [
-            {'key': 'AWS_S3_CONTENT_BUCKET', 'is_secret': False, 'description': 'S3 bucket for content images'},
-            {'key': 'AWS_S3_CONTENT_REGION', 'is_secret': False, 'description': 'S3 region for content images'},
-            {'key': 'CONTENT_CDN_BASE', 'is_secret': False, 'description': 'CDN base URL for content images'},
+            {'key': 'AWS_S3_CONTENT_BUCKET', 'is_secret': False, 'description': 'S3 bucket for content images extracted from synced markdown. Public-read.'},
+            {'key': 'AWS_S3_CONTENT_REGION', 'is_secret': False, 'description': 'AWS region of the content-images bucket.'},
+            {'key': 'CONTENT_CDN_BASE', 'is_secret': False, 'description': 'Public CDN base URL fronting the content bucket (e.g. https://cdn.aishippinglabs.com). Without this images break on the live site.'},
         ],
     },
     {
         'name': 'youtube',
         'label': 'YouTube',
         'keys': [
-            {'key': 'YOUTUBE_CLIENT_ID', 'is_secret': True, 'description': 'YouTube OAuth client ID'},
-            {'key': 'YOUTUBE_CLIENT_SECRET', 'is_secret': True, 'description': 'YouTube OAuth client secret'},
-            {'key': 'YOUTUBE_REFRESH_TOKEN', 'is_secret': True, 'description': 'YouTube OAuth refresh token'},
+            {'key': 'YOUTUBE_CLIENT_ID', 'is_secret': True, 'description': 'YouTube Data API OAuth client ID. Used to upload event recordings to the channel.'},
+            {'key': 'YOUTUBE_CLIENT_SECRET', 'is_secret': True, 'description': 'YouTube OAuth client secret. Get from Google Cloud Console > APIs & Services > Credentials.'},
+            {'key': 'YOUTUBE_REFRESH_TOKEN', 'is_secret': True, 'description': 'Long-lived OAuth refresh token authorising uploads. Generated once via the YouTube auth flow.'},
         ],
     },
     {
         'name': 'github',
         'label': 'GitHub App',
         'keys': [
-            {'key': 'GITHUB_APP_ID', 'is_secret': False, 'description': 'GitHub App ID'},
-            {'key': 'GITHUB_APP_INSTALLATION_ID', 'is_secret': False, 'description': 'GitHub App installation ID'},
-            {'key': 'GITHUB_APP_PRIVATE_KEY', 'is_secret': True, 'description': 'GitHub App private key (PEM)', 'multiline': True},
+            {'key': 'GITHUB_APP_ID', 'is_secret': False, 'description': 'Numeric ID of the GitHub App used to read content repos. Found at github.com/settings/apps/<your-app>.'},
+            {'key': 'GITHUB_APP_INSTALLATION_ID', 'is_secret': False, 'description': 'Installation ID of the GitHub App on the content org. Found at github.com/organizations/<org>/settings/installations.'},
+            {'key': 'GITHUB_APP_PRIVATE_KEY', 'is_secret': True, 'description': 'PEM private key issued by GitHub when the app was created. Used to sign API requests; without this content sync fails.', 'multiline': True},
         ],
     },
     {
         'name': 'slack',
         'label': 'Slack',
         'keys': [
-            {'key': 'SLACK_ENABLED', 'is_secret': False, 'description': 'Enable Slack integration (true/false) — off by default'},
-            {'key': 'SLACK_BOT_TOKEN', 'is_secret': True, 'description': 'Slack bot OAuth token'},
-            {'key': 'SLACK_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Comma-separated community channel IDs'},
-            {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Announcements channel ID'},
-            {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_NAME', 'is_secret': False, 'description': 'Announcements channel name (e.g. #announcements)'},
-            {'key': 'SLACK_INVITE_URL', 'is_secret': False, 'description': 'Slack workspace invite URL'},
+            {'key': 'SLACK_ENABLED', 'is_secret': False, 'description': 'Set true to enable Slack bot posting and event listening. Off by default to keep dev/test silent.'},
+            {'key': 'SLACK_BOT_TOKEN', 'is_secret': True, 'description': 'Slack bot user OAuth token (xoxb-...). Used to post announcements and read community channel events.'},
+            {'key': 'SLACK_COMMUNITY_CHANNEL_IDS', 'is_secret': False, 'description': 'Comma-separated channel IDs the bot watches for community signals (mentions, reactions).'},
+            {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Channel ID where the bot posts new content and event announcements.'},
+            {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_NAME', 'is_secret': False, 'description': 'Display name of the announcements channel (e.g. #announcements). Used in UI copy.'},
+            {'key': 'SLACK_INVITE_URL', 'is_secret': False, 'description': 'Public Slack workspace invite URL shown to Main+ members on the dashboard.'},
         ],
     },
 ]

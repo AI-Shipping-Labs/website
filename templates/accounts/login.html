@@ -50,6 +50,7 @@
             </a>
           </div>
 
+          {% if oauth_google_enabled or oauth_github_enabled or oauth_slack_enabled %}
           <!-- Divider -->
           <div class="relative my-6">
             <div class="absolute inset-0 flex items-center">
@@ -61,6 +62,7 @@
           </div>
 
           <div class="space-y-4">
+            {% if oauth_google_enabled %}
             <!-- Google Sign In -->
             <a href="{% url 'google_login' %}"
                class="flex w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
@@ -72,7 +74,9 @@
               </svg>
               Sign in with Google
             </a>
+            {% endif %}
 
+            {% if oauth_github_enabled %}
             <!-- GitHub Sign In -->
             <a href="{% url 'github_login' %}"
                class="flex w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
@@ -81,7 +85,9 @@
               </svg>
               Sign in with GitHub
             </a>
+            {% endif %}
 
+            {% if oauth_slack_enabled %}
             <!-- Slack Sign In -->
             <a href="{% url 'slack_login' %}"
                class="flex w-full items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
@@ -93,7 +99,9 @@
               </svg>
               Sign in with Slack
             </a>
+            {% endif %}
           </div>
+          {% endif %}
 
           <div class="mt-6 text-center">
             <p class="text-xs text-muted-foreground">

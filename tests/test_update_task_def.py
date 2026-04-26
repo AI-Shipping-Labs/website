@@ -84,3 +84,29 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
                 environment["ALLOWED_HOSTS"],
                 "aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com",
             )
+
+    def test_run_migrations_only_set_on_web_container(self):
+        with TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "input.json"
+            output_path = Path(tmpdir) / "output.json"
+            self._write_task_definition(input_path)
+
+            update_task_def.update_task_definition(
+                str(input_path),
+                "20260422-123456-abcd123",
+                str(output_path),
+                "dev",
+            )
+
+            task_def = self._read_task_definition(output_path)
+
+        env_by_container = {
+            container["name"]: {
+                item["name"]: item["value"] for item in container["environment"]
+            }
+            for container in task_def["containerDefinitions"]
+        }
+        self.assertEqual(env_by_container["ai-shipping-labs"]["RUN_MIGRATIONS"], "true")
+        self.assertEqual(
+            env_by_container["ai-shipping-labs-worker"]["RUN_MIGRATIONS"], "false"
+        )

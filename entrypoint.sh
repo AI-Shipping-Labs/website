@@ -1,13 +1,21 @@
 #!/bin/sh
 
-echo "Apply database migrations"
-uv run python manage.py migrate
+# Migrations run from a single container per task. Two containers (web +
+# worker) start in parallel from the same image and entrypoint, and any
+# migration with both DDL and data steps (e.g. integrations.0021) deadlocks
+# when run concurrently against the same database. Issue #336.
+if [ "${RUN_MIGRATIONS}" = "true" ]; then
+    echo "Apply database migrations"
+    uv run python manage.py migrate
 
-if [ $? -ne 0 ]; then
-    echo "Failed to apply database migrations."
-    exit 1
+    if [ $? -ne 0 ]; then
+        echo "Failed to apply database migrations."
+        exit 1
+    else
+        echo "Database migrations applied successfully."
+    fi
 else
-    echo "Database migrations applied successfully."
+    echo "Skipping migrations on this container (RUN_MIGRATIONS != true)"
 fi
 
 # Create the django-q cache table. The /studio/worker/ dashboard reads

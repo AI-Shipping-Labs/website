@@ -42,6 +42,16 @@ def _set_env_var(environment, name, value):
     environment.append({"name": name, "value": value})
 
 
+def _run_migrations_for_container(container_name):
+    # entrypoint.sh runs `manage.py migrate` only when RUN_MIGRATIONS=true.
+    # Two containers in the same task race on migrations with mixed DDL +
+    # data steps and deadlock (issue #336). Pick the web container as the
+    # single migrator; everything else (workers, sidecars) skips.
+    if container_name and container_name.endswith("-worker"):
+        return "false"
+    return "true"
+
+
 def _required_allowed_hosts(deploy_env):
     return ALLOWED_HOSTS_BY_ENV.get(deploy_env, ALLOWED_HOSTS_BY_ENV["dev"])
 
@@ -88,6 +98,11 @@ def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
                 environment,
                 "SITE_BASE_URL",
                 _site_base_url_for_env(deploy_env),
+            )
+            _set_env_var(
+                environment,
+                "RUN_MIGRATIONS",
+                _run_migrations_for_container(container_def.get("name")),
             )
             container_def["environment"] = environment
 

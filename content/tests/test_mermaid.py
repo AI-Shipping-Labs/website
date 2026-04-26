@@ -8,12 +8,15 @@ enough. We use ``content.models.article.render_markdown`` as the
 representative helper.
 """
 
+import datetime
+
 from django.test import TestCase
 
 from content.markdown_extensions import (
     MermaidExtension,
     MermaidPreprocessor,
 )
+from content.models.article import Article
 from content.models.article import render_markdown as render_article_md
 from content.models.course import render_markdown as render_course_md
 from content.models.workshop import render_markdown as render_workshop_md
@@ -163,15 +166,38 @@ class SharedAcrossHelpersTest(TestCase):
         self.assertIn('<div class="mermaid">', render_event_md(md))
 
 
-class BaseTemplateScriptTagTest(TestCase):
-    """``base.html`` must include the lazy-loader script tag so every
-    page ships with the renderer (which self-guards on missing
-    ``div.mermaid`` nodes)."""
+class MermaidScriptTagInclusionTest(TestCase):
+    """Lazy-load contract from issue #320: the mermaid renderer shim is
+    only emitted on pages that render markdown-derived HTML. Non-content
+    pages (homepage, login, studio, account, etc.) ship zero bytes of
+    mermaid JavaScript."""
 
-    def test_base_html_includes_mermaid_script(self):
-        # The homepage uses base.html — fetching it is enough to assert
-        # on what the layout emits.
+    def test_homepage_does_not_include_mermaid_script(self):
         response = self.client.get('/')
+        body = response.content.decode()
+        # Homepage extends base.html but does not render markdown body
+        # content, so the partial must not be included.
+        self.assertNotRegex(body, r'js/mermaid-render(\.[0-9a-f]+)?\.js')
+        # Regression guard: a multi-line ``{# ... #}`` Django comment in
+        # base.html leaks as visible text on every page (Django's ``{# #}``
+        # is single-line only). Ensure the explanatory note about the
+        # mermaid lazy-load partial never reaches the browser.
+        self.assertNotIn('{# Mermaid', body)
+        self.assertNotIn('lazy-loaded per page', body)
+
+    def test_blog_detail_includes_mermaid_script(self):
+        # A markdown-rendering template (``content/blog_detail.html``)
+        # must include the partial via its ``extra_scripts`` block.
+        Article.objects.create(
+            title='Mermaid Test Post',
+            slug='mermaid-test-post',
+            content_markdown='# Hello\n\nBody.\n',
+            date=datetime.date(2024, 1, 1),
+            page_type='blog',
+            published=True,
+        )
+        response = self.client.get('/blog/mermaid-test-post')
+        self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         self.assertRegex(body, r'js/mermaid-render(\.[0-9a-f]+)?\.js')
         # type="module" is required so the dynamic import() inside the

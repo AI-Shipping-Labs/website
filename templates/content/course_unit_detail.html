@@ -443,6 +443,8 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ block.super }}
+{% include "_partials/mermaid_script.html" %}
 <script>
   // Desktop foldable sidebar toggle (issue #229).
   // Mirrors the ChatGPT/Claude pattern: collapse-and-center the body so

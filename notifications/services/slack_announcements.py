@@ -31,7 +31,7 @@ def _build_slack_blocks(content_type, content):
     Returns:
         Tuple of (text_fallback, blocks_list).
     """
-    site_url = getattr(settings, 'SITE_URL', 'https://aishippinglabs.com')
+    site_url = settings.SITE_BASE_URL
     url = content.get_absolute_url() if hasattr(content, 'get_absolute_url') else ''
     full_url = f'{site_url}{url}'
 

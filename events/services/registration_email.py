@@ -34,7 +34,7 @@ def send_registration_confirmation(registration):
         )
         return None
 
-    site_url = getattr(settings, 'SITE_URL', 'https://aishippinglabs.com')
+    site_url = settings.SITE_BASE_URL
     join_url = f'{site_url}/events/{event.slug}/join'
 
     # Render the email template

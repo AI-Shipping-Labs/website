@@ -23,6 +23,16 @@ CSRF_TRUSTED_ORIGINS_BY_ENV = {
     ],
 }
 
+# Canonical base URL per environment. Drives every absolute URL the app
+# generates (unsubscribe, calendar invites, password resets, share URLs,
+# OG / canonical meta, OAuth redirect URIs). Without this, dev tasks
+# would default to the prod literal in settings.py and ship prod links
+# from the dev environment.
+SITE_BASE_URL_BY_ENV = {
+    "dev": "https://dev.aishippinglabs.com",
+    "prod": "https://aishippinglabs.com",
+}
+
 
 def _set_env_var(environment, name, value):
     for env_var in environment:
@@ -44,6 +54,10 @@ def _csrf_trusted_origins_for_env(deploy_env):
     return ",".join(
         CSRF_TRUSTED_ORIGINS_BY_ENV.get(deploy_env, CSRF_TRUSTED_ORIGINS_BY_ENV["dev"])
     )
+
+
+def _site_base_url_for_env(deploy_env):
+    return SITE_BASE_URL_BY_ENV.get(deploy_env, SITE_BASE_URL_BY_ENV["dev"])
 
 
 def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
@@ -69,6 +83,11 @@ def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
                 environment,
                 "CSRF_TRUSTED_ORIGINS",
                 _csrf_trusted_origins_for_env(deploy_env),
+            )
+            _set_env_var(
+                environment,
+                "SITE_BASE_URL",
+                _site_base_url_for_env(deploy_env),
             )
             container_def["environment"] = environment
 

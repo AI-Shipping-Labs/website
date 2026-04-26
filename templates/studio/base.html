@@ -3,6 +3,7 @@
 {% block title %}Studio - {% block studio_title %}Dashboard{% endblock %} | {{ site_name }}{% endblock %}
 
 {% block body %}
+{% include "studio/includes/env_mismatch_banner.html" %}
 <div class="flex min-h-screen">
   <!-- Mobile sidebar toggle -->
   <button id="studio-sidebar-toggle" class="md:hidden fixed top-3 left-3 z-50 p-2 bg-gray-800 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition-colors" aria-label="Toggle sidebar">

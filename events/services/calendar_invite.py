@@ -34,7 +34,11 @@ def generate_ics(event, method='REQUEST'):
     vevent.add('dtstamp', timezone.now())
     vevent.add('sequence', event.ics_sequence)
 
-    # Stable UID per event
+    # Stable UID per event. Per RFC 5545 the UID must be globally
+    # stable across iCal client reloads — DO NOT swap this for
+    # SITE_BASE_URL. If the apex domain changes between dev/prod, a
+    # calendar that received the dev invite would treat the prod invite
+    # as a different event instead of an update.
     vevent.add('uid', f'event-{event.slug}@aishippinglabs.com')
 
     # Description (plain text)
@@ -42,7 +46,7 @@ def generate_ics(event, method='REQUEST'):
         vevent.add('description', event.description)
 
     # Join URL
-    site_url = getattr(settings, 'SITE_URL', 'https://aishippinglabs.com')
+    site_url = settings.SITE_BASE_URL
     join_url = f'{site_url}/events/{event.slug}/join'
     vevent.add('url', join_url)
     vevent.add('location', vText(join_url))

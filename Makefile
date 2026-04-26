@@ -1,18 +1,25 @@
 .PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright lint lint-fix clean
 
+# Default SITE_BASE_URL for local dev so generated links (unsubscribe,
+# calendar invites, password resets, share URLs) point at the running
+# dev server instead of the production hostname. Override with:
+#   SITE_BASE_URL=http://localhost:8001 make run2
+SITE_BASE_URL ?= http://localhost:8000
+
 # Start dev server
 run: qcache
-	uv run python manage.py runserver
+	SITE_BASE_URL=$(SITE_BASE_URL) uv run python manage.py runserver
 
 # Start dev server on port 8001
 run2: qcache
-	uv run python manage.py runserver 8001
+	SITE_BASE_URL=http://localhost:8001 uv run python manage.py runserver 8001
 
 # Start django-q worker
 worker: qcache
-	uv run python manage.py qcluster
+	SITE_BASE_URL=$(SITE_BASE_URL) uv run python manage.py qcluster
 
-# Start dev server + django-q worker together (Ctrl-C kills both)
+# Start dev server + django-q worker together (Ctrl-C kills both).
+# Procfile.dev sets SITE_BASE_URL=http://localhost:8000 on each line.
 dev: qcache
 	uv run honcho -f Procfile.dev start
 

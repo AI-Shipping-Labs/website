@@ -1,0 +1,35 @@
+<!--
+  Studio host-mismatch banner (issue #321).
+
+  Renders only when the website.context_processors.studio_env_mismatch_context
+  context processor populates ``env_mismatch`` (i.e. SITE_BASE_URL's
+  scheme/host/port doesn't match the live request). Amber-toned and
+  deliberately not dismissible — if it can be hidden, it can be ignored.
+-->
+{% if env_mismatch %}
+<div class="bg-amber-500/10 border-b border-amber-500/30 px-4 py-3"
+     data-testid="env-mismatch-banner"
+     role="alert">
+  <div class="flex items-start space-x-3">
+    <svg class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+    </svg>
+    <div class="flex-1 text-sm text-amber-300">
+      <p class="font-semibold">Environment mismatch</p>
+      <p class="mt-1">
+        <code class="px-1 py-0.5 rounded bg-amber-500/20">SITE_BASE_URL</code>
+        is set to
+        <code class="px-1 py-0.5 rounded bg-amber-500/20" data-testid="env-mismatch-configured">{{ env_mismatch.configured_base_url }}</code>
+        but you're on
+        <code class="px-1 py-0.5 rounded bg-amber-500/20" data-testid="env-mismatch-request">{{ env_mismatch.request_url }}</code>.
+      </p>
+      <p class="mt-1">
+        Generated links (unsubscribe, calendar invites, password resets, share URLs, webhook configs) will point to
+        <code class="px-1 py-0.5 rounded bg-amber-500/20">{{ env_mismatch.configured_host }}</code>,
+        not where you are. Fix <code class="px-1 py-0.5 rounded bg-amber-500/20">SITE_BASE_URL</code>
+        or use the matching host before triggering anything that sends external links.
+      </p>
+    </div>
+  </div>
+</div>
+{% endif %}

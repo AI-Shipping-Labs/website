@@ -27,7 +27,7 @@ DEFAULT_OG_IMAGE_ALT = 'AI Shipping Labs'
 
 def _get_site_url():
     """Return the site URL from settings."""
-    return getattr(settings, 'SITE_URL', 'https://aishippinglabs.com')
+    return settings.SITE_BASE_URL
 
 
 def _truncate_description(text, max_length=160):

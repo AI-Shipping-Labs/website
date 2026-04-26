@@ -156,7 +156,7 @@ class EmailService:
         full_context = {
             "user_name": user.first_name or user.email.split("@")[0],
             "user_email": user.email,
-            "site_url": getattr(settings, "SITE_URL", "https://aishippinglabs.com"),
+            "site_url": settings.SITE_BASE_URL,
             "site_name": getattr(settings, "SITE_NAME", "AI Shipping Labs"),
         }
         full_context.update(context)
@@ -184,7 +184,7 @@ class EmailService:
         """
         import jwt
 
-        site_url = getattr(settings, "SITE_URL", "https://aishippinglabs.com")
+        site_url = settings.SITE_BASE_URL
         secret = settings.SECRET_KEY
 
         token = jwt.encode(

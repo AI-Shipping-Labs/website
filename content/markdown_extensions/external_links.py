@@ -1,9 +1,10 @@
 """External-link rewriting for python-markdown (issue #303).
 
 Adds ``target="_blank"`` and ``rel="...noopener"`` to ``<a>`` elements that
-point to a host other than ``settings.SITE_URL``. Internal links (anchors,
-relative paths, root-relative paths, same-domain absolute URLs, and
-non-http schemes such as ``mailto:`` and ``tel:``) are left alone.
+point to a host other than ``settings.SITE_BASE_URL``. Internal links
+(anchors, relative paths, root-relative paths, same-domain absolute
+URLs, and non-http schemes such as ``mailto:`` and ``tel:``) are left
+alone.
 
 The rewrite runs as a :class:`Treeprocessor`, not a postprocessor, so the
 DOM walk happens on parsed ``ElementTree`` nodes after inline parsing —
@@ -34,24 +35,29 @@ from markdown.treeprocessors import Treeprocessor
 def _site_hosts():
     """Return the set of lowercase hostnames considered "internal".
 
-    Source of truth is ``settings.SITE_URL``. We deliberately do NOT use
-    ``ALLOWED_HOSTS`` because it can include wildcards (``*``) and dev
-    hosts (``localhost``); a wildcard would silently treat every link as
-    internal.
+    Source of truth is ``settings.SITE_BASE_URL``. We deliberately do
+    NOT use ``ALLOWED_HOSTS`` because it can include wildcards (``*``)
+    and dev hosts (``localhost``); a wildcard would silently treat every
+    link as internal.
 
     Both the configured host and its ``www.``-flipped sibling are added
     so ``aishippinglabs.com`` and ``www.aishippinglabs.com`` are both
     recognised as the site.
 
-    If ``SITE_URL`` is empty/unset we return an empty set, which means
-    every absolute ``http(s)://...`` URL is treated as external. That's
-    the safer default for a misconfigured deployment.
+    If ``SITE_BASE_URL`` is empty/unset we return an empty set, which
+    means every absolute ``http(s)://...`` URL is treated as external.
+    That's the safer default for a misconfigured deployment — and it
+    matches the dev intent: with ``SITE_BASE_URL=http://localhost:8000``,
+    a stray ``https://aishippinglabs.com/...`` link in dev content is
+    correctly treated as external (i.e. opens in a new tab) rather than
+    silently swept under the same-origin rug.
 
-    Computed on every ``Treeprocessor.run()`` call (not at module import)
-    so test ``@override_settings(SITE_URL=...)`` decorators take effect.
+    Computed on every ``Treeprocessor.run()`` call (not at module
+    import) so test ``@override_settings(SITE_BASE_URL=...)`` decorators
+    take effect.
     """
     hosts = set()
-    site_url = getattr(settings, 'SITE_URL', '') or ''
+    site_url = getattr(settings, 'SITE_BASE_URL', '') or ''
     if site_url:
         netloc = urlparse(site_url).netloc.lower()
         if netloc:

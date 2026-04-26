@@ -50,26 +50,64 @@ echo "Waiting for ${SERVICE} to reach steady state on the new task definition (t
 if ! aws ecs wait services-stable \
     --cluster ${CLUSTER} \
     --services ${SERVICE}; then
-    echo "ERROR: ${SERVICE} did not reach steady state. Recent ECS service events:"
+    echo "ERROR: ${SERVICE} did not reach steady state."
+
+    echo "--- Recent ECS service events ---"
     aws ecs describe-services \
         --cluster ${CLUSTER} \
         --services ${SERVICE} \
         --query 'services[0].events[:20]' \
         --output table || true
-    echo "ERROR: ${SERVICE} did not reach steady state. Recent task stop reasons:"
-    TASK_ARNS=$(aws ecs list-tasks \
+
+    echo "--- RUNNING task statuses ---"
+    RUNNING_ARNS=$(aws ecs list-tasks \
+        --cluster ${CLUSTER} \
+        --service-name ${SERVICE} \
+        --desired-status RUNNING \
+        --query 'taskArns[:5]' \
+        --output text 2>/dev/null || true)
+    if [ -n "${RUNNING_ARNS}" ]; then
+        aws ecs describe-tasks \
+            --cluster ${CLUSTER} \
+            --tasks ${RUNNING_ARNS} \
+            --query 'tasks[].[taskArn,lastStatus,healthStatus,containers[].lastStatus,containers[].reason]' \
+            --output table || true
+    else
+        echo "(no RUNNING tasks)"
+    fi
+
+    echo "--- Recent STOPPED task reasons ---"
+    STOPPED_ARNS=$(aws ecs list-tasks \
         --cluster ${CLUSTER} \
         --service-name ${SERVICE} \
         --desired-status STOPPED \
         --query 'taskArns[:5]' \
-        --output text || true)
-    if [ -n "${TASK_ARNS}" ]; then
+        --output text 2>/dev/null || true)
+    if [ -n "${STOPPED_ARNS}" ]; then
         aws ecs describe-tasks \
             --cluster ${CLUSTER} \
-            --tasks ${TASK_ARNS} \
+            --tasks ${STOPPED_ARNS} \
             --query 'tasks[].[taskArn,lastStatus,stoppedReason,containers[].reason]' \
             --output table || true
+    else
+        echo "(no STOPPED tasks)"
     fi
+
+    echo "--- ALB target-group health ---"
+    TG_ARN=$(aws ecs describe-services \
+        --cluster ${CLUSTER} \
+        --services ${SERVICE} \
+        --query 'services[0].loadBalancers[0].targetGroupArn' \
+        --output text 2>/dev/null || true)
+    if [ -n "${TG_ARN}" ] && [ "${TG_ARN}" != "None" ]; then
+        aws elbv2 describe-target-health \
+            --target-group-arn ${TG_ARN} \
+            --query 'TargetHealthDescriptions[].[Target.Id,Target.Port,TargetHealth.State,TargetHealth.Reason,TargetHealth.Description]' \
+            --output table || true
+    else
+        echo "(service has no load balancer attached)"
+    fi
+
     exit 1
 fi
 

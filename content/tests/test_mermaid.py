@@ -173,7 +173,7 @@ class BaseTemplateScriptTagTest(TestCase):
         # on what the layout emits.
         response = self.client.get('/')
         body = response.content.decode()
-        self.assertIn('js/mermaid-render.js', body)
+        self.assertRegex(body, r'js/mermaid-render(\.[0-9a-f]+)?\.js')
         # type="module" is required so the dynamic import() inside the
         # script is allowed by the browser.
         self.assertIn('type="module"', body)

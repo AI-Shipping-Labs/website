@@ -25,7 +25,7 @@ class AllowedHostsConfigTest(SimpleTestCase):
         )
 
 
-@override_settings(ALLOWED_HOSTS=["aishippinglabs.com"])
+@override_settings(ALLOWED_HOSTS=["aishippinglabs.com"], VERSION="test-version-abc1234")
 class AllowedHostsEnforcementTest(TestCase):
     def setUp(self):
         self.client = Client(raise_request_exception=False)
@@ -41,7 +41,7 @@ class AllowedHostsEnforcementTest(TestCase):
         response = self.client.get("/ping", HTTP_HOST="aishippinglabs.com")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b"OK")
+        self.assertEqual(response.content, b"test-version-abc1234")
 
     def test_health_check_bypasses_host_validation(self):
         # ALB health checks hit the container by its VPC IP, so the Host
@@ -51,7 +51,7 @@ class AllowedHostsEnforcementTest(TestCase):
         response = self.client.get("/ping", HTTP_HOST="10.0.1.189:8000")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b"OK")
+        self.assertEqual(response.content, b"test-version-abc1234")
 
     def test_health_check_bypass_does_not_leak_to_other_paths(self):
         # Sanity: the /ping bypass must be path-exact, not a prefix match.

@@ -31,7 +31,7 @@ Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_UR
 ## 2. Sign in to Studio
 
 1. Visit `{SITE_BASE_URL}/studio/`.
-2. First-time on a fresh DB: open an SSH tunnel to the bastion and run `uv run python manage.py createsuperuser` against the remote database. The bastion-tunnel and `DATABASE_URL` recipe is in `_docs/setup.md` — see "Database access" and "Creating admin users". Do not duplicate it here.
+2. First-time on a fresh DB: open an SSH tunnel to the bastion and run `uv run python manage.py createsuperuser` against the remote database. The bastion-tunnel and `DATABASE_URL` recipe is in `_docs/setup.md` — see "Database access" and "Creating admin users".
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. Every integration group from `INTEGRATION_GROUPS` is rendered there with a status badge (`configured`, `partial`, `not_configured`).
 
@@ -250,8 +250,10 @@ Test: in `Studio > Recordings`, click "Publish to YouTube" on a recording; confi
 Run this checklist after configuring everything. Each item is one click, end to end.
 
 - [ ] Sign in with Google, GitHub, and Slack — all three create a `User` row visible in `/studio/users/`.
+- [ ] Sign out, then visit a gated article at `{SITE_BASE_URL}/blog/<gated-article-slug>`; confirm a paywall renders with a working `View Pricing` link that lands on `/pricing`.
 - [ ] Subscribe to the newsletter on the home page; receive the welcome email at the subscribed address.
 - [ ] Upgrade to a paid tier in Stripe test mode (`/pricing`); the user's tier reflects on `/account/`.
+- [ ] As a paid member, cancel the subscription via `{SITE_BASE_URL}/account/` (or the Stripe customer portal); confirm the user's tier on `/account/` drops to Free within a few seconds (Stripe webhook `customer.subscription.deleted` reaches `/api/webhooks/payments`).
 - [ ] Trigger a content sync at `/studio/sync/`; new articles appear at `/blog/` and their images load from the CDN domain.
 - [ ] Create an event with platform=zoom in `/studio/events/`; the join URL points at zoom.us and the meeting exists in the Zoom account.
 - [ ] Upload a workshop recording to S3 via `/studio/recordings/<id>/edit`; click "Publish to YouTube"; the YouTube URL is stored.

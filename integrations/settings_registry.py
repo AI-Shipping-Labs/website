@@ -6,6 +6,11 @@ The 'multiline' flag indicates keys that need a textarea (e.g. PEM keys).
 Each ``description`` is a short answer to: what does it do, where do I
 get it, what breaks without it. Kept to one sentence so the dashboard
 stays scannable. See issue #322 for the locked rewrites.
+
+NOTE: ``_docs/configuration.md`` references the count and names of these
+groups in the Studio sign-in section ("confirm 8 integration groups are
+listed (...)"). When adding, removing, or renaming a group here, update
+that line of the doc in the same PR.
 """
 
 INTEGRATION_GROUPS = [

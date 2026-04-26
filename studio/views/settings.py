@@ -120,6 +120,10 @@ def settings_save_group(request, group_name):
         messages.error(request, f'Unknown integration group: {group_name}')
         return redirect('studio_settings')
 
+    if request.POST.get('confirm_update') != 'on':
+        messages.error(request, 'Tick "Apply changes" to confirm before saving.')
+        return redirect('studio_settings')
+
     saved_count = 0
     for key_def in group_def['keys']:
         key = key_def['key']
@@ -154,6 +158,10 @@ def settings_save_auth_provider(request, provider):
     """
     if not is_supported_provider(provider):
         messages.error(request, f'Unknown auth provider: {provider}')
+        return redirect('studio_settings')
+
+    if request.POST.get('confirm_update') != 'on':
+        messages.error(request, 'Tick "Apply changes" to confirm before saving.')
         return redirect('studio_settings')
 
     client_id = request.POST.get('client_id', '').strip()

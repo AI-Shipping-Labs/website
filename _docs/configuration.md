@@ -54,7 +54,7 @@ Per provider, fill in: Provider, Name, Client id, Secret key, and assign your si
 1. Open `https://console.cloud.google.com/apis/credentials`.
 2. Create an OAuth 2.0 Client ID, type "Web application".
 3. Add `{SITE_BASE_URL}/accounts/google/login/callback/` to "Authorized redirect URIs".
-4. Copy the Client ID and Client Secret into Django admin > Social applications > add Google.
+4. Save in Studio > Settings > Auth & Login > Google.
 
 Foot-gun: the trailing slash on the redirect URI is REQUIRED. `redirect_uri_mismatch` errors at login time mean the slash is missing.
 
@@ -64,7 +64,7 @@ Test: visit `{SITE_BASE_URL}/accounts/login/`, click "Sign in with Google", comp
 
 1. Open `https://github.com/settings/developers`, "OAuth Apps" tab.
 2. Click "New OAuth App". Set "Authorization callback URL" to `{SITE_BASE_URL}/accounts/github/login/callback/`.
-3. Generate a client secret. Copy the Client ID and Client Secret into Django admin > Social applications > add GitHub.
+3. Generate a client secret. Save in Studio > Settings > Auth & Login > GitHub.
 
 Foot-gun: GitHub OAuth apps allow only ONE callback URL per app. Create a separate OAuth app per environment (local, dev, prod). This is a different app from the GitHub APP used for content sync (section 7).
 
@@ -75,7 +75,7 @@ Test: visit `{SITE_BASE_URL}/accounts/login/`, click "Sign in with GitHub", comp
 1. Open `https://api.slack.com/apps`, click "Create New App > From scratch".
 2. Under "OAuth & Permissions", add `{SITE_BASE_URL}/accounts/slack/login/callback/` to "Redirect URLs".
 3. Under "User Token Scopes", add `openid`, `profile`, `email`.
-4. Copy the Client ID and Client Secret from "Basic Information" into Django admin > Social applications > add Slack.
+4. Copy the Client ID and Client Secret from "Basic Information" and save in Studio > Settings > Auth & Login > Slack.
 
 Foot-gun: this is a different Slack app from the BOT used for community posting (section 6). The login app needs `openid`, `profile`, `email`. The bot needs `chat:write`, `channels:read`, etc. Two Slack apps, two sets of credentials.
 

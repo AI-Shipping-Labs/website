@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Collect static files
+        run: uv run python manage.py collectstatic --noinput
+
       - name: Run migrations
         run: uv run python manage.py migrate
 

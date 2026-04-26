@@ -427,6 +427,13 @@ class SubscribePageTest(TestCase):
         self.assertContains(response, 'type="email"')
         self.assertContains(response, "Subscribe")
 
+    def test_subscribe_page_does_not_leak_template_comments(self):
+        """Documentation comment in subscribe_form.html partial must not render to HTML."""
+        response = self.client.get("/subscribe")
+        content = response.content.decode()
+        self.assertNotIn("Reusable newsletter subscribe form partial", content)
+        self.assertNotIn("Optional context variables", content)
+
 
 class FooterSubscribeFormTest(TestCase):
     """Test that the subscribe form appears in the site footer."""

@@ -63,7 +63,7 @@ def _create_event(
     required_level=0,
     max_participants=None,
     status="upcoming",
-    recording=None,
+    recording_url="",
 ):
     """Create an Event via ORM."""
     from events.models import Event
@@ -88,7 +88,7 @@ def _create_event(
         required_level=required_level,
         max_participants=max_participants,
         status=status,
-        recording=recording,
+        recording_url=recording_url,
     )
     event.save()
     connection.close()
@@ -108,16 +108,26 @@ def _register_user_for_event(user, event):
 
 
 def _create_recording(title, slug, date=None):
-    """Create a Recording via ORM."""
+    """Create a completed event with a recording via ORM.
+
+    The events/recordings unification merged the legacy Recording model into
+    Event. To represent a "past recording" fixture we use status='completed'
+    and a past start_datetime so it shows up on /events?filter=past.
+    """
     from events.models import Event
 
     if date is None:
         date = datetime.date.today()
 
+    start_dt = timezone.make_aware(
+        datetime.datetime.combine(date, datetime.time(12, 0))
+    )
+
     recording = Event(
         title=title,
         slug=slug,
-        date=date,
+        start_datetime=start_dt,
+        status="completed",
         published=True,
     )
     recording.save()
@@ -612,20 +622,15 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
 class TestScenario9CompletedEventWithRecording:
     """Visitor views a completed event and finds the recording."""
 
-    def test_completed_event_shows_recording_link(
+    def test_completed_event_shows_inline_recording(
         self, django_server
     , page):
-        """Given an anonymous visitor. A completed event linked to a
-        recording. The detail page shows 'This event has been recorded'
-        with a 'Watch the recording' link. Clicking it navigates to
-        the recording page."""
+        """Given an anonymous visitor. A completed event with an inline
+        recording_url. The unified event detail page renders the recording
+        block with the video player inline (no separate Recording row, no
+        'Watch the recording' link)."""
         _clear_events()
         _ensure_tiers()
-
-        recording = _create_recording(
-            title="Past Workshop Recording",
-            slug="past-workshop-recording",
-        )
 
         now = timezone.now()
         _create_event(
@@ -634,7 +639,7 @@ class TestScenario9CompletedEventWithRecording:
             description="A workshop that already happened.",
             start_datetime=now - datetime.timedelta(days=14),
             status="completed",
-            recording=recording,
+            recording_url="https://www.youtube.com/watch?v=past123",
         )
 
         # Step 1: Navigate to /events/past-workshop
@@ -642,23 +647,16 @@ class TestScenario9CompletedEventWithRecording:
             f"{django_server}/events/past-workshop",
             wait_until="domcontentloaded",
         )
-        body = page.content()
 
-        # Then: Shows "This event has been recorded"
-        assert "This event has been recorded" in body
-
-        # "Watch the recording" link is present
-        watch_link = page.locator(
-            'a:has-text("Watch the recording")'
+        # Then: The page loads with the inline recording block
+        recording_block = page.locator(
+            '[data-testid="event-recording-block"]'
         )
-        assert watch_link.count() >= 1
+        assert recording_block.count() == 1
 
-        # Step 2: Click "Watch the recording"
-        watch_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: Navigates to the recording page
-        assert "/events/past-workshop-recording" in page.url
+        # The video player is rendered inline (YouTube data-source)
+        body = page.content()
+        assert 'data-source="youtube"' in body
 # ---------------------------------------------------------------
 # Scenario 10: Visitor views a completed event that has no
 #               recording yet
@@ -684,7 +682,6 @@ class TestScenario10CompletedEventNoRecording:
             description="A session without a recording.",
             start_datetime=now - datetime.timedelta(days=7),
             status="completed",
-            recording=None,
         )
 
         # Step 1: Navigate to /events/unrecorded-session
@@ -697,14 +694,15 @@ class TestScenario10CompletedEventNoRecording:
         # Then: Event info is visible
         assert "Unrecorded Session" in body
 
-        # No "Watch the recording" link
-        watch_link = page.locator(
-            'a:has-text("Watch the recording")'
+        # No inline recording block (event has no recording_url, so
+        # has_recording is False and the block is not rendered).
+        recording_block = page.locator(
+            '[data-testid="event-recording-block"]'
         )
-        assert watch_link.count() == 0
+        assert recording_block.count() == 0
 
-        # No "This event has been recorded" message
-        assert "This event has been recorded" not in body
+        # No video player iframe in main content
+        assert 'data-source="youtube"' not in body
 # ---------------------------------------------------------------
 # Scenario 11: Draft events are not visible to the public
 # ---------------------------------------------------------------

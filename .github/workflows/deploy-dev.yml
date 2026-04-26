@@ -43,7 +43,7 @@ jobs:
         run: uv run python manage.py migrate
 
       - name: Run unit and integration tests
-        run: uv run python manage.py test
+        run: uv run python manage.py test --parallel auto
 
   deploy:
     name: Deploy to Dev

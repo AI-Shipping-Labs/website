@@ -30,11 +30,14 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check .
 
+      - name: Collect static files
+        run: uv run python manage.py collectstatic --noinput
+
       - name: Run migrations
         run: uv run python manage.py migrate
 
       - name: Run unit and integration tests
-        run: uv run python manage.py test
+        run: uv run python manage.py test --parallel auto
 
   playwright-tests:
     name: Playwright E2E Tests

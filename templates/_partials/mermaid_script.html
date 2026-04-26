@@ -1,0 +1,9 @@
+{% load static %}
+{% comment %}
+Mermaid diagram renderer (issue #300, lazy-loaded per #320). Included
+only from templates that render markdown-derived HTML which may contain
+a div.mermaid node. The shim itself self-guards on the absence of those
+nodes and only then imports the heavy Mermaid CDN bundle, so this
+partial costs ~7.5 KB on markdown pages and zero bytes everywhere else.
+{% endcomment %}
+<script type="module" src="{% static 'js/mermaid-render.js' %}" defer></script>

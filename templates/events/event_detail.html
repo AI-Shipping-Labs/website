@@ -328,6 +328,8 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ block.super }}
+{% include "_partials/mermaid_script.html" %}
 <script>
 function getCookie(name) {
   let cookieValue = null;

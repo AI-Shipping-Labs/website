@@ -1189,7 +1189,11 @@ class BaseHtmlMetaTagsTest(TestCase):
         response = self.client.get('/')
         content = response.content.decode()
         self.assertIn('og:image', content)
-        self.assertIn('ai-shipping-labs.jpg', content)
+        # base.html renders {% static 'ai-shipping-labs.jpg' %}, which
+        # CompressedManifestStaticFilesStorage rewrites to a hashed
+        # filename (ai-shipping-labs.<hash>.jpg) once collectstatic has
+        # run in CI. Match either form. See #333.
+        self.assertRegex(content, r'ai-shipping-labs(\.[0-9a-f]+)?\.jpg')
 
     def test_homepage_has_og_image_dimensions(self):
         response = self.client.get('/')

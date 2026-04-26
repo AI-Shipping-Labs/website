@@ -24,7 +24,7 @@ Context:
   </div>
 
   <!-- Settings form -->
-  <form method="post" action="{% url 'studio_settings_save' group.name %}">
+  <form method="post" action="{% url 'studio_settings_save' group.name %}" autocomplete="off">
     {% csrf_token %}
     <div class="space-y-4">
       {% for field in group.fields %}
@@ -33,16 +33,28 @@ Context:
         <div class="flex items-center gap-2">
           {% if field.multiline %}
             <textarea id="field-{{ field.key }}" name="{{ field.key }}" rows="6"
+              autocomplete="off"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-lpignore="true"
               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">{{ field.current_value }}</textarea>
           {% elif field.is_secret %}
             <div class="relative w-full">
               <input type="password" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
+                autocomplete="off"
+                data-1p-ignore="true"
+                data-bwignore="true"
+                data-lpignore="true"
                 class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent pr-16">
               <button type="button" onclick="toggleReveal(this)"
                 class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1">Show</button>
             </div>
           {% else %}
             <input type="text" id="field-{{ field.key }}" name="{{ field.key }}" value="{{ field.current_value }}"
+              autocomplete="off"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-lpignore="true"
               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
           {% endif %}
           {% if field.source == 'env' %}
@@ -54,8 +66,15 @@ Context:
       {% endfor %}
     </div>
 
+    <label class="inline-flex items-center gap-2 mb-3 mt-2">
+      <input type="checkbox" name="confirm_update" data-confirm-update>
+      <span class="text-sm text-gray-300">Apply changes</span>
+    </label>
+
     <div class="mt-6 flex justify-end">
       <button type="submit"
+        disabled
+        data-save-button
         class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
         Save {{ group.label }}
       </button>

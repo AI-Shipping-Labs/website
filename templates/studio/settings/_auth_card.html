@@ -63,7 +63,7 @@ Context:
   </div>
 
   <!-- Save form: client_id + client_secret -->
-  <form method="post" action="{% url 'studio_settings_save_auth' provider.provider %}">
+  <form method="post" action="{% url 'studio_settings_save_auth' provider.provider %}" autocomplete="off">
     {% csrf_token %}
     <div class="space-y-4">
       <div>
@@ -74,6 +74,10 @@ Context:
                id="auth-{{ provider.provider }}-client-id"
                name="client_id"
                value="{{ provider.client_id }}"
+               autocomplete="off"
+               data-1p-ignore="true"
+               data-bwignore="true"
+               data-lpignore="true"
                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
         <p class="mt-1 text-xs text-gray-500">
           Public identifier issued by {{ provider.name }}. Safe to share. Without this the "Sign in with {{ provider.name }}" button does nothing.
@@ -89,6 +93,10 @@ Context:
                  id="auth-{{ provider.provider }}-client-secret"
                  name="client_secret"
                  value="{{ provider.secret }}"
+                 autocomplete="off"
+                 data-1p-ignore="true"
+                 data-bwignore="true"
+                 data-lpignore="true"
                  class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent pr-16">
           <button type="button" onclick="toggleReveal(this)"
                   class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-200 transition-colors px-2 py-1">Show</button>
@@ -99,8 +107,15 @@ Context:
       </div>
     </div>
 
+    <label class="inline-flex items-center gap-2 mb-3 mt-2">
+      <input type="checkbox" name="confirm_update" data-confirm-update>
+      <span class="text-sm text-gray-300">Apply changes</span>
+    </label>
+
     <div class="mt-6 flex justify-end">
       <button type="submit"
+              disabled
+              data-save-button
               class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
         Save {{ provider.name }}
       </button>

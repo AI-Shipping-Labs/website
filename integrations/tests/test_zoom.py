@@ -904,8 +904,6 @@ class EventSyncZoomCreationTest(TestCase):
     def _make_source(self):
         return ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='event',
-            content_path='events',
         )
 
     def _write_event_yaml(
@@ -947,9 +945,16 @@ class EventSyncZoomCreationTest(TestCase):
         return events_dir
 
     def _sync_events(self, source, events_dir, commit_sha='abc1234'):
-        from integrations.services.github import _sync_events
+        # Issue #310: per-type orchestrators are gone — go through
+        # ``sync_content_source`` so the walker dispatches to events.
+        from integrations.services.github import sync_content_source
 
-        return _sync_events(source, events_dir, commit_sha, sync_log=None)
+        # ``events_dir`` here is actually the repo root (tmp_dir/events).
+        # The walker expects to find events under an ``events/`` subtree;
+        # since the test wrote directly to ``events_dir``, walk one level
+        # up to find the repo root.
+        repo_dir = os.path.dirname(events_dir)
+        return sync_content_source(source, repo_dir=repo_dir)
 
     @patch('integrations.services.zoom.create_meeting')
     def test_sync_creates_zoom_meeting_for_location_zoom_event(
@@ -971,10 +976,10 @@ class EventSyncZoomCreationTest(TestCase):
                 timezone_name='Europe/Berlin',
                 location='Zoom',
             )
-            stats = self._sync_events(source, events_dir)
+            sync_log = self._sync_events(source, events_dir)
 
         event = Event.objects.get(slug='synced-zoom-event')
-        self.assertEqual(stats['errors'], [])
+        self.assertEqual(sync_log.errors, [])
         self.assertEqual(event.event_type, 'live')
         self.assertEqual(event.status, 'upcoming')
         self.assertEqual(
@@ -1177,11 +1182,11 @@ class EventSyncZoomCreationTest(TestCase):
                 location='Zoom',
             )
             with self.assertLogs('integrations.services.github', level='WARNING') as logs:
-                stats = self._sync_events(source, events_dir)
+                sync_log = self._sync_events(source, events_dir)
 
         event = Event.objects.get(slug='rate-limited-event')
-        self.assertEqual(stats['errors'], [])
-        self.assertEqual(stats['created'], 1)
+        self.assertEqual(sync_log.errors, [])
+        self.assertEqual(sync_log.items_created, 1)
         self.assertEqual(event.zoom_meeting_id, '')
         self.assertEqual(event.zoom_join_url, '')
         self.assertIn(
@@ -1211,10 +1216,10 @@ class EventSyncZoomCreationTest(TestCase):
                 location='Zoom',
             )
             with self.assertLogs('integrations.services.github', level='WARNING') as logs:
-                stats = self._sync_events(source, events_dir)
+                sync_log = self._sync_events(source, events_dir)
 
         event = Event.objects.get(slug='missing-creds-event')
-        self.assertEqual(stats['errors'], [])
+        self.assertEqual(sync_log.errors, [])
         self.assertEqual(event.zoom_meeting_id, '')
         self.assertEqual(event.zoom_join_url, '')
         self.assertIn('Zoom OAuth credentials not configured', '\n'.join(logs.output))

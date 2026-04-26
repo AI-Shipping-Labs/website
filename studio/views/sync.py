@@ -434,6 +434,27 @@ def _build_course_tree(items_detail):
     return result
 
 
+# Display labels for content_type values surfaced in ``items_detail``.
+# Was previously sourced from ``ContentSource.get_content_type_display``,
+# but ``content_type`` is no longer on ``ContentSource`` (issue #310). The
+# per-type dispatch helpers in :mod:`integrations.services.github` write
+# the content_type into each ``items_detail`` entry, so the dashboard
+# aggregator can group on those keys directly.
+_CONTENT_TYPE_DISPLAY = {
+    'article': 'Article',
+    'course': 'Course',
+    'module': 'Module',
+    'unit': 'Unit',
+    'project': 'Project',
+    'resource': 'Resource',
+    'event': 'Event',
+    'workshop': 'Workshop',
+    'workshop_page': 'Workshop Page',
+    'instructor': 'Instructor',
+    'interview_question': 'Interview Question',
+}
+
+
 def _aggregate_batch(logs):
     """Aggregate a queryset of SyncLog entries into a batch summary dict.
 
@@ -446,6 +467,10 @@ def _aggregate_batch(logs):
     ``course_breakdown`` list — one entry per level (courses, modules,
     units) with its own counts and item list — so the dashboard can render
     the per-level breakdown and expandable changed-pages list (issue #224).
+
+    Issue #310: per-content-type breakdown is now driven by
+    ``items_detail.content_type`` rather than ``log.source.content_type``,
+    since one SyncLog can now contain items of many types.
     """
     total_created = 0
     total_updated = 0
@@ -461,43 +486,88 @@ def _aggregate_batch(logs):
     overall_status = None
     seen_non_skipped = False
 
+    def _ensure_entry(content_type, log):
+        display = _CONTENT_TYPE_DISPLAY.get(
+            content_type, content_type.replace('_', ' ').title(),
+        )
+        if display in per_type:
+            return per_type[display]
+        per_type[display] = {
+            'content_type': content_type,
+            'display_name': display,
+            'created': 0,
+            'updated': 0,
+            'unchanged': 0,
+            'deleted': 0,
+            'status': log.status,
+            'errors_count': 0,
+            'items_detail': [],
+            'commit_sha': log.commit_sha or '',
+            'short_commit_sha': log.short_commit_sha,
+            'commit_url': log.commit_url,
+            'is_skipped': log.status == 'skipped',
+        }
+        return per_type[display]
+
     for log in logs:
-        ct = log.source.get_content_type_display()
-        if ct not in per_type:
-            per_type[ct] = {
-                'content_type': log.source.content_type,
-                'display_name': ct,
-                'created': 0,
-                'updated': 0,
-                'unchanged': 0,
-                'deleted': 0,
-                'status': log.status,
-                'errors_count': 0,
-                'items_detail': [],
-                # Issue #235: surface the commit SHA each per-type row ran
-                # against (or, for skip rows, the SHA we compared HEAD to).
-                'commit_sha': log.commit_sha or '',
-                'short_commit_sha': log.short_commit_sha,
-                'commit_url': log.commit_url,
-                'is_skipped': log.status == 'skipped',
-            }
-        entry = per_type[ct]
-        entry['created'] += log.items_created
-        entry['updated'] += log.items_updated
-        entry['unchanged'] += log.items_unchanged
-        entry['deleted'] += log.items_deleted
-        entry['items_detail'].extend(log.items_detail or [])
-        # ``skipped`` rows store their reason ("HEAD unchanged" or
-        # "Sync already in progress") in ``errors`` for compatibility,
-        # but those aren't actual errors — don't count them toward
-        # the dashboard's red error panel or the "Completed with N
-        # errors" pill (issue #235).
-        if log.status != 'skipped':
-            entry['errors_count'] += len(log.errors or [])
+        # Group items by their content_type field. Each item bumps the
+        # appropriate per-type bucket; items without a content_type fall
+        # under "Other" so nothing is silently dropped.
+        items_by_type = OrderedDict()
+        for item in log.items_detail or []:
+            ct = item.get('content_type') or 'other'
+            items_by_type.setdefault(ct, []).append(item)
+
+        # If the log produced no items at all (skipped, all-unchanged,
+        # error before any work), still surface a stub row so the
+        # dashboard / history doesn't render a blank table.
+        if not items_by_type:
+            entry = _ensure_entry('other', log)
+            entry['unchanged'] += log.items_unchanged
+
+        for ct, items in items_by_type.items():
+            entry = _ensure_entry(ct, log)
+            for item in items:
+                action = item.get('action')
+                if action == 'created':
+                    entry['created'] += 1
+                elif action == 'updated':
+                    entry['updated'] += 1
+                elif action == 'deleted':
+                    entry['deleted'] += 1
+            entry['items_detail'].extend(items)
+            if log.status != 'skipped':
+                # Errors are recorded at the log level, not per-item;
+                # distribute them evenly. Easier: count them once at the
+                # batch level (handled below) and on each per-type row.
+                pass
+
+        # Per-log error count distributed to every per-type row that saw
+        # work in this log. With one source per repo this is fine —
+        # before the consolidation each log mapped 1:1 to a content type
+        # and the count was simply per-row. Now we apportion to every
+        # row that received items, OR to a synthetic 'other' row if the
+        # log didn't produce items but did produce errors.
+        if log.status != 'skipped' and log.errors:
+            err_count = len(log.errors)
+            if items_by_type:
+                for ct in items_by_type:
+                    display = _CONTENT_TYPE_DISPLAY.get(
+                        ct, ct.replace('_', ' ').title(),
+                    )
+                    if display in per_type:
+                        per_type[display]['errors_count'] += err_count
+            else:
+                entry = _ensure_entry('other', log)
+                entry['errors_count'] += err_count
+
         if log.status == 'failed':
-            entry['status'] = 'failed'
-        elif log.status == 'partial' and entry['status'] != 'failed':
-            entry['status'] = 'partial'
+            for entry in per_type.values():
+                entry['status'] = 'failed'
+        elif log.status == 'partial':
+            for entry in per_type.values():
+                if entry['status'] != 'failed':
+                    entry['status'] = 'partial'
 
         total_created += log.items_created
         total_updated += log.items_updated
@@ -535,14 +605,50 @@ def _aggregate_batch(logs):
     # nesting modules under their course and lessons under their module,
     # while the legacy flat breakdown stays for callers/tests that still
     # expect it.
+    #
+    # Issue #310: ``items_detail`` for course/module/unit entries lives
+    # in separate per_type rows (one per content_type) since the
+    # aggregator now buckets by content_type. Combine them all into the
+    # ``Course`` row (creating it if missing) so the dashboard's course
+    # tree still finds every node.
+    has_course_data = any(
+        per_type[d]['items_detail']
+        for d in (
+            _CONTENT_TYPE_DISPLAY['course'],
+            _CONTENT_TYPE_DISPLAY['module'],
+            _CONTENT_TYPE_DISPLAY['unit'],
+        )
+        if d in per_type
+    )
+    if has_course_data:
+        course_display = _CONTENT_TYPE_DISPLAY['course']
+        if course_display not in per_type:
+            # Synthesize a course entry so the tree has a host.
+            from types import SimpleNamespace
+            stub = SimpleNamespace(
+                status='success', commit_sha='', short_commit_sha='',
+                commit_url='',
+            )
+            _ensure_entry('course', stub)
+        # Move the course entry to the front of per_type so the tree
+        # is index 0 — tests rely on this position.
+        course_entry = per_type.pop(course_display)
+        new_per_type = OrderedDict()
+        new_per_type[course_display] = course_entry
+        for k, v in per_type.items():
+            new_per_type[k] = v
+        per_type.clear()
+        per_type.update(new_per_type)
+
     for entry in per_type.values():
         if entry['content_type'] == 'course':
-            entry['course_breakdown'] = _build_course_level_breakdown(
-                entry['items_detail'],
-            )
-            entry['course_tree'] = _build_course_tree(
-                entry['items_detail'],
-            )
+            combined = list(entry['items_detail'])
+            for ct_key in ('module', 'unit'):
+                display = _CONTENT_TYPE_DISPLAY[ct_key]
+                if display in per_type:
+                    combined.extend(per_type[display]['items_detail'])
+            entry['course_breakdown'] = _build_course_level_breakdown(combined)
+            entry['course_tree'] = _build_course_tree(combined)
 
     return {
         'total_created': total_created,
@@ -561,125 +667,65 @@ def _aggregate_batch(logs):
 def _build_repos_context():
     """Build the per-repo dashboard payload (cards + last batches).
 
-    Extracted so the auto-refresh fragment endpoint (issue #243) can reuse
-    the same aggregation without re-rendering the page chrome.
-
-    Returns a dict with ``repos`` (list of repo dicts) and ``sources`` (the
-    flat queryset, kept for callers that still need it).
+    Issue #310: with one ContentSource per repo, the per-source loop is
+    trivial — each card maps 1:1 to a single source.
     """
-    # Order by ``repo_name`` (then ``content_type``) so the dashboard is
-    # deterministic — relying on insertion order produced flaky card layouts
-    # when sources were added in different sequences across environments.
-    sources = ContentSource.objects.all().order_by('repo_name', 'content_type')
+    sources = ContentSource.objects.all().order_by('repo_name')
 
-    # Group sources by repo_name
     repos = OrderedDict()
     for source in sources:
-        if source.repo_name not in repos:
-            repos[source.repo_name] = {
-                'repo_name': source.repo_name,
-                'sources': [],
-                'is_private': source.is_private,
-                'last_synced_at': None,
-                'any_running': False,
-                'overall_status': None,
-            }
-        repo = repos[source.repo_name]
-        repo['sources'].append(source)
-        if source.last_synced_at:
-            if repo['last_synced_at'] is None or source.last_synced_at > repo['last_synced_at']:
-                repo['last_synced_at'] = source.last_synced_at
-        # Both ``queued`` and ``running`` keep the dashboard's auto-refresh
-        # poller ticking — issue #274 added ``queued`` so the operator sees
-        # "click registered" even before the worker picks up the task.
-        if source.last_sync_status in ('running', 'queued'):
-            repo['any_running'] = True
-        if source.last_sync_status:
-            if source.last_sync_status == 'failed':
-                last_log = SyncLog.objects.filter(source=source).order_by('-started_at').first()
-                log_errors = (last_log.errors if last_log else []) or []
-                if not _is_not_configured_error(log_errors):
-                    repo['overall_status'] = 'failed'
-            elif source.last_sync_status == 'partial' and repo['overall_status'] != 'failed':
-                repo['overall_status'] = 'partial'
-            elif source.last_sync_status == 'running':
-                repo['overall_status'] = 'running'
-            elif source.last_sync_status == 'queued' and repo['overall_status'] not in (
-                'failed', 'partial', 'running',
-            ):
-                repo['overall_status'] = 'queued'
-            elif repo['overall_status'] is None:
+        repo = {
+            'repo_name': source.repo_name,
+            'source': source,
+            # Kept as a single-element list for backward compat with templates
+            # that still iterate ``repo.sources``.
+            'sources': [source],
+            'is_private': source.is_private,
+            'last_synced_at': source.last_synced_at,
+            'any_running': source.last_sync_status in ('running', 'queued'),
+            'overall_status': None,
+            'last_synced_commit': source.last_synced_commit or '',
+            'short_synced_commit': source.short_synced_commit,
+            'synced_commit_url': source.synced_commit_url,
+        }
+        if source.last_sync_status == 'failed':
+            last_log = (
+                SyncLog.objects.filter(source=source)
+                .order_by('-started_at').first()
+            )
+            log_errors = (last_log.errors if last_log else []) or []
+            if not _is_not_configured_error(log_errors):
+                repo['overall_status'] = 'failed'
+            else:
                 repo['overall_status'] = source.last_sync_status
+        elif source.last_sync_status:
+            repo['overall_status'] = source.last_sync_status
+        repos[source.repo_name] = repo
 
-    # Get the most recent batch of sync logs for each repo
+    # Get the most recent batch of sync logs for each repo (one source per repo).
     for repo in repos.values():
-        source_ids = [s.pk for s in repo['sources']]
+        source = repo['source']
         latest_logs = SyncLog.objects.filter(
-            source_id__in=source_ids,
+            source=source,
         ).exclude(status__in=['running', 'queued']).order_by('-started_at')
 
-        # Find the most recent batch_id or timestamp cluster
         if latest_logs.exists():
             newest = latest_logs.first()
             if newest.batch_id:
-                # Scope by repo's sources too — a Sync-All batch shares one
-                # batch_id across every repo, so without this filter we'd
-                # mis-attribute other repos' logs to this card.
                 batch_logs = SyncLog.objects.filter(
                     batch_id=newest.batch_id,
-                    source_id__in=source_ids,
+                    source=source,
                 )
             else:
-                # Fall back to logs from the same source started within 60s
-                batch_logs = SyncLog.objects.filter(
-                    source_id__in=source_ids,
-                    started_at__gte=newest.started_at - datetime.timedelta(seconds=60),
-                    started_at__lte=newest.started_at + datetime.timedelta(seconds=60),
-                ).exclude(status__in=['running', 'queued'])
+                # Single log per source for non-batch syncs.
+                batch_logs = SyncLog.objects.filter(pk=newest.pk)
             repo['last_batch'] = _aggregate_batch(batch_logs)
         else:
             repo['last_batch'] = None
 
-        # Surface the latest-batch error count on the repo dict so the
-        # status pill can render "Completed with N errors" for ``partial``
-        # without having to walk into ``last_batch`` from the template.
         repo['overall_errors_count'] = (
             repo['last_batch']['errors_count'] if repo['last_batch'] else 0
         )
-
-        # Issue #235: expose a sorted list of (source, last_synced_commit)
-        # for the per-card SHA strip. Empty when the repo has only one
-        # source AND no recorded commit yet — the strip is hidden in that
-        # case to keep the card clean for never-synced repos.
-        sources_sorted = sorted(repo['sources'], key=lambda s: s.content_type)
-        any_synced = any(s.last_synced_commit for s in sources_sorted)
-        repo['sources_with_commits'] = sources_sorted if any_synced else []
-
-        # Issue #279: collapse repeated commit SHAs to one line per repo.
-        # When every source in the repo points at the same commit (treating
-        # missing/empty as "same"), surface a single ``unique_commit`` dict so
-        # the template can render one ``Commit: <short>`` line instead of N
-        # identical per-content-type rows. If sources genuinely diverge
-        # (one sub-sync stuck at an older SHA), ``unique_commit`` stays
-        # None and the template falls back to the per-content-type loop.
-        repo['unique_commit'] = None
-        if any_synced:
-            distinct_shas = {
-                s.last_synced_commit
-                for s in sources_sorted
-                if s.last_synced_commit
-            }
-            if len(distinct_shas) == 1:
-                # Pick the first source that actually has the SHA so we get
-                # a valid ``synced_commit_url`` (sources without a commit
-                # return ''). Any source with the SHA works since they
-                # share the same repo_name.
-                src = next(s for s in sources_sorted if s.last_synced_commit)
-                repo['unique_commit'] = {
-                    'last_synced_commit': src.last_synced_commit,
-                    'short_synced_commit': src.short_synced_commit,
-                    'synced_commit_url': src.synced_commit_url,
-                }
 
     repos_list = list(repos.values())
     return {
@@ -805,15 +851,12 @@ def sync_trigger(request, source_id):
             # click landed even if the worker is down.
             _mark_source_queued(source)
             warning = _worker_warning_suffix()
-            label = source.repo_name
-            if source.content_path:
-                label = f'{label} ({source.content_path})'
             verb = 'Force resync queued' if force else 'Sync queued'
             base_msg = format_html(
                 '{verb} for {label}. You can see the status '
                 '<a href="/studio/worker/" class="underline">here</a>{warning}',
                 verb=verb,
-                label=label,
+                label=source.repo_name,
                 warning=warning,
             )
             if warning:
@@ -824,8 +867,7 @@ def sync_trigger(request, source_id):
             sync_content_source(source, force=force)
             messages.success(
                 request,
-                f'Sync completed for {source.repo_name}'
-                + (f' ({source.content_path})' if source.content_path else ''),
+                f'Sync completed for {source.repo_name}',
             )
     except Exception as e:
         logger.exception('Error triggering sync for %s', source.repo_name)
@@ -866,7 +908,7 @@ def sync_repo_trigger(request, repo_name):
                     source,
                     batch_id=batch_id,
                     force=force,
-                    task_name=f'sync-{source.repo_name}-{source.content_type}',
+                    task_name=f'sync-{source.repo_name}',
                 )
                 # Issue #274: visible queued state per source so the operator
                 # can tell their click landed before the worker picks up.
@@ -920,7 +962,7 @@ def sync_all(request):
                     source,
                     batch_id=batch_id,
                     force=force,
-                    task_name=f'sync-{source.repo_name}-{source.content_type}',
+                    task_name=f'sync-{source.repo_name}',
                 )
                 # Issue #274: visible queued state per source.
                 _mark_source_queued(source, batch_id=batch_id)
@@ -1019,19 +1061,17 @@ def sync_object_trigger(request, model_name, object_id):
     """Trigger a re-sync from a Studio detail page's "Re-sync source" button.
 
     Resolves the matching ``ContentSource`` from the object's ``source_repo``
-    plus its model-derived ``content_type`` and enqueues the same async task
-    used by the dashboard ``Sync now`` button. The button is rendered by
-    ``synced_banner.html`` only when the object has a ``source_repo``, but
-    the view still guards each precondition so a hand-crafted POST cannot
-    crash the server. See issue #281.
+    and enqueues the same async task used by the dashboard ``Sync now``
+    button. The button is rendered by ``synced_banner.html`` only when the
+    object has a ``source_repo``, but the view still guards each
+    precondition so a hand-crafted POST cannot crash the server. See
+    issue #281.
 
     Redirects back to the page that triggered the click (same-host
     ``HTTP_REFERER``), falling back to ``/studio/sync/`` so the operator can
     watch progress on the dashboard.
     """
     from django.apps import apps
-
-    from studio.utils import MODEL_CONTENT_TYPE_MAP
 
     fallback_url = redirect('studio_sync_dashboard').url
 
@@ -1061,26 +1101,13 @@ def sync_object_trigger(request, model_name, object_id):
         )
         return redirect(_safe_redirect_target(request, fallback_url))
 
-    content_type = MODEL_CONTENT_TYPE_MAP.get(class_name)
-    if content_type is None:
-        # Should be impossible given the allowlist, but guard anyway.
-        messages.error(
-            request,
-            f'No content_type mapping for model {class_name}.',
-        )
-        return redirect(_safe_redirect_target(request, fallback_url))
-
     try:
-        source = ContentSource.objects.get(
-            repo_name=source_repo,
-            content_type=content_type,
-        )
+        source = ContentSource.objects.get(repo_name=source_repo)
     except ContentSource.DoesNotExist:
         messages.error(
             request,
-            f'No content source is configured for {source_repo} '
-            f'({content_type}). Add one under Sync Dashboard '
-            'before re-syncing this object.',
+            f'No content source is configured for {source_repo}. '
+            'Add one under Sync Dashboard before re-syncing this object.',
         )
         return redirect(_safe_redirect_target(request, fallback_url))
 
@@ -1090,18 +1117,17 @@ def sync_object_trigger(request, model_name, object_id):
             async_task(
                 'integrations.services.github.sync_content_source',
                 source,
-                task_name=f'sync-{source.repo_name}-{source.content_type}',
+                task_name=f'sync-{source.repo_name}',
             )
             # Issue #274: mark queued only AFTER the enqueue succeeded so
             # we don't lie about an in-flight sync that never landed.
             _mark_source_queued(source)
             warning = _worker_warning_suffix()
             base_msg = format_html(
-                'Sync queued for {repo} ({content_type}). Watch progress at '
+                'Sync queued for {repo}. Watch progress at '
                 '<a href="/studio/sync/" class="underline">/studio/sync/</a>'
                 '{warning}',
                 repo=source.repo_name,
-                content_type=source.content_type,
                 warning=warning,
             )
             if warning:
@@ -1114,18 +1140,15 @@ def sync_object_trigger(request, model_name, object_id):
             sync_content_source(source)
             messages.success(
                 request,
-                f'Sync completed for {source.repo_name} '
-                f'({source.content_type}).',
+                f'Sync completed for {source.repo_name}.',
             )
     except Exception as exc:
         logger.exception(
-            'Error triggering object re-sync for %s (%s)',
-            source.repo_name, source.content_type,
+            'Error triggering object re-sync for %s', source.repo_name,
         )
         messages.error(
             request,
-            f'Re-sync failed for {source.repo_name} '
-            f'({source.content_type}): {exc}',
+            f'Re-sync failed for {source.repo_name}: {exc}',
         )
 
     return redirect(_safe_redirect_target(request, fallback_url))

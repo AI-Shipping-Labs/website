@@ -184,7 +184,6 @@ class SyncArticlesUnchangedTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog-225',
-            content_type='article',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -273,7 +272,6 @@ class SyncProjectsUnchangedTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/projects-225',
-            content_type='project',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -313,7 +311,6 @@ class SyncInterviewQuestionsUnchangedTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/interview-225',
-            content_type='interview_question',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -345,8 +342,6 @@ class SyncCoursesUnchangedTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/course-225',
-            content_type='course',
-            content_path='',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -458,7 +453,6 @@ class SyncResourcesUnchangedTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/resources-225',
-            content_type='resource',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -545,7 +539,6 @@ class SyncEventsUnchangedTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/events-225',
-            content_type='event',
         )
         self.temp_dir = tempfile.mkdtemp()
 
@@ -639,8 +632,6 @@ class SyncCourseReadmeOverviewUnchangedTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/course-readme-225',
-            content_type='course',
-            content_path='',
         )
         self.temp_dir = tempfile.mkdtemp()
 

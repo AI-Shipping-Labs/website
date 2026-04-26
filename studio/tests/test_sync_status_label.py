@@ -149,7 +149,6 @@ class SyncDashboardLabelTest(TestCase):
     def _make_partial_source(self, *, errors):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='partial',
             last_synced_at=timezone.now(),
         )
@@ -200,7 +199,6 @@ class SyncDashboardLabelTest(TestCase):
         # Regression: re-using the pill must not break the green path.
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='success',
             last_synced_at=timezone.now(),
         )
@@ -230,7 +228,6 @@ class SyncHistoryLabelTest(TestCase):
         )
         cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
         )
 
     def setUp(self):
@@ -274,7 +271,6 @@ class AdminSyncLabelTest(TestCase):
     def test_admin_dashboard_uses_completed_with_n_errors(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='partial',
             last_synced_at=timezone.now(),
         )
@@ -295,7 +291,6 @@ class AdminSyncLabelTest(TestCase):
     def test_admin_history_uses_completed_with_n_errors_for_log(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='partial',
             last_synced_at=timezone.now(),
         )
@@ -330,7 +325,6 @@ class SyncAggregatorErrorCountTest(TestCase):
     def test_per_type_row_carries_errors_count(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='partial',
             last_synced_at=timezone.now(),
         )
@@ -359,7 +353,6 @@ class SyncAggregatorErrorCountTest(TestCase):
         for the existing error pane."""
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='partial',
             last_synced_at=timezone.now(),
         )

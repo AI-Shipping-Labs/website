@@ -121,7 +121,6 @@ class SyncSkipFirstSyncTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-first',
-            content_type='article',
         )
         self.temp_dir = tempfile.mkdtemp()
         _write_md(
@@ -151,7 +150,6 @@ class SyncSkipSameShaTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-same',
-            content_type='article',
             last_synced_commit='a' * 40,
             last_sync_status='success',
         )
@@ -205,7 +203,6 @@ class SyncSkipNewShaTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-new-sha',
-            content_type='article',
             last_synced_commit='a' * 40,
             last_sync_status='success',
         )
@@ -235,7 +232,6 @@ class SyncSkipForceTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-force',
-            content_type='article',
             last_synced_commit='a' * 40,
             last_sync_status='success',
         )
@@ -268,7 +264,6 @@ class SyncSkipPreviousFailureTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-failed',
-            content_type='article',
             last_synced_commit='a' * 40,
             last_sync_status='failed',
         )
@@ -294,7 +289,6 @@ class SyncSkipHeadFetchFailureTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-fetchfail',
-            content_type='article',
             last_synced_commit='a' * 40,
             last_sync_status='success',
         )
@@ -321,7 +315,6 @@ class SyncFailureDoesNotUpdateLastSyncedCommitTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-keep-sha',
-            content_type='article',
             last_synced_commit='a' * 40,
             last_sync_status='success',
         )
@@ -354,7 +347,6 @@ class SyncSuccessUpdatesLastSyncedCommitTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-persist',
-            content_type='article',
         )
         self.temp_dir = tempfile.mkdtemp()
         _write_md(
@@ -407,7 +399,6 @@ class SyncFromDiskWithoutGitTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-disk',
-            content_type='article',
             # Even a populated baseline must NOT cause a skip when
             # repo_dir is provided.
             last_synced_commit='a' * 40,
@@ -450,7 +441,6 @@ class WebhookForcesSyncTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='octo/repo-235-webhook',
-            content_type='article',
             last_synced_commit='a' * 40,
             last_sync_status='success',
         )
@@ -497,7 +487,6 @@ class StudioForceResyncFlagTest(TestCase):
         self.client.force_login(self.staff)
         self.source = ContentSource.objects.create(
             repo_name='owner/repo-235-force-flag',
-            content_type='article',
         )
 
     @mock.patch('studio.views.sync.sync_content_source')
@@ -554,7 +543,6 @@ class StudioDashboardShowsCommitTest(TestCase):
     def test_dashboard_renders_short_sha_with_github_link(self):
         ContentSource.objects.create(
             repo_name='Org/Repo-235-dash',
-            content_type='article',
             last_synced_commit='abcdef1234567890abcdef1234567890abcdef12',
             last_sync_status='success',
         )
@@ -573,7 +561,6 @@ class StudioDashboardShowsCommitTest(TestCase):
     def test_dashboard_force_resync_button_present(self):
         ContentSource.objects.create(
             repo_name='Org/Repo-235-force-btn',
-            content_type='article',
         )
         response = self.client.get('/studio/sync/')
         html = response.content.decode()
@@ -598,7 +585,6 @@ class StudioHistoryShowsSkippedShaTest(TestCase):
 
         source = ContentSource.objects.create(
             repo_name='Org/Repo-235-hist',
-            content_type='article',
         )
         SyncLog.objects.create(
             source=source,

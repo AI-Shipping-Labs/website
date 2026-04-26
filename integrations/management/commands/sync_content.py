@@ -49,7 +49,7 @@ class Command(BaseCommand):
         has_errors = False
 
         for source in sources:
-            self.stdout.write(f'Syncing {source.content_type}...')
+            self.stdout.write(f'Syncing {source.repo_name}...')
             try:
                 kwargs = {}
                 if from_disk:

@@ -54,7 +54,6 @@ class SyncTriggerSetsQueuedStateTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
-            content_type='article',
         )
 
     @patch('django_q.tasks.async_task')
@@ -108,51 +107,35 @@ class SyncRepoTriggerSetsQueuedStateTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
-    def test_repo_trigger_sets_queued_for_each_source(self, mock_async):
-        article = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content', content_type='article',
-        )
-        course = ContentSource.objects.create(
+    def test_repo_trigger_sets_queued_for_source(self, mock_async):
+        """Issue #310: one ContentSource per repo. The trigger marks the
+        single source queued."""
+        source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course', content_path='courses/',
         )
         self.client.post('/studio/sync/AI-Shipping-Labs/content/trigger-repo/')
-        article.refresh_from_db()
-        course.refresh_from_db()
-        self.assertEqual(article.last_sync_status, 'queued')
-        self.assertEqual(course.last_sync_status, 'queued')
+        source.refresh_from_db()
+        self.assertEqual(source.last_sync_status, 'queued')
 
     @patch('django_q.tasks.async_task')
-    def test_repo_trigger_creates_queued_synclog_per_source(self, mock_async):
-        article = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content', content_type='article',
-        )
-        course = ContentSource.objects.create(
+    def test_repo_trigger_creates_queued_synclog(self, mock_async):
+        source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course', content_path='courses/',
         )
         self.client.post('/studio/sync/AI-Shipping-Labs/content/trigger-repo/')
         self.assertEqual(
-            SyncLog.objects.filter(source=article, status='queued').count(), 1,
-        )
-        self.assertEqual(
-            SyncLog.objects.filter(source=course, status='queued').count(), 1,
+            SyncLog.objects.filter(source=source, status='queued').count(), 1,
         )
 
     @patch('django_q.tasks.async_task')
-    def test_repo_trigger_queued_rows_share_batch_id(self, mock_async):
-        ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content', content_type='article',
-        )
+    def test_repo_trigger_queued_row_carries_batch_id(self, mock_async):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course', content_path='courses/',
         )
         self.client.post('/studio/sync/AI-Shipping-Labs/content/trigger-repo/')
         queued = SyncLog.objects.filter(status='queued')
-        batch_ids = {log.batch_id for log in queued}
-        self.assertEqual(len(batch_ids), 1)
-        self.assertIsNotNone(next(iter(batch_ids)))
+        self.assertEqual(queued.count(), 1)
+        self.assertIsNotNone(queued.first().batch_id)
 
 
 class SyncAllSetsQueuedStateTest(TestCase):
@@ -171,12 +154,11 @@ class SyncAllSetsQueuedStateTest(TestCase):
     @patch('django_q.tasks.async_task')
     def test_sync_all_sets_queued_for_all_sources(self, mock_async):
         a = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog', content_type='article',
+            repo_name='AI-Shipping-Labs/blog',
         )
         b = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project', content_path='projects/',
-        )
+            )
         self.client.post('/studio/sync/all/')
         a.refresh_from_db()
         b.refresh_from_db()
@@ -186,12 +168,11 @@ class SyncAllSetsQueuedStateTest(TestCase):
     @patch('django_q.tasks.async_task')
     def test_sync_all_creates_one_queued_synclog_per_source(self, mock_async):
         a = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog', content_type='article',
+            repo_name='AI-Shipping-Labs/blog',
         )
         b = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project', content_path='projects/',
-        )
+            )
         self.client.post('/studio/sync/all/')
         self.assertEqual(
             SyncLog.objects.filter(source=a, status='queued').count(), 1,
@@ -214,7 +195,7 @@ class WorkerQueuedToRunningTransitionTest(TestCase):
 
     def setUp(self):
         self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog', content_type='article',
+            repo_name='AI-Shipping-Labs/blog',
         )
 
     def _run_worker(self, **kwargs):
@@ -302,7 +283,6 @@ class WatchdogQueuedTimeoutTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='queued',
         )
 
@@ -370,7 +350,6 @@ class WatchdogRunningTimeoutTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='running',
         )
 
@@ -430,7 +409,6 @@ class WatchdogStatusEndpointTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='queued',
         )
 
@@ -472,7 +450,6 @@ class WatchdogConfigurableThresholdsTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='queued',
         )
 
@@ -536,7 +513,6 @@ class DashboardRendersQueuedPillTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
             last_sync_status='queued',
         )
         # Fresh (1 minute old) so the watchdog doesn't auto-fail it.
@@ -621,7 +597,7 @@ class QueuedToRunningToSuccessFlowTest(TestCase):
         self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
         self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog', content_type='article',
+            repo_name='AI-Shipping-Labs/blog',
         )
 
     @patch('django_q.tasks.async_task')

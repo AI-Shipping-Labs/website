@@ -230,61 +230,51 @@ def workshop_edit(request, workshop_id):
 @staff_required
 @require_POST
 def workshop_resync(request):
-    """Trigger a sync for every workshop ``ContentSource``.
+    """Trigger a sync for the workshops ``ContentSource``.
 
-    Mirrors ``sync_repo_trigger`` from ``studio/views/sync.py`` but scoped
-    to ``content_type='workshop'`` so a single button on the workshops list
-    fans out only the workshop-related sources. Calls
-    ``_mark_source_queued`` (the same helper used by the dashboard buttons)
-    so the queued state is immediately visible at ``/studio/sync/``.
-
-    With zero configured workshop sources the view flashes an error and
-    redirects to the sync dashboard rather than 500ing on an empty fan-out.
+    Issue #310: with one ``ContentSource`` per repo, this resolves to the
+    ``AI-Shipping-Labs/workshops-content`` repo. If the operator ever
+    splits workshops across repos, this view can grow back.
     """
-    sources = list(
-        ContentSource.objects.filter(content_type='workshop'),
-    )
+    workshops_repo = 'AI-Shipping-Labs/workshops-content'
+    source = ContentSource.objects.filter(repo_name=workshops_repo).first()
 
-    if not sources:
+    if source is None:
         messages.error(
             request,
-            'No workshop content source configured. '
+            f'No content source for {workshops_repo}. '
             'Add one under Sync Dashboard.',
         )
         return redirect('studio_sync_dashboard')
 
     batch_id = uuid.uuid4()
-    count = len(sources)
 
-    for source in sources:
+    try:
         try:
-            try:
-                # Lazy import: django_q is optional in test environments.
-                from django_q.tasks import async_task
-                async_task(
-                    'integrations.services.github.sync_content_source',
-                    source,
-                    batch_id=batch_id,
-                    task_name=f'sync-{source.repo_name}-workshop',
-                )
-                _mark_source_queued(source, batch_id=batch_id)
-            except ImportError:
-                # Fall back to a synchronous sync when django_q isn't
-                # installed (test runner, dev shell). Mirrors
-                # ``sync_repo_trigger`` so the fan-out always goes through.
-                from integrations.services.github import sync_content_source
-                sync_content_source(source, batch_id=batch_id)
-        except Exception:
-            logger.exception(
-                'Error triggering workshop sync for %s', source.repo_name,
+            # Lazy import: django_q is optional in test environments.
+            from django_q.tasks import async_task
+            async_task(
+                'integrations.services.github.sync_content_source',
+                source,
+                batch_id=batch_id,
+                task_name=f'sync-{source.repo_name}',
             )
+            _mark_source_queued(source, batch_id=batch_id)
+        except ImportError:
+            # Fall back to a synchronous sync when django_q isn't
+            # installed (test runner, dev shell).
+            from integrations.services.github import sync_content_source
+            sync_content_source(source, batch_id=batch_id)
+    except Exception:
+        logger.exception(
+            'Error triggering workshop sync for %s', source.repo_name,
+        )
 
     warning = _worker_warning_suffix()
     base_msg = format_html(
-        'Workshop sync queued for {count} source{plural}. Watch progress at '
+        'Workshop sync queued for {repo}. Watch progress at '
         '<a href="/studio/sync/" class="underline">/studio/sync/</a>{warning}',
-        count=count,
-        plural='' if count == 1 else 's',
+        repo=source.repo_name,
         warning=warning,
     )
     if warning:

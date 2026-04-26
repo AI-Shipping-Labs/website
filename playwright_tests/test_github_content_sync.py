@@ -91,36 +91,19 @@ def _clear_courses():
 
 
 def _seed_content_sources():
-    """Seed the four default content sources."""
+    """Seed the four default content sources (one row per repo)."""
     from integrations.models import ContentSource
 
     sources_data = [
-        {
-            "repo_name": "AI-Shipping-Labs/blog",
-            "content_type": "article",
-            "is_private": False,
-        },
-        {
-            "repo_name": "AI-Shipping-Labs/courses",
-            "content_type": "course",
-            "is_private": True,
-        },
-        {
-            "repo_name": "AI-Shipping-Labs/resources",
-            "content_type": "resource",
-            "is_private": False,
-        },
-        {
-            "repo_name": "AI-Shipping-Labs/projects",
-            "content_type": "project",
-            "is_private": False,
-        },
+        {"repo_name": "AI-Shipping-Labs/blog", "is_private": False},
+        {"repo_name": "AI-Shipping-Labs/courses", "is_private": True},
+        {"repo_name": "AI-Shipping-Labs/resources", "is_private": False},
+        {"repo_name": "AI-Shipping-Labs/projects", "is_private": False},
     ]
     created_sources = []
     for sd in sources_data:
         source, _ = ContentSource.objects.get_or_create(
             repo_name=sd["repo_name"],
-            content_type=sd["content_type"],
             defaults={
                 "is_private": sd["is_private"],
             },
@@ -129,13 +112,16 @@ def _seed_content_sources():
     return created_sources
 
 
-def _create_content_source(repo_name, content_type, is_private=False):
-    """Create a single content source."""
+def _create_content_source(repo_name, content_type=None, is_private=False):
+    """Create a single content source.
+
+    ``content_type`` is accepted for call-site compatibility but ignored —
+    issue #310 dropped per-type rows in favour of one row per repo.
+    """
     from integrations.models import ContentSource
 
     source, _ = ContentSource.objects.get_or_create(
         repo_name=repo_name,
-        content_type=content_type,
         defaults={
             "is_private": is_private,
         },
@@ -459,13 +445,14 @@ class TestScenario2AdminTriggersSyncAll:
         sync_all_btn = page.locator('button:has-text("Sync All")')
         assert sync_all_btn.count() >= 1
 
-        # Step 2: Run syncs for all sources via ORM
+        # Step 2: Run syncs for all sources via ORM. Dispatch per repo
+        # since per-type rows no longer exist (issue #310).
         for source in sources:
-            if source.content_type == "article":
+            if source.repo_name == "AI-Shipping-Labs/blog":
                 _sync_blog_source_with_articles(source, [
                     {"slug": "sync-all-test", "title": "Sync All Test"},
                 ])
-            elif source.content_type == "course":
+            elif source.repo_name == "AI-Shipping-Labs/courses":
                 _sync_courses_source(source)
             else:
                 # For resource and project sources, run an empty
@@ -1114,7 +1101,12 @@ class TestScenario12AdminViewsSeededSources:
 
     def test_four_seeded_sources_displayed_correctly(self, django_server, page):
         """After seeding, the sync dashboard shows all 4 sources with correct
-        attributes: repo names, content types, private flag, and 'Never synced'."""
+        attributes: repo names, private flag, and 'Never synced'.
+
+        Issue #310: per-content-type labels are no longer shown per-source
+        on the dashboard — sources are one-row-per-repo and the per-type
+        breakdown only appears in the sync results table after a sync runs.
+        """
         _clear_content_sources()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
@@ -1134,12 +1126,6 @@ class TestScenario12AdminViewsSeededSources:
         assert "AI-Shipping-Labs/courses" in body
         assert "AI-Shipping-Labs/resources" in body
         assert "AI-Shipping-Labs/projects" in body
-
-        # Then: Content types shown
-        assert "article" in body
-        assert "course" in body
-        assert "resource" in body
-        assert "project" in body
 
         # Then: Courses source marked as "Private"
         courses_card = page.locator(
@@ -1213,7 +1199,11 @@ class TestScenario13SyncQueuedButtonConfirmation:
         blog_card = page.locator(
             '.bg-card:has-text("AI-Shipping-Labs/blog")'
         ).first
-        sync_btn = blog_card.locator('button.sync-btn')
+        # The card has two `button.sync-btn` buttons: 'Sync now' (first)
+        # and 'Force resync' (second). Pick the first one explicitly so
+        # `.inner_text()` / `.wait_for()` don't trip Playwright's
+        # strict-mode check.
+        sync_btn = blog_card.locator('button.sync-btn').first
         sync_btn_text = sync_btn.locator('span.sync-btn-text')
 
         # Pre-condition: original label is "Sync now", button enabled.
@@ -1302,7 +1292,8 @@ class TestScenario13SyncQueuedButtonConfirmation:
         blog_card = page.locator(
             '.bg-card:has-text("AI-Shipping-Labs/blog")'
         ).first
-        sync_btn = blog_card.locator('button.sync-btn')
+        # First sync-btn = 'Sync now' (second is 'Force resync').
+        sync_btn = blog_card.locator('button.sync-btn').first
         sync_btn_text = sync_btn.locator('span.sync-btn-text')
 
         sync_btn_text.wait_for()
@@ -1392,7 +1383,6 @@ class TestScenario14SyncDashboardAutoRefresh:
         # Single source pinned to 'running' so the poller starts immediately.
         source = ContentSource.objects.create(
             repo_name="AI-Shipping-Labs/blog",
-            content_type="article",
             last_sync_status="running",
         )
         _login_admin_via_browser(page, django_server, "admin@test.com")

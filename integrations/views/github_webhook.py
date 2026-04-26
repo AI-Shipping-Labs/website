@@ -123,7 +123,7 @@ def github_webhook(request):
                         'integrations.services.github.sync_content_source',
                         source,
                         force=True,
-                        task_name=f'sync-{source.repo_name}-{source.content_type}',
+                        task_name=f'sync-{source.repo_name}',
                     )
                     # Issue #274: webhook-driven sync goes through the same
                     # queued-then-running pattern as the Studio trigger so

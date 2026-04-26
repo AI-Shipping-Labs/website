@@ -30,13 +30,13 @@ class SyncedUtilsTest(TestCase):
     def setUpTestData(cls):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog',
         )
         cls.synced_article = Article.objects.create(
             title='Synced', slug='synced', date=timezone.now().date(),
             source_repo='AI-Shipping-Labs/content',
-            source_path='synced.md',
+            # Issue #310: source_path is now repo-relative, including
+            # the historical content_path prefix.
+            source_path='blog/synced.md',
             source_commit='abc1234def5678901234567890123456789abcde',
         )
         cls.manual_article = Article.objects.create(
@@ -71,14 +71,14 @@ class SyncedArticleReadOnlyTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         ContentSource.objects.get_or_create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            defaults={'content_path': 'blog'},
         )
         self.synced = Article.objects.create(
             title='Synced Article', slug='synced-art',
             date=timezone.now().date(), published=True,
             source_repo='AI-Shipping-Labs/content',
-            source_path='synced-art.md',
+            # Issue #310: source_path is repo-relative including the
+            # historical content_path prefix.
+            source_path='blog/synced-art.md',
             source_commit='abc1234def5678901234567890123456789abcde',
         )
         self.manual = Article.objects.create(
@@ -212,8 +212,6 @@ class SyncedRecordingReadOnlyTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         ContentSource.objects.get_or_create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='event',
-            defaults={'content_path': 'events'},
         )
         self.synced = Event.objects.create(
             title='Synced Recording', slug='synced-rec',
@@ -262,8 +260,6 @@ class SyncedCourseReadOnlyTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         ContentSource.objects.get_or_create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            defaults={'content_path': 'courses'},
         )
         self.synced = Course.objects.create(
             title='Synced Course', slug='synced-course', status='published',
@@ -359,8 +355,6 @@ class SyncedDownloadReadOnlyTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         ContentSource.objects.get_or_create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='resource',
-            defaults={'content_path': 'resources'},
         )
         self.synced = Download.objects.create(
             title='Synced Download', slug='synced-dl',
@@ -400,8 +394,6 @@ class SyncedProjectReadOnlyTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
         ContentSource.objects.get_or_create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='project',
-            defaults={'content_path': 'projects'},
         )
         self.synced = Project.objects.create(
             title='Synced Project', slug='synced-proj',

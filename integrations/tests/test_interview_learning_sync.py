@@ -18,8 +18,6 @@ class SyncInterviewQuestionsTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='interview_question',
-            content_path='interview-questions',
         )
         self.temp_dir = tempfile.mkdtemp()
         # The sync resolves content_path relative to repo_dir,

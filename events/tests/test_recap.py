@@ -522,21 +522,18 @@ class SyncEventsRecapTest(TestCase):
         from integrations.models import ContentSource
         return ContentSource.objects.create(
             repo_name='test-content',
-            content_type='event',
-            content_path='events/',
         )
 
     def test_sync_persists_recap_dict(self):
         import tempfile
 
-        from integrations.services.github import _sync_events
+        from integrations.services.github import sync_content_source
         recap = {'hero': {'title': 'My Event'}}
         with tempfile.TemporaryDirectory() as tmp:
-            events_dir = self._write_event_yaml(tmp, recap_block=recap)
+            self._write_event_yaml(tmp, recap_block=recap)
             source = self._make_source()
-            stats = _sync_events(source, events_dir, 'abc1234',
-                                 sync_log=None)
-        self.assertEqual(stats['errors'], [])
+            sync_log = sync_content_source(source, repo_dir=tmp)
+        self.assertEqual(sync_log.errors, [])
         event = Event.objects.get(slug='launch-test')
         self.assertEqual(event.recap, recap)
         self.assertTrue(event.has_recap)
@@ -544,11 +541,11 @@ class SyncEventsRecapTest(TestCase):
     def test_sync_with_no_recap_leaves_field_empty(self):
         import tempfile
 
-        from integrations.services.github import _sync_events
+        from integrations.services.github import sync_content_source
         with tempfile.TemporaryDirectory() as tmp:
-            events_dir = self._write_event_yaml(tmp, recap_block=None)
+            self._write_event_yaml(tmp, recap_block=None)
             source = self._make_source()
-            _sync_events(source, events_dir, 'abc1234', sync_log=None)
+            sync_content_source(source, repo_dir=tmp)
         event = Event.objects.get(slug='launch-test')
         self.assertEqual(event.recap, {})
         self.assertFalse(event.has_recap)
@@ -558,7 +555,7 @@ class SyncEventsRecapTest(TestCase):
         import os
         import tempfile
 
-        from integrations.services.github import _sync_events
+        from integrations.services.github import sync_content_source
 
         with tempfile.TemporaryDirectory() as tmp:
             events_dir = os.path.join(tmp, 'events')
@@ -569,15 +566,15 @@ class SyncEventsRecapTest(TestCase):
                     'content_id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\n'
                     'title: "Bad"\n'
                     'slug: bad-recap\n'
+                    'start_datetime: "2026-04-13T16:30:00Z"\n'
                     'recap:\n'
                     '  - item1\n'
                     '  - item2\n'
                 )
             source = self._make_source()
-            stats = _sync_events(source, events_dir, 'abc1234',
-                                 sync_log=None)
-        self.assertEqual(len(stats['errors']), 1)
-        self.assertIn('Invalid recap', stats['errors'][0]['error'])
+            sync_log = sync_content_source(source, repo_dir=tmp)
+        self.assertEqual(len(sync_log.errors), 1)
+        self.assertIn('Invalid recap', sync_log.errors[0]['error'])
         # Event still synced, recap empty
         event = Event.objects.get(slug='bad-recap')
         self.assertEqual(event.recap, {})

@@ -45,7 +45,7 @@ def _clear_workshops():
     Workshop.objects.all().delete()
     Event.objects.all().delete()
     # Wipe sync sources so each test starts clean.
-    ContentSource.objects.filter(content_type='workshop').delete()
+    ContentSource.objects.filter(repo_name='AI-Shipping-Labs/workshops-content').delete()
     connection.close()
 
 
@@ -64,8 +64,6 @@ def _sync_workshop_repo(files):
     source, _ = ContentSource.objects.get_or_create(
         repo_name='AI-Shipping-Labs/workshops-content',
         defaults={
-            'content_type': 'workshop',
-            'content_path': '',
             'is_private': False,
         },
     )

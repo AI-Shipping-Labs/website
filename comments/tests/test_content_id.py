@@ -89,53 +89,58 @@ class SyncPipelineContentIdTest(TestCase):
 
     def test_sync_articles_skips_without_content_id(self):
         """Articles without content_id in frontmatter are skipped."""
+        import datetime as dt
+
         import frontmatter as fm
 
-        from integrations.models import ContentSource, SyncLog
-        from integrations.services.github import _sync_articles
+        from integrations.models import ContentSource
+        from integrations.services.github import sync_content_source
 
         source = ContentSource.objects.create(
-            content_type='article',
             repo_name='test/repo',
-            content_path='blog',
         )
-        sync_log = SyncLog.objects.create(source=source)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Article without content_id
-            post = fm.Post('Body', title='No ID', slug='no-id')
+            # Article without content_id (issue #310: walker requires
+            # ``date:`` to bucket as article).
+            post = fm.Post(
+                'Body', title='No ID', slug='no-id',
+                date=dt.date(2026, 1, 1),
+            )
             with open(os.path.join(tmpdir, 'no-id.md'), 'wb') as f:
                 fm.dump(post, f)
 
-            stats = _sync_articles(source, tmpdir, 'abc123', sync_log)
+            sync_log = sync_content_source(source, repo_dir=tmpdir)
 
         self.assertEqual(Article.objects.filter(slug='no-id').count(), 0)
         self.assertTrue(
-            any('missing content_id' in e['error'] for e in stats['errors']),
-            f"Expected 'missing content_id' error, got: {stats['errors']}",
+            any('missing content_id' in e['error'] for e in sync_log.errors),
+            f"Expected 'missing content_id' error, got: {sync_log.errors}",
         )
 
     def test_sync_articles_stores_content_id(self):
         """Articles with content_id in frontmatter store it on the model."""
+        import datetime as dt
+
         import frontmatter as fm
 
-        from integrations.models import ContentSource, SyncLog
-        from integrations.services.github import _sync_articles
+        from integrations.models import ContentSource
+        from integrations.services.github import sync_content_source
 
         source = ContentSource.objects.create(
-            content_type='article',
             repo_name='test/repo2',
-            content_path='blog',
         )
-        sync_log = SyncLog.objects.create(source=source)
         test_uuid = str(uuid.uuid4())
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            post = fm.Post('Body', title='With ID', slug='with-id', content_id=test_uuid)
+            post = fm.Post(
+                'Body', title='With ID', slug='with-id',
+                content_id=test_uuid, date=dt.date(2026, 1, 1),
+            )
             with open(os.path.join(tmpdir, 'with-id.md'), 'wb') as f:
                 fm.dump(post, f)
 
-            _sync_articles(source, tmpdir, 'abc123', sync_log)
+            sync_content_source(source, repo_dir=tmpdir)
 
         article = Article.objects.get(slug='with-id')
         self.assertEqual(str(article.content_id), test_uuid)

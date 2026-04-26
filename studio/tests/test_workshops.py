@@ -442,19 +442,19 @@ class StudioWorkshopResyncTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
     def test_no_workshop_source_flashes_error(self):
-        # No ContentSource rows configured for content_type='workshop'.
-        ContentSource.objects.filter(content_type='workshop').delete()
+        # No ContentSource rows configured for the workshops repo.
+        ContentSource.objects.filter(repo_name='AI-Shipping-Labs/workshops-content').delete()
         response = self.client.post('/studio/workshops/resync/', follow=True)
         self.assertRedirects(response, '/studio/sync/')
         # Flash message visible on the dashboard.
-        self.assertContains(response, 'No workshop content source configured')
+        self.assertContains(response, 'No content source for')
+        self.assertContains(response, 'AI-Shipping-Labs/workshops-content')
         # No SyncLog rows were created.
         self.assertEqual(SyncLog.objects.count(), 0)
 
     def test_with_source_enqueues_async_task_and_marks_queued(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
         )
         # Patch async_task to avoid hitting django-q during the test.
         with patch('django_q.tasks.async_task') as mock_async:
@@ -464,7 +464,7 @@ class StudioWorkshopResyncTest(TestCase):
 
         self.assertRedirects(response, '/studio/sync/')
         self.assertContains(response, 'Workshop sync queued')
-        # async_task got called once, scoped to the workshop source.
+        # async_task got called once, scoped to the workshops repo.
         self.assertEqual(mock_async.call_count, 1)
         call_kwargs = mock_async.call_args.kwargs
         self.assertEqual(
@@ -475,7 +475,7 @@ class StudioWorkshopResyncTest(TestCase):
         self.assertIn('batch_id', call_kwargs)
         self.assertEqual(
             call_kwargs['task_name'],
-            f'sync-{source.repo_name}-workshop',
+            f'sync-{source.repo_name}',
         )
 
         # _mark_source_queued created a SyncLog row for the source.
@@ -483,47 +483,27 @@ class StudioWorkshopResyncTest(TestCase):
         self.assertEqual(log.status, 'queued')
 
     def test_only_workshop_sources_are_synced(self):
-        # Set up sources of different content types — only the workshop one
+        # Set up sources for different repos — only the workshops one
         # must be enqueued.
-        ContentSource.objects.create(
+        workshops = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
         )
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='article',
-            content_path='blog',
         )
 
         with patch('django_q.tasks.async_task') as mock_async:
             self.client.post('/studio/workshops/resync/')
 
         self.assertEqual(mock_async.call_count, 1)
-        # The single call targeted the workshop source, not the article one.
-        self.assertEqual(
-            mock_async.call_args.args[1].content_type,
-            'workshop',
-        )
-
-
-class StudioWorkshopUtilsMappingTest(TestCase):
-    """``Workshop`` and ``WorkshopPage`` are wired into the GitHub URL helper."""
-
-    def test_model_content_type_map_has_workshop_entries(self):
-        from studio.utils import _MODEL_CONTENT_TYPE_MAP
-
-        self.assertEqual(_MODEL_CONTENT_TYPE_MAP.get('Workshop'), 'workshop')
-        self.assertEqual(
-            _MODEL_CONTENT_TYPE_MAP.get('WorkshopPage'), 'workshop',
-        )
+        # The single call targeted the workshops-content source.
+        self.assertEqual(mock_async.call_args.args[1], workshops)
 
     def test_get_github_edit_url_for_workshop(self):
         from studio.utils import get_github_edit_url
 
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
-            content_path='',
         )
         ws = _make_workshop(slug='demo')
         url = get_github_edit_url(ws)

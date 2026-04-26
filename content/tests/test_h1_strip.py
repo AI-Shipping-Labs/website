@@ -234,8 +234,6 @@ class SyncStripsLeadingH1Test(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='test-org/python-course-h1',
-            content_type='course',
-            content_path='',
         )
         self.temp_dir = tempfile.mkdtemp()
         # Single-course mode: course.yaml at repo root.

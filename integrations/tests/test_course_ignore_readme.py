@@ -136,8 +136,6 @@ class _CourseSyncFixtureBase(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/python-course',
-            content_type='course',
-            content_path='',
         )
         self.temp_dir = tempfile.mkdtemp()
 

@@ -34,15 +34,29 @@ from integrations.services.github import sync_content_source
 
 
 class _SyncFixture(TestCase):
-    """Common helpers for writing a tmp content repo on disk."""
+    """Common helpers for writing a tmp content repo on disk.
+
+    Issue #310: instructors are dispatched by location (a path component
+    named ``instructors``). We always write into a synthetic
+    ``instructors/`` subdir at the repo root so the walker buckets the
+    yaml as instructor files.
+    """
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(prefix='instructor-sync-')
+        self.instructors_dir = os.path.join(self.temp_dir, 'instructors')
+        os.makedirs(self.instructors_dir, exist_ok=True)
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def _write(self, rel_path, text):
+        # Allow callers to write to any path; bare ``<id>.yaml`` filenames
+        # default to the ``instructors/`` subdir so existing fixtures Just
+        # Work. Path-shaped rel_paths (containing a slash) go through
+        # untouched.
+        if '/' not in rel_path and rel_path.endswith(('.yaml', '.yml')):
+            rel_path = os.path.join('instructors', rel_path)
         full = os.path.join(self.temp_dir, rel_path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, 'w') as f:
@@ -52,8 +66,6 @@ class _SyncFixture(TestCase):
     def _instructor_source(self):
         return ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='instructor',
-            content_path='',
             is_private=False,
         )
 
@@ -115,7 +127,7 @@ class InstructorSyncHappyPathTest(_SyncFixture):
         sync_content_source(source, repo_dir=self.temp_dir)
 
         # Drop one yaml and resync.
-        os.remove(os.path.join(self.temp_dir, 'jane-doe.yaml'))
+        os.remove(os.path.join(self.instructors_dir, 'jane-doe.yaml'))
         sync_content_source(source, repo_dir=self.temp_dir)
 
         jane = Instructor.objects.get(instructor_id='jane-doe')
@@ -199,8 +211,6 @@ class WorkshopReferencesInstructorsTest(_SyncFixture):
 
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
-            content_path='',
             is_private=False,
         )
         sync_log = sync_content_source(source, repo_dir=self.temp_dir)
@@ -236,8 +246,6 @@ class WorkshopReferencesInstructorsTest(_SyncFixture):
 
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
-            content_path='',
             is_private=False,
         )
         sync_log = sync_content_source(source, repo_dir=self.temp_dir)
@@ -276,8 +284,6 @@ class WorkshopReferencesInstructorsTest(_SyncFixture):
 
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/workshops-content',
-            content_type='workshop',
-            content_path='',
             is_private=False,
         )
         sync_content_source(source, repo_dir=self.temp_dir)
@@ -315,8 +321,6 @@ class CourseReferencesInstructorsTest(_SyncFixture):
 
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='course',
-            content_path='',
             is_private=False,
         )
         sync_log = sync_content_source(source, repo_dir=self.temp_dir)
@@ -341,7 +345,8 @@ class EventReferencesInstructorsTest(_SyncFixture):
             status='published',
         )
 
-        self._write('demo-event.yaml', (
+        # Write under ``events/`` so the walker classifies as event.
+        self._write('events/demo-event.yaml', (
             'content_id: 22222222-2222-2222-2222-222222222222\n'
             'slug: demo-event\n'
             'title: "Demo Event"\n'
@@ -352,8 +357,6 @@ class EventReferencesInstructorsTest(_SyncFixture):
 
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
-            content_type='event',
-            content_path='',
             is_private=False,
         )
         sync_content_source(source, repo_dir=self.temp_dir)

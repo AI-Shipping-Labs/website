@@ -15,6 +15,9 @@ The banner is Studio-only by spec, so a non-Studio path with a deliberate
 mismatch must NOT render the banner — that's its own test.
 """
 
+from pathlib import Path
+
+from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, TestCase, override_settings
 
@@ -251,3 +254,110 @@ class StudioEnvMismatchBannerViewTest(TestCase):
         response = self.client.get('/studio/articles/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="env-mismatch-banner"')
+
+
+class ProxySSLHeaderTest(TestCase):
+    """Behind AWS ALB, TLS terminates at the load balancer and the
+    container sees the request as HTTP. ``SECURE_PROXY_SSL_HEADER`` must
+    be honored in production so ``request.scheme`` reports the original
+    scheme (``https``) and the Studio host-mismatch banner does not
+    false-positive (issue #350).
+
+    Tests cover both directions:
+
+    - With ``SECURE_PROXY_SSL_HEADER`` configured (prod-like), the
+      forwarded header is trusted: ``request.scheme`` becomes
+      ``'https'`` and the banner does not fire when configured host
+      matches the request host.
+    - The banner still fires when host genuinely differs (regression
+      guard — the fix must not silence real mismatches).
+    - With ``SECURE_PROXY_SSL_HEADER`` unset (local dev), the header is
+      ignored — anyone could otherwise spoof ``https`` from the LAN.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    @override_settings(
+        DEBUG=False,
+        SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'),
+        ALLOWED_HOSTS=['dev.aishippinglabs.com'],
+    )
+    def test_forwarded_proto_makes_request_secure(self):
+        request = self.factory.get(
+            '/studio/',
+            HTTP_HOST='dev.aishippinglabs.com',
+            HTTP_X_FORWARDED_PROTO='https',
+        )
+        self.assertEqual(request.scheme, 'https')
+        self.assertTrue(request.is_secure())
+
+    @override_settings(
+        DEBUG=False,
+        SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'),
+        SITE_BASE_URL='https://dev.aishippinglabs.com',
+        ALLOWED_HOSTS=['dev.aishippinglabs.com'],
+    )
+    def test_no_banner_when_behind_alb_with_matching_host(self):
+        # Reproduces the dev.aishippinglabs.com bug: ALB terminates TLS,
+        # forwards X-Forwarded-Proto: https, request host matches
+        # SITE_BASE_URL host. Banner must not fire.
+        request = self.factory.get(
+            '/studio/',
+            HTTP_HOST='dev.aishippinglabs.com',
+            HTTP_X_FORWARDED_PROTO='https',
+        )
+        self.assertIsNone(_build_env_mismatch_payload(request))
+
+    @override_settings(
+        DEBUG=False,
+        SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'),
+        SITE_BASE_URL='https://prod.aishippinglabs.com',
+        ALLOWED_HOSTS=['dev.aishippinglabs.com'],
+    )
+    def test_banner_still_fires_when_host_genuinely_differs(self):
+        # Regression guard: the fix must not silence real mismatches.
+        # Configured host is prod, request lands on dev — that's a stale
+        # config and the banner should still warn the operator.
+        request = self.factory.get(
+            '/studio/',
+            HTTP_HOST='dev.aishippinglabs.com',
+            HTTP_X_FORWARDED_PROTO='https',
+        )
+        payload = _build_env_mismatch_payload(request)
+        self.assertIsNotNone(payload)
+        self.assertEqual(
+            payload['configured_host'], 'prod.aishippinglabs.com',
+        )
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=None)
+    def test_forwarded_proto_ignored_when_header_setting_unset(self):
+        # Local dev never sets SECURE_PROXY_SSL_HEADER (the gate in
+        # website.settings only sets it when DEBUG=False), so the
+        # forwarded header must be ignored — otherwise any local caller
+        # could spoof https by sending the header.
+        request = self.factory.get(
+            '/studio/',
+            HTTP_HOST='localhost:8000',
+            HTTP_X_FORWARDED_PROTO='https',
+        )
+        self.assertEqual(request.scheme, 'http')
+        self.assertFalse(request.is_secure())
+
+    def test_settings_module_gates_secure_proxy_header_on_debug(self):
+        # Lock the gating in website/settings.py: the conditional block
+        # that sets SECURE_PROXY_SSL_HEADER must be guarded by
+        # ``if not DEBUG`` so the header is never trusted in local dev.
+        # A grep-style assertion guards against accidental removal of
+        # the gate (e.g. someone unconditionally sets the header during
+        # a refactor and silently weakens dev-mode CSRF/session checks).
+        settings_path = (
+            Path(django_settings.BASE_DIR) / 'website' / 'settings.py'
+        )
+        source = settings_path.read_text()
+        self.assertIn(
+            "if not DEBUG:\n"
+            "    SECURE_PROXY_SSL_HEADER = "
+            "('HTTP_X_FORWARDED_PROTO', 'https')",
+            source,
+        )

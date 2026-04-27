@@ -155,6 +155,11 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'analytics.middleware.CampaignTrackingMiddleware',
     'integrations.middleware.RedirectMiddleware',
+    # Mark /studio/* and /accounts/* responses uncacheable. Defensive
+    # protection so authenticated HTML (which can carry per-user flash
+    # messages and CSRF tokens) never sits in a browser back-forward
+    # cache, service worker, or future CDN. See issue #347.
+    'studio.middleware.StudioNoStoreMiddleware',
 ]
 
 APPEND_SLASH = True

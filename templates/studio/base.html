@@ -2,6 +2,14 @@
 
 {% block title %}Studio - {% block studio_title %}Dashboard{% endblock %} | {{ site_name }}{% endblock %}
 
+{% comment %}
+Studio renders its own messages region inside the main content area
+(below) so it sits next to the page title, not above the sidebar layout.
+Suppress the parent ``base.html`` `messages` block to prevent
+double-rendering. See issue #347.
+{% endcomment %}
+{% block messages %}{% endblock %}
+
 {% block body %}
 {% include "studio/includes/env_mismatch_banner.html" %}
 <div class="flex min-h-screen">
@@ -220,6 +228,12 @@
   <!-- Main content -->
   <main class="flex-1 ml-0 md:ml-64 min-w-0 overflow-hidden">
     <div class="p-4 pt-14 md:pt-8 md:p-8">
+      {% comment %}
+      Render the Django messages queue exactly once per Studio response
+      (issue #347). Leaf templates must NOT iterate ``messages`` again,
+      or the flash will render twice on the same page.
+      {% endcomment %}
+      {% include "_partials/messages.html" %}
       {% block studio_content %}{% endblock %}
     </div>
   </main>

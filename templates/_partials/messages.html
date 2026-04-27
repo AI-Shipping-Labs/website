@@ -1,0 +1,23 @@
+{% comment %}
+Shared messages partial used by both `templates/base.html` (public site)
+and `templates/studio/base.html` (Studio admin) to render Django's
+``messages`` framework queue exactly once per response.
+
+Rendering messages here drains the message store on every page, which
+fixes the bug where allauth's "Successfully signed in as <name>." flash
+sat undrained in cookie/session storage and later leaked into another
+viewer's Studio page (issue #347).
+
+Tag classes mirror the dark-theme alert colors used elsewhere in Studio
+(error/success/warning/info).
+{% endcomment %}
+{% if messages %}
+<div class="mb-6 space-y-2" data-testid="messages-region" role="status" aria-live="polite">
+  {% for message in messages %}
+  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'warning' %}bg-yellow-500/20 text-yellow-300{% else %}bg-blue-500/20 text-blue-400{% endif %}"
+       data-message-tag="{{ message.tags }}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

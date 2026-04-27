@@ -12,15 +12,7 @@
   </h1>
 </div>
 
-{% if messages %}
-<div class="mb-6 space-y-2">
-  {% for message in messages %}
-  <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
-    {{ message }}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+{# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
 <div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
   <form method="post" action="{% if form_action == 'edit' %}{% url 'studio_utm_campaign_edit' campaign_id=campaign.pk %}{% else %}{% url 'studio_utm_campaign_create' %}{% endif %}">

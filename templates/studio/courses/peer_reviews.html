@@ -37,18 +37,7 @@
   </form>
 </div>
 
-{% if messages %}
-<div class="mb-6 space-y-2">
-  {% for message in messages %}
-  <div class="rounded-lg p-3 text-sm
-    {% if message.tags == 'success' %}bg-green-500/10 border border-green-500/30 text-green-400
-    {% elif message.tags == 'error' %}bg-red-500/10 border border-red-500/30 text-red-400
-    {% else %}bg-blue-500/10 border border-blue-500/30 text-blue-400{% endif %}">
-    {{ message }}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+{# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
 <!-- Status filter -->
 <div class="flex items-center space-x-2 mb-6 text-sm">

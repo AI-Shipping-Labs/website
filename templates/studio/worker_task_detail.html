@@ -15,15 +15,7 @@
     </a>
   </div>
 
-  {% if messages %}
-    <div class="space-y-2">
-      {% for message in messages %}
-        <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-500/20 text-red-400{% elif message.tags == 'success' %}bg-green-500/20 text-green-400{% elif message.tags == 'info' %}bg-blue-500/20 text-blue-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-          {{ message }}
-        </div>
-      {% endfor %}
-    </div>
-  {% endif %}
+  {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
   {# Status banner — green for success, red for failure. #}
   {% if task.success %}

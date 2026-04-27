@@ -358,6 +358,18 @@
     })();
   </script>
   {% endif %}
+  {% comment %}
+  Render the Django messages queue exactly once per response so allauth's
+  "Successfully signed in as ..." flash (and other one-shot messages) is
+  drained on the very next page after it's produced. Without this drain,
+  the message sits in cookie/session storage and later leaks into a
+  different viewer's first Studio sub-page render. See issue #347.
+  {% endcomment %}
+  {% block messages %}
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-4">
+    {% include "_partials/messages.html" %}
+  </div>
+  {% endblock %}
   {% block body %}{% endblock %}
 
   <script>

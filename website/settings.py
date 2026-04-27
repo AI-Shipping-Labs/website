@@ -94,6 +94,11 @@ DEBUG = _bool_env('DEBUG', default=True)
 
 SECRET_KEY = _resolve_secret_key(debug=DEBUG)
 
+# AWS ALB terminates TLS and forwards X-Forwarded-Proto; trust it only
+# in production (DEBUG=False) so local dev can't be spoofed via headers.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 ALLOWED_HOSTS = _csv_env('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
 CSRF_TRUSTED_ORIGINS = _csv_env('CSRF_TRUSTED_ORIGINS', '', allow_empty=True)

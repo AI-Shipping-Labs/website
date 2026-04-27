@@ -66,6 +66,8 @@ from studio.views.recordings import recording_edit, recording_list, recording_pu
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
 from studio.views.settings import (
     settings_dashboard,
+    settings_export,
+    settings_import,
     settings_save_auth_provider,
     settings_save_group,
 )
@@ -306,6 +308,11 @@ urlpatterns = [
 
     # Settings
     path('settings/', settings_dashboard, name='studio_settings'),
+    # Export / import (issue #323) registered BEFORE the generic
+    # ``<group_name>/save/`` route so the literal ``export/`` and
+    # ``import/`` prefixes aren't swallowed by the str converter.
+    path('settings/export/', settings_export, name='studio_settings_export'),
+    path('settings/import/', settings_import, name='studio_settings_import'),
     # Auth provider save URL is registered BEFORE the generic
     # ``<group_name>/save/`` route so the literal ``auth/`` prefix isn't
     # swallowed by the str converter (it would otherwise treat ``auth``

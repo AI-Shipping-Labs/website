@@ -9,13 +9,19 @@ Provides:
   integration group.
 - ``/studio/settings/auth/<provider>/save/`` — save OAuth credentials
   for a single login provider.
+- ``/studio/settings/export/`` — download all settings as a JSON file.
+- ``/studio/settings/import/`` — upload a previously-exported JSON file
+  and upsert the settings.
 """
 
+import json
 import os
+from datetime import datetime
 
 from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.sites.models import Site
+from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -27,6 +33,13 @@ from studio.services.auth_settings import (
     get_all_auth_providers,
     is_supported_provider,
     save_auth_provider,
+)
+from studio.services.settings_io import (
+    ImportError as SettingsImportError,
+)
+from studio.services.settings_io import (
+    apply_import,
+    build_export,
 )
 
 
@@ -181,3 +194,96 @@ def settings_save_auth_provider(request, provider):
     # Redirect back to the card the operator just saved so they can
     # confirm the status badge flipped without scrolling.
     return redirect(f'/studio/settings/#auth-{provider}')
+
+
+@staff_required
+def settings_export(request):
+    """Download all integration + auth-provider settings as a JSON file.
+
+    Plaintext on purpose — see issue #323. ``staff_required`` is the only
+    gate; the operator is trusted to handle the file like a password
+    manager export.
+    """
+    payload = build_export()
+    body = json.dumps(payload, indent=2, sort_keys=False)
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    filename = f'aishippinglabs-settings-{timestamp}.json'
+    response = HttpResponse(body, content_type='application/json')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@staff_required
+@require_POST
+def settings_import(request):
+    """Upsert settings from a previously-exported JSON upload.
+
+    Validation: malformed JSON and unknown ``format_version`` are rejected
+    with a flash error and no DB writes. Unknown integration keys / auth
+    providers are skipped and surfaced as a warning so schema drift between
+    environments doesn't block a bootstrap.
+    """
+    upload = request.FILES.get('settings_file')
+    if upload is None:
+        messages.error(request, 'No file uploaded. Pick a settings JSON file and try again.')
+        return redirect('studio_settings')
+
+    try:
+        raw = upload.read().decode('utf-8')
+    except UnicodeDecodeError:
+        messages.error(
+            request,
+            'Settings file must be UTF-8 encoded JSON.',
+        )
+        return redirect('studio_settings')
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        messages.error(
+            request,
+            f'Settings file is not valid JSON: {exc.msg} (line {exc.lineno}).',
+        )
+        return redirect('studio_settings')
+
+    try:
+        result = apply_import(payload)
+    except SettingsImportError as exc:
+        messages.error(request, str(exc))
+        return redirect('studio_settings')
+
+    clear_config_cache()
+
+    summary_parts = []
+    if result.integration_created or result.integration_updated:
+        summary_parts.append(
+            f'integrations: {result.integration_created} created, '
+            f'{result.integration_updated} updated'
+        )
+    if result.auth_created or result.auth_updated:
+        summary_parts.append(
+            f'auth providers: {result.auth_created} created, '
+            f'{result.auth_updated} updated'
+        )
+    if summary_parts:
+        messages.success(
+            request,
+            'Settings imported (' + '; '.join(summary_parts) + ').',
+        )
+    else:
+        messages.info(request, 'Settings file contained no recognised entries.')
+
+    if result.skipped_integration_keys:
+        messages.warning(
+            request,
+            'Skipped unknown integration keys: '
+            + ', '.join(result.skipped_integration_keys),
+        )
+    if result.skipped_auth_providers:
+        messages.warning(
+            request,
+            'Skipped unknown auth providers: '
+            + ', '.join(result.skipped_auth_providers),
+        )
+
+    return redirect('studio_settings')

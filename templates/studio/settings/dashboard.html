@@ -3,9 +3,27 @@
 {% block studio_title %}Settings{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <h1 class="text-2xl font-semibold text-foreground">Settings</h1>
-  <p class="text-muted-foreground mt-1">Configure how users sign in and how the platform talks to external services. Values saved here take priority over environment variables.</p>
+<div class="mb-8 flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Settings</h1>
+    <p class="text-muted-foreground mt-1">Configure how users sign in and how the platform talks to external services. Values saved here take priority over environment variables.</p>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <a href="{% url 'studio_settings_export' %}" class="inline-flex items-center px-3 py-2 rounded-lg bg-muted text-foreground hover:bg-muted/80 text-sm font-medium border border-border" data-testid="settings-download">
+      Download settings
+    </a>
+    <form action="{% url 'studio_settings_import' %}" method="post" enctype="multipart/form-data" class="flex items-center gap-2">
+      {% csrf_token %}
+      <label class="inline-flex items-center px-3 py-2 rounded-lg bg-muted text-foreground hover:bg-muted/80 text-sm font-medium border border-border cursor-pointer">
+        <span>Choose file</span>
+        <input type="file" name="settings_file" accept="application/json,.json" class="sr-only" onchange="this.form.querySelector('[data-upload-filename]').textContent = this.files[0] ? this.files[0].name : 'No file chosen'; this.form.querySelector('[data-upload-submit]').disabled = !this.files[0];">
+      </label>
+      <span class="text-xs text-muted-foreground" data-upload-filename>No file chosen</span>
+      <button type="submit" disabled data-upload-submit data-testid="settings-upload" class="inline-flex items-center px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium border border-border disabled:opacity-50 disabled:cursor-not-allowed">
+        Upload settings
+      </button>
+    </form>
+  </div>
 </div>
 
 <!-- Messages -->

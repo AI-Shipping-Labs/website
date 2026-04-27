@@ -22,8 +22,11 @@ double-rendering. See issue #347.
   <!-- Backdrop -->
   <div id="studio-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden" onclick="toggleStudioSidebar()"></div>
 
-  <!-- Sidebar: hidden on mobile, visible on md+ -->
-  <aside id="studio-sidebar" class="hidden md:block w-64 bg-card border-r border-border flex-shrink-0 fixed h-full overflow-y-auto z-40">
+  <!-- Sidebar: hidden on mobile, visible on md+. On mobile (toggled visible)
+       it acts as a fixed drawer; on md+ it sits in the flex flow as a sticky
+       column so it pins to the viewport top once any preceding banner has
+       scrolled past (no gap above the sidebar). See issue #351. -->
+  <aside id="studio-sidebar" class="hidden md:block w-64 bg-card border-r border-border flex-shrink-0 fixed inset-y-0 left-0 h-full md:sticky md:inset-auto md:top-0 md:h-screen md:self-start overflow-y-auto z-40">
     <div class="p-6">
       <a href="{% url 'studio_dashboard' %}" class="flex items-center space-x-2 mb-8">
         <div class="w-8 h-8 bg-accent rounded flex items-center justify-center">
@@ -225,8 +228,9 @@ double-rendering. See issue #347.
     </div>
   </aside>
 
-  <!-- Main content -->
-  <main class="flex-1 ml-0 md:ml-64 min-w-0 overflow-hidden">
+  <!-- Main content. Sidebar is in flex flow on md+ (issue #351) so no
+       left-margin offset is needed; flex-1 takes the remaining width. -->
+  <main class="flex-1 min-w-0 overflow-hidden">
     <div class="p-4 pt-14 md:pt-8 md:p-8">
       {% comment %}
       Render the Django messages queue exactly once per Studio response

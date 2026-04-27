@@ -20,6 +20,10 @@ jobs:
 
     env:
       AWS_REGION: eu-west-1
+      # Hostname the verify step polls. Currently prod.aishippinglabs.com
+      # because the apex still serves the legacy Next.js site. Switch to
+      # aishippinglabs.com after the apex DNS cutover.
+      PROD_HOST: prod.aishippinglabs.com
 
     steps:
       - name: Echo Inputs
@@ -44,19 +48,15 @@ jobs:
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
 
       - name: Verify prod deploy landed
-        # Polls the env-specific hostname, not the apex. The apex
-        # aishippinglabs.com still resolves to the legacy Next.js site
-        # until the cutover; prod.aishippinglabs.com is the ALB pointing at
-        # the Django backend (matches ALLOWED_HOSTS_BY_ENV["prod"]).
         run: |
           set -e
           EXPECTED_TAG="${{ github.event.inputs.deployTag }}"
           if [ -z "$EXPECTED_TAG" ]; then
             EXPECTED_TAG=$(tail -n1 .prod-versions)
           fi
-          echo "Polling https://prod.aishippinglabs.com/ping for tag matching ${EXPECTED_TAG}..."
+          echo "Polling https://${PROD_HOST}/ping for tag matching ${EXPECTED_TAG}..."
           for i in $(seq 1 30); do
-            DEPLOYED=$(curl -fsSL --max-time 10 https://prod.aishippinglabs.com/ping 2>/dev/null || echo "")
+            DEPLOYED=$(curl -fsSL --max-time 10 "https://${PROD_HOST}/ping" 2>/dev/null || echo "")
             if [ -n "${DEPLOYED}" ] && [ "${DEPLOYED}" = "${EXPECTED_TAG}" ]; then
               echo "::notice ::Prod verified — /ping returned ${DEPLOYED} after ${i} attempt(s)."
               exit 0

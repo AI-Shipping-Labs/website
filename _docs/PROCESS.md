@@ -97,18 +97,39 @@ Orchestrator picks groomed issue
 - If tester fails: relay feedback to software engineer, re-launch to fix, then re-launch tester
 - If tester passes: launch product manager for acceptance review
 - If PM rejects: relay UX feedback to software engineer, fix, then re-launch PM
-- If PM accepts: tell software engineer to commit and push
+- If PM accepts: tell software engineer to commit on the worktree branch (no push, no PR)
+- After SWE commits, the orchestrator merges the worktree branch into local `main` and pushes `main` to origin (see "Merging — local only, no PRs" below)
 - After pushing, run oncall-engineer to check CI/CD
 - After committing, pick the next two issues (never stop until all issues are done)
 
+### Merging — local only, no PRs
+
+We do NOT use GitHub Pull Requests. Do not run `gh pr create` / `gh pr merge`. The merge happens on the orchestrator's local `main` branch, then `main` is pushed to origin and CI/CD deploys from there.
+
+Steps after the SWE has committed on `worktree-agent-XXXX`:
+
+1. From the main checkout (NOT the worktree), confirm `main` is clean and up-to-date with origin: `git fetch origin && git status` → no uncommitted changes; `git rev-parse HEAD` should equal `git rev-parse origin/main`.
+2. Merge the worktree branch into local `main` with a custom merge-commit subject matching the project pattern:
+   ```
+   git merge --no-ff worktree-agent-XXXX \
+     -m "Merge worktree-agent-XXXX: <SWE's commit subject> (#ISSUE)"
+   ```
+   The `(#ISSUE)` reference is the GitHub issue number (e.g. `(#350)`), NOT a PR number. There are no PRs.
+3. Push: `git push origin main`.
+4. The SWE's commit body should contain `Closes #ISSUE` so GitHub auto-closes the issue when the merge commit reaches origin/main.
+5. After push, run oncall-engineer.
+
+Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → tester → PM acceptance) — opening a PR adds nothing on top of that and produces noisy `Merge pull request #NNN from <branch>` commit subjects on `main`. Local `--no-ff` merges keep the history clean and let the orchestrator control the merge subject.
+
 ### Mandatory Steps (never skip)
 
-- Every issue goes through ALL stages: PM groom → SWE implement → Tester review → PM acceptance → Commit → Oncall CI check
+- Every issue goes through ALL stages: PM groom → SWE implement → Tester review → PM acceptance → Commit → Local merge → Push → Oncall CI check
 - Tester must run the full workflow from `.claude/agents/tester.md` including Step 7 (capture screenshots). Screenshots are used by agents to verify pages rendered correctly, not just for human review
 - Tester must actually run all tests — not just review code. Test report must include counts by type
 - Tester must capture screenshots of every changed page and read each one to verify it is not a 404, error, or broken layout
 - SWE and tester must update acceptance criteria checkboxes in the issue body (`- [ ]` → `- [x]`)
 - Never commit directly without tester review, even for "simple" changes
+- Never use `gh pr create` or `gh pr merge` — see "Merging — local only, no PRs"
 - After push, always run oncall-engineer agent to monitor CI — do not just check manually
 
 ### How to Pick Issues

@@ -1,5 +1,8 @@
 """Tests for the Studio users list / CSV export and subscriber redirect shims."""
 
+import csv
+import io
+import re
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -11,6 +14,11 @@ from email_app.models import NewsletterSubscriber
 from payments.models import Tier
 
 User = get_user_model()
+
+
+def _parse_csv(response):
+    """Decode the response body and parse it as CSV via DictReader."""
+    return list(csv.DictReader(io.StringIO(response.content.decode())))
 
 
 class StudioUserListTest(TestCase):
@@ -202,7 +210,12 @@ class StudioUserListTest(TestCase):
 
 
 class StudioUserExportTest(TestCase):
-    """CSV export at /studio/users/export."""
+    """CSV export at /studio/users/export.
+
+    Columns and filename were re-locked in issue #355: header is
+    ``email,tier,tags,email_verified,unsubscribed,date_joined,last_login``
+    and the filename includes a UTC timestamp for provenance.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -220,6 +233,8 @@ class StudioUserExportTest(TestCase):
             email='alice@test.com',
             password='testpass',
         )
+        cls.alice.tags = ['early-adopter', 'paid-2026']
+        cls.alice.save(update_fields=['tags'])
         cls.bob = User.objects.create_user(
             email='bob@test.com',
             password='testpass',
@@ -235,6 +250,8 @@ class StudioUserExportTest(TestCase):
             password='testpass',
             tier=cls.free_tier,
         )
+        cls.override_user.tags = ['vip']
+        cls.override_user.save(update_fields=['tags'])
         TierOverride.objects.create(
             user=cls.override_user,
             original_tier=cls.free_tier,
@@ -246,66 +263,182 @@ class StudioUserExportTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
+    def _row_by_email(self, response, email):
+        rows = _parse_csv(response)
+        for row in rows:
+            if row['email'] == email:
+                return row
+        raise AssertionError(f'No row for {email}; rows: {rows}')
+
     def test_export_returns_csv(self):
         response = self.client.get('/studio/users/export')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/csv')
         self.assertIn('attachment', response['Content-Disposition'])
-        self.assertIn('users.csv', response['Content-Disposition'])
 
-    def test_export_header_lists_columns(self):
+    def test_export_filename_uses_timestamped_pattern(self):
+        response = self.client.get('/studio/users/export')
+        # The filename embeds a UTC timestamp; assert on the locked pattern,
+        # not a specific instant, so the test is not flaky around midnight.
+        match = re.search(
+            r'filename="(aishippinglabs-contacts-\d{8}-\d{6}\.csv)"',
+            response['Content-Disposition'],
+        )
+        self.assertIsNotNone(
+            match,
+            f"Content-Disposition did not match pattern: {response['Content-Disposition']!r}",
+        )
+
+    def test_export_header_lists_locked_columns(self):
         response = self.client.get('/studio/users/export')
         first_line = response.content.decode().splitlines()[0]
-        self.assertEqual(first_line, 'Email,Joined,Subscribed,Tier,Status')
+        self.assertEqual(
+            first_line,
+            'email,tier,tags,email_verified,unsubscribed,date_joined,last_login',
+        )
+
+    def test_export_dictreader_fieldnames_match_locked_set(self):
+        response = self.client.get('/studio/users/export')
+        reader = csv.DictReader(io.StringIO(response.content.decode()))
+        self.assertEqual(
+            reader.fieldnames,
+            [
+                'email',
+                'tier',
+                'tags',
+                'email_verified',
+                'unsubscribed',
+                'date_joined',
+                'last_login',
+            ],
+        )
 
     def test_export_default_filter_is_all(self):
         response = self.client.get('/studio/users/export')
-        content = response.content.decode()
-        self.assertIn('alice@test.com', content)
-        self.assertIn('bob@test.com', content)
-        self.assertIn('main@test.com', content)
-        self.assertIn('override@test.com', content)
-        self.assertIn('staff@test.com', content)
+        emails = {row['email'] for row in _parse_csv(response)}
+        self.assertEqual(
+            emails,
+            {
+                'staff@test.com',
+                'alice@test.com',
+                'bob@test.com',
+                'main@test.com',
+                'override@test.com',
+            },
+        )
 
     def test_export_filter_paid(self):
         response = self.client.get('/studio/users/export?filter=paid')
-        content = response.content.decode()
-        self.assertIn('main@test.com', content)
-        self.assertIn('override@test.com', content)
-        self.assertNotIn('alice@test.com', content)
-        self.assertNotIn('bob@test.com', content)
+        emails = {row['email'] for row in _parse_csv(response)}
+        self.assertEqual(emails, {'main@test.com', 'override@test.com'})
 
     def test_export_filter_subscribers_uses_user_preference(self):
         response = self.client.get('/studio/users/export?filter=subscribers')
-        content = response.content.decode()
-        self.assertIn('alice@test.com', content)
-        self.assertIn('main@test.com', content)
-        self.assertIn('override@test.com', content)
-        self.assertNotIn('bob@test.com', content)
-        self.assertNotIn('staff@test.com', content)
+        emails = {row['email'] for row in _parse_csv(response)}
+        self.assertEqual(
+            emails,
+            {'alice@test.com', 'main@test.com', 'override@test.com'},
+        )
 
     def test_export_honours_search(self):
         response = self.client.get('/studio/users/export?filter=all&q=override')
-        content = response.content.decode()
-        self.assertIn('override@test.com', content)
-        self.assertNotIn('alice@test.com', content)
-        self.assertNotIn('bob@test.com', content)
+        emails = {row['email'] for row in _parse_csv(response)}
+        self.assertEqual(emails, {'override@test.com'})
 
-    def test_export_subscribed_column_values(self):
-        response = self.client.get('/studio/users/export?filter=all')
-        lines = response.content.decode().splitlines()
-        alice_line = next(line for line in lines if line.startswith('alice@test.com'))
-        bob_line = next(line for line in lines if line.startswith('bob@test.com'))
-        self.assertEqual(alice_line.split(',')[2], 'Yes')
-        self.assertEqual(bob_line.split(',')[2], 'No')
+    def test_export_honours_tag_filter(self):
+        response = self.client.get('/studio/users/export?tag=vip')
+        emails = {row['email'] for row in _parse_csv(response)}
+        self.assertEqual(emails, {'override@test.com'})
+
+    def test_export_tag_filter_normalizes_input(self):
+        # Operator passes a non-normalized URL value; the export should
+        # still resolve to the normalized tag stored on the user.
+        response = self.client.get('/studio/users/export?tag=Early%20Adopter')
+        emails = {row['email'] for row in _parse_csv(response)}
+        self.assertEqual(emails, {'alice@test.com'})
 
     def test_export_tier_column_shows_override_tier(self):
         response = self.client.get('/studio/users/export?filter=all')
-        lines = response.content.decode().splitlines()
-        override_line = next(
-            line for line in lines if line.startswith('override@test.com')
-        )
-        self.assertEqual(override_line.split(',')[3], 'Premium (override)')
+        row = self._row_by_email(response, 'override@test.com')
+        self.assertEqual(row['tier'], 'Premium (override)')
+
+    def test_export_tier_column_shows_paid_tier_name_without_override(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'main@test.com')
+        self.assertEqual(row['tier'], 'Main')
+
+    def test_export_tier_column_shows_free_for_default_user(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'alice@test.com')
+        self.assertEqual(row['tier'], 'Free')
+
+    def test_export_tags_cell_joins_with_commas(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'alice@test.com')
+        # csv.DictReader unquotes the cell, so we get the raw joined string.
+        self.assertEqual(row['tags'], 'early-adopter,paid-2026')
+
+    def test_export_tags_cell_empty_when_user_has_no_tags(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'bob@test.com')
+        self.assertEqual(row['tags'], '')
+
+    def test_export_tags_cell_quoted_in_raw_csv_when_multiple(self):
+        # The raw CSV bytes must quote a multi-tag cell so the embedded
+        # commas don't bleed into the next column.
+        response = self.client.get('/studio/users/export?filter=all')
+        raw = response.content.decode()
+        self.assertIn('"early-adopter,paid-2026"', raw)
+
+    def test_export_email_verified_column_yes_no(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        # alice was created via create_user; the default is email_verified=False.
+        # We don't care which one alice is in; we only assert the cell
+        # renders as the literal Yes/No (not True/False/empty).
+        row = self._row_by_email(response, 'alice@test.com')
+        self.assertIn(row['email_verified'], {'Yes', 'No'})
+
+        # Force a known value and re-check.
+        self.alice.email_verified = True
+        self.alice.save(update_fields=['email_verified'])
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'alice@test.com')
+        self.assertEqual(row['email_verified'], 'Yes')
+
+    def test_export_unsubscribed_column_yes_no(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        alice_row = self._row_by_email(response, 'alice@test.com')
+        bob_row = self._row_by_email(response, 'bob@test.com')
+        self.assertEqual(alice_row['unsubscribed'], 'No')
+        self.assertEqual(bob_row['unsubscribed'], 'Yes')
+
+    def test_export_date_joined_isoformat(self):
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'alice@test.com')
+        # ISO 8601 from timezone-aware datetime -> contains T and timezone offset.
+        self.assertEqual(row['date_joined'], self.alice.date_joined.isoformat())
+
+    def test_export_last_login_empty_when_never_logged_in(self):
+        # alice has never logged in; bob has never logged in either. The cell
+        # must be the empty string, not the literal "None".
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'alice@test.com')
+        self.assertEqual(row['last_login'], '')
+
+    def test_export_last_login_isoformat_when_set(self):
+        login_time = timezone.now()
+        self.alice.last_login = login_time
+        self.alice.save(update_fields=['last_login'])
+        response = self.client.get('/studio/users/export?filter=all')
+        row = self._row_by_email(response, 'alice@test.com')
+        self.assertEqual(row['last_login'], login_time.isoformat())
+
+    def test_export_drops_status_column(self):
+        # The Status column was removed in issue #355.
+        response = self.client.get('/studio/users/export?filter=all')
+        reader = csv.DictReader(io.StringIO(response.content.decode()))
+        self.assertNotIn('Status', reader.fieldnames)
+        self.assertNotIn('status', reader.fieldnames)
 
     def test_export_non_staff_forbidden(self):
         User.objects.create_user(

@@ -23,6 +23,7 @@ superusers.
 """
 
 import csv
+import datetime
 import secrets
 
 from django.contrib import messages
@@ -170,7 +171,10 @@ def _build_user_listing(active_filter, search, tag_filter=''):
             'pk': user.pk,
             'email': user.email,
             'date_joined': user.date_joined,
+            'last_login': user.last_login,
             'is_subscribed': not user.unsubscribed,
+            'unsubscribed': user.unsubscribed,
+            'email_verified': user.email_verified,
             'tier_name': _effective_tier_name(user, override),
             'status': _user_status(user),
             'tags': list(user.tags or []),
@@ -242,8 +246,15 @@ def user_list(request):
 def user_export_csv(request):
     """Export the currently-filtered user list as CSV.
 
-    Honours the same ``filter`` and ``q`` query params as ``user_list`` so
-    operators can grab the exact rows they're looking at.
+    Honours the same ``filter``, ``q``, and ``tag`` query params as
+    ``user_list`` so operators can grab the exact rows they're looking at.
+
+    Columns (locked by issue #355):
+    ``email, tier, tags, email_verified, unsubscribed, date_joined,
+    last_login``. ``tags`` is a comma-separated list of normalized strings;
+    ``csv.writer`` quotes the cell when it contains commas. Datetimes use
+    ISO 8601, with empty cells for nulls. Filename includes a UTC timestamp
+    so repeat downloads do not collide.
     """
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     search = request.GET.get('q', '')
@@ -251,18 +262,35 @@ def user_export_csv(request):
 
     user_rows, _counts = _build_user_listing(active_filter, search, raw_tag)
 
+    timestamp = (
+        timezone.now()
+        .astimezone(datetime.timezone.utc)
+        .strftime('%Y%m%d-%H%M%S')
+    )
+    filename = f'aishippinglabs-contacts-{timestamp}.csv'
+
     response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename="users.csv"'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
     writer = csv.writer(response)
-    writer.writerow(['Email', 'Joined', 'Subscribed', 'Tier', 'Status'])
+    writer.writerow([
+        'email',
+        'tier',
+        'tags',
+        'email_verified',
+        'unsubscribed',
+        'date_joined',
+        'last_login',
+    ])
     for row in user_rows:
         writer.writerow([
             row['email'],
-            row['date_joined'].isoformat() if row['date_joined'] else '',
-            'Yes' if row['is_subscribed'] else 'No',
             row['tier_name'],
-            row['status'],
+            ','.join(row['tags']),
+            'Yes' if row['email_verified'] else 'No',
+            'Yes' if row['unsubscribed'] else 'No',
+            row['date_joined'].isoformat() if row['date_joined'] else '',
+            row['last_login'].isoformat() if row['last_login'] else '',
         ])
 
     return response

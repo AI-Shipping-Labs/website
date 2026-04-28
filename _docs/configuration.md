@@ -35,7 +35,7 @@ Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_UR
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. Every integration group from `INTEGRATION_GROUPS` is rendered there with a status badge (`configured`, `partial`, `not_configured`).
 
-Test: visit `/studio/settings/` and confirm 8 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, YouTube, GitHub App, Slack).
+Test: visit `/studio/settings/` and confirm 9 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, YouTube, GitHub App, Slack, Site).
 
 ## 3. OAuth login providers
 

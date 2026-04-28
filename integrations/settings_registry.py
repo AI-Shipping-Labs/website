@@ -8,7 +8,7 @@ get it, what breaks without it. Kept to one sentence so the dashboard
 stays scannable. See issue #322 for the locked rewrites.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 8 integration groups are
+groups in the Studio sign-in section ("confirm 9 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -91,6 +91,14 @@ INTEGRATION_GROUPS = [
             {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Channel ID where the bot posts new content and event announcements.'},
             {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_NAME', 'is_secret': False, 'description': 'Display name of the announcements channel (e.g. #announcements). Used in UI copy.'},
             {'key': 'SLACK_INVITE_URL', 'is_secret': False, 'description': 'Public Slack workspace invite URL shown to Main+ members on the dashboard.'},
+        ],
+    },
+    {
+        'name': 'site',
+        'label': 'Site',
+        'keys': [
+            {'key': 'SITE_BASE_URL', 'is_secret': False, 'description': 'Canonical absolute URL — used for generated links, OAuth callbacks, etc.'},
+            {'key': 'SITE_BASE_URL_ALIASES', 'is_secret': False, 'description': 'Additional hosts that should not trigger the host-mismatch banner. Comma- or whitespace-separated.'},
         ],
     },
 ]

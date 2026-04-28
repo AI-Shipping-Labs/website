@@ -280,16 +280,28 @@ ANALYTICS_COOKIE_DOMAIN = os.environ.get('ANALYTICS_COOKIE_DOMAIN', '') or None
 # Site configuration
 VERSION = os.getenv("VERSION", "N/A")
 SITE_NAME = 'AI Shipping Labs'
-# Canonical, env-driven base URL used by every URL-generating call site
+# Canonical base URL used by every URL-generating call site
 # (unsubscribe links, calendar invites, password resets, OAuth redirect
 # URIs, share URLs, OG / canonical meta tags, Slack announcement links,
-# UTM campaign destinations). Set this per environment via the
-# SITE_BASE_URL env var; the literal default below is a safety net so
-# settings always exposes the attribute, but production deploys MUST
-# override it. The Studio host-mismatch banner (see
-# website.context_processors.studio_env_mismatch_context) warns when the
-# configured value disagrees with the request host.
-SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com')
+# UTM campaign destinations). Resolution order: IntegrationSetting row
+# in the DB (Studio > Settings > Site) > SITE_BASE_URL env var > literal
+# default. The literal default is a safety net so settings always
+# exposes the attribute; production deploys MUST override it. The
+# Studio host-mismatch banner (see
+# website.context_processors.studio_env_mismatch_context) warns when
+# the configured value disagrees with the request host.
+#
+# get_config() guards against the chicken-and-egg of being called while
+# settings.py is still loading (settings.configured == False at this
+# point, so the django-conf branch is skipped and we fall through to
+# env / default — DB rows are picked up on the next access after Django
+# finishes booting).
+from integrations.config import get_config  # noqa: E402
+
+SITE_BASE_URL = get_config(
+    'SITE_BASE_URL',
+    os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com'),
+)
 SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who want to turn AI ideas into real projects.'
 
 # Stripe payment links

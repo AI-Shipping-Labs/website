@@ -1,7 +1,9 @@
+import re
 from urllib.parse import urlparse
 
 from django.conf import settings
 
+from integrations.config import get_config
 from integrations.middleware import get_announcement_banner
 
 # Default ports per scheme. Used by the host-mismatch detector so an
@@ -68,9 +70,17 @@ def _normalize_host_triple(scheme, host_with_port):
 def _build_env_mismatch_payload(request):
     """Return banner data for the Studio host-mismatch warning.
 
-    Returns ``None`` if the request matches ``SITE_BASE_URL`` after
-    normalization. Returns a dict with ``configured_base_url``,
-    ``request_url``, and ``configured_host`` otherwise.
+    Returns ``None`` if the request matches ``SITE_BASE_URL`` (or any
+    alias from ``SITE_BASE_URL_ALIASES``) after normalization. Returns a
+    dict with ``configured_base_url``, ``request_url``, and
+    ``configured_host`` otherwise.
+
+    Aliases are read from the ``SITE_BASE_URL_ALIASES`` integration
+    setting, parsed with ``re.split(r'[\\s,]+', value)`` so operators
+    can separate entries with commas, whitespace, or newlines. Each
+    alias is run through the same ``_normalize_host_triple`` as the
+    canonical URL; malformed aliases (empty netloc) are skipped. Empty
+    / unset aliases preserve today's banner behavior bit-for-bit.
 
     The dict shape is what the partial template consumes; if the
     detector can't make sense of the configured URL (empty / unparseable
@@ -90,6 +100,20 @@ def _build_env_mismatch_payload(request):
 
     if configured_triple == request_triple:
         return None
+
+    aliases_raw = get_config('SITE_BASE_URL_ALIASES', '')
+    if aliases_raw:
+        for alias in re.split(r'[\s,]+', aliases_raw):
+            if not alias:
+                continue
+            alias_parsed = urlparse(alias)
+            if not alias_parsed.netloc:
+                continue
+            alias_triple = _normalize_host_triple(
+                alias_parsed.scheme, alias_parsed.netloc,
+            )
+            if alias_triple == request_triple:
+                return None
 
     return {
         'configured_base_url': configured,

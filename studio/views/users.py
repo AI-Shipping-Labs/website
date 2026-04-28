@@ -25,12 +25,24 @@ superusers.
 import csv
 import secrets
 
+from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from accounts.models import TierOverride
+from accounts.utils.tags import (
+    add_tag as _add_tag_to_user,
+)
+from accounts.utils.tags import (
+    normalize_tag,
+    normalize_tags,
+)
+from accounts.utils.tags import (
+    remove_tag as _remove_tag_from_user,
+)
 from studio.decorators import staff_required, superuser_required
 
 User = get_user_model()
@@ -130,11 +142,17 @@ def _matches_filter(user, active_filter, override=None):
     return True
 
 
-def _build_user_listing(active_filter, search):
-    """Build filtered rows plus aggregate counts for the users page/export."""
+def _build_user_listing(active_filter, search, tag_filter=''):
+    """Build filtered rows plus aggregate counts for the users page/export.
+
+    ``tag_filter`` is the raw ``?tag=`` query value; we normalize it
+    server-side so ``?tag=Early%20Adopter`` matches ``early-adopter``. An
+    empty / whitespace tag filter is treated as "no tag filter".
+    """
     all_users = list(User.objects.select_related('tier').all())
     override_map = _active_override_map(all_users)
     search_lower = search.lower()
+    normalized_tag = normalize_tag(tag_filter) if tag_filter else ''
 
     user_rows = []
     for user in all_users:
@@ -145,6 +163,9 @@ def _build_user_listing(active_filter, search):
         if not _matches_filter(user, active_filter, override):
             continue
 
+        if normalized_tag and normalized_tag not in (user.tags or []):
+            continue
+
         user_rows.append({
             'pk': user.pk,
             'email': user.email,
@@ -152,6 +173,7 @@ def _build_user_listing(active_filter, search):
             'is_subscribed': not user.unsubscribed,
             'tier_name': _effective_tier_name(user, override),
             'status': _user_status(user),
+            'tags': list(user.tags or []),
         })
 
     counts = {
@@ -193,13 +215,16 @@ def user_list(request):
     """List platform Users with tier and subscriber filter chips."""
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     search = request.GET.get('q', '')
+    raw_tag = request.GET.get('tag', '')
+    active_tag = normalize_tag(raw_tag) if raw_tag else ''
 
-    user_rows, counts = _build_user_listing(active_filter, search)
+    user_rows, counts = _build_user_listing(active_filter, search, raw_tag)
 
     return render(request, 'studio/users/list.html', {
         'user_rows': user_rows,
         'active_filter': active_filter,
         'search': search,
+        'active_tag': active_tag,
         'total_users': counts['total_users'],
         'paid_count': counts['paid_count'],
         'main_plus_count': counts['main_plus_count'],
@@ -222,8 +247,9 @@ def user_export_csv(request):
     """
     active_filter = _normalize_filter(request.GET.get('filter', ''))
     search = request.GET.get('q', '')
+    raw_tag = request.GET.get('tag', '')
 
-    user_rows, _counts = _build_user_listing(active_filter, search)
+    user_rows, _counts = _build_user_listing(active_filter, search, raw_tag)
 
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="users.csv"'
@@ -362,3 +388,98 @@ def user_create_done(request):
         'is_admin': bool(stash.get('is_admin')),
     }
     return render(request, 'studio/users/created.html', context)
+
+
+# ---------------------------------------------------------------------------
+# User detail page + tag add/remove (issue #354)
+# ---------------------------------------------------------------------------
+
+
+def _all_known_contact_tags():
+    """Return the sorted, deduped union of every contact tag across users.
+
+    Powers the ``<datalist>`` typeahead on the detail page so operators see
+    suggestions for tags already in use without having to remember the exact
+    spelling. Stays staff-only (callers all gate on ``staff_required``).
+    """
+    seen = set()
+    for tag_list in User.objects.values_list('tags', flat=True):
+        if not tag_list:
+            continue
+        # Normalize defensively in case any rows pre-date the helper.
+        for tag in normalize_tags(tag_list):
+            seen.add(tag)
+    return sorted(seen)
+
+
+def _active_override_for_user(user):
+    """Return the user's active non-expired override, or None."""
+    return (
+        TierOverride.objects
+        .filter(
+            user_id=user.pk,
+            is_active=True,
+            expires_at__gt=timezone.now(),
+        )
+        .select_related('override_tier')
+        .order_by('-created_at')
+        .first()
+    )
+
+
+@staff_required
+def user_detail(request, user_id):
+    """Staff-only user detail page with the contact-tags editor.
+
+    Reads from the same effective-tier helpers as the list view so the
+    displayed tier matches what operators see in the table (including any
+    active override).
+    """
+    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    override = _active_override_for_user(user)
+
+    context = {
+        'detail_user': user,
+        'tier_name': _effective_tier_name(user, override),
+        'has_override': override is not None,
+        'is_subscribed': not user.unsubscribed,
+        'tags': list(user.tags or []),
+        'known_tags': _all_known_contact_tags(),
+        'status': _user_status(user),
+    }
+    return render(request, 'studio/users/detail.html', context)
+
+
+@staff_required
+@require_POST
+def user_tag_add(request, user_id):
+    """POST handler: add a normalized tag to the user.
+
+    Empty / whitespace input is rejected with a flash. Adding a tag the user
+    already has is a silent no-op (idempotent). Always redirects back to the
+    detail page.
+    """
+    user = get_object_or_404(User, pk=user_id)
+    raw = (request.POST.get('tag') or '').strip()
+    if not raw:
+        messages.error(request, 'Enter a tag before clicking Add.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    normalized = _add_tag_to_user(user, raw)
+    if not normalized:
+        messages.error(request, 'That tag normalized to an empty string. Use letters, digits, or hyphens.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    messages.success(request, f'Tag "{normalized}" added.')
+    return redirect('studio_user_detail', user_id=user.pk)
+
+
+@staff_required
+@require_POST
+def user_tag_remove(request, user_id):
+    """POST handler: remove a normalized tag from the user (idempotent)."""
+    user = get_object_or_404(User, pk=user_id)
+    raw = (request.POST.get('tag') or '').strip()
+    if raw:
+        _remove_tag_from_user(user, raw)
+    return redirect('studio_user_detail', user_id=user.pk)

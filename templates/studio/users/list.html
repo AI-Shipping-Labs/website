@@ -8,7 +8,7 @@
     <h1 class="text-2xl font-semibold text-foreground">Users</h1>
     <p class="text-muted-foreground mt-1">All platform users. Filter by effective tier or newsletter subscription.</p>
   </div>
-  <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
+  <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
      class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors shrink-0">
     Export CSV
   </a>
@@ -45,29 +45,41 @@
      The filter chips are anchor links (so the active chip is bookmarkable
      and re-clicking does not lose the search box value: we forward `q`).
      The search box is a separate GET form that preserves the active chip
-     via a hidden field. -->
+     via a hidden field. The tag filter (`?tag=`) is preserved across all
+     the chip links and the search form. -->
 <div class="mb-6 space-y-3">
   <div class="flex flex-wrap items-center gap-2" data-testid="user-filter-chips">
     {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
-    <a href="?filter={{ filter_all }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_all }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_all }}"
        class="{{ chip_base }} {% if active_filter == filter_all %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
-    <a href="?filter={{ filter_paid }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_paid }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_paid }}"
        class="{{ chip_base }} {% if active_filter == filter_paid %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Paid</a>
-    <a href="?filter={{ filter_main_plus }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_main_plus }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_main_plus }}"
        class="{{ chip_base }} {% if active_filter == filter_main_plus %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Main+</a>
-    <a href="?filter={{ filter_premium }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_premium }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_premium }}"
        class="{{ chip_base }} {% if active_filter == filter_premium %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Premium</a>
-    <a href="?filter={{ filter_subscribers }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_subscribers }}{% if search %}&amp;q={{ search }}{% endif %}{% if active_tag %}&amp;tag={{ active_tag }}{% endif %}"
        data-filter="{{ filter_subscribers }}"
        class="{{ chip_base }} {% if active_filter == filter_subscribers %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Subscribers</a>
     {% endwith %}
   </div>
+  {% if active_tag %}
+  <div class="flex items-center" data-testid="active-tag-chip">
+    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-accent/20 border border-accent text-accent-foreground">
+      Tag: {{ active_tag }}
+      <a href="?filter={{ active_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
+         data-testid="active-tag-clear"
+         class="text-muted-foreground hover:text-foreground" aria-label="Clear tag filter">x</a>
+    </span>
+  </div>
+  {% endif %}
   <form method="get" class="flex flex-wrap items-center gap-3">
     <input type="hidden" name="filter" value="{{ active_filter }}">
+    {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
     <input type="text" name="q" value="{{ search }}" placeholder="Search by email..."
            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
     <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
@@ -83,6 +95,7 @@
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Joined</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscribed</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Tier</th>
+        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Tags</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
@@ -100,6 +113,18 @@
           {% endif %}
         </td>
         <td class="px-3 sm:px-6 py-4 text-sm text-foreground hidden sm:table-cell">{{ row.tier_name }}</td>
+        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-testid="user-tags-cell">
+          {% if row.tags %}
+          <div class="flex flex-wrap gap-1">
+            {% for tag in row.tags %}
+            <a href="?tag={{ tag }}{% if active_filter and active_filter != filter_all %}&amp;filter={{ active_filter }}{% endif %}{% if search %}&amp;q={{ search }}{% endif %}"
+               class="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent-foreground border border-accent/40 hover:bg-accent/30">{{ tag }}</a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <span class="text-xs text-muted-foreground">-</span>
+          {% endif %}
+        </td>
         <td class="px-3 sm:px-6 py-4">
           {% if row.status == 'Staff' %}
           <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Staff</span>
@@ -110,15 +135,18 @@
           {% endif %}
         </td>
         <td class="px-3 sm:px-6 py-4">
-          <form method="post" action="{% url 'studio_impersonate' row.pk %}" class="inline">
-            {% csrf_token %}
-            <button type="submit" class="text-xs text-blue-400 hover:text-blue-300" title="Login as this user">Login as</button>
-          </form>
+          <div class="flex items-center gap-3">
+            <a href="{% url 'studio_user_detail' row.pk %}" class="text-xs text-blue-400 hover:text-blue-300" data-testid="user-view-link">View</a>
+            <form method="post" action="{% url 'studio_impersonate' row.pk %}" class="inline">
+              {% csrf_token %}
+              <button type="submit" class="text-xs text-blue-400 hover:text-blue-300" title="Login as this user">Login as</button>
+            </form>
+          </div>
         </td>
       </tr>
       {% empty %}
       <tr>
-        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</td>
+        <td colspan="7" class="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</td>
       </tr>
       {% endfor %}
     </tbody>

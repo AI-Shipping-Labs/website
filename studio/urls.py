@@ -12,6 +12,7 @@ from studio.views.campaigns import (
     campaign_send,
     campaign_test_send,
 )
+from studio.views.contacts_import import user_import, user_import_confirm
 from studio.views.content_sources import (
     content_source_create,
     content_source_refresh,
@@ -298,6 +299,12 @@ urlpatterns = [
     # Manually create user (issue #234)
     path('users/new/', user_create, name='studio_user_create'),
     path('users/created/', user_create_done, name='studio_user_create_done'),
+
+    # Bulk import contacts from CSV (issue #356). Registered before the
+    # ``<int:user_id>/`` route so the literal ``import/`` prefix is not
+    # swallowed by the int converter.
+    path('users/import/', user_import, name='studio_user_import'),
+    path('users/import/confirm', user_import_confirm, name='studio_user_import_confirm'),
 
     # User detail page + contact tags (issue #354). The literal ``new/``,
     # ``created/``, ``export``, and ``tier-override/`` prefixes are

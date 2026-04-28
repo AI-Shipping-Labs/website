@@ -30,7 +30,7 @@
             {% if event.status == 'upcoming' %}bg-blue-500/20 text-blue-400
             {% elif event.status == 'live' %}bg-red-500/20 text-red-400
             {% elif event.status == 'completed' %}bg-green-500/20 text-green-400
-            {% elif event.status == 'cancelled' %}bg-gray-500/20 text-gray-400
+            {% elif event.status == 'cancelled' %}bg-secondary text-muted-foreground
             {% else %}bg-secondary text-muted-foreground{% endif %}">
             {{ event.get_status_display }}
           </span>

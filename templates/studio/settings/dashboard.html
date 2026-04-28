@@ -72,6 +72,19 @@ function toggleReveal(btn) {
   }
 }
 
+// Clear a DB override on one field and submit its surrounding group form.
+// Empties the matching input, then submits the form — the save view deletes
+// any row whose POSTed value is empty, so the field reverts to env on the
+// next page load. We submit the whole form (not just the cleared field) so
+// the other keys in the group keep their stored values.
+function clearOverride(btn, fieldKey) {
+  var form = btn.closest('form');
+  if (!form) { return; }
+  var input = form.querySelector('[name="' + fieldKey + '"]');
+  if (input) { input.value = ''; }
+  form.submit();
+}
+
 // Vanilla copy-to-clipboard for the auth-card callback URL.
 // Uses navigator.clipboard.writeText so we don't ship a JS library.
 function copyCallbackUrl(btn) {

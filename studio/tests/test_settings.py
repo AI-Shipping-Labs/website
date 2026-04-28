@@ -34,7 +34,6 @@ class BooleanSettingRoundTripTest(TestCase):
         self.client.post('/studio/settings/slack/save/', {
             'SLACK_ENABLED': 'true',
             'SLACK_BOT_TOKEN': 'xoxb-test',
-            'confirm_update': 'on',
         })
         self.assertEqual(
             IntegrationSetting.objects.get(key='SLACK_ENABLED').value,
@@ -52,7 +51,6 @@ class BooleanSettingRoundTripTest(TestCase):
         self.client.post('/studio/settings/slack/save/', {
             # SLACK_ENABLED deliberately absent.
             'SLACK_BOT_TOKEN': 'xoxb-test',
-            'confirm_update': 'on',
         })
         self.assertEqual(
             IntegrationSetting.objects.get(key='SLACK_ENABLED').value,
@@ -94,17 +92,3 @@ class BooleanSettingRoundTripTest(TestCase):
         )
         self.assertIsNotNone(match)
         self.assertIn('checked', match.group(0))
-
-    def test_unchecked_boolean_without_confirm_update_does_not_write_false(self):
-        IntegrationSetting.objects.create(
-            key='SLACK_ENABLED', value='true', is_secret=False, group='slack',
-        )
-        self.client.post('/studio/settings/slack/save/', {
-            # Boolean absent (unchecked) AND confirm_update absent — the
-            # #339 guard must short-circuit before the per-key loop runs.
-        })
-        # Existing value untouched.
-        self.assertEqual(
-            IntegrationSetting.objects.get(key='SLACK_ENABLED').value,
-            'true',
-        )

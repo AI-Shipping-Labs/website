@@ -18,6 +18,12 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
 
+    # The "Commit and push .prod-versions" step writes to main; the
+    # default GITHUB_TOKEN is read-only without this. Run 25051473553
+    # failed at that step with a 403 because of the missing grant.
+    permissions:
+      contents: write
+
     env:
       AWS_REGION: eu-west-1
       # Hostname the verify step polls. Currently prod.aishippinglabs.com

@@ -220,8 +220,13 @@
       </div>
       {% endif %}
 
-      <!-- Completed event with recording: inline recording block -->
-      {% if event.status == 'completed' and event.has_recording %}
+      <!-- Completed event with recording: inline recording block.
+           Suppressed when a Workshop is linked (issue #363) — the workshop's
+           landing/video pages own the recording UI. The "Full workshop
+           writeup" CTA above is the canonical hand-off in that case. Legacy
+           past events that have not been promoted to a Workshop continue to
+           render this block as before. -->
+      {% if event.status == 'completed' and event.has_recording and not event.workshop %}
       <div data-testid="event-recording-block">
         {% if is_gated %}
           {% include "includes/content_gated.html" %}

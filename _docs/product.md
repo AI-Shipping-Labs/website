@@ -124,7 +124,7 @@ Access control logic: a user can access any content object where `user.tier.leve
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
 | Events listing | `/events` | Upcoming and past events split into two sections; type/status badges (live, async); tier badges; registration status; spots remaining; link to recording for past events | Everyone (listing visible) | Shipped |
-| Event detail | `/events/<slug>` | Full event page with status, type, dates, location, timezone, description, registration button, materials, Zoom join link (when live); SEO metadata | Open events: everyone; gated: tier-dependent | Shipped |
+| Event detail | `/events/<slug>` | Announcement page for the event: status, type, dates, location, timezone, description, registration button, Zoom join link (when live); SEO metadata. Workshop-linked events show a "View workshop writeup" CTA that hands off to the workshop landing page — recording, timestamps, materials, learning objectives, and core tools live on the workshop, not on the event. Legacy past events with no linked workshop still render the inline recording block. | Open events: everyone; gated: tier-dependent | Shipped |
 | Event registration | `/api/events/<slug>/register` | POST to register for an event | Authenticated users with access | Shipped |
 | Event unregistration | `/api/events/<slug>/unregister` | POST to unregister from an event | Authenticated users | Shipped |
 
@@ -275,7 +275,7 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Tier | A membership level (Free, Basic, Main, Premium) | Plan, package, subscription level |
 | Level | The numeric access level associated with a tier (0, 10, 20, 30) | Rank, grade |
 | Article | A blog post on the site | Post, blog entry |
-| Recording | A recorded event/workshop video with materials | Video, replay |
+| Recording | A recorded workshop video with timestamps and materials. Lives on the Workshop landing/video pages (`/workshops/<slug>` and `/workshops/<slug>/video`); the linked Event page only announces the session and links out to the workshop. Legacy past events that have not been promoted to a Workshop still host their recording inline on the event detail page. | Video, replay |
 | Tutorial | A focused step-by-step guide on a narrow topic | How-to, guide |
 | Course | A structured multi-module learning path with units | Class, program |
 | Module | A grouping of units within a course | Section, chapter |

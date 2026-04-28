@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Terms of Service | AI Shipping Labs{% endblock %}
+{% block meta_description %}Terms of Service for AI Shipping Labs, a community platform operated by DataTalks.Club.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="px-6 pt-32 pb-16 lg:px-8 lg:pt-40 lg:pb-24">
+    <div class="mx-auto max-w-4xl">
+      <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to home
+      </a>
+
+      <article class="legal-prose space-y-6 text-muted-foreground leading-relaxed">
+        <h1 class="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Terms of Service</h1>
+        <p class="text-sm text-muted-foreground">Last updated: {{ last_updated }}</p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">1. Who we are</h2>
+        <p>
+          AI Shipping Labs ("we", "us", "our") is a community platform operated by DataTalks.Club,
+          Schönensche Str. 13, 10439 Berlin, Germany (VAT No. DE343190995). You can reach us at
+          <a class="text-foreground underline hover:text-accent" href="mailto:contact@aishippinglabs.com">contact@aishippinglabs.com</a>.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">2. Accepting these terms</h2>
+        <p>
+          By creating an account, subscribing to a paid tier, or otherwise using
+          <a class="text-foreground underline hover:text-accent" href="https://aishippinglabs.com">aishippinglabs.com</a> (the "Service"), you agree to these
+          Terms of Service. If you do not agree, do not use the Service.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">3. Your account</h2>
+        <p>
+          You are responsible for keeping your account credentials secure and for all activity that happens
+          under your account. You must provide an accurate email address and notify us promptly if you
+          believe your account has been compromised. We may suspend or terminate accounts that violate
+          these terms.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">4. Membership tiers and payment</h2>
+        <p>
+          The Service offers a free tier and three paid tiers (Basic, Main, Premium). Paid subscriptions
+          are billed monthly or annually in euros via Stripe. By subscribing, you authorize us (through
+          Stripe) to charge your payment method on a recurring basis until you cancel. Prices are listed
+          on the <a class="text-foreground underline hover:text-accent" href="/pricing">pricing page</a> and may change with reasonable notice; existing
+          subscriptions are billed at the price in effect at the start of the current period.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">5. Refunds and cancellation</h2>
+        <p>
+          You can cancel a paid subscription at any time from your account page. Cancellation takes effect
+          at the end of the current billing period; you keep access until that date. We do not offer
+          pro-rated refunds for partial periods unless required by applicable law (including the EU
+          consumer right of withdrawal where it applies).
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">6. Content and conduct</h2>
+        <p>
+          The Service includes content we publish (articles, recordings, courses, downloads) and content
+          contributed by members (project submissions, comments, Slack messages, poll proposals).
+        </p>
+        <ul class="list-disc pl-6 space-y-2">
+          <li>You retain ownership of content you submit. By submitting content, you grant us a
+            non-exclusive, worldwide, royalty-free license to host, display, and distribute it as part of
+            the Service.</li>
+          <li>You agree not to post content that is illegal, infringing, harassing, hateful, or otherwise
+            harmful, and not to use the Service to spam, scrape, or attack other users.</li>
+          <li>We may remove content or suspend accounts that violate these rules.</li>
+        </ul>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">7. Intellectual property</h2>
+        <p>
+          Content we publish on the Service is protected by copyright and made available to you for
+          personal use as a member. You may not redistribute, resell, or republish our paid content
+          without written permission. Member-contributed content remains the property of its author.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">8. Third-party services</h2>
+        <p>
+          The Service relies on third-party providers including Stripe (payments), Slack (community),
+          GitHub and Google (OAuth login), Amazon SES (email), and Zoom (live events). Use of those
+          services is subject to their own terms.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">9. Disclaimers</h2>
+        <p>
+          The Service is provided "as is" and "as available". We do not guarantee that it will be
+          uninterrupted or error-free, and the educational content is for informational purposes only —
+          it is not professional advice. To the extent permitted by law, we exclude all warranties not
+          expressly stated in these terms.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">10. Limitation of liability</h2>
+        <p>
+          To the maximum extent permitted by applicable law, our total liability arising out of or
+          related to the Service is limited to the amount you paid us in the twelve months preceding the
+          event giving rise to the claim. We are not liable for indirect or consequential damages such as
+          lost profits, lost data, or business interruption. Nothing in this section limits liability that
+          cannot be limited by law (for example, liability for intent or gross negligence).
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">11. Termination</h2>
+        <p>
+          You may stop using the Service and delete your account at any time. We may suspend or terminate
+          your access if you breach these terms or if we discontinue the Service. Sections that by their
+          nature should survive termination (ownership, disclaimers, limitation of liability, governing
+          law) will survive.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">12. Governing law and jurisdiction</h2>
+        <p>
+          These terms are governed by the laws of the Federal Republic of Germany, excluding its conflict
+          of laws rules and the UN Convention on Contracts for the International Sale of Goods. Mandatory
+          consumer protections of your country of residence remain unaffected. Exclusive jurisdiction for
+          disputes is the courts of Berlin, Germany, where permitted by law.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">13. Changes to these terms</h2>
+        <p>
+          We may update these terms from time to time. If we make material changes, we will notify
+          registered users by email or by an in-app notice before the changes take effect. Continued use
+          of the Service after the effective date means you accept the updated terms.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">14. Contact</h2>
+        <p>
+          Questions about these terms? Email
+          <a class="text-foreground underline hover:text-accent" href="mailto:contact@aishippinglabs.com">contact@aishippinglabs.com</a>.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

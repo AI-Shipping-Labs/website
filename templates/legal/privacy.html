@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy | AI Shipping Labs{% endblock %}
+{% block meta_description %}Privacy Policy for AI Shipping Labs: what data we collect, how we use it, and your GDPR rights.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="px-6 pt-32 pb-16 lg:px-8 lg:pt-40 lg:pb-24">
+    <div class="mx-auto max-w-4xl">
+      <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to home
+      </a>
+
+      <article class="legal-prose space-y-6 text-muted-foreground leading-relaxed">
+        <h1 class="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Privacy Policy</h1>
+        <p class="text-sm text-muted-foreground">Last updated: {{ last_updated }}</p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">1. Who is the data controller</h2>
+        <p>
+          The controller of personal data processed via aishippinglabs.com is DataTalks.Club,
+          Schönensche Str. 13, 10439 Berlin, Germany (VAT No. DE343190995). Contact:
+          <a class="text-foreground underline hover:text-accent" href="mailto:contact@aishippinglabs.com">contact@aishippinglabs.com</a>.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">2. What we collect and why</h2>
+        <h3 class="text-xl font-semibold text-foreground mt-6">Account data</h3>
+        <p>
+          When you create an account we store your email address, a hashed password, and your tier and
+          billing status. Legal basis: performance of the contract (GDPR Art. 6(1)(b)).
+        </p>
+
+        <h3 class="text-xl font-semibold text-foreground mt-6">Authentication via OAuth</h3>
+        <p>
+          If you sign in through GitHub or Google, we receive your email address and basic profile from
+          the provider in order to create or look up your account. We do not receive your password.
+        </p>
+
+        <h3 class="text-xl font-semibold text-foreground mt-6">Newsletter and email campaigns</h3>
+        <p>
+          If you subscribe to the newsletter, we store your email address and your subscription status.
+          Newsletter signup uses a double opt-in confirmation. Legal basis: consent (Art. 6(1)(a)). You
+          can unsubscribe at any time from any newsletter email or from the account page; we honor
+          unsubscribes via the email service provider.
+        </p>
+
+        <h3 class="text-xl font-semibold text-foreground mt-6">Payments</h3>
+        <p>
+          Paid subscriptions are processed by Stripe. We do not see or store your full card number;
+          Stripe handles card data and returns to us a customer ID, subscription state, and billing
+          metadata so we can grant the right tier. Stripe is the processor for this data; see Stripe's
+          privacy policy for details. Legal basis: performance of the contract.
+        </p>
+
+        <h3 class="text-xl font-semibold text-foreground mt-6">Slack community</h3>
+        <p>
+          Members of the Main and Premium tiers receive an invitation to our Slack workspace. If you join,
+          Slack stores your messages and profile under its own privacy policy. We do not import Slack
+          message content back into the Service.
+        </p>
+
+        <h3 class="text-xl font-semibold text-foreground mt-6">Email delivery (Amazon SES)</h3>
+        <p>
+          Transactional emails (verification, password reset, billing receipts) and newsletter emails are
+          delivered via Amazon Simple Email Service. Amazon receives your email address and the message
+          contents in order to deliver them. We also receive bounce and complaint signals from Amazon to
+          keep our list clean.
+        </p>
+
+        <h3 class="text-xl font-semibold text-foreground mt-6">Cookies and similar technologies</h3>
+        <p>
+          We use a small set of strictly necessary cookies:
+        </p>
+        <ul class="list-disc pl-6 space-y-2">
+          <li><code>sessionid</code> — keeps you logged in.</li>
+          <li><code>csrftoken</code> — protects against cross-site request forgery on form submissions.</li>
+        </ul>
+        <p>
+          These cookies are required for the Service to function and are not used for tracking or
+          advertising. We do not currently set analytics or marketing cookies. If we add any in the
+          future, we will request consent first.
+        </p>
+
+        <h3 class="text-xl font-semibold text-foreground mt-6">Server logs</h3>
+        <p>
+          Our servers automatically log basic request data (IP address, user agent, timestamp, request
+          path) for security and operational purposes. These logs are kept for a limited period and then
+          deleted or aggregated.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">3. How we use your data</h2>
+        <ul class="list-disc pl-6 space-y-2">
+          <li>To provide and operate the Service (authentication, access control, billing).</li>
+          <li>To send transactional and (with consent) newsletter emails.</li>
+          <li>To respond to support requests.</li>
+          <li>To detect, prevent, and respond to fraud, abuse, and security incidents.</li>
+          <li>To comply with legal obligations (e.g. tax records).</li>
+        </ul>
+        <p>
+          We do not sell your personal data, and we do not share it with third parties for their own
+          marketing.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">4. Who we share data with</h2>
+        <p>
+          We share data only with the processors listed above (Stripe, Amazon SES, Slack, GitHub, Google)
+          as needed to operate the Service. Some of these providers process data outside the EU/EEA. Where
+          that is the case, transfers are covered by appropriate safeguards such as the EU Standard
+          Contractual Clauses or the EU-US Data Privacy Framework.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">5. How long we keep data</h2>
+        <p>
+          Account data is kept while your account is active and for a reasonable period afterwards to
+          resolve disputes and meet legal obligations. Newsletter records are kept until you unsubscribe.
+          Billing records are kept for the legally required retention period for tax and accounting
+          purposes (typically 10 years under German law).
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">6. Your rights</h2>
+        <p>
+          Under the GDPR you have the right to:
+        </p>
+        <ul class="list-disc pl-6 space-y-2">
+          <li>Access the personal data we hold about you.</li>
+          <li>Correct inaccurate data.</li>
+          <li>Request deletion of your data ("right to be forgotten"), subject to legal retention rules.</li>
+          <li>Restrict or object to processing.</li>
+          <li>Receive your data in a portable format.</li>
+          <li>Withdraw consent at any time (this does not affect processing already done).</li>
+          <li>Lodge a complaint with a supervisory authority — for users in Germany, the Berliner
+            Beauftragte für Datenschutz und Informationsfreiheit.</li>
+        </ul>
+        <p>
+          To exercise these rights, email
+          <a class="text-foreground underline hover:text-accent" href="mailto:contact@aishippinglabs.com">contact@aishippinglabs.com</a>.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">7. Security</h2>
+        <p>
+          We use industry-standard technical and organizational measures to protect your data, including
+          encryption in transit (HTTPS), hashed passwords, access controls, and monitored infrastructure.
+          No system is perfectly secure; you should choose a strong, unique password and notify us if you
+          suspect your account is compromised.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">8. Children</h2>
+        <p>
+          The Service is not directed at children under 16. We do not knowingly collect personal data from
+          children. If you believe a child has provided us data, contact us and we will delete it.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">9. Changes to this policy</h2>
+        <p>
+          We may update this policy as the Service evolves. The "Last updated" date at the top reflects
+          the latest version. For material changes, we will notify registered users by email or in-app
+          notice.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">10. Contact</h2>
+        <p>
+          Privacy questions or requests: <a class="text-foreground underline hover:text-accent" href="mailto:contact@aishippinglabs.com">contact@aishippinglabs.com</a>.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

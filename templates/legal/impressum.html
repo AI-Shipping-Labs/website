@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Impressum | AI Shipping Labs{% endblock %}
+{% block meta_description %}Impressum für AI Shipping Labs gemäß § 5 TMG.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="px-6 pt-32 pb-16 lg:px-8 lg:pt-40 lg:pb-24">
+    <div class="mx-auto max-w-4xl">
+      <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to home
+      </a>
+
+      <article class="legal-prose space-y-6 text-muted-foreground leading-relaxed">
+        <h1 class="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Impressum</h1>
+        <p class="text-sm text-muted-foreground">Stand: {{ last_updated }}</p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Angaben gemäß § 5 TMG</h2>
+        <p>
+          DataTalks.Club<br>
+          Schönensche Str. 13<br>
+          10439 Berlin<br>
+          Deutschland
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Vertreten durch</h2>
+        <p>Alexey Grigorev</p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Kontakt</h2>
+        <p>
+          E-Mail: <a class="text-foreground underline hover:text-accent" href="mailto:contact@aishippinglabs.com">contact@aishippinglabs.com</a>
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Umsatzsteuer-Identifikationsnummer</h2>
+        <p>
+          Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br>
+          DE343190995
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
+        <p>
+          Alexey Grigorev<br>
+          Schönensche Str. 13<br>
+          10439 Berlin<br>
+          Deutschland
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Streitschlichtung</h2>
+        <p>
+          Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:
+          <a class="text-foreground underline hover:text-accent" href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer">https://ec.europa.eu/consumers/odr/</a>.
+          Unsere E-Mail-Adresse finden Sie oben im Impressum.
+        </p>
+        <p>
+          Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer
+          Verbraucherschlichtungsstelle teilzunehmen.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Haftung für Inhalte</h2>
+        <p>
+          Als Diensteanbieter sind wir gemäß § 7 Abs. 1 TMG für eigene Inhalte auf diesen Seiten nach den
+          allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als Diensteanbieter jedoch
+          nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen oder nach
+          Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen. Verpflichtungen zur
+          Entfernung oder Sperrung der Nutzung von Informationen nach den allgemeinen Gesetzen bleiben
+          hiervon unberührt.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Haftung für Links</h2>
+        <p>
+          Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen Einfluss
+          haben. Deshalb können wir für diese fremden Inhalte auch keine Gewähr übernehmen. Für die
+          Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber der Seiten
+          verantwortlich.
+        </p>
+
+        <h2 class="text-2xl font-semibold text-foreground mt-10">Urheberrecht</h2>
+        <p>
+          Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem
+          deutschen Urheberrecht. Beiträge Dritter sind als solche gekennzeichnet. Vervielfältigung,
+          Bearbeitung, Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechtes
+          bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

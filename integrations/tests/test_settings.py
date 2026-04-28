@@ -182,7 +182,6 @@ class SettingsSaveGroupViewTest(TestCase):
             'ZOOM_CLIENT_SECRET': 'my_secret',
             'ZOOM_ACCOUNT_ID': 'my_account',
             'ZOOM_WEBHOOK_SECRET_TOKEN': 'my_token',
-            'confirm_update': 'on',
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
@@ -204,7 +203,6 @@ class SettingsSaveGroupViewTest(TestCase):
             'ZOOM_CLIENT_SECRET': '',
             'ZOOM_ACCOUNT_ID': '',
             'ZOOM_WEBHOOK_SECRET_TOKEN': '',
-            'confirm_update': 'on',
         })
         setting = IntegrationSetting.objects.get(key='ZOOM_CLIENT_ID')
         self.assertEqual(setting.value, 'new_val')
@@ -219,7 +217,6 @@ class SettingsSaveGroupViewTest(TestCase):
             'ZOOM_CLIENT_SECRET': '',
             'ZOOM_ACCOUNT_ID': '',
             'ZOOM_WEBHOOK_SECRET_TOKEN': '',
-            'confirm_update': 'on',
         })
         # After save, cache should be cleared and new value returned
         result = get_config('ZOOM_CLIENT_ID')
@@ -245,47 +242,11 @@ class SettingsSaveGroupViewTest(TestCase):
             'ZOOM_CLIENT_SECRET': 'val',
             'ZOOM_ACCOUNT_ID': 'val',
             'ZOOM_WEBHOOK_SECRET_TOKEN': 'val',
-            'confirm_update': 'on',
         })
         setting = IntegrationSetting.objects.get(key='ZOOM_CLIENT_ID')
         self.assertEqual(setting.group, 'zoom')
         self.assertTrue(setting.is_secret)
         self.assertIn('client ID', setting.description)
-
-    def test_save_without_confirm_update_does_not_write(self):
-        # Defense-in-depth against browser password-manager autofill
-        # silently overwriting credentials. Server is the source of
-        # truth: no `confirm_update=on` means no DB write.
-        self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.post('/studio/settings/zoom/save/', {
-            'ZOOM_CLIENT_ID': 'autofilled_junk',
-            'ZOOM_CLIENT_SECRET': 'autofilled_junk',
-            'ZOOM_ACCOUNT_ID': 'autofilled_junk',
-            'ZOOM_WEBHOOK_SECRET_TOKEN': 'autofilled_junk',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(IntegrationSetting.objects.count(), 0)
-        # Flash error tells the operator what to do.
-        msgs = [str(m) for m in response.wsgi_request._messages]
-        self.assertTrue(any('Apply changes' in m for m in msgs))
-
-    def test_save_with_non_on_confirm_update_does_not_write(self):
-        # Only the literal string "on" (HTML checkbox value) unlocks the
-        # save path. Anything else — including "true" — is rejected.
-        self.client.login(email='admin@test.com', password='testpass')
-        IntegrationSetting.objects.create(
-            key='ZOOM_CLIENT_ID', value='preserved', group='zoom',
-        )
-        self.client.post('/studio/settings/zoom/save/', {
-            'ZOOM_CLIENT_ID': 'overwritten',
-            'ZOOM_CLIENT_SECRET': '',
-            'ZOOM_ACCOUNT_ID': '',
-            'ZOOM_WEBHOOK_SECRET_TOKEN': '',
-            'confirm_update': 'true',
-        })
-        # Existing value MUST NOT be overwritten by a missing/wrong confirm.
-        setting = IntegrationSetting.objects.get(key='ZOOM_CLIENT_ID')
-        self.assertEqual(setting.value, 'preserved')
 
 
 class SettingsDashboardAutofillSuppressionTest(TestCase):

@@ -162,7 +162,7 @@ class AuthProviderSaveTest(TestCase):
     def test_save_creates_socialapp_with_correct_fields(self):
         response = self.client.post(
             '/studio/settings/auth/google/save/',
-            {'client_id': 'goog-test-id', 'client_secret': 'goog-test-secret', 'confirm_update': 'on'},
+            {'client_id': 'goog-test-id', 'client_secret': 'goog-test-secret'},
         )
         self.assertEqual(response.status_code, 302)
         app = SocialApp.objects.get(provider='google')
@@ -173,7 +173,7 @@ class AuthProviderSaveTest(TestCase):
     def test_save_attaches_current_site(self):
         self.client.post(
             '/studio/settings/auth/google/save/',
-            {'client_id': 'cid', 'client_secret': 'sec', 'confirm_update': 'on'},
+            {'client_id': 'cid', 'client_secret': 'sec'},
         )
         app = SocialApp.objects.get(provider='google')
         current_site = Site.objects.get_current()
@@ -183,11 +183,11 @@ class AuthProviderSaveTest(TestCase):
         # First save creates, second save updates the same row.
         self.client.post(
             '/studio/settings/auth/github/save/',
-            {'client_id': 'old', 'client_secret': 'old-sec', 'confirm_update': 'on'},
+            {'client_id': 'old', 'client_secret': 'old-sec'},
         )
         self.client.post(
             '/studio/settings/auth/github/save/',
-            {'client_id': 'gh-new-id', 'client_secret': 'gh-new-sec', 'confirm_update': 'on'},
+            {'client_id': 'gh-new-id', 'client_secret': 'gh-new-sec'},
         )
         apps = SocialApp.objects.filter(provider='github')
         self.assertEqual(apps.count(), 1)
@@ -202,7 +202,7 @@ class AuthProviderSaveTest(TestCase):
         )
         self.client.post(
             '/studio/settings/auth/slack/save/',
-            {'client_id': '', 'client_secret': '', 'confirm_update': 'on'},
+            {'client_id': '', 'client_secret': ''},
         )
         app = SocialApp.objects.get(provider='slack')
         self.assertEqual(app.client_id, '')
@@ -211,7 +211,7 @@ class AuthProviderSaveTest(TestCase):
     def test_save_unknown_provider_does_not_create_row(self):
         response = self.client.post(
             '/studio/settings/auth/twitter/save/',
-            {'client_id': 'x', 'client_secret': 'y', 'confirm_update': 'on'},
+            {'client_id': 'x', 'client_secret': 'y'},
         )
         # Whitelist: redirect back to settings with an error message,
         # but no SocialApp row for the unknown provider.
@@ -221,39 +221,9 @@ class AuthProviderSaveTest(TestCase):
     def test_save_redirects_to_provider_anchor(self):
         response = self.client.post(
             '/studio/settings/auth/google/save/',
-            {'client_id': 'cid', 'client_secret': 'sec', 'confirm_update': 'on'},
+            {'client_id': 'cid', 'client_secret': 'sec'},
         )
         self.assertIn('#auth-google', response.url)
-
-    def test_save_without_confirm_update_does_not_create_socialapp(self):
-        # If a browser password-manager autofills client_id +
-        # client_secret and the operator hits Save by reflex, the
-        # missing `confirm_update=on` checkbox value MUST keep the
-        # write from happening — no SocialApp gets created with junk.
-        response = self.client.post(
-            '/studio/settings/auth/google/save/',
-            {'client_id': 'autofilled@junk.com', 'client_secret': 'autofilled-pw'},
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(SocialApp.objects.filter(provider='google').count(), 0)
-        msgs = [str(m) for m in response.wsgi_request._messages]
-        self.assertTrue(any('Apply changes' in m for m in msgs))
-
-    def test_save_without_confirm_update_does_not_overwrite_existing(self):
-        # Real prod-day footgun: a populated SocialApp gets overwritten
-        # by autofilled junk. The confirm gate keeps the existing row.
-        SocialApp.objects.create(
-            provider='github', name='GitHub',
-            client_id='real-cid', secret='real-secret',
-        )
-        self.client.post(
-            '/studio/settings/auth/github/save/',
-            {'client_id': 'autofilled@junk.com', 'client_secret': 'autofilled-pw'},
-        )
-        app = SocialApp.objects.get(provider='github')
-        self.assertEqual(app.client_id, 'real-cid')
-        self.assertEqual(app.secret, 'real-secret')
-
 
 class IntegrationSaveRegressionTest(TestCase):
     """Existing IntegrationSetting save flow still works after reorganisation."""

@@ -92,14 +92,5 @@ function copyCallbackUrl(btn) {
   }
 }
 
-// Each settings card starts with a disabled Save button. The operator
-// must tick the per-card "Apply changes" checkbox before Save becomes
-// active — defense-in-depth against browser password-manager autofill
-// silently overwriting real credentials with junk.
-document.querySelectorAll('[data-confirm-update]').forEach(function(cb) {
-  var btn = cb.closest('form').querySelector('[data-save-button]');
-  if (!btn) return;
-  cb.addEventListener('change', function() { btn.disabled = !cb.checked; });
-});
 </script>
 {% endblock %}

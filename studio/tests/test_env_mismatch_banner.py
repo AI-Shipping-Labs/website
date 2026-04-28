@@ -332,10 +332,10 @@ class ProxySSLHeaderTest(TestCase):
 
     @override_settings(SECURE_PROXY_SSL_HEADER=None)
     def test_forwarded_proto_ignored_when_header_setting_unset(self):
-        # Local dev never sets SECURE_PROXY_SSL_HEADER (the gate in
-        # website.settings only sets it when DEBUG=False), so the
-        # forwarded header must be ignored — otherwise any local caller
-        # could spoof https by sending the header.
+        # Sanity check on Django's own behavior: when SECURE_PROXY_SSL_HEADER
+        # is not configured, the forwarded header is ignored. This isn't the
+        # current production config (we always set the header now), but it
+        # locks the underlying invariant we depend on.
         request = self.factory.get(
             '/studio/',
             HTTP_HOST='localhost:8000',
@@ -344,20 +344,22 @@ class ProxySSLHeaderTest(TestCase):
         self.assertEqual(request.scheme, 'http')
         self.assertFalse(request.is_secure())
 
-    def test_settings_module_gates_secure_proxy_header_on_debug(self):
-        # Lock the gating in website/settings.py: the conditional block
-        # that sets SECURE_PROXY_SSL_HEADER must be guarded by
-        # ``if not DEBUG`` so the header is never trusted in local dev.
-        # A grep-style assertion guards against accidental removal of
-        # the gate (e.g. someone unconditionally sets the header during
-        # a refactor and silently weakens dev-mode CSRF/session checks).
+    def test_settings_module_sets_secure_proxy_header_unconditionally(self):
+        # Lock the unconditional `SECURE_PROXY_SSL_HEADER` line in
+        # website/settings.py. The previous `if not DEBUG:` gate broke
+        # dev (where DEBUG=True is set on the ECS task), causing the
+        # host-mismatch banner to false-fire. A grep-style assertion
+        # guards against the gate being re-added.
         settings_path = (
             Path(django_settings.BASE_DIR) / 'website' / 'settings.py'
         )
         source = settings_path.read_text()
         self.assertIn(
+            "SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')",
+            source,
+        )
+        self.assertNotIn(
             "if not DEBUG:\n"
-            "    SECURE_PROXY_SSL_HEADER = "
-            "('HTTP_X_FORWARDED_PROTO', 'https')",
+            "    SECURE_PROXY_SSL_HEADER",
             source,
         )

@@ -329,7 +329,138 @@ class TestWorkshopSitemap:
 
 
 # ----------------------------------------------------------------------
-# Scenario 6: Draft workshop is hidden everywhere.
+# Scenario 6: Action buttons render above the description and the
+# tutorial pages list (issue #360).
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopActionButtonsAboveDescription:
+    def test_action_buttons_render_above_description_and_pages_list(
+        self, browser, django_server,
+    ):
+        """Visitor with access sees video / tutorial / GitHub buttons
+        immediately under the title, before the description and the
+        tutorial pages list."""
+        _clear_workshops()
+        _create_workshop(
+            slug='ws',
+            landing=0,
+            pages=0,
+            recording=0,
+            code_repo_url='https://github.com/example/repo',
+        )
+        _create_user('main@test.com', tier_slug='main')
+
+        ctx = _auth_context(browser, 'main@test.com')
+        page = ctx.new_page()
+        page.goto(
+            f'{django_server}/workshops/ws',
+            wait_until='domcontentloaded',
+        )
+
+        # Title is rendered.
+        assert page.locator(
+            '[data-testid="workshop-title"]',
+        ).count() == 1
+
+        # All action buttons present.
+        video_link = page.locator('[data-testid="workshop-video-link"]')
+        tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
+        repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
+        description = page.locator('[data-testid="workshop-description"]')
+        pages_list = page.locator('[data-testid="workshop-pages-list"]')
+
+        assert video_link.count() == 1
+        assert tutorial_link.count() == 1
+        assert repo_link.count() == 1
+        assert description.count() == 1
+        assert pages_list.count() == 1
+
+        # Compare DOM order via vertical position.
+        video_box = video_link.bounding_box()
+        tutorial_box = tutorial_link.bounding_box()
+        repo_box = repo_link.bounding_box()
+        description_box = description.bounding_box()
+        pages_box = pages_list.bounding_box()
+
+        assert video_box is not None
+        assert tutorial_box is not None
+        assert repo_box is not None
+        assert description_box is not None
+        assert pages_box is not None
+
+        # Action block sits ABOVE the description.
+        assert video_box['y'] < description_box['y']
+        assert tutorial_box['y'] < description_box['y']
+        assert repo_box['y'] < description_box['y']
+        # Description sits above the tutorial pages list.
+        assert description_box['y'] < pages_box['y']
+
+        ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestWorkshopWithoutCodeRepoNoEmptySlot:
+    def test_no_code_repo_no_empty_button_row(
+        self, browser, django_server,
+    ):
+        """When the workshop has no code_repo_url, the GitHub button
+        is absent from the DOM (no empty container)."""
+        _clear_workshops()
+        _create_workshop(
+            slug='ws-nogit',
+            landing=0,
+            pages=0,
+            recording=0,
+            code_repo_url='',
+        )
+        _create_user('main@test.com', tier_slug='main')
+
+        ctx = _auth_context(browser, 'main@test.com')
+        page = ctx.new_page()
+        page.goto(
+            f'{django_server}/workshops/ws-nogit',
+            wait_until='domcontentloaded',
+        )
+
+        # GitHub button is not rendered at all.
+        repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
+        assert repo_link.count() == 0
+
+        # Video + tutorial cards still render above the description.
+        video_link = page.locator('[data-testid="workshop-video-link"]')
+        tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
+        description = page.locator('[data-testid="workshop-description"]')
+
+        assert video_link.count() == 1
+        assert tutorial_link.count() == 1
+        assert description.count() == 1
+
+        video_box = video_link.bounding_box()
+        tutorial_box = tutorial_link.bounding_box()
+        description_box = description.bounding_box()
+
+        assert video_box is not None
+        assert tutorial_box is not None
+        assert description_box is not None
+
+        assert video_box['y'] < description_box['y']
+        assert tutorial_box['y'] < description_box['y']
+
+        # No empty wrapper sits where the repo button used to be: the
+        # template gates the entire `<div class="mb-12">…</div>` wrapper
+        # behind `{% if workshop.code_repo_url %}`, so no element with
+        # the repo testid exists, and there's no anchor pointing at
+        # github.com from the action block.
+        github_anchors = page.locator('a[href*="github.com"]').count()
+        assert github_anchors == 0
+
+        ctx.close()
+
+
+# ----------------------------------------------------------------------
+# Scenario 7: Draft workshop is hidden everywhere.
 # ----------------------------------------------------------------------
 
 

@@ -1,0 +1,102 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Confirm contacts import{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_user_import' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Choose a different file
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">Confirm import</h1>
+  <p class="text-muted-foreground mt-1 text-sm">
+    Reviewing <span class="font-mono">{{ filename }}</span> ({{ total_rows }} data row{{ total_rows|pluralize }}).
+    Pick the email column, optionally set a tag and tier, then click Import.
+  </p>
+</div>
+
+{% if error %}
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" data-testid="import-error">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-4xl mb-6" data-testid="import-preview">
+  <h2 class="text-lg font-semibold text-foreground mb-3">Preview (first {{ preview_rows|length }} row{{ preview_rows|length|pluralize }})</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-secondary">
+        <tr>
+          {% for col in header %}
+          <th class="text-left px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in preview_rows %}
+        <tr>
+          {% for cell in row %}
+          <td class="px-3 py-2 text-foreground font-mono text-xs break-all">{{ cell }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <form method="post" action="{% url 'studio_user_import_confirm' %}" data-testid="import-confirm-form">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label for="id_email_column" class="block text-sm font-medium text-foreground mb-1">Email column</label>
+      <select id="id_email_column" name="email_column" required
+              data-testid="import-email-column"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% for col in header %}
+        <option value="{{ col }}" {% if col == default_email_column %}selected{% endif %}>{{ col }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">All other columns are ignored.</p>
+    </div>
+
+    <div class="mb-6">
+      <label for="id_tag" class="block text-sm font-medium text-foreground mb-1">Tag (optional)</label>
+      <input type="text" id="id_tag" name="tag"
+             placeholder="e.g. event-2026-signup"
+             autocomplete="off"
+             data-testid="import-tag-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">
+        Normalized to lowercase / hyphens. Appended to existing users; new users are created with this tag.
+      </p>
+    </div>
+
+    <div class="mb-6">
+      <label for="id_tier" class="block text-sm font-medium text-foreground mb-1">Tier</label>
+      <select id="id_tier" name="tier_id"
+              data-testid="import-tier-select"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="{{ no_tier_sentinel }}" selected>(no tier change)</option>
+        {% for tier in tiers %}
+        <option value="{{ tier.pk }}">{{ tier.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">
+        Selecting a paid tier creates a 10-year tier override per user (does not touch Stripe-managed subscriptions). Free is a no-op.
+      </p>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit"
+              data-testid="import-confirm-submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Import
+      </button>
+      <a href="{% url 'studio_user_import' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

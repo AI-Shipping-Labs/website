@@ -1,0 +1,74 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Import result{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_user_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to users
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">Import result</h1>
+  {% if tag or tier_name %}
+  <p class="text-muted-foreground mt-1 text-sm" data-testid="import-applied-summary">
+    Applied
+    {% if tag %}tag <span class="font-mono">{{ tag }}</span>{% endif %}
+    {% if tag and tier_name %}and{% endif %}
+    {% if tier_name %}tier <span class="font-mono">{{ tier_name }}</span> override{% endif %}.
+  </p>
+  {% endif %}
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 max-w-3xl">
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Created</p>
+    <p class="text-2xl font-semibold text-green-400 mt-1" data-testid="import-result-created">{{ created }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Updated</p>
+    <p class="text-2xl font-semibold text-blue-400 mt-1" data-testid="import-result-updated">{{ updated }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Skipped</p>
+    <p class="text-2xl font-semibold text-foreground mt-1" data-testid="import-result-skipped">{{ skipped }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-xs text-muted-foreground uppercase tracking-wider">Malformed</p>
+    <p class="text-2xl font-semibold text-red-400 mt-1" data-testid="import-result-malformed">{{ malformed }}</p>
+  </div>
+</div>
+
+{% if warnings %}
+<h2 class="text-lg font-semibold text-foreground mb-3">Warnings ({{ warnings|length }})</h2>
+<div class="bg-card border border-border rounded-lg overflow-hidden mb-8 max-w-4xl" data-testid="import-warnings-table">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Row</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Value</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row_number, value, reason in warnings %}
+      <tr>
+        <td class="px-6 py-4 text-xs text-foreground font-mono">{{ row_number }}</td>
+        <td class="px-6 py-4 text-xs text-foreground font-mono break-all">{{ value }}</td>
+        <td class="px-6 py-4 text-sm text-red-400">{{ reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm text-muted-foreground mb-8" data-testid="import-no-warnings">No warnings.</p>
+{% endif %}
+
+<div class="flex items-center space-x-4">
+  <a href="{% url 'studio_user_list' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    Back to users list
+  </a>
+  <a href="{% url 'studio_user_import' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    Import another file
+  </a>
+</div>
+{% endblock %}

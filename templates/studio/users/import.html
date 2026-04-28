@@ -1,0 +1,50 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Import contacts{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_user_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Users
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">Import contacts</h1>
+  <p class="text-muted-foreground mt-1 text-sm">
+    Upload a CSV of contacts. On the next step you'll pick which column holds the email address and optionally apply a tag and tier to the whole batch.
+  </p>
+</div>
+
+{% if error %}
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" data-testid="import-error">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <form method="post" enctype="multipart/form-data" action="{% url 'studio_user_import' %}" data-testid="import-upload-form">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label for="id_csv_file" class="block text-sm font-medium text-foreground mb-1">CSV file</label>
+      <input type="file" id="id_csv_file" name="csv_file" accept=".csv" required
+             data-testid="import-file-input"
+             class="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-accent file:text-accent-foreground hover:file:opacity-90">
+      <p class="text-xs text-muted-foreground mt-1">
+        Up to 5 MB. The header row is required. Columns other than the chosen email column are ignored.
+      </p>
+    </div>
+
+    <div class="bg-secondary border border-border rounded-lg p-4 mb-6">
+      <p class="text-xs text-muted-foreground uppercase tracking-wider mb-2">Example</p>
+      <pre class="text-xs text-foreground font-mono whitespace-pre-wrap">Name,Email,Source
+Ada,ada@example.com,event-2026
+Grace,grace@example.com,event-2026</pre>
+    </div>
+
+    <button type="submit"
+            data-testid="import-upload-submit"
+            class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Continue
+    </button>
+  </form>
+</div>
+{% endblock %}

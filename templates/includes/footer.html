@@ -28,7 +28,7 @@
     </div>
     {% endif %}
 
-    <div class="mt-16 grid gap-8 border-t border-border pt-8 sm:grid-cols-2">
+    <div class="mt-16 grid gap-8 border-t border-border pt-8 sm:grid-cols-3">
       <div>
         <a href="/" class="flex items-center gap-2">
           <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-6 w-6">
@@ -53,6 +53,21 @@
           </li>
           <li>
             <a href="{{ stripe_customer_portal_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Manage Subscription</a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 class="text-sm font-semibold text-foreground">Legal</h3>
+        <ul class="mt-4 space-y-1">
+          <li>
+            <a href="/terms/" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Terms of Service</a>
+          </li>
+          <li>
+            <a href="/privacy/" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Privacy Policy</a>
+          </li>
+          <li>
+            <a href="/impressum/" class="inline-flex min-h-[44px] items-center text-sm text-muted-foreground transition-colors hover:text-foreground">Impressum</a>
           </li>
         </ul>
       </div>

@@ -166,6 +166,9 @@ class StaticViewSitemap(Sitemap):
             'workshops_list',
             'collection_list',
             'tags_index',
+            'terms',
+            'privacy',
+            'impressum',
         ]
 
     def location(self, item):

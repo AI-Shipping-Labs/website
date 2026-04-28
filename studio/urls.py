@@ -88,8 +88,11 @@ from studio.views.tier_overrides import tier_override_create, tier_override_page
 from studio.views.users import (
     user_create,
     user_create_done,
+    user_detail,
     user_export_csv,
     user_list,
+    user_tag_add,
+    user_tag_remove,
 )
 from studio.views.utm_analytics import (
     utm_campaign_detail as utm_analytics_campaign_detail,
@@ -295,6 +298,13 @@ urlpatterns = [
     # Manually create user (issue #234)
     path('users/new/', user_create, name='studio_user_create'),
     path('users/created/', user_create_done, name='studio_user_create_done'),
+
+    # User detail page + contact tags (issue #354). The literal ``new/``,
+    # ``created/``, ``export``, and ``tier-override/`` prefixes are
+    # registered above so the ``<int:user_id>`` route does not swallow them.
+    path('users/<int:user_id>/', user_detail, name='studio_user_detail'),
+    path('users/<int:user_id>/tags/add', user_tag_add, name='studio_user_tag_add'),
+    path('users/<int:user_id>/tags/remove', user_tag_remove, name='studio_user_tag_remove'),
 
     # Announcement banner
     path('announcement/', announcement_banner_edit, name='studio_announcement_banner'),

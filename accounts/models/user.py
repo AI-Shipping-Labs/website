@@ -111,6 +111,17 @@ class User(AbstractUser):
         help_text="User's preferred theme: 'dark', 'light', or '' (follow system).",
     )
 
+    # Operator-managed contact tags (issue #354). Free-form short slugs
+    # ("early-adopter", "ai-hero-waitlist") used by Studio for segmentation.
+    # Always stored as a list of normalized strings (see
+    # accounts/utils/tags.py); empty list when there are no tags. SEPARATE
+    # namespace from content tags -- never rendered on public pages.
+    tags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Operator-managed contact tags (Studio-only; staff-only data).",
+    )
+
     class Meta:
         ordering = ["-date_joined"]
 

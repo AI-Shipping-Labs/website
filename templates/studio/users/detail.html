@@ -1,0 +1,105 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}User: {{ detail_user.email }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_user_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to users
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2 break-all" data-testid="user-detail-email">{{ detail_user.email }}</h1>
+  <p class="text-muted-foreground mt-1">User details and contact tags. Visible to staff only.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+
+  <!-- Profile summary -->
+  <div class="bg-card border border-border rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Profile</h2>
+    <dl class="space-y-3 text-sm">
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Email</dt>
+        <dd class="text-foreground font-mono break-all">{{ detail_user.email }}</dd>
+      </div>
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Tier</dt>
+        <dd class="text-foreground" data-testid="user-detail-tier">
+          {{ tier_name }}
+          {% if has_override %}
+          <span class="text-xs text-muted-foreground">(override active)</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Joined</dt>
+        <dd class="text-foreground">{{ detail_user.date_joined|date:"M d, Y" }}</dd>
+      </div>
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Subscribed</dt>
+        <dd>
+          {% if is_subscribed %}
+          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Yes</span>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">No</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Status</dt>
+        <dd class="text-foreground">{{ status }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Tags -->
+  <div class="bg-card border border-border rounded-lg p-6" data-testid="user-tags-section">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Tags</h2>
+
+    <div class="mb-4">
+      {% if tags %}
+      <div class="flex flex-wrap gap-2" data-testid="user-tags-chips">
+        {% for tag in tags %}
+        <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-accent/20 text-accent-foreground border border-accent/40" data-testid="user-tag-chip" data-tag="{{ tag }}">
+          {{ tag }}
+          <form method="post" action="{% url 'studio_user_tag_remove' detail_user.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="tag" value="{{ tag }}">
+            <button type="submit"
+                    class="text-muted-foreground hover:text-foreground"
+                    aria-label="Remove tag {{ tag }}"
+                    data-testid="user-tag-remove">x</button>
+          </form>
+        </span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-sm text-muted-foreground" data-testid="user-tags-empty">No tags yet. Add one below.</p>
+      {% endif %}
+    </div>
+
+    <form method="post" action="{% url 'studio_user_tag_add' detail_user.pk %}" class="flex flex-wrap items-center gap-2" data-testid="user-tag-add-form">
+      {% csrf_token %}
+      <input type="text"
+             name="tag"
+             list="known-contact-tags"
+             placeholder="Add a tag..."
+             autocomplete="off"
+             data-testid="user-tag-input"
+             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+      <datalist id="known-contact-tags">
+        {% for tag in known_tags %}
+        <option value="{{ tag }}"></option>
+        {% endfor %}
+      </datalist>
+      <button type="submit"
+              data-testid="user-tag-add-submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Add tag
+      </button>
+    </form>
+    <p class="text-xs text-muted-foreground mt-2">
+      Tags are normalized to lowercase and hyphenated. They are visible to staff only and never rendered on public pages.
+    </p>
+  </div>
+</div>
+{% endblock %}

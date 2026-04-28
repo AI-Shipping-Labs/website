@@ -1735,8 +1735,16 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
 
     Iterates ``course_dirs`` (absolute paths to dirs containing
     ``course.yaml``) and upserts a ``Course`` row plus its Modules and
-    Units for each. Performs the stale-Course soft-delete sweep at the
-    end. Replaces the legacy ``_sync_courses`` orchestrator.
+    Units for each. Performs the stale-Course sweep at the end:
+
+    - When a stale row's ``content_id`` matches an active published row
+      (anywhere in the DB, not just this repo), the stale row is treated
+      as an orphan from a rename / cross-repo move: enrollments,
+      individual access grants, cohorts, and per-unit progress are
+      reattached to the published row by ``Unit.content_id``, then the
+      orphan is deleted (issue #366).
+    - Otherwise the row is soft-deleted to ``status='draft'`` so any
+      historical FKs are preserved (legacy behavior, unchanged).
     """
     from content.models import Course
 
@@ -1751,11 +1759,12 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
         )
 
     # Edge Case 3: Exclude failed slugs from stale-content cleanup
-    stale_courses = Course.objects.filter(
+    stale_courses = list(Course.objects.filter(
         source_repo=source.repo_name,
         status='published',
-    ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs)
+    ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs))
 
+    deleted_count = 0
     for course in stale_courses:
         stats['items_detail'].append({
             'title': course.title,
@@ -1765,9 +1774,101 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
             'course_id': course.pk,
             'course_slug': course.slug,
         })
-    deleted_count = stale_courses.count()
-    stale_courses.update(status='draft')
+        deleted_count += 1
+
+        # Issue #366: if a published sibling holds the same content_id
+        # (e.g. the course was renamed and re-synced earlier in this
+        # walk, or moved to another repo), reattach FKs to it and
+        # delete the orphan instead of leaving a draft behind. Without
+        # this, the dashboard's Continue Learning widget keeps building
+        # URLs against the old slug.
+        sibling = None
+        if course.content_id is not None:
+            sibling = Course.objects.filter(
+                content_id=course.content_id,
+                status='published',
+            ).exclude(pk=course.pk).first()
+
+        if sibling is not None:
+            _reattach_course_fks(course, sibling)
+            course.delete()
+        else:
+            course.status = 'draft'
+            course.save(update_fields=['status', 'updated_at'])
     stats['deleted'] += deleted_count
+
+
+def _reattach_course_fks(orphan_course, target_course):
+    """Move enrollment / progress / cohort FKs off ``orphan_course``.
+
+    Issue #366: when a course is renamed (slug changes but ``content_id``
+    is stable), the sync may end up with two ``Course`` rows that share
+    a ``content_id``. Any ``Enrollment``, ``CourseAccess``, or
+    ``Cohort`` rows attached to the orphan need to follow the live
+    course; ``UserCourseProgress`` rows are repointed unit-by-unit by
+    matching ``Unit.content_id`` so per-lesson completion survives.
+
+    Units in the orphan that have no ``content_id`` match in the target
+    are left attached to the orphan: deleting them would silently lose
+    a user's completion record. The caller decides whether to delete
+    the orphan course (cascading those leftovers) or keep it around.
+
+    The only side-effect is FK rewrites + a WARNING log per orphan unit
+    that couldn't be matched. Idempotent: running with the same orphan
+    twice is a no-op (no rows left to move).
+    """
+    from content.models import (
+        CourseAccess,
+        Enrollment,
+        Unit,
+        UserCourseProgress,
+    )
+    from content.models.cohort import Cohort
+
+    Enrollment.objects.filter(course=orphan_course).update(
+        course=target_course,
+    )
+    CourseAccess.objects.filter(course=orphan_course).update(
+        course=target_course,
+    )
+    Cohort.objects.filter(course=orphan_course).update(course=target_course)
+
+    target_unit_by_content_id = {
+        unit.content_id: unit
+        for unit in Unit.objects.filter(
+            module__course=target_course,
+        ).exclude(content_id__isnull=True)
+    }
+
+    orphan_units = Unit.objects.filter(
+        module__course=orphan_course,
+    ).select_related('module')
+
+    for unit in orphan_units:
+        target = (
+            target_unit_by_content_id.get(unit.content_id)
+            if unit.content_id is not None else None
+        )
+        if target is None:
+            # No content_id match — refusing to silently lose the
+            # progress data. Leave UserCourseProgress on this orphan
+            # unit; if the orphan course is deleted, the cascade will
+            # remove the progress (which is the correct outcome: the
+            # unit no longer exists anywhere).
+            if UserCourseProgress.objects.filter(unit=unit).exists():
+                logger.warning(
+                    'Course %s (%s): orphan unit %s (content_id=%s) has '
+                    'no match in target course %s; leaving '
+                    'UserCourseProgress rows attached to the orphan.',
+                    orphan_course.slug, orphan_course.pk, unit.slug,
+                    unit.content_id, target_course.slug,
+                )
+            continue
+        if target.pk == unit.pk:
+            # Unit was already moved (orphan_course == target_course
+            # via stale module/unit reuse); nothing to do.
+            continue
+        UserCourseProgress.objects.filter(unit=unit).update(unit=target)
 
 
 def _sync_single_course(
@@ -1805,8 +1906,35 @@ def _sync_single_course(
             stats['errors'].append({'file': rel_path, 'error': msg})
             return
 
-        # Edge Case 2: Slug collision across sources
-        if _check_slug_collision(Course, slug, source.repo_name, rel_path):
+        # Edge Case 2: Slug collision across sources.
+        # Issue #366 carve-out: when the colliding row shares this course's
+        # ``content_id``, it's the same logical course moving between repos
+        # (or a stale draft from an earlier rename in a different repo) —
+        # we want to claim it, not skip. The full match-and-reattach logic
+        # below handles repointing the FKs.
+        existing_with_slug = Course.objects.filter(slug=slug).exclude(
+            source_repo=source.repo_name,
+        ).first()
+        # ``content_id`` is stored as ``UUIDField`` but YAML frontmatter
+        # parses to a string. Coerce both sides to a string before
+        # comparing so a cross-repo move with a stable ``content_id`` is
+        # recognized as the same logical course (issue #366).
+        existing_cid = (
+            str(existing_with_slug.content_id)
+            if existing_with_slug is not None
+            and existing_with_slug.content_id is not None
+            else None
+        )
+        if (
+            existing_with_slug is not None
+            and existing_cid != str(course_content_id)
+        ):
+            other_source = existing_with_slug.source_repo or 'studio'
+            logger.warning(
+                "Slug collision: '%s' already exists from source '%s' "
+                "(source_repo=%s). Skipped %s.",
+                slug, other_source, existing_with_slug.source_repo, rel_path,
+            )
             stats['errors'].append({
                 'file': rel_path,
                 'error': (
@@ -1866,12 +1994,27 @@ def _sync_single_course(
         }
 
         # Prefer the stable content_id over slug when locating an existing
-        # course row. This lets authors rename a course (slug/title/source
-        # path) without triggering a duplicate content_id insert.
-        course = Course.objects.filter(
-            content_id=course_content_id,
-            source_repo=source.repo_name,
-        ).first()
+        # course row. Issue #366: scope by content_id ALONE (not
+        # ``content_id`` + ``source_repo``) so a course that moves between
+        # repos, or a draft row left behind by an earlier rename, is
+        # reused instead of duplicated. The matcher prefers a published
+        # row (this sync's repo first) and falls back to draft rows so
+        # we resurrect-on-rename rather than create a new orphan.
+        candidates = list(
+            Course.objects.filter(content_id=course_content_id),
+        )
+        course = None
+        if candidates:
+            # Stable preference order: same-repo published, other-repo
+            # published, same-repo draft, other-repo draft. This keeps the
+            # historical "match the row in this repo" behavior in the common
+            # case while still claiming a sibling row when the course moved.
+            def _priority(c):
+                same_repo = 0 if c.source_repo == source.repo_name else 1
+                is_draft = 0 if c.status == 'published' else 1
+                return (is_draft, same_repo, c.pk)
+            candidates.sort(key=_priority)
+            course = candidates[0]
 
         # Backward-compat fallback: older synced rows may predate content_id
         # backfills, so still support slug-based matching when the stable-ID
@@ -1891,6 +2034,8 @@ def _sync_single_course(
             identity_changed = (
                 course.slug != slug
                 or course.source_path != rel_path
+                or course.source_repo != source.repo_name
+                or course.status != 'published'
             )
             if identity_changed or _defaults_differ(course, course_defaults):
                 course.slug = slug
@@ -1902,6 +2047,16 @@ def _sync_single_course(
             else:
                 created = False
                 changed = False
+
+            # Issue #366: any other Course row that shares this
+            # content_id is an orphan from an earlier rename / cross-repo
+            # move. Reattach its FKs to the live row and delete it so
+            # the dashboard stops building URLs against the old slug.
+            for sibling in candidates:
+                if sibling.pk == course.pk:
+                    continue
+                _reattach_course_fks(sibling, course)
+                sibling.delete()
 
         if changed:
             action = 'created' if created else 'updated'

@@ -10,6 +10,7 @@ from django.core.validators import validate_email
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from accounts.utils.tags import normalize_tags
 from email_app.models import EmailCampaign
 from email_app.services.email_service import EmailService, EmailServiceError
 from studio.decorators import staff_required
@@ -17,6 +18,10 @@ from studio.decorators import staff_required
 logger = logging.getLogger(__name__)
 
 TEST_RECIPIENT_SPLIT_RE = re.compile(r"[\s,;]+")
+# Operators may type tags comma-, space-, semicolon-, or newline-separated
+# in the include/exclude inputs (issue #357). The form also submits HTML
+# multi-select values as a list, so we accept both shapes.
+TAG_INPUT_SPLIT_RE = re.compile(r"[\s,;]+")
 TEST_EMAIL_FOOTER_NOTE = (
     "Test send only. This address is not linked to a subscriber record, so no unsubscribe link is included."
 )
@@ -66,6 +71,52 @@ def _summarize_recipients(recipients, *, limit=3):
     return f"{', '.join(recipients[:limit])} (+{len(recipients) - limit} more)"
 
 
+def _parse_campaign_tags(request, field_name):
+    """Parse a campaign tag input (include/exclude) into a normalized list.
+
+    Accepts both ``getlist`` (multi-select, repeated inputs) and a single
+    free-form string with comma/space/semicolon/newline separators -- the
+    typeahead input ships values as a single text field and the multi-
+    select form ships them as repeated POST keys, so support both.
+
+    De-duplicates while preserving the operator's original order so the
+    detail-page summary reads in a predictable shape.
+    """
+    pieces = []
+    raw_list = request.POST.getlist(field_name)
+    for raw in raw_list:
+        if raw is None:
+            continue
+        # A single field may itself contain a comma-separated list of tags
+        # (free-form typing), so split each entry too.
+        pieces.extend(TAG_INPUT_SPLIT_RE.split(raw))
+
+    seen = set()
+    ordered = []
+    for tag in normalize_tags(pieces):
+        if tag and tag not in seen:
+            seen.add(tag)
+            ordered.append(tag)
+    return ordered
+
+
+def _all_known_contact_tags():
+    """Sorted union of every existing contact tag across users.
+
+    Powers the typeahead ``<datalist>`` on the campaign form so operators
+    pick from tags already in use. Mirrors the helper in
+    ``studio/views/users.py`` (issue #354) -- if you change one, change
+    both.
+    """
+    seen = set()
+    for tag_list in User.objects.values_list('tags', flat=True):
+        if not tag_list:
+            continue
+        for tag in normalize_tags(tag_list):
+            seen.add(tag)
+    return sorted(seen)
+
+
 @staff_required
 def campaign_list(request):
     """List all email campaigns with stats."""
@@ -96,11 +147,15 @@ def campaign_create(request):
         subject = request.POST.get("subject", "").strip()
         body = request.POST.get("body", "")
         target_min_level = int(request.POST.get("target_min_level", 0))
+        target_tags_any = _parse_campaign_tags(request, "target_tags_any")
+        target_tags_none = _parse_campaign_tags(request, "target_tags_none")
 
         campaign = EmailCampaign.objects.create(
             subject=subject,
             body=body,
             target_min_level=target_min_level,
+            target_tags_any=target_tags_any,
+            target_tags_none=target_tags_none,
             status="draft",
         )
         messages.success(
@@ -119,6 +174,7 @@ def campaign_create(request):
             "campaign": None,
             "form_action": "create",
             "recipient_count": recipient_count,
+            "known_tags": _all_known_contact_tags(),
         },
     )
 
@@ -145,11 +201,21 @@ def campaign_edit(request, campaign_id):
         subject = request.POST.get("subject", "").strip()
         body = request.POST.get("body", "")
         target_min_level = int(request.POST.get("target_min_level", 0))
+        target_tags_any = _parse_campaign_tags(request, "target_tags_any")
+        target_tags_none = _parse_campaign_tags(request, "target_tags_none")
 
         campaign.subject = subject
         campaign.body = body
         campaign.target_min_level = target_min_level
-        campaign.save(update_fields=["subject", "body", "target_min_level"])
+        campaign.target_tags_any = target_tags_any
+        campaign.target_tags_none = target_tags_none
+        campaign.save(update_fields=[
+            "subject",
+            "body",
+            "target_min_level",
+            "target_tags_any",
+            "target_tags_none",
+        ])
 
         messages.success(
             request,
@@ -165,6 +231,7 @@ def campaign_edit(request, campaign_id):
             "campaign": campaign,
             "form_action": "edit",
             "recipient_count": recipient_count,
+            "known_tags": _all_known_contact_tags(),
         },
     )
 
@@ -347,6 +414,8 @@ def campaign_duplicate(request, campaign_id):
         subject=f"{campaign.subject} (Copy)",
         body=campaign.body,
         target_min_level=campaign.target_min_level,
+        target_tags_any=list(campaign.target_tags_any or []),
+        target_tags_none=list(campaign.target_tags_none or []),
         status="draft",
     )
     messages.success(

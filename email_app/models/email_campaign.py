@@ -7,8 +7,10 @@ from django.utils import timezone
 class EmailCampaign(models.Model):
     """Email campaign for newsletter sends.
 
-    Campaigns target users by minimum tier level and track
-    send status and recipient counts.
+    Campaigns target users by minimum tier level and (issue #357) by
+    contact tags from ``User.tags``. Tag filters AND with the tier-level
+    filter so an operator can scope a send to e.g. "Main+ AND has the
+    `early-adopter` tag".
     """
 
     STATUS_CHOICES = [
@@ -36,6 +38,26 @@ class EmailCampaign(models.Model):
             '0 = everyone, 10 = Basic+, 20 = Main+, 30 = Premium.'
         ),
     )
+    # Contact-tag scoping (issue #357). Both fields hold a list of normalized
+    # tag strings (see ``accounts/utils/tags.py``). Empty list means "no
+    # filter on this side": empty include = include everyone, empty exclude =
+    # exclude no one. Both empty = behavior identical to pre-#357.
+    target_tags_any = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            'Recipient must carry at least one of these contact tags. '
+            'Empty list = no include filter.'
+        ),
+    )
+    target_tags_none = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            'Recipient must not carry any of these contact tags. '
+            'Empty list = no exclude filter.'
+        ),
+    )
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -61,14 +83,21 @@ class EmailCampaign(models.Model):
     def get_eligible_recipients(self):
         """Query users eligible to receive this campaign.
 
-        Returns a queryset of users where:
+        Returns a queryset of users where ALL of the following hold:
         - effective tier level >= target_min_level
           (base tier or active override)
         - unsubscribed = False
         - email_verified = True
+        - if ``target_tags_any`` is non-empty: ``user.tags`` contains at
+          least one of those tags.
+        - if ``target_tags_none`` is non-empty: ``user.tags`` contains
+          none of those tags.
+
+        Empty tag lists mean "no filter on that side" — both empty
+        reproduces the exact pre-#357 behavior.
         """
         User = get_user_model()
-        return (
+        base_qs = (
             User.objects.filter(
                 unsubscribed=False,
                 email_verified=True,
@@ -83,6 +112,27 @@ class EmailCampaign(models.Model):
             )
             .distinct()
         )
+
+        include_tags = list(self.target_tags_any or [])
+        exclude_tags = list(self.target_tags_none or [])
+        if not include_tags and not exclude_tags:
+            return base_qs
+
+        # Tag membership lives in a JSONField list; SQLite (used in tests)
+        # does not support ``__overlap`` on JSONField. Match the
+        # Python-side approach #354 used for the user-list filter so
+        # behavior is consistent across both backends.
+        include_set = set(include_tags)
+        exclude_set = set(exclude_tags)
+        eligible_ids = []
+        for pk, tags in base_qs.values_list('pk', 'tags'):
+            tags = set(tags or [])
+            if include_set and not (tags & include_set):
+                continue
+            if exclude_set and (tags & exclude_set):
+                continue
+            eligible_ids.append(pk)
+        return User.objects.filter(pk__in=eligible_ids)
 
     def get_recipient_count(self):
         """Return the estimated number of eligible recipients."""

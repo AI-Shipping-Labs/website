@@ -39,9 +39,53 @@
         <option value="30" {% if campaign.target_min_level == 30 %}selected{% endif %}>Premium only</option>
       </select>
       <p class="text-xs text-muted-foreground mt-1" data-testid="recipient-count-helper">
-        Will reach {{ recipient_count }} eligible recipient{{ recipient_count|pluralize }} at the current audience level. Save to refresh this count after changing the audience.
+        Will reach {{ recipient_count }} eligible recipient{{ recipient_count|pluralize }} at the current audience and tag filters. Save to refresh this count after changes.
       </p>
     </div>
+
+    {# Issue #357: tag scoping ANDs with the audience tier filter above. #}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="target-tags-any-input">
+        Include tags (any of)
+      </label>
+      <input type="text"
+             id="target-tags-any-input"
+             name="target_tags_any"
+             list="known-contact-tags"
+             value="{% for tag in campaign.target_tags_any %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+             autocomplete="off"
+             placeholder="early-adopter, ai-hero-waitlist"
+             data-testid="target-tags-any-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">
+        Recipient must carry at least one of these contact tags. Comma- or space-separated. Empty = no include filter.
+      </p>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="target-tags-none-input">
+        Exclude tags (none of)
+      </label>
+      <input type="text"
+             id="target-tags-none-input"
+             name="target_tags_none"
+             list="known-contact-tags"
+             value="{% for tag in campaign.target_tags_none %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+             autocomplete="off"
+             placeholder="bounced, unsubscribed-newsletter"
+             data-testid="target-tags-none-input"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">
+        Recipient must not carry any of these contact tags. Empty = no exclude filter.
+      </p>
+    </div>
+
+    {# Shared typeahead dataset for both include and exclude inputs (issue #354 pattern). #}
+    <datalist id="known-contact-tags">
+      {% for tag in known_tags %}
+      <option value="{{ tag }}"></option>
+      {% endfor %}
+    </datalist>
   </div>
 
   <div class="flex items-center space-x-4">

@@ -11,7 +11,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
@@ -150,6 +150,286 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
             subject='Test', body='Hi', target_min_level=0,
         )
         self.assertEqual(campaign.get_recipient_count(), 5)
+
+
+@tag('core')
+class EmailCampaignTagTargetingTest(TierSetupMixin, TestCase):
+    """Issue #357: tag-based recipient targeting on top of tier level.
+
+    Locks in the AND semantics: tier-level filter, include-tags filter
+    (any-of), and exclude-tags filter (none-of) all AND together. Empty
+    tag lists mean "no filter on that side", so a campaign saved before
+    #357 (both lists empty) returns the same queryset as before.
+    """
+
+    def setUp(self):
+        # Three Free, verified, subscribed users with different tag shapes.
+        self.alice = User.objects.create_user(
+            email='alice@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+        )
+        self.alice.tags = ['early-adopter']
+        self.alice.save(update_fields=['tags'])
+
+        self.bob = User.objects.create_user(
+            email='bob@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+        )
+        self.bob.tags = ['early-adopter', 'bounced']
+        self.bob.save(update_fields=['tags'])
+
+        self.carol = User.objects.create_user(
+            email='carol@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+        )
+        # No tags.
+
+    def test_both_tag_filters_empty_matches_pre_357_behavior(self):
+        """Regression: both tag fields empty == pre-#357 queryset."""
+        campaign = EmailCampaign.objects.create(
+            subject='No tag filter', body='Hi', target_min_level=0,
+        )
+        emails = set(
+            campaign.get_eligible_recipients().values_list('email', flat=True),
+        )
+        self.assertEqual(
+            emails,
+            {'alice@test.com', 'bob@test.com', 'carol@test.com'},
+        )
+
+    def test_include_tags_any_only(self):
+        """target_tags_any narrows to users carrying at least one tag."""
+        campaign = EmailCampaign.objects.create(
+            subject='Early adopters', body='Hi', target_min_level=0,
+            target_tags_any=['early-adopter'],
+        )
+        emails = set(
+            campaign.get_eligible_recipients().values_list('email', flat=True),
+        )
+        self.assertEqual(emails, {'alice@test.com', 'bob@test.com'})
+        self.assertNotIn('carol@test.com', emails)
+
+    def test_exclude_tags_none_only(self):
+        """target_tags_none excludes users carrying any of the tags."""
+        campaign = EmailCampaign.objects.create(
+            subject='Drop bounced', body='Hi', target_min_level=0,
+            target_tags_none=['bounced'],
+        )
+        emails = set(
+            campaign.get_eligible_recipients().values_list('email', flat=True),
+        )
+        # Bob has 'bounced' so he is excluded; Alice and Carol stay.
+        self.assertEqual(emails, {'alice@test.com', 'carol@test.com'})
+        self.assertNotIn('bob@test.com', emails)
+
+    def test_include_and_exclude_combined(self):
+        """Include and exclude AND together: must match include AND avoid exclude."""
+        campaign = EmailCampaign.objects.create(
+            subject='Early adopters minus bounced',
+            body='Hi', target_min_level=0,
+            target_tags_any=['early-adopter'],
+            target_tags_none=['bounced'],
+        )
+        emails = set(
+            campaign.get_eligible_recipients().values_list('email', flat=True),
+        )
+        # Alice: early-adopter, no bounced => in. Bob: early-adopter AND
+        # bounced => out. Carol: no tags => out (fails include).
+        self.assertEqual(emails, {'alice@test.com'})
+
+    def test_tag_filter_ands_with_target_min_level(self):
+        """Tag filter ANDs with the existing tier-level filter."""
+        # Promote Alice to Main, leave Bob on Free with the tag.
+        self.alice.tier = self.main_tier
+        self.alice.save(update_fields=['tier'])
+
+        campaign = EmailCampaign.objects.create(
+            subject='Main+ early adopters', body='Hi',
+            target_min_level=20,
+            target_tags_any=['early-adopter'],
+        )
+        emails = set(
+            campaign.get_eligible_recipients().values_list('email', flat=True),
+        )
+        # Only Alice satisfies Main+ AND has the early-adopter tag.
+        self.assertEqual(emails, {'alice@test.com'})
+
+    def test_tag_filter_excludes_unverified_and_unsubscribed(self):
+        """Tag filter does not bypass the verification/subscribed gates."""
+        unverified = User.objects.create_user(
+            email='unverified@test.com', tier=self.free_tier,
+            email_verified=False, unsubscribed=False,
+        )
+        unverified.tags = ['early-adopter']
+        unverified.save(update_fields=['tags'])
+
+        unsub = User.objects.create_user(
+            email='unsub@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=True,
+        )
+        unsub.tags = ['early-adopter']
+        unsub.save(update_fields=['tags'])
+
+        campaign = EmailCampaign.objects.create(
+            subject='Tag filter respects gates', body='Hi',
+            target_min_level=0,
+            target_tags_any=['early-adopter'],
+        )
+        emails = set(
+            campaign.get_eligible_recipients().values_list('email', flat=True),
+        )
+        # Alice and Bob carry the tag and pass the gates; the unverified
+        # and unsubscribed users with the same tag are still rejected.
+        self.assertEqual(emails, {'alice@test.com', 'bob@test.com'})
+
+
+@tag('core')
+class CampaignDuplicateCopiesTagsTest(TierSetupMixin, TestCase):
+    """campaign_duplicate must copy both tag fields onto the new draft (#357)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            email='admin@test.com', password='adminpass123',
+        )
+        self.admin.email_verified = True
+        self.admin.tier = self.free_tier
+        self.admin.save()
+        self.client.login(email='admin@test.com', password='adminpass123')
+
+    def test_duplicate_copies_target_tag_fields(self):
+        original = EmailCampaign.objects.create(
+            subject='Tagged Campaign',
+            body='Hi',
+            target_min_level=20,
+            target_tags_any=['early-adopter'],
+            target_tags_none=['bounced'],
+            status='draft',
+        )
+
+        url = reverse(
+            'studio_campaign_duplicate', args=[original.pk],
+        )
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+
+        duplicate = EmailCampaign.objects.exclude(pk=original.pk).get()
+        self.assertEqual(duplicate.target_tags_any, ['early-adopter'])
+        self.assertEqual(duplicate.target_tags_none, ['bounced'])
+        # And the new copy is a fresh draft (not linked to the original).
+        self.assertEqual(duplicate.status, 'draft')
+        self.assertEqual(duplicate.target_min_level, 20)
+
+
+@tag('core')
+@override_settings(
+    # The base studio template loads hashed static assets via
+    # ``CompressedManifestStaticFilesStorage``. Inside the test runner
+    # ``collectstatic`` is not run, so the manifest lookup raises. Switch
+    # to the simple non-hashing storage for tests that actually render
+    # the studio detail HTML. Other (admin/non-render) tests in this
+    # file don't need this and stay on the production setting.
+    STORAGES={
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    },
+)
+class CampaignFormTagPersistTest(TierSetupMixin, TestCase):
+    """The Studio campaign form persists include/exclude tags (#357)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            email='admin@test.com', password='adminpass123',
+        )
+        self.admin.email_verified = True
+        self.admin.tier = self.free_tier
+        self.admin.save()
+        self.client.login(email='admin@test.com', password='adminpass123')
+
+    def test_create_persists_normalized_tag_fields(self):
+        url = reverse('studio_campaign_create')
+        response = self.client.post(url, {
+            'subject': 'Tagged draft',
+            'body': 'Hi',
+            'target_min_level': 0,
+            # Free-form: mixed case, comma- and space-separated.
+            'target_tags_any': 'Early-Adopter, ai-hero-waitlist',
+            'target_tags_none': 'bounced',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        campaign = EmailCampaign.objects.get(subject='Tagged draft')
+        self.assertEqual(
+            campaign.target_tags_any,
+            ['early-adopter', 'ai-hero-waitlist'],
+        )
+        self.assertEqual(campaign.target_tags_none, ['bounced'])
+
+    def test_edit_overwrites_tag_fields(self):
+        campaign = EmailCampaign.objects.create(
+            subject='Edit me',
+            body='Hi',
+            target_min_level=0,
+            target_tags_any=['early-adopter'],
+            target_tags_none=['bounced'],
+            status='draft',
+        )
+        url = reverse('studio_campaign_edit', args=[campaign.pk])
+        response = self.client.post(url, {
+            'subject': 'Edited',
+            'body': 'Hi',
+            'target_min_level': 0,
+            # Clear include, replace exclude with a different list.
+            'target_tags_any': '',
+            'target_tags_none': 'bounced spammer',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.target_tags_any, [])
+        self.assertEqual(campaign.target_tags_none, ['bounced', 'spammer'])
+
+    def test_detail_page_renders_active_tag_filters(self):
+        campaign = EmailCampaign.objects.create(
+            subject='With tags',
+            body='Hi',
+            target_min_level=0,
+            target_tags_any=['early-adopter'],
+            target_tags_none=['bounced'],
+            status='draft',
+        )
+        url = reverse('studio_campaign_detail', args=[campaign.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        # Detail page surfaces both lists in their dedicated cells.
+        self.assertContains(
+            response,
+            'data-testid="campaign-include-tags"',
+        )
+        self.assertContains(
+            response,
+            'data-testid="campaign-exclude-tags"',
+        )
+        self.assertContains(response, 'early-adopter')
+        self.assertContains(response, 'bounced')
+
+    def test_detail_page_renders_dash_when_no_tag_filters(self):
+        campaign = EmailCampaign.objects.create(
+            subject='No tag filter',
+            body='Hi',
+            target_min_level=0,
+            status='draft',
+        )
+        url = reverse('studio_campaign_detail', args=[campaign.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        # Both cells render the em-dash placeholder when empty.
+        content = response.content.decode()
+        # Two —, one for include, one for exclude.
+        self.assertGreaterEqual(content.count('—'), 2)
 
 @tag('core')
 class SendCampaignFanOutTest(TierSetupMixin, TestCase):

@@ -38,6 +38,18 @@
         <p class="text-sm text-foreground mt-1" data-testid="eligible-recipients">{{ recipient_count }}</p>
       </div>
       <div>
+        <p class="text-sm text-muted-foreground">Include tags</p>
+        <p class="text-sm text-foreground mt-1" data-testid="campaign-include-tags">
+          {% if campaign.target_tags_any %}{{ campaign.target_tags_any|join:", " }}{% else %}—{% endif %}
+        </p>
+      </div>
+      <div>
+        <p class="text-sm text-muted-foreground">Exclude tags</p>
+        <p class="text-sm text-foreground mt-1" data-testid="campaign-exclude-tags">
+          {% if campaign.target_tags_none %}{{ campaign.target_tags_none|join:", " }}{% else %}—{% endif %}
+        </p>
+      </div>
+      <div>
         <p class="text-sm text-muted-foreground">Sent Count</p>
         <p class="text-sm text-foreground mt-1">{{ campaign.sent_count }}</p>
       </div>

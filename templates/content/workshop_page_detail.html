@@ -102,8 +102,8 @@
           </div>
           {% endif %}
 
-          <!-- Prev / Next -->
-          {% if prev_page or next_page %}
+          <!-- Prev / Next + Mark as completed (issue #365) -->
+          {% if prev_page or next_page or user_authenticated %}
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 border-t border-border pt-8 mt-8">
             {% if prev_page %}
             <a href="{{ prev_page.get_absolute_url }}"
@@ -113,6 +113,27 @@
               <span class="truncate">{{ prev_page.title }}</span>
             </a>
             {% endif %}
+
+            {% if user_authenticated %}
+            <button
+              type="button"
+              id="mark-page-complete-btn"
+              data-page-slug="{{ page.slug }}"
+              data-workshop-slug="{{ workshop.slug }}"
+              data-testid="mark-page-complete-btn"
+              class="inline-flex items-center justify-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors flex-shrink-0
+                     {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20{% else %}border-border bg-card text-foreground hover:bg-muted{% endif %}"
+            >
+              {% if is_completed %}
+              <i data-lucide="check-circle-2" class="h-4 w-4"></i>
+              Completed
+              {% else %}
+              <i data-lucide="circle" class="h-4 w-4"></i>
+              Mark as completed
+              {% endif %}
+            </button>
+            {% endif %}
+
             {% if next_page %}
             <a href="{{ next_page.get_absolute_url }}"
                class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0"
@@ -140,5 +161,52 @@
 {% block extra_scripts %}
 {{ block.super }}
 {% include "_partials/mermaid_script.html" %}
+<script>
+  // Mark workshop page as completed toggle (issue #365). Mirrors the
+  // course unit button JS in templates/content/course_unit_detail.html.
+  (function() {
+    var btn = document.getElementById('mark-page-complete-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', function() {
+      var pageSlug = btn.dataset.pageSlug;
+      var workshopSlug = btn.dataset.workshopSlug;
+      var url = '/api/workshops/' + workshopSlug + '/pages/' + pageSlug + '/complete';
+
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCsrfToken(),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.completed) {
+          btn.classList.remove('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+          btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+          btn.innerHTML = '<i data-lucide="check-circle-2" class="h-4 w-4"></i> Completed';
+        } else {
+          btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+          btn.classList.add('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+          btn.innerHTML = '<i data-lucide="circle" class="h-4 w-4"></i> Mark as completed';
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      });
+    });
+
+    function getCsrfToken() {
+      var cookies = document.cookie.split(';');
+      for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i].trim();
+        if (cookie.startsWith('csrftoken=')) {
+          return cookie.substring('csrftoken='.length);
+        }
+      }
+      return '';
+    }
+  })();
+</script>
 {% include "comments/_qa_script.html" %}
 {% endblock %}

@@ -13,8 +13,12 @@ from content.models import (
     Enrollment,
     Project,
     Unit,
+    UserContentCompletion,
     UserCourseProgress,
+    Workshop,
+    WorkshopPage,
 )
+from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
 from events.models import Event
 
@@ -211,7 +215,20 @@ def _dashboard(request):
     # and compute completion percentage + last accessed unit.
     # A course is "in progress" if the user has at least one completed unit
     # but has not completed all units.
-    in_progress_courses = _get_in_progress_courses(user, user_level)
+    #
+    # Issue #365 — workshops with at least one completed page (and not yet
+    # finished) are merged into the same list under a unified ``kind``
+    # discriminator. Course-only users get the same ordering as before;
+    # the merged list short-circuits the workshop branch when the user has
+    # no workshop completions.
+    in_progress_learning = _get_in_progress_learning(user, user_level)
+    # Backward-compatible alias used by existing course-only tests
+    # (test_dashboard.py, test_dashboard_performance.py): the unified
+    # list filtered down to ``kind='course'`` items so the in-template
+    # iteration and the assertion shape don't shift under those tests.
+    in_progress_courses = [
+        item for item in in_progress_learning if item.get('kind') == 'course'
+    ]
 
     # --- Upcoming events ---
     upcoming_events = _get_upcoming_events(user)
@@ -246,6 +263,7 @@ def _dashboard(request):
         'tier_name': tier_name,
         'override_tier_name': override_tier_name,
         'in_progress_courses': in_progress_courses,
+        'in_progress_learning': in_progress_learning,
         'upcoming_events': upcoming_events,
         'recent_content': recent_content,
         'active_polls': active_polls,
@@ -385,6 +403,7 @@ def _get_in_progress_courses(user, user_level):
         # still slot into the list in a sensible order.
         sort_key = last_completed_at or enrolled_at_by_course[cid]
         result.append({
+            'kind': 'course',
             'course': course,
             'completed_count': completed_count,
             'total_units': total,
@@ -400,6 +419,158 @@ def _get_in_progress_courses(user, user_level):
     for item in result:
         del item['_sort_key']
     return result
+
+
+def _get_in_progress_workshops(user, user_level):
+    """Return workshops the user has started but not finished (issue #365).
+
+    A workshop appears here when:
+
+    - The user has at least one ``UserContentCompletion`` row with
+      ``content_type='workshop_page'`` whose ``object_id`` resolves to
+      a page on a published workshop.
+    - The user's effective tier still meets
+      ``workshop.pages_required_level`` (mirrors the course
+      tier-recheck path; we don't surface workshops the user can no
+      longer access).
+    - At least one page on the workshop is not yet completed.
+
+    There is no workshop-level enrollment table — completing a page is
+    the implicit "I am taking this workshop" signal. This mirrors the
+    course auto-enroll-on-progress behaviour.
+
+    Sorted by most-recent ``completed_at`` desc. The unified list
+    sorts again across kinds in :func:`_get_in_progress_learning`.
+
+    Implementation note: keeps the query count constant. Total query
+    cost (read by the next test ``InProgressLearningQueryCountTest``):
+      1. Fetch all completion rows for this user
+      2. Fetch the workshops for those rows + all their pages
+    """
+    completion_qs = UserContentCompletion.objects.filter(
+        user=user,
+        content_type=CONTENT_TYPE_WORKSHOP_PAGE,
+    ).order_by('-completed_at')
+    completions = list(completion_qs)
+    if not completions:
+        return []
+
+    completed_page_ids: set[int] = set()
+    last_completion_at_by_page: dict[int, object] = {}
+    for c in completions:
+        completed_page_ids.add(c.object_id)
+        prev = last_completion_at_by_page.get(c.object_id)
+        if prev is None or c.completed_at > prev:
+            last_completion_at_by_page[c.object_id] = c.completed_at
+
+    # Resolve the pages -> workshops via prefetch so we can iterate
+    # ``workshop.pages`` from the cache rather than firing per-workshop
+    # queries.
+    pages_qs = (
+        WorkshopPage.objects
+        .filter(pk__in=completed_page_ids)
+        .select_related('workshop')
+    )
+    workshop_ids = {p.workshop_id for p in pages_qs}
+    if not workshop_ids:
+        return []
+
+    workshops = list(
+        Workshop.objects
+        .filter(pk__in=workshop_ids, status='published')
+        .prefetch_related('pages')
+    )
+
+    result = []
+    for workshop in workshops:
+        # Tier recheck — hide workshops the user can no longer access.
+        if user_level < workshop.pages_required_level:
+            continue
+        all_pages = list(workshop.pages.all())
+        if not all_pages:
+            continue
+        total = len(all_pages)
+        completed_count = sum(
+            1 for p in all_pages if p.id in completed_page_ids
+        )
+        if completed_count == 0:
+            # Defensive: completion rows existed but none matched a
+            # current page — likely the page was deleted. Skip.
+            continue
+        if completed_count >= total:
+            # Fully completed — out of "in progress".
+            continue
+        percentage = int((completed_count / total) * 100)
+
+        # Resolve next_page: first page in sort order without a
+        # completion row.
+        next_page = None
+        last_page = None
+        last_completed_at = None
+        for page in all_pages:
+            if page.id not in completed_page_ids and next_page is None:
+                next_page = page
+            ts = last_completion_at_by_page.get(page.id)
+            if ts is not None and (
+                last_completed_at is None or ts > last_completed_at
+            ):
+                last_completed_at = ts
+                last_page = page
+
+        result.append({
+            'kind': 'workshop',
+            'workshop': workshop,
+            'completed_count': completed_count,
+            'total_units': total,
+            'percentage': percentage,
+            'last_page': last_page,
+            'last_completed_at': last_completed_at,
+            'next_page': next_page,
+            '_sort_key': last_completed_at,
+        })
+
+    result.sort(
+        key=lambda x: x['_sort_key'] or 0,
+        reverse=True,
+    )
+    for item in result:
+        del item['_sort_key']
+    return result
+
+
+def _get_in_progress_learning(user, user_level):
+    """Return a unified Continue-Learning list (issue #365).
+
+    Merges :func:`_get_in_progress_courses` and
+    :func:`_get_in_progress_workshops` and sorts by most-recent
+    activity descending. Each item carries a ``kind`` discriminator
+    (``'course'`` or ``'workshop'``) so the dashboard template branches
+    once per row.
+
+    The implementation deliberately concatenates the two specialised
+    helpers rather than rewriting them as a single query, because:
+
+    - ``UserCourseProgress`` and ``UserContentCompletion`` live in
+      different tables with no shared FK.
+    - The course path already has a stable, N+1-safe query plan
+      (verified by ``test_dashboard_performance.py``); keeping that
+      function intact avoids regressing the course-only path while we
+      bolt on the workshop one.
+    """
+    course_items = _get_in_progress_courses(user, user_level)
+    workshop_items = _get_in_progress_workshops(user, user_level)
+    if not workshop_items:
+        # Pure course path — preserves item ordering exactly.
+        return course_items
+
+    def _activity_key(item):
+        if item['kind'] == 'course':
+            return item['last_completed_at'] or item['enrolled_at']
+        return item['last_completed_at']
+
+    merged = course_items + workshop_items
+    merged.sort(key=_activity_key, reverse=True)
+    return merged
 
 
 def _get_upcoming_events(user):

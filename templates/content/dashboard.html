@@ -115,9 +115,43 @@
             </h2>
             <a href="/courses" class="shrink-0 text-sm text-accent hover:underline">View all courses</a>
           </div>
-          {% if in_progress_courses %}
-          <div class="space-y-4">
-            {% for item in in_progress_courses %}
+          {% if in_progress_learning %}
+          <div class="space-y-4" data-testid="continue-learning-list">
+            {% for item in in_progress_learning %}
+            {% if item.kind == 'workshop' %}
+            <!-- Workshop card (issue #365). Mirrors the course card chrome
+                 so the merged list reads as a single Continue-Learning
+                 stream rather than two segregated sub-sections. -->
+            <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="continue-learning-workshop">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <h3 class="font-medium text-foreground truncate">{{ item.workshop.title }}</h3>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    {{ item.completed_count }}/{{ item.total_units }} pages completed
+                  </p>
+                  <div class="mt-2 h-2 w-full rounded-full bg-secondary overflow-hidden">
+                    <div class="h-full rounded-full bg-accent transition-all" style="width: {{ item.percentage }}%"></div>
+                  </div>
+                  {% if item.last_page %}
+                  <p class="mt-1 text-xs text-muted-foreground">
+                    Last: {{ item.last_page.title }}
+                  </p>
+                  {% endif %}
+                </div>
+                {% if item.next_page %}
+                <a href="{{ item.next_page.get_absolute_url }}" aria-label="Continue with {{ item.workshop.title }} — {{ item.next_page.title }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="continue-learning-workshop-cta">
+                  Continue
+                  <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                </a>
+                {% else %}
+                <a href="{{ item.workshop.get_absolute_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="continue-learning-workshop-cta">
+                  Continue
+                  <i data-lucide="arrow-right" class="h-4 w-4"></i>
+                </a>
+                {% endif %}
+              </div>
+            </div>
+            {% else %}
             <div class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
               <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div class="flex-1 min-w-0">
@@ -152,6 +186,7 @@
                 {% endif %}
               </div>
             </div>
+            {% endif %}
             {% endfor %}
           </div>
           {% else %}

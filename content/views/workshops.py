@@ -18,11 +18,13 @@ The catalog always shows every published workshop (with a tier badge) so
 users see what they would unlock by upgrading.
 """
 
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.views.decorators.http import require_POST
 
 from content.access import get_required_tier_name
-from content.models import Workshop
+from content.models import Workshop, WorkshopPage
+from content.services import completion as completion_service
 from content.templatetags.video_utils import (
     append_query_param,
     detect_video_source,
@@ -313,6 +315,17 @@ def workshop_page_detail(request, slug, page_slug):
     else:
         watch_bar_url = ''
 
+    # Issue #365 — server-rendered completion state powers both the
+    # initial button styling and the "still completed after reload"
+    # acceptance criterion. Anonymous users get False without a DB hit
+    # (the service short-circuits) and the template hides the button
+    # for them anyway.
+    is_completed = (
+        request.user.is_authenticated
+        and not is_gated
+        and completion_service.is_completed(request.user, page)
+    )
+
     context.update({
         'page': page,
         'pages': pages,
@@ -322,5 +335,39 @@ def workshop_page_detail(request, slug, page_slug):
         'show_watch_bar': show_watch_bar,
         'watch_bar_url': watch_bar_url,
         'watch_bar_label': page.video_start,
+        'is_completed': is_completed,
+        'user_authenticated': request.user.is_authenticated,
     })
     return render(request, 'content/workshop_page_detail.html', context)
+
+
+@require_POST
+def api_workshop_page_complete(request, slug, page_slug):
+    """POST /api/workshops/<slug>/pages/<page_slug>/complete — toggle.
+
+    Mirrors :func:`content.views.courses.api_course_unit_complete` so
+    the two content types share the same response contract:
+
+    - 401 for anonymous callers.
+    - 403 when the user is below ``pages_required_level``.
+    - ``{"completed": true|false}`` on success.
+
+    Toggle is delegated to the shared completion service so the write
+    paths stay in one place.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+    workshop = _resolve_workshop(slug)
+    page = get_object_or_404(WorkshopPage, workshop=workshop, slug=page_slug)
+    user = request.user
+
+    if not workshop.user_can_access_pages(user):
+        return JsonResponse({'error': 'Access denied'}, status=403)
+
+    if completion_service.is_completed(user, page):
+        completion_service.unmark_completed(user, page)
+        return JsonResponse({'completed': False})
+
+    completion_service.mark_completed(user, page)
+    return JsonResponse({'completed': True})

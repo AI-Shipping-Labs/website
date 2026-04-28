@@ -46,6 +46,7 @@ from content.views.peer_review import (
 )
 from content.views.tags import tags_detail, tags_index
 from content.views.workshops import (
+    api_workshop_page_complete,
     workshop_detail,
     workshop_page_detail,
     workshop_video,
@@ -131,6 +132,12 @@ urlpatterns = [
     path('api/courses/<slug:slug>', api_course_detail, name='api_course_detail'),
     path('api/courses/<slug:slug>/units/<int:unit_id>', api_course_unit_detail, name='api_course_unit_detail'),
     path('api/courses/<slug:slug>/units/<int:unit_id>/complete', api_course_unit_complete, name='api_course_unit_complete'),
+    # Issue #365 — workshop page completion mirrors the course unit endpoint.
+    path(
+        'api/workshops/<slug:slug>/pages/<slug:page_slug>/complete',
+        api_workshop_page_complete,
+        name='api_workshop_page_complete',
+    ),
     path('api/courses/<slug:slug>/cohorts/<int:cohort_id>/enroll', api_cohort_enroll, name='api_cohort_enroll'),
     path('api/courses/<slug:slug>/cohorts/<int:cohort_id>/unenroll', api_cohort_unenroll, name='api_cohort_unenroll'),
     path('api/courses/<slug:slug>/purchase', api_course_purchase, name='api_course_purchase'),

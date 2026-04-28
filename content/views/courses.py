@@ -22,8 +22,8 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
+from content.services import completion as completion_service
 from content.services.enrollment import (
-    auto_enroll_on_progress,
     ensure_enrollment,
     is_enrolled,
 )
@@ -643,7 +643,15 @@ def api_course_unit_detail(request, slug, unit_id):
 
 @require_POST
 def api_course_unit_complete(request, slug, unit_id):
-    """POST /api/courses/{slug}/units/{unit_id}/complete - toggle completion."""
+    """POST /api/courses/{slug}/units/{unit_id}/complete - toggle completion.
+
+    Issue #365 — toggle is now routed through
+    :mod:`content.services.completion` so course units and workshop
+    pages share the same primitives. Behaviour is unchanged: 401 for
+    anonymous, 403 without access, ``{"completed": true|false}``
+    response, and auto-enrollment on first completion (handled inside
+    the service).
+    """
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required'}, status=401)
 
@@ -656,25 +664,13 @@ def api_course_unit_complete(request, slug, unit_id):
     if not has_access:
         return JsonResponse({'error': 'Access denied'}, status=403)
 
-    # Toggle: if progress exists with completed_at, unset it; otherwise create/set it
-    progress, created = UserCourseProgress.objects.get_or_create(
-        user=user, unit=unit,
-    )
-
-    if created or progress.completed_at is None:
-        # Mark as completed
-        progress.completed_at = timezone.now()
-        progress.save()
-        # Auto-enroll on first lesson completion (issue #236). Idempotent —
-        # ensure_enrollment is a no-op when an active enrollment already
-        # exists, so this fires safely even when the user already clicked
-        # the explicit Enroll button.
-        auto_enroll_on_progress(user, course)
-        return JsonResponse({'completed': True})
-    else:
-        # Uncomplete - delete the record
-        progress.delete()
+    # Toggle: if completed, uncomplete; otherwise mark complete.
+    if completion_service.is_completed(user, unit):
+        completion_service.unmark_completed(user, unit)
         return JsonResponse({'completed': False})
+
+    completion_service.mark_completed(user, unit)
+    return JsonResponse({'completed': True})
 
 
 # --- Cohort enrollment endpoints ---

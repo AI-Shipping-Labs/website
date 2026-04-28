@@ -377,14 +377,56 @@ class VideoPlayerTemplateTagTest(TestCase):
         self.assertIn('Setup', html)
         self.assertIn('video-timestamp', html)
 
+    def test_chapters_details_collapsed_by_default(self):
+        """Chapters render inside a <details> with no `open` attribute (#361)."""
+        context = {
+            'url': 'https://youtube.com/watch?v=abc',
+            'ts': [
+                {'time_seconds': 0, 'label': 'Introduction'},
+                {'time_seconds': 125, 'label': 'Setup'},
+            ],
+        }
+        html = self._render(
+            '{% load video_tags %}{% video_player video_url=url timestamps=ts %}',
+            context,
+        )
+        # The chapters block uses an HTML5 <details> element
+        self.assertIn('data-testid="video-chapters"', html)
+        # The <details> wrapper for chapters must NOT include `open` so it
+        # starts collapsed.  Match the opening tag specifically.
+        import re as _re
+        match = _re.search(r'<details[^>]*data-testid="video-chapters"[^>]*>', html)
+        self.assertIsNotNone(match, 'expected <details> wrapper for chapters')
+        self.assertNotIn(' open', match.group(0))
+        # Summary uses the "Chapters" label with a count of 2
+        self.assertIn('Chapters (2)', html)
+        # The legacy "Timestamps" header is gone
+        self.assertNotIn('>Timestamps<', html)
+
     def test_video_without_timestamps_no_timestamp_section(self):
         html = self._render(
             '{% load video_tags %}{% video_player video_url="https://youtube.com/watch?v=abc" %}'
         )
-        # The timestamp section heading should not be present
-        self.assertNotIn('class="mb-3 text-sm font-semibold uppercase', html)
+        # No <details> chapters wrapper renders when timestamps are empty
+        self.assertNotIn('data-testid="video-chapters"', html)
+        self.assertNotIn('Chapters (', html)
         # No timestamp buttons should be rendered
         self.assertNotIn('data-time-seconds=', html)
+
+    def test_chapters_count_matches_timestamp_length(self):
+        """Summary count reflects the actual number of timestamps."""
+        context = {
+            'url': 'https://youtube.com/watch?v=abc',
+            'ts': [
+                {'time_seconds': i * 60, 'label': f'Chapter {i}'}
+                for i in range(5)
+            ],
+        }
+        html = self._render(
+            '{% load video_tags %}{% video_player video_url=url timestamps=ts %}',
+            context,
+        )
+        self.assertIn('Chapters (5)', html)
 
     def test_youtube_includes_iframe_api(self):
         html = self._render(

@@ -29,9 +29,17 @@
   {% endif %}
 
   {% if has_timestamps %}
-  <div class="mt-4 rounded-lg border border-border bg-card p-4">
-    <h3 class="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Timestamps</h3>
-    <div class="space-y-1">
+  <style>
+    .video-chapters > summary::-webkit-details-marker,
+    .video-chapters > summary::marker { display: none; }
+    .video-chapters[open] .video-chapters-chevron { transform: rotate(180deg); }
+  </style>
+  <details class="video-chapters mt-4 rounded-lg border border-border bg-card" data-testid="video-chapters">
+    <summary class="cursor-pointer list-none flex items-center gap-3 px-4 py-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted/50 transition-colors rounded-lg">
+      <span class="flex-1">Chapters ({{ timestamps|length }})</span>
+      <i data-lucide="chevron-down" class="video-chapters-chevron h-4 w-4 transition-transform duration-200 flex-shrink-0"></i>
+    </summary>
+    <div class="space-y-1 px-4 pb-4">
       {% for ts in timestamps %}
       <button
         type="button"
@@ -46,7 +54,7 @@
       </button>
       {% endfor %}
     </div>
-  </div>
+  </details>
   {% endif %}
 </div>
 

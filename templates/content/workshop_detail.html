@@ -82,13 +82,10 @@
       </div>
       {% else %}
 
-      <!-- Description (always shown when landing is accessible) -->
-      {% if workshop.description_html %}
-      <div class="prose mb-12" data-testid="workshop-description">
-        {{ workshop.description_html|safe }}
-      </div>
-      {% endif %}
-
+      <!-- Action buttons block: video + tutorial cards and the GitHub
+           code repo button render immediately under the header so
+           returning visitors can jump into the content without scrolling
+           past the description. -->
       <!-- Section nav: video + tutorial cards link out to the dedicated
            pages. Each one shows its own access state so the visitor knows
            up-front what they would be unlocking. -->
@@ -164,6 +161,13 @@
           View code on GitHub
           <i data-lucide="external-link" class="h-3 w-3"></i>
         </a>
+      </div>
+      {% endif %}
+
+      <!-- Description (always shown when landing is accessible) -->
+      {% if workshop.description_html %}
+      <div class="prose mb-12" data-testid="workshop-description">
+        {{ workshop.description_html|safe }}
       </div>
       {% endif %}
 

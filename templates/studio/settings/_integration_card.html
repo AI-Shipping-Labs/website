@@ -28,8 +28,21 @@ Context:
     {% csrf_token %}
     <div class="space-y-4">
       {% for field in group.fields %}
-      <div>
-        <label for="field-{{ field.key }}" class="block text-sm font-medium text-gray-300 mb-1">{{ field.description }}</label>
+      <div data-field-key="{{ field.key }}">
+        <div class="flex items-center justify-between mb-1 gap-2">
+          <label for="field-{{ field.key }}" class="block text-sm font-medium text-gray-300">{{ field.description }}</label>
+          {# Source badge — replaces the old "(from env)" text. Three states. #}
+          {% if field.source == 'db' %}
+            <span data-source-badge="db"
+                  class="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 whitespace-nowrap">Source: DB override</span>
+          {% elif field.source == 'env' %}
+            <span data-source-badge="env"
+                  class="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 whitespace-nowrap">Source: env</span>
+          {% else %}
+            <span data-source-badge="none"
+                  class="px-2 py-0.5 text-xs rounded-full bg-gray-500/20 text-gray-400 whitespace-nowrap">Source: not set</span>
+          {% endif %}
+        </div>
         <div class="flex items-center gap-2">
           {% if field.is_boolean %}
             <label class="inline-flex items-center gap-2">
@@ -67,10 +80,35 @@ Context:
               data-lpignore="true"
               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent">
           {% endif %}
-          {% if field.source == 'env' %}
-            <span class="text-xs text-gray-500 whitespace-nowrap">(from env)</span>
+          {% comment %}
+          Clear-override icon button — only shown when DB is winning. Clears
+          this field's input and submits the surrounding group form so the
+          other keys in the group keep their stored values. The save view
+          treats an empty submitted value as "delete the row".
+          {% endcomment %}
+          {% if field.source == 'db' %}
+            <button type="button"
+                    onclick="clearOverride(this, '{{ field.key }}')"
+                    data-clear-override="{{ field.key }}"
+                    title="Remove this DB override and use the env value"
+                    aria-label="Clear override for {{ field.key }}"
+                    class="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md border border-border text-xs text-gray-400 hover:text-gray-200 hover:bg-muted/60 transition-colors">
+              &times;
+            </button>
           {% endif %}
         </div>
+        {# One-line muted hint — only renders for DB-override state. Secrets redacted. #}
+        {% if field.source == 'db' %}
+          {% if field.env_value %}
+            <p class="mt-1 text-xs text-gray-500" data-env-hint="present">
+              Env value: <span class="font-mono">{% if field.is_secret %}************{% else %}{{ field.env_value }}{% endif %}</span> (would apply if override cleared)
+            </p>
+          {% else %}
+            <p class="mt-1 text-xs text-gray-500" data-env-hint="absent">
+              No env value set (clearing override would leave this empty)
+            </p>
+          {% endif %}
+        {% endif %}
         <p class="mt-0.5 text-xs text-gray-500 font-mono">{{ field.key }}</p>
       </div>
       {% endfor %}

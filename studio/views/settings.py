@@ -83,6 +83,7 @@ def _build_group_context(group_def, db_settings):
             'is_boolean': key_def.get('is_boolean', False),
             'current_value': current_value,
             'source': source,
+            'env_value': env_value,
         })
 
     if keys_set == total_keys:
@@ -138,19 +139,36 @@ def settings_save_group(request, group_name):
     for key_def in group_def['keys']:
         key = key_def['key']
         if key_def.get('is_boolean'):
+            # Booleans always store an explicit "true"/"false" — an unticked
+            # checkbox means false, never absent. Don't delete these rows.
             value = 'true' if request.POST.get(key) == 'true' else 'false'
+            IntegrationSetting.objects.update_or_create(
+                key=key,
+                defaults={
+                    'value': value,
+                    'is_secret': key_def.get('is_secret', False),
+                    'group': group_name,
+                    'description': key_def.get('description', ''),
+                },
+            )
         else:
             value = request.POST.get(key, '')
-
-        IntegrationSetting.objects.update_or_create(
-            key=key,
-            defaults={
-                'value': value,
-                'is_secret': key_def.get('is_secret', False),
-                'group': group_name,
-                'description': key_def.get('description', ''),
-            },
-        )
+            if value == '':
+                # Empty value clears the DB override and falls back to env.
+                # ``key`` came from iterating the registry above, so we know
+                # it is safe to delete — we never touch keys outside the
+                # registry from this view.
+                IntegrationSetting.objects.filter(key=key).delete()
+            else:
+                IntegrationSetting.objects.update_or_create(
+                    key=key,
+                    defaults={
+                        'value': value,
+                        'is_secret': key_def.get('is_secret', False),
+                        'group': group_name,
+                        'description': key_def.get('description', ''),
+                    },
+                )
         saved_count += 1
 
     clear_config_cache()

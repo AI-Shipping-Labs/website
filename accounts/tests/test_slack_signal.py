@@ -183,6 +183,59 @@ class SlackSignalSetUserIdOnSignupTest(TestCase):
         self.assertEqual(user.slack_user_id, "")
 
 
+class SlackOAuthSetsSlackMemberTest(TestCase):
+    """Issue #358: Slack OAuth proves workspace membership."""
+
+    def test_slack_login_sets_slack_member_true(self):
+        user = User.objects.create_user(email='oauth@example.com')
+        self.assertFalse(user.slack_member)
+        self.assertIsNone(user.slack_checked_at)
+
+        extra_data = {
+            'https://slack.com/user_id': 'U_OAUTH',
+            'email': 'oauth@example.com',
+        }
+        sociallogin = _make_sociallogin('slack', extra_data, user)
+
+        set_slack_user_id_on_social_login(
+            sender=None, request=MagicMock(), sociallogin=sociallogin,
+        )
+
+        user.refresh_from_db()
+        self.assertTrue(user.slack_member)
+        self.assertIsNotNone(user.slack_checked_at)
+
+    def test_slack_signup_sets_slack_member_true(self):
+        user = User.objects.create_user(email='newoauth@example.com')
+
+        extra_data = {
+            'https://slack.com/user_id': 'U_NEWOAUTH',
+            'email': 'newoauth@example.com',
+        }
+        sociallogin = _make_sociallogin('slack', extra_data, user)
+
+        set_slack_user_id_on_social_signup(
+            sender=None, request=MagicMock(), sociallogin=sociallogin,
+        )
+
+        user.refresh_from_db()
+        self.assertTrue(user.slack_member)
+        self.assertIsNotNone(user.slack_checked_at)
+
+    def test_non_slack_provider_does_not_flip_slack_member(self):
+        user = User.objects.create_user(email='google@example.com')
+        extra_data = {'sub': 'google-id'}
+        sociallogin = _make_sociallogin('google', extra_data, user)
+
+        set_slack_user_id_on_social_login(
+            sender=None, request=MagicMock(), sociallogin=sociallogin,
+        )
+
+        user.refresh_from_db()
+        self.assertFalse(user.slack_member)
+        self.assertIsNone(user.slack_checked_at)
+
+
 class SlackLoginMarksEmailVerifiedTest(TestCase):
     """Verify the existing mark_email_verified_on_social_login signal handler
     also fires for Slack logins (it works for all OAuth providers)."""

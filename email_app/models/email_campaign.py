@@ -26,6 +26,19 @@ class EmailCampaign(models.Model):
         (30, 'Premium only'),
     ]
 
+    # Issue #358: tri-state Slack-membership filter applied alongside
+    # the tier filter. Operators use this to target campaigns at users
+    # who are or aren't already in the Slack workspace (e.g. nudging
+    # main-tier users who haven't joined to do so).
+    SLACK_FILTER_ANY = 'any'
+    SLACK_FILTER_YES = 'yes'
+    SLACK_FILTER_NO = 'no'
+    SLACK_FILTER_CHOICES = [
+        (SLACK_FILTER_ANY, 'Any'),
+        (SLACK_FILTER_YES, 'Members only'),
+        (SLACK_FILTER_NO, 'Non-members only'),
+    ]
+
     subject = models.CharField(max_length=255)
     body = models.TextField(
         help_text='Campaign body in markdown or HTML.',
@@ -56,6 +69,16 @@ class EmailCampaign(models.Model):
         help_text=(
             'Recipient must not carry any of these contact tags. '
             'Empty list = no exclude filter.'
+        ),
+    )
+    slack_filter = models.CharField(
+        max_length=10,
+        choices=SLACK_FILTER_CHOICES,
+        default=SLACK_FILTER_ANY,
+        help_text=(
+            'Restrict recipients by verified Slack workspace membership. '
+            '"any" applies no filter; "yes" sends only to members; '
+            '"no" sends only to non-members. Issue #358.'
         ),
     )
     status = models.CharField(
@@ -92,6 +115,7 @@ class EmailCampaign(models.Model):
           least one of those tags.
         - if ``target_tags_none`` is non-empty: ``user.tags`` contains
           none of those tags.
+        - slack_member matches ``slack_filter`` (any/yes/no)
 
         Empty tag lists mean "no filter on that side" — both empty
         reproduces the exact pre-#357 behavior.
@@ -110,8 +134,12 @@ class EmailCampaign(models.Model):
                     tier_overrides__override_tier__level__gte=self.target_min_level,
                 )
             )
-            .distinct()
         )
+        if self.slack_filter == self.SLACK_FILTER_YES:
+            base_qs = base_qs.filter(slack_member=True)
+        elif self.slack_filter == self.SLACK_FILTER_NO:
+            base_qs = base_qs.filter(slack_member=False)
+        base_qs = base_qs.distinct()
 
         include_tags = list(self.target_tags_any or [])
         exclude_tags = list(self.target_tags_none or [])

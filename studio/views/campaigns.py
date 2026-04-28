@@ -149,6 +149,9 @@ def campaign_create(request):
         target_min_level = int(request.POST.get("target_min_level", 0))
         target_tags_any = _parse_campaign_tags(request, "target_tags_any")
         target_tags_none = _parse_campaign_tags(request, "target_tags_none")
+        slack_filter = _normalize_slack_filter(
+            request.POST.get("slack_filter", "")
+        )
 
         campaign = EmailCampaign.objects.create(
             subject=subject,
@@ -156,6 +159,7 @@ def campaign_create(request):
             target_min_level=target_min_level,
             target_tags_any=target_tags_any,
             target_tags_none=target_tags_none,
+            slack_filter=slack_filter,
             status="draft",
         )
         messages.success(
@@ -177,6 +181,14 @@ def campaign_create(request):
             "known_tags": _all_known_contact_tags(),
         },
     )
+
+
+def _normalize_slack_filter(value):
+    """Map raw form value to a valid EmailCampaign slack_filter choice."""
+    valid = {choice[0] for choice in EmailCampaign.SLACK_FILTER_CHOICES}
+    if value in valid:
+        return value
+    return EmailCampaign.SLACK_FILTER_ANY
 
 
 @staff_required
@@ -203,18 +215,23 @@ def campaign_edit(request, campaign_id):
         target_min_level = int(request.POST.get("target_min_level", 0))
         target_tags_any = _parse_campaign_tags(request, "target_tags_any")
         target_tags_none = _parse_campaign_tags(request, "target_tags_none")
+        slack_filter = _normalize_slack_filter(
+            request.POST.get("slack_filter", "")
+        )
 
         campaign.subject = subject
         campaign.body = body
         campaign.target_min_level = target_min_level
         campaign.target_tags_any = target_tags_any
         campaign.target_tags_none = target_tags_none
+        campaign.slack_filter = slack_filter
         campaign.save(update_fields=[
             "subject",
             "body",
             "target_min_level",
             "target_tags_any",
             "target_tags_none",
+            "slack_filter",
         ])
 
         messages.success(
@@ -416,6 +433,7 @@ def campaign_duplicate(request, campaign_id):
         target_min_level=campaign.target_min_level,
         target_tags_any=list(campaign.target_tags_any or []),
         target_tags_none=list(campaign.target_tags_none or []),
+        slack_filter=campaign.slack_filter,
         status="draft",
     )
     messages.success(

@@ -65,6 +65,13 @@ VALID_FILTERS = {
 }
 DEFAULT_FILTER = FILTER_ALL
 
+# Slack-membership filter (issue #358). Tri-state: any/yes/no.
+SLACK_FILTER_ANY = 'any'
+SLACK_FILTER_YES = 'yes'
+SLACK_FILTER_NO = 'no'
+VALID_SLACK_FILTERS = {SLACK_FILTER_ANY, SLACK_FILTER_YES, SLACK_FILTER_NO}
+DEFAULT_SLACK_FILTER = SLACK_FILTER_ANY
+
 
 def _normalize_filter(value):
     """Map the raw ``filter`` query param to one of ``VALID_FILTERS``.
@@ -75,6 +82,25 @@ def _normalize_filter(value):
     if value in VALID_FILTERS:
         return value
     return DEFAULT_FILTER
+
+
+def _normalize_slack_filter(value):
+    """Map the raw ``slack`` query param to one of ``VALID_SLACK_FILTERS``."""
+    if value in VALID_SLACK_FILTERS:
+        return value
+    return DEFAULT_SLACK_FILTER
+
+
+def _slack_status(user):
+    """Return a tri-state Slack membership label for the listing.
+
+    - "Member" — verified to be in the Slack workspace.
+    - "Not in Slack" — verified to be absent.
+    - "Never checked" — never probed (slack_checked_at IS NULL).
+    """
+    if user.slack_checked_at is None:
+        return 'Never checked'
+    return 'Member' if user.slack_member else 'Not in Slack'
 
 
 def _base_tier_level(user):
@@ -143,12 +169,24 @@ def _matches_filter(user, active_filter, override=None):
     return True
 
 
-def _build_user_listing(active_filter, search, tag_filter=''):
+def _matches_slack_filter(user, slack_filter):
+    """Apply the Slack-membership filter on top of the tier filter."""
+    if slack_filter == SLACK_FILTER_YES:
+        return bool(user.slack_member)
+    if slack_filter == SLACK_FILTER_NO:
+        return not user.slack_member
+    return True
+
+
+def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER):
     """Build filtered rows plus aggregate counts for the users page/export.
 
     ``tag_filter`` is the raw ``?tag=`` query value; we normalize it
     server-side so ``?tag=Early%20Adopter`` matches ``early-adopter``. An
     empty / whitespace tag filter is treated as "no tag filter".
+
+    ``slack_filter`` is the tri-state Slack-membership filter (issue
+    #358). It ANDs with the tier and tag filters.
     """
     all_users = list(User.objects.select_related('tier').all())
     override_map = _active_override_map(all_users)
@@ -167,6 +205,9 @@ def _build_user_listing(active_filter, search, tag_filter=''):
         if normalized_tag and normalized_tag not in (user.tags or []):
             continue
 
+        if not _matches_slack_filter(user, slack_filter):
+            continue
+
         user_rows.append({
             'pk': user.pk,
             'email': user.email,
@@ -178,6 +219,9 @@ def _build_user_listing(active_filter, search, tag_filter=''):
             'tier_name': _effective_tier_name(user, override),
             'status': _user_status(user),
             'tags': list(user.tags or []),
+            'slack_status': _slack_status(user),
+            'slack_member': bool(user.slack_member),
+            'slack_checked_at': user.slack_checked_at,
         })
 
     counts = {
@@ -200,6 +244,9 @@ def _build_user_listing(active_filter, search, tag_filter=''):
         'subscriber_count': sum(
             1 for user in all_users if not user.unsubscribed
         ),
+        'slack_member_count': sum(
+            1 for user in all_users if user.slack_member
+        ),
     }
 
     return user_rows, counts
@@ -218,15 +265,19 @@ def _user_status(user):
 def user_list(request):
     """List platform Users with tier and subscriber filter chips."""
     active_filter = _normalize_filter(request.GET.get('filter', ''))
+    slack_filter = _normalize_slack_filter(request.GET.get('slack', ''))
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
     active_tag = normalize_tag(raw_tag) if raw_tag else ''
 
-    user_rows, counts = _build_user_listing(active_filter, search, raw_tag)
+    user_rows, counts = _build_user_listing(
+        active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
+    )
 
     return render(request, 'studio/users/list.html', {
         'user_rows': user_rows,
         'active_filter': active_filter,
+        'slack_filter': slack_filter,
         'search': search,
         'active_tag': active_tag,
         'total_users': counts['total_users'],
@@ -234,11 +285,15 @@ def user_list(request):
         'main_plus_count': counts['main_plus_count'],
         'premium_count': counts['premium_count'],
         'subscriber_count': counts['subscriber_count'],
+        'slack_member_count': counts['slack_member_count'],
         'filter_all': FILTER_ALL,
         'filter_paid': FILTER_PAID,
         'filter_main_plus': FILTER_MAIN_PLUS,
         'filter_premium': FILTER_PREMIUM,
         'filter_subscribers': FILTER_SUBSCRIBERS,
+        'slack_filter_any': SLACK_FILTER_ANY,
+        'slack_filter_yes': SLACK_FILTER_YES,
+        'slack_filter_no': SLACK_FILTER_NO,
     })
 
 
@@ -246,21 +301,25 @@ def user_list(request):
 def user_export_csv(request):
     """Export the currently-filtered user list as CSV.
 
-    Honours the same ``filter``, ``q``, and ``tag`` query params as
-    ``user_list`` so operators can grab the exact rows they're looking at.
+    Honours the same ``filter``, ``q``, ``tag``, and ``slack`` query
+    params as ``user_list`` so operators can grab the exact rows they're
+    looking at.
 
-    Columns (locked by issue #355):
+    Columns (locked by issue #355, with ``slack`` appended in #358):
     ``email, tier, tags, email_verified, unsubscribed, date_joined,
-    last_login``. ``tags`` is a comma-separated list of normalized strings;
-    ``csv.writer`` quotes the cell when it contains commas. Datetimes use
-    ISO 8601, with empty cells for nulls. Filename includes a UTC timestamp
-    so repeat downloads do not collide.
+    last_login, slack``. ``tags`` is a comma-separated list of normalized
+    strings; ``csv.writer`` quotes the cell when it contains commas.
+    Datetimes use ISO 8601, with empty cells for nulls. Filename
+    includes a UTC timestamp so repeat downloads do not collide.
     """
     active_filter = _normalize_filter(request.GET.get('filter', ''))
+    slack_filter = _normalize_slack_filter(request.GET.get('slack', ''))
     search = request.GET.get('q', '')
     raw_tag = request.GET.get('tag', '')
 
-    user_rows, _counts = _build_user_listing(active_filter, search, raw_tag)
+    user_rows, _counts = _build_user_listing(
+        active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
+    )
 
     timestamp = (
         timezone.now()
@@ -281,6 +340,7 @@ def user_export_csv(request):
         'unsubscribed',
         'date_joined',
         'last_login',
+        'slack',
     ])
     for row in user_rows:
         writer.writerow([
@@ -291,6 +351,7 @@ def user_export_csv(request):
             'Yes' if row['unsubscribed'] else 'No',
             row['date_joined'].isoformat() if row['date_joined'] else '',
             row['last_login'].isoformat() if row['last_login'] else '',
+            row['slack_status'],
         ])
 
     return response

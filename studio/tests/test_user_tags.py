@@ -91,8 +91,9 @@ class StudioUserListTagFilterTest(TestCase):
         response = self.client.get('/studio/users/?tag=early-adopter&filter=paid&q=dan')
         self.assertContains(response, 'data-testid="active-tag-chip"')
         self.assertContains(response, 'Tag: early-adopter')
-        # Clear link drops ``tag`` but preserves ``filter`` and ``q``.
-        self.assertContains(response, '?filter=paid&amp;q=dan')
+        # Clear link drops ``tag`` but preserves ``filter``, ``slack``,
+        # and ``q``. (Issue #358 added the slack filter to chip URLs.)
+        self.assertContains(response, '?filter=paid&amp;slack=any&amp;q=dan')
 
     def test_filter_chip_links_carry_tag_value(self):
         response = self.client.get('/studio/users/?tag=early-adopter')

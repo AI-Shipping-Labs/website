@@ -151,6 +151,63 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(campaign.get_recipient_count(), 5)
 
+    def test_slack_filter_yes_returns_only_members(self):
+        """Issue #358: slack_filter='yes' restricts to slack_member=True."""
+        User.objects.create_user(
+            email='in@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+            slack_member=True,
+        )
+        User.objects.create_user(
+            email='out@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+            slack_member=False,
+        )
+        campaign = EmailCampaign.objects.create(
+            subject='Members', body='Hi', target_min_level=0,
+            slack_filter='yes',
+        )
+        emails = list(campaign.get_eligible_recipients().values_list('email', flat=True))
+        self.assertEqual(emails, ['in@test.com'])
+
+    def test_slack_filter_no_returns_only_non_members(self):
+        """Issue #358: slack_filter='no' restricts to slack_member=False."""
+        User.objects.create_user(
+            email='in@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+            slack_member=True,
+        )
+        User.objects.create_user(
+            email='out@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+            slack_member=False,
+        )
+        campaign = EmailCampaign.objects.create(
+            subject='Non-members', body='Hi', target_min_level=0,
+            slack_filter='no',
+        )
+        emails = list(campaign.get_eligible_recipients().values_list('email', flat=True))
+        self.assertEqual(emails, ['out@test.com'])
+
+    def test_slack_filter_any_does_not_restrict(self):
+        """Issue #358: default slack_filter='any' applies no Slack filter."""
+        User.objects.create_user(
+            email='in@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+            slack_member=True,
+        )
+        User.objects.create_user(
+            email='out@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+            slack_member=False,
+        )
+        campaign = EmailCampaign.objects.create(
+            subject='Anyone', body='Hi', target_min_level=0,
+        )
+        # Default value is "any".
+        self.assertEqual(campaign.slack_filter, 'any')
+        self.assertEqual(campaign.get_eligible_recipients().count(), 2)
+
 
 @tag('core')
 class EmailCampaignTagTargetingTest(TierSetupMixin, TestCase):
@@ -430,6 +487,7 @@ class CampaignFormTagPersistTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         # Two —, one for include, one for exclude.
         self.assertGreaterEqual(content.count('—'), 2)
+
 
 @tag('core')
 class SendCampaignFanOutTest(TierSetupMixin, TestCase):

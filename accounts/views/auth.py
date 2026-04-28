@@ -122,6 +122,55 @@ def _send_verification_email(user):
         logger.exception("Failed to send verification email to %s", user.email)
 
 
+def _probe_slack_membership_on_signup(user):
+    """Synchronously probe Slack workspace membership during signup.
+
+    Best-effort: any failure is logged at WARNING and swallowed so the
+    signup path always reaches its 201 response. The 30-min periodic
+    task ``refresh_slack_membership`` will pick up users left in
+    ``slack_checked_at IS NULL`` state on the next cycle.
+    """
+    from django.utils import timezone
+
+    try:
+        from community.services import get_community_service
+
+        service = get_community_service()
+        outcome, uid = service.check_workspace_membership(user.email)
+    except Exception:
+        logger.warning(
+            "Slack membership probe failed during signup for %s",
+            user.email,
+            exc_info=True,
+        )
+        return
+
+    if outcome == "unknown":
+        # Token unset, transient failure, or not configured —
+        # leave fields untouched, periodic task will retry.
+        return
+
+    update_fields = ["slack_member", "slack_checked_at"]
+    user.slack_checked_at = timezone.now()
+
+    if outcome == "member":
+        user.slack_member = True
+        if uid and not user.slack_user_id:
+            user.slack_user_id = uid
+            update_fields.append("slack_user_id")
+    else:
+        user.slack_member = False
+
+    try:
+        user.save(update_fields=update_fields)
+    except Exception:
+        logger.warning(
+            "Failed to persist Slack membership probe result for %s",
+            user.email,
+            exc_info=True,
+        )
+
+
 def _send_password_reset_email(user):
     """Send a password reset email to the user using EmailService.
 
@@ -179,6 +228,14 @@ def register_api(request):
     # Create user with email_verified=False and free tier
     user = User.objects.create_user(email=email, password=password)
     # email_verified defaults to False, tier defaults to free (in model save)
+
+    # Best-effort Slack workspace membership probe. If the email is
+    # already in Slack (rare on signup but possible: someone joined
+    # the public Slack first, then signs up on the website later) we
+    # set ``slack_member=True`` immediately so the dashboard skips the
+    # "Join Slack" CTA on the very first dashboard render. Must NEVER
+    # block signup — wrapped in try/except, ``unknown`` is a no-op.
+    _probe_slack_membership_on_signup(user)
 
     # Send verification email
     _send_verification_email(user)

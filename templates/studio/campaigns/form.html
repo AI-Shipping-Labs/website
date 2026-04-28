@@ -86,6 +86,19 @@
       <option value="{{ tag }}"></option>
       {% endfor %}
     </datalist>
+
+    {# Issue #358: Slack-membership filter ANDs with the tier and tag filters above. #}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1">Slack workspace</label>
+      <select name="slack_filter" data-testid="campaign-slack-filter" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="any" {% if not campaign.slack_filter or campaign.slack_filter == 'any' %}selected{% endif %}>Any (no filter)</option>
+        <option value="yes" {% if campaign.slack_filter == 'yes' %}selected{% endif %}>Members only</option>
+        <option value="no" {% if campaign.slack_filter == 'no' %}selected{% endif %}>Non-members only</option>
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">
+        Filters by verified Slack workspace membership (issue #358). Use "Non-members" to nudge users to join.
+      </p>
+    </div>
   </div>
 
   <div class="flex items-center space-x-4">

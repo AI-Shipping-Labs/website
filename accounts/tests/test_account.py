@@ -753,3 +753,59 @@ class AccountPageHeaderFooterTest(TestCase):
     def test_page_title(self):
         response = self.client.get("/account/")
         self.assertContains(response, "<title>Account")
+
+
+class AccountPageUserIdDisplayTest(TestCase):
+    """Tests for the User ID display on the account page (issue #367)."""
+
+    def test_logged_in_user_sees_their_user_id(self):
+        """Logged-in user sees their numeric User.id rendered with the
+        label 'User ID:' on the account page."""
+        user = User.objects.create_user(email="userid@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        self.assertEqual(response.status_code, 200)
+
+        content = response.content.decode()
+        # The 'User ID:' label is present
+        self.assertIn("User ID:", content)
+        # The numeric id is rendered inside the user-id-value element
+        marker = 'id="user-id-value"'
+        idx = content.find(marker)
+        self.assertNotEqual(idx, -1, "user-id-value element must be present")
+        tag_end = content.find(">", idx)
+        close_idx = content.find("</dd>", tag_end)
+        self.assertNotEqual(close_idx, -1)
+        rendered = content[tag_end + 1:close_idx].strip()
+        self.assertEqual(rendered, str(user.id))
+
+    def test_user_id_value_uses_monospace_font(self):
+        """The User ID value is rendered in a monospace font for
+        easy visual scanning / selection."""
+        user = User.objects.create_user(email="mono@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        content = response.content.decode()
+        marker = 'id="user-id-value"'
+        idx = content.find(marker)
+        self.assertNotEqual(idx, -1)
+        tag_start = content.rfind("<", 0, idx)
+        tag_end = content.find(">", idx)
+        value_tag = content[tag_start:tag_end + 1]
+        self.assertIn("font-mono", value_tag)
+
+    def test_account_info_section_present(self):
+        """The new 'Account info' section is rendered on the page."""
+        user = User.objects.create_user(email="info@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        content = response.content.decode()
+        self.assertIn('id="account-info-section"', content)
+        self.assertIn("Account info", content)
+
+    def test_anonymous_visitor_redirected_to_login(self):
+        """Anonymous visitors hitting /account/ are redirected to login —
+        no User ID is exposed."""
+        response = self.client.get("/account/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response.url)

@@ -228,6 +228,21 @@
         </form>
       </div>
 
+      <!-- Account Info Section -->
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mt-8" id="account-info-section">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+          <i data-lucide="info" class="h-5 w-5 text-accent"></i>
+          Account info
+        </h2>
+
+        <dl class="space-y-2">
+          <div class="flex items-center gap-3">
+            <dt class="text-sm text-muted-foreground">User ID:</dt>
+            <dd class="font-mono text-foreground" id="user-id-value">{{ user.id }}</dd>
+          </div>
+        </dl>
+      </div>
+
     </div>
   </section>
 

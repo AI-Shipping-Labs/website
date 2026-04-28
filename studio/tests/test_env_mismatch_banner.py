@@ -21,6 +21,8 @@ from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model
 from django.test import Client, RequestFactory, TestCase, override_settings
 
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 from website.context_processors import (
     _build_env_mismatch_payload,
     _normalize_host_triple,
@@ -363,3 +365,170 @@ class ProxySSLHeaderTest(TestCase):
             "    SECURE_PROXY_SSL_HEADER",
             source,
         )
+
+
+class EnvMismatchAliasTest(TestCase):
+    """Aliases from ``SITE_BASE_URL_ALIASES`` suppress the banner without
+    changing the canonical URL used elsewhere (issue #369).
+
+    The aliases setting lives in the DB (``IntegrationSetting`` row) and
+    is parsed via ``re.split(r'[\\s,]+', value)`` so operators can use
+    commas, whitespace, or newlines to separate entries.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def _request(self, host, scheme='http'):
+        return self.factory.get(
+            '/studio/',
+            HTTP_HOST=host,
+            **{'wsgi.url_scheme': scheme},
+        )
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'www.aishippinglabs.com', 'dev.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_alias_match_suppresses_banner(self):
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value='https://prod.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        request = self._request('prod.aishippinglabs.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(request))
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'www.aishippinglabs.com', 'dev.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_canonical_match_no_banner_with_aliases_set(self):
+        # Canonical match still wins even when aliases are configured.
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value='https://prod.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        request = self._request('aishippinglabs.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(request))
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'www.aishippinglabs.com', 'dev.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_multiple_aliases_parsed_from_comma_separated(self):
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value='https://prod.aishippinglabs.com, https://www.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
+        www_request = self._request('www.aishippinglabs.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+        self.assertIsNone(_build_env_mismatch_payload(www_request))
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'www.aishippinglabs.com', 'dev.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_multiple_aliases_parsed_from_newlines(self):
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value=(
+                'https://prod.aishippinglabs.com\n'
+                'https://www.aishippinglabs.com'
+            ),
+            group='site',
+        )
+        clear_config_cache()
+        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
+        www_request = self._request('www.aishippinglabs.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+        self.assertIsNone(_build_env_mismatch_payload(www_request))
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'www.aishippinglabs.com', 'dev.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_real_mismatch_still_warns_with_aliases_set(self):
+        # Aliases list prod and www only — a request to `dev` must still
+        # fire the banner.
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value='https://prod.aishippinglabs.com https://www.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        request = self._request('dev.aishippinglabs.com', scheme='https')
+        payload = _build_env_mismatch_payload(request)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload['configured_host'], 'aishippinglabs.com')
+        self.assertEqual(
+            payload['request_url'], 'https://dev.aishippinglabs.com',
+        )
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'www.aishippinglabs.com', 'dev.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_malformed_alias_skipped_silently(self):
+        # A garbage alias entry must not crash; the canonical comparison
+        # still works alongside it.
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value='not a url, https://prod.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        # Garbage alias doesn't crash and doesn't suppress a real mismatch.
+        bad_request = self._request('dev.aishippinglabs.com', scheme='https')
+        self.assertIsNotNone(_build_env_mismatch_payload(bad_request))
+        # The well-formed alias still suppresses its match.
+        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=['localhost', 'aishippinglabs.com'],
+    )
+    def test_empty_aliases_preserves_existing_behavior(self):
+        # No IntegrationSetting row, no env override — banner fires
+        # exactly as it did before this issue. Mirrors the canonical
+        # mismatch case in BuildEnvMismatchPayloadTest.
+        request = self._request('localhost:8000', scheme='http')
+        payload = _build_env_mismatch_payload(request)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload['configured_host'], 'aishippinglabs.com')
+        self.assertEqual(payload['request_url'], 'http://localhost:8000')

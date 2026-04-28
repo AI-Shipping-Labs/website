@@ -26,11 +26,17 @@ def get_config(key, default=''):
         _populate_cache()
     if key in _cache and _cache[key]:
         return _cache[key]
-    # Check Django settings first (supports @override_settings in tests)
+    # Check Django settings first (supports @override_settings in tests).
+    # Guard with settings.configured so we don't accidentally trigger
+    # LazySettings._setup() while website/settings.py is still being
+    # imported — that would freeze a partial Settings snapshot and break
+    # every later `settings.X` lookup. `settings.configured` is a plain
+    # attribute that does NOT force setup, so it's safe to read first.
     from django.conf import settings  # noqa: PLC0415
-    settings_val = getattr(settings, key, None)
-    if settings_val is not None:
-        return settings_val
+    if settings.configured:
+        settings_val = getattr(settings, key, None)
+        if settings_val is not None:
+            return settings_val
     # Then env var
     env_val = os.environ.get(key)
     if env_val is not None:

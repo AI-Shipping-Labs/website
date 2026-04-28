@@ -287,6 +287,12 @@ class TestScenario1YouTubeRecordingTimestamps:
         assert 'data-source="youtube"' in body
         assert "video-player" in body
 
+        # Expand the collapsed Chapters disclosure (#361) so timestamps
+        # are visible/clickable.
+        page.evaluate(
+            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        )
+
         # Verify three timestamps are listed
         timestamps = page.locator(".video-timestamp")
         assert timestamps.count() == 3
@@ -359,6 +365,11 @@ class TestScenario2LoomRecordingTimestamps:
         # Initial iframe src should be the loom embed URL
         initial_src = iframe.get_attribute("src")
         assert "loom.com/embed/" in initial_src
+
+        # Expand the collapsed Chapters disclosure (#361)
+        page.evaluate(
+            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        )
 
         # Verify timestamps
         timestamps = page.locator(".video-timestamp")
@@ -434,6 +445,11 @@ class TestScenario3SelfHostedCourseUnit:
         assert 'data-source="self_hosted"' in body
         video = page.locator("#video-player-self-hosted")
         assert video.count() == 1
+
+        # Expand the collapsed Chapters disclosure (#361)
+        page.evaluate(
+            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        )
 
         # Verify timestamps
         timestamps = page.locator(".video-timestamp")
@@ -613,6 +629,11 @@ class TestScenario7HourLongTimestamps:
             wait_until="domcontentloaded",
         )
 
+        # Expand the collapsed Chapters disclosure (#361)
+        page.evaluate(
+            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        )
+
         # Verify all timestamps are present
         timestamps = page.locator(".video-timestamp")
         assert timestamps.count() == 3
@@ -772,6 +793,11 @@ class TestScenario10AdminTimestampEditor:
 
         body = page.content()
 
+        # Expand the collapsed Chapters disclosure (#361)
+        page.evaluate(
+            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        )
+
         # Verify timestamps appear
         timestamps = page.locator(".video-timestamp")
         assert timestamps.count() == 2
@@ -786,3 +812,147 @@ class TestScenario10AdminTimestampEditor:
 #   tests in content/tests/test_course_units.py
 #   (ApiCourseUnitCompleteTest, CourseUnitProgressTest)
 # ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# Issue #361: Chapters disclosure -- collapsed by default, hidden
+# entirely when no timestamps exist.
+# ---------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestChaptersDisclosureExpandSeekCollapse:
+    """Visitor on an event with chapters: expand, seek, collapse.
+
+    Regression test for Issue #361: the chapters list now lives inside
+    a collapsed `<details>` so it does not push the rest of the page
+    down for visitors who did not ask for chapter navigation.
+    """
+
+    def test_visitor_expands_seeks_and_collapses_chapters(
+        self, django_server, page
+    ):
+        _clear_recordings()
+        _create_recording(
+            title="Chapters Disclosure Demo",
+            slug="chapters-disclosure-demo",
+            description="Event for chapters disclosure regression test.",
+            youtube_url="https://www.youtube.com/watch?v=chapdemo01",
+            timestamps=[
+                {"time_seconds": 0, "label": "Welcome"},
+                {"time_seconds": 60, "label": "Setup"},
+                {"time_seconds": 180, "label": "Build"},
+                {"time_seconds": 360, "label": "Test"},
+                {"time_seconds": 600, "label": "Wrap up"},
+            ],
+            required_level=0,
+        )
+
+        page.goto(
+            f"{django_server}/events/chapters-disclosure-demo",
+            wait_until="domcontentloaded",
+        )
+
+        # Video embed is visible
+        yt_player = page.locator('[id^="yt-player-"]')
+        assert yt_player.count() >= 1
+
+        # Chapters disclosure renders, collapsed (no `open` attribute)
+        chapters = page.locator('details[data-testid="video-chapters"]')
+        assert chapters.count() == 1
+        assert (
+            chapters.first.evaluate("el => el.hasAttribute('open')")
+            is False
+        )
+
+        # Summary line shows "Chapters (5)" -- the visible text is
+        # uppercased via the `uppercase` Tailwind class but the underlying
+        # source text is "Chapters (5)".  Assert against the source text
+        # via textContent so the test matches the literal markup.
+        summary = chapters.locator("summary")
+        summary_source = summary.first.evaluate("el => el.textContent.trim()")
+        assert "Chapters (5)" in summary_source
+
+        # Individual chapter rows are not visible while collapsed.
+        first_chapter_btn = chapters.locator(".video-timestamp").first
+        assert first_chapter_btn.is_visible() is False
+
+        # Step: click summary to expand
+        summary.first.click()
+        page.wait_for_timeout(150)
+        assert (
+            chapters.first.evaluate("el => el.hasAttribute('open')")
+            is True
+        )
+        assert first_chapter_btn.is_visible() is True
+
+        # All 5 chapter rows are present and labelled correctly
+        chapter_buttons = chapters.locator(".video-timestamp")
+        assert chapter_buttons.count() == 5
+        rows_text = chapters.first.inner_text()
+        assert "[00:00]" in rows_text
+        assert "Welcome" in rows_text
+        assert "[01:00]" in rows_text
+        assert "Setup" in rows_text
+
+        # Step: click the first chapter row -- existing seek handler
+        # should be wired up unchanged.  We assert via data attributes
+        # and a clean click that no console errors fire.
+        first_btn = chapter_buttons.first
+        assert first_btn.get_attribute("data-time-seconds") == "0"
+        assert first_btn.get_attribute("data-source") == "youtube"
+        assert first_btn.get_attribute("data-video-id") == "chapdemo01"
+
+        errors = []
+        page.on("pageerror", lambda exc: errors.append(str(exc)))
+        first_btn.click()
+        page.wait_for_timeout(100)
+        assert errors == []
+
+        # Step: click summary again to collapse
+        summary.first.click()
+        page.wait_for_timeout(150)
+        assert (
+            chapters.first.evaluate("el => el.hasAttribute('open')")
+            is False
+        )
+        assert first_chapter_btn.is_visible() is False
+
+
+@pytest.mark.django_db(transaction=True)
+class TestNoChaptersWhenTimestampsEmpty:
+    """Visitor on an event recording without chapters sees a clean page."""
+
+    def test_no_chapters_disclosure_when_timestamps_empty(
+        self, django_server, page
+    ):
+        _clear_recordings()
+        _create_recording(
+            title="No Chapters Recording",
+            slug="no-chapters-recording",
+            description="Event without timestamps configured.",
+            youtube_url="https://www.youtube.com/watch?v=nochap0001",
+            timestamps=[],
+            required_level=0,
+        )
+
+        page.goto(
+            f"{django_server}/events/no-chapters-recording",
+            wait_until="domcontentloaded",
+        )
+
+        # Video embed is visible
+        yt_player = page.locator('[id^="yt-player-"]')
+        assert yt_player.count() >= 1
+
+        # No chapters details element renders at all
+        chapters = page.locator('details[data-testid="video-chapters"]')
+        assert chapters.count() == 0
+
+        # No "Chapters (" summary text appears anywhere on the page
+        body = page.content()
+        assert "Chapters (" not in body
+
+        # No leftover legacy "Timestamps" header card either
+        assert ">Timestamps<" not in body
+
+        # No timestamp buttons rendered
+        assert page.locator(".video-timestamp").count() == 0

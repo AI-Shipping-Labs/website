@@ -805,13 +805,16 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
 class SlackJoinPromptTest(TierSetupMixin, TestCase):
     """Test the Slack join prompt on the dashboard for Main+ users."""
 
-    def _create_user(self, email, tier=None, slack_user_id=''):
+    def _create_user(self, email, tier=None, slack_user_id='', slack_member=False):
         user = User.objects.create_user(email=email, password='testpass')
         if tier:
             user.tier = tier
             user.save()
         if slack_user_id:
             user.slack_user_id = slack_user_id
+            user.save()
+        if slack_member:
+            user.slack_member = True
             user.save()
         return user
 
@@ -855,10 +858,11 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         self.assertIn('rel="noopener"', content)
 
     def test_slack_connected_replaces_join_card(self):
-        """Once slack_user_id is set, show connected status instead of join."""
+        """Once slack_member is True, show connected status instead of join."""
+        # Issue #358: gate changed from slack_user_id to slack_member.
         self._create_user(
             'main-connected@test.com', tier=self.main_tier,
-            slack_user_id='U12345',
+            slack_user_id='U12345', slack_member=True,
         )
         self.client.login(email='main-connected@test.com', password='testpass')
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
@@ -933,10 +937,11 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         )
 
     def test_context_variables_slack_connected(self):
-        """The slack_connected context variable is True for linked users."""
+        """The slack_connected context variable is True for verified members."""
+        # Issue #358: gate changed from slack_user_id to slack_member.
         self._create_user(
             'main-ctx2@test.com', tier=self.main_tier,
-            slack_user_id='U99999',
+            slack_user_id='U99999', slack_member=True,
         )
         self.client.login(email='main-ctx2@test.com', password='testpass')
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
@@ -951,6 +956,21 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             response = self.client.get('/')
         self.assertFalse(response.context['show_slack_join'])
+        self.assertFalse(response.context['slack_connected'])
+
+    def test_slack_user_id_alone_does_not_hide_join_card(self):
+        """Issue #358: having slack_user_id (e.g. from OAuth) without
+        slack_member=True does NOT count as joined — the user can still
+        have a Slack identity without being in our workspace."""
+        self._create_user(
+            'oauth-only@test.com', tier=self.main_tier,
+            slack_user_id='U_OAUTH', slack_member=False,
+        )
+        self.client.login(email='oauth-only@test.com', password='testpass')
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+        # Join CTA still visible — slack_user_id alone is not workspace membership.
+        self.assertTrue(response.context['show_slack_join'])
         self.assertFalse(response.context['slack_connected'])
 
     def test_slack_section_position_below_welcome_above_continue(self):

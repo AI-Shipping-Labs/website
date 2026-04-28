@@ -132,6 +132,45 @@ class StudioCampaignCreateTest(TestCase):
         campaign = EmailCampaign.objects.get(subject="Premium Campaign")
         self.assertEqual(campaign.target_min_level, 30)
 
+    def test_create_campaign_default_slack_filter_is_any(self):
+        # Issue #358: omitting the field defaults to "any".
+        self.client.post(
+            "/studio/campaigns/new",
+            {
+                "subject": "Default Slack",
+                "body": "x",
+                "target_min_level": "0",
+            },
+        )
+        campaign = EmailCampaign.objects.get(subject="Default Slack")
+        self.assertEqual(campaign.slack_filter, "any")
+
+    def test_create_campaign_with_slack_filter_yes(self):
+        self.client.post(
+            "/studio/campaigns/new",
+            {
+                "subject": "Members Only",
+                "body": "x",
+                "target_min_level": "20",
+                "slack_filter": "yes",
+            },
+        )
+        campaign = EmailCampaign.objects.get(subject="Members Only")
+        self.assertEqual(campaign.slack_filter, "yes")
+
+    def test_create_campaign_with_invalid_slack_filter_falls_back_to_any(self):
+        self.client.post(
+            "/studio/campaigns/new",
+            {
+                "subject": "Bad Slack",
+                "body": "x",
+                "target_min_level": "0",
+                "slack_filter": "garbage",
+            },
+        )
+        campaign = EmailCampaign.objects.get(subject="Bad Slack")
+        self.assertEqual(campaign.slack_filter, "any")
+
 
 class StudioCampaignDetailTest(TestCase):
     """Test campaign detail/preview view."""

@@ -514,3 +514,46 @@ class TestScenario11DashboardAfterDeletion:
             'a[href="/community"]'
         )
         assert community_link.count() == 0
+
+
+# ---------------------------------------------------------------
+# Issue #358: Slack-member dashboard CTA hide/show.
+#
+# When ``slack_member=True`` is set on a Main+ user, the "Join our
+# Slack community" CTA is replaced by the "Connected to Slack"
+# panel. Reload the page to confirm the gating is sticky (no
+# flicker, no race condition between the page render and any JS).
+# ---------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestIssue358SlackMemberHidesCTA:
+    """Verified Slack member sees the connected panel, not the join CTA."""
+
+    def test_slack_member_main_user_sees_connected_panel(
+        self, django_server, browser, settings,
+    ):
+        _ensure_tiers()
+        user = _create_user("slack-member@test.com", tier_slug="main")
+        # Mark the user as a verified Slack workspace member.
+        from django.utils import timezone
+
+        user.slack_member = True
+        user.slack_checked_at = timezone.now()
+        user.save(update_fields=["slack_member", "slack_checked_at"])
+        connection.close()
+
+        context = _auth_context(browser, "slack-member@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+        assert "Join our Slack community" not in body
+        assert "Connected to Slack" in body
+
+        # Reload — the CTA must still not appear (no flicker / race).
+        page.reload(wait_until="domcontentloaded")
+        body_after = page.content()
+        assert "Join our Slack community" not in body_after
+        assert "Connected to Slack" in body_after

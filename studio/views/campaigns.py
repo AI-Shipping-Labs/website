@@ -96,11 +96,15 @@ def campaign_create(request):
         subject = request.POST.get("subject", "").strip()
         body = request.POST.get("body", "")
         target_min_level = int(request.POST.get("target_min_level", 0))
+        slack_filter = _normalize_slack_filter(
+            request.POST.get("slack_filter", "")
+        )
 
         campaign = EmailCampaign.objects.create(
             subject=subject,
             body=body,
             target_min_level=target_min_level,
+            slack_filter=slack_filter,
             status="draft",
         )
         messages.success(
@@ -121,6 +125,14 @@ def campaign_create(request):
             "recipient_count": recipient_count,
         },
     )
+
+
+def _normalize_slack_filter(value):
+    """Map raw form value to a valid EmailCampaign slack_filter choice."""
+    valid = {choice[0] for choice in EmailCampaign.SLACK_FILTER_CHOICES}
+    if value in valid:
+        return value
+    return EmailCampaign.SLACK_FILTER_ANY
 
 
 @staff_required
@@ -145,11 +157,17 @@ def campaign_edit(request, campaign_id):
         subject = request.POST.get("subject", "").strip()
         body = request.POST.get("body", "")
         target_min_level = int(request.POST.get("target_min_level", 0))
+        slack_filter = _normalize_slack_filter(
+            request.POST.get("slack_filter", "")
+        )
 
         campaign.subject = subject
         campaign.body = body
         campaign.target_min_level = target_min_level
-        campaign.save(update_fields=["subject", "body", "target_min_level"])
+        campaign.slack_filter = slack_filter
+        campaign.save(update_fields=[
+            "subject", "body", "target_min_level", "slack_filter",
+        ])
 
         messages.success(
             request,
@@ -347,6 +365,7 @@ def campaign_duplicate(request, campaign_id):
         subject=f"{campaign.subject} (Copy)",
         body=campaign.body,
         target_min_level=campaign.target_min_level,
+        slack_filter=campaign.slack_filter,
         status="draft",
     )
     messages.success(

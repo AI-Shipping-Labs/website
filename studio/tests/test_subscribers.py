@@ -143,12 +143,14 @@ class StudioUserListTest(TestCase):
         self.assertContains(response, 'value="override"')
 
     def test_chip_links_carry_search_value(self):
+        # Issue #358: chips also carry the slack filter so combining
+        # chip clicks doesn't reset the slack filter back to "any".
         response = self.client.get('/studio/users/?filter=all&q=alice')
-        self.assertContains(response, '?filter=all&amp;q=alice')
-        self.assertContains(response, '?filter=paid&amp;q=alice')
-        self.assertContains(response, '?filter=main_plus&amp;q=alice')
-        self.assertContains(response, '?filter=premium&amp;q=alice')
-        self.assertContains(response, '?filter=subscribers&amp;q=alice')
+        self.assertContains(response, '?filter=all&amp;slack=any&amp;q=alice')
+        self.assertContains(response, '?filter=paid&amp;slack=any&amp;q=alice')
+        self.assertContains(response, '?filter=main_plus&amp;slack=any&amp;q=alice')
+        self.assertContains(response, '?filter=premium&amp;slack=any&amp;q=alice')
+        self.assertContains(response, '?filter=subscribers&amp;slack=any&amp;q=alice')
 
     def test_subscribed_column_uses_user_unsubscribed_flag(self):
         response = self.client.get('/studio/users/?filter=all')
@@ -199,6 +201,82 @@ class StudioUserListTest(TestCase):
         self.assertEqual(response.context['main_plus_count'], 3)
         self.assertEqual(response.context['premium_count'], 2)
         self.assertEqual(response.context['subscriber_count'], 4)
+
+
+class StudioUserListSlackFilterTest(TestCase):
+    """Issue #358: Slack-membership column + filter on /studio/users/."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email='member@test.com', password='testpass',
+            slack_member=True, slack_checked_at=timezone.now(),
+        )
+        cls.outsider = User.objects.create_user(
+            email='outsider@test.com', password='testpass',
+            slack_member=False, slack_checked_at=timezone.now(),
+        )
+        cls.unchecked = User.objects.create_user(
+            email='unchecked@test.com', password='testpass',
+        )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def test_filter_yes_returns_only_members(self):
+        response = self.client.get('/studio/users/?slack=yes')
+        emails = [row['email'] for row in response.context['user_rows']]
+        self.assertEqual(emails, ['member@test.com'])
+
+    def test_filter_no_returns_non_members_including_unchecked(self):
+        response = self.client.get('/studio/users/?slack=no')
+        emails = sorted(row['email'] for row in response.context['user_rows'])
+        self.assertEqual(
+            emails,
+            ['outsider@test.com', 'staff@test.com', 'unchecked@test.com'],
+        )
+
+    def test_filter_any_default(self):
+        response = self.client.get('/studio/users/?slack=garbage')
+        self.assertEqual(response.context['slack_filter'], 'any')
+
+    def test_slack_status_column_renders_three_states(self):
+        response = self.client.get('/studio/users/')
+        rows = {row['email']: row for row in response.context['user_rows']}
+        self.assertEqual(rows['member@test.com']['slack_status'], 'Member')
+        self.assertEqual(rows['outsider@test.com']['slack_status'], 'Not in Slack')
+        self.assertEqual(rows['unchecked@test.com']['slack_status'], 'Never checked')
+
+    def test_slack_member_count_in_context(self):
+        response = self.client.get('/studio/users/')
+        self.assertEqual(response.context['slack_member_count'], 1)
+
+    def test_csv_export_includes_slack_column(self):
+        response = self.client.get('/studio/users/export')
+        lines = response.content.decode().splitlines()
+        member_line = next(line for line in lines if line.startswith('member@test.com'))
+        outsider_line = next(line for line in lines if line.startswith('outsider@test.com'))
+        unchecked_line = next(line for line in lines if line.startswith('unchecked@test.com'))
+        self.assertEqual(member_line.split(',')[5], 'Member')
+        self.assertEqual(outsider_line.split(',')[5], 'Not in Slack')
+        self.assertEqual(unchecked_line.split(',')[5], 'Never checked')
+
+    def test_filter_combines_with_tier_filter(self):
+        # Make member also paid.
+        main_tier = Tier.objects.get(slug='main')
+        StudioUserListSlackFilterTest.member.tier = main_tier
+        StudioUserListSlackFilterTest.member.save()
+
+        response = self.client.get('/studio/users/?filter=paid&slack=yes')
+        emails = [row['email'] for row in response.context['user_rows']]
+        self.assertEqual(emails, ['member@test.com'])
+
+        # Reset.
+        StudioUserListSlackFilterTest.member.tier = None
+        StudioUserListSlackFilterTest.member.save()
 
 
 class StudioUserExportTest(TestCase):
@@ -256,7 +334,8 @@ class StudioUserExportTest(TestCase):
     def test_export_header_lists_columns(self):
         response = self.client.get('/studio/users/export')
         first_line = response.content.decode().splitlines()[0]
-        self.assertEqual(first_line, 'Email,Joined,Subscribed,Tier,Status')
+        # Issue #358: added Slack column at the end.
+        self.assertEqual(first_line, 'Email,Joined,Subscribed,Tier,Status,Slack')
 
     def test_export_default_filter_is_all(self):
         response = self.client.get('/studio/users/export')

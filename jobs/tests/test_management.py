@@ -39,6 +39,16 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.func, 'jobs.tasks.expire_overrides.expire_tier_overrides')
         self.assertEqual(schedule.cron, '*/15 * * * *')
 
+    def test_creates_slack_membership_refresh_schedule(self):
+        """Command creates slack-membership-refresh schedule (issue #358)."""
+        call_command('setup_schedules')
+        schedule = Schedule.objects.get(name='slack-membership-refresh')
+        self.assertEqual(
+            schedule.func,
+            'community.tasks.slack_membership.refresh_slack_membership',
+        )
+        self.assertEqual(schedule.cron, '*/30 * * * *')
+
     def test_idempotent(self):
         """Running command twice does not create duplicate schedules."""
         call_command('setup_schedules')
@@ -47,6 +57,7 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='cleanup-webhook-logs').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='event-reminders').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='expire-tier-overrides').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='slack-membership-refresh').count(), 1)
 
     def test_no_unexpected_schedules_created(self):
         """Command does not create any schedules outside the expected set."""
@@ -57,5 +68,6 @@ class SetupSchedulesCommandTest(TestCase):
             'cleanup-webhook-logs',
             'event-reminders',
             'expire-tier-overrides',
+            'slack-membership-refresh',
         }
         self.assertEqual(names, expected)

@@ -8,7 +8,7 @@
     <h1 class="text-2xl font-semibold text-foreground">Users</h1>
     <p class="text-muted-foreground mt-1">All platform users. Filter by effective tier or newsletter subscription.</p>
   </div>
-  <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
+  <a href="{% url 'studio_user_export' %}?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
      class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors shrink-0">
     Export CSV
   </a>
@@ -34,10 +34,14 @@
   </div>
 </div>
 
-<div class="mb-6">
-  <div class="bg-card border border-border rounded-lg p-4 max-w-xs">
+<div class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+  <div class="bg-card border border-border rounded-lg p-4">
     <p class="text-sm text-muted-foreground">Subscribers</p>
     <p class="text-xl font-semibold text-green-400">{{ subscriber_count }}</p>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-4">
+    <p class="text-sm text-muted-foreground">In Slack</p>
+    <p class="text-xl font-semibold text-purple-400">{{ slack_member_count }}</p>
   </div>
 </div>
 
@@ -49,25 +53,40 @@
 <div class="mb-6 space-y-3">
   <div class="flex flex-wrap items-center gap-2" data-testid="user-filter-chips">
     {% with chip_base="px-4 py-1.5 rounded-full text-sm border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
-    <a href="?filter={{ filter_all }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_all }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
        data-filter="{{ filter_all }}"
        class="{{ chip_base }} {% if active_filter == filter_all %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">All</a>
-    <a href="?filter={{ filter_paid }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_paid }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
        data-filter="{{ filter_paid }}"
        class="{{ chip_base }} {% if active_filter == filter_paid %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Paid</a>
-    <a href="?filter={{ filter_main_plus }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_main_plus }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
        data-filter="{{ filter_main_plus }}"
        class="{{ chip_base }} {% if active_filter == filter_main_plus %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Main+</a>
-    <a href="?filter={{ filter_premium }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_premium }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
        data-filter="{{ filter_premium }}"
        class="{{ chip_base }} {% if active_filter == filter_premium %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Premium</a>
-    <a href="?filter={{ filter_subscribers }}{% if search %}&amp;q={{ search }}{% endif %}"
+    <a href="?filter={{ filter_subscribers }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
        data-filter="{{ filter_subscribers }}"
        class="{{ chip_base }} {% if active_filter == filter_subscribers %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Subscribers</a>
     {% endwith %}
   </div>
+  <div class="flex flex-wrap items-center gap-2" data-testid="user-slack-filter-chips">
+    <span class="text-xs text-muted-foreground mr-1">Slack:</span>
+    {% with chip_base="px-3 py-1 rounded-full text-xs border transition-colors" chip_active="bg-accent text-accent-foreground border-accent" chip_idle="bg-secondary text-muted-foreground border-border hover:text-foreground hover:bg-muted" %}
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_any }}{% if search %}&amp;q={{ search }}{% endif %}"
+       data-slack-filter="{{ slack_filter_any }}"
+       class="{{ chip_base }} {% if slack_filter == slack_filter_any %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Any</a>
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_yes }}{% if search %}&amp;q={{ search }}{% endif %}"
+       data-slack-filter="{{ slack_filter_yes }}"
+       class="{{ chip_base }} {% if slack_filter == slack_filter_yes %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Members</a>
+    <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter_no }}{% if search %}&amp;q={{ search }}{% endif %}"
+       data-slack-filter="{{ slack_filter_no }}"
+       class="{{ chip_base }} {% if slack_filter == slack_filter_no %}{{ chip_active }}{% else %}{{ chip_idle }}{% endif %}">Not in Slack</a>
+    {% endwith %}
+  </div>
   <form method="get" class="flex flex-wrap items-center gap-3">
     <input type="hidden" name="filter" value="{{ active_filter }}">
+    <input type="hidden" name="slack" value="{{ slack_filter }}">
     <input type="text" name="q" value="{{ search }}" placeholder="Search by email..."
            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
     <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
@@ -83,6 +102,7 @@
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Joined</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscribed</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Tier</th>
+        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Slack</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
         <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
@@ -100,6 +120,15 @@
           {% endif %}
         </td>
         <td class="px-3 sm:px-6 py-4 text-sm text-foreground hidden sm:table-cell">{{ row.tier_name }}</td>
+        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-testid="slack-status">
+          {% if row.slack_status == 'Member' %}
+          <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-400">Member</span>
+          {% elif row.slack_status == 'Not in Slack' %}
+          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Not in Slack</span>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground italic">Never checked</span>
+          {% endif %}
+        </td>
         <td class="px-3 sm:px-6 py-4">
           {% if row.status == 'Staff' %}
           <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Staff</span>
@@ -118,7 +147,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</td>
+        <td colspan="7" class="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</td>
       </tr>
       {% endfor %}
     </tbody>

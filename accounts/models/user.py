@@ -102,6 +102,17 @@ class User(AbstractUser):
         default="",
         help_text="Slack user ID for community integration.",
     )
+    slack_member = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether the user's email is verified to be in the Slack workspace.",
+    )
+    slack_checked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="When the user's Slack workspace membership was last verified.",
+    )
 
     # UI preferences
     theme_preference = models.CharField(

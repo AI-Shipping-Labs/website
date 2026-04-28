@@ -234,10 +234,13 @@ def _dashboard(request):
     from content.access import LEVEL_MAIN
     slack_invite_url = getattr(settings, 'SLACK_INVITE_URL', '')
     has_qualifying_tier = user.tier_id and user.tier.level >= LEVEL_MAIN
+    # Issue #358: gate on the verified ``slack_member`` boolean rather
+    # than ``slack_user_id`` (which is populated by Slack OAuth even
+    # for users who never joined the workspace).
     show_slack_join = bool(
-        slack_invite_url and has_qualifying_tier and not user.slack_user_id
+        slack_invite_url and has_qualifying_tier and not user.slack_member
     )
-    slack_connected = bool(has_qualifying_tier and user.slack_user_id)
+    slack_connected = bool(has_qualifying_tier and user.slack_member)
 
     context = {
         'tier_name': tier_name,

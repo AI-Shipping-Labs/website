@@ -47,4 +47,12 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: expire-tier-overrides (every 15 min)'))
 
+        # Refresh Slack workspace membership every 30 minutes (issue #358)
+        schedule(
+            'community.tasks.slack_membership.refresh_slack_membership',
+            cron='*/30 * * * *',
+            name='slack-membership-refresh',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: slack-membership-refresh (every 30 min)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

@@ -20,6 +20,7 @@ class CommunityAuditLog(models.Model):
         ("remove", "Remove"),
         ("reactivate", "Reactivate"),
         ("link", "Link"),
+        ("check", "Check"),
     ]
 
     user = models.ForeignKey(

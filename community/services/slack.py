@@ -117,6 +117,56 @@ class SlackCommunityService(CommunityService):
                 return None
             raise
 
+    def check_workspace_membership(self, email):
+        """Check whether an email is a member of the Slack workspace.
+
+        Three-state result. ``unknown`` means the call failed transiently
+        (rate limit, 5xx, network error) and the caller should leave the
+        existing state alone — we'll retry on the next cycle.
+
+        Also returns ``unknown`` when the integration isn't configured
+        (no bot token, ``SLACK_ENABLED`` off) so local dev never crashes.
+
+        Args:
+            email: Email address to check.
+
+        Returns:
+            tuple[str, str|None]: One of:
+                - ("member", slack_user_id) — found in workspace.
+                - ("not_member", None) — Slack returned users_not_found.
+                - ("unknown", None) — transient failure or not configured.
+        """
+        # Bail early if not configured. is_enabled() check is also done
+        # inside _api_call, but checking here lets us return "unknown"
+        # instead of bubbling up a SlackAPIError on first call in dev.
+        if not self.bot_token or not is_enabled('SLACK_ENABLED'):
+            return ("unknown", None)
+
+        try:
+            data = self._api_call("users.lookupByEmail", email=email)
+            uid = data.get("user", {}).get("id")
+            if uid:
+                return ("member", uid)
+            # ok=True but no user.id — treat as unknown so we retry.
+            return ("unknown", None)
+        except SlackAPIError as e:
+            if e.error_code == "users_not_found":
+                return ("not_member", None)
+            # ratelimited, fatal_error, internal_error, service_unavailable,
+            # any other Slack-side or HTTP-level failure: be conservative.
+            logger.warning(
+                "Slack workspace membership check failed for %s: %s",
+                email, e,
+            )
+            return ("unknown", None)
+        except requests.RequestException as e:
+            # Network error, timeout, DNS, etc.
+            logger.warning(
+                "Slack workspace membership check network error for %s: %s",
+                email, e,
+            )
+            return ("unknown", None)
+
     def add_to_channels(self, slack_user_id):
         """Add a Slack user to all community channels.
 

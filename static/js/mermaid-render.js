@@ -42,15 +42,23 @@
 
   /**
    * Build the Mermaid `themeVariables` object from the site's CSS
-   * tokens. Mapping rationale (see #306 spec):
+   * tokens. Mapping rationale (see #306 spec, updated for #359):
    *
    *   background          -> --background  (outer canvas)
    *   primaryColor/mainBkg-> --card        (node fill)
    *   primaryTextColor    -> --foreground  (node + title text)
-   *   primaryBorderColor  -> --border      (node + cluster border)
+   *   primaryBorderColor  -> --accent      (node + cluster border, #359)
    *   secondaryColor/clusterBkg -> --muted (subgraph backgrounds)
    *   lineColor           -> --accent      (edges/arrows pop with brand)
    *   edgeLabelBackground -> --background  (label boxes match canvas)
+   *
+   * Why borders use --accent (#359): Mermaid sets `stroke` as an SVG
+   * attribute, so CSS overrides would lose specificity. The previous
+   * --border token (HSL ~18% L in dark mode) had ~1.2:1 contrast with
+   * --card (HSL 7% L), making nodes look borderless on dark cards.
+   * --accent is the brand-yellow already used for `lineColor`/edges and
+   * provides good contrast against --card in both light and dark
+   * palettes, so node outlines pop the same way edges already do.
    */
   function buildThemeVariables() {
     var bg = readToken('--background');
@@ -59,37 +67,63 @@
     var muted = readToken('--muted');
     var mutedFg = readToken('--muted-foreground');
     var accent = readToken('--accent');
-    var border = readToken('--border');
     return {
       background: bg,
       primaryColor: card,
       primaryTextColor: fg,
-      primaryBorderColor: border,
+      primaryBorderColor: accent,
       secondaryColor: muted,
       secondaryTextColor: fg,
-      secondaryBorderColor: border,
+      secondaryBorderColor: accent,
       tertiaryColor: bg,
       tertiaryTextColor: mutedFg,
-      tertiaryBorderColor: border,
+      tertiaryBorderColor: accent,
       lineColor: accent,
       textColor: fg,
       mainBkg: card,
-      nodeBorder: border,
+      nodeBorder: accent,
       clusterBkg: muted,
-      clusterBorder: border,
+      clusterBorder: accent,
       edgeLabelBackground: bg,
       titleColor: fg,
       // Sequence + flowchart commonly read these too.
       actorBkg: card,
-      actorBorder: border,
+      actorBorder: accent,
       actorTextColor: fg,
       actorLineColor: accent,
       signalColor: fg,
       signalTextColor: fg,
       labelBoxBkgColor: card,
-      labelBoxBorderColor: border,
+      labelBoxBorderColor: accent,
       labelTextColor: fg,
     };
+  }
+
+  /**
+   * Lock each rendered SVG to its intrinsic viewBox width (#359).
+   *
+   * Mermaid 10 emits the rendered SVG with `width="100%"` and an inline
+   * `style="max-width: <natural>px"`. The CSS rule in
+   * `templates/_partials/mermaid_script.html` clears the `max-width`
+   * cap, but the `width="100%"` attribute still makes the SVG shrink
+   * to the container width on narrow viewports -- which is exactly
+   * what the auto-shrink fix was meant to prevent. Setting
+   * `style.width = <viewBox-width>px` overrides the attribute by
+   * specificity (inline style beats presentation attribute) and locks
+   * the SVG to the intrinsic content size, so the surrounding
+   * `div.mermaid` scrolls horizontally on mobile while the diagram
+   * stays at a readable size.
+   */
+  function lockSvgWidthToViewBox(nodes) {
+    nodes.forEach(function (n) {
+      var svg = n.querySelector('svg');
+      if (!svg || !svg.viewBox || !svg.viewBox.baseVal) return;
+      var w = svg.viewBox.baseVal.width;
+      if (w > 0) {
+        svg.style.width = w + 'px';
+        svg.style.maxWidth = 'none';
+      }
+    });
   }
 
   /**
@@ -129,7 +163,9 @@
       // The XSS scenario from #300 still passes after re-render.
       securityLevel: 'strict',
     });
-    return mermaid.run({ nodes: nodes });
+    return mermaid.run({ nodes: nodes }).then(function () {
+      lockSvgWidthToViewBox(nodes);
+    });
   }
 
   /**
@@ -176,6 +212,9 @@
         // un-escaped by the browser when it parsed the div), replaces
         // the contents with the SVG, and sets data-processed="true".
         return mermaid.run({ nodes: nodes }).then(function () {
+          // Lock each SVG to its viewBox width so wide diagrams keep
+          // their natural rendered size on narrow viewports (#359).
+          lockSvgWidthToViewBox(nodes);
           // Wire the theme observer once the first render has settled
           // so we never race the initial mermaid.run.
           watchThemeChanges(mermaid);

@@ -5,5 +5,17 @@ only from templates that render markdown-derived HTML which may contain
 a div.mermaid node. The shim itself self-guards on the absence of those
 nodes and only then imports the heavy Mermaid CDN bundle, so this
 partial costs ~7.5 KB on markdown pages and zero bytes everywhere else.
+
+Inline <style> block below (#359): make div.mermaid a horizontal scroll
+container so wide diagrams retain their natural rendered size on narrow
+viewports. The SVG rule defeats Mermaid's default `max-width: 100%` so
+the diagram does not auto-shrink below readability; instead it stays at
+its natural width and the user can swipe across it on mobile while the
+page itself does not scroll horizontally.
 {% endcomment %}
+<style>
+  div.mermaid { max-width: 100%; overflow-x: auto; }
+  div.mermaid > svg { max-width: none; height: auto; display: block; margin: 0 auto; }
+  div.mermaid:not([data-processed]) { white-space: pre; }
+</style>
 <script type="module" src="{% static 'js/mermaid-render.js' %}" defer></script>

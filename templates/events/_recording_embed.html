@@ -1,0 +1,14 @@
+{% load video_tags %}
+{% if event.recording_url %}
+  {% video_player video_url=event.recording_url timestamps=event.timestamps %}
+{% elif event.recording_embed_url %}
+<div class="aspect-video rounded-lg overflow-hidden border border-border bg-black">
+  <iframe
+    src="{{ event.recording_embed_url }}"
+    class="w-full h-full"
+    title="{{ event.title }}"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowfullscreen></iframe>
+</div>
+{% endif %}

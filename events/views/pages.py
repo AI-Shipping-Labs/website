@@ -320,22 +320,3 @@ def event_detail(request, slug):
     context.update(gating)
     return render(request, 'events/event_detail.html', context)
 
-
-def event_recap(request, slug):
-    """Render the event recap landing page.
-
-    Returns 404 when the event does not exist, is draft (for non-staff),
-    or has no recap data.
-    """
-    event = get_object_or_404(Event, slug=slug)
-
-    if event.status == 'draft' and not request.user.is_staff:
-        raise Http404
-
-    if not event.recap_html:
-        raise Http404
-
-    context = {
-        'event': event,
-    }
-    return render(request, 'events/event_recap.html', context)

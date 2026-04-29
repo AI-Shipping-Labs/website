@@ -114,19 +114,21 @@ markdown body with images
 ### Event
 
 `events/<slug>.yaml`. One file per event. Optional `recap_file:` points at a
-markdown file in the same content repo and renders an event-recap page (see
-`events/views/pages.py::event_recap`, route `/events/<slug>/recap`). Recap
-markdown can include repo-local HTML snippets with
+markdown file in the same content repo and renders recap content inline on the
+event detail page. Recap markdown can include repo-local HTML snippets with
 `<!-- include:relative-file.html -->`; those snippets are rendered during sync
 and stored as HTML, so page-specific markup stays in the content repo instead
-of Django templates. Recap markdown and include files are trusted content-repo
-inputs, like other synced markdown HTML; do not point `recap_file` or include
-markers at user uploads or unreviewed external content.
+of Django templates. Recap-specific structured data belongs directly in the
+recap file frontmatter, so there is a single source for the recap content.
+Generic event fields, such as the recording URL, stay on the event. Recap
+markdown and include files are trusted content-repo inputs, like other synced
+markdown HTML; do not point `recap_file` or include markers at user uploads or
+unreviewed external content.
 
 ```yaml
 content_id: <UUID>
-slug: community-launch
-title: 'AI Shipping Labs Community Launch'
+slug: example-event
+title: Example Event
 event_type: live
 status: upcoming
 start_datetime: "2026-04-13T16:30:00Z"
@@ -134,9 +136,8 @@ end_datetime: "2026-04-13T18:00:00Z"
 location: Zoom
 required_level: 0
 speaker_name: Alexey Grigorev
-recap_file: community-launch/recap.md
-recap_data:           # optional, merged with recap file frontmatter data
-  cta_label: Join now
+recording_embed_url: https://www.youtube.com/embed/...
+recap_file: example-event/recap.md
 description: |
   multi-line markdown
 ```
@@ -145,10 +146,10 @@ Example recap file:
 
 ```markdown
 ---
-data:
-  recording:
-    title: Watch the stream
-    embed_url: https://www.youtube.com/embed/...
+hero:
+  title: Example Event Recap
+  subtitle: If you missed the stream, start here.
+cta_label: Join now
 ---
 
 # Event recap
@@ -156,9 +157,9 @@ data:
 <!-- include:recording.html -->
 ```
 
-If the event file is `events/community-launch.yaml`, the include above is
+If the event file is `events/example-event.yaml`, the include above is
 resolved relative to the recap file directory, for example
-`events/community-launch/recording.html`.
+`events/example-event/recording.html`.
 
 ### Recording
 

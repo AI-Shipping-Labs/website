@@ -1438,8 +1438,7 @@ def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
     """Render an event recap markdown file and content-owned includes.
 
     ``recap_file`` is resolved relative to the event YAML/Markdown file. The
-    recap file may have frontmatter with a ``data`` mapping. Event YAML can
-    also provide ``recap_data``; recap-file data wins on key conflicts.
+    recap file may have frontmatter used by content includes.
 
     Recap markdown and includes are trusted content-repo input, matching the
     rest of the synced markdown pipeline. Do not point this at user uploads.
@@ -1466,17 +1465,9 @@ def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
         raise FileNotFoundError(f'recap_file not found in {rel_path}: {recap_file}')
 
     metadata, body = _parse_markdown_file(recap_path)
-    recap_data = {}
-    event_recap_data = data.get('recap_data', {})
-    if event_recap_data:
-        if not isinstance(event_recap_data, dict):
-            raise ValueError(f'recap_data in {rel_path} must be a mapping/dict')
-        recap_data.update(event_recap_data)
-    file_recap_data = metadata.get('data', {})
-    if file_recap_data:
-        if not isinstance(file_recap_data, dict):
-            raise ValueError(f'data in {recap_rel_path} must be a mapping/dict')
-        recap_data.update(file_recap_data)
+    recap_data = metadata
+    if recap_data and not isinstance(recap_data, dict):
+        raise ValueError(f'frontmatter in {recap_rel_path} must be a mapping/dict')
 
     recap_base_dir = os.path.dirname(recap_rel_path)
     body = rewrite_image_urls(body, source.repo_name, recap_base_dir)
@@ -1484,7 +1475,28 @@ def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
     from content.utils.includes import expand_content_includes
     from content.utils.linkify import linkify_urls
     from events.models.event import render_markdown
+    from django.template.loader import render_to_string
+    from django.utils.safestring import mark_safe
 
+    event_context = {
+        'title': data.get('title', ''),
+        'slug': data.get('slug', ''),
+        'description': data.get('description', ''),
+        'start_datetime': data.get('start_datetime'),
+        'end_datetime': data.get('end_datetime'),
+        'location': data.get('location', ''),
+        'recording_url': data.get('recording_url', '') or data.get('video_url', ''),
+        'recording_embed_url': (
+            data.get('recording_embed_url', '')
+            or data.get('google_embed_url', '')
+        ),
+        'recording_s3_url': data.get('recording_s3_url', ''),
+        'timestamps': data.get('timestamps', []),
+    }
+    event_context['recording_html'] = mark_safe(render_to_string(
+        'events/_recording_embed.html',
+        {'event': event_context},
+    ))
     html = linkify_urls(render_markdown(body))
     html = expand_content_includes(
         html,
@@ -1492,20 +1504,7 @@ def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
         base_dir=os.path.dirname(recap_path),
         context={
             'data': recap_data,
-            'event': {
-                'title': data.get('title', ''),
-                'slug': data.get('slug', ''),
-                'description': data.get('description', ''),
-                'start_datetime': data.get('start_datetime'),
-                'end_datetime': data.get('end_datetime'),
-                'location': data.get('location', ''),
-                'recording_url': data.get('recording_url', '') or data.get('video_url', ''),
-                'recording_embed_url': (
-                    data.get('recording_embed_url', '')
-                    or data.get('google_embed_url', '')
-                ),
-                'recording_s3_url': data.get('recording_s3_url', ''),
-            },
+            'event': event_context,
         },
     )
 

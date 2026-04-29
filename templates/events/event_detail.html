@@ -13,7 +13,7 @@
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
   <article class="py-8 sm:py-16 lg:py-24">
-    <div class="mx-auto max-w-4xl px-6 lg:px-8">
+    <div class="mx-auto max-w-5xl px-6 lg:px-8">
       <a href="/events" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
         Back to Events
@@ -109,26 +109,6 @@
         </div>
         {% endif %}
         {% endwith %}
-      {% endif %}
-
-      <!-- Recap link -->
-      {% if event.has_recap %}
-      <div class="mb-8 rounded-lg border border-accent/30 bg-accent/5 p-5">
-        <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="flex items-center gap-3">
-            <i data-lucide="sparkles" class="h-5 w-5 text-accent"></i>
-            <div>
-              <p class="font-semibold text-foreground">Event recap available</p>
-              <p class="text-sm text-muted-foreground">A summary of key topics, recording, and next steps.</p>
-            </div>
-          </div>
-          <a href="{{ event.get_recap_url }}"
-             class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90">
-            View event recap
-            <i data-lucide="arrow-right" class="h-4 w-4"></i>
-          </a>
-        </div>
-      </div>
       {% endif %}
 
       <!-- Registration / Action Section -->
@@ -232,13 +212,9 @@
           {% include "includes/content_gated.html" %}
         {% else %}
         <!-- Video Player -->
-        {% if event.recording_url %}
-          {% video_player video_url=event.recording_url timestamps=event.timestamps %}
-        {% elif event.recording_embed_url %}
-        <div class="mb-12 aspect-video rounded-lg overflow-hidden border border-border">
-          <iframe src="{{ event.recording_embed_url }}" class="w-full h-full" allowfullscreen></iframe>
+        <div class="mb-12">
+          {% include "events/_recording_embed.html" %}
         </div>
-        {% endif %}
 
         <!-- Core Tools -->
         {% if event.core_tools %}
@@ -316,8 +292,12 @@
       </div>
       {% endif %}
 
-      <!-- Description -->
-      {% if event.description_html %}
+      <!-- Description / Recap -->
+      {% if event.has_recap and event.status == 'completed' %}
+      <div class="event-recap space-y-12">
+        {{ event.recap_html|safe }}
+      </div>
+      {% elif event.description_html %}
       <div class="prose">
         {{ event.description_html|safe }}
       </div>

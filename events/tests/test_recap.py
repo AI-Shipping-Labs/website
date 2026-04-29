@@ -22,13 +22,45 @@ class EventRecapModelTest(TestCase):
         event.save()
         self.assertTrue(event.has_recap)
 
-    def test_get_recap_url(self):
-        event = Event(slug='my-event')
-        self.assertEqual(event.get_recap_url(), '/events/my-event/recap')
-
 
 class EventRecapViewTest(TestCase):
-    def test_recap_page_returns_200_when_rendered_html_exists(self):
+    def test_event_detail_renders_normal_event_header_then_recording_then_recap(self):
+        Event.objects.create(
+            title='Launch',
+            slug='launch',
+            description='Original launch description',
+            start_datetime=timezone.now(),
+            status='completed',
+            recording_url='https://www.youtube.com/watch?v=test',
+            timestamps=[{'time_seconds': 0, 'label': 'Intro'}],
+            recap_html='<h2>Watch the recording</h2>',
+        )
+        response = self.client.get('/events/launch')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/event_detail.html')
+        self.assertContains(response, 'Launch')
+        self.assertContains(response, 'data-testid="event-recording-block"')
+        self.assertContains(response, 'Watch the recording')
+        self.assertContains(response, 'Chapters (1)')
+        content = response.content.decode()
+        self.assertLess(
+            content.index('data-testid="event-recording-block"'),
+            content.index('Watch the recording'),
+        )
+        self.assertNotIn('<p class="text-muted-foreground">Original launch description</p>', content)
+
+    def test_event_detail_omits_recap_html_when_absent(self):
+        Event.objects.create(
+            title='No Recap',
+            slug='no-recap',
+            start_datetime=timezone.now(),
+            status='completed',
+        )
+        response = self.client.get('/events/no-recap')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Watch the recording')
+
+    def test_old_recap_url_returns_404(self):
         Event.objects.create(
             title='Launch',
             slug='launch',
@@ -37,34 +69,11 @@ class EventRecapViewTest(TestCase):
             recap_html='<h2>Watch the recording</h2>',
         )
         response = self.client.get('/events/launch/recap')
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'events/event_recap.html')
-        self.assertContains(response, 'Watch the recording')
-
-    def test_recap_page_returns_404_without_rendered_html(self):
-        Event.objects.create(
-            title='No Recap',
-            slug='no-recap',
-            start_datetime=timezone.now(),
-            status='completed',
-        )
-        response = self.client.get('/events/no-recap/recap')
-        self.assertEqual(response.status_code, 404)
-
-    def test_recap_page_returns_404_for_draft_to_anonymous(self):
-        Event.objects.create(
-            title='Draft Recap',
-            slug='draft-recap',
-            start_datetime=timezone.now(),
-            status='draft',
-            recap_html='<h2>Draft</h2>',
-        )
-        response = self.client.get('/events/draft-recap/recap')
         self.assertEqual(response.status_code, 404)
 
 
 class EventDetailRecapLinkTest(TestCase):
-    def test_event_detail_shows_recap_link_when_rendered_recap_present(self):
+    def test_upcoming_event_with_synced_recap_still_shows_normal_event_page(self):
         Event.objects.create(
             title='Has Recap',
             slug='has-recap',
@@ -75,8 +84,10 @@ class EventDetailRecapLinkTest(TestCase):
         response = self.client.get('/events/has-recap')
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn('View event recap', content)
-        self.assertIn('/events/has-recap/recap', content)
+        self.assertIn('Sign in to register for this event', content)
+        self.assertNotIn('<h2>Summary</h2>', content)
+        self.assertNotIn('View event recap', content)
+        self.assertNotIn('/events/has-recap/recap', content)
 
     def test_event_detail_hides_recap_link_when_no_rendered_recap(self):
         Event.objects.create(
@@ -115,18 +126,15 @@ class SyncEventsRecapFileTest(TestCase):
                 'event_type: live\n'
                 'status: completed\n'
                 'start_datetime: "2026-04-13T16:30:00Z"\n'
-                'recording_embed_url: "https://www.youtube.com/embed/WQAs1LNxdvM"\n'
+                'recording_embed_url: "https://www.youtube.com/embed/test-video"\n'
                 'recap_file: launch/recap.md\n'
-                'recap_data:\n'
-                '  cta_label: "Join now"\n'
             ))
             self._write(tmp, 'events/launch/recap.md', (
                 '---\n'
-                'data:\n'
-                '  cta_label: "Start building"\n'
-                '  topics:\n'
-                '    - title: "Execution"\n'
-                '      summary: "Ship real projects."\n'
+                'cta_label: "Start building"\n'
+                'topics:\n'
+                '  - title: "Execution"\n'
+                '    summary: "Ship real projects."\n'
                 '---\n'
                 '# Recap\n\n'
                 '<!-- include:recording.html -->\n\n'
@@ -156,11 +164,11 @@ class SyncEventsRecapFileTest(TestCase):
         self.assertEqual(event.recap_data['cta_label'], 'Start building')
         self.assertEqual(
             event.recording_embed_url,
-            'https://www.youtube.com/embed/WQAs1LNxdvM',
+            'https://www.youtube.com/embed/test-video',
         )
         self.assertIn('id="watch-stream"', event.recap_html)
         self.assertIn('Watch the recording', event.recap_html)
-        self.assertIn('youtube.com/embed/WQAs1LNxdvM', event.recap_html)
+        self.assertIn('youtube.com/embed/test-video', event.recap_html)
         self.assertIn('Execution', event.recap_html)
         self.assertIn('Ship real projects.', event.recap_html)
         self.assertIn('Start building', event.recap_html)
@@ -279,7 +287,7 @@ class SyncEventsRecapFileTest(TestCase):
         self.assertEqual(event.recap_html, '')
         self.assertFalse(event.has_recap)
 
-    def test_sync_logs_error_for_non_mapping_recap_data(self):
+    def test_sync_logs_error_for_invalid_recap_frontmatter(self):
         from integrations.services.github import sync_content_source
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -289,14 +297,17 @@ class SyncEventsRecapFileTest(TestCase):
                 'slug: bad-data\n'
                 'start_datetime: "2026-04-13T16:30:00Z"\n'
                 'recap_file: bad-data/recap.md\n'
-                'recap_data:\n'
-                '  - invalid\n'
             ))
-            self._write(tmp, 'events/bad-data/recap.md', '# Recap\n')
+            self._write(tmp, 'events/bad-data/recap.md', (
+                '---\n'
+                'hero: [unterminated\n'
+                '---\n'
+                '# Recap\n'
+            ))
             sync_log = sync_content_source(self._make_source(), repo_dir=tmp)
 
         self.assertEqual(len(sync_log.errors), 1)
-        self.assertIn('recap_data in events/bad-data.yaml must be a mapping', sync_log.errors[0]['error'])
+        self.assertIn('Failed to parse frontmatter', sync_log.errors[0]['error'])
         event = Event.objects.get(slug='bad-data')
         self.assertEqual(event.recap_html, '')
         self.assertFalse(event.has_recap)

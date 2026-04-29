@@ -1434,6 +1434,89 @@ def _defaults_differ(instance, defaults):
     return False
 
 
+def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
+    """Render an event recap markdown file and content-owned includes.
+
+    ``recap_file`` is resolved relative to the event YAML/Markdown file. The
+    recap file may have frontmatter with a ``data`` mapping. Event YAML can
+    also provide ``recap_data``; recap-file data wins on key conflicts.
+
+    Recap markdown and includes are trusted content-repo input, matching the
+    rest of the synced markdown pipeline. Do not point this at user uploads.
+    """
+    recap_file = data.get('recap_file') or data.get('recap-file') or ''
+    if not recap_file:
+        return {
+            'recap_file': '',
+            'recap_markdown': '',
+            'recap_html': '',
+            'recap_data': {},
+        }
+
+    if os.path.isabs(recap_file):
+        raise ValueError(f'recap_file must be relative in {rel_path}')
+
+    event_base = os.path.dirname(event_rel_path)
+    recap_rel_path = os.path.normpath(os.path.join(event_base, recap_file))
+    repo_root = os.path.realpath(repo_dir)
+    recap_path = os.path.realpath(os.path.join(repo_dir, recap_rel_path))
+    if os.path.commonpath([repo_root, recap_path]) != repo_root:
+        raise ValueError(f'recap_file escapes content repo in {rel_path}')
+    if not os.path.isfile(recap_path):
+        raise FileNotFoundError(f'recap_file not found in {rel_path}: {recap_file}')
+
+    metadata, body = _parse_markdown_file(recap_path)
+    recap_data = {}
+    event_recap_data = data.get('recap_data', {})
+    if event_recap_data:
+        if not isinstance(event_recap_data, dict):
+            raise ValueError(f'recap_data in {rel_path} must be a mapping/dict')
+        recap_data.update(event_recap_data)
+    file_recap_data = metadata.get('data', {})
+    if file_recap_data:
+        if not isinstance(file_recap_data, dict):
+            raise ValueError(f'data in {recap_rel_path} must be a mapping/dict')
+        recap_data.update(file_recap_data)
+
+    recap_base_dir = os.path.dirname(recap_rel_path)
+    body = rewrite_image_urls(body, source.repo_name, recap_base_dir)
+
+    from content.utils.includes import expand_content_includes
+    from content.utils.linkify import linkify_urls
+    from events.models.event import render_markdown
+
+    html = linkify_urls(render_markdown(body))
+    html = expand_content_includes(
+        html,
+        repo_dir=repo_dir,
+        base_dir=os.path.dirname(recap_path),
+        context={
+            'data': recap_data,
+            'event': {
+                'title': data.get('title', ''),
+                'slug': data.get('slug', ''),
+                'description': data.get('description', ''),
+                'start_datetime': data.get('start_datetime'),
+                'end_datetime': data.get('end_datetime'),
+                'location': data.get('location', ''),
+                'recording_url': data.get('recording_url', '') or data.get('video_url', ''),
+                'recording_embed_url': (
+                    data.get('recording_embed_url', '')
+                    or data.get('google_embed_url', '')
+                ),
+                'recording_s3_url': data.get('recording_s3_url', ''),
+            },
+        },
+    )
+
+    return {
+        'recap_file': recap_file,
+        'recap_markdown': body,
+        'recap_html': html,
+        'recap_data': recap_data,
+    }
+
+
 def _count_content_files(content_dir):
     """Count content files (.md, .yaml, .yml) in a directory tree."""
     count = 0
@@ -3376,8 +3459,25 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
     seen_slugs = set()
     failed_slugs = set()
     data = None  # ensure name is bound for the except clause
+    recap_rel_paths = set()
+
+    for rel_path in file_list:
+        filename = os.path.basename(rel_path)
+        if filename.endswith(('.yaml', '.yml')):
+            try:
+                yaml_data = _parse_yaml_file(os.path.join(repo_dir, rel_path))
+            except Exception:
+                continue
+            recap_file = yaml_data.get('recap_file') or yaml_data.get('recap-file')
+            if recap_file and not os.path.isabs(recap_file):
+                recap_rel_paths.add(os.path.normpath(
+                    os.path.join(os.path.dirname(rel_path), recap_file),
+                ))
 
     for rel_path in sorted(file_list):
+        if os.path.normpath(rel_path) in recap_rel_paths:
+            continue
+
         filepath = os.path.join(repo_dir, rel_path)
         filename = os.path.basename(rel_path)
 
@@ -3414,23 +3514,30 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
 
             seen_slugs.add(slug)
 
-            # Validate recap if present: must be a dict
-            recap_value = data.get('recap', {})
-            if recap_value and not isinstance(recap_value, dict):
-                msg = (
-                    f'Invalid recap in {rel_path}: must be a mapping/dict, '
-                    f'got {type(recap_value).__name__}. Skipping recap.'
+            try:
+                rendered_recap = _render_event_recap_file(
+                    repo_dir, rel_path, data, source, rel_path,
                 )
+            except Exception as exc:
+                msg = f'Error rendering recap for {rel_path}: {exc}'
                 logger.warning(msg)
                 stats['errors'].append({'file': rel_path, 'error': msg})
-                recap_value = {}
+                rendered_recap = {
+                    'recap_file': data.get('recap_file') or data.get('recap-file') or '',
+                    'recap_markdown': '',
+                    'recap_html': '',
+                    'recap_data': {},
+                }
 
             # Content fields that sync always updates
             content_defaults = {
                 'title': data.get('title', slug),
                 'description': data.get('description', ''),
                 'recording_url': data.get('recording_url', '') or data.get('video_url', ''),
-                'recording_embed_url': data.get('google_embed_url', ''),
+                'recording_embed_url': (
+                    data.get('recording_embed_url', '')
+                    or data.get('google_embed_url', '')
+                ),
                 'transcript_url': data.get('transcript_url', ''),
                 'timestamps': data.get('timestamps', []),
                 'materials': data.get('materials', []),
@@ -3443,7 +3550,10 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                 'speaker_bio': data.get('speaker_bio', ''),
                 'related_course': data.get('related_course', ''),
                 'published': data.get('published', True),
-                'recap': recap_value,
+                'recap_file': rendered_recap['recap_file'],
+                'recap_markdown': rendered_recap['recap_markdown'],
+                'recap_html': rendered_recap['recap_html'],
+                'recap_data': rendered_recap['recap_data'],
                 'content_id': event_content_id,
                 'source_repo': source.repo_name,
                 'source_path': rel_path,

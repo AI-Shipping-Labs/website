@@ -234,6 +234,22 @@ class Event(models.Model):
         default=dict, blank=True,
         help_text='Structured recap landing page sections. See docs for schema.',
     )
+    recap_file = models.CharField(
+        max_length=500, blank=True, default='',
+        help_text='Content-repo markdown file used to render the recap page.',
+    )
+    recap_markdown = models.TextField(
+        blank=True, default='',
+        help_text='Raw synced markdown body for the recap page.',
+    )
+    recap_html = models.TextField(
+        blank=True, default='',
+        help_text='Rendered recap HTML, including content-repo includes.',
+    )
+    recap_data = models.JSONField(
+        default=dict, blank=True,
+        help_text='Data from recap frontmatter / event recap_data for include rendering.',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -279,7 +295,7 @@ class Event(models.Model):
     @property
     def has_recap(self):
         """Return True if this event has any recap data."""
-        return bool(self.recap)
+        return bool(self.recap_html)
 
     def get_recap_url(self):
         """Return the URL for the recap landing page."""

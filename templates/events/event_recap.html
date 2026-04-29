@@ -1,398 +1,51 @@
 {% extends "base.html" %}
 
 {% block title %}{{ event.title }} Recap | AI Shipping Labs{% endblock %}
-{% block meta_description %}{% if recap.hero.subtitle %}{{ recap.hero.subtitle|truncatechars:160 }}{% else %}Recap of {{ event.title }} — key topics, recording, and how to join the community.{% endif %}{% endblock %}
+{% block meta_description %}{% if event.description %}{{ event.description|truncatechars:160 }}{% else %}Recap of {{ event.title }}.{% endif %}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ site_url }}{{ event.get_recap_url }}">{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
-<main class="min-h-screen pt-24 bg-background">
+<main class="min-h-screen pt-24">
+  <article class="py-8 sm:py-16 lg:py-24 overflow-x-hidden">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="{{ event.get_absolute_url }}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to event
+      </a>
 
-  {# ------------------- HERO ------------------- #}
-  {% if recap.hero %}
-  <section class="px-6 pb-14 pt-10 lg:px-8 lg:pb-20 lg:pt-16">
-    <div class="mx-auto max-w-5xl">
-      <div class="relative overflow-hidden rounded-2xl border border-border bg-card p-8 sm:p-10">
-        <div class="relative">
-          <div class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
-            <i data-lucide="video" class="h-3.5 w-3.5"></i>
-            {{ recap.hero.eyebrow|default:"Event Recap" }}
-          </div>
-
-          <h1 class="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-5xl" style="text-wrap: balance;">
-            {{ recap.hero.title|default:event.title }}
-          </h1>
-
-          {% if recap.hero.subtitle %}
-          <p class="mt-4 max-w-3xl text-base text-muted-foreground sm:text-lg">{{ recap.hero.subtitle }}</p>
-          {% endif %}
-
-          <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-            <span class="inline-flex items-center gap-1.5">
-              <i data-lucide="calendar-days" class="h-4 w-4 text-accent"></i>
-              {{ event.short_date }}
-            </span>
-            {% if recap.hero.duration %}
-            <span class="inline-flex items-center gap-1.5">
-              <i data-lucide="clock" class="h-4 w-4 text-accent"></i>
-              {{ recap.hero.duration }}
-            </span>
-            {% endif %}
-            {% if recap.hero.format %}
-            <span class="inline-flex items-center gap-1.5">
-              <i data-lucide="users" class="h-4 w-4 text-accent"></i>
-              {{ recap.hero.format }}
-            </span>
-            {% endif %}
-          </div>
-
-          {% if recap.hero.primary_cta or recap.hero.secondary_cta %}
-          <div class="mt-8 flex flex-wrap gap-3">
-            {% if recap.hero.primary_cta %}
-            <a href="{{ recap.hero.primary_cta.href|default:'#plans' }}"
-               {% if recap.hero.primary_cta.external %}target="_blank" rel="noopener noreferrer"{% endif %}
-               class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90">
-              {{ recap.hero.primary_cta.label }}
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
-            {% endif %}
-            {% if recap.hero.secondary_cta %}
-            <a href="{{ recap.hero.secondary_cta.href }}"
-               {% if recap.hero.secondary_cta.external %}target="_blank" rel="noopener noreferrer"{% endif %}
-               class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-secondary">
-              {{ recap.hero.secondary_cta.label }}
-              {% if recap.hero.secondary_cta.external %}<i data-lucide="external-link" class="h-4 w-4 opacity-80"></i>{% endif %}
-            </a>
-            {% endif %}
-          </div>
-          {% endif %}
-
-          {% if recap.hero.jump_to %}
-          <nav aria-label="On this page" class="mt-8 border-t border-border/80 pt-6">
-            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jump to</p>
-            <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm">
-              {% for item in recap.hero.jump_to %}
-              <li>
-                <a href="{{ item.href }}"
-                   class="rounded-md px-0.5 py-0.5 text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline">
-                  {{ item.label }}
-                </a>
-              </li>
-              {% endfor %}
-            </ul>
-          </nav>
+      <header class="mb-12">
+        <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
+          <i data-lucide="sparkles" class="h-3.5 w-3.5"></i>
+          Event Recap
+        </div>
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+          {{ event.title }}
+        </h1>
+        <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {{ event.formatted_start }}
+          </span>
+          {% if event.location %}
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="map-pin" class="h-4 w-4"></i>
+            {{ event.location }}
+          </span>
           {% endif %}
         </div>
+      </header>
+
+      <div class="prose min-w-0 max-w-full">
+        {{ event.recap_html|safe }}
       </div>
     </div>
-  </section>
-  {% endif %}
-
-  {# ------------------- WATCH STREAM ------------------- #}
-  {% if recap.watch_stream and recap.watch_stream.embed_url %}
-  <section id="watch-stream" class="scroll-mt-28 px-6 pb-14 lg:px-8 lg:pb-20" aria-labelledby="watch-stream-heading">
-    <div class="mx-auto max-w-5xl">
-      <div class="overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-6">
-        <div id="watch-stream-heading" class="mb-4 flex items-center gap-2 text-sm font-medium text-accent">
-          <i data-lucide="video" class="h-4 w-4 shrink-0"></i>
-          {{ recap.watch_stream.title|default:"Watch the launch stream" }}
-        </div>
-        <div class="aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-lg">
-          <iframe
-            class="h-full w-full"
-            src="{{ recap.watch_stream.embed_url }}"
-            title="{{ recap.watch_stream.title|default:event.title }}"
-            loading="lazy"
-            referrerpolicy="strict-origin-when-cross-origin"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen></iframe>
-        </div>
-      </div>
-    </div>
-  </section>
-  {% endif %}
-
-  {# ------------------- KEY TOPICS ------------------- #}
-  {% if recap.key_topics and recap.key_topics.items %}
-  <section id="membership" class="scroll-mt-28 border-t border-border px-6 py-14 lg:px-8 lg:py-20">
-    <div class="mx-auto max-w-5xl">
-      <div class="mb-8">
-        {% if recap.key_topics.section_eyebrow %}
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ recap.key_topics.section_eyebrow }}</p>
-        {% endif %}
-        <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          {{ recap.key_topics.section_title|default:"What You Need to Know" }}
-        </h2>
-      </div>
-      <div class="grid gap-4 md:grid-cols-3">
-        {% for item in recap.key_topics.items %}
-        <article class="rounded-xl border border-border bg-card p-5 transition-colors hover:border-accent/40">
-          <div class="flex items-center gap-2 text-xs font-semibold tabular-nums text-muted-foreground">
-            <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-accent/25 bg-accent/10 text-accent">
-              {{ forloop.counter }}
-            </span>
-            <span class="uppercase tracking-wide">{{ item.title }}</span>
-          </div>
-          <p class="mt-3 text-sm leading-relaxed text-muted-foreground">{{ item.summary }}</p>
-        </article>
-        {% endfor %}
-      </div>
-    </div>
-  </section>
-  {% endif %}
-
-  {# ------------------- ACTIVITIES ------------------- #}
-  {% if recap.activities and recap.activities.items %}
-  <section id="activities" class="scroll-mt-28 border-t border-border px-6 py-14 lg:px-8 lg:py-20">
-    <div class="mx-auto max-w-5xl">
-      <div class="mb-8">
-        <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          {{ recap.activities.section_title|default:"Main Community Activities" }}
-        </h2>
-        {% if recap.activities.section_intro %}
-        <p class="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">{{ recap.activities.section_intro }}</p>
-        {% endif %}
-      </div>
-      <div class="grid gap-4 md:grid-cols-2">
-        {% for activity in recap.activities.items %}
-        <article class="flex h-full flex-col rounded-xl border border-border bg-card p-5 transition-colors hover:border-accent/40">
-          <h3 class="text-lg font-semibold text-foreground">{{ activity.title }}</h3>
-          {% if activity.hook %}
-          <p class="mt-2 text-sm font-medium text-foreground/90">{{ activity.hook }}</p>
-          {% endif %}
-          {% if activity.details %}
-          <ul class="mt-3 space-y-2">
-            {% for detail in activity.details %}
-            <li class="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
-              <span class="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent"></span>
-              <span>{{ detail }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-          {% endif %}
-        </article>
-        {% endfor %}
-      </div>
-    </div>
-  </section>
-  {% endif %}
-
-  {# ------------------- EARLY MEMBER ------------------- #}
-  {% if recap.early_member %}
-  <section class="scroll-mt-28 border-t border-border px-6 py-14 lg:px-8 lg:py-20">
-    <div class="mx-auto max-w-5xl">
-      <div class="mb-8">
-        {% if recap.early_member.section_eyebrow %}
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ recap.early_member.section_eyebrow }}</p>
-        {% endif %}
-        <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          {{ recap.early_member.section_title|default:"Why Joining Early Matters" }}
-        </h2>
-        {% if recap.early_member.intro %}
-        <p class="mt-2 max-w-4xl text-sm leading-relaxed text-muted-foreground sm:text-base">{{ recap.early_member.intro }}</p>
-        {% endif %}
-      </div>
-
-      <div class="grid gap-4 md:grid-cols-3">
-        <article class="rounded-xl border border-accent/30 bg-accent/5 p-5 md:col-span-2">
-          {% if recap.early_member.plan_title %}
-          <div class="inline-flex items-center gap-2 text-sm font-semibold text-accent">
-            <i data-lucide="target" class="h-4 w-4"></i>
-            {{ recap.early_member.plan_title }}
-          </div>
-          {% endif %}
-          {% if recap.early_member.plan_description %}
-          <p class="mt-3 text-sm leading-relaxed text-muted-foreground">{{ recap.early_member.plan_description }}</p>
-          {% endif %}
-          {% if recap.early_member.plan_steps %}
-          <div class="mt-5">
-            <p class="text-xs font-semibold uppercase tracking-[0.12em] text-accent/90">How it works</p>
-            <ol class="mt-3 grid gap-3 sm:grid-cols-2 list-none p-0">
-              {% for step in recap.early_member.plan_steps %}
-              <li class="rounded-lg border border-accent/20 bg-background p-3">
-                <div class="flex items-start gap-3">
-                  <span class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
-                    {{ forloop.counter }}
-                  </span>
-                  <p class="text-sm leading-relaxed text-muted-foreground">{{ step }}</p>
-                </div>
-              </li>
-              {% endfor %}
-            </ol>
-          </div>
-          {% endif %}
-        </article>
-
-        <article id="early-member-plan" class="scroll-mt-28 rounded-xl border border-border bg-card p-5">
-          {% if recap.early_member.focus_areas_title %}
-          <h3 class="text-base font-semibold text-foreground">{{ recap.early_member.focus_areas_title }}</h3>
-          {% endif %}
-          {% if recap.early_member.focus_areas %}
-          <ul class="mt-3 space-y-2">
-            {% for item in recap.early_member.focus_areas %}
-            <li class="flex items-start gap-2 text-sm text-muted-foreground">
-              <span class="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent"></span>
-              <span>{{ item }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-          {% endif %}
-          <a href="#plans" class="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-accent hover:underline">
-            More about membership plans
-            <i data-lucide="arrow-right" class="h-4 w-4"></i>
-          </a>
-        </article>
-      </div>
-
-      {% if recap.early_member.closing or recap.early_member.primary_cta or recap.early_member.secondary_cta %}
-      <div class="mt-4 rounded-xl border border-border bg-card p-5">
-        {% if recap.early_member.closing %}
-        <p class="text-sm leading-relaxed text-muted-foreground">{{ recap.early_member.closing }}</p>
-        {% endif %}
-        {% if recap.early_member.primary_cta or recap.early_member.secondary_cta %}
-        <div class="mt-4 flex flex-wrap items-center gap-3">
-          {% if recap.early_member.primary_cta %}
-          <a href="{{ recap.early_member.primary_cta.href }}"
-             {% if recap.early_member.primary_cta.tier %}target="_blank" rel="noopener noreferrer"{% elif recap.early_member.primary_cta.external %}target="_blank" rel="noopener noreferrer"{% endif %}
-             class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90">
-            {{ recap.early_member.primary_cta.label }}
-            {% if recap.early_member.primary_cta.tier or recap.early_member.primary_cta.external %}<i data-lucide="external-link" class="h-4 w-4 opacity-90"></i>{% endif %}
-          </a>
-          {% endif %}
-          {% if recap.early_member.secondary_cta %}
-          <a href="{{ recap.early_member.secondary_cta.href }}"
-             {% if recap.early_member.secondary_cta.external %}target="_blank" rel="noopener noreferrer"{% endif %}
-             class="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary">
-            {{ recap.early_member.secondary_cta.label }}
-          </a>
-          {% endif %}
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-    </div>
-  </section>
-  {% endif %}
-
-  {# ------------------- UPCOMING EVENTS ------------------- #}
-  {% if recap.upcoming_events and recap.upcoming_events.items %}
-  <section id="upcoming-events" class="scroll-mt-28 border-t border-border px-6 py-14 lg:px-8 lg:py-20">
-    <div class="mx-auto max-w-5xl">
-      <div class="mb-8">
-        {% if recap.upcoming_events.section_eyebrow %}
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ recap.upcoming_events.section_eyebrow }}</p>
-        {% endif %}
-        <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          {{ recap.upcoming_events.section_title|default:"Next Live Sessions" }}
-        </h2>
-      </div>
-      <div class="grid gap-4 md:grid-cols-2">
-        {% for ev in recap.upcoming_events.items %}
-        <article class="flex h-full flex-col rounded-xl border border-border bg-card p-5 transition-colors hover:border-accent/30">
-          <h3 class="text-lg font-semibold leading-snug text-foreground">{{ ev.title }}</h3>
-          {% if ev.date %}
-          <p class="mt-3 inline-flex items-start gap-2 text-sm text-muted-foreground">
-            <i data-lucide="calendar-days" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
-            <span>{{ ev.date }}</span>
-          </p>
-          {% endif %}
-          {% if ev.description %}
-          <p class="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">{{ ev.description }}</p>
-          {% endif %}
-          {% if ev.href %}
-          <a href="{{ ev.href }}" target="_blank" rel="noopener noreferrer"
-             class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto">
-            Register on Luma
-            <i data-lucide="external-link" class="h-4 w-4 opacity-90"></i>
-          </a>
-          {% endif %}
-        </article>
-        {% endfor %}
-      </div>
-    </div>
-  </section>
-  {% endif %}
-
-  {# ------------------- PLANS ------------------- #}
-  {% if recap.plans and recap.plans.items %}
-  <section id="plans" class="scroll-mt-28 border-t border-border px-6 py-14 lg:px-8 lg:py-20">
-    <div class="mx-auto max-w-5xl">
-      <div class="mb-8">
-        {% if recap.plans.section_eyebrow %}
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ recap.plans.section_eyebrow }}</p>
-        {% endif %}
-        <h2 class="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          {{ recap.plans.section_title|default:"Pick the Right Level of Support" }}
-        </h2>
-        {% if recap.plans.section_intro %}
-        <p class="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">{{ recap.plans.section_intro }}</p>
-        {% endif %}
-      </div>
-      <div class="grid gap-4 md:grid-cols-3">
-        {% for plan in recap.plans.items %}
-        <article class="flex h-full flex-col rounded-xl border p-5 {% if plan.highlight %}border-accent/50 bg-accent/5 shadow-md ring-1 ring-accent/20{% else %}border-border bg-card{% endif %}">
-          {% if plan.label %}
-          <div class="inline-flex w-fit rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs font-semibold text-accent">
-            {{ plan.label }}
-          </div>
-          {% endif %}
-          <h3 class="mt-3 text-lg font-semibold text-foreground">{{ plan.tier_name|default:plan.tier|title }}</h3>
-          {% if plan.description %}
-          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ plan.description }}</p>
-          {% endif %}
-          {% if plan.best_for %}
-          <p class="mt-3 text-sm text-foreground/85">{{ plan.best_for }}</p>
-          {% endif %}
-          {% if plan.extras %}
-          <ul class="mt-3 space-y-2">
-            {% for item in plan.extras %}
-            <li class="flex items-start gap-2 text-sm text-muted-foreground">
-              <span class="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent"></span>
-              <span>{{ item }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-          {% endif %}
-          <a href="{{ plan.payment_link|default:'#' }}"
-             {% if plan.payment_link and plan.payment_link != '#' %}target="_blank" rel="noopener noreferrer"{% endif %}
-             data-tier="{{ plan.tier }}"
-             class="mt-auto inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors sm:w-auto {% if plan.highlight %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}">
-            Choose {{ plan.tier_name|default:plan.tier|title }}
-            <i data-lucide="external-link" class="h-4 w-4 opacity-90"></i>
-          </a>
-        </article>
-        {% endfor %}
-      </div>
-    </div>
-  </section>
-  {% endif %}
-
-  {# ------------------- FINAL CTA ------------------- #}
-  {% if recap.final_cta %}
-  <section class="border-t border-border px-6 py-14 lg:px-8 lg:py-20">
-    <div class="mx-auto max-w-4xl rounded-2xl border border-accent/30 bg-accent/5 p-8 text-center">
-      <h3 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-        {{ recap.final_cta.title|default:"Ready to Join?" }}
-      </h3>
-      {% if recap.final_cta.description %}
-      <p class="mx-auto mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground sm:text-base">{{ recap.final_cta.description }}</p>
-      {% endif %}
-      {% if recap.final_cta.buttons %}
-      <div class="mt-7 flex flex-wrap items-center justify-center gap-3">
-        {% for btn in recap.final_cta.buttons %}
-        <a href="{{ btn.href }}"
-           {% if btn.external %}target="_blank" rel="noopener noreferrer"{% endif %}
-           class="inline-flex items-center gap-2 rounded-lg {% if forloop.first %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}border border-border bg-background text-foreground hover:bg-secondary{% endif %} px-5 py-2.5 text-sm font-semibold transition-colors">
-          {{ btn.label }}
-          <i data-lucide="arrow-right" class="h-4 w-4"></i>
-        </a>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
-  </section>
-  {% endif %}
-
+  </article>
 </main>
 {% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% include "_partials/mermaid_script.html" %}
 {% endblock %}

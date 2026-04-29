@@ -113,7 +113,15 @@ markdown body with images
 
 ### Event
 
-`events/<slug>.yaml`. One file per event. Optional `recap:` block renders an event-recap landing page (see `events/views/pages.py::event_recap`, route `/events/<slug>/recap`).
+`events/<slug>.yaml`. One file per event. Optional `recap_file:` points at a
+markdown file in the same content repo and renders an event-recap page (see
+`events/views/pages.py::event_recap`, route `/events/<slug>/recap`). Recap
+markdown can include repo-local HTML snippets with
+`<!-- include:relative-file.html -->`; those snippets are rendered during sync
+and stored as HTML, so page-specific markup stays in the content repo instead
+of Django templates. Recap markdown and include files are trusted content-repo
+inputs, like other synced markdown HTML; do not point `recap_file` or include
+markers at user uploads or unreviewed external content.
 
 ```yaml
 content_id: <UUID>
@@ -126,18 +134,31 @@ end_datetime: "2026-04-13T18:00:00Z"
 location: Zoom
 required_level: 0
 speaker_name: Alexey Grigorev
+recap_file: community-launch/recap.md
+recap_data:           # optional, merged with recap file frontmatter data
+  cta_label: Join now
 description: |
   multi-line markdown
-recap:               # optional
-  hero: { ... }
-  watch_stream: { ... }
-  key_topics: [...]
-  activities: [...]
-  early_member: { ... }
-  upcoming_events: [...]
-  plans: [...]
-  closing: { ... }
 ```
+
+Example recap file:
+
+```markdown
+---
+data:
+  recording:
+    title: Watch the stream
+    embed_url: https://www.youtube.com/embed/...
+---
+
+# Event recap
+
+<!-- include:recording.html -->
+```
+
+If the event file is `events/community-launch.yaml`, the include above is
+resolved relative to the recap file directory, for example
+`events/community-launch/recording.html`.
 
 ### Recording
 

@@ -10,6 +10,7 @@ from django.template.loader import render_to_string
 
 from email_app.services.email_service import EmailService
 from events.services.calendar_invite import generate_ics
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +98,8 @@ def _send_raw_email(to_email, subject, html_body, ics_content, method='REQUEST')
     Returns:
         str: SES message ID.
     """
-    from_email = getattr(
-        settings, 'SES_FROM_EMAIL', 'community@aishippinglabs.com',
+    from_email = get_config(
+        'SES_FROM_EMAIL', 'community@aishippinglabs.com',
     )
 
     msg = MIMEMultipart('mixed')
@@ -118,9 +119,9 @@ def _send_raw_email(to_email, subject, html_body, ics_content, method='REQUEST')
 
     client = boto3.client(
         'sesv2',
-        region_name=getattr(settings, 'AWS_SES_REGION', 'us-east-1'),
-        aws_access_key_id=getattr(settings, 'AWS_ACCESS_KEY_ID', None),
-        aws_secret_access_key=getattr(settings, 'AWS_SECRET_ACCESS_KEY', None),
+        region_name=get_config('AWS_SES_REGION', 'us-east-1'),
+        aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
     )
     response = client.send_email(
         FromEmailAddress=from_email,

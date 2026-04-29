@@ -1,0 +1,25 @@
+{% if user_authenticated %}
+<button
+  type="button"
+  id="{{ completion_button_id }}"
+  data-completion-toggle
+  data-completion-url="{{ completion_url }}"
+  {% if completion_kind == "course" %}
+  data-unit-id="{{ unit.pk }}"
+  data-course-slug="{{ course.slug }}"
+  {% elif completion_kind == "workshop" %}
+  data-page-slug="{{ page.slug }}"
+  data-workshop-slug="{{ workshop.slug }}"
+  {% endif %}
+  {% if completion_button_testid %}data-testid="{{ completion_button_testid }}"{% endif %}
+  class="inline-flex items-center justify-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors flex-shrink-0 {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20{% else %}border-border bg-card text-foreground hover:bg-muted{% endif %}"
+>
+  {% if is_completed %}
+  <i data-lucide="check-circle-2" class="h-4 w-4"></i>
+  Completed
+  {% else %}
+  <i data-lucide="circle" class="h-4 w-4"></i>
+  Mark as completed
+  {% endif %}
+</button>
+{% endif %}

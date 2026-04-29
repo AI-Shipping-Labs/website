@@ -583,6 +583,15 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         'user_authenticated': user.is_authenticated,
         'unit_content_id': str(unit.content_id) if unit.content_id else '',
         'show_discussion': show_discussion,
+        'prev_item_url': prev_unit.get_absolute_url() if prev_unit else '',
+        'prev_item_title': prev_unit.title if prev_unit else '',
+        'next_item_url': next_unit.get_absolute_url() if next_unit else '',
+        'next_item_title': next_unit.title if next_unit else '',
+        'completion_kind': 'course',
+        'completion_button_id': 'mark-complete-btn',
+        'completion_url': f'/api/courses/{course.slug}/units/{unit.pk}/complete',
+        'bottom_prev_testid': 'bottom-prev-btn',
+        'bottom_next_testid': 'bottom-next-btn',
     }
     return render(request, 'content/course_unit_detail.html', context)
 
@@ -739,11 +748,11 @@ def api_cohort_unenroll(request, slug, cohort_id):
 @require_POST
 def api_course_purchase(request, slug):
     """POST /api/courses/{slug}/purchase - create a Stripe checkout for one-time course purchase."""
-    from django.conf import settings as _settings
-    if not _settings.STRIPE_CHECKOUT_ENABLED:
+    from integrations.config import get_config, is_enabled
+    if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return JsonResponse({
             'error': 'Checkout is disabled. Use payment links.',
-            'portal_url': _settings.STRIPE_CUSTOMER_PORTAL_URL,
+            'portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         }, status=410)
 
     if not request.user.is_authenticated:

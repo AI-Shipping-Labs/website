@@ -11,51 +11,20 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
+  {% if not is_gated %}
+  {% include "content/reader/_prepaint.html" %}
+  {% include "content/reader/_styles.html" %}
+  {% include "content/reader/_floating_toggle.html" with reader_sidebar_label="workshop navigation" %}
+  {% endif %}
   <div class="py-8 lg:py-12">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
-      <div class="flex flex-col lg:flex-row gap-8">
-
-        <!-- Sidebar: list of all workshop pages. Workshops are typically
-             <=20 pages so we don't need the foldable behaviour the course
-             unit sidebar uses. -->
-        <aside class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
-          <div class="lg:sticky lg:top-28">
-            <a href="{{ workshop.get_absolute_url }}" title="{{ workshop.title }}" class="mb-4 flex w-full items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0" data-testid="sidebar-back-to-workshop">
-              <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
-              <span class="truncate">{{ workshop.title }}</span>
-            </a>
-
-            <nav class="rounded-lg border border-border bg-card p-2" aria-label="Workshop pages" data-testid="workshop-sidebar">
-              <h2 class="sr-only">Workshop pages</h2>
-              <ul class="space-y-0.5">
-                {% for nav_page in pages %}
-                <li>
-                  <a href="{{ nav_page.get_absolute_url }}"
-                     class="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors
-                            {% if nav_page.pk == page.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}"
-                     {% if nav_page.pk == page.pk %}data-testid="sidebar-current-page" aria-current="page"{% endif %}>
-                    <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-[10px] font-semibold text-accent">{{ forloop.counter }}</span>
-                    <span class="truncate">{{ nav_page.title }}</span>
-                  </a>
-                </li>
-                {% endfor %}
-              </ul>
-            </nav>
-
-            {% if workshop.code_repo_url %}
-            <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
-               class="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent"
-               data-testid="sidebar-code-repo-link">
-              <i data-lucide="github" class="h-4 w-4"></i>
-              View code
-              <i data-lucide="external-link" class="h-3 w-3"></i>
-            </a>
-            {% endif %}
-          </div>
-        </aside>
+      <div class="flex flex-col lg:flex-row gap-8" id="content-layout">
+        {% if not is_gated %}
+        {% include "content/reader/_sidebar.html" with reader_back_url=workshop.get_absolute_url reader_back_title=workshop.title reader_back_testid="sidebar-back-to-workshop" reader_sidebar_label="workshop navigation" reader_mobile_label="Workshop Navigation" reader_nav_aria_label="Workshop pages" reader_nav_testid="workshop-sidebar" reader_nav_kind="workshop" %}
+        {% endif %}
 
         <!-- Main content -->
-        <div class="flex-1 min-w-0 order-1 lg:order-2">
+        <div class="flex-1 min-w-0 order-1 lg:order-2" {% if not is_gated %}id="content-sidebar-main"{% endif %}>
           <!-- Breadcrumb -->
           <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden" data-testid="page-breadcrumb">
             <a href="/workshops" class="hover:text-foreground transition-colors flex-shrink-0">Workshops</a>
@@ -73,6 +42,10 @@
             <i data-lucide="play" class="h-3.5 w-3.5"></i>
             Watch this section ({{ watch_bar_label }})
           </a>
+          {% endif %}
+
+          {% if not is_gated %}
+          {% include "content/reader/_top_nav.html" %}
           {% endif %}
 
           <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl mb-8" data-testid="page-title">{{ page.title }}</h1>
@@ -102,48 +75,7 @@
           </div>
           {% endif %}
 
-          <!-- Prev / Next + Mark as completed (issue #365) -->
-          {% if prev_page or next_page or user_authenticated %}
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 border-t border-border pt-8 mt-8">
-            {% if prev_page %}
-            <a href="{{ prev_page.get_absolute_url }}"
-               class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted min-w-0"
-               data-testid="page-prev-btn">
-              <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
-              <span class="truncate">{{ prev_page.title }}</span>
-            </a>
-            {% endif %}
-
-            {% if user_authenticated %}
-            <button
-              type="button"
-              id="mark-page-complete-btn"
-              data-page-slug="{{ page.slug }}"
-              data-workshop-slug="{{ workshop.slug }}"
-              data-testid="mark-page-complete-btn"
-              class="inline-flex items-center justify-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-medium transition-colors flex-shrink-0
-                     {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20{% else %}border-border bg-card text-foreground hover:bg-muted{% endif %}"
-            >
-              {% if is_completed %}
-              <i data-lucide="check-circle-2" class="h-4 w-4"></i>
-              Completed
-              {% else %}
-              <i data-lucide="circle" class="h-4 w-4"></i>
-              Mark as completed
-              {% endif %}
-            </button>
-            {% endif %}
-
-            {% if next_page %}
-            <a href="{{ next_page.get_absolute_url }}"
-               class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0"
-               data-testid="page-next-btn">
-              <span class="truncate">Next: {{ next_page.title }}</span>
-              <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
-            </a>
-            {% endif %}
-          </div>
-          {% endif %}
+          {% include "content/reader/_bottom_nav.html" %}
 
           <!-- Q&A Section -->
           {% if page.content_id %}
@@ -161,52 +93,6 @@
 {% block extra_scripts %}
 {{ block.super }}
 {% include "_partials/mermaid_script.html" %}
-<script>
-  // Mark workshop page as completed toggle (issue #365). Mirrors the
-  // course unit button JS in templates/content/course_unit_detail.html.
-  (function() {
-    var btn = document.getElementById('mark-page-complete-btn');
-    if (!btn) return;
-
-    btn.addEventListener('click', function() {
-      var pageSlug = btn.dataset.pageSlug;
-      var workshopSlug = btn.dataset.workshopSlug;
-      var url = '/api/workshops/' + workshopSlug + '/pages/' + pageSlug + '/complete';
-
-      fetch(url, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': getCsrfToken(),
-          'Content-Type': 'application/json',
-        },
-        credentials: 'same-origin',
-      })
-      .then(function(response) { return response.json(); })
-      .then(function(data) {
-        if (data.completed) {
-          btn.classList.remove('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
-          btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
-          btn.innerHTML = '<i data-lucide="check-circle-2" class="h-4 w-4"></i> Completed';
-        } else {
-          btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
-          btn.classList.add('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
-          btn.innerHTML = '<i data-lucide="circle" class="h-4 w-4"></i> Mark as completed';
-        }
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-      });
-    });
-
-    function getCsrfToken() {
-      var cookies = document.cookie.split(';');
-      for (var i = 0; i < cookies.length; i++) {
-        var cookie = cookies[i].trim();
-        if (cookie.startsWith('csrftoken=')) {
-          return cookie.substring('csrftoken='.length);
-        }
-      }
-      return '';
-    }
-  })();
-</script>
+{% include "content/reader/_scripts.html" %}
 {% include "comments/_qa_script.html" %}
 {% endblock %}

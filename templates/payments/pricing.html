@@ -62,7 +62,14 @@
 
           <!-- Tier Name -->
           <div class="mb-6">
-            <h2 class="text-lg font-semibold text-foreground">{{ item.tier.name }}</h2>
+            <div class="flex min-h-[28px] items-start justify-between gap-3">
+              <h2 class="text-lg font-semibold text-foreground">{{ item.tier.name }}</h2>
+              {% if item.state.badge %}
+              <span class="shrink-0 rounded-full border border-border bg-secondary/60 px-2 py-1 text-[11px] font-medium leading-none text-muted-foreground">
+                {{ item.state.badge }}
+              </span>
+              {% endif %}
+            </div>
           </div>
 
           <!-- Price -->
@@ -84,6 +91,11 @@
 
           <!-- Description -->
           <p class="mb-6 text-sm text-muted-foreground">{{ item.tier.description }}</p>
+          {% if item.state.note %}
+          <p class="-mt-3 mb-6 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            {{ item.state.note }}
+          </p>
+          {% endif %}
 
           <!-- Features -->
           <ul class="mb-8 flex-1 space-y-3">
@@ -97,22 +109,20 @@
 
           <!-- CTA Button -->
           <div class="mt-auto">
-            {% if item.tier.slug == 'free' %}
-            {% if user.is_authenticated %}
+            {% if item.state.action_kind == 'disabled' %}
             <span class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium bg-secondary/50 text-muted-foreground min-h-[44px] flex items-center justify-center">
-              You're a member
+              {{ item.state.action_label }}
             </span>
-            {% else %}
+            {% elif item.state.action_kind == 'newsletter' %}
             <a href="/#newsletter"
                class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center">
-              Get the newsletter
+              {{ item.state.action_label }}
             </a>
-            {% endif %}
-            {% elif is_paid_member %}
+            {% elif item.state.action_kind == 'portal' %}
             <a href="{{ stripe_customer_portal_url }}"
                class="block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors bg-secondary text-foreground hover:bg-secondary/80 min-h-[44px] flex items-center justify-center"
-               id="manage-subscription-link">
-              Manage Subscription
+               data-action="manage-subscription">
+              {{ item.state.action_label }}
             </a>
             {% elif stripe_checkout_enabled %}
             <a href="{{ item.payment_link_monthly }}"
@@ -121,7 +131,7 @@
                data-link-monthly="{{ item.payment_link_monthly }}"
                data-link-annual="{{ item.payment_link_annual }}"
                {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
-              Join
+              {{ item.state.action_label }}
             </a>
             {% else %}
             <a href="{{ item.payment_link_monthly }}"
@@ -129,7 +139,7 @@
                data-link-monthly="{{ item.payment_link_monthly }}"
                data-link-annual="{{ item.payment_link_annual }}"
                {% if item.tier.slug == 'main' %}style="box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);"{% endif %}>
-              Join
+              {{ item.state.action_label }}
             </a>
             {% endif %}
           </div>

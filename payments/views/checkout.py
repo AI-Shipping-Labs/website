@@ -3,11 +3,11 @@
 import json
 import logging
 
-from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 
+from integrations.config import get_config, is_enabled
 from payments.services import (
     cancel_subscription,
     create_checkout_session,
@@ -22,7 +22,7 @@ def _checkout_disabled_response():
     """Return a 410 response when checkout is disabled."""
     return JsonResponse({
         'error': 'Checkout is disabled. Use payment links.',
-        'portal_url': settings.STRIPE_CUSTOMER_PORTAL_URL,
+        'portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
     }, status=410)
 
 
@@ -38,7 +38,7 @@ def create_checkout(request):
     Returns JSON with:
         checkout_url: str - The Stripe Checkout URL to redirect the user to
     """
-    if not settings.STRIPE_CHECKOUT_ENABLED:
+    if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return _checkout_disabled_response()
 
     try:
@@ -88,7 +88,7 @@ def upgrade(request):
 
     Returns JSON with status.
     """
-    if not settings.STRIPE_CHECKOUT_ENABLED:
+    if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return _checkout_disabled_response()
 
     try:
@@ -128,7 +128,7 @@ def downgrade(request):
 
     Returns JSON with status.
     """
-    if not settings.STRIPE_CHECKOUT_ENABLED:
+    if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return _checkout_disabled_response()
 
     try:
@@ -164,7 +164,7 @@ def cancel(request):
 
     Returns JSON with status.
     """
-    if not settings.STRIPE_CHECKOUT_ENABLED:
+    if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return _checkout_disabled_response()
 
     try:

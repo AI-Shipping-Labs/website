@@ -129,7 +129,7 @@ def site_context(request):
         'site_name': settings.SITE_NAME,
         'site_url': settings.SITE_BASE_URL,
         'site_description': settings.SITE_DESCRIPTION,
-        'stripe_customer_portal_url': settings.STRIPE_CUSTOMER_PORTAL_URL,
+        'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'current_year': __import__('datetime').datetime.now().year,
     }
 

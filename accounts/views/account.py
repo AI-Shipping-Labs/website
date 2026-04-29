@@ -3,12 +3,12 @@
 import json
 from datetime import datetime, timezone
 
-from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
+from integrations.config import get_config, is_enabled
 from payments.models import Tier
 
 
@@ -115,8 +115,8 @@ def account_view(request):
         "newsletter_subscribed": not user.unsubscribed,
         "tier_features": tier_features,
         "active_override": active_override,
-        "stripe_checkout_enabled": settings.STRIPE_CHECKOUT_ENABLED,
-        "stripe_customer_portal_url": settings.STRIPE_CUSTOMER_PORTAL_URL,
+        "stripe_checkout_enabled": is_enabled("STRIPE_CHECKOUT_ENABLED"),
+        "stripe_customer_portal_url": get_config("STRIPE_CUSTOMER_PORTAL_URL", ""),
     }
 
     return render(request, "accounts/account.html", context)

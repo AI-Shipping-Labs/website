@@ -1,0 +1,38 @@
+<style>
+  @media (min-width: 1024px) {
+    #content-sidebar-aside {
+      transition: width 200ms ease, opacity 200ms ease, margin 200ms ease;
+      overflow: hidden;
+    }
+    :root[data-content-sidebar="collapsed"] #content-sidebar-aside {
+      width: 0 !important;
+      min-width: 0 !important;
+      opacity: 0;
+      pointer-events: none;
+      margin-right: -2rem;
+      flex-basis: 0;
+    }
+    :root[data-content-sidebar="collapsed"] #content-sidebar-main {
+      flex: 0 1 56rem;
+      max-width: 56rem;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #content-sidebar-floating-toggle { display: none; }
+    :root[data-content-sidebar="collapsed"] #content-sidebar-floating-toggle {
+      display: inline-flex;
+    }
+    #content-sidebar-collapse-btn { display: inline-flex; }
+  }
+  @media (max-width: 1023px) {
+    #content-sidebar-collapse-btn,
+    #content-sidebar-floating-toggle { display: none !important; }
+  }
+  .sidebar-module > summary::-webkit-details-marker,
+  .sidebar-module > summary::marker { display: none; }
+  .sidebar-module[open] > div { animation: sidebarSlideDown 0.15s ease-out; }
+  @keyframes sidebarSlideDown {
+    from { opacity: 0; transform: translateY(-2px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>

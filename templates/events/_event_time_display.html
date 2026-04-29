@@ -1,0 +1,23 @@
+<span class="flex items-center gap-1.5" data-testid="event-time-row">
+  <i data-lucide="calendar" class="h-4 w-4"></i>
+  <span
+    data-event-time-display
+    data-start-utc="{{ event_time_display.start_utc_iso }}"
+    data-end-utc="{{ event_time_display.end_utc_iso }}"
+    data-default-timezone="{{ event_time_display.fallback_timezone }}"
+  >{{ event_time_display.fallback_range }}</span>
+</span>
+<label class="flex items-center gap-1.5" for="event-timezone-select">
+  <i data-lucide="globe" class="h-4 w-4"></i>
+  <span class="sr-only">Event timezone</span>
+  <select
+    id="event-timezone-select"
+    data-event-timezone-select
+    data-testid="event-timezone-select"
+    class="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+  >
+    {% for timezone_name in event_time_display.timezone_choices %}
+    <option value="{{ timezone_name }}" {% if timezone_name == event_time_display.fallback_timezone %}selected{% endif %}>{{ timezone_name }}</option>
+    {% endfor %}
+  </select>
+</label>

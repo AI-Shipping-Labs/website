@@ -13,6 +13,10 @@ from content.access import (
 )
 from content.models import TagRule
 from events.models import Event, EventJoinClick, EventRegistration
+from events.services.display_time import (
+    build_event_time_display,
+    should_display_event_location,
+)
 
 VALID_EVENTS_FILTERS = {'all', 'upcoming', 'past'}
 
@@ -311,12 +315,13 @@ def event_detail(request, slug):
 
     context = {
         'event': event,
+        'event_time_display': build_event_time_display(event),
         'has_access': has_access,
         'is_registered': is_registered,
+        'show_event_location': should_display_event_location(event),
         'show_zoom_link': show_zoom_link,
         'required_tier_name': required_tier_name,
         'tag_rules': tag_rules,
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)
-

@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 
+from integrations.config import get_config
+
 logger = logging.getLogger(__name__)
 
 # Valid SNS certificate URL hostnames
@@ -23,6 +25,35 @@ VALID_SNS_HOSTS = {
     'sns.ap-southeast-1.amazonaws.com',
     'sns.ap-northeast-1.amazonaws.com',
 }
+
+_UNSET = object()
+
+
+def _settings_override_value(key):
+    """Return an explicit override_settings value, if one is active."""
+    wrapped = getattr(settings, '_wrapped', None)
+    if wrapped is not None and wrapped.__class__.__name__ == 'UserSettingsHolder':
+        return wrapped.__dict__.get(key, _UNSET)
+    return _UNSET
+
+
+def _is_truthy_flag(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ('true', '1', 'yes')
+
+
+def _ses_validation_enabled():
+    value = get_config(
+        'SES_WEBHOOK_VALIDATION_ENABLED',
+        _UNSET,
+        use_settings=False,
+    )
+    if value is _UNSET:
+        value = _settings_override_value('SES_WEBHOOK_VALIDATION_ENABLED')
+    if value is _UNSET:
+        return not settings.DEBUG
+    return _is_truthy_flag(value)
 
 
 def validate_sns_notification(payload):
@@ -42,10 +73,7 @@ def validate_sns_notification(payload):
         bool: True if the notification is valid, False otherwise.
     """
     # Skip validation in development/testing when disabled
-    validation_enabled = getattr(
-        settings, 'SES_WEBHOOK_VALIDATION_ENABLED', not settings.DEBUG,
-    )
-    if not validation_enabled:
+    if not _ses_validation_enabled():
         return True
 
     # Check that the SigningCertURL is from an AWS domain

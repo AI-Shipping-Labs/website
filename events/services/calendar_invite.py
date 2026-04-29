@@ -7,6 +7,8 @@ from django.utils import timezone
 from icalendar import Calendar, vCalAddress, vText
 from icalendar import Event as ICalEvent
 
+from integrations.config import get_config
+
 
 def generate_ics(event, method='REQUEST'):
     """Generate a .ics calendar file for an event.
@@ -52,7 +54,7 @@ def generate_ics(event, method='REQUEST'):
     vevent.add('location', vText(join_url))
 
     # Organizer
-    from_email = getattr(settings, 'SES_FROM_EMAIL', 'community@aishippinglabs.com')
+    from_email = get_config('SES_FROM_EMAIL', 'community@aishippinglabs.com')
     organizer = vCalAddress(f'mailto:{from_email}')
     organizer.params['cn'] = vText('AI Shipping Labs')
     vevent.add('organizer', organizer)

@@ -11,7 +11,7 @@ _cache = {}
 _cache_populated = False
 
 
-def get_config(key, default=''):
+def get_config(key, default='', *, use_settings=True):
     """Get config value: DB first, then env var, then Django settings, then default.
 
     Args:
@@ -33,7 +33,7 @@ def get_config(key, default=''):
     # every later `settings.X` lookup. `settings.configured` is a plain
     # attribute that does NOT force setup, so it's safe to read first.
     from django.conf import settings  # noqa: PLC0415
-    if settings.configured:
+    if use_settings and settings.configured:
         settings_val = getattr(settings, key, None)
         if settings_val is not None:
             return settings_val
@@ -56,7 +56,7 @@ def is_enabled(key):
     val = get_config(key, 'false')
     if isinstance(val, bool):
         return val
-    return str(val).lower() in ('true', '1', 'yes')
+    return str(val).strip().lower() in ('true', '1', 'yes')
 
 
 def _populate_cache():

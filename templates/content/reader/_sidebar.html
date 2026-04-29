@@ -1,0 +1,111 @@
+<aside id="content-sidebar-aside" class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
+  <div class="lg:sticky lg:top-28">
+    <div class="flex items-center justify-between gap-2">
+      <a href="{{ reader_back_url }}"
+         title="{{ reader_back_title }}"
+         class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0"
+         {% if reader_back_testid %}data-testid="{{ reader_back_testid }}"{% endif %}>
+        <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+        <span class="truncate">{{ reader_back_title }}</span>
+      </a>
+      <button
+        type="button"
+        id="content-sidebar-collapse-btn"
+        aria-label="Collapse {{ reader_sidebar_label }}"
+        aria-expanded="true"
+        aria-controls="content-sidebar-aside"
+        class="mb-4 -mt-0.5 items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+        data-testid="content-sidebar-collapse-btn"
+      >
+        <i data-lucide="panel-left-close" class="h-4 w-4"></i>
+      </button>
+    </div>
+
+    <button
+      type="button"
+      id="sidebar-toggle-btn"
+      class="lg:hidden mt-4 w-full flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+      aria-expanded="false"
+      aria-controls="sidebar-nav"
+    >
+      <span class="flex items-center gap-2">
+        <i data-lucide="list" class="h-4 w-4"></i>
+        {{ reader_mobile_label }}
+      </span>
+      <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200" id="sidebar-toggle-chevron"></i>
+    </button>
+
+    <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block"
+         aria-label="{{ reader_nav_aria_label }}"
+         {% if reader_nav_testid %}data-testid="{{ reader_nav_testid }}"{% endif %}>
+      <h2 class="sr-only">{{ reader_nav_aria_label }}</h2>
+
+      {% if reader_nav_kind == "course" %}
+        {% for nav_module in modules %}
+        <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_module.pk == unit.module.pk %}open{% endif %}>
+          <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
+            <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ nav_module.title }}</span>
+          </summary>
+          <div>
+            <ul class="space-y-0.5 mt-1">
+              {% for nav_unit in nav_module.units.all %}
+              <li>
+                <a href="{{ nav_unit.get_absolute_url }}"
+                   class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors {% if nav_unit.pk == unit.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}"
+                   {% if nav_unit.pk == unit.pk %}aria-current="page"{% endif %}>
+                  {% if nav_unit.pk in completed_unit_ids %}
+                  <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+                  {% else %}
+                  <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 opacity-40"></i>
+                  {% endif %}
+                  <span class="truncate">{{ nav_unit.title }}</span>
+                </a>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </details>
+        {% endfor %}
+      {% elif reader_nav_kind == "workshop" %}
+        <ul class="space-y-0.5">
+          {% for nav_page in pages %}
+          <li>
+            <a href="{{ nav_page.get_absolute_url }}"
+               class="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors {% if nav_page.pk == page.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}"
+               {% if nav_page.pk == page.pk %}data-testid="sidebar-current-page" aria-current="page"{% endif %}>
+              {% if nav_page.pk in completed_page_ids %}
+              <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0" data-testid="sidebar-completed-page"></i>
+              {% else %}
+              <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-[10px] font-semibold text-accent">{{ forloop.counter }}</span>
+              {% endif %}
+              <span class="truncate">{{ nav_page.title }}</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </nav>
+
+    {% if show_discussion %}
+    <div id="sidebar-discussion" class="mt-4 rounded-lg border border-border bg-card p-4 hidden lg:block">
+      <a href="{{ course.discussion_url }}" target="_blank" rel="noopener noreferrer"
+         class="inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline">
+        <i data-lucide="message-circle" class="h-4 w-4"></i>
+        Join the discussion
+        <i data-lucide="external-link" class="h-3 w-3"></i>
+      </a>
+    </div>
+    {% endif %}
+
+    {% if workshop.code_repo_url %}
+    <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
+       class="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent"
+       data-testid="sidebar-code-repo-link">
+      <i data-lucide="github" class="h-4 w-4"></i>
+      View code
+      <i data-lucide="external-link" class="h-3 w-3"></i>
+    </a>
+    {% endif %}
+  </div>
+</aside>

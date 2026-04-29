@@ -326,6 +326,11 @@ def workshop_page_detail(request, slug, page_slug):
         and not is_gated
         and completion_service.is_completed(request.user, page)
     )
+    completed_page_ids = (
+        completion_service.completed_ids_for(request.user, pages)
+        if request.user.is_authenticated and not is_gated
+        else set()
+    )
 
     context.update({
         'page': page,
@@ -337,7 +342,20 @@ def workshop_page_detail(request, slug, page_slug):
         'watch_bar_url': watch_bar_url,
         'watch_bar_label': page.video_start,
         'is_completed': is_completed,
+        'completed_page_ids': completed_page_ids,
         'user_authenticated': request.user.is_authenticated,
+        'prev_item_url': prev_page.get_absolute_url() if prev_page else '',
+        'prev_item_title': prev_page.title if prev_page else '',
+        'next_item_url': next_page.get_absolute_url() if next_page else '',
+        'next_item_title': next_page.title if next_page else '',
+        'completion_kind': 'workshop',
+        'completion_button_id': 'mark-page-complete-btn',
+        'completion_button_testid': 'mark-page-complete-btn',
+        'completion_url': (
+            f'/api/workshops/{workshop.slug}/pages/{page.slug}/complete'
+        ),
+        'bottom_prev_testid': 'page-prev-btn',
+        'bottom_next_testid': 'page-next-btn',
     })
     return render(request, 'content/workshop_page_detail.html', context)
 

@@ -71,13 +71,13 @@ class PricingFreeTierCTATest(TierSetupMixin, TestCase):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/pricing")
         self.assertNotContains(response, '/#newsletter')
-        self.assertContains(response, "You're a member")
+        self.assertContains(response, "Current free plan")
 
-    def test_authenticated_user_still_sees_paid_tier_join_buttons(self):
+    def test_authenticated_user_still_sees_paid_tier_upgrade_buttons(self):
         self.client.login(email="member@test.com", password="testpass123")
         response = self.client.get("/pricing")
-        # Paid tiers should still have Join buttons
-        self.assertContains(response, "Join")
+        # Paid tiers should still offer a paid upgrade path.
+        self.assertContains(response, "Upgrade")
 
 
 class BlogEmptyStateSubscribeTest(TierSetupMixin, TestCase):

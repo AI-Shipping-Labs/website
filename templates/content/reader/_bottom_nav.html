@@ -1,0 +1,23 @@
+{% if prev_item_url or next_item_url or user_authenticated %}
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 border-t border-border pt-8 mt-8">
+  {% if prev_item_url %}
+  <a href="{{ prev_item_url }}"
+     class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted min-w-0"
+     data-testid="{{ bottom_prev_testid }}">
+    <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+    <span class="truncate">{{ prev_item_title }}</span>
+  </a>
+  {% endif %}
+
+  {% include "content/reader/_completion_button.html" %}
+
+  {% if next_item_url %}
+  <a href="{{ next_item_url }}"
+     class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0"
+     data-testid="{{ bottom_next_testid }}">
+    <span class="truncate">Next: {{ next_item_title }}</span>
+    <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
+  </a>
+  {% endif %}
+</div>
+{% endif %}

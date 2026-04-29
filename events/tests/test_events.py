@@ -285,7 +285,8 @@ class EventsListPageTest(TestCase):
 
     def test_event_card_shows_date(self):
         response = self.client.get('/events')
-        self.assertContains(response, 'UTC')
+        self.assertContains(response, self.upcoming_event.formatted_date())
+        self.assertNotContains(response, self.upcoming_event.formatted_time())
 
     def test_event_card_shows_location(self):
         response = self.client.get('/events')

@@ -1,0 +1,24 @@
+{% if prev_item_url or next_item_url %}
+<div class="mb-6 flex items-center justify-between text-sm gap-4" data-testid="top-nav-row">
+  {% if prev_item_url %}
+  <a href="{{ prev_item_url }}"
+     class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground min-w-0 max-w-[40vw]"
+     data-testid="top-prev-btn">
+    <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+    <span class="truncate">{{ prev_item_title }}</span>
+  </a>
+  {% else %}
+  <span></span>
+  {% endif %}
+  {% if next_item_url %}
+  <a href="{{ next_item_url }}"
+     class="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground min-w-0 max-w-[40vw]"
+     data-testid="top-next-btn">
+    <span class="truncate">{{ next_item_title }}</span>
+    <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
+  </a>
+  {% else %}
+  <span></span>
+  {% endif %}
+</div>
+{% endif %}

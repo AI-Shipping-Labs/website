@@ -1,9 +1,8 @@
 """Tests for the ``site`` integration settings group (issue #369).
 
-The ``site`` group exposes ``SITE_BASE_URL`` and ``SITE_BASE_URL_ALIASES``
-to Studio so operators can edit the canonical base URL and the
-banner-suppression alias list without a redeploy. This module locks two
-contracts:
+The ``site`` group exposes ``SITE_BASE_URL``, ``SITE_BASE_URL_ALIASES``,
+and ``EVENT_DISPLAY_TIMEZONE`` to Studio so operators can edit public
+site defaults without a redeploy. This module locks two contracts:
 
 - ``site`` is registered in ``INTEGRATION_GROUPS`` with both expected
   keys (so the Studio dashboard renders it).
@@ -33,11 +32,12 @@ class SiteGroupRegistryTest(TestCase):
         self.assertIsNotNone(group)
         self.assertEqual(group['label'], 'Site')
 
-    def test_site_group_has_both_keys(self):
+    def test_site_group_has_expected_keys(self):
         group = get_group_by_name('site')
         keys = [k['key'] for k in group['keys']]
         self.assertIn('SITE_BASE_URL', keys)
         self.assertIn('SITE_BASE_URL_ALIASES', keys)
+        self.assertIn('EVENT_DISPLAY_TIMEZONE', keys)
 
     def test_site_keys_are_not_secret(self):
         group = get_group_by_name('site')
@@ -118,11 +118,12 @@ class SiteSettingsSaveViewTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def test_save_creates_both_site_keys(self):
+    def test_save_creates_site_keys(self):
         self.client.login(email='admin@test.com', password='testpass')
         response = self.client.post('/studio/settings/site/save/', {
             'SITE_BASE_URL': 'https://aishippinglabs.com',
             'SITE_BASE_URL_ALIASES': 'https://prod.aishippinglabs.com',
+            'EVENT_DISPLAY_TIMEZONE': 'Europe/Berlin',
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
@@ -134,6 +135,10 @@ class SiteSettingsSaveViewTest(TestCase):
                 key='SITE_BASE_URL_ALIASES',
             ).value,
             'https://prod.aishippinglabs.com',
+        )
+        self.assertEqual(
+            IntegrationSetting.objects.get(key='EVENT_DISPLAY_TIMEZONE').value,
+            'Europe/Berlin',
         )
         # Both rows are tagged with the new group name.
         self.assertEqual(
@@ -148,6 +153,7 @@ class SiteSettingsSaveViewTest(TestCase):
         self.client.post('/studio/settings/site/save/', {
             'SITE_BASE_URL': 'https://aishippinglabs.com',
             'SITE_BASE_URL_ALIASES': 'https://prod.aishippinglabs.com',
+            'EVENT_DISPLAY_TIMEZONE': 'Europe/Berlin',
         })
         # After save, get_config returns the new DB value rather than
         # the stale cached blank.

@@ -8,9 +8,9 @@ Usage:
 """
 
 import stripe
-from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from integrations.config import get_config
 from payments.models import Tier
 
 
@@ -18,11 +18,12 @@ class Command(BaseCommand):
     help = "Create Stripe products and prices for all paid tiers."
 
     def handle(self, *args, **options):
-        if not settings.STRIPE_SECRET_KEY:
+        secret_key = get_config("STRIPE_SECRET_KEY", "")
+        if not secret_key:
             self.stderr.write("STRIPE_SECRET_KEY is not set.")
             return
 
-        client = stripe.StripeClient(settings.STRIPE_SECRET_KEY)
+        client = stripe.StripeClient(secret_key)
 
         paid_tiers = Tier.objects.exclude(slug="free").order_by("level")
         if not paid_tiers.exists():

@@ -6,11 +6,22 @@ persistence behaviour is exercised by a Playwright test
 (``playwright_tests/test_foldable_sidebar.py``).
 """
 
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.utils import timezone
 
 from content.access import LEVEL_OPEN
-from content.models import Course, Module, Unit
+from content.models import (
+    Course,
+    Module,
+    Unit,
+    UserContentCompletion,
+    Workshop,
+    WorkshopPage,
+)
+from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -47,6 +58,29 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         )
         cls.user.tier = cls.free_tier
         cls.user.save()
+        cls.workshop = Workshop.objects.create(
+            title="Foldable Workshop",
+            slug="foldable-workshop",
+            status="published",
+            date=date(2026, 4, 29),
+            landing_required_level=LEVEL_OPEN,
+            pages_required_level=LEVEL_OPEN,
+            recording_required_level=LEVEL_OPEN,
+        )
+        cls.workshop_page = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            title="Workshop Page 1",
+            slug="page-1",
+            sort_order=1,
+            body="Workshop body",
+        )
+        cls.workshop_page_2 = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            title="Workshop Page 2",
+            slug="page-2",
+            sort_order=2,
+            body="More workshop body",
+        )
 
     def setUp(self):
         self.client = Client()
@@ -150,3 +184,57 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
             'id="content-sidebar-floating-toggle"',
             status_code=403,
         )
+
+    def test_workshop_page_renders_shared_reader_controls(self):
+        """Accessible workshop tutorial pages use the same reader hooks."""
+        response = self.client.get(self.workshop_page.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="content-sidebar-collapse-btn"')
+        self.assertContains(response, 'id="content-sidebar-floating-toggle"')
+        self.assertContains(response, 'id="content-sidebar-aside"')
+        self.assertContains(response, 'id="content-sidebar-main"')
+        self.assertContains(response, 'id="sidebar-toggle-btn"')
+        self.assertContains(response, 'id="sidebar-nav"')
+        self.assertContains(response, 'data-testid="workshop-sidebar"')
+        self.assertContains(response, "content-sidebar-collapsed")
+
+    def test_workshop_sidebar_marks_completed_pages(self):
+        """Authenticated readers see completed workshop pages in the nav."""
+        UserContentCompletion.objects.create(
+            user=self.user,
+            content_type=CONTENT_TYPE_WORKSHOP_PAGE,
+            object_id=self.workshop_page.pk,
+            completed_at=timezone.now(),
+        )
+        response = self.client.get(self.workshop_page_2.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="sidebar-completed-page"')
+        self.assertContains(response, 'check-circle-2')
+
+    def test_gated_workshop_page_does_not_render_reader_controls(self):
+        """Workshop paywalls hide body, Q&A, completion, and reader controls."""
+        gated = Workshop.objects.create(
+            title="Gated Workshop",
+            slug="gated-workshop",
+            status="published",
+            date=date(2026, 4, 29),
+            landing_required_level=LEVEL_OPEN,
+            pages_required_level=30,
+            recording_required_level=30,
+        )
+        page = WorkshopPage.objects.create(
+            workshop=gated,
+            title="Locked Page",
+            slug="locked-page",
+            sort_order=1,
+            body="Secret workshop body",
+            content_id="11111111-1111-1111-1111-111111111111",
+        )
+        response = self.client.get(page.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="page-paywall"')
+        self.assertNotContains(response, 'Secret workshop body')
+        self.assertNotContains(response, 'id="content-sidebar-collapse-btn"')
+        self.assertNotContains(response, 'id="content-sidebar-floating-toggle"')
+        self.assertNotContains(response, 'data-testid="mark-page-complete-btn"')
+        self.assertNotContains(response, 'data-testid="qa-section"')

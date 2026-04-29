@@ -47,26 +47,11 @@
         </h1>
 
         <div class="mt-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="calendar" class="h-4 w-4"></i>
-            {{ event.formatted_start }}
-          </span>
-          {% if event.end_datetime %}
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="clock" class="h-4 w-4"></i>
-            Until {{ event.end_datetime|date:"H:i" }} UTC
-          </span>
-          {% endif %}
-          {% if event.location %}
+          {% include "events/_event_time_display.html" %}
+          {% if show_event_location %}
           <span class="flex items-center gap-1.5">
             <i data-lucide="map-pin" class="h-4 w-4"></i>
             {{ event.location }}
-          </span>
-          {% endif %}
-          {% if event.timezone %}
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="globe" class="h-4 w-4"></i>
-            {{ event.timezone }}
           </span>
           {% endif %}
         </div>
@@ -370,5 +355,152 @@ function unregisterFromEvent(slug) {
     btn.textContent = 'Cancel Registration';
   });
 }
+
+(function() {
+  const STORAGE_KEY = 'event-display-timezone';
+  const COMMON_TIMEZONES = [
+    'Europe/Berlin',
+    'UTC',
+    'America/New_York',
+    'America/Los_Angeles',
+    'Europe/London',
+    'Europe/Paris',
+    'Asia/Tokyo',
+    'Asia/Singapore',
+    'Australia/Sydney',
+  ];
+
+  function isValidTimeZone(timezoneName) {
+    if (!timezoneName || typeof timezoneName !== 'string') return false;
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: timezoneName }).format(new Date());
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function getSavedTimeZone() {
+    try {
+      return window.localStorage.getItem(STORAGE_KEY);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function saveTimeZone(timezoneName) {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, timezoneName);
+    } catch (error) {
+      // Ignore storage errors; the selector should still update in-place.
+    }
+  }
+
+  function getBrowserTimeZone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function resolveTimeZone(defaultTimeZone) {
+    const savedTimeZone = getSavedTimeZone();
+    if (isValidTimeZone(savedTimeZone)) return savedTimeZone;
+    if (savedTimeZone) {
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch (error) {
+        // Ignore storage cleanup errors.
+      }
+    }
+
+    const browserTimeZone = getBrowserTimeZone();
+    if (isValidTimeZone(browserTimeZone)) return browserTimeZone;
+    if (isValidTimeZone(defaultTimeZone)) return defaultTimeZone;
+    return 'Europe/Berlin';
+  }
+
+  function getSupportedTimeZones(selectedTimeZone, defaultTimeZone) {
+    let timezones = COMMON_TIMEZONES;
+    if (Intl.supportedValuesOf) {
+      try {
+        timezones = Intl.supportedValuesOf('timeZone');
+      } catch (error) {
+        timezones = COMMON_TIMEZONES;
+      }
+    }
+    return Array.from(new Set([selectedTimeZone, defaultTimeZone].concat(timezones)))
+      .filter(isValidTimeZone)
+      .sort();
+  }
+
+  function formatDate(value, timezoneName) {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: timezoneName,
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(value);
+  }
+
+  function formatTime(value, timezoneName) {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: timezoneName,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(value);
+  }
+
+  function renderEventTime(display, timezoneName) {
+    const start = new Date(display.dataset.startUtc);
+    const endValue = display.dataset.endUtc;
+    const startDate = formatDate(start, timezoneName);
+    const startTime = formatTime(start, timezoneName);
+    if (!endValue) {
+      display.textContent = `${startDate}, ${startTime} ${timezoneName}`;
+      return;
+    }
+
+    const end = new Date(endValue);
+    const endDate = formatDate(end, timezoneName);
+    const endTime = formatTime(end, timezoneName);
+    if (startDate === endDate) {
+      display.textContent = `${startDate}, ${startTime}-${endTime} ${timezoneName}`;
+    } else {
+      display.textContent = `${startDate}, ${startTime} - ${endDate}, ${endTime} ${timezoneName}`;
+    }
+  }
+
+  function populateSelector(select, selectedTimeZone, defaultTimeZone) {
+    const options = getSupportedTimeZones(selectedTimeZone, defaultTimeZone);
+    select.replaceChildren();
+    options.forEach(function(timezoneName) {
+      const option = document.createElement('option');
+      option.value = timezoneName;
+      option.textContent = timezoneName;
+      option.selected = timezoneName === selectedTimeZone;
+      select.appendChild(option);
+    });
+  }
+
+  const display = document.querySelector('[data-event-time-display]');
+  const select = document.querySelector('[data-event-timezone-select]');
+  if (!display || !select || !window.Intl) return;
+
+  const defaultTimeZone = display.dataset.defaultTimezone || 'Europe/Berlin';
+  let selectedTimeZone = resolveTimeZone(defaultTimeZone);
+  populateSelector(select, selectedTimeZone, defaultTimeZone);
+  renderEventTime(display, selectedTimeZone);
+
+  select.addEventListener('change', function(event) {
+    const nextTimeZone = event.target.value;
+    if (!isValidTimeZone(nextTimeZone)) return;
+    selectedTimeZone = nextTimeZone;
+    saveTimeZone(selectedTimeZone);
+    renderEventTime(display, selectedTimeZone);
+  });
+})();
 </script>
 {% endblock %}

@@ -11,7 +11,8 @@ import logging
 import time
 
 import requests
-from django.conf import settings
+
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +53,9 @@ def get_access_token():
     if _token_cache['access_token'] and _token_cache['expires_at'] > now + 60:
         return _token_cache['access_token']
 
-    client_id = settings.YOUTUBE_CLIENT_ID
-    client_secret = settings.YOUTUBE_CLIENT_SECRET
-    refresh_token = settings.YOUTUBE_REFRESH_TOKEN
+    client_id = get_config('YOUTUBE_CLIENT_ID', '')
+    client_secret = get_config('YOUTUBE_CLIENT_SECRET', '')
+    refresh_token = get_config('YOUTUBE_REFRESH_TOKEN', '')
 
     if not all([client_id, client_secret, refresh_token]):
         raise YouTubeAPIError(

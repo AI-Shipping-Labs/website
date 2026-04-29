@@ -1,0 +1,108 @@
+<script>
+  (function() {
+    var STORAGE_KEY = 'content-sidebar-collapsed';
+    var collapseBtn = document.getElementById('content-sidebar-collapse-btn');
+    var floatingBtn = document.getElementById('content-sidebar-floating-toggle');
+    if (!collapseBtn && !floatingBtn) return;
+
+    function getCollapsed() {
+      try { return localStorage.getItem(STORAGE_KEY) === '1'; }
+      catch (e) { return false; }
+    }
+    function setCollapsed(collapsed) {
+      try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); }
+      catch (e) { /* localStorage disabled, in-memory only */ }
+      document.documentElement.setAttribute(
+        'data-content-sidebar', collapsed ? 'collapsed' : 'expanded'
+      );
+      if (collapseBtn) collapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      if (floatingBtn) floatingBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+
+    setCollapsed(getCollapsed());
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', function() { setCollapsed(true); });
+    }
+    if (floatingBtn) {
+      floatingBtn.addEventListener('click', function() { setCollapsed(false); });
+    }
+  })();
+
+  (function() {
+    var toggleBtn = document.getElementById('sidebar-toggle-btn');
+    var nav = document.getElementById('sidebar-nav');
+    var chevron = document.getElementById('sidebar-toggle-chevron');
+    var discussion = document.getElementById('sidebar-discussion');
+    if (!toggleBtn || !nav) return;
+
+    toggleBtn.addEventListener('click', function() {
+      var isHidden = nav.classList.contains('hidden');
+      if (isHidden) {
+        nav.classList.remove('hidden');
+        if (discussion) discussion.classList.remove('hidden');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+      } else {
+        nav.classList.add('hidden');
+        if (discussion) discussion.classList.add('hidden');
+        toggleBtn.setAttribute('aria-expanded', 'false');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+      }
+    });
+  })();
+
+  (function() {
+    document.addEventListener('toggle', function(e) {
+      var details = e.target;
+      if (!details.classList || !details.classList.contains('sidebar-module')) return;
+      var chevron = details.querySelector('.sidebar-chevron');
+      if (!chevron) return;
+      chevron.style.transform = details.open ? 'rotate(90deg)' : 'rotate(0deg)';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }, true);
+  })();
+
+  (function() {
+    var buttons = document.querySelectorAll('[data-completion-toggle]');
+    if (!buttons.length) return;
+
+    function getCsrfToken() {
+      var cookies = document.cookie.split(';');
+      for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i].trim();
+        if (cookie.startsWith('csrftoken=')) {
+          return cookie.substring('csrftoken='.length);
+        }
+      }
+      return '';
+    }
+
+    function renderButton(btn, completed) {
+      if (completed) {
+        btn.classList.remove('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+        btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+        btn.innerHTML = '<i data-lucide="check-circle-2" class="h-4 w-4"></i> Completed';
+      } else {
+        btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-400', 'hover:bg-green-500/20');
+        btn.classList.add('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+        btn.innerHTML = '<i data-lucide="circle" class="h-4 w-4"></i> Mark as completed';
+      }
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    buttons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        fetch(btn.dataset.completionUrl, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json',
+          },
+          credentials: 'same-origin',
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) { renderButton(btn, Boolean(data.completed)); });
+      });
+    });
+  })();
+</script>

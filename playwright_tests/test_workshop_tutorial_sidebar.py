@@ -386,3 +386,151 @@ class TestCourseUnitSidebarRegressionGuard:
             assert collapse.count() == 1
         finally:
             ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestSharedReaderWorkshopBehavior:
+    """Workshop tutorials and course units share the reader chrome."""
+
+    def _setup_reader_content(self):
+        _clear_workshops()
+        _clear_courses()
+        _create_user('main-381@test.com', tier_slug='main')
+        _create_workshop(
+            slug='shared-reader',
+            title='Shared Reader Workshop',
+            landing=0,
+            pages=20,
+            recording=20,
+            pages_data=[
+                ('intro', 'Introduction', '# Intro\n\nShared body.'),
+                ('setup', 'Setup', '# Setup\n\nNext body.'),
+            ],
+        )
+        course = _create_course(
+            title='Shared Reader Course',
+            slug='shared-reader-course',
+            required_level=20,
+        )
+        module = _create_module(course, 'Module 1', sort_order=1)
+        unit = _create_unit(
+            module, 'Unit 1',
+            sort_order=1,
+            body='Course body',
+        )
+        return unit.get_absolute_url()
+
+    def test_sidebar_collapse_preference_is_shared_with_course_units(
+        self, browser, django_server,
+    ):
+        course_unit_url = self._setup_reader_content()
+
+        ctx = _auth_context(browser, 'main-381@test.com')
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/shared-reader/tutorial/intro',
+                wait_until='domcontentloaded',
+            )
+            collapse = page.locator(
+                '[data-testid="content-sidebar-collapse-btn"]',
+            )
+            collapse.wait_for(state='visible')
+            collapse.click()
+            page.wait_for_function(
+                "document.documentElement.getAttribute('data-content-sidebar')"
+                " === 'collapsed'",
+            )
+            assert page.evaluate(
+                "localStorage.getItem('content-sidebar-collapsed')"
+            ) == '1'
+            assert page.locator(
+                '[data-testid="content-sidebar-floating-toggle"]',
+            ).is_visible()
+
+            page.goto(f'{django_server}{course_unit_url}', wait_until='domcontentloaded')
+            assert page.evaluate(
+                "document.documentElement.getAttribute('data-content-sidebar')"
+            ) == 'collapsed'
+
+            page.locator('[data-testid="content-sidebar-floating-toggle"]').click()
+            page.wait_for_function(
+                "document.documentElement.getAttribute('data-content-sidebar')"
+                " === 'expanded'",
+            )
+            page.goto(
+                f'{django_server}/workshops/shared-reader/tutorial/setup',
+                wait_until='domcontentloaded',
+            )
+            assert page.evaluate(
+                "document.documentElement.getAttribute('data-content-sidebar')"
+            ) == 'expanded'
+        finally:
+            ctx.close()
+
+    def test_mobile_workshop_navigation_uses_shared_toggle(
+        self, browser, django_server,
+    ):
+        self._setup_reader_content()
+
+        from playwright_tests.conftest import create_session_for_user
+        session_key = create_session_for_user('main-381@test.com')
+        ctx = browser.new_context(viewport={'width': 390, 'height': 820})
+        ctx.add_cookies([
+            {
+                'name': 'sessionid', 'value': session_key,
+                'domain': '127.0.0.1', 'path': '/',
+            },
+            {
+                'name': 'csrftoken', 'value': 'e2e-test-csrf-token-value',
+                'domain': '127.0.0.1', 'path': '/',
+            },
+        ])
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/shared-reader/tutorial/intro',
+                wait_until='domcontentloaded',
+            )
+            assert not page.locator(
+                '[data-testid="content-sidebar-collapse-btn"]',
+            ).is_visible()
+            toggle = page.locator('#sidebar-toggle-btn')
+            toggle.wait_for(state='visible')
+            assert page.locator('#sidebar-nav').is_hidden()
+            toggle.click()
+            page.locator('#sidebar-nav').wait_for(state='visible')
+            page.locator(
+                '#sidebar-nav a[href="/workshops/shared-reader/tutorial/setup"]',
+            ).click()
+            page.wait_for_url('**/workshops/shared-reader/tutorial/setup')
+            assert page.locator('[data-testid="page-body"]').is_visible()
+        finally:
+            ctx.close()
+
+    def test_workshop_completion_renders_sidebar_completed_state_after_reload(
+        self, browser, django_server,
+    ):
+        self._setup_reader_content()
+
+        ctx = _auth_context(browser, 'main-381@test.com')
+        page = ctx.new_page()
+        try:
+            page.goto(
+                f'{django_server}/workshops/shared-reader/tutorial/intro',
+                wait_until='domcontentloaded',
+            )
+            page.locator('[data-testid="mark-page-complete-btn"]').click()
+            page.wait_for_function(
+                "document.querySelector('[data-testid=\"mark-page-complete-btn\"]')"
+                ".textContent.includes('Completed')",
+            )
+            page.reload(wait_until='domcontentloaded')
+            assert page.locator(
+                '[data-testid="sidebar-completed-page"]',
+            ).count() == 1
+            assert 'Completed' in page.locator(
+                '[data-testid="mark-page-complete-btn"]',
+            ).text_content()
+        finally:
+            ctx.close()

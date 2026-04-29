@@ -1,0 +1,13 @@
+<script>
+  (function() {
+    try {
+      if (localStorage.getItem('content-sidebar-collapsed') === '1') {
+        document.documentElement.setAttribute('data-content-sidebar', 'collapsed');
+      } else {
+        document.documentElement.setAttribute('data-content-sidebar', 'expanded');
+      }
+    } catch (e) {
+      document.documentElement.setAttribute('data-content-sidebar', 'expanded');
+    }
+  })();
+</script>

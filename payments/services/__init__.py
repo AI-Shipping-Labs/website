@@ -8,10 +8,10 @@ import logging
 from datetime import datetime, timezone
 
 import stripe
-from django.conf import settings
 from django.core.mail import send_mail
 
 from accounts.models import User
+from integrations.config import get_config
 from payments.exceptions import WebhookPermanentError
 from payments.models import ConversionAttribution, Tier, WebhookEvent
 
@@ -24,8 +24,8 @@ _MISSING = object()
 
 
 def _get_stripe_client():
-    """Return a configured Stripe client using the secret key from settings."""
-    return stripe.StripeClient(settings.STRIPE_SECRET_KEY)
+    """Return a configured Stripe client using the configured secret key."""
+    return stripe.StripeClient(get_config("STRIPE_SECRET_KEY", ""))
 
 
 def _tier_for_price_id(price_id):
@@ -515,7 +515,7 @@ def handle_invoice_payment_failed(invoice_data):
         )
         return
 
-    portal_url = getattr(settings, "STRIPE_CUSTOMER_PORTAL_URL", "")
+    portal_url = get_config("STRIPE_CUSTOMER_PORTAL_URL", "")
 
     try:
         send_mail(
@@ -696,7 +696,7 @@ def verify_webhook_signature(payload, sig_header):
         stripe.SignatureVerificationError: If the signature is invalid.
         ValueError: If the payload is invalid.
     """
-    webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+    webhook_secret = get_config("STRIPE_WEBHOOK_SECRET", "")
     event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     return event
 

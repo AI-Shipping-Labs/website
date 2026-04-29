@@ -7,11 +7,11 @@ from datetime import datetime
 from datetime import timezone as datetime_timezone
 
 import stripe
-from django.conf import settings
 from django.core.management.base import CommandError
 
 from accounts.models import IMPORT_SOURCE_STRIPE
 from accounts.services.import_users import ImportRow, register_import_adapter
+from integrations.config import get_config
 from payments.models import Tier
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ CONFIGURATION_ERRORS = (
 
 def stripe_customer_import_adapter():
     """Yield import rows for Stripe customers and their subscription state."""
-    secret_key = getattr(settings, "STRIPE_SECRET_KEY", "")
+    secret_key = get_config("STRIPE_SECRET_KEY", "")
     if not secret_key:
         raise CommandError("STRIPE_SECRET_KEY is required for Stripe imports.")
 

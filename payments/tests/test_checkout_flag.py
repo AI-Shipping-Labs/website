@@ -208,13 +208,13 @@ class PricingPageFlagOffTest(TierSetupMixin, TestCase):
         self.assertContains(response, "prefilled_email=prefill@test.com")
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_paid_user_sees_manage_subscription(self):
+    def test_paid_user_sees_current_plan_state(self):
         user = User.objects.create_user(email="paid@test.com", password="testpass123")
         user.tier = self.main_tier
         user.save(update_fields=["tier"])
         self.client.login(email="paid@test.com", password="testpass123")
         response = self.client.get("/pricing")
-        self.assertContains(response, "Manage Subscription")
+        self.assertContains(response, "Current plan")
         self.assertTrue(response.context["is_paid_member"])
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=False)

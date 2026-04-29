@@ -751,13 +751,18 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         ]
 
         from email_app.tasks.send_campaign import send_campaign_batch
-        result = send_campaign_batch(
-            self.campaign.pk,
-            user_ids=[self.user1.pk, self.user2.pk],
-            send_delay=0,
-        )
+        with self.assertLogs('email_app.tasks.send_campaign', level='ERROR') as logs:
+            result = send_campaign_batch(
+                self.campaign.pk,
+                user_ids=[self.user1.pk, self.user2.pk],
+                send_delay=0,
+            )
 
         self.assertEqual(result['sent_count'], 1)
+        self.assertIn(
+            f'Failed to send campaign {self.campaign.pk} to user2@test.com',
+            logs.output[0],
+        )
         self.assertEqual(
             EmailLog.objects.filter(campaign=self.campaign).count(), 1,
         )

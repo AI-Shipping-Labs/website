@@ -168,10 +168,14 @@ class WorkerLivenessTest(TestCase):
         with patch(
             'studio.worker_health.Stat.get_all',
             side_effect=ConnectionError('broker unreachable'),
-        ):
+        ), self.assertLogs('studio.worker_health', level='WARNING') as logs:
             response = self.client.get('/studio/worker/')
         self.assertFalse(response.context['worker_alive'])
         self.assertContains(response, 'broker unreachable')
+        self.assertIn(
+            'Failed to query django-q cluster status: broker unreachable',
+            logs.output[0],
+        )
 
     def test_active_clusters_table_shows_cluster_metadata(self):
         cluster = _fake_cluster(

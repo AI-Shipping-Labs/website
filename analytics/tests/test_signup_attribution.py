@@ -392,6 +392,7 @@ class StripeCheckoutSignupTest(TestCase):
         # Patch the Stripe lookup so it returns no period-end (we don't
         # care about the post-creation work for this test).
         with patch('payments.services._get_subscription_period_end', return_value=None), \
+             patch('payments.services._get_subscription_price_id', return_value=''), \
              patch('payments.services._community_invite'):
             from payments.services import handle_checkout_completed
             handle_checkout_completed(session_data)

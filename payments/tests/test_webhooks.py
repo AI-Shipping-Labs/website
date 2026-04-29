@@ -34,6 +34,21 @@ WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
 
 
+class QuietSubscriptionLookupMixin:
+    """Avoid real Stripe subscription lookups in webhook tests."""
+
+    def setUp(self):
+        super().setUp()
+        patchers = [
+            patch("payments.services._get_subscription_period_end", return_value=None),
+            patch("payments.services._get_subscription_price_id", return_value=""),
+            patch("payments.services._tier_from_subscription", return_value=None),
+        ]
+        for patcher in patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+
 def _build_stripe_signature(payload_bytes, secret=TEST_WEBHOOK_SECRET):
     """Build a valid Stripe webhook signature for testing."""
     timestamp = str(int(time.time()))
@@ -58,7 +73,7 @@ def _make_event_payload(event_id, event_type, data_object):
 
 
 @tag('core')
-class WebhookSignatureValidationTest(TestCase):
+class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
     """Tests that the webhook endpoint validates Stripe signatures."""
 
     def test_missing_signature_returns_400(self):
@@ -235,7 +250,7 @@ class WebhookSignatureValidationTest(TestCase):
 
 
 @tag('core')
-class CheckoutCompletedHandlerTest(TestCase):
+class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
     """Tests for the checkout.session.completed webhook handler."""
 
     def test_sets_user_tier_on_checkout(self):
@@ -693,7 +708,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
 
 
 @tag('core')
-class WebhookIdempotencyTest(TestCase):
+class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
     """Tests that webhook processing is idempotent."""
 
     def test_is_event_already_processed_returns_false_for_new_event(self):
@@ -999,8 +1014,14 @@ class WebhookHandlerFailureTest(TestCase):
             {"checkout.session.completed": flaky_handler},
         ):
             # First delivery: transient failure.
-            response1 = self._post_checkout_event(event_id, user)
+            with self.assertLogs("payments.views.webhooks", level="ERROR") as logs:
+                response1 = self._post_checkout_event(event_id, user)
             self.assertEqual(response1.status_code, 500)
+            self.assertIn(
+                "Error processing webhook event evt_retry_1 "
+                "(checkout.session.completed)",
+                logs.output[0],
+            )
             self.assertEqual(
                 WebhookEvent.objects.filter(stripe_event_id=event_id).count(),
                 0,
@@ -1063,10 +1084,16 @@ class WebhookHandlerFailureTest(TestCase):
             {"checkout.session.completed": perm_failing_handler},
         ):
             # First delivery: permanent failure.
-            response1 = self._post_checkout_event(event_id, user)
+            with self.assertLogs("payments.views.webhooks", level="WARNING") as logs:
+                response1 = self._post_checkout_event(event_id, user)
             self.assertEqual(
                 response1.status_code, 200,
                 "Permanent failure must return 200 so Stripe stops retrying.",
+            )
+            self.assertIn(
+                "Webhook handler raised WebhookPermanentError: "
+                "evt_perm_1 (checkout.session.completed): malformed metadata",
+                logs.output[0],
             )
             self.assertEqual(
                 WebhookEvent.objects.filter(
@@ -1110,7 +1137,13 @@ class WebhookHandlerFailureTest(TestCase):
             "payments.views.webhooks.EVENT_HANDLERS",
             {"checkout.session.completed": perm_failing_handler},
         ):
-            self._post_checkout_event(event_id, user)
+            with self.assertLogs("payments.views.webhooks", level="WARNING") as logs:
+                self._post_checkout_event(event_id, user)
+        self.assertIn(
+            "Webhook handler raised WebhookPermanentError: "
+            "evt_perm_msg_1 (checkout.session.completed): malformed metadata",
+            logs.output[0],
+        )
 
         row = WebhookEvent.objects.get(stripe_event_id=event_id)
         self.assertEqual(row.status, WebhookEvent.STATUS_FAILED_PERMANENT)

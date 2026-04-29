@@ -17,6 +17,7 @@ Covers:
 """
 
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -36,6 +37,20 @@ from payments.services import handle_checkout_completed, handle_subscription_del
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+
+class QuietSubscriptionLookupMixin:
+    """Avoid real Stripe subscription lookups in progress-retention tests."""
+
+    def setUp(self):
+        super().setUp()
+        patchers = [
+            patch('payments.services._get_subscription_period_end', return_value=None),
+            patch('payments.services._get_subscription_price_id', return_value=''),
+        ]
+        for patcher in patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
 
 # ============================================================
@@ -179,10 +194,13 @@ class SubscriptionDeletedProgressRetentionTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
-class ResubscriptionProgressRetentionTest(TierSetupMixin, TestCase):
+class ResubscriptionProgressRetentionTest(
+    QuietSubscriptionLookupMixin, TierSetupMixin, TestCase,
+):
     """After re-subscription, tier is restored and progress records are intact."""
 
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(
             email='resub@test.com', password='testpass',
         )
@@ -272,10 +290,13 @@ class ResubscriptionProgressRetentionTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
-class DashboardProgressCancellationTest(TierSetupMixin, TestCase):
+class DashboardProgressCancellationTest(
+    QuietSubscriptionLookupMixin, TierSetupMixin, TestCase,
+):
     """Dashboard hides gated course progress after cancellation and restores it after re-sub."""
 
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(
             email='dashboard@test.com', password='testpass',
         )
@@ -420,10 +441,13 @@ class DashboardProgressCancellationTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
-class DashboardEventRegistrationRetentionTest(TierSetupMixin, TestCase):
+class DashboardEventRegistrationRetentionTest(
+    QuietSubscriptionLookupMixin, TierSetupMixin, TestCase,
+):
     """Event registrations persist through cancellation and re-subscription."""
 
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(
             email='eventuser@test.com', password='testpass',
         )
@@ -472,10 +496,13 @@ class DashboardEventRegistrationRetentionTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
-class ProjectSubmissionRetentionTest(TierSetupMixin, TestCase):
+class ProjectSubmissionRetentionTest(
+    QuietSubscriptionLookupMixin, TierSetupMixin, TestCase,
+):
     """Project submissions persist through cancellation."""
 
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(
             email='builder@test.com', password='testpass',
         )
@@ -523,10 +550,13 @@ class ProjectSubmissionRetentionTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
-class DowngradeTierProgressFilteringTest(TierSetupMixin, TestCase):
+class DowngradeTierProgressFilteringTest(
+    QuietSubscriptionLookupMixin, TierSetupMixin, TestCase,
+):
     """Downgrade from Premium to Basic: Basic courses visible, Premium hidden on dashboard."""
 
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(
             email='partial@test.com', password='testpass',
         )
@@ -671,10 +701,13 @@ class DowngradeTierProgressFilteringTest(TierSetupMixin, TestCase):
 # ============================================================
 
 
-class ResumeCourseAfterResubTest(TierSetupMixin, TestCase):
+class ResumeCourseAfterResubTest(
+    QuietSubscriptionLookupMixin, TierSetupMixin, TestCase,
+):
     """After re-subscription, user can resume from the last completed unit."""
 
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(
             email='resume@test.com', password='testpass',
         )

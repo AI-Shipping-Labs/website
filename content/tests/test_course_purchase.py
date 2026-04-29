@@ -385,8 +385,13 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
         mock_get_client.side_effect = Exception('Stripe API error')
 
         self.client.login(email='buyer@test.com', password='testpass')
-        response = self.client.post('/api/courses/buy-me/purchase')
+        with self.assertLogs('content.views.courses', level='ERROR') as logs:
+            response = self.client.post('/api/courses/buy-me/purchase')
         self.assertEqual(response.status_code, 500)
+        self.assertIn(
+            'Failed to create course purchase checkout for course buy-me',
+            logs.output[0],
+        )
         self.assertIn('error', response.json())
 
     def test_get_method_not_allowed(self):
@@ -541,7 +546,11 @@ class WebhookCoursePurchaseTest(TierSetupMixin, TestCase):
                 'tier_slug': 'main',
             },
         }
-        handle_checkout_completed(session_data)
+        with (
+            patch('payments.services._get_subscription_period_end', return_value=None),
+            patch('payments.services._get_subscription_price_id', return_value=''),
+        ):
+            handle_checkout_completed(session_data)
 
         self.user.refresh_from_db()
         self.assertEqual(self.user.tier.slug, 'main')
@@ -797,10 +806,15 @@ class StudioCreateStripeProductTest(TestCase):
     @patch('payments.services._get_stripe_client')
     def test_stripe_error_returns_500(self, mock_get_client):
         mock_get_client.side_effect = Exception('Stripe API error')
-        response = self.client.post(
-            f'/studio/courses/{self.course.pk}/create-stripe-product',
-        )
+        with self.assertLogs('studio.views.courses', level='ERROR') as logs:
+            response = self.client.post(
+                f'/studio/courses/{self.course.pk}/create-stripe-product',
+            )
         self.assertEqual(response.status_code, 500)
+        self.assertIn(
+            f'Failed to create Stripe product for course {self.course.pk}',
+            logs.output[0],
+        )
         self.assertIn('error', response.json())
 
 

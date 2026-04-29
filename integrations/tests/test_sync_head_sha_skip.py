@@ -279,7 +279,9 @@ class SyncSkipPreviousFailureTest(TestCase):
         # ``success`` — there's no point asking, we already know we want
         # to run.
         mock_clone.side_effect = RuntimeError('boom')  # short-circuit
-        sync_content_source(self.source)
+        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
+            sync_content_source(self.source)
+        self.assertIn('Sync failed for owner/blog-235-failed', logs.output[0])
         mock_fetch.assert_not_called()
 
 
@@ -305,7 +307,9 @@ class SyncSkipHeadFetchFailureTest(TestCase):
         # last_synced_commit is set — the failure to fetch HEAD must NOT
         # cause us to silently mark the sync as skipped.
         mock_clone.side_effect = RuntimeError('short-circuit')
-        sync_content_source(self.source)
+        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
+            sync_content_source(self.source)
+        self.assertIn('Sync failed for owner/blog-235-fetchfail', logs.output[0])
         mock_clone.assert_called_once()
 
 
@@ -333,9 +337,11 @@ class SyncFailureDoesNotUpdateLastSyncedCommitTest(TestCase):
         mock_fetch.return_value = 'b' * 40
         mock_clone.side_effect = RuntimeError('clone failed')
 
-        log = sync_content_source(self.source)
+        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
+            log = sync_content_source(self.source)
 
         self.assertEqual(log.status, 'failed')
+        self.assertIn('Sync failed for owner/blog-235-keep-sha', logs.output[0])
         self.source.refresh_from_db()
         # Still the old SHA — the failure must not overwrite it.
         self.assertEqual(self.source.last_synced_commit, 'a' * 40)

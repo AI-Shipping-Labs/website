@@ -341,10 +341,16 @@ class RegistrationApiEmailTest(TestCase):
         mock_send.side_effect = Exception('SES is down')
 
         self.client.login(email='api@example.com', password='testpass123')
-        response = self.client.post(f'/api/events/{self.event.slug}/register')
+        with self.assertLogs('events.views.api', level='ERROR') as logs:
+            response = self.client.post(f'/api/events/{self.event.slug}/register')
 
         # Registration should still succeed
         self.assertEqual(response.status_code, 201)
+        self.assertIn(
+            'Failed to send registration email for event "api-event" '
+            'to user api@example.com',
+            logs.output[0],
+        )
 
         # User should still be registered
         self.assertTrue(

@@ -82,8 +82,14 @@ class ContentSourceCreateViewTest(TestCase):
     @patch('studio.views.content_sources.list_installation_repositories',
            side_effect=GitHubSyncError('GitHub App credentials not configured.'))
     def test_get_shows_error_when_github_not_configured(self, _mock_list):
-        response = self.client.get('/studio/content-sources/new/')
+        with self.assertLogs('studio.views.content_sources', level='WARNING') as logs:
+            response = self.client.get('/studio/content-sources/new/')
         self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            'Could not fetch installation repositories: '
+            'GitHub App credentials not configured.',
+            logs.output[0],
+        )
         self.assertContains(response, 'GitHub App credentials not configured')
 
     @patch('studio.views.content_sources.list_installation_repositories',
@@ -202,11 +208,16 @@ class ContentSourceCreateViewTest(TestCase):
     @patch('studio.views.content_sources.list_installation_repositories',
            side_effect=GitHubSyncError('boom'))
     def test_post_rejects_when_github_api_unreachable(self, _mock_list):
-        response = self.client.post('/studio/content-sources/new/', {
-            'repo_name': 'AI-Shipping-Labs/blog',
-            'webhook_secret': '',
-        })
+        with self.assertLogs('studio.views.content_sources', level='WARNING') as logs:
+            response = self.client.post('/studio/content-sources/new/', {
+                'repo_name': 'AI-Shipping-Labs/blog',
+                'webhook_secret': '',
+            })
         self.assertEqual(response.status_code, 400)
+        self.assertIn(
+            'Could not fetch installation repositories: boom',
+            logs.output[0],
+        )
         self.assertFalse(ContentSource.objects.exists())
 
 

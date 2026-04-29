@@ -80,10 +80,15 @@ class EventCreateZoomSuccessTest(TestCase):
     def test_create_zoom_api_error_returns_500(self, mock_create_meeting):
         """When create_meeting raises an exception, the endpoint returns 500 with error message."""
         mock_create_meeting.side_effect = Exception('Zoom API rate limit exceeded')
-        response = self.client.post(
-            f'/studio/events/{self.event.pk}/create-zoom',
-        )
+        with self.assertLogs('studio.views.events', level='ERROR') as logs:
+            response = self.client.post(
+                f'/studio/events/{self.event.pk}/create-zoom',
+            )
         self.assertEqual(response.status_code, 500)
+        self.assertIn(
+            f'Failed to create Zoom meeting for event {self.event.pk}',
+            logs.output[0],
+        )
         data = response.json()
         self.assertIn('error', data)
         self.assertIn('Zoom API rate limit exceeded', data['error'])
@@ -206,4 +211,3 @@ class EventCreateZoomAccessControlTest(TestCase):
 # Endpoint behavior (POST creates a meeting, errors return correct status codes,
 # auth gates work) is covered by the other classes above. JS-driven show/hide
 # of the zoom section based on platform selection is a Playwright concern.
-

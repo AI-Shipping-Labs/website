@@ -162,7 +162,12 @@ class NotificationServiceNotifyTest(TestCase):
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_notify_nonexistent_content_does_not_crash(self, mock_slack):
         """Non-existent content IDs should be handled gracefully."""
-        NotificationService.notify('article', 99999)
+        with self.assertLogs(
+            'notifications.services.notification_service',
+            level='ERROR',
+        ) as logs:
+            NotificationService.notify('article', 99999)
+        self.assertIn('Failed to load content for notify: article/99999', logs.output[0])
         self.assertEqual(Notification.objects.count(), 0)
 
     # Replaces playwright_tests/test_notifications.py::

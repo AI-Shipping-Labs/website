@@ -32,8 +32,11 @@ class CheckoutCompletedCommunityTest(TestCase):
         self.user = User.objects.create_user(email="checkout_community@test.com")
 
     @patch("payments.services._community_invite")
+    @patch("payments.services._get_subscription_price_id", return_value="")
     @patch("payments.services._get_subscription_period_end", return_value=None)
-    def test_main_tier_triggers_invite(self, mock_period, mock_invite):
+    def test_main_tier_triggers_invite(
+        self, _mock_period, _mock_price_id, mock_invite,
+    ):
         """Purchasing Main tier triggers community invite."""
         session_data = {
             "id": "cs_test_1",
@@ -51,8 +54,11 @@ class CheckoutCompletedCommunityTest(TestCase):
         self.assertEqual(called_user.pk, self.user.pk)
 
     @patch("payments.services._community_invite")
+    @patch("payments.services._get_subscription_price_id", return_value="")
     @patch("payments.services._get_subscription_period_end", return_value=None)
-    def test_basic_tier_does_not_trigger_invite(self, mock_period, mock_invite):
+    def test_basic_tier_does_not_trigger_invite(
+        self, _mock_period, _mock_price_id, mock_invite,
+    ):
         """Purchasing Basic tier does NOT trigger community invite."""
         session_data = {
             "id": "cs_test_2",

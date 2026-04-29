@@ -1726,7 +1726,9 @@ class SyncFailureTest(TestCase):
         try:
             with open(os.path.join(temp_dir, 'a.md'), 'w') as f:
                 f.write('---\ntitle: x\n---\n')
-            sync_content_source(source, repo_dir=temp_dir)
+            with self.assertLogs('integrations.services.github', level='ERROR') as logs:
+                sync_content_source(source, repo_dir=temp_dir)
+            self.assertIn('Sync failed for test/fail', logs.output[0])
             source.refresh_from_db()
             self.assertEqual(source.last_sync_status, 'failed')
             self.assertIn('failed', source.last_sync_log.lower())

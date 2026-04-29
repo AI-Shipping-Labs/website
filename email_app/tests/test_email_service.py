@@ -356,8 +356,12 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_client.send_email.side_effect = Exception('SES down')
         mock_boto3.client.return_value = mock_client
 
-        with self.assertRaises(EmailServiceError) as ctx:
+        with (
+            self.assertLogs('email_app.services.email_service', level='ERROR') as logs,
+            self.assertRaises(EmailServiceError) as ctx,
+        ):
             self.service._send_ses('to@example.com', 'Sub', '<html/>')
+        self.assertIn('Failed to send email via SES to to@example.com', logs.output[0])
         self.assertIn('SES send failed', str(ctx.exception))
 
     @override_settings(SES_FROM_EMAIL='custom@example.com')

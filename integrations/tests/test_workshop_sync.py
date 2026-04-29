@@ -635,9 +635,11 @@ class WorkshopSeedContentSourceTest(TestCase):
     """seed_content_sources registers the workshops-content repo idempotently."""
 
     def test_seed_creates_workshop_source(self):
+        from io import StringIO
+
         from django.core.management import call_command
 
-        call_command('seed_content_sources')
+        call_command('seed_content_sources', stdout=StringIO())
         qs = ContentSource.objects.filter(
             repo_name='AI-Shipping-Labs/workshops-content',
         )
@@ -646,10 +648,12 @@ class WorkshopSeedContentSourceTest(TestCase):
         self.assertTrue(source.is_private)
 
     def test_seed_is_idempotent(self):
+        from io import StringIO
+
         from django.core.management import call_command
 
-        call_command('seed_content_sources')
-        call_command('seed_content_sources')
+        call_command('seed_content_sources', stdout=StringIO())
+        call_command('seed_content_sources', stdout=StringIO())
 
         self.assertEqual(
             ContentSource.objects.filter(

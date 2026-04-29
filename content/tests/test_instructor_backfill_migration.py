@@ -15,8 +15,10 @@ runs against a real schema. Covers:
   (``source_repo IS NULL``) and the through rows that referenced them.
 """
 
+from contextlib import redirect_stdout
 from datetime import datetime
 from datetime import timezone as dt_timezone
+from io import StringIO
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
@@ -35,7 +37,8 @@ def _migrate_to(*targets):
     """
     executor = MigrationExecutor(connection)
     executor.loader.build_graph()
-    executor.migrate(list(targets))
+    with redirect_stdout(StringIO()):
+        executor.migrate(list(targets))
     return MigrationExecutor(connection).loader.project_state(
         list(targets),
     ).apps

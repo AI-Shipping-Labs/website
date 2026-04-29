@@ -119,9 +119,14 @@ class EmailMatcherTest(TestCase):
         mock_service.lookup_user_by_email.side_effect = Exception("API timeout")
         mock_get_service.return_value = mock_service
 
-        result = match_community_emails()
+        with self.assertLogs("community.tasks.email_matcher", level="ERROR") as logs:
+            result = match_community_emails()
 
         self.assertEqual(result["errors"], 1)
+        self.assertIn(
+            "Email matcher: error processing user error@test.com",
+            logs.output[0],
+        )
 
 
 @override_settings(

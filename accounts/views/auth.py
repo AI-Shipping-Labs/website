@@ -2,11 +2,13 @@
 
 import json
 import logging
+import time
 
 import jwt
 from allauth.socialaccount.models import SocialApp
 from django.conf import settings
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import login, logout
+from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -19,6 +21,24 @@ logger = logging.getLogger(__name__)
 
 # JWT algorithm
 JWT_ALGORITHM = "HS256"
+EMAIL_PASSWORD_AUTH_BACKEND = "django.contrib.auth.backends.ModelBackend"
+EMAIL_PASSWORD_BACKEND = ModelBackend()
+INVALID_LOGIN_ERROR = "Invalid email or password"
+
+
+def _log_login_timing(outcome, started_at):
+    """Log only coarse slow-login diagnostics; never credentials or tokens."""
+    elapsed_ms = (time.perf_counter() - started_at) * 1000
+    slow_threshold_ms = getattr(settings, "LOGIN_API_SLOW_MS", 750)
+    if elapsed_ms >= slow_threshold_ms:
+        logger.warning(
+            "Slow login_api attempt",
+            extra={
+                "login_outcome": outcome,
+                "elapsed_ms": round(elapsed_ms, 2),
+            },
+        )
+    return elapsed_ms
 
 
 @ensure_csrf_cookie
@@ -303,31 +323,46 @@ def login_api(request):
         200 with {"status": "ok"} on success.
         401 with {"error": "..."} on failure.
     """
+    started_at = time.perf_counter()
+    outcome = "unknown"
     try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            outcome = "invalid_json"
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    email = data.get("email", "").strip().lower()
-    password = data.get("password", "")
+        email = data.get("email", "").strip().lower()
+        password = data.get("password", "")
 
-    if not email or not password:
-        return JsonResponse(
-            {"error": "Email and password are required"}, status=400
+        if not email or not password:
+            outcome = "missing_fields"
+            return JsonResponse(
+                {"error": "Email and password are required"}, status=400
+            )
+
+        # Before issue #371, authenticate() fell through every configured
+        # backend. The plain email/password endpoint only needs ModelBackend;
+        # calling it directly preserves Django's password hash and dummy-hash
+        # protections while avoiding duplicate allauth backend work.
+        user = EMAIL_PASSWORD_BACKEND.authenticate(
+            request,
+            username=email,
+            password=password,
         )
+        if user is None:
+            outcome = "invalid_credentials"
+            return JsonResponse({"error": INVALID_LOGIN_ERROR}, status=401)
 
-    user = authenticate(request, email=email, password=password)
-    if user is None:
-        return JsonResponse(
-            {"error": "Invalid email or password"}, status=401
-        )
-
-    login(request, user)
-    response_data = {"status": "ok"}
-    # Push server-side theme preference to client on login
-    if user.theme_preference:
-        response_data["theme_preference"] = user.theme_preference
-    return JsonResponse(response_data)
+        login(request, user, backend=EMAIL_PASSWORD_AUTH_BACKEND)
+        outcome = "success"
+        response_data = {"status": "ok"}
+        # Push server-side theme preference to client on login
+        if user.theme_preference:
+            response_data["theme_preference"] = user.theme_preference
+        return JsonResponse(response_data)
+    finally:
+        _log_login_timing(outcome, started_at)
 
 
 @require_POST

@@ -8,6 +8,8 @@ Welcome to **AI Shipping Labs**.
 
 {% if is_course_db_import %}
 We created an account for you because of your DataTalks course history{% if course_slug_list %}: {{ course_slug_list }}{% endif %}. This gives you no-cost Main access as a continuity bridge for alumni.
+{% elif is_slack_import %}
+We created a Free account for you because you were already in the AI Shipping Labs Slack workspace. This does not grant paid membership access or mean you opted in to marketing newsletters.
 {% else %}
 We created an account for you because you were already connected with us through {{ source_label }}{% if import_tags %} ({{ import_tags }}){% endif %}.
 {% endif %}

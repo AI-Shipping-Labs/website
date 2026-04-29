@@ -44,7 +44,7 @@ class UserAdmin(BaseUserAdmin):
         ),
         (
             "Community",
-            {"fields": ("slack_user_id",)},
+            {"fields": ("slack_user_id", "slack_member", "slack_checked_at")},
         ),
         (
             "Import",

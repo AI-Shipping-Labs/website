@@ -11,6 +11,7 @@ from django.utils import timezone
 from django_q.models import Schedule
 
 from accounts.admin.import_batch import ImportBatchAdmin
+from accounts.admin.user import UserAdmin
 from accounts.models import ImportBatch, TierOverride
 from accounts.services import import_users
 from accounts.services.import_users import (
@@ -477,6 +478,9 @@ class WelcomeImportedEmailTaskTest(TestCase):
 
 
 class ImportUsersCommandTest(TestCase):
+    def setUp(self):
+        import_users.ADAPTERS.clear()
+
     def tearDown(self):
         import_users.ADAPTERS.clear()
 
@@ -513,3 +517,14 @@ class ImportBatchAdminTest(TestCase):
         self.assertIn("source", model_admin.readonly_fields)
         self.assertIn("errors", model_admin.readonly_fields)
         self.assertIn("source", model_admin.list_filter)
+
+
+class UserAdminTest(TestCase):
+    def test_community_fieldset_exposes_slack_membership_fields(self):
+        model_admin = admin.site._registry[User]
+        self.assertIsInstance(model_admin, UserAdmin)
+        community_fields = dict(model_admin.fieldsets)["Community"]["fields"]
+        self.assertEqual(
+            community_fields,
+            ("slack_user_id", "slack_member", "slack_checked_at"),
+        )

@@ -10,6 +10,7 @@ import logging
 import requests
 from django.conf import settings
 
+from community.slack_config import get_slack_announcements_channel_id
 from integrations.config import get_config, is_enabled
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def _get_announcements_channel_id():
     """Return the Slack announcements channel ID from settings."""
-    return get_config('SLACK_ANNOUNCEMENTS_CHANNEL_ID')
+    return get_slack_announcements_channel_id()
 
 
 def _build_slack_blocks(content_type, content):

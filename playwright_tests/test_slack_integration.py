@@ -20,12 +20,16 @@ from django.conf import settings
 
 from notifications.services.slack_announcements import post_slack_announcement
 
-SLACK_TEST_CHANNEL = "C0AHN84QNP3"
+DEFAULT_SLACK_TEST_CHANNEL = "C0AHN84QNP3"
 
 # Skip the entire module if SLACK_BOT_TOKEN is not available in env
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("SLACK_BOT_TOKEN"),
-    reason="SLACK_BOT_TOKEN env var not set; skipping real Slack integration test",
+    not os.environ.get("SLACK_BOT_TOKEN")
+    or not os.environ.get("SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID"),
+    reason=(
+        "SLACK_BOT_TOKEN and SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID must be set; "
+        "skipping real Slack integration test"
+    ),
 )
 
 
@@ -47,7 +51,15 @@ def test_post_slack_announcement_real():
     # Temporarily set real Slack credentials from env vars
     original_token = settings.SLACK_BOT_TOKEN
     original_channel = settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID
+    original_env = settings.SLACK_ENVIRONMENT
+    original_test_channel = settings.SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID
     env_token = os.environ["SLACK_BOT_TOKEN"]
+    test_channel = os.environ["SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID"]
+
+    assert test_channel == DEFAULT_SLACK_TEST_CHANNEL, (
+        "Real Slack integration tests must target #integration-tests "
+        f"({DEFAULT_SLACK_TEST_CHANNEL}), got {test_channel}"
+    )
 
     # We need to capture the chat.postMessage response to get the message
     # timestamp (ts) for deletion. Wrap requests.post to intercept it.
@@ -63,8 +75,9 @@ def test_post_slack_announcement_real():
 
     try:
         settings.SLACK_ENABLED = True
+        settings.SLACK_ENVIRONMENT = "test"
         settings.SLACK_BOT_TOKEN = env_token
-        settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = SLACK_TEST_CHANNEL
+        settings.SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = test_channel
 
         # Post a message using the real function, capturing the API response
         content = _FakeContent(
@@ -86,7 +99,7 @@ def test_post_slack_announcement_real():
         assert post_data.get("ok") is True, (
             f"chat.postMessage response was not ok: {post_data.get('error', 'unknown')}"
         )
-        assert post_data.get("channel") == SLACK_TEST_CHANNEL, (
+        assert post_data.get("channel") == test_channel, (
             f"Message posted to wrong channel: {post_data.get('channel')}"
         )
 
@@ -103,7 +116,7 @@ def test_post_slack_announcement_real():
         delete_response = requests.post(
             "https://slack.com/api/chat.delete",
             json={
-                "channel": SLACK_TEST_CHANNEL,
+                "channel": test_channel,
                 "ts": message_ts,
             },
             headers={
@@ -120,5 +133,7 @@ def test_post_slack_announcement_real():
     finally:
         # Restore original settings
         settings.SLACK_ENABLED = False
+        settings.SLACK_ENVIRONMENT = original_env
         settings.SLACK_BOT_TOKEN = original_token
         settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = original_channel
+        settings.SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = original_test_channel

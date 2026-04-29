@@ -39,6 +39,28 @@ class CommunityServiceInterfaceTest(TestCase):
         self.assertIsInstance(service, SlackCommunityService)
 
 
+class SlackCommunityServiceEnvironmentTest(TestCase):
+    @override_settings(
+        SLACK_ENVIRONMENT="development",
+        SLACK_COMMUNITY_CHANNEL_IDS=["CPROD"],
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["CDEV"],
+    )
+    def test_default_channels_use_environment_resolver(self):
+        service = SlackCommunityService(bot_token="xoxb-test")
+        self.assertEqual(service.channel_ids, ["CDEV"])
+
+    @override_settings(
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["CDEV"],
+    )
+    def test_explicit_channel_ids_still_win(self):
+        service = SlackCommunityService(
+            bot_token="xoxb-test",
+            channel_ids=["CEXPLICIT"],
+        )
+        self.assertEqual(service.channel_ids, ["CEXPLICIT"])
+
+
 @override_settings(SLACK_ENABLED=True)
 @tag('core')
 class SlackAPICallTest(TestCase):

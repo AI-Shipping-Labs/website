@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, override_settings
 
 from content.models import Article
+from integrations.config import clear_config_cache
 from notifications.services.slack_announcements import (
     _build_slack_blocks,
     post_slack_announcement,
@@ -63,12 +64,19 @@ class BuildSlackBlocksTest(TestCase):
 class PostSlackAnnouncementTest(TestCase):
     """Tests for the post_slack_announcement function."""
 
+    def setUp(self):
+        clear_config_cache()
+
     def test_skips_when_no_bot_token(self):
         article = Article.objects.create(
             title='Test', slug='test-no-token',
             date=date(2025, 1, 1),
         )
-        with self.settings(SLACK_BOT_TOKEN='', SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123'):
+        with self.settings(
+            SLACK_ENVIRONMENT='production',
+            SLACK_BOT_TOKEN='',
+            SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123',
+        ):
             result = post_slack_announcement('article', article)
             self.assertFalse(result)
 
@@ -77,9 +85,51 @@ class PostSlackAnnouncementTest(TestCase):
             title='Test', slug='test-no-channel',
             date=date(2025, 1, 1),
         )
-        with self.settings(SLACK_BOT_TOKEN='xoxb-test', SLACK_ANNOUNCEMENTS_CHANNEL_ID=''):
+        with self.settings(
+            SLACK_ENVIRONMENT='production',
+            SLACK_BOT_TOKEN='xoxb-test',
+            SLACK_ANNOUNCEMENTS_CHANNEL_ID='',
+        ):
             result = post_slack_announcement('article', article)
             self.assertFalse(result)
+
+    @patch('notifications.services.slack_announcements.requests.post')
+    def test_development_without_dev_channel_skips(self, mock_post):
+        article = Article.objects.create(
+            title='Dev Skip Article', slug='test-dev-skip',
+            date=date(2025, 1, 1),
+        )
+        with self.settings(
+            SLACK_ENVIRONMENT='development',
+            SLACK_BOT_TOKEN='xoxb-test',
+            SLACK_ANNOUNCEMENTS_CHANNEL_ID='CPROD',
+            SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID='',
+        ):
+            result = post_slack_announcement('article', article)
+
+        self.assertFalse(result)
+        mock_post.assert_not_called()
+
+    @patch('notifications.services.slack_announcements.requests.post')
+    def test_development_posts_to_dev_channel(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'ok': True}
+        mock_post.return_value = mock_response
+
+        article = Article.objects.create(
+            title='Dev Posted Article', slug='test-dev-post',
+            date=date(2025, 1, 1),
+        )
+        with self.settings(
+            SLACK_ENVIRONMENT='development',
+            SLACK_BOT_TOKEN='xoxb-test',
+            SLACK_ANNOUNCEMENTS_CHANNEL_ID='CPROD',
+            SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID='CDEV',
+        ):
+            result = post_slack_announcement('article', article)
+
+        self.assertTrue(result)
+        self.assertEqual(mock_post.call_args.kwargs['json']['channel'], 'CDEV')
 
     @patch('notifications.services.slack_announcements.requests.post')
     def test_posts_to_slack_api(self, mock_post):
@@ -91,7 +141,11 @@ class PostSlackAnnouncementTest(TestCase):
             title='Posted Article', slug='test-post',
             date=date(2025, 1, 1),
         )
-        with self.settings(SLACK_BOT_TOKEN='xoxb-test', SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123'):
+        with self.settings(
+            SLACK_ENVIRONMENT='production',
+            SLACK_BOT_TOKEN='xoxb-test',
+            SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123',
+        ):
             result = post_slack_announcement('article', article)
 
         self.assertTrue(result)
@@ -109,7 +163,14 @@ class PostSlackAnnouncementTest(TestCase):
             title='Error Article', slug='test-error',
             date=date(2025, 1, 1),
         )
-        with self.settings(SLACK_BOT_TOKEN='xoxb-test', SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123'):
+        with (
+            self.settings(
+                SLACK_ENVIRONMENT='production',
+                SLACK_BOT_TOKEN='xoxb-test',
+                SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123',
+            ),
+            self.assertLogs('notifications.services.slack_announcements', level='WARNING'),
+        ):
             result = post_slack_announcement('article', article)
 
         self.assertFalse(result)
@@ -121,7 +182,14 @@ class PostSlackAnnouncementTest(TestCase):
             title='Exception Article', slug='test-exception',
             date=date(2025, 1, 1),
         )
-        with self.settings(SLACK_BOT_TOKEN='xoxb-test', SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123'):
+        with (
+            self.settings(
+                SLACK_ENVIRONMENT='production',
+                SLACK_BOT_TOKEN='xoxb-test',
+                SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123',
+            ),
+            self.assertLogs('notifications.services.slack_announcements', level='ERROR'),
+        ):
             result = post_slack_announcement('article', article)
 
         self.assertFalse(result)

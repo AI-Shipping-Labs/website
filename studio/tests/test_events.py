@@ -43,6 +43,19 @@ class StudioEventListTest(StaffUserMixin, TestCase):
         response = self.client.get('/studio/events/')
         self.assertContains(response, 'Test Event')
 
+    def test_list_shows_kind_and_platform(self):
+        Event.objects.create(
+            title='Workshop Event',
+            slug='workshop-event',
+            start_datetime=timezone.now(),
+            kind='workshop',
+            platform='custom',
+        )
+        response = self.client.get('/studio/events/')
+        self.assertContains(response, 'Kind / Platform')
+        self.assertContains(response, 'Workshop')
+        self.assertContains(response, 'Custom URL')
+
     def test_list_has_no_create_button(self):
         response = self.client.get('/studio/events/')
         self.assertNotContains(response, 'New Event')
@@ -159,7 +172,6 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         self.client.post(f'/studio/events/{self.event.pk}/edit', {
             'title': 'Updated Event',
             'slug': 'edit-event',
-            'event_type': 'async',
             'event_date': '15/12/2024',
             'event_time': '14:00',
             'duration_hours': '2',
@@ -170,14 +182,12 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         self.event.refresh_from_db()
         self.assertEqual(self.event.title, 'Updated Event')
         self.assertEqual(self.event.status, 'upcoming')
-        self.assertEqual(self.event.event_type, 'async')
 
     def test_edit_event_saves_correct_datetimes(self):
         """Editing with time=09:00 and duration=3 saves correctly."""
         self.client.post(f'/studio/events/{self.event.pk}/edit', {
             'title': 'Edit Event',
             'slug': 'edit-event',
-            'event_type': 'live',
             'event_date': '01/06/2026',
             'event_time': '09:00',
             'duration_hours': '3',
@@ -199,7 +209,6 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         self.client.post(f'/studio/events/{self.event.pk}/edit', {
             'title': 'Edit Event',
             'slug': 'edit-event',
-            'event_type': 'live',
             'event_date': '01/12/2024',
             'event_time': '10:00',
             'duration_hours': '1',
@@ -333,7 +342,6 @@ class StudioEventCreateZoomTest(StaffUserMixin, TestCase):
         self.client.login(**self.staff_credentials)
         self.event = Event.objects.create(
             title='Live Event', slug='live-event',
-            event_type='live',
             start_datetime=timezone.now(),
             timezone='Europe/Berlin',
             status='draft',

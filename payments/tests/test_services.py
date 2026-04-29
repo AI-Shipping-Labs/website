@@ -23,8 +23,8 @@ from payments.models import ConversionAttribution, Tier
 from payments.services import (
     _get_subscription_period_end,
     _get_subscription_price_id,
-    _tier_from_subscription,
     _tier_for_price_id,
+    _tier_from_subscription,
     cancel_subscription,
     create_checkout_session,
     downgrade_subscription,

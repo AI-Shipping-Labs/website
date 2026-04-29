@@ -6,12 +6,114 @@ from studio.worker_health import get_worker_status
 register = template.Library()
 
 
+LIST_TABLE_WRAPPER_CLASS = 'bg-card border border-border rounded-lg overflow-x-auto'
+LIST_TABLE_CLASS = 'w-full'
+LIST_TABLE_HEAD_CLASS = 'bg-secondary'
+LIST_TABLE_HEAD_CELL_CLASS = (
+    'text-left px-6 py-3 text-xs font-medium text-muted-foreground '
+    'uppercase tracking-wider'
+)
+LIST_TABLE_HEAD_CELL_RIGHT_CLASS = (
+    'text-right px-6 py-3 text-xs font-medium text-muted-foreground '
+    'uppercase tracking-wider'
+)
+LIST_TABLE_BODY_CLASS = 'divide-y divide-border'
+LIST_TABLE_ROW_CLASS = 'hover:bg-secondary/50 transition-colors'
+
+STATUS_BADGE_CLASSES = {
+    'published': 'bg-green-500/20 text-green-400',
+    'draft': 'bg-yellow-500/20 text-yellow-400',
+    'upcoming': 'bg-blue-500/20 text-blue-400',
+    'completed': 'bg-secondary text-muted-foreground',
+    'cancelled': 'bg-red-500/20 text-red-400',
+}
+
+STATUS_OPTIONS = {
+    'publication': [
+        ('draft', 'Draft'),
+        ('published', 'Published'),
+    ],
+    'event': [
+        ('draft', 'Draft'),
+        ('upcoming', 'Upcoming'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ],
+}
+
+
 @register.filter
 def dict_get(dictionary, key):
     """Look up a key in a dictionary. Returns None if key is missing."""
     if isinstance(dictionary, dict):
         return dictionary.get(key)
     return None
+
+
+@register.simple_tag
+def studio_list_class(part='wrapper', align='left'):
+    """Return shared class names for Studio content list tables."""
+    if part == 'wrapper':
+        return LIST_TABLE_WRAPPER_CLASS
+    if part == 'table':
+        return LIST_TABLE_CLASS
+    if part == 'thead':
+        return LIST_TABLE_HEAD_CLASS
+    if part == 'th':
+        if align == 'right':
+            return LIST_TABLE_HEAD_CELL_RIGHT_CLASS
+        return LIST_TABLE_HEAD_CELL_CLASS
+    if part == 'tbody':
+        return LIST_TABLE_BODY_CLASS
+    if part == 'row':
+        return LIST_TABLE_ROW_CLASS
+    return ''
+
+
+@register.inclusion_tag('studio/includes/list_filter_form.html')
+def studio_list_filter(
+    search='',
+    status_filter='',
+    placeholder='Search...',
+    status_kind='publication',
+    auto_submit=True,
+):
+    """Render the shared Studio list search/status filter form."""
+    return {
+        'search': search,
+        'status_filter': status_filter,
+        'placeholder': placeholder,
+        'status_options': STATUS_OPTIONS.get(status_kind, STATUS_OPTIONS['publication']),
+        'auto_submit': auto_submit,
+    }
+
+
+@register.inclusion_tag('studio/includes/status_badge.html')
+def studio_status_badge(status, label=''):
+    """Render a centralized Studio list status badge."""
+    return {
+        'label': label or str(status).title(),
+        'classes': STATUS_BADGE_CLASSES.get(status, STATUS_BADGE_CLASSES['draft']),
+    }
+
+
+@register.inclusion_tag('studio/includes/synced_badge.html')
+def studio_synced_badge(source_repo):
+    """Render the shared synced badge when a row is source-managed."""
+    return {'source_repo': source_repo}
+
+
+@register.inclusion_tag('studio/includes/list_action.html')
+def studio_list_action(href, label, kind='secondary', new_tab=False, rel=''):
+    """Render shared Studio list action links."""
+    return {
+        'href': href,
+        'label': label,
+        'kind': kind,
+        'new_tab': new_tab,
+        'rel': rel,
+        'testid': 'view-on-site' if label == 'View on site' else '',
+    }
 
 
 @register.filter

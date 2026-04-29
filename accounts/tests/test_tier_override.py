@@ -1073,13 +1073,35 @@ class PerformanceTest(TierOverrideTestBase):
         self.assertIn("is_active", index_fields)
 
     def test_55_expiry_job_uses_bulk_update(self):
-        """#55: Expiry job uses bulk queryset.update() for efficiency.
-        Verified by checking the function source uses .update()."""
-        import inspect
-
+        """#55: Expiry job deactivates all expired overrides in one run."""
         from jobs.tasks.expire_overrides import expire_tier_overrides
-        source = inspect.getsource(expire_tier_overrides)
-        self.assertIn(".update(is_active=False)", source)
+
+        users = [
+            self._make_user(email=f"expired-{idx}@example.com")
+            for idx in range(3)
+        ]
+        for idx, user in enumerate(users):
+            self._make_override(
+                user,
+                self.premium_tier,
+                expires_at=timezone.now() - timedelta(minutes=idx + 1),
+            )
+        active_user = self._make_user(email="active@example.com")
+        active_override = self._make_override(
+            active_user,
+            self.premium_tier,
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+
+        result = expire_tier_overrides()
+
+        self.assertEqual(result["deactivated"], 3)
+        self.assertEqual(
+            TierOverride.objects.filter(user__in=users, is_active=True).count(),
+            0,
+        )
+        active_override.refresh_from_db()
+        self.assertTrue(active_override.is_active)
 
 
 # ============================================================
@@ -1417,12 +1439,19 @@ class SetupSchedulesTest(TestCase):
 
     def test_expire_tier_overrides_schedule_registered(self):
         """setup_schedules registers expire-tier-overrides."""
-        import inspect
+        from io import StringIO
 
-        from jobs.management.commands.setup_schedules import Command
-        source = inspect.getsource(Command.handle)
-        self.assertIn("expire-tier-overrides", source)
-        self.assertIn("expire_tier_overrides", source)
+        from django.core.management import call_command
+        from django_q.models import Schedule
+
+        call_command("setup_schedules", stdout=StringIO())
+
+        schedule = Schedule.objects.get(name="expire-tier-overrides")
+        self.assertEqual(
+            schedule.func,
+            "jobs.tasks.expire_overrides.expire_tier_overrides",
+        )
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
 
 
 # ============================================================

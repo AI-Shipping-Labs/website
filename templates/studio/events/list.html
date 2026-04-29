@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Events{% endblock %}
 
@@ -6,64 +7,45 @@
 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
   <div>
     <h1 class="text-2xl font-semibold text-foreground">Events</h1>
-    <p class="text-muted-foreground mt-1">Manage live and async events.</p>
+    <p class="text-muted-foreground mt-1">Manage event lifecycle, platform, and capacity.</p>
   </div>
   <span class="text-sm text-muted-foreground">Events are managed in the content repo.</span>
 </div>
 
-<!-- Filters -->
-<div class="mb-6">
-  <form method="get" class="flex flex-wrap items-center gap-3">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search events..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <select name="status" onchange="this.form.submit()"
-            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <option value="">All statuses</option>
-      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
-      <option value="upcoming" {% if status_filter == 'upcoming' %}selected{% endif %}>Upcoming</option>
-      <option value="live" {% if status_filter == 'live' %}selected{% endif %}>Live</option>
-      <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
-      <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
-    </select>
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
-  </form>
-</div>
+{% studio_list_filter search status_filter "Search events..." "event" %}
 
 <!-- Event List -->
-<div class="bg-card border border-border rounded-lg overflow-x-auto">
-  <table class="w-full">
-    <thead class="bg-secondary">
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Capacity</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Kind / Platform</th>
+        <th class="{% studio_list_class 'th' %}">Date</th>
+        <th class="{% studio_list_class 'th' %}">Capacity</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border">
+    <tbody class="{% studio_list_class 'tbody' %}">
       {% for event in events %}
-      <tr class="hover:bg-secondary/50 transition-colors">
+      <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ event.title }}</a>
         </td>
         <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full
-            {% if event.status == 'upcoming' %}bg-blue-500/20 text-blue-400
-            {% elif event.status == 'live' %}bg-green-500/20 text-green-400
-            {% elif event.status == 'completed' %}bg-secondary text-muted-foreground
-            {% elif event.status == 'cancelled' %}bg-red-500/20 text-red-400
-            {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-            {{ event.get_status_display }}
-          </span>
+          {% studio_status_badge event.status event.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ event.get_event_type_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">
+          <span class="text-foreground">{{ event.get_kind_display }}</span>
+          <p class="text-xs text-muted-foreground mt-1">{{ event.get_platform_display }}</p>
+        </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{% if event.max_participants %}{{ event.registration_count }}/{{ event.max_participants }}{% else %}Unlimited{% endif %}</td>
         <td class="px-6 py-4 text-right space-x-3">
-          <a href="{{ event.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
-          <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+          {% studio_list_action event.get_absolute_url 'View on site' 'secondary' True %}
+          {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
+          {% studio_list_action event_edit_url 'Edit' 'primary' %}
         </td>
       </tr>
       {% empty %}

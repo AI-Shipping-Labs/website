@@ -23,49 +23,34 @@
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
-<!-- Filters -->
-<div class="mb-6">
-  <form method="get" class="flex flex-wrap items-center gap-3">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search workshops..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <select name="status"
-            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <option value="">All statuses</option>
-      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
-      <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
-    </select>
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
-  </form>
-</div>
+{% studio_list_filter search status_filter "Search workshops..." "publication" False %}
 
 {% if workshops %}
-<div class="bg-card border border-border rounded-lg overflow-x-auto">
-  <table class="w-full">
-    <thead class="bg-secondary">
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Landing gate</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages gate</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Recording gate</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Linked event</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last synced</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Date</th>
+        <th class="{% studio_list_class 'th' %}">Landing gate</th>
+        <th class="{% studio_list_class 'th' %}">Pages gate</th>
+        <th class="{% studio_list_class 'th' %}">Recording gate</th>
+        <th class="{% studio_list_class 'th' %}">Linked event</th>
+        <th class="{% studio_list_class 'th' %}">Last synced</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border" data-testid="workshop-rows">
+    <tbody class="{% studio_list_class 'tbody' %}" data-testid="workshop-rows">
       {% for workshop in workshops %}
-      <tr class="hover:bg-secondary/50 transition-colors" data-testid="workshop-row">
+      <tr class="{% studio_list_class 'row' %}" data-testid="workshop-row">
         <td class="px-6 py-4">
           <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ workshop.title }}</a>
           <p class="text-xs text-muted-foreground mt-1">{{ workshop.slug }}</p>
-          {% if workshop.source_repo %}<span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400" data-testid="synced-badge">synced</span>{% endif %}
+          {% studio_synced_badge workshop.source_repo %}
         </td>
         <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full {% if workshop.status == 'published' %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-            {{ workshop.get_status_display }}
-          </span>
+          {% studio_status_badge workshop.status workshop.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.date|date:"M d, Y" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.get_landing_required_level_display }}</td>
@@ -82,10 +67,9 @@
           {% if workshop.source_commit %}{{ workshop.source_commit|truncatechars:10 }}{% else %}&mdash;{% endif %}
         </td>
         <td class="px-6 py-4 text-right space-x-3 whitespace-nowrap">
-          <a href="{{ workshop.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
-             class="text-sm text-muted-foreground hover:text-foreground"
-             data-testid="view-on-site">View on site</a>
-          <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}" class="text-sm text-accent hover:underline">View</a>
+          {% studio_list_action workshop.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer' %}
+          {% url 'studio_workshop_detail' workshop_id=workshop.pk as workshop_detail_url %}
+          {% studio_list_action workshop_detail_url 'View' 'primary' %}
         </td>
       </tr>
       {% endfor %}

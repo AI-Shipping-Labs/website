@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Articles{% endblock %}
 
@@ -10,50 +11,44 @@
   </div>
 </div>
 
-<!-- Filters -->
-<div class="mb-6">
-  <form method="get" class="flex flex-wrap items-center gap-3">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search articles..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <select name="status" onchange="this.form.submit()"
-            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <option value="">All statuses</option>
-      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
-      <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
-    </select>
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
-  </form>
-</div>
+{% studio_list_filter search status_filter "Search articles..." %}
 
 <!-- Article List -->
-<div class="bg-card border border-border rounded-lg overflow-x-auto">
-  <table class="w-full">
-    <thead class="bg-secondary">
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Author</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Author</th>
+        <th class="{% studio_list_class 'th' %}">Date</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border">
+    <tbody class="{% studio_list_class 'tbody' %}">
       {% for article in articles %}
-      <tr class="hover:bg-secondary/50 transition-colors">
+      <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_article_edit' article_id=article.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ article.title }}</a>
-          {% if article.source_repo %}<span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400" data-testid="synced-badge">synced</span>{% endif %}
+          {% studio_synced_badge article.source_repo %}
         </td>
         <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full {% if article.published %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-            {% if article.published %}Published{% else %}Draft{% endif %}
-          </span>
+          {% if article.published %}
+          {% studio_status_badge 'published' 'Published' %}
+          {% else %}
+          {% studio_status_badge 'draft' 'Draft' %}
+          {% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ article.author|default:"-" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ article.date|date:"M d, Y" }}</td>
         <td class="px-6 py-4 text-right space-x-3">
-          <a href="{{ article.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
-          <a href="{% url 'studio_article_edit' article_id=article.pk %}" class="text-sm text-accent hover:underline">{% if article.source_repo %}View{% else %}Edit{% endif %}</a>
+          {% studio_list_action article.get_absolute_url 'View on site' 'secondary' True %}
+          {% url 'studio_article_edit' article_id=article.pk as article_edit_url %}
+          {% if article.source_repo %}
+          {% studio_list_action article_edit_url 'View' 'primary' %}
+          {% else %}
+          {% studio_list_action article_edit_url 'Edit' 'primary' %}
+          {% endif %}
         </td>
       </tr>
       {% empty %}

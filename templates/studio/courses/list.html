@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Courses{% endblock %}
 
@@ -10,53 +11,43 @@
   </div>
 </div>
 
-<!-- Filters -->
-<div class="mb-6">
-  <form method="get" class="flex flex-wrap items-center gap-3">
-    <input type="text" name="q" value="{{ search }}" placeholder="Search courses..."
-           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-    <select name="status" onchange="this.form.submit()"
-            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <option value="">All statuses</option>
-      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
-      <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
-    </select>
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
-  </form>
-</div>
+{% studio_list_filter search status_filter "Search courses..." %}
 
 <!-- Course List -->
-<div class="bg-card border border-border rounded-lg overflow-x-auto">
-  <table class="w-full">
-    <thead class="bg-secondary">
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Instructor</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Access</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Updated</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Instructor</th>
+        <th class="{% studio_list_class 'th' %}">Access</th>
+        <th class="{% studio_list_class 'th' %}">Updated</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border">
+    <tbody class="{% studio_list_class 'tbody' %}">
       {% for course in courses %}
-      <tr class="hover:bg-secondary/50 transition-colors">
+      <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ course.title }}</a>
           <p class="text-xs text-muted-foreground mt-1">{{ course.slug }}</p>
-          {% if course.source_repo %}<span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400" data-testid="synced-badge">synced</span>{% endif %}
+          {% studio_synced_badge course.source_repo %}
         </td>
         <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full {% if course.status == 'published' %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-            {{ course.get_status_display }}
-          </span>
+          {% studio_status_badge course.status course.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ course.instructor_name|default:"-" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{% if course.is_free %}Free{% else %}Level {{ course.required_level }}{% endif %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ course.updated_at|date:"M d, Y" }}</td>
         <td class="px-6 py-4 text-right space-x-3">
-          <a href="{{ course.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
-          <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="text-sm text-accent hover:underline">{% if course.source_repo %}View{% else %}Edit{% endif %}</a>
+          {% studio_list_action course.get_absolute_url 'View on site' 'secondary' True %}
+          {% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
+          {% if course.source_repo %}
+          {% studio_list_action course_edit_url 'View' 'primary' %}
+          {% else %}
+          {% studio_list_action course_edit_url 'Edit' 'primary' %}
+          {% endif %}
         </td>
       </tr>
       {% empty %}

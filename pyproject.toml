@@ -79,7 +79,7 @@ select = ["F", "I", "PLC0415"]
 # Other modules with justified inline imports
 "content/access.py" = ["PLC0415"]
 "content/tier_config.py" = ["PLC0415"]
-"payments/services.py" = ["PLC0415"]
+"payments/services/__init__.py" = ["PLC0415"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["content", "accounts", "payments", "studio", "integrations", "events", "community", "notifications", "voting", "email_app", "jobs"]

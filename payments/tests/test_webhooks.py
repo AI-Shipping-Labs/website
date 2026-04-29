@@ -20,7 +20,7 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
 from payments.exceptions import WebhookPermanentError
-from payments.models import Tier, WebhookEvent
+from payments.models import ConversionAttribution, Tier, WebhookEvent
 from payments.services import (
     handle_checkout_completed,
     handle_invoice_payment_failed,
@@ -858,6 +858,13 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
             WebhookEvent.objects.filter(stripe_event_id="evt_dupe_1").count(),
             1,
             "Duplicate webhook POST must not create a second WebhookEvent row.",
+        )
+        self.assertEqual(
+            ConversionAttribution.objects.filter(
+                stripe_session_id="cs_dupe",
+            ).count(),
+            1,
+            "Duplicate webhook POST must not create a second attribution row.",
         )
         # Successful checkout completion does not send mail; if it did,
         # idempotency would also have to suppress it. Either way, the

@@ -1,0 +1,87 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}User Imports{% endblock %}
+
+{% block studio_content %}
+<div class="flex items-center justify-between mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">User imports</h1>
+    <p class="text-muted-foreground mt-1">Review external import runs and queue new dry-runs or live imports.</p>
+  </div>
+  <a href="{% url 'studio_import_batch_new' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    New import
+  </a>
+</div>
+
+<form method="get" class="flex flex-wrap items-end gap-4 mb-6">
+  <div>
+    <label for="source" class="block text-xs font-medium text-muted-foreground mb-1">Source</label>
+    <select id="source" name="source" class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+      <option value="">All sources</option>
+      {% for value,label in source_options %}
+      <option value="{{ value }}" {% if source_filter == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="dry_run" class="block text-xs font-medium text-muted-foreground mb-1">Dry-run</label>
+    <select id="dry_run" name="dry_run" class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+      <option value="">All</option>
+      <option value="yes" {% if dry_run_filter == 'yes' %}selected{% endif %}>Yes</option>
+      <option value="no" {% if dry_run_filter == 'no' %}selected{% endif %}>No</option>
+    </select>
+  </div>
+  <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Filter</button>
+</form>
+
+<div class="bg-card border border-border rounded-lg overflow-x-auto">
+  <table class="w-full min-w-[980px]">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Source</th>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Started</th>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Finished</th>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Mode</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Created</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Updated</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Skipped</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Errors</th>
+        <th class="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Emails</th>
+        <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase">Actor</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for batch in page_obj %}
+      <tr class="hover:bg-secondary/50">
+        <td class="px-4 py-3 text-sm"><a class="text-accent hover:underline" href="{% url 'studio_import_batch_detail' batch_id=batch.pk %}">{{ batch.get_source_display }}</a></td>
+        <td class="px-4 py-3 text-sm">{{ batch.get_status_display }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground">{{ batch.started_at|date:"Y-m-d H:i" }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground">{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i" }}{% else %}running{% endif %}</td>
+        <td class="px-4 py-3 text-sm">{% if batch.dry_run %}<span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">dry-run</span>{% else %}<span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">live</span>{% endif %}</td>
+        <td class="px-4 py-3 text-sm text-right">{{ batch.users_created }}</td>
+        <td class="px-4 py-3 text-sm text-right">{{ batch.users_updated }}</td>
+        <td class="px-4 py-3 text-sm text-right">{{ batch.users_skipped }}</td>
+        <td class="px-4 py-3 text-sm text-right"><a class="text-accent hover:underline" href="{% url 'studio_import_batch_detail' batch_id=batch.pk %}#errors">{{ batch.errors|length }}</a></td>
+        <td class="px-4 py-3 text-sm text-right">{{ batch.emails_queued }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground">{% if batch.actor %}{{ batch.actor.email }}{% else %}System{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td class="px-4 py-8 text-center text-muted-foreground" colspan="11">No import batches found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="flex items-center justify-between mt-6 text-sm">
+  <div class="text-muted-foreground">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+  <div class="space-x-3">
+    {% if page_obj.has_previous %}<a class="text-accent hover:underline" href="?page={{ page_obj.previous_page_number }}&source={{ source_filter }}&dry_run={{ dry_run_filter }}">Previous</a>{% endif %}
+    {% if page_obj.has_next %}<a class="text-accent hover:underline" href="?page={{ page_obj.next_page_number }}&source={{ source_filter }}&dry_run={{ dry_run_filter }}">Next</a>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

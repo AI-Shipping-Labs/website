@@ -1,0 +1,64 @@
+<div id="import-status-panel" data-finished="{% if batch.finished_at %}true{% else %}false{% endif %}">
+  <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+    <div class="bg-card border border-border rounded-lg p-4">
+      <div class="text-xs text-muted-foreground uppercase">Status</div>
+      <div class="text-lg font-semibold text-foreground">{{ batch.get_status_display }}</div>
+    </div>
+    <div class="bg-card border border-border rounded-lg p-4">
+      <div class="text-xs text-muted-foreground uppercase">Created</div>
+      <div class="text-lg font-semibold text-foreground">{{ batch.users_created }}</div>
+    </div>
+    <div class="bg-card border border-border rounded-lg p-4">
+      <div class="text-xs text-muted-foreground uppercase">Updated</div>
+      <div class="text-lg font-semibold text-foreground">{{ batch.users_updated }}</div>
+    </div>
+    <div class="bg-card border border-border rounded-lg p-4">
+      <div class="text-xs text-muted-foreground uppercase">Skipped</div>
+      <div class="text-lg font-semibold text-foreground">{{ batch.users_skipped }}</div>
+    </div>
+    <div class="bg-card border border-border rounded-lg p-4">
+      <div class="text-xs text-muted-foreground uppercase">Errors</div>
+      <div class="text-lg font-semibold text-foreground">{{ errors|length }}</div>
+    </div>
+    <div class="bg-card border border-border rounded-lg p-4">
+      <div class="text-xs text-muted-foreground uppercase">Emails</div>
+      <div class="text-lg font-semibold text-foreground">{{ batch.emails_queued }}</div>
+    </div>
+  </div>
+
+  <div class="bg-card border border-border rounded-lg p-5 mb-6">
+    <h2 class="text-lg font-semibold text-foreground mb-3">Summary</h2>
+    <p class="text-sm text-muted-foreground whitespace-pre-wrap">{{ batch.summary|default:"No summary yet." }}</p>
+  </div>
+
+  <div id="errors" class="bg-card border border-border rounded-lg overflow-x-auto">
+    <div class="p-5 border-b border-border">
+      <h2 class="text-lg font-semibold text-foreground">Errors</h2>
+    </div>
+    <table id="errors-table" class="w-full min-w-[920px]">
+      <thead class="bg-secondary">
+        <tr>
+          {% for column in error_columns %}
+          <th class="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase cursor-pointer" data-sort-column="{{ forloop.counter0 }}">{{ column }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for error in errors %}
+        <tr>
+          <td class="px-4 py-3 text-sm">{{ error.kind }}</td>
+          <td class="px-4 py-3 text-sm">{{ error.row }}</td>
+          <td class="px-4 py-3 text-sm">{{ error.email }}</td>
+          <td class="px-4 py-3 text-sm">{{ error.field }}</td>
+          <td class="px-4 py-3 text-sm">{{ error.existing_value }}</td>
+          <td class="px-4 py-3 text-sm">{{ error.incoming_value }}</td>
+          <td class="px-4 py-3 text-sm">{{ error.incoming_source }}</td>
+          <td class="px-4 py-3 text-sm">{{ error.message }}</td>
+        </tr>
+        {% empty %}
+        <tr><td class="px-4 py-6 text-center text-muted-foreground" colspan="{{ error_columns|length }}">No errors recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -86,6 +86,13 @@ from studio.views.sync import (
     sync_trigger,
 )
 from studio.views.tier_overrides import tier_override_create, tier_override_page, tier_override_revoke
+from studio.views.user_imports import (
+    import_batch_detail,
+    import_batch_fragment,
+    import_batch_list,
+    import_batch_new,
+    import_batch_rerun,
+)
 from studio.views.users import (
     user_create,
     user_create_done,
@@ -295,6 +302,13 @@ urlpatterns = [
     # Users list + CSV export (issue #271)
     path('users/', user_list, name='studio_user_list'),
     path('users/export', user_export_csv, name='studio_user_export'),
+
+    # External user-import pipeline (issue #317)
+    path('imports/', import_batch_list, name='studio_import_batch_list'),
+    path('imports/new/', import_batch_new, name='studio_import_batch_new'),
+    path('imports/<int:batch_id>/', import_batch_detail, name='studio_import_batch_detail'),
+    path('imports/<int:batch_id>/fragment/', import_batch_fragment, name='studio_import_batch_fragment'),
+    path('imports/<int:batch_id>/rerun/', import_batch_rerun, name='studio_import_batch_rerun'),
 
     # Manually create user (issue #234)
     path('users/new/', user_create, name='studio_user_create'),

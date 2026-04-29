@@ -90,10 +90,39 @@ def run_import_batch(
     actor=None,
     default_tags=None,
     send_welcome=True,
+    batch=None,
 ):
     """Run one import batch against an adapter yielding ``ImportRow`` values."""
     _validate_source(source)
-    batch = ImportBatch.objects.create(source=source, actor=actor, dry_run=dry_run)
+    if batch is None:
+        batch = ImportBatch.objects.create(source=source, actor=actor, dry_run=dry_run)
+    else:
+        batch.source = source
+        batch.actor = actor
+        batch.dry_run = dry_run
+        batch.status = ImportBatch.STATUS_RUNNING
+        batch.finished_at = None
+        batch.users_created = 0
+        batch.users_updated = 0
+        batch.users_skipped = 0
+        batch.emails_queued = 0
+        batch.errors = []
+        batch.summary = ""
+        batch.save(
+            update_fields=[
+                "source",
+                "actor",
+                "dry_run",
+                "status",
+                "finished_at",
+                "users_created",
+                "users_updated",
+                "users_skipped",
+                "emails_queued",
+                "errors",
+                "summary",
+            ]
+        )
     default_tags = normalize_tags(default_tags or [])
     created_user_ids = []
 

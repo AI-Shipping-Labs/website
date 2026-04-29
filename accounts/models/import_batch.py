@@ -44,6 +44,7 @@ class ImportBatch(models.Model):
     emails_queued = models.PositiveIntegerField(default=0)
     errors = models.JSONField(default=list, blank=True)
     summary = models.TextField(blank=True, default="")
+    params = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-started_at"]

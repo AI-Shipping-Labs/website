@@ -12,6 +12,7 @@ Tests cover:
 
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import stripe
@@ -383,8 +384,7 @@ class UpgradeSubscriptionTest(TestCase):
     def test_calls_stripe_with_proration(self, mock_get_client):
         """Upgrade uses create_prorations proration_behavior."""
         mock_client = MagicMock()
-        mock_sub = MagicMock()
-        mock_sub.items.data = [MagicMock(id="si_item_1")]
+        mock_sub = {"items": {"data": [{"id": "si_item_1"}]}}
         mock_client.subscriptions.retrieve.return_value = mock_sub
         mock_client.subscriptions.update.return_value = mock_sub
         mock_get_client.return_value = mock_client
@@ -395,6 +395,75 @@ class UpgradeSubscriptionTest(TestCase):
         call_params = mock_client.subscriptions.update.call_args[1]["params"]
         self.assertEqual(call_params["proration_behavior"], "create_prorations")
         self.assertEqual(call_params["items"][0]["price"], "price_main_monthly")
+        self.assertEqual(call_params["items"][0]["id"], "si_item_1")
+
+    @patch("payments.services._get_stripe_client")
+    def test_updates_dict_like_subscription_item(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = {
+            "items": {"data": [{"id": "si_dict_item"}]},
+        }
+        mock_get_client.return_value = mock_client
+
+        upgrade_subscription(self.user, "main", "monthly")
+
+        call_params = mock_client.subscriptions.update.call_args[1]["params"]
+        self.assertEqual(
+            call_params["items"],
+            [{"id": "si_dict_item", "price": "price_main_monthly"}],
+        )
+
+    @patch("payments.services._get_stripe_client")
+    def test_updates_mapping_object_with_items_method_collision(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = StripeMappingObject(
+            items={"data": [StripeMappingObject(id="si_collision_item")]},
+        )
+        mock_get_client.return_value = mock_client
+
+        upgrade_subscription(self.user, "main", "monthly")
+
+        call_params = mock_client.subscriptions.update.call_args[1]["params"]
+        self.assertEqual(call_params["items"][0]["id"], "si_collision_item")
+
+    @patch("payments.services._get_stripe_client")
+    def test_updates_object_like_subscription_item(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = SimpleNamespace(
+            items=SimpleNamespace(data=[SimpleNamespace(id="si_object_item")]),
+        )
+        mock_get_client.return_value = mock_client
+
+        upgrade_subscription(self.user, "main", "monthly")
+
+        call_params = mock_client.subscriptions.update.call_args[1]["params"]
+        self.assertEqual(call_params["items"][0]["id"], "si_object_item")
+
+    @patch("payments.services._get_stripe_client")
+    def test_raises_for_empty_subscription_items(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = {"items": {"data": []}}
+        mock_get_client.return_value = mock_client
+
+        with self.assertRaisesMessage(
+            ValueError, "Subscription has no subscription item to update."
+        ):
+            upgrade_subscription(self.user, "main", "monthly")
+
+        mock_client.subscriptions.update.assert_not_called()
+
+    @patch("payments.services._get_stripe_client")
+    def test_raises_for_subscription_item_missing_id(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = {"items": {"data": [{}]}}
+        mock_get_client.return_value = mock_client
+
+        with self.assertRaisesMessage(
+            ValueError, "Subscription has no subscription item to update."
+        ):
+            upgrade_subscription(self.user, "main", "monthly")
+
+        mock_client.subscriptions.update.assert_not_called()
 
 
 @tag('core')
@@ -421,8 +490,7 @@ class DowngradeSubscriptionTest(TestCase):
     def test_sets_pending_tier(self, mock_get_client):
         """Downgrade sets pending_tier to the new tier."""
         mock_client = MagicMock()
-        mock_sub = MagicMock()
-        mock_sub.items.data = [MagicMock(id="si_item_1")]
+        mock_sub = {"items": {"data": [{"id": "si_item_1"}]}}
         mock_client.subscriptions.retrieve.return_value = mock_sub
         mock_client.subscriptions.update.return_value = mock_sub
         mock_get_client.return_value = mock_client
@@ -436,8 +504,7 @@ class DowngradeSubscriptionTest(TestCase):
     def test_does_not_change_current_tier(self, mock_get_client):
         """Downgrade does NOT change the current tier immediately."""
         mock_client = MagicMock()
-        mock_sub = MagicMock()
-        mock_sub.items.data = [MagicMock(id="si_item_1")]
+        mock_sub = {"items": {"data": [{"id": "si_item_1"}]}}
         mock_client.subscriptions.retrieve.return_value = mock_sub
         mock_client.subscriptions.update.return_value = mock_sub
         mock_get_client.return_value = mock_client
@@ -451,8 +518,7 @@ class DowngradeSubscriptionTest(TestCase):
     def test_calls_stripe_with_no_proration(self, mock_get_client):
         """Downgrade uses 'none' proration_behavior."""
         mock_client = MagicMock()
-        mock_sub = MagicMock()
-        mock_sub.items.data = [MagicMock(id="si_item_1")]
+        mock_sub = {"items": {"data": [{"id": "si_item_1"}]}}
         mock_client.subscriptions.retrieve.return_value = mock_sub
         mock_client.subscriptions.update.return_value = mock_sub
         mock_get_client.return_value = mock_client
@@ -461,6 +527,69 @@ class DowngradeSubscriptionTest(TestCase):
 
         call_params = mock_client.subscriptions.update.call_args[1]["params"]
         self.assertEqual(call_params["proration_behavior"], "none")
+        self.assertEqual(call_params["billing_cycle_anchor"], "unchanged")
+        self.assertEqual(
+            call_params["items"],
+            [{"id": "si_item_1", "price": "price_basic_monthly"}],
+        )
+
+    @patch("payments.services._get_stripe_client")
+    def test_updates_mapping_object_with_items_method_collision(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = StripeMappingObject(
+            items={"data": [StripeMappingObject(id="si_collision_item")]},
+        )
+        mock_get_client.return_value = mock_client
+
+        downgrade_subscription(self.user, "basic", "monthly")
+
+        call_params = mock_client.subscriptions.update.call_args[1]["params"]
+        self.assertEqual(
+            call_params["items"],
+            [{"id": "si_collision_item", "price": "price_basic_monthly"}],
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.pending_tier, self.basic)
+        self.assertEqual(self.user.tier, self.main)
+
+    @patch("payments.services._get_stripe_client")
+    def test_updates_object_like_subscription_item(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = SimpleNamespace(
+            items=SimpleNamespace(data=[SimpleNamespace(id="si_object_item")]),
+        )
+        mock_get_client.return_value = mock_client
+
+        downgrade_subscription(self.user, "basic", "monthly")
+
+        call_params = mock_client.subscriptions.update.call_args[1]["params"]
+        self.assertEqual(call_params["items"][0]["id"], "si_object_item")
+
+    @patch("payments.services._get_stripe_client")
+    def test_raises_for_empty_subscription_items(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = {"items": {"data": []}}
+        mock_get_client.return_value = mock_client
+
+        with self.assertRaisesMessage(
+            ValueError, "Subscription has no subscription item to update."
+        ):
+            downgrade_subscription(self.user, "basic", "monthly")
+
+        mock_client.subscriptions.update.assert_not_called()
+
+    @patch("payments.services._get_stripe_client")
+    def test_raises_for_subscription_item_missing_id(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.subscriptions.retrieve.return_value = {"items": {"data": [{}]}}
+        mock_get_client.return_value = mock_client
+
+        with self.assertRaisesMessage(
+            ValueError, "Subscription has no subscription item to update."
+        ):
+            downgrade_subscription(self.user, "basic", "monthly")
+
+        mock_client.subscriptions.update.assert_not_called()
 
 
 @tag('core')

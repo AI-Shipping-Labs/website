@@ -78,6 +78,14 @@ def _subscription_price_id(subscription):
     return price_id if price_id is not _MISSING and price_id else ""
 
 
+def _subscription_item_id(subscription):
+    item = _first_subscription_item(subscription)
+    item_id = _stripe_value(item, "id")
+    if item_id in (_MISSING, None, ""):
+        raise ValueError("Subscription has no subscription item to update.")
+    return item_id
+
+
 def _subscription_period_end(subscription):
     period_end = _stripe_value(subscription, "current_period_end")
     if period_end in (_MISSING, None, ""):
@@ -574,9 +582,8 @@ def upgrade_subscription(user, new_tier_slug, billing_period):
 
     client = _get_stripe_client()
 
-    # Get the current subscription to find the item ID
     subscription = client.subscriptions.retrieve(user.subscription_id)
-    item_id = subscription.items.data[0].id
+    item_id = _subscription_item_id(subscription)
 
     # Update subscription with proration (Stripe default behavior)
     updated = client.subscriptions.update(
@@ -627,9 +634,8 @@ def downgrade_subscription(user, new_tier_slug, billing_period):
 
     client = _get_stripe_client()
 
-    # Get the current subscription to find the item ID
     subscription = client.subscriptions.retrieve(user.subscription_id)
-    item_id = subscription.items.data[0].id
+    item_id = _subscription_item_id(subscription)
 
     # Schedule the change at period end (no proration)
     updated = client.subscriptions.update(

@@ -1,11 +1,4 @@
-"""Tests for the contact-tag normalization helpers and the User.tags field
-(issue #354).
-
-The User-level tag mutation helpers wrap ``content/utils/tags.py`` for slug
-rules; we re-test the helper-level behavior here only to lock in the contract
-that contact-tag callers depend on (idempotent add/remove, empty rejection,
-JSON-list lookup).
-"""
+"""Tests for the contact-tag normalization helpers and the User.tags field."""
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -16,8 +9,7 @@ User = get_user_model()
 
 
 class NormalizeTagsTest(TestCase):
-    """``normalize_tags`` mirrors the content-tag rules but is the helper that
-    contact-tag callers import directly. Re-verify the cases the spec lists."""
+    """Lock in the contact-tag slug rules used by import and Studio callers."""
 
     def test_dedup_lowercase_hyphenate_strip_special(self):
         # Mirrors content/utils/tags.py: ``/`` is stripped (not replaced with
@@ -29,6 +21,9 @@ class NormalizeTagsTest(TestCase):
         # "AI & ML" -> "ai-ml" because spaces become hyphens, then the
         # ``&`` is stripped, leaving the surrounding hyphens which collapse.
         self.assertEqual(normalize_tags(["AI & ML"]), ["ai-ml"])
+
+    def test_normalize_preserves_source_namespace_colon(self):
+        self.assertEqual(normalize_tags(["Stripe:Active"]), ["stripe:active"])
 
     def test_empty_input_returns_empty_list(self):
         self.assertEqual(normalize_tags([]), [])

@@ -503,10 +503,27 @@ class EventDetailRecordingLinkTest(TestCase):
             start_datetime=timezone.now() - timedelta(days=7),
             status='completed',
             recording_url='https://youtube.com/watch?v=test',
+            timestamps=[{'time_seconds': 0, 'label': 'Welcome'}],
+            materials=[
+                {'title': 'Slides', 'url': 'https://example.com/slides.pdf'}
+            ],
+            transcript_text='Event transcript text.',
         )
         response = self.client.get('/events/completed-event')
         # Recording block is rendered inline, identified by data-testid.
         self.assertContains(response, 'data-testid="event-recording-block"')
+        self.assertTemplateUsed(response, 'events/_recording_embed.html')
+        self.assertTemplateUsed(response, 'events/_recording_materials.html')
+        self.assertTemplateUsed(response, 'events/_recording_transcript.html')
+        self.assertContains(response, 'data-testid="video-chapters"')
+        self.assertContains(response, 'class="video-timestamp')
+        self.assertContains(response, 'data-time-seconds="0"')
+        self.assertContains(response, 'data-source="youtube"')
+        self.assertNotContains(response, 'Tutorial:')
+        self.assertContains(response, 'data-testid="recording-materials"')
+        self.assertContains(response, 'https://example.com/slides.pdf')
+        self.assertContains(response, 'data-testid="recording-transcript"')
+        self.assertContains(response, 'Event transcript text.')
         # No link out to a separate recording surface.
         self.assertNotContains(response, '/event-recordings/')
 

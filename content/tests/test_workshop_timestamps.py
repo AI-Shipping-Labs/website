@@ -347,7 +347,7 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
     def test_inverse_links_render_for_matching_timestamps(self):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/vl/video')
-        self.assertContains(response, 'data-testid="workshop-timestamps"')
+        self.assertContains(response, 'data-testid="video-chapters"')
         self.assertContains(
             response,
             'data-testid="timestamp-tutorial-link"',
@@ -398,7 +398,7 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/vl/video?t=16:00')
         self.assertContains(response, 'data-testid="video-paywall"')
-        self.assertNotContains(response, 'data-testid="workshop-timestamps"')
+        self.assertNotContains(response, 'data-testid="video-chapters"')
         self.assertNotContains(response, 'start: 960')
 
 

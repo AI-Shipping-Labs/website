@@ -1,0 +1,22 @@
+{% if materials %}
+<div class="{{ section_class|default:'mb-12' }}">
+  <h2 class="mb-4 text-2xl font-semibold tracking-tight">Materials</h2>
+  <div class="space-y-3" data-testid="{{ materials_testid|default:'recording-materials' }}">
+    {% for material in materials %}
+    <a href="{{ material.url }}" target="_blank" rel="noopener noreferrer"
+       class="group flex items-center gap-3 sm:gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-card/80 min-h-[44px]">
+      <div class="flex-shrink-0 rounded-lg bg-accent/20 p-2">
+        <i data-lucide="external-link" class="h-5 w-5 text-accent"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <h3 class="font-semibold text-foreground group-hover:text-accent transition-colors truncate">{{ material.title }}</h3>
+        {% if material.type %}
+        <p class="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{{ material.type }}</p>
+        {% endif %}
+      </div>
+      <i data-lucide="external-link" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground group-hover:text-accent transition-colors"></i>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

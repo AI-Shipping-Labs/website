@@ -71,17 +71,9 @@
       </div>
       {% else %}
 
-      <!-- Recording panel (mirrors the events recording block).
-           timestamps=None suppresses the include's built-in timestamp
-           list because we render our own (with -> Tutorial sub-links)
-           below the player. -->
-      {% if event and event.recording_url %}
+      {% if event and event.has_recording %}
       <div data-testid="video-player">
-        {% video_player video_url=event.recording_url timestamps=None start_seconds=embed_start_seconds %}
-      </div>
-      {% elif event and event.recording_embed_url %}
-      <div class="aspect-video rounded-lg overflow-hidden border border-border" data-testid="video-embed">
-        <iframe src="{{ recording_embed_url_with_start|default:event.recording_embed_url }}" class="w-full h-full" allowfullscreen></iframe>
+        {% include "events/_recording_embed.html" %}
       </div>
       {% else %}
       <div class="rounded-lg border border-border bg-card p-8 text-center" data-testid="video-missing">
@@ -90,72 +82,9 @@
       </div>
       {% endif %}
 
-      <!-- Workshop timestamp list with optional inverse links to the
-           tutorial pages that map to each chapter. Mirrors the structure
-           of the include's built-in list so the click-to-seek JS in
-           video_player.html still wires it up via the
-           `.video-timestamp` selector. -->
-      {% if timestamps_with_pages %}
-      <div class="mt-4 rounded-lg border border-border bg-card p-4" data-testid="workshop-timestamps">
-        <h3 class="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Timestamps</h3>
-        <div class="space-y-1">
-          {% for ts in timestamps_with_pages %}
-          <div class="rounded-md px-1 py-1">
-            <button type="button"
-                    class="video-timestamp flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-secondary/50"
-                    data-time-seconds="{{ ts.time_seconds }}"
-                    data-source="{{ video_source_type }}"
-                    {% if video_id %}data-video-id="{{ video_id }}"{% endif %}>
-              <span class="shrink-0 font-mono text-sm font-medium text-accent">{{ ts.formatted_time }}</span>
-              <span class="text-sm text-foreground">{{ ts.label }}</span>
-            </button>
-            {% if ts.tutorial_page %}
-            <a href="{{ ts.tutorial_page.get_absolute_url }}"
-               class="ml-9 mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
-               data-testid="timestamp-tutorial-link">
-              <i data-lucide="arrow-right" class="h-3 w-3"></i>
-              Tutorial: {{ ts.tutorial_page.title }}
-            </a>
-            {% endif %}
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      <!-- Materials -->
-      {% if event and event.materials %}
-      <div class="mt-12">
-        <h2 class="mb-4 text-2xl font-semibold tracking-tight">Materials</h2>
-        <div class="space-y-3" data-testid="video-materials">
-          {% for material in event.materials %}
-          <a href="{{ material.url }}" target="_blank" rel="noopener noreferrer"
-             class="group flex items-center gap-3 sm:gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 hover:bg-card/80 min-h-[44px]">
-            <div class="flex-shrink-0 rounded-lg bg-accent/20 p-2">
-              <i data-lucide="external-link" class="h-5 w-5 text-accent"></i>
-            </div>
-            <div class="min-w-0 flex-1">
-              <h3 class="font-semibold text-foreground group-hover:text-accent transition-colors truncate">{{ material.title }}</h3>
-              {% if material.type %}
-              <p class="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{{ material.type }}</p>
-              {% endif %}
-            </div>
-            <i data-lucide="external-link" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground group-hover:text-accent transition-colors"></i>
-          </a>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      <!-- Transcript -->
-      {% if event and event.transcript_text %}
-      <div class="mt-12">
-        <h2 class="mb-4 text-2xl font-semibold tracking-tight">Transcript</h2>
-        <details class="rounded-lg border border-border bg-card p-4" data-testid="video-transcript">
-          <summary class="cursor-pointer text-sm font-medium text-foreground">Show transcript</summary>
-          <div class="mt-4 max-h-96 overflow-y-auto whitespace-pre-wrap text-sm text-muted-foreground">{{ event.transcript_text }}</div>
-        </details>
-      </div>
+      {% if event %}
+        {% include "events/_recording_materials.html" with materials=event.materials section_class="mt-12" materials_testid="video-materials" %}
+        {% include "events/_recording_transcript.html" with transcript_text=event.transcript_text section_class="mt-12" transcript_testid="video-transcript" %}
       {% endif %}
 
       {% endif %}

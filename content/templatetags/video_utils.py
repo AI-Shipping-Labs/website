@@ -263,6 +263,7 @@ def normalize_timestamps(timestamps):
             'time_seconds': time_seconds,
             'label': label,
             'formatted_time': format_timestamp(time_seconds),
+            'tutorial_page': ts.get('tutorial_page'),
         })
     return normalized
 

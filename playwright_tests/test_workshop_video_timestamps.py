@@ -133,8 +133,9 @@ class TestWatchBarRoundTrip:
         )
 
         # Step 3: The timestamps panel renders inverse links for matched rows.
-        ts_panel = page.locator('[data-testid="workshop-timestamps"]')
+        ts_panel = page.locator('[data-testid="video-chapters"]')
         assert ts_panel.count() == 1
+        ts_panel.locator('summary').click()
         # Two tutorial sub-links (0:00 -> page B, 16:00 -> page C).
         tutorial_links = page.locator(
             '[data-testid="timestamp-tutorial-link"]'
@@ -221,7 +222,7 @@ class TestVideoDeepLink:
         # YouTube playerVars.start carries the parsed seconds.
         assert 'start: 960' in body
         # The timestamps panel still renders (?t= doesn't suppress it).
-        assert 'data-testid="workshop-timestamps"' in body
+        assert 'data-testid="video-chapters"' in body
 
         ctx.close()
 

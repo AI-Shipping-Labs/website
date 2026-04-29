@@ -266,6 +266,7 @@ def workshop_video(request, slug):
 
     context.update({
         'embed_start_seconds': embed_start_seconds,
+        'recording_timestamps': timestamps_with_pages,
         'timestamps_with_pages': timestamps_with_pages,
         'video_id': video_id,
         'video_source_type': video_source_type,

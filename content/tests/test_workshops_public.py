@@ -285,6 +285,11 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
                 {'title': 'Slides', 'url': 'https://x/slides.pdf', 'type': 'pdf'},
             ],
         )
+        cls.workshop.event.timestamps = [
+            {'time_seconds': 0, 'label': 'Intro'},
+        ]
+        cls.workshop.event.transcript_text = 'Workshop transcript text.'
+        cls.workshop.event.save()
         cls.user_basic = User.objects.create_user(
             email='basic@x.com', password='pw', tier=cls.basic_tier,
         )
@@ -322,12 +327,25 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws/video')
         self.assertNotContains(response, 'data-testid="video-paywall"')
         self.assertContains(response, 'data-testid="video-player"')
+        self.assertTemplateUsed(response, 'events/_recording_embed.html')
+        self.assertContains(response, 'data-testid="video-chapters"')
+        self.assertContains(response, 'class="video-timestamp')
+        self.assertContains(response, 'data-time-seconds="0"')
+        self.assertContains(response, 'data-source="youtube"')
 
     def test_video_main_renders_materials(self):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/ws/video')
+        self.assertTemplateUsed(response, 'events/_recording_materials.html')
         self.assertContains(response, 'data-testid="video-materials"')
         self.assertContains(response, 'Slides')
+
+    def test_video_main_renders_transcript(self):
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/ws/video')
+        self.assertTemplateUsed(response, 'events/_recording_transcript.html')
+        self.assertContains(response, 'data-testid="video-transcript"')
+        self.assertContains(response, 'Workshop transcript text.')
 
     def test_video_landing_paywall_when_landing_gated(self):
         ws = _make_workshop(

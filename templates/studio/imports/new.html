@@ -1,0 +1,105 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}New Import{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_import_batch_list' %}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to imports</a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">New user import</h1>
+  <p class="text-muted-foreground mt-1">Queue a dry-run or superuser-approved live import from a registered source.</p>
+</div>
+
+{% if error %}
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" data-testid="form-error">{{ error }}</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form id="import-form" method="post" enctype="multipart/form-data" action="{% url 'studio_import_batch_new' %}">
+    {% csrf_token %}
+    <div class="mb-6">
+      <label for="id_source" class="block text-sm font-medium text-foreground mb-1">Source</label>
+      <select id="id_source" name="source" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+        <option value="">Choose source</option>
+        {% for option in source_options %}
+        <option value="{{ option.value }}" {% if not option.available %}disabled{% endif %} {% if posted.source == option.value %}selected{% endif %}>
+          {{ option.label }}{% if not option.available %} - adapter unavailable{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div id="csv-field" class="mb-6 hidden">
+      <label for="id_csv_file" class="block text-sm font-medium text-foreground mb-1">Course-db CSV</label>
+      <input type="file" id="id_csv_file" name="csv_file" accept=".csv,text/csv"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+    </div>
+
+    <div class="mb-6">
+      <label for="id_tags" class="block text-sm font-medium text-foreground mb-1">Default tags</label>
+      <input type="text" id="id_tags" name="tags" value="{{ posted.tags }}"
+             placeholder="comma-separated"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground">
+    </div>
+
+    <div class="space-y-4 mb-6">
+      <label class="flex items-start gap-3">
+        <input type="checkbox" id="id_dry_run" name="dry_run" {% if posted.dry_run or not posted %}checked{% endif %}
+               class="mt-1 h-4 w-4 rounded border-border bg-secondary text-accent">
+        <span class="text-sm">
+          <span class="block font-medium text-foreground">Dry-run</span>
+          <span class="block text-xs text-muted-foreground mt-0.5">Preview counters and diagnostics without writing users or sending email.</span>
+        </span>
+      </label>
+
+      <label class="flex items-start gap-3">
+        <input type="checkbox" id="id_send_welcome" name="send_welcome" checked
+               class="mt-1 h-4 w-4 rounded border-border bg-secondary text-accent">
+        <span class="text-sm">
+          <span class="block font-medium text-foreground">Send welcome emails</span>
+          <span class="block text-xs text-muted-foreground mt-0.5">Available only for live imports.</span>
+        </span>
+      </label>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90">Queue import</button>
+      <a href="{% url 'studio_import_batch_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+(function() {
+  var source = document.getElementById('id_source');
+  var csvField = document.getElementById('csv-field');
+  var dryRun = document.getElementById('id_dry_run');
+  var sendWelcome = document.getElementById('id_send_welcome');
+  var form = document.getElementById('import-form');
+  var confirmText = 'This will create real user accounts and send welcome emails. Continue?';
+
+  function refreshSource() {
+    csvField.classList.toggle('hidden', source.value !== 'course_db');
+  }
+
+  function refreshWelcome() {
+    if (dryRun.checked) {
+      sendWelcome.checked = false;
+      sendWelcome.disabled = true;
+    } else {
+      sendWelcome.disabled = false;
+      if (!sendWelcome.checked) sendWelcome.checked = true;
+    }
+  }
+
+  source.addEventListener('change', refreshSource);
+  dryRun.addEventListener('change', refreshWelcome);
+  form.addEventListener('submit', function(event) {
+    if (!dryRun.checked && !window.confirm(confirmText)) {
+      event.preventDefault();
+    }
+  });
+  refreshSource();
+  refreshWelcome();
+})();
+</script>
+{% endblock %}

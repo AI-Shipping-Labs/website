@@ -1,0 +1,93 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Import {{ batch.pk }}{% endblock %}
+
+{% block studio_content %}
+<div class="flex items-start justify-between mb-8">
+  <div>
+    <a href="{% url 'studio_import_batch_list' %}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to imports</a>
+    <h1 class="text-2xl font-semibold text-foreground mt-2">Import batch {{ batch.pk }}</h1>
+    <p class="text-muted-foreground mt-1">{{ batch.get_source_display }} {% if batch.dry_run %}dry-run{% else %}live{% endif %}</p>
+  </div>
+  {% if can_rerun and request.user.is_superuser %}
+  <form method="post" action="{% url 'studio_import_batch_rerun' batch_id=batch.pk %}" onsubmit="return confirm('This will create real user accounts and send welcome emails. Continue?');">
+    {% csrf_token %}
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">Run again</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if course_db_upload_missing %}
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-yellow-500/20 text-yellow-300">
+  The original course-db CSV is no longer available. Start a <a class="underline" href="{% url 'studio_import_batch_new' %}">new import</a> to upload a fresh CSV.
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <div class="bg-card border border-border rounded-lg p-5">
+    <h2 class="text-lg font-semibold text-foreground mb-3">Audit</h2>
+    <dl class="space-y-2 text-sm">
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Source</dt><dd>{{ batch.get_source_display }}</dd></div>
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Status</dt><dd>{{ batch.get_status_display }}</dd></div>
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Dry-run</dt><dd>{{ batch.dry_run|yesno:"Yes,No" }}</dd></div>
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Actor</dt><dd>{% if batch.actor %}{{ batch.actor.email }}{% else %}System{% endif %}</dd></div>
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Started</dt><dd>{{ batch.started_at|date:"Y-m-d H:i:s" }}</dd></div>
+      <div class="flex justify-between gap-4"><dt class="text-muted-foreground">Finished</dt><dd>{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i:s" }}{% else %}running{% endif %}</dd></div>
+    </dl>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-5 lg:col-span-2">
+    <h2 class="text-lg font-semibold text-foreground mb-3">Sanitized params</h2>
+    <pre class="text-xs whitespace-pre-wrap bg-secondary border border-border rounded-lg p-3 overflow-x-auto">{{ params_json }}</pre>
+  </div>
+</div>
+
+<div id="import-status-container" data-fragment-url="{% url 'studio_import_batch_fragment' batch_id=batch.pk %}">
+  {% include "studio/imports/_status.html" %}
+</div>
+
+<script>
+(function() {
+  var container = document.getElementById('import-status-container');
+  var timer = null;
+
+  function bindSorting() {
+    var table = document.getElementById('errors-table');
+    if (!table) return;
+    table.querySelectorAll('th[data-sort-column]').forEach(function(header) {
+      header.addEventListener('click', function() {
+        var index = Number(header.getAttribute('data-sort-column'));
+        var tbody = table.querySelector('tbody');
+        var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+        rows.sort(function(a, b) {
+          return a.children[index].innerText.localeCompare(b.children[index].innerText);
+        });
+        rows.forEach(function(row) { tbody.appendChild(row); });
+      });
+    });
+  }
+
+  function poll() {
+    var panel = document.getElementById('import-status-panel');
+    if (!panel || panel.getAttribute('data-finished') === 'true') {
+      if (timer) window.clearInterval(timer);
+      return;
+    }
+    fetch(container.getAttribute('data-fragment-url'), {headers: {'X-Requested-With': 'fetch'}})
+      .then(function(response) { return response.text(); })
+      .then(function(html) {
+        container.innerHTML = html;
+        bindSorting();
+        var nextPanel = document.getElementById('import-status-panel');
+        if (nextPanel && nextPanel.getAttribute('data-finished') === 'true' && timer) {
+          window.clearInterval(timer);
+        }
+      });
+  }
+
+  bindSorting();
+  if (document.getElementById('import-status-panel').getAttribute('data-finished') !== 'true') {
+    timer = window.setInterval(poll, 5000);
+  }
+})();
+</script>
+{% endblock %}

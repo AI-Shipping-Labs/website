@@ -18,6 +18,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.db.models import BooleanField
 from django.utils import timezone
 from django_q.models import Schedule
 
@@ -66,6 +67,7 @@ class ImportRow:
     tags: list[str] = field(default_factory=list)
     extra_user_fields: dict = field(default_factory=dict)
     validation_error: str = ""
+    diagnostics: dict = field(default_factory=dict)
 
 
 def register_import_adapter(source, adapter_fn):
@@ -109,13 +111,13 @@ def run_import_batch(
                 )
             except RowError as exc:
                 batch.users_skipped += 1
-                batch.errors.append(
-                    {
-                        "row": row_number,
-                        "email": getattr(row, "email", ""),
-                        "error_message": str(exc),
-                    }
-                )
+                error = {
+                    "row": row_number,
+                    "email": getattr(row, "email", ""),
+                    "error_message": str(exc),
+                }
+                error.update(getattr(row, "diagnostics", {}) or {})
+                batch.errors.append(error)
                 continue
 
             if action == "created":
@@ -428,7 +430,13 @@ def _apply_extra_field_updates(
         if value in (None, ""):
             continue
         existing_value = getattr(user, field_name, None)
-        if allow_overwrite or existing_value in (None, ""):
+        model_field = User._meta.get_field(field_name)
+        can_fill_boolean = (
+            isinstance(model_field, BooleanField)
+            and existing_value is False
+            and value is True
+        )
+        if allow_overwrite or existing_value in (None, "") or can_fill_boolean:
             if not dry_run:
                 setattr(user, field_name, value)
             update_fields.add(field_name)

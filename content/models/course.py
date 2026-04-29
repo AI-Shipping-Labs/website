@@ -3,6 +3,11 @@ from django.db import models
 from django.db.models import Prefetch
 
 from content.access import VISIBILITY_CHOICES, get_required_tier_name
+from content.models.mixins import (
+    SourceMetadataMixin,
+    SyncedContentIdentityMixin,
+    TimestampedModelMixin,
+)
 from content.utils.h1 import strip_leading_title_h1
 from content.utils.markdown import render_markdown
 
@@ -12,13 +17,14 @@ STATUS_CHOICES = [
 ]
 
 
-class Course(models.Model):
+class Course(
+    SyncedContentIdentityMixin,
+    SourceMetadataMixin,
+    TimestampedModelMixin,
+    models.Model,
+):
     """Structured course: Course -> Modules -> Units."""
 
-    content_id = models.UUIDField(
-        unique=True, null=True, blank=True,
-        help_text="Stable UUID from frontmatter for linking user-generated data.",
-    )
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, unique=True)
     description = models.TextField(
@@ -73,18 +79,6 @@ class Course(models.Model):
         default=list, blank=True,
         help_text="List of testimonial objects: {quote, name, role?, company?, source_url?}.",
     )
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text="GitHub repo this content was synced from.",
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text="File path within the source repo.",
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text="Git commit SHA of the last sync.",
-    )
     # Peer review configuration
     peer_review_enabled = models.BooleanField(
         default=False,
@@ -106,9 +100,6 @@ class Course(models.Model):
         blank=True, default='',
         help_text="Auto-rendered HTML from peer_review_criteria markdown.",
     )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -229,7 +220,7 @@ class Course(models.Model):
         return None
 
 
-class Module(models.Model):
+class Module(SourceMetadataMixin, models.Model):
     """A module within a course, containing units."""
 
     course = models.ForeignKey(
@@ -245,18 +236,6 @@ class Module(models.Model):
     overview_html = models.TextField(
         blank=True, default='',
         help_text="Auto-rendered HTML from overview markdown.",
-    )
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text="GitHub repo this content was synced from.",
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text="File path within the source repo.",
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text="Git commit SHA of the last sync.",
     )
     overview_source_path = models.CharField(
         max_length=500, blank=True, null=True, default=None,
@@ -297,13 +276,9 @@ class Module(models.Model):
         super().save(*args, **kwargs)
 
 
-class Unit(models.Model):
+class Unit(SyncedContentIdentityMixin, SourceMetadataMixin, models.Model):
     """A single lesson unit within a module."""
 
-    content_id = models.UUIDField(
-        unique=True, null=True, blank=True,
-        help_text="Stable UUID from frontmatter for linking user-generated data.",
-    )
     module = models.ForeignKey(
         Module, on_delete=models.CASCADE, related_name='units',
     )
@@ -343,19 +318,6 @@ class Unit(models.Model):
         max_length=32, blank=True, null=True,
         help_text="MD5 hex digest of body text for rename detection.",
     )
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text="GitHub repo this content was synced from.",
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text="File path within the source repo.",
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text="Git commit SHA of the last sync.",
-    )
-
     class Meta:
         ordering = ['sort_order']
         unique_together = [('module', 'slug')]

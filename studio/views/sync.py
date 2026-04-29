@@ -1009,9 +1009,8 @@ def sync_status(request, source_id):
 # the model_name. We resolve the model via Django's app registry rather than
 # importing every model up-front — keeps studio/views/sync.py free of cross-app
 # imports. Synced models only; the workshop_page entry exists because workshop
-# pages share their parent workshop's ``source_repo`` and the include is
-# always called with ``obj=workshop`` so the WorkshopPage class itself never
-# needs to be loaded by name. Issue #281.
+# pages now carry source metadata directly, while older rows can still be
+# driven from the parent workshop surface. Issue #281/#388.
 _OBJECT_TRIGGER_MODEL_ALLOWLIST = {
     'article': ('content', 'Article'),
     'course': ('content', 'Course'),

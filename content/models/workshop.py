@@ -20,6 +20,11 @@ from content.markdown_extensions import (
     ExternalLinksExtension,
     MermaidExtension,
 )
+from content.models.mixins import (
+    SourceMetadataMixin,
+    SyncedContentIdentityMixin,
+    TimestampedModelMixin,
+)
 
 
 def render_markdown(text):
@@ -56,7 +61,12 @@ STATUS_CHOICES = [
 ]
 
 
-class Workshop(models.Model):
+class Workshop(
+    SyncedContentIdentityMixin,
+    SourceMetadataMixin,
+    TimestampedModelMixin,
+    models.Model,
+):
     """A multi-page workshop with an optional linked recording.
 
     A Workshop is a synced content type keyed by ``content_id`` (stable UUID
@@ -82,10 +92,6 @@ class Workshop(models.Model):
     closed so the recording is never leaked under a looser gate.
     """
 
-    content_id = models.UUIDField(
-        unique=True, null=True, blank=True,
-        help_text='Stable UUID from frontmatter for linking user-generated data.',
-    )
     slug = models.SlugField(max_length=300, unique=True)
     title = models.CharField(max_length=300)
     description = models.TextField(
@@ -149,22 +155,6 @@ class Workshop(models.Model):
         related_name='workshop',
         help_text='Linked Event row that carries the recording metadata.',
     )
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text='GitHub repo this content was synced from.',
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text='File path within the source repo.',
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text='Git commit SHA of the last sync.',
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['-date']
 
@@ -238,16 +228,14 @@ class Workshop(models.Model):
         return get_user_level(user) >= self.recording_required_level
 
 
-class WorkshopPage(models.Model):
+class WorkshopPage(
+    SyncedContentIdentityMixin,
+    SourceMetadataMixin,
+    TimestampedModelMixin,
+    models.Model,
+):
     """A single markdown page within a workshop, ordered by ``sort_order``."""
 
-    content_id = models.UUIDField(
-        unique=True, null=True, blank=True,
-        help_text=(
-            'Stable UUID. Derived from (repo_name, source_path) when the '
-            'page markdown has no explicit content_id.'
-        ),
-    )
     workshop = models.ForeignKey(
         Workshop, on_delete=models.CASCADE, related_name='pages',
     )
@@ -271,16 +259,6 @@ class WorkshopPage(models.Model):
             'with recording access.'
         ),
     )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['sort_order']
         unique_together = [('workshop', 'slug')]

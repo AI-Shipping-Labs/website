@@ -2,6 +2,11 @@ from django.db import models
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
+from content.models.mixins import (
+    SourceMetadataMixin,
+    SyncedContentIdentityMixin,
+    TimestampedModelMixin,
+)
 from content.utils.markdown import render_markdown
 
 EVENT_STATUS_CHOICES = [
@@ -24,7 +29,12 @@ EVENT_KIND_CHOICES = [
 ]
 
 
-class Event(models.Model):
+class Event(
+    SyncedContentIdentityMixin,
+    SourceMetadataMixin,
+    TimestampedModelMixin,
+    models.Model,
+):
     """Event for community activities.
 
     Also stores recording data inline (previously in a separate Recording model).
@@ -96,10 +106,6 @@ class Event(models.Model):
     )
 
     # --- Recording fields (previously on content.Recording) ---
-    content_id = models.UUIDField(
-        unique=True, null=True, blank=True,
-        help_text='Stable UUID from frontmatter for linking user-generated data.',
-    )
     recording_url = models.URLField(
         max_length=500, blank=True, default='',
         help_text='Primary video URL (YouTube, S3, etc.).',
@@ -176,18 +182,6 @@ class Event(models.Model):
         max_length=500, blank=True, default='',
         help_text='Cover image URL from content repo.',
     )
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text='GitHub repo this content was synced from.',
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text='File path within the source repo.',
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text='Git commit SHA of the last sync.',
-    )
     ics_sequence = models.PositiveIntegerField(
         default=0,
         help_text='Sequence number for .ics calendar invite updates.',
@@ -212,9 +206,6 @@ class Event(models.Model):
         default=dict, blank=True,
         help_text='Data from recap frontmatter / event recap_data for include rendering.',
     )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-start_datetime']

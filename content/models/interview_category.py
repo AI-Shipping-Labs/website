@@ -2,6 +2,8 @@
 import markdown
 from django.db import models
 
+from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
+
 
 def render_markdown(text):
     """Convert markdown to HTML with syntax highlighting."""
@@ -23,7 +25,7 @@ def render_markdown(text):
     )
 
 
-class InterviewCategory(models.Model):
+class InterviewCategory(SourceMetadataMixin, TimestampedModelMixin, models.Model):
     """An interview questions category synced from GitHub content repo."""
 
     slug = models.SlugField(max_length=300, unique=True)
@@ -38,18 +40,6 @@ class InterviewCategory(models.Model):
         blank=True, default='',
         help_text="Markdown body content from the file.",
     )
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['slug']
         verbose_name_plural = 'interview categories'

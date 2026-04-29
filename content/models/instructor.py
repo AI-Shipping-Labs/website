@@ -19,6 +19,7 @@ import markdown as md_lib
 from django.db import models
 
 from content.markdown_extensions import MermaidExtension
+from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
 
 
 def render_markdown(text):
@@ -48,7 +49,7 @@ STATUS_CHOICES = [
 ]
 
 
-class Instructor(models.Model):
+class Instructor(SourceMetadataMixin, TimestampedModelMixin, models.Model):
     """A person who teaches courses, workshops, or speaks at events.
 
     Identified by a stable, human-readable ``instructor_id`` slug
@@ -79,21 +80,6 @@ class Instructor(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default='draft',
     )
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text='GitHub repo this instructor was synced from (NULL for backfill).',
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text='File path within the source repo.',
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text='Git commit SHA of the last sync.',
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['name']
 

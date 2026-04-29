@@ -4,6 +4,11 @@ from django.db import models
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
+from content.models.mixins import (
+    SourceMetadataMixin,
+    SyncedContentIdentityMixin,
+    TimestampedModelMixin,
+)
 from content.utils.h1 import strip_leading_title_h1
 from content.utils.markdown import render_markdown
 
@@ -18,12 +23,13 @@ PAGE_TYPE_CHOICES = [
 ]
 
 
-class Article(models.Model):
+class Article(
+    SyncedContentIdentityMixin,
+    SourceMetadataMixin,
+    TimestampedModelMixin,
+    models.Model,
+):
     """Blog article / post."""
-    content_id = models.UUIDField(
-        unique=True, null=True, blank=True,
-        help_text="Stable UUID from frontmatter for linking user-generated data.",
-    )
     title = models.CharField(max_length=300)
     slug = models.SlugField(max_length=300, unique=True)
     description = models.TextField(blank=True, default='')
@@ -52,21 +58,6 @@ class Article(models.Model):
     )
     published = models.BooleanField(default=True)
     published_at = models.DateTimeField(null=True, blank=True)
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text="GitHub repo this content was synced from (e.g. AI-Shipping-Labs/blog).",
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text="File path within the source repo.",
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text="Git commit SHA of the last sync.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['-date']
 

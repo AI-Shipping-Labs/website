@@ -7,6 +7,7 @@ from .download import *
 from .enrollment import *
 from .instructor import *
 from .interview_category import *
+from .mixins import *
 from .peer_review import *
 from .project import *
 from .site_config import *

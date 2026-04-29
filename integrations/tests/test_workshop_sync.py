@@ -128,6 +128,7 @@ class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
         self.assertEqual(pages[0].slug, 'overview')
         self.assertEqual(pages[0].sort_order, 1)
         self.assertEqual(pages[0].title, 'Overview')
+        self.assertEqual(pages[0].source_repo, 'AI-Shipping-Labs/workshops-content')
         self.assertEqual(pages[1].slug, 'setup')
         self.assertEqual(pages[1].sort_order, 2)
 

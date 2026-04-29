@@ -1,9 +1,10 @@
 from django.db import models
 
 from content.access import VISIBILITY_CHOICES, get_required_tier_name
+from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
 
 
-class CuratedLink(models.Model):
+class CuratedLink(SourceMetadataMixin, TimestampedModelMixin, models.Model):
     """Curated link in the collection."""
     CATEGORY_CHOICES = [
         ('tools', 'Tools'),
@@ -40,21 +41,6 @@ class CuratedLink(models.Model):
         help_text="Minimum tier level required to view full content.",
     )
     published = models.BooleanField(default=True)
-    source_repo = models.CharField(
-        max_length=300, blank=True, null=True, default=None,
-        help_text="GitHub repo this content was synced from.",
-    )
-    source_path = models.CharField(
-        max_length=500, blank=True, null=True, default=None,
-        help_text="File path within the source repo.",
-    )
-    source_commit = models.CharField(
-        max_length=40, blank=True, null=True, default=None,
-        help_text="Git commit SHA of the last sync.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['sort_order', 'title']
 

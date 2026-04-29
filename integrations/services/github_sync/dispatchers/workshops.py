@@ -595,6 +595,7 @@ def _sync_workshop_pages(
                 'sort_order': sort_order,
                 'body': body,
                 'video_start': video_start,
+                'source_repo': repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,
                 'content_id': content_id,

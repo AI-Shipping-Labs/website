@@ -37,18 +37,18 @@ logger = logging.getLogger(__name__)
 def _build_page_github_url(workshop, page):
     """Return the GitHub URL for a ``WorkshopPage`` markdown file.
 
-    Workshop pages don't carry their own ``source_repo`` — they inherit it
-    from their parent workshop. ``get_github_edit_url`` would otherwise return
-    ``None`` because ``WorkshopPage.source_repo`` doesn't exist on the model.
-    Build the URL inline using ``workshop.source_repo`` + ``page.source_path``.
+    New synced pages carry their own ``source_repo``. Older rows may still
+    have only the parent workshop's repo metadata, so fall back to the
+    workshop when needed.
 
     Returns an empty string when the workshop or page lacks the required
     source metadata so templates can use ``|default:''`` style fallbacks.
     """
-    if not workshop.source_repo or not page.source_path:
+    source_repo = page.source_repo or workshop.source_repo
+    if not source_repo or not page.source_path:
         return ''
     return (
-        f'https://github.com/{workshop.source_repo}/blob/main/'
+        f'https://github.com/{source_repo}/blob/main/'
         f'{page.source_path}'
     )
 

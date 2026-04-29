@@ -63,6 +63,65 @@ class LoginViewTest(TestCase):
 
 
 @tag('core')
+class SharedAuthTemplateTest(TestCase):
+    """Tests for the shared login/register auth shell and OAuth partials."""
+
+    def test_login_uses_shared_auth_includes(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertTemplateUsed(response, "accounts/includes/_auth_card.html")
+        self.assertTemplateUsed(response, "accounts/includes/_login_form.html")
+        self.assertTemplateUsed(response, "accounts/includes/_oauth_providers.html")
+        self.assertTemplateUsed(response, "accounts/includes/_legal_footer.html")
+
+    def test_register_uses_shared_auth_includes(self):
+        response = self.client.get("/accounts/register/")
+
+        self.assertTemplateUsed(response, "accounts/includes/_auth_card.html")
+        self.assertTemplateUsed(response, "accounts/includes/_register_form.html")
+        self.assertTemplateUsed(response, "accounts/includes/_oauth_providers.html")
+        self.assertTemplateUsed(response, "accounts/includes/_legal_footer.html")
+
+    def test_login_hides_oauth_area_when_all_providers_disabled(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertNotContains(response, 'data-auth-oauth-divider')
+        self.assertNotContains(response, "Sign in with Google")
+        self.assertNotContains(response, "Sign in with GitHub")
+        self.assertNotContains(response, "Sign in with Slack")
+
+    def test_register_hides_oauth_area_when_all_providers_disabled(self):
+        response = self.client.get("/accounts/register/")
+
+        self.assertNotContains(response, 'data-auth-oauth-divider')
+        self.assertNotContains(response, "Sign up with Google")
+        self.assertNotContains(response, "Sign up with GitHub")
+        self.assertNotContains(response, "Sign up with Slack")
+
+    def test_login_renders_only_enabled_provider_buttons(self):
+        _configure_provider('google', 'Google')
+
+        response = self.client.get("/accounts/login/")
+
+        self.assertContains(response, 'data-auth-oauth-divider')
+        self.assertContains(response, 'href="/accounts/google/login/"')
+        self.assertContains(response, "Sign in with Google")
+        self.assertNotContains(response, "Sign in with GitHub")
+        self.assertNotContains(response, "Sign in with Slack")
+
+    def test_register_renders_only_enabled_provider_buttons(self):
+        _configure_provider('slack', 'Slack')
+
+        response = self.client.get("/accounts/register/")
+
+        self.assertContains(response, 'data-auth-oauth-divider')
+        self.assertContains(response, 'href="/accounts/slack/login/"')
+        self.assertContains(response, "Sign up with Slack")
+        self.assertNotContains(response, "Sign up with Google")
+        self.assertNotContains(response, "Sign up with GitHub")
+
+
+@tag('core')
 class LogoutViewTest(TestCase):
     """Tests for the logout flow."""
 

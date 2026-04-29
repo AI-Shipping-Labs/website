@@ -659,17 +659,40 @@ class RegisterPageTest(TestCase):
         self.assertIn("register-password", content)
 
     def test_register_page_contains_oauth_links(self):
+        site = Site.objects.get_current()
+        for provider, name in (('google', 'Google'), ('github', 'GitHub')):
+            app = SocialApp.objects.create(
+                provider=provider,
+                name=name,
+                client_id=f'{provider}-cid',
+                secret=f'{provider}-secret',
+            )
+            app.sites.add(site)
         resp = self.client.get("/accounts/register/")
         content = resp.content.decode()
         self.assertIn("Sign up with Google", content)
         self.assertIn("Sign up with GitHub", content)
 
     def test_register_page_contains_slack_button(self):
+        app = SocialApp.objects.create(
+            provider='slack',
+            name='Slack',
+            client_id='slack-cid',
+            secret='slack-secret',
+        )
+        app.sites.add(Site.objects.get_current())
         resp = self.client.get("/accounts/register/")
         content = resp.content.decode()
         self.assertIn("Sign up with Slack", content)
 
     def test_register_page_contains_slack_oauth_link(self):
+        app = SocialApp.objects.create(
+            provider='slack',
+            name='Slack',
+            client_id='slack-cid',
+            secret='slack-secret',
+        )
+        app.sites.add(Site.objects.get_current())
         resp = self.client.get("/accounts/register/")
         content = resp.content.decode()
         self.assertIn("/accounts/slack/login/", content)

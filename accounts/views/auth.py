@@ -26,6 +26,17 @@ EMAIL_PASSWORD_BACKEND = ModelBackend()
 INVALID_LOGIN_ERROR = "Invalid email or password"
 
 
+def _oauth_provider_context():
+    configured_providers = set(
+        SocialApp.objects.exclude(client_id='').values_list('provider', flat=True)
+    )
+    return {
+        'oauth_google_enabled': 'google' in configured_providers,
+        'oauth_github_enabled': 'github' in configured_providers,
+        'oauth_slack_enabled': 'slack' in configured_providers,
+    }
+
+
 def _log_login_timing(outcome, started_at):
     """Log only coarse slow-login diagnostics; never credentials or tokens."""
     elapsed_ms = (time.perf_counter() - started_at) * 1000
@@ -53,18 +64,7 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect("/")
 
-    configured_providers = set(
-        SocialApp.objects.exclude(client_id='').values_list('provider', flat=True)
-    )
-    return render(
-        request,
-        "accounts/login.html",
-        {
-            'oauth_google_enabled': 'google' in configured_providers,
-            'oauth_github_enabled': 'github' in configured_providers,
-            'oauth_slack_enabled': 'slack' in configured_providers,
-        },
-    )
+    return render(request, "accounts/login.html", _oauth_provider_context())
 
 
 @ensure_csrf_cookie
@@ -72,7 +72,7 @@ def register_view(request):
     """Render the registration page."""
     if request.user.is_authenticated:
         return redirect("/")
-    return render(request, "accounts/register.html")
+    return render(request, "accounts/register.html", _oauth_provider_context())
 
 
 def logout_view(request):

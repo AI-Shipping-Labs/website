@@ -1,0 +1,23 @@
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-7xl px-6 py-16 sm:py-24 lg:px-8 lg:py-32">
+      <div class="mx-auto max-w-md">
+        <div class="rounded-2xl border border-border bg-card p-5 sm:p-8">
+          <div class="text-center mb-8">
+            <h1 class="text-2xl font-semibold tracking-tight">{{ auth_title }}</h1>
+            <p class="mt-2 text-sm text-muted-foreground">{{ auth_subtitle }}</p>
+          </div>
+
+          {% include form_template %}
+          {% include "accounts/includes/_oauth_providers.html" %}
+          {% include "accounts/includes/_legal_footer.html" %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>

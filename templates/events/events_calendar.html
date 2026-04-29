@@ -104,10 +104,6 @@
             {% for event in cell.events %}
             <a href="/events/{{ event.slug }}" class="block rounded-lg border border-border bg-secondary/50 p-3 hover:border-accent/50 transition-colors">
               <div class="flex items-center gap-2 mb-1 flex-wrap">
-                <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
-                  {% if event.event_type == 'live' %}<i data-lucide="radio" class="h-3 w-3"></i>{% else %}<i data-lucide="clock" class="h-3 w-3"></i>{% endif %}
-                  {{ event.get_event_type_display }}
-                </span>
                 {% if event.required_level > 0 %}
                 <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
                   <i data-lucide="lock" class="h-3 w-3"></i>
@@ -145,10 +141,6 @@
               {% for event in day_info.events %}
               <a href="/events/{{ event.slug }}" class="block rounded-lg border border-border bg-card p-4 hover:border-accent/50 transition-colors">
                 <div class="flex items-center gap-2 mb-2 flex-wrap">
-                  <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium {% if event.event_type == 'live' %}bg-green-500/20 text-green-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
-                    {% if event.event_type == 'live' %}<i data-lucide="radio" class="h-3 w-3"></i>{% else %}<i data-lucide="clock" class="h-3 w-3"></i>{% endif %}
-                    {{ event.get_event_type_display }}
-                  </span>
                   {% if event.required_level > 0 %}
                   <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
                     <i data-lucide="lock" class="h-3 w-3"></i>

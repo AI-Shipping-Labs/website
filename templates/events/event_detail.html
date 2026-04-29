@@ -20,15 +20,10 @@
       </a>
 
       <header class="mb-12">
-        <!-- Status & Type Badges -->
+        <!-- Status Badges -->
         <div class="mb-4 flex flex-wrap items-center gap-2">
-          <span class="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            {% if event.event_type == 'live' %}<i data-lucide="radio" class="h-4 w-4"></i>{% else %}<i data-lucide="clock" class="h-4 w-4"></i>{% endif %}
-            {{ event.get_event_type_display }} Event
-          </span>
           <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium
             {% if event.status == 'upcoming' %}bg-blue-500/20 text-blue-400
-            {% elif event.status == 'live' %}bg-red-500/20 text-red-400
             {% elif event.status == 'completed' %}bg-green-500/20 text-green-400
             {% elif event.status == 'cancelled' %}bg-secondary text-muted-foreground
             {% else %}bg-secondary text-muted-foreground{% endif %}">
@@ -97,7 +92,7 @@
       {% endif %}
 
       <!-- Registration / Action Section -->
-      {% if event.status == 'upcoming' or event.status == 'live' %}
+      {% if event.status == 'upcoming' %}
       <div class="mb-12 rounded-lg border border-border bg-card p-6">
         {% if not user.is_authenticated %}
           <!-- Anonymous user - show login CTA -->
@@ -152,7 +147,7 @@
           </div>
 
           {% if show_zoom_link %}
-          <!-- Zoom join link (shown 15 min before start) -->
+          <!-- Join link (shown 15 min before start) -->
           <div class="mt-4 rounded-lg border border-accent/30 bg-accent/5 p-4">
             <div class="flex items-center gap-3">
               <i data-lucide="video" class="h-5 w-5 text-accent"></i>

@@ -9,14 +9,21 @@ Flow:
 
 import logging
 import os
-import tempfile
 
-import boto3
 from django.conf import settings
 
-from integrations.config import get_config
+from jobs.tasks.recordings_s3 import (
+    download_recording_to_temp_file,
+    extract_s3_key,
+    get_recordings_s3_config,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_s3_key(s3_url, bucket, region):
+    """Backward-compatible wrapper for existing imports/tests."""
+    return extract_s3_key(s3_url, bucket, region)
 
 
 def upload_recording_to_youtube(event_id):
@@ -140,32 +147,12 @@ def _download_from_s3(event):
     Raises:
         ClientError: If the S3 download fails.
     """
-    bucket = get_config('AWS_S3_RECORDINGS_BUCKET')
-    region = get_config('AWS_S3_RECORDINGS_REGION', 'eu-central-1') or 'eu-central-1'
+    s3_config = get_recordings_s3_config()
 
-    if not bucket:
+    if not s3_config.bucket:
         raise ValueError('AWS_S3_RECORDINGS_BUCKET not configured')
 
-    # Extract S3 key from the URL
-    s3_key = _extract_s3_key(event.recording_s3_url, bucket, region)
-
-    s3_client = boto3.client(
-        's3',
-        region_name=region,
-        aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
-    )
-
-    # Download to temp file
-    temp_fd, temp_path = tempfile.mkstemp(suffix='.mp4')
-    os.close(temp_fd)
-
-    logger.info(
-        'Downloading recording from S3: s3://%s/%s -> %s',
-        bucket, s3_key, temp_path,
-    )
-
-    s3_client.download_file(bucket, s3_key, temp_path)
+    temp_path, s3_key = download_recording_to_temp_file(event.recording_s3_url, s3_config)
 
     file_size = os.path.getsize(temp_path)
     logger.info(
@@ -174,24 +161,3 @@ def _download_from_s3(event):
     )
 
     return temp_path
-
-
-def _extract_s3_key(s3_url, bucket, region):
-    """Extract the S3 object key from an S3 URL.
-
-    Args:
-        s3_url: Full S3 URL.
-        bucket: S3 bucket name.
-        region: AWS region.
-
-    Returns:
-        str: The S3 object key.
-    """
-    prefix = f'https://{bucket}.s3.{region}.amazonaws.com/'
-    if s3_url.startswith(prefix):
-        return s3_url[len(prefix):]
-
-    # Fallback: try to extract key after the bucket hostname
-    from urllib.parse import urlparse
-    parsed = urlparse(s3_url)
-    return parsed.path.lstrip('/')

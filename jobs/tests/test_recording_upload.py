@@ -129,7 +129,6 @@ class UploadRecordingToS3Test(TestCase):
         self.event = Event.objects.create(
             title='Test Workshop',
             slug='test-workshop',
-            event_type='live',
             start_datetime=timezone.now() - timedelta(hours=2),
             end_datetime=timezone.now() - timedelta(hours=1),
             timezone='Europe/Berlin',
@@ -144,7 +143,7 @@ class UploadRecordingToS3Test(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    @patch('jobs.tasks.recording_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
     @patch('integrations.services.zoom.requests.post')
     def test_successful_upload(self, mock_zoom_post, mock_requests_get, mock_boto_client):
@@ -196,7 +195,7 @@ class UploadRecordingToS3Test(TestCase):
         expected_url = f'https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/recordings/{year}/test-workshop.mp4'
         self.assertEqual(self.recording.recording_s3_url, expected_url)
 
-    @patch('jobs.tasks.recording_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
     @patch('integrations.services.zoom.requests.post')
     def test_s3_key_structure(self, mock_zoom_post, mock_requests_get, mock_boto_client):
@@ -281,7 +280,7 @@ class UploadRecordingToS3Test(TestCase):
                 'https://zoom.us/rec/download/fail',
             )
 
-    @patch('jobs.tasks.recording_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
     @patch('integrations.services.zoom.requests.post')
     def test_s3_upload_failure_raises(self, mock_zoom_post, mock_requests_get, mock_boto_client):
@@ -323,7 +322,7 @@ class UploadRecordingToS3Test(TestCase):
         self.recording.refresh_from_db()
         self.assertEqual(self.recording.recording_s3_url, '')
 
-    @patch('jobs.tasks.recording_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
     @patch('integrations.services.zoom.requests.post')
     def test_download_url_gets_access_token(self, mock_zoom_post, mock_requests_get, mock_boto_client):
@@ -357,7 +356,7 @@ class UploadRecordingToS3Test(TestCase):
         self.assertIn('access_token=my-zoom-token-xyz', actual_url)
         self.assertTrue(actual_url.startswith(download_url))
 
-    @patch('jobs.tasks.recording_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
     @patch('integrations.services.zoom.requests.post')
     def test_download_url_with_existing_query_params(self, mock_zoom_post, mock_requests_get, mock_boto_client):
@@ -389,7 +388,7 @@ class UploadRecordingToS3Test(TestCase):
         actual_url = mock_requests_get.call_args[0][0]
         self.assertIn('&access_token=token-123', actual_url)
 
-    @patch('jobs.tasks.recording_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
     @patch('integrations.services.zoom.requests.post')
     def test_uses_studio_config_for_recordings_s3(
@@ -475,7 +474,6 @@ class WebhookTriggersS3UploadJobTest(TestCase):
             title='Upload Workshop',
             slug='upload-workshop',
             description='Learn about uploads.',
-            event_type='live',
             start_datetime=timezone.now() - timedelta(hours=3),
             end_datetime=timezone.now() - timedelta(hours=1),
             timezone='Europe/Berlin',
@@ -483,7 +481,7 @@ class WebhookTriggersS3UploadJobTest(TestCase):
             zoom_join_url='https://zoom.us/j/55555555555',
             tags=['uploads'],
             required_level=0,
-            status='live',
+            status='upcoming',
         )
 
     def _post_webhook(self, payload_dict):

@@ -143,7 +143,6 @@ class StudioEventEditPlatformTest(TestCase):
         self.client.post(f'/studio/events/{event.pk}/edit', {
             'title': 'Switch to Custom',
             'slug': 'switch-custom',
-            'event_type': 'live',
             'platform': 'custom',
             'custom_url': 'https://youtube.com/live/xyz',
             'event_date': '15/03/2026',
@@ -168,7 +167,6 @@ class StudioEventEditPlatformTest(TestCase):
         self.client.post(f'/studio/events/{event.pk}/edit', {
             'title': 'Switch to Zoom',
             'slug': 'switch-zoom',
-            'event_type': 'live',
             'platform': 'zoom',
             'event_date': '15/03/2026',
             'event_time': '14:00',
@@ -190,7 +188,6 @@ class StudioEventEditPlatformTest(TestCase):
         self.client.post(f'/studio/events/{event.pk}/edit', {
             'title': 'Clear Meeting ID',
             'slug': 'clear-meeting',
-            'event_type': 'live',
             'platform': 'custom',
             'custom_url': 'https://meet.google.com/abc',
             'event_date': '15/03/2026',

@@ -31,7 +31,6 @@ class CalendarViewTest(TestCase):
                 timezone.datetime(2026, 3, 15, 14, 0)
             ),
             status='upcoming',
-            event_type='live',
         )
         cls.draft_event = Event.objects.create(
             title='Draft Event',
@@ -40,7 +39,6 @@ class CalendarViewTest(TestCase):
                 timezone.datetime(2026, 3, 20, 10, 0)
             ),
             status='draft',
-            event_type='live',
         )
         cls.gated_event = Event.objects.create(
             title='Advanced AI Agents',
@@ -49,7 +47,6 @@ class CalendarViewTest(TestCase):
                 timezone.datetime(2026, 3, 20, 16, 0)
             ),
             status='upcoming',
-            event_type='live',
             required_level=20,
         )
 
@@ -174,7 +171,6 @@ class CalendarViewTest(TestCase):
                 timezone.datetime(2026, 3, 15, 18, 0)
             ),
             status='upcoming',
-            event_type='async',
         )
         response = self.client.get('/events/calendar/2026/3')
         weeks = response.context['weeks']

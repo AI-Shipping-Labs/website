@@ -23,17 +23,9 @@ def make_upcoming(modeladmin, request, queryset):
 make_upcoming.short_description = 'Set status to Upcoming'
 
 
-def make_live(modeladmin, request, queryset):
-    """Transition selected events to live status."""
-    queryset.filter(status='upcoming').update(status='live')
-
-
-make_live.short_description = 'Set status to Live'
-
-
 def make_completed(modeladmin, request, queryset):
     """Transition selected events to completed status."""
-    queryset.filter(status__in=['upcoming', 'live']).update(status='completed')
+    queryset.filter(status='upcoming').update(status='completed')
 
 
 make_completed.short_description = 'Set status to Completed'
@@ -114,15 +106,15 @@ class EventInstructorInline(admin.TabularInline):
 class EventAdmin(admin.ModelAdmin):
     form = EventAdminForm
     list_display = [
-        'title', 'slug', 'event_type', 'platform', 'status',
+        'title', 'slug', 'platform', 'status',
         'start_datetime', 'required_level', 'has_recording_display',
         'registration_count_display',
     ]
-    list_filter = ['status', 'event_type', 'platform', 'required_level', 'published']
+    list_filter = ['status', 'platform', 'required_level', 'published']
     search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
     actions = [
-        make_upcoming, make_live, make_completed, make_cancelled,
+        make_upcoming, make_completed, make_cancelled,
         publish_recordings, unpublish_recordings,
     ]
     inlines = [EventInstructorInline, EventRegistrationInline]
@@ -130,7 +122,7 @@ class EventAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {
             'fields': (
-                'title', 'slug', 'description', 'event_type', 'platform',
+                'title', 'slug', 'description', 'platform',
             ),
         }),
         ('Schedule', {
@@ -138,7 +130,7 @@ class EventAdmin(admin.ModelAdmin):
                 'start_datetime', 'end_datetime', 'timezone', 'location',
             ),
         }),
-        ('Zoom / Custom URL', {
+        ('Join Details', {
             'fields': ('zoom_meeting_id', 'zoom_join_url'),
             'classes': ('collapse',),
         }),

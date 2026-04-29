@@ -162,9 +162,7 @@ def events_list(request):
 
     selected_tags = _get_selected_tags(request)
 
-    upcoming_events = events.filter(
-        status__in=['upcoming', 'live'],
-    ).order_by('start_datetime')
+    upcoming_events = events.filter(status='upcoming').order_by('start_datetime')
 
     # For the "past" surface we only show completed events with a recording
     # (and honor the ``published`` flag, matching the old /event-recordings
@@ -300,11 +298,11 @@ def event_detail(request, slug):
     gating_content_type = 'recording' if is_completed_recording else 'event'
     gating = build_gating_context(user, event, gating_content_type)
 
-    # Determine if we should show the Zoom join link
-    show_zoom_link = (
+    # Determine if we should show the join link.
+    show_join_link = (
         is_registered
         and event.can_show_zoom_link()
-        and event.status in ('upcoming', 'live')
+        and event.status == 'upcoming'
     )
 
     # Determine required tier name for CTA
@@ -319,7 +317,7 @@ def event_detail(request, slug):
         'has_access': has_access,
         'is_registered': is_registered,
         'show_event_location': should_display_event_location(event),
-        'show_zoom_link': show_zoom_link,
+        'show_zoom_link': show_join_link,
         'required_tier_name': required_tier_name,
         'tag_rules': tag_rules,
     }

@@ -129,7 +129,6 @@ unreviewed external content.
 content_id: <UUID>
 slug: example-event
 title: Example Event
-event_type: live
 status: upcoming
 start_datetime: "2026-04-13T16:30:00Z"
 end_datetime: "2026-04-13T18:00:00Z"

@@ -1761,8 +1761,8 @@ class GitHubAppAuthTest(TestCase):
         GITHUB_APP_PRIVATE_KEY='fake-key',
         GITHUB_APP_INSTALLATION_ID='67890',
     )
-    @patch('integrations.services.github.jwt.encode')
-    @patch('integrations.services.github.requests.post')
+    @patch('integrations.services.github_sync.client.jwt.encode')
+    @patch('integrations.services.github_sync.client.requests.post')
     def test_successful_token_generation(self, mock_post, mock_jwt):
         from integrations.services.github import generate_github_app_token
 
@@ -1784,8 +1784,8 @@ class GitHubAppAuthTest(TestCase):
         GITHUB_APP_PRIVATE_KEY='fake-key',
         GITHUB_APP_INSTALLATION_ID='67890',
     )
-    @patch('integrations.services.github.jwt.encode')
-    @patch('integrations.services.github.requests.post')
+    @patch('integrations.services.github_sync.client.jwt.encode')
+    @patch('integrations.services.github_sync.client.requests.post')
     def test_failed_token_generation(self, mock_post, mock_jwt):
         from integrations.services.github import generate_github_app_token
 
@@ -2129,7 +2129,7 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github.boto3.client')
+    @patch('integrations.services.github_sync.media.boto3.client')
     def test_uploads_new_image(self, mock_boto_client):
         from integrations.services.github import upload_images_to_s3
 
@@ -2155,7 +2155,7 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github.boto3.client')
+    @patch('integrations.services.github_sync.media.boto3.client')
     def test_skips_when_etag_matches(self, mock_boto_client):
         from integrations.services.github import upload_images_to_s3
 
@@ -2183,7 +2183,7 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github.boto3.client')
+    @patch('integrations.services.github_sync.media.boto3.client')
     def test_uploads_when_etag_differs(self, mock_boto_client):
         from integrations.services.github import upload_images_to_s3
 
@@ -2211,7 +2211,7 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github.boto3.client')
+    @patch('integrations.services.github_sync.media.boto3.client')
     def test_ignores_non_image_files(self, mock_boto_client):
         from integrations.services.github import upload_images_to_s3
 
@@ -2238,7 +2238,7 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github.boto3.client')
+    @patch('integrations.services.github_sync.media.boto3.client')
     def test_upload_error_recorded(self, mock_boto_client):
         from integrations.services.github import upload_images_to_s3
 

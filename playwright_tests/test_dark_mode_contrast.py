@@ -102,7 +102,6 @@ def _create_today_event():
         title="Dark Mode Smoke Event",
         slug="dark-mode-smoke-event",
         description="Fixture for dark-mode contrast E2E.",
-        event_type="live",
         start_datetime=timezone.now() + datetime.timedelta(days=3),
         timezone="Europe/Berlin",
         required_level=0,

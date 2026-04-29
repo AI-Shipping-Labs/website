@@ -1,45 +1,12 @@
-import markdown as md
 from django.db import models
 from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
-from content.markdown_extensions import (
-    ExternalLinksExtension,
-    MermaidExtension,
-)
-
-
-def render_markdown(text):
-    """Convert markdown to HTML."""
-    return md.markdown(
-        text,
-        extensions=[
-            MermaidExtension(),
-            ExternalLinksExtension(),
-            'fenced_code',
-            'codehilite',
-            'tables',
-            'attr_list',
-            'md_in_html',
-        ],
-        extension_configs={
-            'codehilite': {
-                'css_class': 'codehilite',
-                'guess_lang': False,
-            },
-        },
-    )
-
-
-EVENT_TYPE_CHOICES = [
-    ('live', 'Live'),
-    ('async', 'Async'),
-]
+from content.utils.markdown import render_markdown
 
 EVENT_STATUS_CHOICES = [
     ('draft', 'Draft'),
     ('upcoming', 'Upcoming'),
-    ('live', 'Live'),
     ('completed', 'Completed'),
     ('cancelled', 'Cancelled'),
 ]
@@ -58,7 +25,7 @@ EVENT_KIND_CHOICES = [
 
 
 class Event(models.Model):
-    """Event for live or async community activities.
+    """Event for community activities.
 
     Also stores recording data inline (previously in a separate Recording model).
     Completed events with a recording_url are shown on /events?filter=past.
@@ -73,11 +40,6 @@ class Event(models.Model):
     description_html = models.TextField(
         blank=True, default='',
         help_text='Auto-generated HTML from description markdown.',
-    )
-    event_type = models.CharField(
-        max_length=10,
-        choices=EVENT_TYPE_CHOICES,
-        default='live',
     )
     kind = models.CharField(
         max_length=20,
@@ -107,15 +69,15 @@ class Event(models.Model):
     )
     zoom_meeting_id = models.CharField(
         max_length=255, blank=True, default='',
-        help_text='Zoom meeting ID (populated for live events).',
+        help_text='Zoom meeting ID for events hosted on Zoom.',
     )
     zoom_join_url = models.URLField(
         max_length=500, blank=True, default='',
-        help_text='Zoom join URL (populated for live events).',
+        help_text='Join URL for Zoom or custom-platform events.',
     )
     location = models.CharField(
         max_length=300, blank=True, default='',
-        help_text='Location description (e.g. "Zoom" for live, or a GitHub repo for async).',
+        help_text='Location description, such as Zoom, Discord, or an external resource.',
     )
     tags = models.JSONField(default=list, blank=True)
     required_level = models.IntegerField(
@@ -333,7 +295,7 @@ class Event(models.Model):
         return self.join_clicks.count()
 
     def can_show_zoom_link(self):
-        """Return True if the Zoom join link should be shown (within 15 min of start)."""
+        """Return True if the join link should be shown within 15 minutes of start."""
         if not self.zoom_join_url:
             return False
         now = timezone.now()

@@ -2,7 +2,7 @@
 
 Covers the parser and Event-linking behavior called out in the spec:
 - Happy path: one workshop.yaml + two pages -> 1 Workshop, 2 WorkshopPage,
-  1 linked Event with kind='workshop', event_type='async', status='completed'
+  1 linked Event with kind='workshop', status='completed'
   and recording fields populated.
 - Re-sync is idempotent: running sync twice does NOT create a second Event
   or a second Workshop.
@@ -136,7 +136,6 @@ class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
         event = Event.objects.get(pk=workshop.event_id)
         self.assertEqual(event.slug, 'demo')
         self.assertEqual(event.kind, 'workshop')
-        self.assertEqual(event.event_type, 'async')
         self.assertEqual(event.status, 'completed')
         self.assertEqual(
             event.recording_url,
@@ -249,7 +248,6 @@ class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
             slug='demo',
             title='Stale Title',
             start_datetime=existing_start,
-            event_type='live',
             status='upcoming',
             zoom_meeting_id='999-999-999',
             zoom_join_url='https://zoom.us/j/9999',

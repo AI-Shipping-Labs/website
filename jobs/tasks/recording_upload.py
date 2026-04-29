@@ -7,13 +7,15 @@ Flow:
 3. Store S3 URL on Event record
 """
 
-import io
 import logging
 
-import boto3
 import requests
 
-from integrations.config import get_config
+from jobs.tasks.recordings_s3 import (
+    build_recording_s3_key,
+    get_recordings_s3_config,
+    upload_recording_mp4,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +41,16 @@ def upload_recording_to_s3(event_id, download_url):
         logger.error('Event %s not found, skipping upload', event_id)
         return {'status': 'error', 'message': f'Event {event_id} not found'}
 
-    bucket = get_config('AWS_S3_RECORDINGS_BUCKET')
-    region = get_config('AWS_S3_RECORDINGS_REGION', 'eu-central-1') or 'eu-central-1'
+    s3_config = get_recordings_s3_config()
 
-    if not bucket:
+    if not s3_config.bucket:
         logger.error(
             'AWS_S3_RECORDINGS_BUCKET not configured, skipping upload for event %s',
             event_id,
         )
         return {'status': 'error', 'message': 'S3 bucket not configured'}
 
-    # Build S3 key: recordings/{year}/{event-slug}.mp4
-    year = event.start_datetime.year
-    s3_key = f'recordings/{year}/{event.slug}.mp4'
+    s3_key = build_recording_s3_key(event)
 
     logger.info(
         'Starting download of recording for event "%s" from Zoom: %s',
@@ -64,11 +63,10 @@ def upload_recording_to_s3(event_id, download_url):
 
     logger.info(
         'Downloaded %d bytes for event "%s", uploading to S3 bucket %s at %s',
-        len(file_data), event.title, bucket, s3_key,
+        len(file_data), event.title, s3_config.bucket, s3_key,
     )
 
-    # Upload to S3
-    s3_url = _upload_to_s3(file_data, bucket, s3_key, region)
+    s3_url = upload_recording_mp4(file_data, s3_config, s3_key)
 
     # Store S3 URL on event
     event.recording_s3_url = s3_url
@@ -120,38 +118,3 @@ def _download_from_zoom(url):
         chunks.append(chunk)
 
     return b''.join(chunks)
-
-
-def _upload_to_s3(file_data, bucket, key, region):
-    """Upload file data to S3.
-
-    Args:
-        file_data: bytes of the file to upload.
-        bucket: S3 bucket name.
-        key: S3 object key.
-        region: AWS region for the S3 bucket.
-
-    Returns:
-        str: The S3 URL of the uploaded file.
-
-    Raises:
-        ClientError: If the S3 upload fails.
-    """
-    s3_client = boto3.client(
-        's3',
-        region_name=region,
-        aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
-    )
-
-    s3_client.upload_fileobj(
-        io.BytesIO(file_data),
-        bucket,
-        key,
-        ExtraArgs={
-            'ContentType': 'video/mp4',
-        },
-    )
-
-    s3_url = f'https://{bucket}.s3.{region}.amazonaws.com/{key}'
-    return s3_url

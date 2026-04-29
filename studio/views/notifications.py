@@ -40,7 +40,7 @@ def _is_content_published(content_type, content):
     elif content_type == 'download':
         return content.published
     elif content_type == 'event':
-        return content.status in ('upcoming', 'live', 'completed')
+        return content.status in ('upcoming', 'completed')
     elif content_type == 'course':
         return content.status == 'published'
     return False

@@ -224,7 +224,7 @@ class S3FailureNoAbortTest(_ArticleSyncTestBase):
     """Test that S3 upload failures do not abort content sync."""
 
     @override_settings(AWS_S3_CONTENT_BUCKET='test-bucket')
-    @patch('integrations.services.github.upload_images_to_s3')
+    @patch('integrations.services.github_sync.orchestration.upload_images_to_s3')
     def test_s3_error_does_not_abort_sync(self, mock_upload):
         """S3 upload error should not prevent content sync."""
         mock_upload.return_value = {
@@ -808,7 +808,7 @@ class CloneTimeoutConfigTest(TestCase):
     """Test that clone timeout is configurable."""
 
     @override_settings(GITHUB_SYNC_CLONE_TIMEOUT=60)
-    @patch('integrations.services.github.subprocess.run')
+    @patch('integrations.services.github_sync.repo.subprocess.run')
     def test_clone_uses_configured_timeout(self, mock_run):
         from integrations.services.github import clone_or_pull_repo
 

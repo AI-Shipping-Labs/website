@@ -36,8 +36,7 @@ class EventCreateZoomSuccessTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
         self.event = Event.objects.create(
-            title='Live Workshop', slug='live-workshop',
-            event_type='live', platform='zoom',
+            title='Live Workshop', slug='live-workshop', platform='zoom',
             start_datetime=timezone.now(),
             timezone='Europe/Berlin',
             status='upcoming',
@@ -108,8 +107,7 @@ class EventCreateZoomAlreadyHasMeetingTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
         self.event = Event.objects.create(
-            title='Already Has Zoom', slug='has-zoom',
-            event_type='live', platform='zoom',
+            title='Already Has Zoom', slug='has-zoom', platform='zoom',
             start_datetime=timezone.now(),
             timezone='Europe/Berlin',
             status='upcoming',
@@ -157,8 +155,7 @@ class EventCreateZoom405Test(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
         self.event = Event.objects.create(
-            title='Method Test', slug='method-test',
-            event_type='live', platform='zoom',
+            title='Method Test', slug='method-test', platform='zoom',
             start_datetime=timezone.now(),
             timezone='Europe/Berlin',
             status='upcoming',
@@ -177,8 +174,7 @@ class EventCreateZoomAccessControlTest(TestCase):
     def setUp(self):
         self.client = Client()
         self.event = Event.objects.create(
-            title='Access Test', slug='access-test',
-            event_type='live', platform='zoom',
+            title='Access Test', slug='access-test', platform='zoom',
             start_datetime=timezone.now(),
             timezone='Europe/Berlin',
             status='upcoming',

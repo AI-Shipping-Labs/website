@@ -38,9 +38,9 @@ class ListInstallationRepositoriesTest(TestCase):
     def tearDown(self):
         cache.clear()
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_returns_full_name_private_default_branch(self, mock_get, mock_token):
         mock_get.return_value = _mock_repos_response([
             {
@@ -69,9 +69,9 @@ class ListInstallationRepositoriesTest(TestCase):
         self.assertTrue(content['private'])
         self.assertEqual(content['default_branch'], 'main')
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_uses_token_in_authorization_header(self, mock_get, mock_token):
         mock_get.return_value = _mock_repos_response([])
         list_installation_repositories()
@@ -81,9 +81,9 @@ class ListInstallationRepositoriesTest(TestCase):
         self.assertEqual(headers['Authorization'], 'token tok')
         self.assertIn('installation/repositories', call.args[0])
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_caches_result_for_subsequent_calls(self, mock_get, mock_token):
         mock_get.return_value = _mock_repos_response([
             {'full_name': 'x/y', 'private': False, 'default_branch': 'main'},
@@ -96,9 +96,9 @@ class ListInstallationRepositoriesTest(TestCase):
         # GitHub API should only be hit once thanks to the cache
         self.assertEqual(mock_get.call_count, 1)
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_force_refresh_bypasses_cache(self, mock_get, mock_token):
         mock_get.return_value = _mock_repos_response([
             {'full_name': 'x/y', 'private': False, 'default_branch': 'main'},
@@ -109,9 +109,9 @@ class ListInstallationRepositoriesTest(TestCase):
 
         self.assertEqual(mock_get.call_count, 2)
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_clear_cache_helper_drops_entry(self, mock_get, mock_token):
         mock_get.return_value = _mock_repos_response([
             {'full_name': 'x/y', 'private': False, 'default_branch': 'main'},
@@ -123,9 +123,9 @@ class ListInstallationRepositoriesTest(TestCase):
 
         self.assertIsNone(cache.get(INSTALLATION_REPOS_CACHE_KEY))
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_paginates_when_full_page_returned(self, mock_get, mock_token):
         # First page returns a full 100 entries -> helper requests page 2
         page1_repos = [
@@ -147,9 +147,9 @@ class ListInstallationRepositoriesTest(TestCase):
         self.assertEqual(mock_get.call_count, 2)
         self.assertEqual(len(repos), 101)
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_raises_github_sync_error_on_non_200(self, mock_get, mock_token):
         response = MagicMock()
         response.status_code = 401
@@ -169,9 +169,9 @@ class ListInstallationRepositoriesTest(TestCase):
         with self.assertRaises(GitHubSyncError):
             list_installation_repositories()
 
-    @patch('integrations.services.github.generate_github_app_token',
+    @patch('integrations.services.github_sync.client.generate_github_app_token',
            return_value='tok')
-    @patch('integrations.services.github.requests.get')
+    @patch('integrations.services.github_sync.client.requests.get')
     def test_handles_empty_repository_list(self, mock_get, mock_token):
         mock_get.return_value = _mock_repos_response([])
         repos = list_installation_repositories()

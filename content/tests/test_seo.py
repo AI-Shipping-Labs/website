@@ -186,7 +186,6 @@ class StructuredDataEventTest(TestCase):
             title='AI Workshop',
             slug='ai-workshop',
             description='A live AI workshop.',
-            event_type='live',
             start_datetime=timezone.make_aware(
                 timezone.datetime(2025, 7, 1, 18, 0),
             ),
@@ -427,7 +426,6 @@ class OgTagsTest(TestCase):
         event = Event.objects.create(
             title='Workshop',
             slug='workshop',
-            event_type='live',
             start_datetime=timezone.now(),
             status='upcoming',
         )
@@ -583,7 +581,6 @@ class EventDetailSEOTest(TestCase):
             title='Live Workshop',
             slug='live-workshop',
             description='A live coding workshop.',
-            event_type='live',
             start_datetime=timezone.now(),
             status='upcoming',
         )
@@ -706,7 +703,6 @@ class SitemapTest(TestCase):
         self.event = Event.objects.create(
             title='Test Event',
             slug='test-event',
-            event_type='live',
             start_datetime=timezone.now(),
             status='upcoming',
         )
@@ -714,7 +710,6 @@ class SitemapTest(TestCase):
         self.draft_event = Event.objects.create(
             title='Draft Event',
             slug='draft-event',
-            event_type='live',
             start_datetime=timezone.now(),
             status='draft',
         )

@@ -53,7 +53,7 @@ def _write_md(filepath, frontmatter_dict, body=''):
 class FetchRemoteHeadShaTest(TestCase):
     """``git ls-remote`` wrapper. Mocked subprocess so no network is needed."""
 
-    @mock.patch('integrations.services.github.subprocess.run')
+    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
     def test_returns_sha_for_public_repo(self, mock_run):
         mock_run.return_value = mock.Mock(
             returncode=0,
@@ -70,8 +70,8 @@ class FetchRemoteHeadShaTest(TestCase):
         self.assertEqual(cmd[3], 'HEAD')
         self.assertEqual(cmd[2], 'https://github.com/owner/repo.git')
 
-    @mock.patch('integrations.services.github.generate_github_app_token')
-    @mock.patch('integrations.services.github.subprocess.run')
+    @mock.patch('integrations.services.github_sync.repo.generate_github_app_token')
+    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
     def test_uses_app_token_for_private_repos(self, mock_run, mock_token):
         mock_token.return_value = 'ghs_secret'
         mock_run.return_value = mock.Mock(
@@ -85,7 +85,7 @@ class FetchRemoteHeadShaTest(TestCase):
         cmd = mock_run.call_args[0][0]
         self.assertIn('x-access-token:ghs_secret', cmd[2])
 
-    @mock.patch('integrations.services.github.subprocess.run')
+    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
     def test_returns_none_when_ls_remote_fails(self, mock_run):
         # Network blip / repo not found. Caller falls through to a real sync.
         mock_run.return_value = mock.Mock(
@@ -93,7 +93,7 @@ class FetchRemoteHeadShaTest(TestCase):
         )
         self.assertIsNone(fetch_remote_head_sha('owner/repo'))
 
-    @mock.patch('integrations.services.github.subprocess.run')
+    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
     def test_returns_none_when_output_is_garbage(self, mock_run):
         # ls-remote should always emit a 40-char SHA, but be defensive.
         mock_run.return_value = mock.Mock(
@@ -101,7 +101,7 @@ class FetchRemoteHeadShaTest(TestCase):
         )
         self.assertIsNone(fetch_remote_head_sha('owner/repo'))
 
-    @mock.patch('integrations.services.github.generate_github_app_token')
+    @mock.patch('integrations.services.github_sync.repo.generate_github_app_token')
     def test_returns_none_when_app_token_missing(self, mock_token):
         from integrations.services.github import GitHubSyncError
         mock_token.side_effect = GitHubSyncError('no creds')
@@ -132,7 +132,7 @@ class SyncSkipFirstSyncTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
     def test_first_sync_does_not_skip(self, mock_fetch):
         # last_synced_commit is empty so the skip path must be bypassed
         # without even consulting fetch_remote_head_sha.
@@ -154,10 +154,10 @@ class SyncSkipSameShaTest(TestCase):
             last_sync_status='success',
         )
 
-    @mock.patch('integrations.services.github.acquire_sync_lock')
-    @mock.patch('integrations.services.github.release_sync_lock')
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github.clone_or_pull_repo')
+    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.release_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
     def test_skip_when_head_matches(
         self, mock_clone, mock_fetch, mock_release, mock_acquire,
     ):
@@ -176,9 +176,9 @@ class SyncSkipSameShaTest(TestCase):
         # ``running`` row was leaked.
         self.assertEqual(SyncLog.objects.filter(source=self.source).count(), 1)
 
-    @mock.patch('integrations.services.github.acquire_sync_lock')
-    @mock.patch('integrations.services.github.release_sync_lock')
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.release_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
     def test_skip_log_records_skipped_status_and_reason(
         self, mock_fetch, mock_release, mock_acquire,
     ):
@@ -245,7 +245,7 @@ class SyncSkipForceTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
     def test_force_bypasses_skip_check(self, mock_fetch):
         # If the skip check fired we'd see ``status=skipped`` and 0 items.
         # ``force=True`` must run the sync instead.
@@ -268,9 +268,9 @@ class SyncSkipPreviousFailureTest(TestCase):
             last_sync_status='failed',
         )
 
-    @mock.patch('integrations.services.github.acquire_sync_lock')
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github.clone_or_pull_repo')
+    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
     def test_retry_after_failure_bypasses_skip(
         self, mock_clone, mock_fetch, mock_acquire,
     ):
@@ -295,9 +295,9 @@ class SyncSkipHeadFetchFailureTest(TestCase):
             last_sync_status='success',
         )
 
-    @mock.patch('integrations.services.github.acquire_sync_lock')
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github.clone_or_pull_repo')
+    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
     def test_runs_sync_when_head_fetch_returns_none(
         self, mock_clone, mock_fetch, mock_acquire,
     ):
@@ -323,10 +323,10 @@ class SyncFailureDoesNotUpdateLastSyncedCommitTest(TestCase):
             last_sync_status='success',
         )
 
-    @mock.patch('integrations.services.github.acquire_sync_lock')
-    @mock.patch('integrations.services.github.release_sync_lock')
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github.clone_or_pull_repo')
+    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.release_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
     def test_failure_keeps_last_good_sha(
         self, mock_clone, mock_fetch, mock_release, mock_acquire,
     ):
@@ -420,7 +420,7 @@ class SyncFromDiskWithoutGitTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @mock.patch('integrations.services.github.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
     def test_from_disk_never_consults_remote(self, mock_fetch):
         log = sync_content_source(self.source, repo_dir=self.temp_dir)
         self.assertEqual(log.status, 'success')

@@ -179,7 +179,6 @@ class ZoomCreateMeetingTest(TestCase):
         self.event = Event.objects.create(
             title='Test Workshop',
             slug='test-workshop',
-            event_type='live',
             start_datetime=timezone.now() + timedelta(days=7),
             end_datetime=timezone.now() + timedelta(days=7, hours=2),
             timezone='Europe/Berlin',
@@ -493,7 +492,6 @@ class ZoomRecordingCompletedTest(TestCase):
             title='Workshop: Building AI Agents',
             slug='workshop-building-ai-agents',
             description='Learn how to build AI agents.',
-            event_type='live',
             start_datetime=timezone.now() - timedelta(hours=3),
             end_datetime=timezone.now() - timedelta(hours=1),
             timezone='Europe/Berlin',
@@ -501,7 +499,7 @@ class ZoomRecordingCompletedTest(TestCase):
             zoom_join_url='https://zoom.us/j/12345678901',
             tags=['ai', 'agents'],
             required_level=10,
-            status='live',
+            status='upcoming',
         )
 
     def _post_webhook(self, payload_dict):
@@ -686,7 +684,6 @@ class EventAdminZoomCreationTest(TestCase):
             'title': 'Admin Live Event',
             'slug': 'admin-live-event',
             'description': 'Test event from admin',
-            'event_type': 'live',
             'platform': 'zoom',
             'start_datetime_0': start.strftime('%Y-%m-%d'),
             'start_datetime_1': start.strftime('%H:%M:%S'),
@@ -728,7 +725,6 @@ class EventAdminZoomCreationTest(TestCase):
             'title': 'Admin Async Event',
             'slug': 'admin-async-event',
             'description': 'Async event',
-            'event_type': 'async',
             'platform': 'zoom',
             'start_datetime_0': start.strftime('%Y-%m-%d'),
             'start_datetime_1': start.strftime('%H:%M:%S'),
@@ -769,7 +765,6 @@ class EventAdminZoomCreationTest(TestCase):
             'title': 'Pre-Zoomed Event',
             'slug': 'pre-zoomed-event',
             'description': 'Already has Zoom',
-            'event_type': 'live',
             'platform': 'zoom',
             'start_datetime_0': start.strftime('%Y-%m-%d'),
             'start_datetime_1': start.strftime('%H:%M:%S'),
@@ -806,7 +801,6 @@ class EventAdminZoomCreationTest(TestCase):
             'title': 'Zoom Fail Event',
             'slug': 'zoom-fail-event',
             'description': 'Zoom will fail',
-            'event_type': 'live',
             'platform': 'zoom',
             'start_datetime_0': start.strftime('%Y-%m-%d'),
             'start_datetime_1': start.strftime('%H:%M:%S'),
@@ -850,7 +844,6 @@ class EventAdminZoomCreationTest(TestCase):
         event = Event.objects.create(
             title='Existing Event',
             slug='existing-event',
-            event_type='live',
             start_datetime=timezone.now() + timedelta(days=7),
             timezone='Europe/Berlin',
             zoom_meeting_id='existing-meeting-id',
@@ -864,7 +857,6 @@ class EventAdminZoomCreationTest(TestCase):
                 'title': 'Existing Event Updated',
                 'slug': 'existing-event',
                 'description': 'Updated description',
-                'event_type': 'live',
                 'platform': 'zoom',
                 'start_datetime_0': start.strftime('%Y-%m-%d'),
                 'start_datetime_1': start.strftime('%H:%M:%S'),
@@ -969,7 +961,6 @@ class EventSyncZoomCreationTest(TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             events_dir = self._write_event_yaml(
                 tmp_dir,
-                event_type='live',
                 status='upcoming',
                 start_datetime='2026-05-01T18:00:00Z',
                 end_datetime='2026-05-01T19:30:00Z',
@@ -980,7 +971,6 @@ class EventSyncZoomCreationTest(TestCase):
 
         event = Event.objects.get(slug='synced-zoom-event')
         self.assertEqual(sync_log.errors, [])
-        self.assertEqual(event.event_type, 'live')
         self.assertEqual(event.status, 'upcoming')
         self.assertEqual(
             event.start_datetime,
@@ -1012,7 +1002,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='platform-zoom-event',
                 title='Platform Zoom Event',
-                event_type='live',
                 status='draft',
                 start_datetime='2026-05-03T09:00:00Z',
                 timezone_name='UTC',
@@ -1038,7 +1027,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='recording-only-event',
                 title='Recording Only Event',
-                event_type='live',
                 status='upcoming',
                 start_datetime='2026-05-04T12:00:00Z',
                 platform='custom',
@@ -1062,7 +1050,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='completed-zoom-event',
                 title='Completed Zoom Event',
-                event_type='live',
                 status='completed',
                 start_datetime='2026-05-05T12:00:00Z',
                 location='Zoom',
@@ -1076,7 +1063,7 @@ class EventSyncZoomCreationTest(TestCase):
         mock_create_meeting.assert_not_called()
 
     @patch('integrations.services.zoom.create_meeting')
-    def test_async_sync_event_does_not_create_zoom_meeting(
+    def test_cancelled_sync_event_does_not_create_zoom_meeting(
         self, mock_create_meeting,
     ):
         source = self._make_source()
@@ -1084,17 +1071,16 @@ class EventSyncZoomCreationTest(TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             events_dir = self._write_event_yaml(
                 tmp_dir,
-                slug='async-zoom-event',
-                title='Async Zoom Event',
-                event_type='async',
-                status='upcoming',
+                slug='cancelled-zoom-event',
+                title='Cancelled Zoom Event',
+                status='cancelled',
                 start_datetime='2026-05-05T12:00:00Z',
                 platform='zoom',
             )
             self._sync_events(source, events_dir)
 
-        event = Event.objects.get(slug='async-zoom-event')
-        self.assertEqual(event.event_type, 'async')
+        event = Event.objects.get(slug='cancelled-zoom-event')
+        self.assertEqual(event.status, 'cancelled')
         self.assertEqual(event.zoom_meeting_id, '')
         self.assertEqual(event.zoom_join_url, '')
         mock_create_meeting.assert_not_called()
@@ -1110,7 +1096,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='no-schedule-event',
                 title='No Schedule Event',
-                event_type='live',
                 status='upcoming',
                 location='Zoom',
             )
@@ -1137,7 +1122,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='existing-zoom-event',
                 title='Original Title',
-                event_type='live',
                 status='upcoming',
                 start_datetime='2026-05-06T12:00:00Z',
                 location='Zoom',
@@ -1148,7 +1132,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='existing-zoom-event',
                 title='Updated Title',
-                event_type='live',
                 status='upcoming',
                 start_datetime='2026-05-06T12:00:00Z',
                 location='Zoom',
@@ -1176,7 +1159,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='rate-limited-event',
                 title='Rate Limited Event',
-                event_type='live',
                 status='upcoming',
                 start_datetime='2026-05-07T12:00:00Z',
                 location='Zoom',
@@ -1210,7 +1192,6 @@ class EventSyncZoomCreationTest(TestCase):
                 tmp_dir,
                 slug='missing-creds-event',
                 title='Missing Credentials Event',
-                event_type='live',
                 status='upcoming',
                 start_datetime='2026-05-08T12:00:00Z',
                 location='Zoom',

@@ -1,6 +1,5 @@
 """Stripe Checkout views for creating checkout sessions and managing subscriptions."""
 
-import json
 import logging
 
 from django.contrib.auth.decorators import login_required
@@ -13,6 +12,10 @@ from payments.services import (
     create_checkout_session,
     downgrade_subscription,
     upgrade_subscription,
+)
+from payments.views.request_helpers import (
+    extract_tier_billing_payload,
+    parse_json_body,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,21 +44,16 @@ def create_checkout(request):
     if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return _checkout_disabled_response()
 
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    data, response = parse_json_body(request)
+    if response is not None:
+        return response
 
-    tier_slug = data.get("tier_slug", "")
-    billing_period = data.get("billing_period", "monthly")
-
-    if not tier_slug:
-        return JsonResponse({"error": "tier_slug is required"}, status=400)
-
-    if billing_period not in ("monthly", "yearly"):
-        return JsonResponse(
-            {"error": "billing_period must be 'monthly' or 'yearly'"}, status=400
-        )
+    tier_slug, billing_period, response = extract_tier_billing_payload(
+        data,
+        validate_billing_period=True,
+    )
+    if response is not None:
+        return response
 
     success_url = request.build_absolute_uri("/?checkout=success")
     cancel_url = request.build_absolute_uri("/pricing?checkout=cancelled")
@@ -91,16 +89,13 @@ def upgrade(request):
     if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return _checkout_disabled_response()
 
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    data, response = parse_json_body(request)
+    if response is not None:
+        return response
 
-    tier_slug = data.get("tier_slug", "")
-    billing_period = data.get("billing_period", "monthly")
-
-    if not tier_slug:
-        return JsonResponse({"error": "tier_slug is required"}, status=400)
+    tier_slug, billing_period, response = extract_tier_billing_payload(data)
+    if response is not None:
+        return response
 
     try:
         upgrade_subscription(
@@ -131,16 +126,13 @@ def downgrade(request):
     if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
         return _checkout_disabled_response()
 
-    try:
-        data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    data, response = parse_json_body(request)
+    if response is not None:
+        return response
 
-    tier_slug = data.get("tier_slug", "")
-    billing_period = data.get("billing_period", "monthly")
-
-    if not tier_slug:
-        return JsonResponse({"error": "tier_slug is required"}, status=400)
+    tier_slug, billing_period, response = extract_tier_billing_payload(data)
+    if response is not None:
+        return response
 
     try:
         downgrade_subscription(

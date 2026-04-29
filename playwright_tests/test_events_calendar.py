@@ -52,7 +52,6 @@ def _create_event(
     title,
     slug,
     description="",
-    event_type="live",
     start_datetime=None,
     end_datetime=None,
     tz="Europe/Berlin",
@@ -77,7 +76,6 @@ def _create_event(
         title=title,
         slug=slug,
         description=description,
-        event_type=event_type,
         start_datetime=start_datetime,
         end_datetime=end_datetime,
         timezone=tz,
@@ -147,9 +145,10 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
     def test_visitor_sees_upcoming_and_past_events_then_clicks_detail(
         self, django_server
     , page):
-        """Given an anonymous visitor. Two events exist: an upcoming live
-        event and a completed event. The listing shows both in the correct
-        sections. Clicking the upcoming event shows the full detail page."""
+        """Given an anonymous visitor. Two events exist: an upcoming event
+        and a completed event. The listing shows both in the correct
+        sections without event type badges. Clicking the upcoming event
+        shows the full detail page."""
         _clear_events()
         _ensure_tiers()
 
@@ -159,7 +158,6 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
             title="AI Prompt Engineering Workshop",
             slug="ai-prompt-engineering-workshop",
             description="Learn prompt engineering for AI models.",
-            event_type="live",
             start_datetime=now + datetime.timedelta(days=7),
             location="Zoom",
             max_participants=20,
@@ -171,7 +169,6 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
             title="Intro to LLMs",
             slug="intro-to-llms",
             description="An introduction to large language models.",
-            event_type="live",
             start_datetime=now - datetime.timedelta(days=7),
             status="completed",
         )
@@ -192,8 +189,9 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
         upcoming_text = upcoming_section.inner_text()
         assert "AI Prompt Engineering Workshop" in upcoming_text
 
-        # With a "Live" type badge
-        assert "Live" in body
+        # Event type badges were removed by #389.
+        assert "Live" not in upcoming_text
+        assert "Async" not in upcoming_text
 
         # Location "Zoom" and "20 spots remaining"
         assert "Zoom" in body
@@ -523,9 +521,9 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
         self, django_server
     , browser):
         """Given a user logged in as free@test.com who is registered for
-        an upcoming live event starting 10 minutes from now. The detail
+        an upcoming Zoom event starting 10 minutes from now. The detail
         page shows 'You're registered!' and a 'Join the event' section
-        with the clickable Zoom link."""
+        with the internal join redirect link."""
         _clear_events()
         _ensure_tiers()
         user = _create_user("free@test.com", tier_slug="free")
@@ -538,7 +536,6 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
             start_datetime=now + datetime.timedelta(minutes=10),
             required_level=0,
             status="upcoming",
-            event_type="live",
         )
         _register_user_for_event(user, event)
 
@@ -554,15 +551,15 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
         # Then: Shows "You're registered!"
         assert "You're registered!" in body
 
-        # "Join the event" section appears with the Zoom link
+        # "Join the event" section appears with the internal redirect link.
         assert "Join the event" in body
-        assert "https://zoom.us/j/123456" in body
+        assert "https://zoom.us/j/123456" not in body
 
-        # The Zoom link is clickable
-        zoom_link = page.locator(
-            'a[href="https://zoom.us/j/123456"]'
+        # The raw Zoom URL is hidden behind the join redirect endpoint.
+        join_link = page.locator(
+            'a[href="/events/imminent-workshop/join"]'
         )
-        assert zoom_link.count() >= 1
+        assert join_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 8: Registered member checks an event that is still
 #              far away and Zoom link is hidden
@@ -577,7 +574,7 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
         self, django_server
     , browser):
         """Given a user logged in as free@test.com who is registered for
-        an upcoming live event starting 2 hours from now. The detail page
+        an upcoming Zoom event starting 2 hours from now. The detail page
         shows 'You're registered!' but no 'Join the event' section and
         the Zoom URL is not displayed."""
         _clear_events()
@@ -592,7 +589,6 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
             start_datetime=now + datetime.timedelta(hours=2),
             required_level=0,
             status="upcoming",
-            event_type="live",
         )
         _register_user_for_event(user, event)
 

@@ -226,7 +226,6 @@ def _create_event(
     required_level=0,
     status="upcoming",
     start_datetime=None,
-    event_type="live",
 ):
     """Create an Event via ORM."""
     from events.models import Event
@@ -240,7 +239,6 @@ def _create_event(
         required_level=required_level,
         status=status,
         start_datetime=start_datetime,
-        event_type=event_type,
     )
     event.save()
     connection.close()

@@ -45,7 +45,6 @@ class UploadRecordingToYouTubeTest(TestCase):
             title='Test Workshop',
             slug='test-workshop',
             description='Learn about testing.',
-            event_type='live',
             start_datetime=timezone.now() - timedelta(hours=2),
             end_datetime=timezone.now() - timedelta(hours=1),
             timezone='Europe/Berlin',
@@ -62,7 +61,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         clear_config_cache()
 
     @patch('integrations.services.youtube.upload_video')
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_successful_upload(self, mock_boto_client, mock_upload_video):
         """Recording is downloaded from S3 and uploaded to YouTube."""
         from jobs.tasks.youtube_upload import upload_recording_to_youtube
@@ -91,7 +90,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         )
 
     @patch('integrations.services.youtube.upload_video')
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_upload_passes_correct_metadata(self, mock_boto_client, mock_upload_video):
         """YouTube upload receives correct title, description, and tags."""
         from jobs.tasks.youtube_upload import upload_recording_to_youtube
@@ -114,7 +113,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         self.assertEqual(call_kwargs['privacy'], 'unlisted')
 
     @patch('integrations.services.youtube.upload_video')
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_s3_download_called_with_correct_key(self, mock_boto_client, mock_upload_video):
         """S3 download extracts the correct key from the S3 URL."""
         from jobs.tasks.youtube_upload import upload_recording_to_youtube
@@ -139,7 +138,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         )
 
     @patch('integrations.services.youtube.upload_video')
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_temp_file_cleaned_up_on_success(self, mock_boto_client, mock_upload_video):
         """Temporary file is deleted after successful upload."""
         from jobs.tasks.youtube_upload import upload_recording_to_youtube
@@ -166,7 +165,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         self.assertFalse(os.path.exists(temp_paths[0]))
 
     @patch('integrations.services.youtube.upload_video')
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_temp_file_cleaned_up_on_failure(self, mock_boto_client, mock_upload_video):
         """Temporary file is deleted even when upload fails."""
         from integrations.services.youtube import YouTubeAPIError
@@ -231,7 +230,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         with self.assertRaises(ValueError):
             upload_recording_to_youtube(self.recording.id)
 
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_s3_download_failure_raises(self, mock_boto_client):
         """Task raises on S3 download failure to trigger django-q2 retry."""
         from botocore.exceptions import ClientError
@@ -249,7 +248,7 @@ class UploadRecordingToYouTubeTest(TestCase):
             upload_recording_to_youtube(self.recording.id)
 
     @patch('integrations.services.youtube.upload_video')
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_youtube_upload_failure_raises(self, mock_boto_client, mock_upload_video):
         """Task raises on YouTube upload failure to trigger django-q2 retry."""
         from integrations.services.youtube import YouTubeAPIError
@@ -268,7 +267,7 @@ class UploadRecordingToYouTubeTest(TestCase):
         self.assertEqual(self.recording.recording_url, '')
 
     @patch('integrations.services.youtube.upload_video')
-    @patch('jobs.tasks.youtube_upload.boto3.client')
+    @patch('jobs.tasks.recordings_s3.boto3.client')
     def test_uses_studio_config_for_recordings_s3_download(
         self,
         mock_boto_client,

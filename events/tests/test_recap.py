@@ -123,7 +123,6 @@ class SyncEventsRecapFileTest(TestCase):
                 'content_id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\n'
                 'title: "Launch"\n'
                 'slug: launch\n'
-                'event_type: live\n'
                 'status: completed\n'
                 'start_datetime: "2026-04-13T16:30:00Z"\n'
                 'recording_embed_url: "https://www.youtube.com/embed/test-video"\n'

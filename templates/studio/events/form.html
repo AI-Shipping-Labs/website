@@ -52,22 +52,12 @@
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono{% if is_synced %} opacity-60{% endif %}">{{ event.description|default:'' }}</textarea>
     </div>
 
-    <div class="grid grid-cols-3 gap-4">
-      <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Event Type</label>
-        <select name="event_type"
-                {% if is_synced %}disabled{% endif %}
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-          <option value="live" {% if event.event_type == 'live' %}selected{% endif %}>Live</option>
-          <option value="async" {% if event.event_type == 'async' %}selected{% endif %}>Async</option>
-        </select>
-      </div>
+    <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Status</label>
         <select name="status" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
           <option value="draft" {% if event.status == 'draft' %}selected{% endif %}>Draft</option>
           <option value="upcoming" {% if event.status == 'upcoming' %}selected{% endif %}>Upcoming</option>
-          <option value="live" {% if event.status == 'live' %}selected{% endif %}>Live</option>
           <option value="completed" {% if event.status == 'completed' %}selected{% endif %}>Completed</option>
           <option value="cancelled" {% if event.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
         </select>
@@ -87,7 +77,7 @@
              value="{% if event.platform == 'custom' %}{{ event.zoom_join_url|default:'' }}{% endif %}"
              placeholder="https://youtube.com/live/abc123"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <p class="text-xs text-muted-foreground mt-1">Enter the external URL for this event (e.g. YouTube Live, Discord).</p>
+      <p class="text-xs text-muted-foreground mt-1">Enter the external join URL for this event (e.g. YouTube, Discord).</p>
     </div>
 
     <div class="grid grid-cols-3 gap-4">

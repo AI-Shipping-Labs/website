@@ -31,6 +31,11 @@ def register_for_event(request, slug):
     event = get_object_or_404(Event, slug=slug)
     if event.status == 'draft':
         return JsonResponse({'error': 'Event not found'}, status=404)
+    if event.status != 'upcoming':
+        return JsonResponse(
+            {'error': 'Event is not open for registration'},
+            status=409,
+        )
 
     # Check access (tier level)
     if not can_access(request.user, event):
@@ -93,6 +98,13 @@ def unregister_from_event(request, slug):
         )
 
     event = get_object_or_404(Event, slug=slug)
+    if event.status == 'draft':
+        return JsonResponse({'error': 'Event not found'}, status=404)
+    if event.status != 'upcoming':
+        return JsonResponse(
+            {'error': 'Event is not open for registration'},
+            status=409,
+        )
 
     deleted_count, _ = EventRegistration.objects.filter(
         event=event, user=request.user,

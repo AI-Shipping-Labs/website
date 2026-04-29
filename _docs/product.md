@@ -123,8 +123,8 @@ Access control logic: a user can access any content object where `user.tier.leve
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Events listing | `/events` | Upcoming and past events split into two sections; type/status badges (live, async); tier badges; registration status; spots remaining; link to recording for past events | Everyone (listing visible) | Shipped |
-| Event detail | `/events/<slug>` | Announcement page for the event: status, type, dates, location, timezone, description, registration button, Zoom join link (when live); SEO metadata. Workshop-linked events show a "View workshop writeup" CTA that hands off to the workshop landing page — recording, timestamps, materials, learning objectives, and core tools live on the workshop, not on the event. Legacy past events with no linked workshop still render the inline recording block. | Open events: everyone; gated: tier-dependent | Shipped |
+| Events listing | `/events` | Upcoming and past events split into two sections with status/tier badges, registration status, spots remaining, and links to recordings for past events | Everyone (listing visible) | Shipped |
+| Event detail | `/events/<slug>` | Announcement page for the event: status, dates, location, timezone, description, registration button, join link near start time; SEO metadata. Workshop-linked events show a "View workshop writeup" CTA that hands off to the workshop landing page — recording, timestamps, materials, learning objectives, and core tools live on the workshop, not on the event. Legacy past events with no linked workshop still render the inline recording block. | Open events: everyone; gated: tier-dependent | Shipped |
 | Event registration | `/api/events/<slug>/register` | POST to register for an event | Authenticated users with access | Shipped |
 | Event unregistration | `/api/events/<slug>/unregister` | POST to unregister from an event | Authenticated users | Shipped |
 
@@ -254,7 +254,7 @@ Free member logs in -> sees dashboard with limited content -> browses blog and e
 Member navigates to `/courses` -> browses course catalog with tag filters -> clicks into a course -> reads syllabus and description -> enrolls in a cohort (if available) -> starts first unit -> watches embedded video, reads lesson text, completes homework -> clicks "Mark as completed" -> proceeds to next unit via "Next" button -> progress bar updates on course detail page -> returns to dashboard and sees course in "Continue Learning" section -> eventually completes all units.
 
 ### 4. Member Registers for an Event
-Member navigates to `/events` -> sees upcoming events with type badges and spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via Zoom link (if live) -> after event, recording becomes available at `/event-recordings/<slug>`.
+Member navigates to `/events` -> sees upcoming events with spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after event, recording becomes available at `/event-recordings/<slug>`.
 
 ### 5. Visitor to Paid Member via Pricing
 Visitor clicks "View Membership Tiers" on homepage or navigates to `/pricing` -> reviews all 4 tiers in the grid -> toggles between monthly and annual pricing (annual saves approximately 17%) -> clicks "Join" on their chosen tier -> redirected to Stripe Checkout -> creates account during checkout (or logs in) -> completes payment -> gains access at the purchased tier level.
@@ -284,7 +284,7 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Project | A project idea or portfolio project writeup | Showcase, portfolio item |
 | Curated Link | An external resource link categorized by type (tool, model, course) | Resource, bookmark, collection item |
 | Download | A downloadable file (PDF, slides, notebook) | Asset, attachment |
-| Event | A scheduled activity (live or async) with registration | Meeting, session, webinar |
+| Event | A scheduled activity with registration | Meeting, session, webinar |
 | Instructor | A person who teaches courses, workshops, or speaks at events; identified by a stable `instructor_id` slug and referenced from yaml | Speaker, presenter, author |
 | Poll | A vote on a topic or course idea | Survey, questionnaire |
 | Option | A choice within a poll that members can vote on | Answer, item |

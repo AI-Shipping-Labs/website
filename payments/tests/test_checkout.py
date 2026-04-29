@@ -56,6 +56,19 @@ class CreateCheckoutViewTest(TestCase):
             "create_checkout_session must not be called for an anonymous request.",
         )
 
+    @patch("payments.views.checkout.create_checkout_session")
+    def test_invalid_json_returns_exact_error_and_skips_service(self, mock_create):
+        self.client.login(email="checkout@test.com", password="testpass123")
+        response = self.client.post(
+            "/api/checkout/create",
+            data="not json",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Invalid JSON"})
+        mock_create.assert_not_called()
+
     def test_requires_post_method(self):
         """GET requests return 405."""
         self.client.login(email="checkout@test.com", password="testpass123")
@@ -195,6 +208,32 @@ class UpgradeViewTest(TestCase):
         self.assertEqual(response.status_code, 400)
 
     @patch("payments.views.checkout.upgrade_subscription")
+    def test_invalid_json_returns_exact_error_and_skips_service(self, mock_upgrade):
+        self.client.login(email="upgrade@test.com", password="testpass123")
+        response = self.client.post(
+            "/api/subscription/upgrade",
+            data="not json",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Invalid JSON"})
+        mock_upgrade.assert_not_called()
+
+    @patch("payments.views.checkout.upgrade_subscription")
+    def test_billing_period_validation_remains_service_level(self, mock_upgrade):
+        self.client.login(email="upgrade@test.com", password="testpass123")
+        response = self.client.post(
+            "/api/subscription/upgrade",
+            data=json.dumps({"tier_slug": "main", "billing_period": "weekly"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_upgrade.assert_called_once()
+        self.assertEqual(mock_upgrade.call_args.kwargs["billing_period"], "weekly")
+
+    @patch("payments.views.checkout.upgrade_subscription")
     def test_returns_ok_on_success(self, mock_upgrade):
         """Successful upgrade returns status ok."""
         mock_upgrade.return_value = MagicMock()
@@ -250,6 +289,32 @@ class DowngradeViewTest(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
+
+    @patch("payments.views.checkout.downgrade_subscription")
+    def test_invalid_json_returns_exact_error_and_skips_service(self, mock_downgrade):
+        self.client.login(email="downgrade@test.com", password="testpass123")
+        response = self.client.post(
+            "/api/subscription/downgrade",
+            data="not json",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Invalid JSON"})
+        mock_downgrade.assert_not_called()
+
+    @patch("payments.views.checkout.downgrade_subscription")
+    def test_billing_period_validation_remains_service_level(self, mock_downgrade):
+        self.client.login(email="downgrade@test.com", password="testpass123")
+        response = self.client.post(
+            "/api/subscription/downgrade",
+            data=json.dumps({"tier_slug": "basic", "billing_period": "weekly"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_downgrade.assert_called_once()
+        self.assertEqual(mock_downgrade.call_args.kwargs["billing_period"], "weekly")
 
     @patch("payments.views.checkout.downgrade_subscription")
     def test_returns_ok_on_success(self, mock_downgrade):

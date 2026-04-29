@@ -113,7 +113,6 @@ def event_edit(request, event_id):
             event.title = request.POST.get('title', '').strip()
             event.slug = request.POST.get('slug', '').strip() or slugify(event.title)
             event.description = request.POST.get('description', '')
-            event.event_type = request.POST.get('event_type', 'live')
             platform = request.POST.get('platform', 'zoom')
             event.platform = platform
             start_dt, end_dt = _parse_event_datetime(request.POST)
@@ -128,8 +127,8 @@ def event_edit(request, event_id):
             tags_raw = request.POST.get('tags', '')
             event.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
 
-            # When platform is 'custom', store custom_url in zoom_join_url
-            # and clear zoom_meeting_id
+            # When platform is custom, store the external join URL in the
+            # existing join URL field and clear Zoom-specific metadata.
             if platform == 'custom':
                 event.zoom_join_url = request.POST.get('custom_url', '').strip()
                 event.zoom_meeting_id = ''

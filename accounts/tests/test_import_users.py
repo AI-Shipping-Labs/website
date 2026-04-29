@@ -29,6 +29,10 @@ def rows(*items):
     return lambda: iter(items)
 
 
+def conflicts(batch):
+    return [error for error in batch.errors if error.get("kind") == "conflict"]
+
+
 class ImportUsersServiceTest(TestCase):
     def setUp(self):
         self.main_tier = Tier.objects.get(slug="main")
@@ -118,6 +122,37 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(user.import_metadata["slack"], {"old": True, "new": True})
         self.assertEqual(user.tags, ["member", "active"])
 
+    def test_same_source_identifier_conflict_keeps_existing_value(self):
+        user = User.objects.create_user(
+            email="same-conflict@example.com",
+            import_source="stripe",
+            imported_at=timezone.now(),
+            stripe_customer_id="cus_existing",
+            import_metadata={"stripe": {"stripe_customer_id": "cus_existing"}},
+            tags=["stripe:imported"],
+        )
+
+        batch = run_import_batch(
+            "stripe",
+            rows(
+                ImportRow(
+                    email="same-conflict@example.com",
+                    source_metadata={"stripe_customer_id": "cus_new", "status": "active"},
+                    tags=["stripe:active"],
+                    extra_user_fields={"stripe_customer_id": "cus_new"},
+                )
+            ),
+        )
+
+        user.refresh_from_db()
+        self.assertEqual(user.stripe_customer_id, "cus_existing")
+        self.assertEqual(user.import_metadata["stripe"]["stripe_customer_id"], "cus_new")
+        self.assertEqual(user.import_metadata["stripe"]["status"], "active")
+        self.assertEqual(user.tags, ["stripe:imported", "stripe:active"])
+        self.assertEqual(batch.users_updated, 1)
+        self.assertEqual(batch.users_skipped, 0)
+        self.assertEqual(conflicts(batch)[0]["field"], "stripe_customer_id")
+
     def test_existing_different_source_preserves_earliest_non_manual_source(self):
         user = User.objects.create_user(
             email="multi@example.com",
@@ -148,6 +183,97 @@ class ImportUsersServiceTest(TestCase):
             },
         )
 
+    def test_cross_source_merge_logs_conflicts_and_fills_only_empty_fields(self):
+        user = User.objects.create_user(
+            email="merge-conflict@example.com",
+            first_name="Alice",
+            last_name="Existing",
+            import_source="slack",
+            imported_at=timezone.now(),
+            slack_user_id="U1",
+            stripe_customer_id="cus_existing",
+            import_metadata={"slack": {"slack_user_id": "U1"}},
+            tags=["slack-member"],
+        )
+
+        batch = run_import_batch(
+            "stripe",
+            rows(
+                ImportRow(
+                    email="merge-conflict@example.com",
+                    name="Alicia Incoming",
+                    source_metadata={"stripe_customer_id": "cus_new"},
+                    tags=["stripe:active", "slack-member"],
+                    extra_user_fields={
+                        "stripe_customer_id": "cus_new",
+                        "subscription_id": "sub_new",
+                    },
+                )
+            ),
+        )
+
+        user.refresh_from_db()
+        self.assertEqual(user.import_source, "slack")
+        self.assertEqual(user.first_name, "Alice")
+        self.assertEqual(user.last_name, "Existing")
+        self.assertEqual(user.stripe_customer_id, "cus_existing")
+        self.assertEqual(user.subscription_id, "sub_new")
+        self.assertEqual(user.tags, ["slack-member", "stripe:active"])
+        self.assertEqual(user.import_metadata["stripe"]["stripe_customer_id"], "cus_new")
+        self.assertEqual(batch.users_updated, 1)
+        self.assertEqual(batch.users_skipped, 0)
+        self.assertEqual(
+            {conflict["field"] for conflict in conflicts(batch)},
+            {"first_name", "last_name", "stripe_customer_id"},
+        )
+
+    def test_manual_user_becomes_imported_from_first_source_only(self):
+        user = User.objects.create_user(email="manual@example.com")
+
+        run_import_batch(
+            "slack",
+            rows(
+                ImportRow(
+                    email="manual@example.com",
+                    source_metadata={"slack_user_id": "U1"},
+                    tags=["slack-member"],
+                )
+            ),
+        )
+        run_import_batch(
+            "stripe",
+            rows(
+                ImportRow(
+                    email="manual@example.com",
+                    source_metadata={"stripe_customer_id": "cus_1"},
+                    tags=["stripe:active"],
+                )
+            ),
+        )
+
+        user.refresh_from_db()
+        self.assertEqual(user.import_source, "slack")
+        self.assertIsNotNone(user.imported_at)
+        self.assertEqual(set(user.import_metadata), {"slack", "stripe"})
+        self.assertEqual(user.tags, ["slack-member", "stripe:active"])
+
+    def test_plus_address_aliases_are_distinct_imported_users(self):
+        batch = run_import_batch(
+            "stripe",
+            rows(
+                ImportRow(email="alice@example.com", tags=["base"]),
+                ImportRow(email="alice+stripe@example.com", tags=["plus"]),
+            ),
+            send_welcome=False,
+        )
+
+        self.assertEqual(batch.users_created, 2)
+        base = User.objects.get(email="alice@example.com")
+        plus = User.objects.get(email="alice+stripe@example.com")
+        self.assertNotEqual(base.pk, plus.pk)
+        self.assertEqual(base.tags, ["base"])
+        self.assertEqual(plus.tags, ["plus"])
+
     def test_dry_run_records_counts_but_writes_no_users_or_jobs(self):
         existing = User.objects.create_user(email="dry@example.com", tags=["before"])
 
@@ -169,6 +295,36 @@ class ImportUsersServiceTest(TestCase):
         self.assertFalse(User.objects.filter(email="newdry@example.com").exists())
         self.assertEqual(Schedule.objects.count(), 0)
 
+    def test_dry_run_detects_conflicts_without_user_writes(self):
+        existing = User.objects.create_user(
+            email="dry-conflict@example.com",
+            import_source="slack",
+            imported_at=timezone.now(),
+            slack_user_id="UOLD",
+            import_metadata={"slack": {"slack_user_id": "UOLD"}},
+            tags=["before"],
+        )
+
+        batch = run_import_batch(
+            "slack",
+            rows(
+                ImportRow(
+                    email="dry-conflict@example.com",
+                    source_metadata={"slack_user_id": "UNEW"},
+                    tags=["after"],
+                    extra_user_fields={"slack_user_id": "UNEW"},
+                )
+            ),
+            dry_run=True,
+        )
+
+        self.assertEqual(batch.users_updated, 1)
+        self.assertEqual(conflicts(batch)[0]["field"], "slack_user_id")
+        existing.refresh_from_db()
+        self.assertEqual(existing.slack_user_id, "UOLD")
+        self.assertEqual(existing.import_metadata, {"slack": {"slack_user_id": "UOLD"}})
+        self.assertEqual(existing.tags, ["before"])
+
     def test_invalid_email_and_unknown_tier_are_row_errors(self):
         batch = run_import_batch(
             "course_db",
@@ -184,6 +340,30 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(batch.users_skipped, 2)
         self.assertEqual(len(batch.errors), 2)
         self.assertTrue(User.objects.filter(email="valid@example.com").exists())
+
+    def test_unknown_and_protected_extra_fields_are_row_errors(self):
+        batch = run_import_batch(
+            "slack",
+            rows(
+                ImportRow(email="valid-fields@example.com"),
+                ImportRow(
+                    email="protected@example.com",
+                    extra_user_fields={"tier": "main"},
+                ),
+                ImportRow(
+                    email="unknown-field@example.com",
+                    extra_user_fields={"not_a_user_field": "value"},
+                ),
+            ),
+        )
+
+        self.assertEqual(batch.users_created, 1)
+        self.assertEqual(batch.users_skipped, 2)
+        self.assertEqual(
+            {error["error_message"] for error in batch.errors},
+            {"protected user field: tier", "unknown user field: not_a_user_field"},
+        )
+        self.assertTrue(User.objects.filter(email="valid-fields@example.com").exists())
 
     def test_tier_slug_creates_active_override_without_changing_user_tier(self):
         expiry = timezone.now() + timedelta(days=30)
@@ -204,6 +384,45 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(override.override_tier, self.main_tier)
         self.assertEqual(override.expires_at, expiry)
         self.assertEqual(batch.users_created, 1)
+
+    def test_tier_conflict_preserves_existing_active_override(self):
+        premium_tier = Tier.objects.get(slug="premium")
+        user = User.objects.create_user(email="tier-conflict@example.com")
+        TierOverride.objects.create(
+            user=user,
+            original_tier=user.tier,
+            override_tier=premium_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        batch = run_import_batch(
+            "course_db",
+            rows(ImportRow(email="tier-conflict@example.com", tier_slug="main")),
+        )
+
+        override = TierOverride.objects.get(user=user, is_active=True)
+        self.assertEqual(override.override_tier, premium_tier)
+        self.assertEqual(TierOverride.objects.filter(user=user).count(), 1)
+        self.assertEqual(batch.users_updated, 1)
+        self.assertEqual(conflicts(batch)[0]["field"], "tier_override")
+
+    def test_same_tier_override_is_idempotent(self):
+        user = User.objects.create_user(email="tier-same@example.com")
+        TierOverride.objects.create(
+            user=user,
+            original_tier=user.tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        batch = run_import_batch(
+            "course_db",
+            rows(ImportRow(email="tier-same@example.com", tier_slug="main")),
+        )
+
+        self.assertEqual(TierOverride.objects.filter(user=user).count(), 1)
+        self.assertEqual(batch.users_updated, 1)
+        self.assertEqual(conflicts(batch), [])
 
     @override_settings(IMPORT_WELCOME_EMAILS_PER_HOUR=50)
     def test_large_import_queues_throttled_schedules_without_sending_ses(self):

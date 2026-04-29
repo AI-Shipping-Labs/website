@@ -1,4 +1,13 @@
-"""Shared user-import orchestration for external audience sources."""
+"""Shared user-import orchestration for external audience sources.
+
+Identity reconciliation is intentionally conservative. Email is the only
+automatic match key: importer lookups trim surrounding whitespace and lowercase
+the validated email value, but ``+suffix`` aliases remain distinct addresses.
+The import path never fuzzy-matches names, phone numbers, Slack IDs, Stripe
+customer IDs, or other provider-specific identifiers. When multiple sources
+share one email, non-empty existing values win and conflicts are logged for
+staff review instead of being overwritten automatically.
+"""
 
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -8,7 +17,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.validators import validate_email
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.utils import timezone
 from django_q.models import Schedule
 
@@ -89,12 +98,14 @@ def run_import_batch(
     try:
         for row_number, row in enumerate(adapter_fn(), start=1):
             try:
-                action, user = _process_row(
+                action, user = reconcile_user(
                     row,
+                    batch,
                     source=source,
                     actor=actor,
                     default_tags=default_tags,
                     dry_run=dry_run,
+                    row_number=row_number,
                 )
             except RowError as exc:
                 batch.users_skipped += 1
@@ -133,6 +144,96 @@ def run_import_batch(
     return batch
 
 
+def reconcile_user(
+    row: ImportRow,
+    batch: ImportBatch,
+    *,
+    source,
+    actor=None,
+    default_tags=None,
+    dry_run=False,
+    row_number=None,
+):
+    """Reconcile one adapter row into the canonical user for its email."""
+    default_tags = normalize_tags(default_tags or [])
+    email, tier = _validate_row(row)
+
+    if dry_run:
+        existing = User.objects.filter(email__iexact=email).first()
+        action = "created" if existing is None else "updated"
+        if existing is not None:
+            branch = _branch_for_user(existing, source)
+            _apply_user_updates(
+                existing,
+                row,
+                source=source,
+                default_tags=default_tags,
+                branch=branch,
+                batch=batch,
+                row_number=row_number,
+                email=email,
+                dry_run=True,
+            )
+            if tier and tier.level > 0:
+                _apply_tier_override(
+                    existing,
+                    tier,
+                    row.tier_expiry,
+                    actor,
+                    batch=batch,
+                    row_number=row_number,
+                    email=email,
+                    source=source,
+                    dry_run=True,
+                )
+        return action, None
+
+    with transaction.atomic():
+        user = User.objects.select_for_update().filter(email__iexact=email).first()
+        if user is None:
+            user = User.objects.create_user(
+                email=email,
+                password=None,
+                import_source=source,
+                imported_at=timezone.now(),
+                import_metadata=_merged_metadata({}, source, row.source_metadata),
+            )
+            action = "created"
+            branch = "create"
+        else:
+            action = "updated"
+            branch = _branch_for_user(user, source)
+
+        update_fields = _apply_user_updates(
+            user,
+            row,
+            source=source,
+            default_tags=default_tags,
+            branch=branch,
+            batch=batch,
+            row_number=row_number,
+            email=email,
+            dry_run=False,
+        )
+        if update_fields:
+            user.save(update_fields=sorted(update_fields))
+
+        if tier and tier.level > 0:
+            _apply_tier_override(
+                user,
+                tier,
+                row.tier_expiry,
+                actor,
+                batch=batch,
+                row_number=row_number,
+                email=email,
+                source=source,
+                dry_run=False,
+            )
+
+    return action, user
+
+
 def queue_imported_welcome_emails(batch, user_ids):
     """Create throttled one-off schedules for imported welcome emails."""
     rate = int(getattr(settings, "IMPORT_WELCOME_EMAILS_PER_HOUR", 50))
@@ -159,7 +260,7 @@ class RowError(Exception):
     """Validation error for one import row; the batch can continue."""
 
 
-def _process_row(row, *, source, actor, default_tags, dry_run):
+def _validate_row(row):
     if not isinstance(row, ImportRow):
         raise RowError("adapter yielded a non-ImportRow value")
     if row.validation_error:
@@ -167,44 +268,24 @@ def _process_row(row, *, source, actor, default_tags, dry_run):
 
     email = _normalize_email(row.email)
     tier = _resolve_tier(row.tier_slug)
+    _validate_extra_user_fields(row.extra_user_fields or {})
+    return email, tier
 
-    existing = User.objects.filter(email__iexact=email).first()
-    action = "updated" if existing else "created"
 
-    if dry_run:
-        return action, None
+def _validate_extra_user_fields(extra_user_fields):
+    for field_name in extra_user_fields:
+        if field_name in PROTECTED_USER_FIELDS:
+            raise RowError(f"protected user field: {field_name}")
+        try:
+            User._meta.get_field(field_name)
+        except FieldDoesNotExist:
+            raise RowError(f"unknown user field: {field_name}") from None
 
-    with transaction.atomic():
-        user = User.objects.select_for_update().filter(email__iexact=email).first()
-        if user is None:
-            try:
-                user = User.objects.create_user(
-                    email=email,
-                    password=None,
-                    import_source=source,
-                    imported_at=timezone.now(),
-                    import_metadata=_merged_metadata({}, source, row.source_metadata),
-                )
-            except IntegrityError:
-                user = User.objects.select_for_update().get(email__iexact=email)
-                action = "updated"
-        else:
-            action = "updated"
 
-        update_fields = _apply_user_updates(
-            user,
-            row,
-            source=source,
-            default_tags=default_tags,
-            is_new=(action == "created"),
-        )
-        if update_fields:
-            user.save(update_fields=sorted(update_fields))
-
-        if tier and tier.level > 0:
-            _apply_tier_override(user, tier, row.tier_expiry, actor)
-
-    return action, user
+def _branch_for_user(user, source):
+    if user.import_source == source:
+        return "same_source_update"
+    return "cross_source_merge"
 
 
 def _normalize_email(raw_email):
@@ -225,20 +306,36 @@ def _resolve_tier(tier_slug):
         raise RowError(f"unknown tier slug: {tier_slug}") from exc
 
 
-def _apply_user_updates(user, row, *, source, default_tags, is_new):
+def _apply_user_updates(
+    user,
+    row,
+    *,
+    source,
+    default_tags,
+    branch,
+    batch,
+    row_number,
+    email,
+    dry_run,
+):
     update_fields = set()
     now = timezone.now()
+    is_new = branch == "create"
+
+    if branch == "cross_source_merge" and user.import_source == IMPORT_SOURCE_MANUAL:
+        if not dry_run:
+            user.import_source = source
+        update_fields.add("import_source")
+        if user.imported_at is None:
+            if not dry_run:
+                user.imported_at = now
+            update_fields.add("imported_at")
 
     if not is_new:
-        if user.import_source == IMPORT_SOURCE_MANUAL:
-            user.import_source = source
-            update_fields.add("import_source")
-        if user.imported_at is None:
-            user.imported_at = now
-            update_fields.add("imported_at")
         merged_metadata = _merged_metadata(user.import_metadata, source, row.source_metadata)
         if merged_metadata != (user.import_metadata or {}):
-            user.import_metadata = merged_metadata
+            if not dry_run:
+                user.import_metadata = merged_metadata
             update_fields.add("import_metadata")
 
     row_tags = normalize_tags([*default_tags, *(row.tags or [])])
@@ -248,30 +345,107 @@ def _apply_user_updates(user, row, *, source, default_tags, is_new):
             if tag not in merged_tags:
                 merged_tags.append(tag)
         if merged_tags != (user.tags or []):
-            user.tags = merged_tags
+            if not dry_run:
+                user.tags = merged_tags
             update_fields.add("tags")
 
-    if row.name:
-        first_name, last_name = _split_name(row.name)
-        if first_name and not user.first_name:
-            user.first_name = first_name
-            update_fields.add("first_name")
-        if last_name and not user.last_name:
-            user.last_name = last_name
-            update_fields.add("last_name")
-
-    for field_name, value in (row.extra_user_fields or {}).items():
-        if field_name in PROTECTED_USER_FIELDS or value in (None, ""):
-            continue
-        try:
-            User._meta.get_field(field_name)
-        except FieldDoesNotExist:
-            raise RowError(f"unknown user field: {field_name}") from None
-        if getattr(user, field_name, None) in (None, ""):
-            setattr(user, field_name, value)
-            update_fields.add(field_name)
+    _apply_name_updates(
+        user,
+        row.name,
+        update_fields,
+        batch=batch,
+        row_number=row_number,
+        email=email,
+        source=source,
+        dry_run=dry_run,
+        allow_overwrite=is_new,
+    )
+    _apply_extra_field_updates(
+        user,
+        row.extra_user_fields or {},
+        update_fields,
+        batch=batch,
+        row_number=row_number,
+        email=email,
+        source=source,
+        dry_run=dry_run,
+        allow_overwrite=is_new,
+    )
 
     return update_fields
+
+
+def _apply_name_updates(
+    user,
+    name,
+    update_fields,
+    *,
+    batch,
+    row_number,
+    email,
+    source,
+    dry_run,
+    allow_overwrite,
+):
+    if not name:
+        return
+
+    first_name, last_name = _split_name(name)
+    for field_name, value in (("first_name", first_name), ("last_name", last_name)):
+        if not value:
+            continue
+        existing_value = getattr(user, field_name, "")
+        if allow_overwrite or existing_value in (None, ""):
+            if not dry_run:
+                setattr(user, field_name, value)
+            update_fields.add(field_name)
+        elif existing_value != value:
+            _append_conflict(
+                batch,
+                row_number=row_number,
+                email=email,
+                field=field_name,
+                existing_value=existing_value,
+                incoming_value=value,
+                incoming_source=source,
+                message=f"Existing {field_name} differs; preserving current value",
+            )
+
+
+def _apply_extra_field_updates(
+    user,
+    extra_user_fields,
+    update_fields,
+    *,
+    batch,
+    row_number,
+    email,
+    source,
+    dry_run,
+    allow_overwrite,
+):
+    for field_name, value in extra_user_fields.items():
+        if value in (None, ""):
+            continue
+        existing_value = getattr(user, field_name, None)
+        if allow_overwrite or existing_value in (None, ""):
+            if not dry_run:
+                setattr(user, field_name, value)
+            update_fields.add(field_name)
+        elif existing_value != value:
+            _append_conflict(
+                batch,
+                row_number=row_number,
+                email=email,
+                field=field_name,
+                existing_value=existing_value,
+                incoming_value=value,
+                incoming_source=source,
+                message=(
+                    f"Existing {field_name} differs; possible duplicate customer "
+                    "or email mismatch"
+                ),
+            )
 
 
 def _split_name(name):
@@ -323,16 +497,45 @@ def _merged_course_db_metadata(existing, metadata):
     return merged
 
 
-def _apply_tier_override(user, tier, tier_expiry, actor):
-    expires_at = tier_expiry or timezone.now() + LONG_LIVED_OVERRIDE_DURATION
-    if TierOverride.objects.filter(
-        user=user,
-        override_tier=tier,
-        is_active=True,
-        expires_at__gt=timezone.now(),
-    ).exists():
+def _apply_tier_override(
+    user,
+    tier,
+    tier_expiry,
+    actor,
+    *,
+    batch,
+    row_number,
+    email,
+    source,
+    dry_run,
+):
+    active_override = (
+        TierOverride.objects.filter(
+            user=user,
+            is_active=True,
+            expires_at__gt=timezone.now(),
+        )
+        .select_related("override_tier")
+        .first()
+    )
+    if active_override:
+        if active_override.override_tier_id != tier.id:
+            _append_conflict(
+                batch,
+                row_number=row_number,
+                email=email,
+                field="tier_override",
+                existing_value=active_override.override_tier.slug,
+                incoming_value=tier.slug,
+                incoming_source=source,
+                message="Existing active tier override differs; preserving current override",
+            )
         return
-    TierOverride.objects.filter(user=user, is_active=True).update(is_active=False)
+
+    if dry_run:
+        return
+
+    expires_at = tier_expiry or timezone.now() + LONG_LIVED_OVERRIDE_DURATION
     TierOverride.objects.create(
         user=user,
         original_tier=user.tier,
@@ -341,6 +544,37 @@ def _apply_tier_override(user, tier, tier_expiry, actor):
         granted_by=actor,
         is_active=True,
     )
+
+
+def _append_conflict(
+    batch,
+    *,
+    row_number,
+    email,
+    field,
+    existing_value,
+    incoming_value,
+    incoming_source,
+    message,
+):
+    batch.errors.append(
+        {
+            "kind": "conflict",
+            "row": row_number,
+            "email": email,
+            "field": field,
+            "existing_value": _json_safe_value(existing_value),
+            "incoming_value": _json_safe_value(incoming_value),
+            "incoming_source": incoming_source,
+            "message": message,
+        }
+    )
+
+
+def _json_safe_value(value):
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
 
 
 def _validate_source(source):

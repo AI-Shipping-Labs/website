@@ -281,6 +281,9 @@ class StripeImportAdapterTest(TestCase):
             )
 
         self.assertEqual(batch.users_updated, 1)
+        self.assertEqual(batch.users_skipped, 0)
+        self.assertEqual(batch.errors[0]["kind"], "conflict")
+        self.assertEqual(batch.errors[0]["field"], "stripe_customer_id")
         existing.refresh_from_db()
         self.assertEqual(existing.stripe_customer_id, "cus_existing")
         self.assertEqual(existing.import_metadata["stripe"]["stripe_customer_id"], "cus_new")

@@ -441,6 +441,12 @@ class CommunityInviteTaskTest(TestCase):
         _ensure_tiers()
         CommunityAuditLog.objects.all().delete()
 
+    @override_settings(
+        SLACK_ENABLED=True,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+    )
     def test_checkout_completed_triggers_invite_and_audit_log(self):
         """community_invite_task calls service.invite and creates audit log."""
         from community.tasks.hooks import community_invite_task
@@ -597,6 +603,12 @@ class CommunityReactivateTaskTest(TestCase):
         self.assertEqual(details["slack_user_id"], "UREACTIVATE")
         self.assertEqual(len(details["channels"]), 2)
 
+    @override_settings(
+        SLACK_ENABLED=True,
+        SLACK_BOT_TOKEN="xoxb-test",
+        SLACK_ENVIRONMENT="development",
+        SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001"],
+    )
     def test_reactivate_task_calls_service(self):
         """community_reactivate_task delegates to service.reactivate."""
         from community.tasks.hooks import community_reactivate_task

@@ -42,7 +42,6 @@ class EventModelFieldsTest(TestCase):
         )
         self.assertEqual(event.title, 'Test Event')
         self.assertEqual(event.slug, 'test-event')
-        self.assertEqual(event.event_type, 'live')
         self.assertEqual(event.status, 'draft')
         self.assertEqual(event.description, '')
         self.assertEqual(event.tags, [])
@@ -57,7 +56,6 @@ class EventModelFieldsTest(TestCase):
             title='Full Event',
             slug='full-event',
             description='# Hello\n\nThis is a test.',
-            event_type='async',
             start_datetime=timezone.now(),
             end_datetime=timezone.now() + timedelta(hours=2),
             timezone='Europe/Berlin',
@@ -69,7 +67,6 @@ class EventModelFieldsTest(TestCase):
             max_participants=50,
             status='upcoming',
         )
-        self.assertEqual(event.event_type, 'async')
         self.assertEqual(event.timezone, 'Europe/Berlin')
         self.assertEqual(event.zoom_meeting_id, '123456789')
         self.assertEqual(event.location, 'Zoom')
@@ -231,7 +228,6 @@ class EventsListPageTest(TestCase):
             title='Upcoming Workshop',
             slug='upcoming-workshop',
             description='An upcoming event',
-            event_type='live',
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
             location='Zoom',
@@ -240,7 +236,6 @@ class EventsListPageTest(TestCase):
             title='Past Workshop',
             slug='past-workshop',
             description='A past event',
-            event_type='live',
             start_datetime=timezone.now() - timedelta(days=7),
             status='completed',
         )
@@ -279,9 +274,10 @@ class EventsListPageTest(TestCase):
         response = self.client.get('/events')
         self.assertContains(response, 'Past')
 
-    def test_event_card_shows_type_badge(self):
+    def test_event_card_omits_type_badge(self):
         response = self.client.get('/events')
-        self.assertContains(response, 'Live')
+        self.assertNotContains(response, 'Live')
+        self.assertNotContains(response, 'Async')
 
     def test_event_card_shows_date(self):
         response = self.client.get('/events')
@@ -411,7 +407,6 @@ class EventDetailPageTest(TestCase):
             title='Detail Event',
             slug='detail-event',
             description='A detailed description of the event.',
-            event_type='live',
             start_datetime=timezone.now() + timedelta(days=7),
             end_datetime=timezone.now() + timedelta(days=7, hours=2),
             timezone='Europe/Berlin',
@@ -444,9 +439,10 @@ class EventDetailPageTest(TestCase):
         response = self.client.get('/events/detail-event')
         self.assertContains(response, 'Europe/Berlin')
 
-    def test_shows_event_type(self):
+    def test_omits_event_type(self):
         response = self.client.get('/events/detail-event')
-        self.assertContains(response, 'Live')
+        self.assertNotContains(response, 'Live Event')
+        self.assertNotContains(response, 'Async Event')
 
     def test_shows_tags(self):
         response = self.client.get('/events/detail-event')
@@ -779,6 +775,29 @@ class RegisterForEventAPITest(TierSetupMixin, TestCase):
         response = self.client.post('/api/events/draft-api/register')
         self.assertEqual(response.status_code, 404)
 
+    def test_register_non_upcoming_events_rejected(self):
+        self.client.login(email='apiuser@test.com', password='pass')
+
+        for status in ['completed', 'cancelled']:
+            event = Event.objects.create(
+                title=f'{status.title()} API',
+                slug=f'{status}-api',
+                start_datetime=timezone.now() - timedelta(days=1),
+                status=status,
+                required_level=LEVEL_OPEN,
+            )
+            response = self.client.post(f'/api/events/{event.slug}/register')
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(
+                response.json()['error'],
+                'Event is not open for registration',
+            )
+            self.assertFalse(
+                EventRegistration.objects.filter(
+                    event=event, user=self.user,
+                ).exists()
+            )
+
     def test_register_only_post(self):
         self.client.login(email='apiuser@test.com', password='pass')
         response = self.client.get('/api/events/api-event/register')
@@ -822,6 +841,31 @@ class UnregisterFromEventAPITest(TestCase):
         response = self.client.delete('/api/events/unreg-api-event/unregister')
         self.assertEqual(response.status_code, 404)
 
+    def test_unregister_non_upcoming_events_rejected(self):
+        self.client.login(email='unreg@test.com', password='pass')
+
+        for status in ['completed', 'cancelled']:
+            event = Event.objects.create(
+                title=f'{status.title()} Unreg API',
+                slug=f'{status}-unreg-api',
+                start_datetime=timezone.now() - timedelta(days=1),
+                status=status,
+            )
+            EventRegistration.objects.create(event=event, user=self.user)
+
+            response = self.client.delete(f'/api/events/{event.slug}/unregister')
+
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(
+                response.json()['error'],
+                'Event is not open for registration',
+            )
+            self.assertTrue(
+                EventRegistration.objects.filter(
+                    event=event, user=self.user,
+                ).exists()
+            )
+
     def test_unregister_only_delete(self):
         self.client.login(email='unreg@test.com', password='pass')
         response = self.client.post('/api/events/unreg-api-event/unregister')
@@ -841,24 +885,12 @@ class EventAdminTest(TestCase):
         )
         self.client.login(email='admin@test.com', password='testpass')
 
-    def test_admin_event_list(self):
-        Event.objects.create(
-            title='Admin Event',
-            slug='admin-event',
-            start_datetime=timezone.now() + timedelta(days=7),
-            status='upcoming',
-        )
-        response = self.client.get('/admin/events/event/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Admin Event')
-
     def test_admin_create_event(self):
         start = timezone.now() + timedelta(days=7)
         self.client.post('/admin/events/event/add/', {
             'title': 'New Event',
             'slug': 'new-event',
             'description': 'A new event',
-            'event_type': 'live',
             'platform': 'zoom',
             'start_datetime_0': start.strftime('%Y-%m-%d'),
             'start_datetime_1': start.strftime('%H:%M:%S'),
@@ -882,27 +914,21 @@ class EventAdminTest(TestCase):
         })
         self.assertEqual(Event.objects.filter(slug='new-event').count(), 1)
 
-    def test_admin_delete_event(self):
-        event = Event.objects.create(
-            title='Delete Me',
-            slug='delete-me',
-            start_datetime=timezone.now() + timedelta(days=7),
-        )
-        self.client.post(
-            f'/admin/events/event/{event.pk}/delete/',
-            {'post': 'yes'},
-        )
-        self.assertEqual(Event.objects.filter(slug='delete-me').count(), 0)
-
     def test_admin_search(self):
         Event.objects.create(
             title='Searchable Event',
             slug='searchable-event',
             start_datetime=timezone.now() + timedelta(days=7),
         )
+        Event.objects.create(
+            title='Hidden Event',
+            slug='hidden-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+        )
         response = self.client.get('/admin/events/event/?q=Searchable')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Searchable Event')
+        self.assertNotContains(response, 'Hidden Event')
 
 
 class EventAdminStatusTransitionTest(TestCase):
@@ -926,28 +952,6 @@ class EventAdminStatusTransitionTest(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.status, 'upcoming')
 
-    def test_transition_upcoming_to_live(self):
-        event = Event.objects.create(
-            title='Upcoming', slug='upcoming-transition',
-            start_datetime=timezone.now() + timedelta(days=7),
-            status='upcoming',
-        )
-        from events.admin.event import make_live
-        make_live(None, None, Event.objects.filter(pk=event.pk))
-        event.refresh_from_db()
-        self.assertEqual(event.status, 'live')
-
-    def test_transition_live_to_completed(self):
-        event = Event.objects.create(
-            title='Live', slug='live-transition',
-            start_datetime=timezone.now(),
-            status='live',
-        )
-        from events.admin.event import make_completed
-        make_completed(None, None, Event.objects.filter(pk=event.pk))
-        event.refresh_from_db()
-        self.assertEqual(event.status, 'completed')
-
     def test_transition_upcoming_to_completed(self):
         event = Event.objects.create(
             title='Upcoming', slug='upcoming-completed',
@@ -959,8 +963,19 @@ class EventAdminStatusTransitionTest(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.status, 'completed')
 
+    def test_draft_does_not_transition_to_completed(self):
+        event = Event.objects.create(
+            title='Draft', slug='draft-completed',
+            start_datetime=timezone.now(),
+            status='draft',
+        )
+        from events.admin.event import make_completed
+        make_completed(None, None, Event.objects.filter(pk=event.pk))
+        event.refresh_from_db()
+        self.assertEqual(event.status, 'draft')
+
     def test_cancel_from_any_state(self):
-        for status in ['draft', 'upcoming', 'live', 'completed']:
+        for status in ['draft', 'upcoming', 'completed']:
             event = Event.objects.create(
                 title=f'Cancel {status}',
                 slug=f'cancel-{status}',
@@ -971,31 +986,6 @@ class EventAdminStatusTransitionTest(TestCase):
             make_cancelled(None, None, Event.objects.filter(pk=event.pk))
             event.refresh_from_db()
             self.assertEqual(event.status, 'cancelled')
-
-    def test_draft_to_live_not_allowed(self):
-        """Direct transition from draft to live should not happen."""
-        event = Event.objects.create(
-            title='Draft', slug='draft-to-live',
-            start_datetime=timezone.now(),
-            status='draft',
-        )
-        from events.admin.event import make_live
-        make_live(None, None, Event.objects.filter(pk=event.pk))
-        event.refresh_from_db()
-        # Should still be draft because make_live filters for upcoming status
-        self.assertEqual(event.status, 'draft')
-
-    def test_completed_to_live_not_allowed(self):
-        """Completed events should not transition to live."""
-        event = Event.objects.create(
-            title='Completed', slug='completed-to-live',
-            start_datetime=timezone.now(),
-            status='completed',
-        )
-        from events.admin.event import make_live
-        make_live(None, None, Event.objects.filter(pk=event.pk))
-        event.refresh_from_db()
-        self.assertEqual(event.status, 'completed')
 
 
 # --- Events List Registered Badge Test ---

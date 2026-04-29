@@ -1307,13 +1307,23 @@ class TestScenario13SyncQueuedButtonConfirmation:
             timeout=2000,
         )
 
-        # Wait ~1 second, then dispatch a second submit on the same form.
+        # Wait until the first queued state has survived the race window, then
+        # dispatch a second submit on the same form.
         # If the previous timer was not cleared, it would fire ~500ms
         # after this point and the label would revert too early.
-        # Intentional fixed wait: this test verifies a clearTimeout race
-        # window — replacing it with an element-state wait would defeat
-        # the purpose of the assertion. See issue #290.
-        page.wait_for_timeout(1000)
+        first_submit_at = page.evaluate("Date.now()")
+        page.wait_for_function(
+            """
+            startedAt => {
+                const el = document.querySelectorAll('button.sync-btn span.sync-btn-text')[0];
+                return el
+                && Date.now() - startedAt >= 1000
+                && el.textContent.includes('Sync queued');
+            }
+            """,
+            arg=first_submit_at,
+            timeout=1500,
+        )
         page.evaluate(
             """
             const btn = document.querySelectorAll('button.sync-btn')[0];
@@ -1327,10 +1337,19 @@ class TestScenario13SyncQueuedButtonConfirmation:
         # 1100ms after the second submit (i.e., ~2100ms after the first
         # submit's timer was set), the label must still say "Sync queued"
         # — proves the second submit reset the timer.
-        # Intentional fixed wait: timer-window assertion (clearTimeout
-        # race). An element-state wait would not exercise the race.
-        # See issue #290.
-        page.wait_for_timeout(1100)
+        second_submit_at = page.evaluate("Date.now()")
+        page.wait_for_function(
+            """
+            startedAt => {
+                const el = document.querySelectorAll('button.sync-btn span.sync-btn-text')[0];
+                return el
+                && Date.now() - startedAt >= 1100
+                && el.textContent.includes('Sync queued');
+            }
+            """,
+            arg=second_submit_at,
+            timeout=1600,
+        )
         assert "Sync queued" in sync_btn_text.inner_text()
 
         # And it eventually reverts cleanly after the second timer fires.

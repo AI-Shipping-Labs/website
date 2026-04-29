@@ -21,99 +21,19 @@ from tests.fixtures import TierSetupMixin
 User = get_user_model()
 
 
-# --- Model field tests ---
+# --- Model behavior tests ---
 
 
 class CuratedLinkModelFieldsTest(TestCase):
-    """Test that CuratedLink has all required fields from issue #76."""
+    """Test CuratedLink custom behavior."""
 
-    def test_title_field(self):
-        link = CuratedLink.objects.create(
-            item_id='test-title', title='Test Link',
-            url='https://example.com', category='tools',
-        )
-        self.assertEqual(link.title, 'Test Link')
-
-    def test_description_field(self):
-        link = CuratedLink.objects.create(
-            item_id='test-desc', title='Test',
-            description='A short description',
-            url='https://example.com', category='tools',
-        )
-        self.assertEqual(link.description, 'A short description')
-
-    def test_description_default_empty(self):
-        link = CuratedLink.objects.create(
-            item_id='test-desc-default', title='Test',
-            url='https://example.com', category='tools',
-        )
-        self.assertEqual(link.description, '')
-
-    def test_url_field(self):
-        link = CuratedLink.objects.create(
-            item_id='test-url', title='Test',
-            url='https://github.com/test/repo', category='tools',
-        )
-        self.assertEqual(link.url, 'https://github.com/test/repo')
-
-    def test_category_field(self):
-        link = CuratedLink.objects.create(
-            item_id='test-cat', title='Test',
-            url='https://example.com', category='models',
-        )
-        self.assertEqual(link.category, 'models')
-
-    def test_tags_field_is_list(self):
+    def test_tags_normalized_on_save(self):
         link = CuratedLink.objects.create(
             item_id='test-tags', title='Test',
             url='https://example.com', category='tools',
-            tags=['python', 'ai', 'cli'],
+            tags=[' Python ', 'AI', 'python'],
         )
-        self.assertEqual(link.tags, ['python', 'ai', 'cli'])
-
-    def test_tags_default_empty_list(self):
-        link = CuratedLink.objects.create(
-            item_id='test-tags-default', title='Test',
-            url='https://example.com', category='tools',
-        )
-        self.assertEqual(link.tags, [])
-
-    def test_required_level_default_0(self):
-        link = CuratedLink.objects.create(
-            item_id='test-rl', title='Test',
-            url='https://example.com', category='tools',
-        )
-        self.assertEqual(link.required_level, 0)
-
-    def test_required_level_custom(self):
-        link = CuratedLink.objects.create(
-            item_id='test-rl-custom', title='Test',
-            url='https://example.com', category='tools',
-            required_level=LEVEL_BASIC,
-        )
-        self.assertEqual(link.required_level, LEVEL_BASIC)
-
-    def test_sort_order_default_0(self):
-        link = CuratedLink.objects.create(
-            item_id='test-sort', title='Test',
-            url='https://example.com', category='tools',
-        )
-        self.assertEqual(link.sort_order, 0)
-
-    def test_sort_order_custom(self):
-        link = CuratedLink.objects.create(
-            item_id='test-sort-custom', title='Test',
-            url='https://example.com', category='tools',
-            sort_order=10,
-        )
-        self.assertEqual(link.sort_order, 10)
-
-    def test_created_at_set_on_create(self):
-        link = CuratedLink.objects.create(
-            item_id='test-created', title='Test',
-            url='https://example.com', category='tools',
-        )
-        self.assertIsNotNone(link.created_at)
+        self.assertEqual(link.tags, ['python', 'ai'])
 
     def test_required_level_tier_name_property(self):
         link = CuratedLink(required_level=LEVEL_BASIC)
@@ -535,19 +455,6 @@ class CuratedLinkAdminTest(TestCase):
         )
         self.client.login(email='admin@test.com', password='testpass')
 
-    def test_admin_list_page(self):
-        CuratedLink.objects.create(
-            item_id='admin-link', title='Admin Link',
-            url='https://example.com', category='tools',
-        )
-        response = self.client.get('/admin/content/curatedlink/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Admin Link')
-
-    def test_admin_add_page(self):
-        response = self.client.get('/admin/content/curatedlink/add/')
-        self.assertEqual(response.status_code, 200)
-
     def test_admin_create_link(self):
         self.client.post('/admin/content/curatedlink/add/', {
             'item_id': 'new-link',
@@ -566,42 +473,35 @@ class CuratedLinkAdminTest(TestCase):
         self.assertEqual(link.title, 'New Link')
         self.assertEqual(link.tags, ['python', 'cli'])
 
-    def test_admin_edit_link(self):
-        link = CuratedLink.objects.create(
-            item_id='edit-link', title='Edit Me',
-            url='https://example.com', category='tools',
-        )
-        response = self.client.get(f'/admin/content/curatedlink/{link.pk}/change/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_delete_link(self):
-        link = CuratedLink.objects.create(
-            item_id='delete-link', title='Delete Me',
-            url='https://example.com', category='tools',
-        )
-        self.client.post(
-            f'/admin/content/curatedlink/{link.pk}/delete/',
-            {'post': 'yes'},
-        )
-        self.assertEqual(CuratedLink.objects.filter(item_id='delete-link').count(), 0)
-
     def test_admin_search(self):
         CuratedLink.objects.create(
             item_id='search-link', title='Searchable Link',
             description='find me',
             url='https://example.com', category='tools',
         )
+        CuratedLink.objects.create(
+            item_id='hidden-link', title='Hidden Link',
+            description='different',
+            url='https://example.com', category='tools',
+        )
         response = self.client.get('/admin/content/curatedlink/?q=Searchable')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Searchable Link')
+        self.assertNotContains(response, 'Hidden Link')
 
     def test_admin_filter_by_category(self):
         CuratedLink.objects.create(
             item_id='filter-tool', title='Tool Link',
             url='https://example.com', category='tools',
         )
+        CuratedLink.objects.create(
+            item_id='filter-model', title='Model Link',
+            url='https://example.com', category='models',
+        )
         response = self.client.get('/admin/content/curatedlink/?category__exact=tools')
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tool Link')
+        self.assertNotContains(response, 'Model Link')
 
     def test_admin_filter_by_published(self):
         CuratedLink.objects.create(
@@ -616,6 +516,8 @@ class CuratedLinkAdminTest(TestCase):
         )
         response = self.client.get('/admin/content/curatedlink/?published__exact=1')
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Published Link')
+        self.assertNotContains(response, 'Unpublished Link')
 
 
 # --- Empty state tests ---

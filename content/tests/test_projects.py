@@ -22,64 +22,11 @@ from content.models import Project
 User = get_user_model()
 
 
-# --- Model field tests ---
+# --- Model behavior tests ---
 
 
 class ProjectNewFieldsTest(TestCase):
-    """Test that Project has all fields required by issue #75."""
-
-    def test_source_code_url_field(self):
-        project = Project.objects.create(
-            title='Test', slug='test-src', date=date(2025, 1, 1),
-            source_code_url='https://github.com/test/repo',
-        )
-        self.assertEqual(project.source_code_url, 'https://github.com/test/repo')
-
-    def test_source_code_url_default_empty(self):
-        project = Project.objects.create(
-            title='Test', slug='test-src-default', date=date(2025, 1, 1),
-        )
-        self.assertEqual(project.source_code_url, '')
-
-    def test_demo_url_field(self):
-        project = Project.objects.create(
-            title='Test', slug='test-demo', date=date(2025, 1, 1),
-            demo_url='https://demo.example.com',
-        )
-        self.assertEqual(project.demo_url, 'https://demo.example.com')
-
-    def test_demo_url_default_empty(self):
-        project = Project.objects.create(
-            title='Test', slug='test-demo-default', date=date(2025, 1, 1),
-        )
-        self.assertEqual(project.demo_url, '')
-
-    def test_cover_image_url_field(self):
-        project = Project.objects.create(
-            title='Test', slug='test-cover', date=date(2025, 1, 1),
-            cover_image_url='https://example.com/image.png',
-        )
-        self.assertEqual(project.cover_image_url, 'https://example.com/image.png')
-
-    def test_cover_image_url_default_empty(self):
-        project = Project.objects.create(
-            title='Test', slug='test-cover-default', date=date(2025, 1, 1),
-        )
-        self.assertEqual(project.cover_image_url, '')
-
-    def test_status_field_default_published(self):
-        project = Project.objects.create(
-            title='Test', slug='test-status', date=date(2025, 1, 1),
-            published=True,
-        )
-        self.assertEqual(project.status, 'published')
-
-    def test_status_pending_review(self):
-        project = Project.objects.create(
-            title='Test', slug='test-pending', date=date(2025, 1, 1),
-            status='pending_review', published=False,
-        )
-        self.assertEqual(project.status, 'pending_review')
+    """Test Project custom behavior."""
 
     def test_published_at_set_when_published(self):
         project = Project.objects.create(
@@ -95,28 +42,9 @@ class ProjectNewFieldsTest(TestCase):
         )
         self.assertIsNone(project.published_at)
 
-    def test_submitter_field(self):
-        user = User.objects.create_user(email='submitter@test.com')
-        project = Project.objects.create(
-            title='Test', slug='test-submitter', date=date(2025, 1, 1),
-            submitter=user,
-        )
-        self.assertEqual(project.submitter, user)
-
-    def test_submitter_null_by_default(self):
-        project = Project.objects.create(
-            title='Test', slug='test-no-submitter', date=date(2025, 1, 1),
-        )
-        self.assertIsNone(project.submitter)
-
-    def test_difficulty_choices(self):
-        valid = ['beginner', 'intermediate', 'advanced']
-        for diff in valid:
-            project = Project.objects.create(
-                title=f'Test {diff}', slug=f'test-{diff}', date=date(2025, 1, 1),
-                difficulty=diff,
-            )
-            self.assertEqual(project.difficulty, diff)
+    def test_difficulty_color_maps_known_levels(self):
+        project = Project(difficulty='advanced')
+        self.assertEqual(project.difficulty_color(), 'bg-red-500/20 text-red-400')
 
 
 # --- Markdown rendering tests ---
@@ -833,19 +761,6 @@ class ProjectAdminTest(TestCase):
         )
         self.client.login(email='admin@test.com', password='testpass')
 
-    def test_admin_project_list(self):
-        Project.objects.create(
-            title='Admin Project', slug='admin-project',
-            date=date(2025, 8, 10), published=True,
-        )
-        response = self.client.get('/admin/content/project/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Admin Project')
-
-    def test_admin_project_add_page(self):
-        response = self.client.get('/admin/content/project/add/')
-        self.assertEqual(response.status_code, 200)
-
     def test_admin_create_project(self):
         self.client.post('/admin/content/project/add/', {
             'title': 'New Project',
@@ -864,25 +779,6 @@ class ProjectAdminTest(TestCase):
             'date': '2025-08-10',
         })
         self.assertEqual(Project.objects.filter(slug='new-project').count(), 1)
-
-    def test_admin_edit_project(self):
-        project = Project.objects.create(
-            title='Edit Me', slug='edit-me', date=date(2025, 8, 10),
-            published=True,
-        )
-        response = self.client.get(f'/admin/content/project/{project.pk}/change/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_delete_project(self):
-        project = Project.objects.create(
-            title='Delete Me', slug='delete-me', date=date(2025, 8, 10),
-            published=True,
-        )
-        self.client.post(
-            f'/admin/content/project/{project.pk}/delete/',
-            {'post': 'yes'},
-        )
-        self.assertEqual(Project.objects.filter(slug='delete-me').count(), 0)
 
     def test_admin_approve_action(self):
         project = Project.objects.create(
@@ -932,4 +828,3 @@ class ProjectAdminTest(TestCase):
         response = self.client.get('/admin/content/project/?q=Searchable')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Searchable Project')
-

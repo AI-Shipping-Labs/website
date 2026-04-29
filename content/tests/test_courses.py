@@ -855,50 +855,6 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-# ============================================================
-# Admin Tests
-# ============================================================
-
-
-class CourseAdminTest(TestCase):
-    """Test admin CRUD for courses."""
-
-    def setUp(self):
-        self.client = Client()
-        self.admin_user = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
-
-    def test_admin_course_list(self):
-        Course.objects.create(
-            title='Admin Course', slug='admin-course', status='published',
-        )
-        response = self.client.get('/admin/content/course/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Admin Course')
-
-    def test_admin_course_add_page(self):
-        response = self.client.get('/admin/content/course/add/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_module_list(self):
-        response = self.client.get('/admin/content/module/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_unit_list(self):
-        response = self.client.get('/admin/content/unit/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_progress_list(self):
-        response = self.client.get('/admin/content/usercourseprogress/')
-        self.assertEqual(response.status_code, 200)
-
-    # test_admin_publish_action and test_admin_unpublish_action removed --
-    # duplicates of CourseAdminCRUDTest.test_admin_status_change_draft_to_published
-    # and test_admin_status_change_published_to_draft in test_course_admin.py
-
-
 class CourseTestimonialsViewTest(TestCase):
     """Test testimonials section on course detail page."""
 

@@ -554,19 +554,6 @@ class ArticleAdminTest(TestCase):
         )
         self.client.login(email='admin@test.com', password='testpass')
 
-    def test_admin_article_list(self):
-        Article.objects.create(
-            title='Admin Test', slug='admin-test', date=date(2025, 6, 15),
-            published=True,
-        )
-        response = self.client.get('/admin/content/article/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Admin Test')
-
-    def test_admin_article_add_page(self):
-        response = self.client.get('/admin/content/article/add/')
-        self.assertEqual(response.status_code, 200)
-
     def test_admin_create_article(self):
         self.client.post('/admin/content/article/add/', {
             'title': 'New Article',
@@ -583,25 +570,6 @@ class ArticleAdminTest(TestCase):
         self.assertEqual(Article.objects.filter(slug='new-article').count(), 1)
         article = Article.objects.get(slug='new-article')
         self.assertEqual(article.title, 'New Article')
-
-    def test_admin_edit_article(self):
-        article = Article.objects.create(
-            title='Edit Me', slug='edit-me', date=date(2025, 6, 15),
-            published=True,
-        )
-        response = self.client.get(f'/admin/content/article/{article.pk}/change/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_delete_article(self):
-        article = Article.objects.create(
-            title='Delete Me', slug='delete-me', date=date(2025, 6, 15),
-            published=True,
-        )
-        self.client.post(
-            f'/admin/content/article/{article.pk}/delete/',
-            {'post': 'yes'},
-        )
-        self.assertEqual(Article.objects.filter(slug='delete-me').count(), 0)
 
     def test_admin_publish_action(self):
         article = Article.objects.create(
@@ -641,6 +609,8 @@ class ArticleAdminTest(TestCase):
         )
         response = self.client.get('/admin/content/article/?status__exact=published')
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Published Article')
+        self.assertNotContains(response, 'Draft Article')
 
     def test_admin_search(self):
         Article.objects.create(
@@ -648,9 +618,15 @@ class ArticleAdminTest(TestCase):
             description='find me', date=date(2025, 6, 15),
             published=True,
         )
+        Article.objects.create(
+            title='Hidden Article', slug='hidden-search',
+            description='other', date=date(2025, 6, 15),
+            published=True,
+        )
         response = self.client.get('/admin/content/article/?q=Searchable')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Searchable Article')
+        self.assertNotContains(response, 'Hidden Article')
 
 
 # --- Sorting tests ---

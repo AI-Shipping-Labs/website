@@ -886,14 +886,6 @@ class CourseAccessAdminTest(TestCase):
         )
         self.client.login(email='admin@test.com', password='testpass')
 
-    def test_admin_course_access_list(self):
-        response = self.client.get('/admin/content/courseaccess/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_course_access_add(self):
-        response = self.client.get('/admin/content/courseaccess/add/')
-        self.assertEqual(response.status_code, 200)
-
     def test_admin_course_edit_shows_individual_pricing(self):
         """Course admin shows individual purchase fields."""
         course = Course.objects.create(

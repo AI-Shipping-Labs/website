@@ -877,7 +877,10 @@ class TestChaptersDisclosureExpandSeekCollapse:
 
         # Step: click summary to expand
         summary.first.click()
-        page.wait_for_timeout(150)
+        page.wait_for_function(
+            "el => el.hasAttribute('open')",
+            arg=chapters.first.element_handle(),
+        )
         assert (
             chapters.first.evaluate("el => el.hasAttribute('open')")
             is True
@@ -904,12 +907,14 @@ class TestChaptersDisclosureExpandSeekCollapse:
         errors = []
         page.on("pageerror", lambda exc: errors.append(str(exc)))
         first_btn.click()
-        page.wait_for_timeout(100)
         assert errors == []
 
         # Step: click summary again to collapse
         summary.first.click()
-        page.wait_for_timeout(150)
+        page.wait_for_function(
+            "el => !el.hasAttribute('open')",
+            arg=chapters.first.element_handle(),
+        )
         assert (
             chapters.first.evaluate("el => el.hasAttribute('open')")
             is False

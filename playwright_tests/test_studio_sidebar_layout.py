@@ -88,7 +88,12 @@ class TestSidebarStaysAnchoredWithBanner:
 
         # Scroll the page so the banner moves off screen.
         page.evaluate("window.scrollTo(0, 600)")
-        page.wait_for_timeout(100)
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                return sidebar && sidebar.getBoundingClientRect().y <= 1.5;
+            }"""
+        )
 
         # The sidebar's top edge is now flush with the viewport top — no gap.
         sidebar_box_after = sidebar.bounding_box()
@@ -148,7 +153,12 @@ class TestSidebarPinsWhenNoBanner:
 
         # After scrolling, the sidebar should still pin to y=0.
         page.evaluate("window.scrollTo(0, 1000)")
-        page.wait_for_timeout(100)
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                return sidebar && sidebar.getBoundingClientRect().y <= 1.5;
+            }"""
+        )
         sidebar_box_after = sidebar.bounding_box()
         assert sidebar_box_after is not None
         assert sidebar_box_after["y"] <= PIXEL_TOLERANCE, (
@@ -194,7 +204,10 @@ class TestSidebarScrollsIndependently:
         # Scroll the sidebar to its bottom programmatically (mimics a user
         # dragging the inner scrollbar).
         sidebar_handle.evaluate("el => { el.scrollTop = el.scrollHeight; }")
-        page.wait_for_timeout(50)
+        page.wait_for_function(
+            """el => Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight""",
+            arg=sidebar_handle.element_handle(),
+        )
 
         # The page itself must not have scrolled.
         page_scroll_y = page.evaluate("window.scrollY")
@@ -256,7 +269,15 @@ class TestMobileDrawerToggle:
 
         # Tap the hamburger toggle.
         page.locator("#studio-sidebar-toggle").click()
-        page.wait_for_timeout(100)
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                const backdrop = document.querySelector('#studio-backdrop');
+                return sidebar && backdrop
+                    && !sidebar.classList.contains('hidden')
+                    && !backdrop.classList.contains('hidden');
+            }"""
+        )
 
         # Sidebar visible and backdrop visible.
         assert not has_class(sidebar.get_attribute("class"), "hidden")

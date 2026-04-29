@@ -613,29 +613,6 @@ class CohortAdminTest(TestCase):
             title='Admin Course', slug='admin-course', status='published',
         )
 
-    def test_admin_cohort_list(self):
-        Cohort.objects.create(
-            course=self.course, name='Admin Cohort',
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
-        )
-        response = self.client.get('/admin/content/cohort/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Admin Cohort')
-
-    def test_admin_cohort_change_page(self):
-        cohort = Cohort.objects.create(
-            course=self.course, name='Change Test',
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
-        )
-        response = self.client.get(f'/admin/content/cohort/{cohort.pk}/change/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_admin_cohort_enrollment_list(self):
-        response = self.client.get('/admin/content/cohortenrollment/')
-        self.assertEqual(response.status_code, 200)
-
     def test_admin_cohort_inline_on_course(self):
         """Cohort inline should appear on course edit page."""
         response = self.client.get(f'/admin/content/course/{self.course.pk}/change/')

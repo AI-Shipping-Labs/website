@@ -265,14 +265,24 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+
+def _staticfiles_storage_backend(*, debug):
+    if debug:
+        return 'django.contrib.staticfiles.storage.StaticFilesStorage'
+    return 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+
 # WhiteNoise: serve hashed, compressed static files in production. The
 # Dockerfile runs `collectstatic --noinput` so STATIC_ROOT is populated
 # at build time. Manifest storage adds content-hash suffixes so static
-# URLs can be cached far-future without staleness.
+# URLs can be cached far-future without staleness. In DEBUG/test runs,
+# keep static URLs unhashed so Django's staticfiles finders can serve
+# both project-level assets and app-provided assets such as Django admin
+# without requiring a prior collectstatic.
 STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
     'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        'BACKEND': _staticfiles_storage_backend(debug=DEBUG),
     },
 }
 

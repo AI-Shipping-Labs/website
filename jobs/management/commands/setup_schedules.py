@@ -55,4 +55,23 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: slack-membership-refresh (every 30 min)'))
 
+        # Daily system imports for external user sources (issue #318)
+        schedule(
+            'accounts.tasks.run_scheduled_import',
+            cron='0 3 * * *',
+            name='import-slack-daily',
+            preserve_disabled=True,
+            source='slack',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: import-slack-daily (daily at 03:00 UTC)'))
+
+        schedule(
+            'accounts.tasks.run_scheduled_import',
+            cron='30 3 * * *',
+            name='import-stripe-daily',
+            preserve_disabled=True,
+            source='stripe',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: import-stripe-daily (daily at 03:30 UTC)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

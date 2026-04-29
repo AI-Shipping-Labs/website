@@ -40,6 +40,13 @@ def _seed_import_batches():
     connection.close()
 
 
+def _seed_import_schedules():
+    from django.core.management import call_command
+
+    call_command("setup_schedules")
+    connection.close()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestStudioUserImports:
     def test_staff_reviews_imports_and_opens_new_form(self, django_server, browser):
@@ -47,6 +54,7 @@ class TestStudioUserImports:
         staff_email = "imports-admin@test.com"
         _create_staff_user(staff_email)
         _seed_import_batches()
+        _seed_import_schedules()
 
         context = _auth_context(browser, staff_email)
         page = context.new_page()
@@ -55,6 +63,12 @@ class TestStudioUserImports:
         page.get_by_text("User imports").click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url.endswith("/studio/imports/")
+        assert "Scheduled imports" in page.content()
+        assert "Slack workspace" in page.content()
+        assert "03:00 UTC" in page.content()
+        assert "Stripe customers" in page.content()
+        assert "03:30 UTC" in page.content()
+        assert "Course database · 03:" not in page.content()
 
         page.locator("#source").select_option("course_db")
         page.locator("#dry_run").select_option("yes")

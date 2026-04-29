@@ -34,6 +34,51 @@
   <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Filter</button>
 </form>
 
+<div class="mb-6">
+  <div class="flex items-start justify-between gap-4 mb-4">
+    <div>
+      <h2 class="text-lg font-semibold text-foreground">Scheduled imports</h2>
+    </div>
+    {% if not request.user.is_superuser %}
+    <p class="text-xs text-muted-foreground">Superuser permission is required for schedule changes.</p>
+    {% endif %}
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% for item in scheduled_imports %}
+    <div class="border border-border rounded-lg p-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="text-sm font-medium text-foreground">{{ item.label }}</div>
+          <div class="text-xs text-muted-foreground mt-1">{{ item.run_time }} · {{ item.cron }}</div>
+        </div>
+        {% if item.enabled %}
+        <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">enabled</span>
+        {% else %}
+        <span class="text-xs px-2 py-1 rounded-full bg-zinc-500/20 text-zinc-300">disabled</span>
+        {% endif %}
+      </div>
+      <div class="mt-4 flex items-center justify-between gap-3">
+        <div class="text-xs text-muted-foreground">
+          {% if item.schedule %}{{ item.name }}{% else %}Run setup_schedules to register{% endif %}
+        </div>
+        {% if request.user.is_superuser and item.schedule %}
+        <form method="post" action="{% url 'studio_import_schedule_toggle' source=item.source %}">
+          {% csrf_token %}
+          {% if item.enabled %}
+          <input type="hidden" name="action" value="disable">
+          <button type="submit" class="border border-border bg-secondary px-3 py-1.5 rounded-lg text-xs text-foreground hover:bg-muted">Disable</button>
+          {% else %}
+          <input type="hidden" name="action" value="enable">
+          <button type="submit" class="border border-border bg-secondary px-3 py-1.5 rounded-lg text-xs text-foreground hover:bg-muted">Enable</button>
+          {% endif %}
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="bg-card border border-border rounded-lg overflow-x-auto">
   <table class="w-full min-w-[980px]">
     <thead class="bg-secondary">
@@ -55,7 +100,15 @@
       {% for batch in page_obj %}
       <tr class="hover:bg-secondary/50">
         <td class="px-4 py-3 text-sm"><a class="text-accent hover:underline" href="{% url 'studio_import_batch_detail' batch_id=batch.pk %}">{{ batch.get_source_display }}</a></td>
-        <td class="px-4 py-3 text-sm">{{ batch.get_status_display }}</td>
+        <td class="px-4 py-3 text-sm">
+          {% if batch.status == 'failed' %}
+          <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-400">Failed</span>
+          {% elif batch.status == 'completed' %}
+          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Completed</span>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Running</span>
+          {% endif %}
+        </td>
         <td class="px-4 py-3 text-sm text-muted-foreground">{{ batch.started_at|date:"Y-m-d H:i" }}</td>
         <td class="px-4 py-3 text-sm text-muted-foreground">{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i" }}{% else %}running{% endif %}</td>
         <td class="px-4 py-3 text-sm">{% if batch.dry_run %}<span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">dry-run</span>{% else %}<span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">live</span>{% endif %}</td>

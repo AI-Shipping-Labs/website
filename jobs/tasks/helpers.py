@@ -63,7 +63,7 @@ def async_task(func, *args, max_retries=None, retry_backoff=None, **kwargs):
     return task_id
 
 
-def schedule(func, cron=None, name=None, repeats=-1, **kwargs):
+def schedule(func, cron=None, name=None, repeats=-1, preserve_disabled=False, **kwargs):
     """
     Register a recurring job schedule.
 
@@ -72,6 +72,7 @@ def schedule(func, cron=None, name=None, repeats=-1, **kwargs):
         cron: Cron expression (e.g. '0 * * * *' for every hour).
         name: Human-readable name for the schedule. Defaults to the function path.
         repeats: Number of times to repeat. -1 means forever (default).
+        preserve_disabled: Keep existing disabled schedules disabled when updating.
         **kwargs: Additional keyword arguments passed to the function.
 
     Returns:
@@ -81,6 +82,11 @@ def schedule(func, cron=None, name=None, repeats=-1, **kwargs):
         raise ValueError("cron expression is required for schedule()")
 
     schedule_name = name or str(func)
+    existing_repeats = None
+    if preserve_disabled:
+        existing_repeats = Schedule.objects.filter(name=schedule_name).values_list('repeats', flat=True).first()
+
+    effective_repeats = 0 if preserve_disabled and existing_repeats == 0 else repeats
 
     # Update or create the schedule to avoid duplicates
     obj, created = Schedule.objects.update_or_create(
@@ -89,7 +95,7 @@ def schedule(func, cron=None, name=None, repeats=-1, **kwargs):
             'func': func if isinstance(func, str) else f'{func.__module__}.{func.__qualname__}',
             'schedule_type': Schedule.CRON,
             'cron': cron,
-            'repeats': repeats,
+            'repeats': effective_repeats,
             'kwargs': kwargs if kwargs else None,
         },
     )

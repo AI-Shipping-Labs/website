@@ -4,13 +4,17 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import get_valid_filename
+from django_q.models import Schedule
 
 from accounts.models import (
     IMPORT_BATCH_SOURCE_CHOICES,
     IMPORT_SOURCE_COURSE_DB,
+    IMPORT_SOURCE_SLACK,
+    IMPORT_SOURCE_STRIPE,
     ImportBatch,
 )
 from accounts.services.import_users import get_import_adapter
@@ -20,6 +24,20 @@ from studio.decorators import staff_required
 
 IMPORT_TASK_PATH = "accounts.tasks.run_import_batch_task"
 IMPORT_SOURCES = [source for source, _label in IMPORT_BATCH_SOURCE_CHOICES]
+SCHEDULED_IMPORTS = {
+    IMPORT_SOURCE_SLACK: {
+        "name": "import-slack-daily",
+        "label": "Slack workspace",
+        "cron": "0 3 * * *",
+        "run_time": "03:00 UTC",
+    },
+    IMPORT_SOURCE_STRIPE: {
+        "name": "import-stripe-daily",
+        "label": "Stripe customers",
+        "cron": "30 3 * * *",
+        "run_time": "03:30 UTC",
+    },
+}
 ERROR_COLUMNS = [
     "kind",
     "row",
@@ -53,6 +71,7 @@ def import_batch_list(request):
             "source_filter": source,
             "dry_run_filter": dry_run,
             "source_options": IMPORT_BATCH_SOURCE_CHOICES,
+            "scheduled_imports": _scheduled_import_context(),
         },
     )
 
@@ -175,6 +194,35 @@ def import_batch_rerun(request, batch_id):
     return redirect("studio_import_batch_detail", batch_id=rerun.pk)
 
 
+@staff_required
+def import_schedule_toggle(request, source):
+    if request.method != "POST":
+        return redirect("studio_import_batch_list")
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Schedule changes are restricted to superusers.")
+    if source not in SCHEDULED_IMPORTS:
+        messages.error(request, "Choose a supported scheduled import source.")
+        return redirect("studio_import_batch_list")
+
+    action = request.POST.get("action")
+    if action not in {"enable", "disable"}:
+        messages.error(request, "Choose enable or disable.")
+        return redirect("studio_import_batch_list")
+
+    schedule_config = SCHEDULED_IMPORTS[source]
+    with transaction.atomic():
+        schedule = get_object_or_404(
+            Schedule.objects.select_for_update(),
+            name=schedule_config["name"],
+        )
+        schedule.repeats = -1 if action == "enable" else 0
+        schedule.save(update_fields=["repeats"])
+
+    verb = "enabled" if action == "enable" else "disabled"
+    messages.success(request, f"{schedule_config['label']} daily import {verb}.")
+    return redirect("studio_import_batch_list")
+
+
 def _detail_context(batch):
     normalized_errors = _normalized_errors(batch.errors or [])
     params_json = json.dumps(batch.params or {}, indent=2, sort_keys=True)
@@ -246,6 +294,27 @@ def _safe_rerun_params(batch):
             }
         )
     return safe
+
+
+def _scheduled_import_context():
+    schedules = {
+        schedule.name: schedule
+        for schedule in Schedule.objects.filter(
+            name__in=[config["name"] for config in SCHEDULED_IMPORTS.values()]
+        )
+    }
+    items = []
+    for source, config in SCHEDULED_IMPORTS.items():
+        schedule = schedules.get(config["name"])
+        items.append(
+            {
+                "source": source,
+                **config,
+                "schedule": schedule,
+                "enabled": bool(schedule and schedule.repeats != 0),
+            }
+        )
+    return items
 
 
 def _normalized_errors(errors):

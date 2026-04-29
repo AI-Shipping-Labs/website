@@ -1,0 +1,9 @@
+<td class="px-4 py-4 text-sm">
+  <a href="{% url 'studio_utm_campaign_analytics' campaign_slug=row.slug %}{{ querystring }}"
+     class="text-foreground hover:text-accent font-medium">{{ row.name }}</a>
+  <p class="text-xs text-muted-foreground font-mono mt-0.5">{{ row.slug }}</p>
+</td>
+<td class="px-4 py-4 text-sm text-muted-foreground hidden md:table-cell">
+  {{ row.utm_sources|join:", " }}
+  {% if row.utm_mediums %} / {{ row.utm_mediums|join:", " }}{% endif %}
+</td>

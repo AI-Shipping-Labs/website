@@ -1,0 +1,8 @@
+<td class="px-4 py-4 text-right text-sm space-x-2 whitespace-nowrap">
+  {% if row.link %}
+  <a href="{% url 'studio_utm_link_analytics' campaign_slug=campaign_slug link_id=row.link.pk %}{{ querystring }}"
+     class="text-accent hover:underline">View link</a>
+  {% else %}
+  <span class="text-xs text-muted-foreground">No minted link</span>
+  {% endif %}
+</td>

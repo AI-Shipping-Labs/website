@@ -1,0 +1,11 @@
+<td class="px-4 py-4 text-sm">
+  <span class="text-foreground font-medium font-mono">{{ row.utm_content|default:"(blank)" }}</span>
+  {% if row.label %}<p class="text-xs text-muted-foreground mt-0.5">{{ row.label }}</p>{% endif %}
+</td>
+<td class="px-4 py-4 text-sm text-muted-foreground hidden md:table-cell">
+  {% if row.destination %}
+  <span title="{{ row.destination }}" class="break-all">{{ row.destination|truncatechars:50 }}</span>
+  {% else %}
+  <span class="text-xs">—</span>
+  {% endif %}
+</td>

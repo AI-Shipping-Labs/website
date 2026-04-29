@@ -16,6 +16,7 @@ Covers acceptance criteria:
 """
 
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -254,6 +255,120 @@ class UtmDashboardTest(TestCase):
         self.assertTrue(response.context['has_conversion_data'])
         self.assertContains(response, 'Paid Conversions')
         self.assertContains(response, 'MRR')
+
+
+# ---------------------------------------------------------------------------
+# Shared metrics table component
+# ---------------------------------------------------------------------------
+
+class SharedMetricsTableTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        _staff_login(self.client)
+        self.campaign = UtmCampaign.objects.create(
+            name='Launch April', slug='launch_april',
+            default_utm_source='newsletter', default_utm_medium='email',
+        )
+        self.link = UtmCampaignLink.objects.create(
+            campaign=self.campaign, utm_content='ai_hero_list',
+            destination='/events/launch', label='AI Hero list',
+        )
+        _seed_visit('launch_april', content='ai_hero_list', anon='shared-1')
+        _seed_visit(
+            'launch_april', content='ai_hero_list',
+            anon='shared-2', ts=timezone.now() - timedelta(days=2),
+        )
+
+    def test_dashboard_and_campaign_detail_use_shared_metrics_table(self):
+        pages = [
+            self.client.get('/studio/utm-analytics/'),
+            self.client.get('/studio/utm-analytics/campaign/launch_april/'),
+        ]
+
+        for response in pages:
+            self.assertEqual(response.status_code, 200)
+            self.assertTemplateUsed(
+                response, 'studio/utm_analytics/_metrics_table.html'
+            )
+            self.assertTemplateUsed(
+                response, 'studio/utm_analytics/_metrics_row.html'
+            )
+            self.assertTemplateUsed(
+                response, 'studio/utm_analytics/_sparkline.html'
+            )
+            self.assertContains(response, 'Visits')
+            self.assertContains(response, 'Unique')
+            self.assertContains(response, 'Signups')
+            self.assertContains(response, 'Visit -&gt; Signup')
+            self.assertContains(response, '<svg')
+            self.assertContains(response, '<polyline')
+
+    def test_shared_conversion_columns_render_on_both_pages(self):
+        tier = Tier.objects.create(
+            slug='tier_shared_mrr', name='Shared', level=98,
+            price_eur_month=10, price_eur_year=120,
+        )
+        user = User.objects.create_user(email='shared-paid@test.com', password='x')
+        ConversionAttribution.objects.create(
+            user=user, stripe_session_id='cs_shared_1',
+            tier=tier, billing_period='monthly',
+            amount_eur=10, mrr_eur=10,
+            first_touch_utm_campaign='launch_april',
+            first_touch_utm_content='ai_hero_list',
+        )
+
+        for path in (
+            '/studio/utm-analytics/',
+            '/studio/utm-analytics/campaign/launch_april/',
+        ):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'Paid')
+            self.assertContains(response, 'Signup -&gt; Paid')
+            self.assertContains(response, 'MRR EUR')
+            self.assertContains(response, 'EUR 10')
+
+    def test_shared_conversion_columns_hide_on_both_pages_without_data(self):
+        with patch('analytics.aggregations.has_conversion_data', return_value=False):
+            for path in (
+                '/studio/utm-analytics/',
+                '/studio/utm-analytics/campaign/launch_april/',
+            ):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, 'Signup -&gt; Paid')
+                self.assertNotContains(response, 'MRR EUR')
+                self.assertNotContains(response, 'EUR 0')
+
+    def test_parent_pages_keep_page_specific_cells_and_actions(self):
+        _seed_visit(
+            'launch_april', content='unminted_list', anon='unminted-1',
+        )
+
+        dashboard = self.client.get('/studio/utm-analytics/?range=7d')
+        self.assertContains(dashboard, 'Launch April')
+        self.assertContains(dashboard, 'launch_april')
+        self.assertContains(dashboard, 'newsletter')
+        self.assertContains(dashboard, '/ email')
+        self.assertContains(
+            dashboard,
+            'href="/studio/utm-analytics/campaign/launch_april/?range=7d"',
+        )
+        self.assertContains(
+            dashboard,
+            f'href="/studio/utm-campaigns/{self.campaign.pk}/"',
+        )
+
+        detail = self.client.get('/studio/utm-analytics/campaign/launch_april/')
+        self.assertContains(detail, 'ai_hero_list')
+        self.assertContains(detail, 'AI Hero list')
+        self.assertContains(detail, '/events/launch')
+        self.assertContains(
+            detail,
+            f'/studio/utm-analytics/campaign/launch_april/link/{self.link.pk}/',
+        )
+        self.assertContains(detail, 'unminted_list')
+        self.assertContains(detail, 'No minted link')
 
 
 # ---------------------------------------------------------------------------

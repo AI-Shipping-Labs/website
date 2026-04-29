@@ -1,0 +1,16 @@
+<tr class="hover:bg-secondary/50 transition-colors">
+  {% include identity_cell_template %}
+  <td class="px-4 py-4 text-sm text-foreground text-right font-medium">{{ row.visits }}</td>
+  <td class="px-4 py-4 text-sm text-muted-foreground text-right hidden lg:table-cell">{{ row.unique_visitors }}</td>
+  <td class="px-4 py-4 text-sm text-foreground text-right font-medium">{{ row.signups }}</td>
+  <td class="px-4 py-4 text-sm text-muted-foreground text-right hidden md:table-cell">{{ row.visit_to_signup_pct }}</td>
+  {% if has_conversion_data %}
+  <td class="px-4 py-4 text-sm text-foreground text-right font-medium">{{ row.conversions }}</td>
+  <td class="px-4 py-4 text-sm text-muted-foreground text-right hidden md:table-cell">{{ row.signup_to_paid_pct }}</td>
+  <td class="px-4 py-4 text-sm text-foreground text-right font-medium">EUR {{ row.mrr|floatformat:0 }}</td>
+  {% endif %}
+  <td class="px-4 py-4 hidden xl:table-cell">
+    {% include "studio/utm_analytics/_sparkline.html" %}
+  </td>
+  {% include action_cell_template %}
+</tr>

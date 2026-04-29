@@ -1,0 +1,8 @@
+<td class="px-4 py-4 text-right text-sm space-x-2 whitespace-nowrap">
+  <a href="{% url 'studio_utm_campaign_analytics' campaign_slug=row.slug %}{{ querystring }}"
+     class="text-accent hover:underline">Drill down</a>
+  {% if row.campaign %}
+  <a href="{% url 'studio_utm_campaign_detail' campaign_id=row.campaign.pk %}"
+     class="text-muted-foreground hover:text-accent">Edit campaign</a>
+  {% endif %}
+</td>

@@ -38,6 +38,19 @@ WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
 
 
+class QuietSubscriptionLookupMixin:
+    """Avoid real Stripe subscription enrichment in attribution tests."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = patch(
+            "payments.services._get_subscription_period_end",
+            return_value=None,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
 def _build_stripe_signature(payload_bytes, secret=TEST_WEBHOOK_SECRET):
     """Build a valid Stripe webhook signature for testing."""
     timestamp = str(int(time.time()))
@@ -102,7 +115,7 @@ def _configure_tier_prices(slug, monthly_price_id, yearly_price_id):
     return tier
 
 
-class FullAttributionSnapshotTest(TestCase):
+class FullAttributionSnapshotTest(QuietSubscriptionLookupMixin, TestCase):
     """First paid checkout snapshots full first-touch and last-touch UTMs."""
 
     def test_monthly_basic_checkout_copies_both_snapshots(self):
@@ -152,7 +165,7 @@ class FullAttributionSnapshotTest(TestCase):
         self.assertEqual(row.stripe_subscription_id, "sub_full_attrib_1")
 
 
-class YearlyConversionMrrTest(TestCase):
+class YearlyConversionMrrTest(QuietSubscriptionLookupMixin, TestCase):
     """Yearly conversion stores amount and divides by 12 for MRR."""
 
     def test_yearly_main_checkout_sets_mrr_to_amount_div_12(self):
@@ -185,7 +198,7 @@ class YearlyConversionMrrTest(TestCase):
         self.assertEqual(row.mrr_eur, 41)
 
 
-class NoPriorAttributionTest(TestCase):
+class NoPriorAttributionTest(QuietSubscriptionLookupMixin, TestCase):
     """Conversion for a user with no UserAttribution still creates a row."""
 
     def test_missing_attribution_writes_blank_utm_row(self):
@@ -237,7 +250,7 @@ class NoPriorAttributionTest(TestCase):
         self.assertEqual(row.mrr_eur, 20)
 
 
-class FrozenSnapshotTest(TestCase):
+class FrozenSnapshotTest(QuietSubscriptionLookupMixin, TestCase):
     """Later UserAttribution changes don't mutate an existing snapshot."""
 
     def test_attribution_update_after_conversion_does_not_change_row(self):
@@ -277,7 +290,7 @@ class FrozenSnapshotTest(TestCase):
         self.assertEqual(row.created_at, original_created_at)
 
 
-class WebhookRetryIdempotencyTest(TestCase):
+class WebhookRetryIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
     """Delivering the same checkout.session.completed twice creates 1 row."""
 
     @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
@@ -359,7 +372,7 @@ class WebhookRetryIdempotencyTest(TestCase):
         )
 
 
-class AttributionFailureDoesNotBlockTierTest(TestCase):
+class AttributionFailureDoesNotBlockTierTest(QuietSubscriptionLookupMixin, TestCase):
     """A raising attribution helper must not break tier/customer/sub updates."""
 
     def test_helper_exception_is_swallowed_and_tier_still_updates(self):
@@ -456,7 +469,7 @@ class SubscriptionUpdateDoesNotCreateSnapshotTest(TestCase):
         self.assertEqual(user.tier, main)
 
 
-class ResubscribeCreatesSecondSnapshotTest(TestCase):
+class ResubscribeCreatesSecondSnapshotTest(QuietSubscriptionLookupMixin, TestCase):
     """Re-subscribe after cancellation creates a new attribution row."""
 
     def test_second_checkout_creates_second_row(self):
@@ -550,7 +563,7 @@ class CoursePurchaseAttributionTest(TestCase):
         self.assertEqual(row.last_touch_utm_campaign, "may_blast")
 
 
-class CampaignForeignKeySnapshotTest(TestCase):
+class CampaignForeignKeySnapshotTest(QuietSubscriptionLookupMixin, TestCase):
     """first_touch_campaign FK is copied verbatim from UserAttribution."""
 
     def test_campaign_fk_is_copied_to_snapshot(self):

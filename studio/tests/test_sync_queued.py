@@ -85,9 +85,14 @@ class SyncTriggerSetsQueuedStateTest(TestCase):
         """If the enqueue itself raises, we must NOT lie about the row
         being queued — there's nothing in the queue.
         """
-        self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
+        with self.assertLogs('studio.views.sync', level='ERROR') as logs:
+            self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.source.refresh_from_db()
         self.assertNotEqual(self.source.last_sync_status, 'queued')
+        self.assertIn(
+            'Error triggering sync for AI-Shipping-Labs/blog',
+            logs.output[0],
+        )
         self.assertFalse(
             SyncLog.objects.filter(source=self.source, status='queued').exists()
         )

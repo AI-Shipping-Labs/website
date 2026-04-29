@@ -1,5 +1,7 @@
 import importlib.util
 import json
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -46,12 +48,13 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             output_path = Path(tmpdir) / "output.json"
             self._write_task_definition(input_path)
 
-            update_task_def.update_task_definition(
-                str(input_path),
-                "20260422-123456-abcd123",
-                str(output_path),
-                "dev",
-            )
+            with redirect_stdout(StringIO()):
+                update_task_def.update_task_definition(
+                    str(input_path),
+                    "20260422-123456-abcd123",
+                    str(output_path),
+                    "dev",
+                )
 
             task_def = self._read_task_definition(output_path)
 
@@ -70,12 +73,13 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
                 environment=[{"name": "ALLOWED_HOSTS", "value": "internal-alb.local"}],
             )
 
-            update_task_def.update_task_definition(
-                str(input_path),
-                "20260422-123456-abcd123",
-                str(output_path),
-                "prod",
-            )
+            with redirect_stdout(StringIO()):
+                update_task_def.update_task_definition(
+                    str(input_path),
+                    "20260422-123456-abcd123",
+                    str(output_path),
+                    "prod",
+                )
 
             task_def = self._read_task_definition(output_path)
 
@@ -93,12 +97,13 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             output_path = Path(tmpdir) / "output.json"
             self._write_task_definition(input_path)
 
-            update_task_def.update_task_definition(
-                str(input_path),
-                "20260422-123456-abcd123",
-                str(output_path),
-                "dev",
-            )
+            with redirect_stdout(StringIO()):
+                update_task_def.update_task_definition(
+                    str(input_path),
+                    "20260422-123456-abcd123",
+                    str(output_path),
+                    "dev",
+                )
 
             task_def = self._read_task_definition(output_path)
 

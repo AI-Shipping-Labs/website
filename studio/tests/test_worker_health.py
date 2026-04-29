@@ -101,10 +101,14 @@ class GetWorkerStatusTest(SimpleTestCase):
         with patch(
             'studio.worker_health.Stat.get_all',
             side_effect=RuntimeError('redis down'),
-        ):
+        ), self.assertLogs('studio.worker_health', level='WARNING') as logs:
             info = get_worker_status()
         self.assertFalse(info['alive'])
         self.assertEqual(info['error'], 'redis down')
+        self.assertIn(
+            'Failed to query django-q cluster status: redis down',
+            logs.output[0],
+        )
 
     def test_cluster_summary_fields(self):
         cluster = _fake_cluster(

@@ -77,8 +77,13 @@ class SignupSlackProbeTest(TestCase):
         svc.check_workspace_membership.side_effect = RuntimeError('boom')
         mock_get_service.return_value = svc
 
-        resp = self._register('boomy@example.com')
+        with self.assertLogs('accounts.views.auth', level='WARNING') as logs:
+            resp = self._register('boomy@example.com')
         self.assertEqual(resp.status_code, 201)
+        self.assertIn(
+            'Slack membership probe failed during signup for boomy@example.com',
+            logs.output[0],
+        )
         # User must still be created.
         user = User.objects.get(email='boomy@example.com')
         # No probe outcome persisted.

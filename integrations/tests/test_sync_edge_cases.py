@@ -669,9 +669,11 @@ class MaxFilesLimitTest(_ArticleSyncTestBase):
                 'date': '2026-01-01',
             }, f'Body {i}.')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
+            sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
 
         self.assertEqual(sync_log.status, 'failed')
+        self.assertIn('Sync failed for test-org/blog', logs.output[0])
         self.assertTrue(
             any('more than 5 content files' in str(e.get('error', ''))
                 for e in sync_log.errors),

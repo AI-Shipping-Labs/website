@@ -345,11 +345,16 @@ class SyncObjectTriggerSuccessTest(TestCase):
     def test_enqueue_failure_does_not_mark_source_queued(self, mock_async):
         """If the async_task call itself raises, we must not lie about
         the source being queued. Mirrors the dashboard sync_trigger guard."""
-        self.client.post(
-            f'/studio/sync/object/article/{self.article.pk}/trigger/',
-        )
+        with self.assertLogs('studio.views.sync', level='ERROR') as logs:
+            self.client.post(
+                f'/studio/sync/object/article/{self.article.pk}/trigger/',
+            )
         self.source.refresh_from_db()
         self.assertNotEqual(self.source.last_sync_status, 'queued')
+        self.assertIn(
+            'Error triggering object re-sync for AI-Shipping-Labs/content',
+            logs.output[0],
+        )
         self.assertFalse(
             SyncLog.objects.filter(
                 source=self.source, status='queued',

@@ -350,8 +350,10 @@ class CheckoutStripeErrorViewTest(TestCase):
         )
         mock_get_client.return_value = mock_client
 
-        response = self._post_checkout()
+        with self.assertLogs("payments.views.checkout", level="ERROR") as logs:
+            response = self._post_checkout()
         self.assertEqual(response.status_code, 500)
+        self.assertIn("Failed to create checkout session", logs.output[0])
         data = response.json()
         self.assertIn("error", data)
         # Should be a user-friendly message, not a traceback
@@ -366,8 +368,10 @@ class CheckoutStripeErrorViewTest(TestCase):
         )
         mock_get_client.return_value = mock_client
 
-        response = self._post_checkout()
+        with self.assertLogs("payments.views.checkout", level="ERROR") as logs:
+            response = self._post_checkout()
         self.assertEqual(response.status_code, 500)
+        self.assertIn("Failed to create checkout session", logs.output[0])
         data = response.json()
         self.assertIn("error", data)
         self.assertNotIn("Traceback", data["error"])
@@ -398,12 +402,14 @@ class UpgradeStripeErrorViewTest(TestCase):
         )
         mock_get_client.return_value = mock_client
 
-        response = self.client.post(
-            "/api/subscription/upgrade",
-            data=json.dumps({"tier_slug": "main", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
+        with self.assertLogs("payments.views.checkout", level="ERROR") as logs:
+            response = self.client.post(
+                "/api/subscription/upgrade",
+                data=json.dumps({"tier_slug": "main", "billing_period": "monthly"}),
+                content_type="application/json",
+            )
         self.assertEqual(response.status_code, 500)
+        self.assertIn("Failed to upgrade subscription", logs.output[0])
         data = response.json()
         self.assertIn("error", data)
         self.assertNotIn("Traceback", data["error"])
@@ -430,11 +436,13 @@ class CancelStripeErrorViewTest(TestCase):
         )
         mock_get_client.return_value = mock_client
 
-        response = self.client.post(
-            "/api/subscription/cancel",
-            content_type="application/json",
-        )
+        with self.assertLogs("payments.views.checkout", level="ERROR") as logs:
+            response = self.client.post(
+                "/api/subscription/cancel",
+                content_type="application/json",
+            )
         self.assertEqual(response.status_code, 500)
+        self.assertIn("Failed to cancel subscription", logs.output[0])
         data = response.json()
         self.assertIn("error", data)
         self.assertNotIn("Traceback", data["error"])
@@ -448,11 +456,13 @@ class CancelStripeErrorViewTest(TestCase):
         )
         mock_get_client.return_value = mock_client
 
-        response = self.client.post(
-            "/api/subscription/cancel",
-            content_type="application/json",
-        )
+        with self.assertLogs("payments.views.checkout", level="ERROR") as logs:
+            response = self.client.post(
+                "/api/subscription/cancel",
+                content_type="application/json",
+            )
         self.assertEqual(response.status_code, 500)
+        self.assertIn("Failed to cancel subscription", logs.output[0])
         data = response.json()
         self.assertIn("error", data)
         self.assertEqual(data["error"], "Failed to cancel subscription")

@@ -71,10 +71,15 @@ class RecordingPublishYouTubeSuccessTest(TestCase):
     def test_publish_youtube_enqueue_error_returns_500(self, mock_async_task):
         """When async_task raises an exception, the endpoint returns 500."""
         mock_async_task.side_effect = Exception('Queue connection failed')
-        response = self.client.post(
-            f'/studio/recordings/{self.recording.pk}/publish-youtube',
-        )
+        with self.assertLogs('studio.views.recordings', level='ERROR') as logs:
+            response = self.client.post(
+                f'/studio/recordings/{self.recording.pk}/publish-youtube',
+            )
         self.assertEqual(response.status_code, 500)
+        self.assertIn(
+            f'Failed to enqueue YouTube upload for event {self.recording.pk}',
+            logs.output[0],
+        )
         data = response.json()
         self.assertIn('error', data)
         self.assertIn('Queue connection failed', data['error'])

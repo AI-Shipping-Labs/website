@@ -1398,8 +1398,15 @@ class StudioSyncTriggerTest(TestCase):
 
     @patch('django_q.tasks.async_task', side_effect=Exception('queue error'))
     def test_trigger_handles_sync_error(self, mock_async):
-        response = self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
+        with self.assertLogs('studio.views.sync', level='ERROR') as logs:
+            response = self.client.post(
+                f'/studio/sync/{self.source.pk}/trigger/',
+            )
         self.assertEqual(response.status_code, 302)
+        self.assertIn(
+            'Error triggering sync for AI-Shipping-Labs/blog',
+            logs.output[0],
+        )
 
     @patch('django_q.tasks.async_task')
     def test_trigger_only_syncs_targeted_source(self, mock_async):

@@ -332,11 +332,16 @@ class RefreshSlackMembershipTaskTest(TestCase):
         svc.check_workspace_membership.side_effect = SlackAPIError('boom')
         mock_get_service.return_value = svc
 
-        result = refresh_slack_membership(sleep_seconds=0)
+        with self.assertLogs('community.tasks.slack_membership', level='ERROR') as logs:
+            result = refresh_slack_membership(sleep_seconds=0)
 
         user.refresh_from_db()
         self.assertIsNone(user.slack_checked_at)
         self.assertEqual(result['unknown'], 1)
+        self.assertIn(
+            'Unexpected error checking Slack membership for boom@test.com',
+            logs.output[0],
+        )
 
 
 class TagMirrorTest(TestCase):

@@ -9,9 +9,42 @@ The ``add_tag`` / ``remove_tag`` helpers wrap normalization plus persistence so
 view code never has to touch the JSON list directly.
 """
 
-from content.utils.tags import normalize_tag, normalize_tags
+from content.utils.tags import normalize_tag as normalize_content_tag
 
 __all__ = ['normalize_tag', 'normalize_tags', 'add_tag', 'remove_tag']
+
+
+def normalize_tag(tag):
+    """Normalize a contact tag.
+
+    Most contact tags use the public content-tag slug rules. Course import tags
+    additionally preserve the private ``course:<slug>`` namespace without
+    changing public content tag semantics.
+    """
+    if not tag or not isinstance(tag, str):
+        return ''
+    raw = tag.strip()
+    prefix = 'course:'
+    if raw.lower().startswith(prefix):
+        course_slug = normalize_content_tag(raw[len(prefix):])
+        if course_slug:
+            return f'{prefix}{course_slug}'
+        return ''
+    return normalize_content_tag(raw)
+
+
+def normalize_tags(tags):
+    """Normalize a list of contact tags, preserving first occurrence order."""
+    if not tags or not isinstance(tags, list):
+        return []
+    seen = set()
+    result = []
+    for tag in tags:
+        normalized = normalize_tag(tag)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
 
 
 def add_tag(user, raw):

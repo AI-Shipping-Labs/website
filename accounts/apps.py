@@ -21,3 +21,7 @@ class AccountsConfig(AppConfig):
         social_account_added.connect(mark_email_verified_on_social_signup)
         pre_social_login.connect(set_slack_user_id_on_social_login)
         social_account_added.connect(set_slack_user_id_on_social_signup)
+
+        from accounts.services.import_course_db import register_course_db_import_adapter
+
+        register_course_db_import_adapter()

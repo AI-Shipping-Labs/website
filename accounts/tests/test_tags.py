@@ -30,6 +30,12 @@ class NormalizeTagsTest(TestCase):
         # ``&`` is stripped, leaving the surrounding hyphens which collapse.
         self.assertEqual(normalize_tags(["AI & ML"]), ["ai-ml"])
 
+    def test_normalize_preserves_namespaced_course_tag(self):
+        self.assertEqual(
+            normalize_tags(["Course:Data Engineering Zoomcamp"]),
+            ["course:data-engineering-zoomcamp"],
+        )
+
     def test_empty_input_returns_empty_list(self):
         self.assertEqual(normalize_tags([]), [])
 

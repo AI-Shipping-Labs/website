@@ -56,6 +56,7 @@ class ImportRow:
     tier_expiry: object | None = None
     tags: list[str] = field(default_factory=list)
     extra_user_fields: dict = field(default_factory=dict)
+    validation_error: str = ""
 
 
 def register_import_adapter(source, adapter_fn):
@@ -161,6 +162,8 @@ class RowError(Exception):
 def _process_row(row, *, source, actor, default_tags, dry_run):
     if not isinstance(row, ImportRow):
         raise RowError("adapter yielded a non-ImportRow value")
+    if row.validation_error:
+        raise RowError(row.validation_error)
 
     email = _normalize_email(row.email)
     tier = _resolve_tier(row.tier_slug)
@@ -282,14 +285,53 @@ def _split_name(name):
 
 def _merged_metadata(existing, source, metadata):
     existing = dict(existing or {})
+    if source == "course_db":
+        existing[source] = _merged_course_db_metadata(existing.get(source), metadata)
+        return existing
+
     source_metadata = dict(existing.get(source) or {})
     source_metadata.update(metadata or {})
     existing[source] = source_metadata
     return existing
 
 
+def _merged_course_db_metadata(existing, metadata):
+    existing = dict(existing or {})
+    metadata = dict(metadata or {})
+    merged = dict(existing)
+
+    for key in ("course_slugs", "course_db_user_ids"):
+        values = list(existing.get(key) or [])
+        for value in metadata.get(key) or []:
+            if value not in values:
+                values.append(value)
+        if values:
+            merged[key] = values
+
+    dates_by_course = {
+        slug: list(dates or [])
+        for slug, dates in (existing.get("enrollment_dates_by_course") or {}).items()
+    }
+    for slug, dates in (metadata.get("enrollment_dates_by_course") or {}).items():
+        values = dates_by_course.setdefault(slug, [])
+        for date_value in dates or []:
+            if date_value not in values:
+                values.append(date_value)
+    if dates_by_course:
+        merged["enrollment_dates_by_course"] = dates_by_course
+
+    return merged
+
+
 def _apply_tier_override(user, tier, tier_expiry, actor):
     expires_at = tier_expiry or timezone.now() + LONG_LIVED_OVERRIDE_DURATION
+    if TierOverride.objects.filter(
+        user=user,
+        override_tier=tier,
+        is_active=True,
+        expires_at__gt=timezone.now(),
+    ).exists():
+        return
     TierOverride.objects.filter(user=user, is_active=True).update(is_active=False)
     TierOverride.objects.create(
         user=user,

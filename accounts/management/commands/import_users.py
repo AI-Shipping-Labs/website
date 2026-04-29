@@ -1,5 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 
+from accounts.models import IMPORT_SOURCE_COURSE_DB
+from accounts.services.import_course_db import CourseDbCsvError
 from accounts.services.import_users import get_import_adapter, run_import_batch
 
 
@@ -8,6 +10,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("source")
+        parser.add_argument("--csv", dest="csv_path", default="")
         parser.add_argument("--dry-run", action="store_true", dest="dry_run")
         parser.add_argument("--tags", default="")
         welcome = parser.add_mutually_exclusive_group()
@@ -31,6 +34,11 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
         if adapter is None:
             raise CommandError(f"No import adapter registered for source: {source}")
+        if source == IMPORT_SOURCE_COURSE_DB:
+            try:
+                adapter = adapter(csv_path=options.get("csv_path"))
+            except CourseDbCsvError as exc:
+                raise CommandError(str(exc)) from exc
 
         default_tags = [
             tag.strip()

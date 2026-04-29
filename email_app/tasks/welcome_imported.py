@@ -45,9 +45,14 @@ def send_imported_welcome_email(user_id):
 
 def _build_context(user):
     site_url = settings.SITE_BASE_URL.rstrip("/")
+    course_db_metadata = (user.import_metadata or {}).get("course_db") or {}
+    course_slugs = course_db_metadata.get("course_slugs") or []
     return {
         "source_label": user.get_import_source_display(),
         "import_tags": ", ".join(user.tags or []),
+        "is_course_db_import": bool(course_slugs),
+        "course_slugs": course_slugs,
+        "course_slug_list": ", ".join(course_slugs),
         "password_reset_url": _build_password_reset_url(user),
         "sign_in_url": f"{site_url}/login/",
     }

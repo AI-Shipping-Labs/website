@@ -94,11 +94,21 @@ DEBUG = _bool_env('DEBUG', default=True)
 
 SECRET_KEY = _resolve_secret_key(debug=DEBUG)
 
+
+def _security_setting_values(*, debug):
+    return {
+        'SESSION_COOKIE_SECURE': not debug,
+        'CSRF_COOKIE_SECURE': not debug,
+        'SECURE_HSTS_SECONDS': 3600 if not debug else 0,
+    }
+
 # AWS ALB terminates TLS and forwards X-Forwarded-Proto. Trust it
 # unconditionally: local dev never receives this header from an external
 # attacker (it's localhost) so the gate isn't worth losing dev DEBUG=True
 # coverage. Without this, the host-mismatch banner false-fires on dev.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+globals().update(_security_setting_values(debug=DEBUG))
 
 ALLOWED_HOSTS = _csv_env('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 

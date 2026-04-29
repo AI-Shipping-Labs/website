@@ -885,6 +885,14 @@ class UnverifiedUserAccessTest(TestCase):
 # ── CSRF Cookie on Login/Register Pages ─────────────────────────────
 
 
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+)
 class CsrfCookieOnAuthPagesTest(TestCase):
     """Regression tests: login and register pages must set the csrftoken cookie.
 
@@ -909,6 +917,65 @@ class CsrfCookieOnAuthPagesTest(TestCase):
             len(cookie_value) > 0,
             "csrftoken cookie is empty on the login page",
         )
+
+    @override_settings(
+        CSRF_COOKIE_SECURE=True,
+        SECURE_HSTS_SECONDS=3600,
+    )
+    def test_login_page_sets_secure_csrftoken_and_hsts_on_https(self):
+        resp = self.client.get(
+            "/accounts/login/",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.cookies[settings.CSRF_COOKIE_NAME]["secure"])
+        self.assertEqual(
+            resp.headers["Strict-Transport-Security"],
+            "max-age=3600",
+        )
+
+    @override_settings(
+        CSRF_COOKIE_SECURE=False,
+        SESSION_COOKIE_SECURE=False,
+        SECURE_HSTS_SECONDS=0,
+    )
+    def test_login_page_keeps_local_http_cookie_behavior(self):
+        resp = self.client.get("/accounts/login/")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.cookies[settings.CSRF_COOKIE_NAME]["secure"])
+        self.assertNotIn("Strict-Transport-Security", resp.headers)
+
+    @override_settings(
+        CSRF_COOKIE_SECURE=True,
+        SESSION_COOKIE_SECURE=True,
+        SECURE_HSTS_SECONDS=3600,
+    )
+    def test_login_api_sets_secure_session_cookie_on_https(self):
+        User.objects.create_user(
+            email="secure-session@example.com",
+            password="secure1234",
+        )
+        page_resp = self.client.get(
+            "/accounts/login/",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        csrf_token = page_resp.cookies[settings.CSRF_COOKIE_NAME].value
+
+        login_resp = self.client.post(
+            "/api/login",
+            data=json.dumps({
+                "email": "secure-session@example.com",
+                "password": "secure1234",
+            }),
+            content_type="application/json",
+            headers={"X-CSRFToken": csrf_token},
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+
+        self.assertEqual(login_resp.status_code, 200)
+        self.assertTrue(login_resp.cookies[settings.SESSION_COOKIE_NAME]["secure"])
 
     def test_register_page_sets_csrftoken_cookie(self):
         """GET /accounts/register/ must include a csrftoken cookie."""

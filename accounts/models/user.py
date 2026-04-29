@@ -1,6 +1,24 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
+IMPORT_SOURCE_MANUAL = "manual"
+IMPORT_SOURCE_SLACK = "slack"
+IMPORT_SOURCE_COURSE_DB = "course_db"
+IMPORT_SOURCE_STRIPE = "stripe"
+
+IMPORT_SOURCE_CHOICES = [
+    (IMPORT_SOURCE_MANUAL, "Manual / self signup"),
+    (IMPORT_SOURCE_SLACK, "Slack workspace"),
+    (IMPORT_SOURCE_COURSE_DB, "Course database"),
+    (IMPORT_SOURCE_STRIPE, "Stripe customers"),
+]
+
+IMPORT_BATCH_SOURCE_CHOICES = [
+    (IMPORT_SOURCE_SLACK, "Slack workspace"),
+    (IMPORT_SOURCE_COURSE_DB, "Course database"),
+    (IMPORT_SOURCE_STRIPE, "Stripe customers"),
+]
+
 
 class UserManager(BaseUserManager):
     """Custom user manager where email is the unique identifier."""
@@ -131,6 +149,26 @@ class User(AbstractUser):
         default=list,
         blank=True,
         help_text="Operator-managed contact tags (Studio-only; staff-only data).",
+    )
+
+    # Import provenance for bulk-created or bulk-reconciled users.
+    import_source = models.CharField(
+        max_length=32,
+        choices=IMPORT_SOURCE_CHOICES,
+        default=IMPORT_SOURCE_MANUAL,
+        db_index=True,
+        help_text="Earliest non-manual source that imported or reconciled this user.",
+    )
+    imported_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="When the import pipeline first created or reconciled this user.",
+    )
+    import_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Source-keyed import metadata for audit/debugging, not querying.",
     )
 
     class Meta:

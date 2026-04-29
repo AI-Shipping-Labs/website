@@ -38,6 +38,7 @@ TRANSACTIONAL_TYPES = {
     "email_verification",
     "password_reset",
     "event_registration",
+    "welcome_imported",
 }
 
 

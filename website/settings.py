@@ -555,3 +555,5 @@ Q_CLUSTER = {
     'catch_up': False,        # Don't catch up on missed schedules
     'sync': os.environ.get('Q_SYNC', '') == 'true',  # Sync mode for testing
 }
+
+IMPORT_WELCOME_EMAILS_PER_HOUR = int(os.environ.get('IMPORT_WELCOME_EMAILS_PER_HOUR', '50'))

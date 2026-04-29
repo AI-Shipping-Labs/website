@@ -8,8 +8,8 @@ from accounts.models import User
 class UserAdmin(BaseUserAdmin):
     """Admin configuration for the custom User model."""
 
-    list_display = ["email", "tier", "email_verified", "date_joined"]
-    list_filter = ["email_verified", "tier", "is_staff", "is_active"]
+    list_display = ["email", "tier", "import_source", "email_verified", "date_joined"]
+    list_filter = ["email_verified", "tier", "import_source", "is_staff", "is_active"]
     search_fields = ["email", "first_name", "last_name"]
     ordering = ["-date_joined"]
 
@@ -45,6 +45,10 @@ class UserAdmin(BaseUserAdmin):
         (
             "Community",
             {"fields": ("slack_user_id",)},
+        ),
+        (
+            "Import",
+            {"fields": ("import_source", "imported_at", "import_metadata", "tags")},
         ),
         (
             "Permissions",

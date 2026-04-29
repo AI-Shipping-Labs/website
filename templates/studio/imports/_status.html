@@ -2,7 +2,15 @@
   <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
     <div class="bg-card border border-border rounded-lg p-4">
       <div class="text-xs text-muted-foreground uppercase">Status</div>
-      <div class="text-lg font-semibold text-foreground">{{ batch.get_status_display }}</div>
+      <div class="mt-2">
+        {% if batch.status == 'failed' %}
+        <span class="text-sm px-2 py-1 rounded-full bg-red-500/20 text-red-400">Failed</span>
+        {% elif batch.status == 'completed' %}
+        <span class="text-sm px-2 py-1 rounded-full bg-green-500/20 text-green-400">Completed</span>
+        {% else %}
+        <span class="text-sm px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Running</span>
+        {% endif %}
+      </div>
     </div>
     <div class="bg-card border border-border rounded-lg p-4">
       <div class="text-xs text-muted-foreground uppercase">Created</div>

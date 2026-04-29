@@ -104,6 +104,27 @@ The project ships a dedicated `django_q` cache for this. It is `LocMemCache` dur
 uv run python manage.py createcachetable django_q_cache
 ```
 
+### Recurring schedules
+
+Register or refresh recurring django-q schedules after setup and deploys:
+
+```bash
+uv run python manage.py setup_schedules
+```
+
+This command is idempotent. It updates existing `Schedule` rows by name instead of creating duplicates.
+
+The external user import schedules are:
+
+| Schedule | Source | Cron UTC | Notes |
+|----------|--------|----------|-------|
+| `import-slack-daily` | Slack workspace | `0 3 * * *` | Runs a live system import and sends imported-user welcome emails through the existing throttle. |
+| `import-stripe-daily` | Stripe customers | `30 3 * * *` | Runs a live system import and sends imported-user welcome emails through the existing throttle. |
+
+Course-db remains a manual CSV import from Studio and is not scheduled automatically.
+
+Staff can review scheduled import history in Studio at `/studio/imports/`. Superusers can disable or re-enable the Slack and Stripe daily schedules from that page; disabling pauses the django-q schedule without deleting historical `ImportBatch` rows. After three consecutive failed scheduled batches for the same source, the app sends one admin alert with the source, latest batch id, summary, and Studio review path. A later successful scheduled batch resets that failure streak.
+
 Why DatabaseCache: the application database is the only thing every web and worker process is guaranteed to share, in every deployment topology — local SQLite, multi-container ECS, future hosts. No extra infrastructure (Redis, EFS) needed. The latency cost (one query per heartbeat read) is negligible at the dashboard's request rate.
 
 We deliberately do not use Redis: avoiding the operational dependency is a product decision.

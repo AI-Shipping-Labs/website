@@ -60,6 +60,8 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='event-reminders').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='expire-tier-overrides').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='slack-membership-refresh').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='import-slack-daily').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='import-stripe-daily').count(), 1)
 
     def test_no_unexpected_schedules_created(self):
         """Command does not create any schedules outside the expected set."""
@@ -71,5 +73,34 @@ class SetupSchedulesCommandTest(TestCase):
             'event-reminders',
             'expire-tier-overrides',
             'slack-membership-refresh',
+            'import-slack-daily',
+            'import-stripe-daily',
         }
         self.assertEqual(names, expected)
+
+    def test_creates_daily_import_schedules(self):
+        """Command creates daily Slack and Stripe import schedules."""
+        call_command('setup_schedules', stdout=StringIO())
+
+        slack = Schedule.objects.get(name='import-slack-daily')
+        self.assertEqual(slack.func, 'accounts.tasks.run_scheduled_import')
+        self.assertEqual(slack.cron, '0 3 * * *')
+        self.assertEqual(slack.schedule_type, Schedule.CRON)
+        self.assertEqual(slack.kwargs, "{'source': 'slack'}")
+
+        stripe = Schedule.objects.get(name='import-stripe-daily')
+        self.assertEqual(stripe.func, 'accounts.tasks.run_scheduled_import')
+        self.assertEqual(stripe.cron, '30 3 * * *')
+        self.assertEqual(stripe.schedule_type, Schedule.CRON)
+        self.assertEqual(stripe.kwargs, "{'source': 'stripe'}")
+
+    def test_setup_preserves_disabled_import_schedule(self):
+        """Refreshing schedules keeps disabled import schedules disabled."""
+        call_command('setup_schedules', stdout=StringIO())
+        Schedule.objects.filter(name='import-slack-daily').update(repeats=0)
+
+        call_command('setup_schedules', stdout=StringIO())
+
+        self.assertEqual(Schedule.objects.filter(name='import-slack-daily').count(), 1)
+        slack = Schedule.objects.get(name='import-slack-daily')
+        self.assertEqual(slack.repeats, 0)

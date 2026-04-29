@@ -92,6 +92,7 @@ from studio.views.user_imports import (
     import_batch_list,
     import_batch_new,
     import_batch_rerun,
+    import_schedule_toggle,
 )
 from studio.views.users import (
     user_create,
@@ -309,6 +310,7 @@ urlpatterns = [
     path('imports/<int:batch_id>/', import_batch_detail, name='studio_import_batch_detail'),
     path('imports/<int:batch_id>/fragment/', import_batch_fragment, name='studio_import_batch_fragment'),
     path('imports/<int:batch_id>/rerun/', import_batch_rerun, name='studio_import_batch_rerun'),
+    path('imports/schedules/<slug:source>/toggle/', import_schedule_toggle, name='studio_import_schedule_toggle'),
 
     # Manually create user (issue #234)
     path('users/new/', user_create, name='studio_user_create'),

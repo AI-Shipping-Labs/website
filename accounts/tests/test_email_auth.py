@@ -13,13 +13,16 @@ Tests cover:
 
 import datetime
 import json
+import time
 from unittest.mock import patch
 
 import jwt
 from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.sites.models import Site
-from django.test import TestCase, tag
+from django.db import connection
+from django.test import TestCase, override_settings, tag
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from accounts.models import User
@@ -271,11 +274,13 @@ class LoginAPITest(TestCase):
         """Wrong password returns 401."""
         resp = self._post({"email": "login@example.com", "password": "wrongpass"})
         self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.json()["error"], "Invalid email or password")
 
     def test_login_nonexistent_user_returns_401(self):
         """Non-existent email returns 401."""
         resp = self._post({"email": "nobody@example.com", "password": "whatever"})
         self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.json()["error"], "Invalid email or password")
 
     def test_login_missing_email_returns_400(self):
         resp = self._post({"password": "something"})
@@ -307,6 +312,73 @@ class LoginAPITest(TestCase):
     def test_login_url_name(self):
         url = reverse("api_login")
         self.assertEqual(url, "/api/login")
+
+    @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+    def test_login_query_guard_valid_wrong_password_and_unknown_email(self):
+        """Guard avoidable DB work while keeping password verification intact.
+
+        The timing investigation for issue #371 showed the safe reduction was
+        avoiding allauth fallback work for this JSON endpoint; password hashing
+        remains the dominant expected cost in production.
+        """
+        self.user.set_password("correct1234")
+        self.user.save(update_fields=["password"])
+        scenarios = [
+            ({"email": "login@example.com", "password": "correct1234"}, 200, 9),
+            ({"email": "login@example.com", "password": "wrongpass"}, 401, 1),
+            ({"email": "nobody@example.com", "password": "whatever"}, 401, 1),
+        ]
+
+        for payload, expected_status, max_queries in scenarios:
+            with self.subTest(email=payload["email"], status=expected_status):
+                with CaptureQueriesContext(connection) as captured:
+                    resp = self._post(payload)
+                self.assertEqual(resp.status_code, expected_status)
+                self.assertLessEqual(
+                    len(captured),
+                    max_queries,
+                    [query["sql"] for query in captured.captured_queries],
+                )
+
+    @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+    def test_login_timing_helper_covers_valid_wrong_password_and_unknown_email(self):
+        """Bound local overhead without making CI depend on production hash cost."""
+        self.user.set_password("correct1234")
+        self.user.save(update_fields=["password"])
+        scenarios = [
+            ({"email": "login@example.com", "password": "correct1234"}, 200),
+            ({"email": "login@example.com", "password": "wrongpass"}, 401),
+            ({"email": "nobody@example.com", "password": "whatever"}, 401),
+        ]
+
+        for payload, expected_status in scenarios:
+            with self.subTest(email=payload["email"], status=expected_status):
+                started_at = time.perf_counter()
+                resp = self._post(payload)
+                elapsed_ms = (time.perf_counter() - started_at) * 1000
+                self.assertEqual(resp.status_code, expected_status)
+                self.assertLess(elapsed_ms, 250)
+
+    def test_login_uses_model_backend_without_allauth_fallback(self):
+        """Email/password API avoids duplicate allauth backend verification."""
+        with patch(
+            "allauth.account.auth_backends.AuthenticationBackend.authenticate",
+            side_effect=AssertionError("allauth fallback should not run"),
+        ):
+            resp = self._post({"email": "login@example.com", "password": "wrongpass"})
+        self.assertEqual(resp.status_code, 401)
+
+    @override_settings(LOGIN_API_SLOW_MS=0)
+    def test_login_slow_diagnostic_logs_outcome_without_credentials(self):
+        with self.assertLogs("accounts.views.auth", level="WARNING") as captured:
+            resp = self._post({"email": "login@example.com", "password": "wrongpass"})
+
+        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(captured.records[0].login_outcome, "invalid_credentials")
+        self.assertGreaterEqual(captured.records[0].elapsed_ms, 0)
+        log_message = captured.records[0].getMessage()
+        self.assertNotIn("login@example.com", log_message)
+        self.assertNotIn("wrongpass", log_message)
 
 
 # ── Password Reset Request API ────────────────────────────────────────
@@ -658,6 +730,7 @@ class LoginPageEmailPasswordTest(TestCase):
         resp = self.client.get("/accounts/login/")
         content = resp.content.decode()
         self.assertIn("login-form", content)
+        self.assertIn('aria-busy="false"', content)
 
     def test_login_page_contains_register_link(self):
         resp = self.client.get("/accounts/login/")
@@ -674,6 +747,15 @@ class LoginPageEmailPasswordTest(TestCase):
         resp = self.client.get("/accounts/login/")
         content = resp.content.decode()
         self.assertIn("or continue with", content)
+
+    def test_login_page_contains_submit_feedback_hooks(self):
+        resp = self.client.get("/accounts/login/")
+        content = resp.content.decode()
+        self.assertIn('id="login-submit"', content)
+        self.assertIn('data-idle-text="Sign in"', content)
+        self.assertIn('data-loading-text="Signing in..."', content)
+        self.assertIn("loginPending", content)
+        self.assertIn("setLoginPending(true)", content)
 
 
 # ── Email Verification Banner ─────────────────────────────────────────

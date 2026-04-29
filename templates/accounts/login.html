@@ -19,7 +19,7 @@
           </div>
 
           <!-- Email + Password Login Form -->
-          <form id="login-form" class="space-y-4 mb-6" onsubmit="return handleLogin(event)">
+          <form id="login-form" class="space-y-4 mb-6" onsubmit="return handleLogin(event)" aria-busy="false">
             <div>
               <label for="login-email" class="block text-sm font-medium text-foreground mb-1">Email</label>
               <input type="email" id="login-email" name="email" required
@@ -34,8 +34,11 @@
             </div>
             <div id="login-error" class="text-sm text-red-400 hidden"></div>
             <button type="submit" id="login-submit"
-                    class="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-              Sign in
+                    class="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-70"
+                    aria-busy="false"
+                    data-idle-text="Sign in"
+                    data-loading-text="Signing in...">
+              <span id="login-submit-text">Sign in</span>
             </button>
           </form>
 
@@ -133,11 +136,38 @@ function getCsrfToken() {
   return '';
 }
 
+var loginPending = false;
+
+function setLoginPending(isPending) {
+  var form = document.getElementById('login-form');
+  var submitButton = document.getElementById('login-submit');
+  var submitText = document.getElementById('login-submit-text');
+  form.setAttribute('aria-busy', isPending ? 'true' : 'false');
+  submitButton.disabled = isPending;
+  submitButton.setAttribute('aria-busy', isPending ? 'true' : 'false');
+  submitText.textContent = isPending
+    ? submitButton.dataset.loadingText
+    : submitButton.dataset.idleText;
+}
+
+function showLoginError(message) {
+  var errorDiv = document.getElementById('login-error');
+  errorDiv.textContent = message;
+  errorDiv.classList.remove('hidden');
+}
+
 function handleLogin(event) {
   event.preventDefault();
+  if (loginPending) {
+    return false;
+  }
+
   var email = document.getElementById('login-email').value;
   var password = document.getElementById('login-password').value;
   var errorDiv = document.getElementById('login-error');
+  loginPending = true;
+  setLoginPending(true);
+  errorDiv.textContent = '';
   errorDiv.classList.add('hidden');
 
   fetch('/api/login', {
@@ -157,13 +187,15 @@ function handleLogin(event) {
       }
       window.location.href = '/';
     } else {
-      errorDiv.textContent = result.data.error || 'Login failed';
-      errorDiv.classList.remove('hidden');
+      loginPending = false;
+      setLoginPending(false);
+      showLoginError(result.data.error || 'Login failed');
     }
   })
   .catch(function() {
-    errorDiv.textContent = 'An error occurred. Please try again.';
-    errorDiv.classList.remove('hidden');
+    loginPending = false;
+    setLoginPending(false);
+    showLoginError('An error occurred. Please try again.');
   });
 
   return false;

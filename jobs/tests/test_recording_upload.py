@@ -19,6 +19,8 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from events.models import Event
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 
 ZOOM_TEST_SECRET = 'test-zoom-webhook-secret'
 ZOOM_TEST_CLIENT_ID = 'test-client-id'
@@ -122,6 +124,7 @@ class UploadRecordingToS3Test(TestCase):
     def setUp(self):
         from integrations.services import zoom
         zoom.clear_token_cache()
+        clear_config_cache()
 
         self.event = Event.objects.create(
             title='Test Workshop',
@@ -137,6 +140,9 @@ class UploadRecordingToS3Test(TestCase):
             published=False,
         )
         self.recording = self.event
+
+    def tearDown(self):
+        clear_config_cache()
 
     @patch('jobs.tasks.recording_upload.boto3.client')
     @patch('jobs.tasks.recording_upload.requests.get')
@@ -382,6 +388,78 @@ class UploadRecordingToS3Test(TestCase):
 
         actual_url = mock_requests_get.call_args[0][0]
         self.assertIn('&access_token=token-123', actual_url)
+
+    @patch('jobs.tasks.recording_upload.boto3.client')
+    @patch('jobs.tasks.recording_upload.requests.get')
+    @patch('integrations.services.zoom.requests.post')
+    def test_uses_studio_config_for_recordings_s3(
+        self,
+        mock_zoom_post,
+        mock_requests_get,
+        mock_boto_client,
+    ):
+        """Studio IntegrationSetting values override process settings."""
+        from jobs.tasks.recording_upload import upload_recording_to_s3
+
+        IntegrationSetting.objects.bulk_create([
+            IntegrationSetting(
+                key='AWS_S3_RECORDINGS_BUCKET',
+                value='studio-recordings-bucket',
+                group='s3_recordings',
+            ),
+            IntegrationSetting(
+                key='AWS_S3_RECORDINGS_REGION',
+                value='us-west-2',
+                group='s3_recordings',
+            ),
+            IntegrationSetting(
+                key='AWS_ACCESS_KEY_ID',
+                value='studio-access-key',
+                is_secret=True,
+                group='ses',
+            ),
+            IntegrationSetting(
+                key='AWS_SECRET_ACCESS_KEY',
+                value='studio-secret-key',
+                is_secret=True,
+                group='ses',
+            ),
+        ])
+        clear_config_cache()
+
+        token_response = MagicMock()
+        token_response.status_code = 200
+        token_response.json.return_value = {
+            'access_token': 'test-token',
+            'expires_in': 3600,
+        }
+        mock_zoom_post.return_value = token_response
+
+        mock_response = MagicMock()
+        mock_response.iter_content.return_value = [b'data']
+        mock_response.raise_for_status = MagicMock()
+        mock_requests_get.return_value = mock_response
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+
+        result = upload_recording_to_s3(
+            self.recording.id,
+            'https://zoom.us/rec/download/abc',
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        mock_boto_client.assert_called_once_with(
+            's3',
+            region_name='us-west-2',
+            aws_access_key_id='studio-access-key',
+            aws_secret_access_key='studio-secret-key',
+        )
+        upload_call = mock_s3.upload_fileobj.call_args
+        self.assertEqual(upload_call[0][1], 'studio-recordings-bucket')
+
+        self.recording.refresh_from_db()
+        self.assertIn('studio-recordings-bucket.s3.us-west-2', self.recording.recording_s3_url)
 
 
 # --- Webhook Integration Tests ---

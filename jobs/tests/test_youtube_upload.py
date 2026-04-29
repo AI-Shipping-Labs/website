@@ -16,6 +16,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from events.models import Event
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 
 YOUTUBE_TEST_CLIENT_ID = 'test-yt-client-id'
 YOUTUBE_TEST_CLIENT_SECRET = 'test-yt-client-secret'
@@ -37,6 +39,7 @@ class UploadRecordingToYouTubeTest(TestCase):
     def setUp(self):
         from integrations.services import youtube
         youtube.clear_token_cache()
+        clear_config_cache()
 
         self.event = Event.objects.create(
             title='Test Workshop',
@@ -54,6 +57,9 @@ class UploadRecordingToYouTubeTest(TestCase):
             published=True,
         )
         self.recording = self.event
+
+    def tearDown(self):
+        clear_config_cache()
 
     @patch('integrations.services.youtube.upload_video')
     @patch('jobs.tasks.youtube_upload.boto3.client')
@@ -260,6 +266,69 @@ class UploadRecordingToYouTubeTest(TestCase):
         # youtube_url should NOT be set on the recording
         self.recording.refresh_from_db()
         self.assertEqual(self.recording.recording_url, '')
+
+    @patch('integrations.services.youtube.upload_video')
+    @patch('jobs.tasks.youtube_upload.boto3.client')
+    def test_uses_studio_config_for_recordings_s3_download(
+        self,
+        mock_boto_client,
+        mock_upload_video,
+    ):
+        """Studio IntegrationSetting values drive the S3 download path."""
+        from jobs.tasks.youtube_upload import upload_recording_to_youtube
+
+        IntegrationSetting.objects.bulk_create([
+            IntegrationSetting(
+                key='AWS_S3_RECORDINGS_BUCKET',
+                value='studio-recordings-bucket',
+                group='s3_recordings',
+            ),
+            IntegrationSetting(
+                key='AWS_S3_RECORDINGS_REGION',
+                value='us-west-2',
+                group='s3_recordings',
+            ),
+            IntegrationSetting(
+                key='AWS_ACCESS_KEY_ID',
+                value='studio-access-key',
+                is_secret=True,
+                group='ses',
+            ),
+            IntegrationSetting(
+                key='AWS_SECRET_ACCESS_KEY',
+                value='studio-secret-key',
+                is_secret=True,
+                group='ses',
+            ),
+        ])
+        clear_config_cache()
+
+        self.recording.recording_s3_url = (
+            'https://studio-recordings-bucket.s3.us-west-2.amazonaws.com/'
+            'recordings/2026/test-workshop.mp4'
+        )
+        self.recording.save(update_fields=['recording_s3_url'])
+
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+        mock_upload_video.return_value = {
+            'video_id': 'studio-config',
+            'youtube_url': 'https://www.youtube.com/watch?v=studio-config',
+        }
+
+        result = upload_recording_to_youtube(self.recording.id)
+
+        self.assertEqual(result['status'], 'ok')
+        mock_boto_client.assert_called_once_with(
+            's3',
+            region_name='us-west-2',
+            aws_access_key_id='studio-access-key',
+            aws_secret_access_key='studio-secret-key',
+        )
+        mock_s3.download_file.assert_called_once()
+        download_call = mock_s3.download_file.call_args
+        self.assertEqual(download_call[0][0], 'studio-recordings-bucket')
+        self.assertEqual(download_call[0][1], 'recordings/2026/test-workshop.mp4')
 
 
 class BuildDescriptionTest(TestCase):

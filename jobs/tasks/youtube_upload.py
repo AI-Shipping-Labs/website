@@ -14,6 +14,8 @@ import tempfile
 import boto3
 from django.conf import settings
 
+from integrations.config import get_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -138,8 +140,8 @@ def _download_from_s3(event):
     Raises:
         ClientError: If the S3 download fails.
     """
-    bucket = settings.AWS_S3_RECORDINGS_BUCKET
-    region = settings.AWS_S3_RECORDINGS_REGION
+    bucket = get_config('AWS_S3_RECORDINGS_BUCKET')
+    region = get_config('AWS_S3_RECORDINGS_REGION', 'eu-central-1') or 'eu-central-1'
 
     if not bucket:
         raise ValueError('AWS_S3_RECORDINGS_BUCKET not configured')
@@ -150,8 +152,8 @@ def _download_from_s3(event):
     s3_client = boto3.client(
         's3',
         region_name=region,
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
     )
 
     # Download to temp file

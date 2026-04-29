@@ -12,7 +12,8 @@ import logging
 
 import boto3
 import requests
-from django.conf import settings
+
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,8 @@ def upload_recording_to_s3(event_id, download_url):
         logger.error('Event %s not found, skipping upload', event_id)
         return {'status': 'error', 'message': f'Event {event_id} not found'}
 
-    bucket = settings.AWS_S3_RECORDINGS_BUCKET
-    region = settings.AWS_S3_RECORDINGS_REGION
+    bucket = get_config('AWS_S3_RECORDINGS_BUCKET')
+    region = get_config('AWS_S3_RECORDINGS_REGION', 'eu-central-1') or 'eu-central-1'
 
     if not bucket:
         logger.error(
@@ -139,8 +140,8 @@ def _upload_to_s3(file_data, bucket, key, region):
     s3_client = boto3.client(
         's3',
         region_name=region,
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
     )
 
     s3_client.upload_fileobj(

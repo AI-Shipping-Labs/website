@@ -84,6 +84,7 @@ def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
 
             environment = container_def.get("environment", [])
             _set_env_var(environment, "VERSION", new_tag)
+            _set_env_var(environment, "DEBUG", "False")
             _set_env_var(
                 environment,
                 "ALLOWED_HOSTS",

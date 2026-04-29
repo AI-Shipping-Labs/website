@@ -58,6 +58,7 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
         for container in task_def["containerDefinitions"]:
             environment = {item["name"]: item["value"] for item in container["environment"]}
             self.assertEqual(environment["VERSION"], "20260422-123456-abcd123")
+            self.assertEqual(environment["DEBUG"], "False")
             self.assertEqual(environment["ALLOWED_HOSTS"], "dev.aishippinglabs.com")
 
     def test_prod_deploy_sets_prod_allowed_hosts(self):
@@ -80,6 +81,7 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
 
         for container in task_def["containerDefinitions"]:
             environment = {item["name"]: item["value"] for item in container["environment"]}
+            self.assertEqual(environment["DEBUG"], "False")
             self.assertEqual(
                 environment["ALLOWED_HOSTS"],
                 "aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com",

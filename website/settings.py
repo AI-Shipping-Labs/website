@@ -462,13 +462,26 @@ SLACK_ENABLED = (
     and os.environ.get('SLACK_ENABLED', 'false').lower() == 'true'
 )
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '') if SLACK_ENABLED else ''
+SLACK_ENVIRONMENT = os.environ.get('SLACK_ENVIRONMENT', 'development').lower()
 SLACK_COMMUNITY_CHANNEL_IDS = [
     cid.strip()
     for cid in os.environ.get('SLACK_COMMUNITY_CHANNEL_IDS', '').split(',')
     if cid.strip()
 ] if SLACK_ENABLED else []
+SLACK_DEV_COMMUNITY_CHANNEL_IDS = [
+    cid.strip()
+    for cid in os.environ.get('SLACK_DEV_COMMUNITY_CHANNEL_IDS', '').split(',')
+    if cid.strip()
+] if SLACK_ENABLED else []
+SLACK_TEST_COMMUNITY_CHANNEL_IDS = [
+    cid.strip()
+    for cid in os.environ.get('SLACK_TEST_COMMUNITY_CHANNEL_IDS', '').split(',')
+    if cid.strip()
+] if SLACK_ENABLED else []
 SLACK_INVITE_URL = os.environ.get('SLACK_INVITE_URL', '')
 SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
+SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
+SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 
 # Cache configuration
 # django-q writes cluster heartbeats (used by the /studio/worker/ dashboard)

@@ -143,15 +143,20 @@ Keys to set in Studio:
 | Key | Source | Notes |
 |-----|--------|-------|
 | `SLACK_ENABLED` | non-secret | `true` to enable. Off by default. |
+| `SLACK_ENVIRONMENT` | non-secret | `production`, `development`, or `test`. Production channel IDs are used only when this is `production`; dev/test require their own channel IDs. |
 | `SLACK_BOT_TOKEN` | secret | "Bot User OAuth Token" — starts with `xoxb-`. |
-| `SLACK_COMMUNITY_CHANNEL_IDS` | non-secret | Comma-separated channel IDs (the `C0…` IDs, NOT names). |
-| `SLACK_ANNOUNCEMENTS_CHANNEL_ID` | non-secret | Channel ID for #announcements. |
+| `SLACK_COMMUNITY_CHANNEL_IDS` | non-secret | Production comma-separated community channel IDs (the `C0…` IDs, NOT names). |
+| `SLACK_ANNOUNCEMENTS_CHANNEL_ID` | non-secret | Production channel ID for #announcements. |
+| `SLACK_DEV_COMMUNITY_CHANNEL_IDS` | non-secret | Development-only community channel IDs. If empty in development, community channel mutations are skipped. |
+| `SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID` | non-secret | Development-only announcement channel ID. If empty in development, announcement posting is skipped. |
+| `SLACK_TEST_COMMUNITY_CHANNEL_IDS` | non-secret | Test-only community channel IDs, only for explicitly opted-in integration tests. |
+| `SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID` | non-secret | Test-only announcement channel ID, expected to be `C0AHN84QNP3` for #integration-tests. |
 | `SLACK_ANNOUNCEMENTS_CHANNEL_NAME` | non-secret | Display name (e.g. `#announcements`). |
 | `SLACK_INVITE_URL` | non-secret | Public Slack invite link shown to new members. |
 
 Bot scopes (Slack app > OAuth & Permissions > Bot Token Scopes): minimum `chat:write`, `channels:read`. Add more as features need them.
 
-Foot-gun: this is the Slack BOT app, separate from the Slack OAuth LOGIN app in section 3.3. Two Slack apps, two sets of credentials.
+Foot-gun: this is the Slack BOT app, separate from the Slack OAuth LOGIN app in section 3.3. Two Slack apps, two sets of credentials. Also keep production, development, and test bot channels separate; `SLACK_ENVIRONMENT=development` and `SLACK_ENVIRONMENT=test` intentionally ignore the production channel IDs.
 
 Test: in Studio, trigger an announcement (e.g. publish an article and use the "Announce on Slack" action) and confirm the bot posted to the configured channel.
 

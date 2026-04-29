@@ -23,6 +23,7 @@ from django.core.mail import send_mail
 
 from community.models import CommunityAuditLog
 from community.services.base import CommunityService
+from community.slack_config import get_slack_community_channel_ids
 from integrations.config import get_config, is_enabled
 
 logger = logging.getLogger(__name__)
@@ -51,13 +52,7 @@ class SlackCommunityService(CommunityService):
         if channel_ids is not None:
             self.channel_ids = channel_ids
         else:
-            raw = get_config('SLACK_COMMUNITY_CHANNEL_IDS')
-            if isinstance(raw, list):
-                self.channel_ids = raw
-            else:
-                self.channel_ids = [
-                    cid.strip() for cid in raw.split(',') if cid.strip()
-                ]
+            self.channel_ids = get_slack_community_channel_ids()
 
     def _api_call(self, method, **kwargs):
         """Make a Slack Web API call.

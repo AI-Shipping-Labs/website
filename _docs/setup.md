@@ -33,6 +33,7 @@ Set in the ECS task definition (plain environment variables):
 |----------|---------|---------|
 | `VERSION` | `20260327-124723-02ce799` | Displayed in the page footer, set automatically by deploy scripts |
 | `DEBUG` | `false` | Django debug mode. Truthy values: `1`, `true`, `yes`. Anything else (including `0`, `false`, `no`, empty) is falsy. Production must set this to `false` to enforce the `SECRET_KEY` guard. |
+| `SLACK_ENVIRONMENT` | `development` on dev, `production` on prod | Slack routing mode. Non-production modes ignore production Slack channel IDs and require dev/test channel overrides before posting. |
 | `ALLOWED_HOSTS` | `dev.aishippinglabs.com` | Comma-separated list of allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | `https://dev.aishippinglabs.com,https://aishippinglabs.com` | Required for POST requests (login, forms) to work over HTTPS |
 | `GITHUB_APP_ID` | `3143490` | GitHub App ID for content sync |

@@ -1,8 +1,9 @@
 """Contact-tag normalization and mutation helpers (issue #354).
 
 Contact tags live on ``User.tags`` as a list of normalized strings. They are
-SEPARATE from the content-tag namespace (articles, downloads, etc.). Contact
-tags allow a colon for source namespaces such as ``stripe:active``.
+SEPARATE from the content-tag namespace (articles, downloads, etc.). They use
+the same slug rules plus a private source namespace such as ``stripe:active``
+or ``course:data-engineering-zoomcamp``.
 
 The ``add_tag`` / ``remove_tag`` helpers wrap normalization plus persistence so
 view code never has to touch the JSON list directly.

@@ -25,6 +25,12 @@ class NormalizeTagsTest(TestCase):
     def test_normalize_preserves_source_namespace_colon(self):
         self.assertEqual(normalize_tags(["Stripe:Active"]), ["stripe:active"])
 
+    def test_normalize_preserves_namespaced_course_tag(self):
+        self.assertEqual(
+            normalize_tags(["Course:Data Engineering Zoomcamp"]),
+            ["course:data-engineering-zoomcamp"],
+        )
+
     def test_empty_input_returns_empty_list(self):
         self.assertEqual(normalize_tags([]), [])
 

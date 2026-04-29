@@ -1,0 +1,4 @@
+email,name,course_slug,enrollment_date,course_db_user_id,notes
+ada@example.com,Ada Lovelace,data-engineering-zoomcamp,2024-01-15,dtc-1001,Sample row only
+GRACE@example.com,Grace Hopper,ml-zoomcamp,2023-09-01,dtc-1002,Sample row only
+invalid-email,Broken Person,data-engineering-zoomcamp,2024-01-20,dtc-1003,Invalid email for dry-run validation

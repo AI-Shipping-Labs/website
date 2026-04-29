@@ -20,6 +20,7 @@ from payments.models import ConversionAttribution, Tier, WebhookEvent
 __all__ = ["WebhookPermanentError"]
 
 logger = logging.getLogger(__name__)
+_MISSING = object()
 
 
 def _get_stripe_client():
@@ -38,6 +39,56 @@ def _tier_for_price_id(price_id):
     if tier is None:
         tier = Tier.objects.filter(stripe_price_id_yearly=price_id).first()
     return tier
+
+
+def _stripe_value(obj, key):
+    """Read a StripeObject/dict field without tripping over mapping methods."""
+    if obj is None:
+        return _MISSING
+    if isinstance(obj, dict):
+        return obj.get(key, _MISSING)
+    try:
+        return obj[key]
+    except (KeyError, TypeError, AttributeError):
+        pass
+    value = getattr(obj, key, _MISSING)
+    if callable(value):
+        return _MISSING
+    return value
+
+
+def _first_subscription_item(subscription):
+    """Return the first subscription item from Stripe dict/object payloads."""
+    items = _stripe_value(subscription, "items")
+    if items is _MISSING:
+        return None
+    data = _stripe_value(items, "data")
+    if data in (_MISSING, None):
+        return None
+    try:
+        return data[0]
+    except (IndexError, KeyError, TypeError):
+        return None
+
+
+def _subscription_price_id(subscription):
+    item = _first_subscription_item(subscription)
+    price = _stripe_value(item, "price")
+    price_id = _stripe_value(price, "id")
+    return price_id if price_id is not _MISSING and price_id else ""
+
+
+def _subscription_period_end(subscription):
+    period_end = _stripe_value(subscription, "current_period_end")
+    if period_end in (_MISSING, None, ""):
+        item = _first_subscription_item(subscription)
+        period_end = _stripe_value(item, "current_period_end")
+    if period_end in (_MISSING, None, ""):
+        return None
+    try:
+        return datetime.fromtimestamp(period_end, tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 def create_checkout_session(user, tier_slug, billing_period, success_url, cancel_url):
@@ -683,8 +734,8 @@ def _tier_from_subscription(subscription_id):
     try:
         client = _get_stripe_client()
         subscription = client.subscriptions.retrieve(subscription_id)
-        if subscription.items.data:
-            price_id = subscription.items.data[0].price.id
+        price_id = _subscription_price_id(subscription)
+        if price_id:
             return _tier_for_price_id(price_id)
     except Exception:
         logger.exception(
@@ -698,10 +749,7 @@ def _get_subscription_period_end(subscription_id):
     try:
         client = _get_stripe_client()
         subscription = client.subscriptions.retrieve(subscription_id)
-        if subscription.current_period_end:
-            return datetime.fromtimestamp(
-                subscription.current_period_end, tz=timezone.utc
-            )
+        return _subscription_period_end(subscription)
     except Exception:
         logger.exception(
             "Failed to get period end for subscription %s", subscription_id
@@ -720,8 +768,7 @@ def _get_subscription_price_id(subscription_id):
     try:
         client = _get_stripe_client()
         subscription = client.subscriptions.retrieve(subscription_id)
-        if subscription.items.data:
-            return subscription.items.data[0].price.id
+        return _subscription_price_id(subscription)
     except Exception:
         logger.exception(
             "Failed to get price id for subscription %s", subscription_id

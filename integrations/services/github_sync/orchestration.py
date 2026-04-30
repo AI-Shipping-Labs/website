@@ -350,7 +350,7 @@ def _classify_repo_files(repo_dir, classify_errors=None):
               with ``start_datetime``.
           ``instructor_files`` — list of YAML files under an
               ``instructors/`` subtree.
-          ``curated_link_files`` — list of ``.md`` files under a
+          ``curated_link_files`` — list of ``.md``/YAML files under a
               ``curated-links/`` subtree.
           ``download_files`` — list of YAML files under a ``downloads/``
               subtree.
@@ -430,7 +430,7 @@ def _classify_repo_files(repo_dir, classify_errors=None):
             if 'instructors' in parts and ext in ('.yaml', '.yml'):
                 instructor_files.append(rel_path)
                 continue
-            if 'curated-links' in parts and ext == '.md':
+            if 'curated-links' in parts and ext in ('.md', '.yaml', '.yml'):
                 curated_link_files.append(rel_path)
                 continue
             if 'downloads' in parts and ext in ('.yaml', '.yml'):

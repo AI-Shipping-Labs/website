@@ -35,6 +35,7 @@ from content.models import (
     Module,
     Project,
     Unit,
+    Workshop,
 )
 from events.models import Event
 from integrations.models import ContentSource, SyncLog
@@ -1520,6 +1521,144 @@ class SyncResourcesTest(TestCase):
         link2 = CuratedLink.objects.get(item_id='link-2')
         self.assertEqual(link2.title, 'Cool Model')
         self.assertEqual(link2.description, 'An impressive open-source model.')
+
+    def test_sync_curated_links_from_yaml_manifest(self):
+        links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'links.yaml'), 'w') as f:
+            f.write('- content_id: yaml-link-1\n')
+            f.write('  title: "YAML Tool"\n')
+            f.write('  description: "Tool description"\n')
+            f.write('  url: "https://example.com/tool"\n')
+            f.write('  category: tools\n')
+            f.write('  tags: [AI, Tools]\n')
+            f.write('  source: "Example"\n')
+            f.write('  sort_order: 3\n')
+            f.write('  required_level: 10\n')
+            f.write('  published: true\n')
+            f.write('- item_id: yaml-link-2\n')
+            f.write('  title: "YAML Course"\n')
+            f.write('  url: "https://example.com/course"\n')
+            f.write('  category: courses\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.status, 'success')
+        self.assertEqual(sync_log.items_created, 2)
+        link = CuratedLink.objects.get(item_id='yaml-link-1')
+        self.assertEqual(link.title, 'YAML Tool')
+        self.assertEqual(link.description, 'Tool description')
+        self.assertEqual(link.url, 'https://example.com/tool')
+        self.assertEqual(link.category, 'tools')
+        self.assertEqual(link.tags, ['ai', 'tools'])
+        self.assertEqual(link.source, 'Example')
+        self.assertEqual(link.sort_order, 3)
+        self.assertEqual(link.required_level, 10)
+        self.assertTrue(link.published)
+        self.assertEqual(link.source_repo, 'AI-Shipping-Labs/resources')
+        self.assertEqual(link.source_path, 'resources/curated-links/links.yaml')
+        self.assertEqual(link.source_commit, 'test-commit-sha')
+
+        defaulted = CuratedLink.objects.get(item_id='yaml-link-2')
+        self.assertEqual(defaulted.description, '')
+        self.assertEqual(defaulted.tags, [])
+        self.assertEqual(defaulted.sort_order, 0)
+        self.assertEqual(defaulted.required_level, 0)
+        self.assertTrue(defaulted.published)
+
+    def test_sync_curated_links_yaml_manifest_updates_existing_row(self):
+        links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')
+        os.makedirs(links_dir)
+        manifest_path = os.path.join(links_dir, 'links.yaml')
+        with open(manifest_path, 'w') as f:
+            f.write('- content_id: yaml-link\n')
+            f.write('  title: "Original"\n')
+            f.write('  url: "https://example.com/original"\n')
+
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        with open(manifest_path, 'w') as f:
+            f.write('- content_id: yaml-link\n')
+            f.write('  title: "Updated"\n')
+            f.write('  url: "https://example.com/updated"\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.items_updated, 1)
+        self.assertEqual(CuratedLink.objects.filter(item_id='yaml-link').count(), 1)
+        link = CuratedLink.objects.get(item_id='yaml-link')
+        self.assertEqual(link.title, 'Updated')
+        self.assertEqual(link.url, 'https://example.com/updated')
+
+    def test_sync_curated_links_yaml_manifest_invalid_entry_is_partial(self):
+        links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'links.yaml'), 'w') as f:
+            f.write('- content_id: bad-link\n')
+            f.write('  title: "Missing URL"\n')
+            f.write('- content_id: good-link\n')
+            f.write('  title: "Good Link"\n')
+            f.write('  url: "https://example.com/good"\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.status, 'partial')
+        self.assertEqual(CuratedLink.objects.filter(item_id='good-link').count(), 1)
+        self.assertFalse(CuratedLink.objects.filter(item_id='bad-link').exists())
+        self.assertTrue(any(
+            'resources/curated-links/links.yaml[0]' in error.get('file', '')
+            and 'bad-link' in error.get('error', '')
+            and 'url' in error.get('error', '')
+            for error in sync_log.errors
+        ), sync_log.errors)
+
+    def test_sync_curated_links_yaml_failed_item_id_protected_from_stale_cleanup(self):
+        CuratedLink.objects.create(
+            item_id='keep-link', title='Keep',
+            url='https://example.com/old', category='tools',
+            source_repo='AI-Shipping-Labs/resources', published=True,
+        )
+        links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'links.yaml'), 'w') as f:
+            f.write('- content_id: keep-link\n')
+            f.write('  title: "Missing URL"\n')
+            f.write('- content_id: new-link\n')
+            f.write('  title: "New Link"\n')
+            f.write('  url: "https://example.com/new"\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.status, 'partial')
+        stale_protected = CuratedLink.objects.get(item_id='keep-link')
+        self.assertTrue(stale_protected.published)
+        self.assertEqual(stale_protected.title, 'Keep')
+        self.assertTrue(CuratedLink.objects.filter(item_id='new-link').exists())
+
+    def test_bad_curated_links_yaml_entry_does_not_block_workshop_sync(self):
+        links_dir = os.path.join(self.temp_dir, 'resources', 'curated-links')
+        os.makedirs(links_dir)
+        with open(os.path.join(links_dir, 'links.yaml'), 'w') as f:
+            f.write('- content_id: bad-link\n')
+            f.write('  title: "Missing URL"\n')
+
+        workshop_dir = os.path.join(self.temp_dir, 'workshops', '2026-04-01-demo')
+        os.makedirs(workshop_dir)
+        with open(os.path.join(workshop_dir, 'workshop.yaml'), 'w') as f:
+            f.write('content_id: "66666666-6666-4666-8666-666666666666"\n')
+            f.write('slug: "demo-workshop"\n')
+            f.write('title: "Demo Workshop"\n')
+            f.write('date: "2026-04-01"\n')
+            f.write('pages_required_level: 0\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.status, 'partial')
+        self.assertTrue(Workshop.objects.filter(slug='demo-workshop').exists())
+        self.assertTrue(any(
+            'resources/curated-links/links.yaml[0]' in error.get('file', '')
+            for error in sync_log.errors
+        ), sync_log.errors)
 
     def test_sync_curated_links_body_as_description(self):
         """Body text of the markdown file becomes the link description."""

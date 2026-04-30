@@ -64,11 +64,15 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.get_target_min_level_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.sent_count }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right space-x-3">
-          {% if campaign.status == 'draft' %}
-          <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}" class="text-sm text-accent hover:underline">Edit</a>
-          {% endif %}
-          <a href="{% url 'studio_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-accent hover:underline">View</a>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% if campaign.status == 'draft' %}
+            <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}" class="{% studio_action_class 'primary' %}">Edit</a>
+            <a href="{% url 'studio_campaign_detail' campaign_id=campaign.pk %}" class="{% studio_action_class 'secondary' %}">View</a>
+            {% else %}
+            <a href="{% url 'studio_campaign_detail' campaign_id=campaign.pk %}" class="{% studio_action_class 'primary' %}">View</a>
+            {% endif %}
+          </div>
         </td>
       </tr>
       {% endfor %}

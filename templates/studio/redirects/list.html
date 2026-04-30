@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Redirects{% endblock %}
 
@@ -41,20 +42,22 @@
           <span class="text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground">Inactive</span>
           {% endif %}
         </td>
-        <td class="px-6 py-4 text-right space-x-3">
-          <form method="post" action="{% url 'studio_redirect_toggle' redirect_id=redir.pk %}" class="inline">
-            {% csrf_token %}
-            <button type="submit" class="text-sm text-blue-400 hover:text-blue-300 hover:underline">
-              {% if redir.is_active %}Deactivate{% else %}Activate{% endif %}
-            </button>
-          </form>
-          <a href="{% url 'studio_redirect_edit' redirect_id=redir.pk %}"
-             class="text-sm text-accent hover:underline">Edit</a>
-          <form method="post" action="{% url 'studio_redirect_delete' redirect_id=redir.pk %}" class="inline"
-                onsubmit="return confirm('Delete this redirect?');">
-            {% csrf_token %}
-            <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline">Delete</button>
-          </form>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            <a href="{% url 'studio_redirect_edit' redirect_id=redir.pk %}"
+               class="{% studio_action_class 'primary' %}">Edit</a>
+            <form method="post" action="{% url 'studio_redirect_toggle' redirect_id=redir.pk %}" class="{% studio_list_class 'action_form' %}">
+              {% csrf_token %}
+              <button type="submit" class="{% studio_action_class 'secondary' %}">
+                {% if redir.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </form>
+            <form method="post" action="{% url 'studio_redirect_delete' redirect_id=redir.pk %}" class="{% studio_list_class 'action_form' %}"
+                  onsubmit="return confirm('Delete redirect from {{ redir.source_path|escapejs }} to {{ redir.target_path|escapejs }}? This cannot be undone.');">
+              {% csrf_token %}
+              <button type="submit" class="{% studio_action_class 'destructive' %}">Delete</button>
+            </form>
+          </div>
         </td>
       </tr>
       {% endfor %}

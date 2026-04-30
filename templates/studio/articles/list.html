@@ -41,14 +41,16 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Author">{{ article.author|default:"-" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ article.date|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right space-x-3 studio-actions-cell" data-label="Actions">
-          {% studio_list_action article.get_absolute_url 'View on site' 'secondary' True %}
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_article_edit' article_id=article.pk as article_edit_url %}
-          {% if article.source_repo %}
-          {% studio_list_action article_edit_url 'View' 'primary' %}
-          {% else %}
-          {% studio_list_action article_edit_url 'Edit' 'primary' %}
-          {% endif %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% if article.source_repo %}
+            {% studio_list_action article_edit_url 'View' 'primary' %}
+            {% else %}
+            {% studio_list_action article_edit_url 'Edit' 'primary' %}
+            {% endif %}
+            {% studio_list_action article.get_absolute_url 'View on site' 'secondary' True %}
+          </div>
         </td>
       </tr>
       {% empty %}

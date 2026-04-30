@@ -54,9 +54,9 @@ still in flight.
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form">
+      <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form {% studio_list_class 'action_form' %}">
         {% csrf_token %}
-        <button type="submit" class="sync-btn px-4 py-2 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 transition-opacity inline-flex items-center space-x-1" data-original-text="Sync now">
+        <button type="submit" class="sync-btn {% studio_action_class 'async' %}" data-original-text="Sync now">
           <span class="sync-btn-text">Sync now</span>
         </button>
       </form>
@@ -64,11 +64,11 @@ still in flight.
       "Force resync" (issue #235) — bypasses the HEAD-SHA skip check.
       Posts ``force=1`` to the same endpoint as Sync now.
       {% endcomment %}
-      <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form">
+      <form method="post" action="{% url 'studio_sync_repo_trigger' repo.repo_name %}" class="sync-form {% studio_list_class 'action_form' %}">
         {% csrf_token %}
         <input type="hidden" name="force" value="1">
         <button type="submit"
-                class="sync-btn px-4 py-2 text-sm border border-border text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors inline-flex items-center space-x-1"
+                class="sync-btn {% studio_action_class 'secondary' %}"
                 title="Re-sync even if no new commits since last sync"
                 data-original-text="Force resync">
           <span class="sync-btn-text">Force resync</span>
@@ -76,7 +76,7 @@ still in flight.
       </form>
       <a href="/admin/integrations/contentsource/{{ repo.source.pk }}/change/"
          target="_blank" rel="noopener"
-         class="px-4 py-2 text-sm border border-border text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors inline-flex items-center space-x-1"
+         class="{% studio_action_class 'secondary' %}"
          title="Edit ContentSource rows for this repo in Django admin">
         <span>Edit in admin</span>
       </a>

@@ -20,6 +20,20 @@ LIST_TABLE_HEAD_CELL_RIGHT_CLASS = (
 )
 LIST_TABLE_BODY_CLASS = 'divide-y divide-border'
 LIST_TABLE_ROW_CLASS = 'hover:bg-secondary/50 transition-colors'
+ACTION_CELL_CLASS = 'studio-actions-cell text-right'
+ACTION_GROUP_CLASS = 'studio-action-group inline-flex flex-wrap items-center justify-end gap-2'
+ACTION_FORM_CLASS = 'inline-flex'
+ACTION_BASE_CLASS = (
+    'studio-action inline-flex items-center justify-center whitespace-nowrap rounded-md '
+    'border px-3 py-1.5 text-xs font-medium transition-colors '
+    'focus:outline-none focus:ring-2 focus:ring-accent/50'
+)
+ACTION_KIND_CLASSES = {
+    'primary': 'border-accent bg-accent text-accent-foreground hover:opacity-90',
+    'secondary': 'border-border bg-secondary text-foreground hover:bg-muted',
+    'destructive': 'border-red-500/40 bg-transparent text-red-400 hover:bg-red-500/10 hover:text-red-300',
+    'async': 'border-blue-500/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20',
+}
 
 STATUS_BADGE_CLASSES = {
     'published': 'bg-green-500/20 text-green-400',
@@ -68,7 +82,19 @@ def studio_list_class(part='wrapper', align='left'):
         return LIST_TABLE_BODY_CLASS
     if part == 'row':
         return LIST_TABLE_ROW_CLASS
+    if part == 'action_cell':
+        return ACTION_CELL_CLASS
+    if part == 'action_group':
+        return ACTION_GROUP_CLASS
+    if part == 'action_form':
+        return ACTION_FORM_CLASS
     return ''
+
+
+@register.simple_tag
+def studio_action_class(kind='secondary'):
+    """Return shared class names for Studio row actions."""
+    return f"{ACTION_BASE_CLASS} {ACTION_KIND_CLASSES.get(kind, ACTION_KIND_CLASSES['secondary'])}"
 
 
 @register.inclusion_tag('studio/includes/list_filter_form.html')
@@ -142,6 +168,7 @@ def studio_list_action(href, label, kind='secondary', new_tab=False, rel=''):
         'href': href,
         'label': label,
         'kind': kind,
+        'class_name': studio_action_class(kind),
         'new_tab': new_tab,
         'rel': rel,
         'testid': 'view-on-site' if label == 'View on site' else '',

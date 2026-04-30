@@ -26,17 +26,17 @@
   </div>
   <div class="flex items-center gap-3 shrink-0">
     <a href="{% url 'studio_content_source_create' %}"
-       class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
+       class="{% studio_action_class 'secondary' %}">
       Add content source
     </a>
     <a href="{% url 'studio_sync_history' %}"
-       class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
+       class="{% studio_action_class 'secondary' %}">
       History
     </a>
     <form method="post" action="{% url 'studio_sync_all' %}" id="sync-all-form">
       {% csrf_token %}
       <button type="submit" id="sync-all-btn"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center space-x-2">
+              class="{% studio_action_class 'async' %}">
         <span>Sync All</span>
       </button>
     </form>

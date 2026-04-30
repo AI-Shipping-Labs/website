@@ -1,3 +1,4 @@
+{% load studio_filters %}
 {% comment %}
 Pending Tasks table partial.
 
@@ -34,18 +35,20 @@ poller swaps in place every ~3s.
               <td class="px-4 py-3 text-muted-foreground" data-label="Lock expires">
                 {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
               </td>
-              <td class="px-4 py-3 text-right studio-actions-cell" data-label="Actions">
+              <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
+                <div class="{% studio_list_class 'action_group' %}">
                 <a href="{% url 'studio_worker_inspect_task' q.id %}{% if q.task_id %}?task_id={{ q.task_id }}{% endif %}"
-                   class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 mr-1"
+                   class="{% studio_action_class 'primary' %}"
                    data-action="inspect">Inspect</a>
-                <form method="post" action="{% url 'studio_worker_delete_queued' q.id %}" class="inline"
-                      onsubmit="return confirm('Delete queued task {{ q.name|default:q.id|escapejs }}?');">
+                <form method="post" action="{% url 'studio_worker_delete_queued' q.id %}" class="{% studio_list_class 'action_form' %}"
+                      onsubmit="return confirm('Delete queued task {{ q.name|default:q.id|escapejs }}? This cannot be undone.');">
                   {% csrf_token %}
                   {% if q.task_id %}<input type="hidden" name="task_id" value="{{ q.task_id }}">{% endif %}
                   <button type="submit"
-                          class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                          class="{% studio_action_class 'destructive' %}"
                           data-action="delete-queued">Delete</button>
                 </form>
+                </div>
               </td>
             </tr>
           {% endfor %}

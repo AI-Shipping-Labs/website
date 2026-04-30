@@ -1,2 +1,2 @@
 <a href="{{ href }}"{% if new_tab %} target="_blank"{% endif %}{% if rel %} rel="{{ rel }}"{% endif %}
-   class="text-sm whitespace-nowrap {% if kind == 'primary' %}text-accent hover:underline{% else %}text-muted-foreground hover:text-foreground{% endif %}"{% if testid %} data-testid="{{ testid }}"{% endif %}>{{ label }}</a>
+   class="{{ class_name }}"{% if testid %} data-testid="{{ testid }}"{% endif %}>{{ label }}</a>

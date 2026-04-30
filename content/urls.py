@@ -47,6 +47,7 @@ from content.views.peer_review import (
 from content.views.tags import tags_detail, tags_index
 from content.views.workshops import (
     api_workshop_page_complete,
+    legacy_workshop_page_redirect,
     workshop_detail,
     workshop_page_detail,
     workshop_video,
@@ -105,6 +106,11 @@ urlpatterns = [
         'workshops/<slug:slug>/tutorial/<slug:page_slug>',
         workshop_page_detail,
         name='workshop_page_detail',
+    ),
+    path(
+        'workshops/<slug:slug>/<slug:page_slug>',
+        legacy_workshop_page_redirect,
+        name='legacy_workshop_page_redirect',
     ),
     # Courses
     path('courses', courses_list, name='courses_list'),

@@ -18,8 +18,9 @@ The catalog always shows every published workshop (with a tier badge) so
 users see what they would unlock by upgrading.
 """
 
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from content.access import get_required_tier_name
@@ -358,6 +359,25 @@ def workshop_page_detail(request, slug, page_slug):
         'bottom_next_testid': 'page-next-btn',
     })
     return render(request, 'content/workshop_page_detail.html', context)
+
+
+def legacy_workshop_page_redirect(request, slug, page_slug):
+    """Redirect old /workshops/<slug>/<page_slug> links to tutorial URLs."""
+    if page_slug in {'tutorial', 'video'}:
+        raise Http404('Workshop page not found')
+
+    workshop = _resolve_workshop(slug)
+    get_object_or_404(WorkshopPage, workshop=workshop, slug=page_slug)
+
+    target_url = reverse(
+        'workshop_page_detail',
+        kwargs={'slug': slug, 'page_slug': page_slug},
+    )
+    query_string = request.META.get('QUERY_STRING')
+    if query_string:
+        target_url = f'{target_url}?{query_string}'
+
+    return HttpResponsePermanentRedirect(target_url)
 
 
 @require_POST

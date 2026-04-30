@@ -7,14 +7,29 @@ for Playwright tests to run against.
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from django.core.management import call_command
 from playwright.sync_api import sync_playwright
 
+from website.test_database_guard import assert_playwright_database_is_safe
+
 DJANGO_HOST = "127.0.0.1"
 DJANGO_PORT = 8765
 DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
+
+
+@pytest.fixture(scope="session")
+def django_db_modify_db_settings():
+    """Force Playwright pytest runs onto a dedicated test database file."""
+    from django.conf import settings
+
+    database_settings = settings.DATABASES['default']
+    if database_settings.get('ENGINE') == 'django.db.backends.sqlite3':
+        database_settings.setdefault('TEST', {})['NAME'] = str(
+            Path(settings.BASE_DIR) / 'test_playwright_db.sqlite3'
+        )
 
 
 def _start_django_server():
@@ -23,6 +38,7 @@ def _start_django_server():
 
     from django.conf import settings
     from django.core.management import execute_from_command_line
+    from django.db import connection
 
     # Disable Slack API calls for E2E tests so no real messages are posted.
     # post_slack_announcement() exits early when token/channel are empty (line 102),
@@ -36,6 +52,8 @@ def _start_django_server():
     # defaults to False (payment-links mode) but E2E tests for the account
     # page and pricing page expect the full checkout UI.
     settings.STRIPE_CHECKOUT_ENABLED = True
+
+    assert_playwright_database_is_safe(connection.settings_dict)
 
     # Run migrations first (uses in-memory or file-based sqlite)
     call_command("migrate", "--run-syncdb", verbosity=0)

@@ -261,6 +261,51 @@ def test_vote_requires_authentication(self):
 
 ---
 
+## Test databases, seed data, and local content
+
+The repository's normal local database is `db.sqlite3`. It is for local
+development, manual browsing, `seed_data`, and content synced from configured
+content repositories. It is not a scratchpad for Playwright or QA fixtures.
+
+`uv run pytest ...` uses pytest-django to create a separate test database.
+`uv run pytest playwright_tests/...` starts the Django server from
+`playwright_tests/conftest.py` after pytest has switched Django to that test
+database. The server fixture has an unsafe database guard and will fail before
+migrations or fixture helpers run if it is pointed at `db.sqlite3` or another
+database name that is not test-scoped.
+
+Do not import Playwright fixture helpers into a Django shell or run them against
+`db.sqlite3`; that writes browser-test courses, workshops, users, and articles
+into your development database. Run the Playwright test through pytest instead:
+
+```bash
+uv run pytest playwright_tests/test_some_flow.py -v
+```
+
+Use `uv run python manage.py seed_data` when you intentionally want local
+development sample users, tiers, polls, and content. Use `sync_content` for
+content repository data, which carries `source_repo` and `content_id` metadata.
+Synced rows are source-owned; do not clean them up as test fixtures.
+
+If a local `db.sqlite3` already contains obvious unsynced QA/test content rows,
+preview cleanup first:
+
+```bash
+uv run python manage.py cleanup_qa_fixtures
+```
+
+The command lists likely unsynced fixture rows and deletes nothing by default.
+After reviewing the list, apply the cleanup explicitly:
+
+```bash
+uv run python manage.py cleanup_qa_fixtures --apply
+```
+
+The cleanup command only considers rows with known QA/test signatures and
+protects content rows that have `source_repo` or `content_id` set.
+
+---
+
 ## Rule 13: Freeze time for time-dependent tests
 
 Use `freezegun` or `time_machine` instead of `timezone.now() + timedelta(...)`.

@@ -106,6 +106,12 @@ full suite, so always run `make test` before pushing. See
 [_docs/testing-guidelines.md](_docs/testing-guidelines.md) for the policy on
 what belongs in core.
 
+Pytest and Playwright use pytest-managed test databases. They must not create
+fixture content in the normal local `db.sqlite3`; the Playwright server fixture
+fails fast if it is pointed at that development database. Use `seed_data` only
+for intentional local development sample data, and use content sync for content
+repo data.
+
 ## Background Job Worker
 
 The project uses [Django-Q2](https://django-q2.readthedocs.io/) for background task processing. It uses the ORM broker (SQLite/PostgreSQL) so no extra services (Redis, RabbitMQ) are needed.

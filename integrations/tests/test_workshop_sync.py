@@ -250,9 +250,12 @@ class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
             title='Stale Title',
             start_datetime=existing_start,
             status='upcoming',
+            timezone='America/New_York',
+            platform='custom',
+            location='Studio-managed room',
             zoom_meeting_id='999-999-999',
             zoom_join_url='https://zoom.us/j/9999',
-            published=True,
+            published=False,
         )
 
         folder = '2026/2026-04-21-demo'
@@ -288,12 +291,78 @@ class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
         # Operational fields must NOT have been overwritten
         self.assertEqual(reloaded.start_datetime, existing_start)
         self.assertEqual(reloaded.status, 'upcoming')
+        self.assertEqual(reloaded.timezone, 'America/New_York')
+        self.assertEqual(reloaded.platform, 'custom')
+        self.assertEqual(reloaded.location, 'Studio-managed room')
         self.assertEqual(reloaded.zoom_meeting_id, '999-999-999')
         self.assertEqual(reloaded.zoom_join_url, 'https://zoom.us/j/9999')
+        self.assertFalse(reloaded.published)
 
         # Workshop is linked to the existing event
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.event_id, existing.pk)
+
+    def test_existing_linked_event_content_update_preserves_ops_and_link(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            slug='demo',
+            title='Demo Workshop',
+            extra_yaml=(
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=original\n'
+                '  embed_url: https://www.youtube.com/embed/original\n'
+                '  required_level: 20\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop = Workshop.objects.get(slug='demo')
+        event = Event.objects.get(pk=workshop.event_id)
+        event_pk = event.pk
+        existing_start = datetime(2026, 1, 1, 10, 0, tzinfo=dt_timezone.utc)
+        event.start_datetime = existing_start
+        event.status = 'upcoming'
+        event.zoom_join_url = 'https://zoom.us/j/kept'
+        event.published = False
+        event.save()
+
+        self._write_workshop_yaml(
+            folder=folder,
+            slug='demo',
+            title='Updated Demo Workshop',
+            extra_yaml=(
+                'recording:\n'
+                '  url: https://www.youtube.com/watch?v=updated\n'
+                '  embed_url: https://www.youtube.com/embed/updated\n'
+                '  required_level: 20\n'
+                '  timestamps:\n'
+                '    - { time: "00:00", title: "Intro" }\n'
+            ),
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        workshop.refresh_from_db()
+        event.refresh_from_db()
+        self.assertEqual(workshop.event_id, event_pk)
+        self.assertEqual(event.title, 'Updated Demo Workshop')
+        self.assertEqual(
+            event.recording_url,
+            'https://www.youtube.com/watch?v=updated',
+        )
+        self.assertEqual(len(event.timestamps), 1)
+        self.assertEqual(event.start_datetime, existing_start)
+        self.assertEqual(event.status, 'upcoming')
+        self.assertEqual(event.zoom_join_url, 'https://zoom.us/j/kept')
+        self.assertFalse(event.published)
+        self.assertTrue(any(
+            item['content_type'] == 'event'
+            and item['slug'] == 'demo'
+            and item['action'] == 'updated'
+            for item in sync_log.items_detail
+        ), sync_log.items_detail)
 
 
 class WorkshopSyncSkipsFolderWithoutYamlTest(_WorkshopSyncFixtureBase):

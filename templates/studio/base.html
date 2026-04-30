@@ -93,28 +93,33 @@ double-rendering. See issue #347.
 {% include "studio/includes/env_mismatch_banner.html" %}
 <div class="flex min-h-screen">
   <!-- Mobile sidebar toggle -->
-  <button id="studio-sidebar-toggle" class="md:hidden fixed top-3 left-3 z-50 p-2 bg-gray-800 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition-colors" aria-label="Toggle sidebar">
+  <button id="studio-sidebar-toggle" class="md:hidden fixed top-3 left-3 z-50 h-11 w-11 flex items-center justify-center bg-gray-800 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition-colors" aria-label="Open Studio sidebar" aria-controls="studio-sidebar" aria-expanded="false">
     <svg id="sidebar-icon-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-    <svg id="sidebar-icon-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
   </button>
 
   <!-- Backdrop -->
-  <div id="studio-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden" onclick="toggleStudioSidebar()"></div>
+  <div id="studio-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden"></div>
 
   <!-- Sidebar: hidden on mobile, visible on md+. On mobile (toggled visible)
        it acts as a fixed drawer; on md+ it sits in the flex flow as a sticky
        column so it pins to the viewport top once any preceding banner has
        scrolled past (no gap above the sidebar). See issue #351. -->
-  <aside id="studio-sidebar" class="hidden md:block w-64 bg-card border-r border-border flex-shrink-0 fixed inset-y-0 left-0 h-full md:sticky md:inset-auto md:top-0 md:h-screen md:self-start overflow-y-auto z-40">
-    <div class="p-6">
-      <a href="{% url 'studio_dashboard' %}" class="flex items-center space-x-2 mb-8">
-        <div class="w-8 h-8 bg-accent rounded flex items-center justify-center">
-          <i data-lucide="layout-dashboard" class="w-4 h-4 text-accent-foreground"></i>
-        </div>
-        <span class="text-lg font-semibold text-foreground">Studio</span>
-      </a>
+  <aside id="studio-sidebar" class="hidden md:block w-64 bg-card border-r border-border flex-shrink-0 fixed inset-y-0 left-0 h-full md:sticky md:inset-auto md:top-0 md:h-screen md:self-start overflow-hidden md:overflow-y-auto z-40">
+    <div class="flex h-full flex-col p-6 md:block md:h-auto">
+      <div class="flex items-center justify-between gap-3 mb-5 md:mb-8">
+        <a href="{% url 'studio_dashboard' %}" class="flex min-w-0 items-center space-x-2">
+          <div class="w-8 h-8 bg-accent rounded flex flex-shrink-0 items-center justify-center">
+            <i data-lucide="layout-dashboard" class="w-4 h-4 text-accent-foreground"></i>
+          </div>
+          <span class="truncate text-lg font-semibold text-foreground">Studio</span>
+        </a>
+        <button id="studio-sidebar-close" type="button" class="md:hidden h-11 w-11 flex flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" aria-label="Close Studio sidebar" aria-controls="studio-sidebar">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
 
-      <nav class="space-y-6">
+      <div class="relative -mx-6 min-h-0 flex-1 md:mx-0 md:min-h-0 md:flex-none">
+      <nav id="studio-sidebar-nav" class="h-full space-y-5 overflow-y-auto px-6 pb-10 md:h-auto md:space-y-6 md:overflow-visible md:px-0 md:pb-0">
         <!-- Content Section -->
         <div>
           <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Content</p>
@@ -311,6 +316,10 @@ double-rendering. See issue #347.
           <p class="px-3 mt-3 text-xs text-muted-foreground">v{{ VERSION }}</p>
         </div>
       </nav>
+      <div id="studio-sidebar-scroll-affordance" class="pointer-events-none absolute inset-x-0 bottom-0 hidden h-14 bg-gradient-to-t from-card via-card/95 to-transparent md:hidden" aria-hidden="true">
+        <span class="absolute bottom-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-muted-foreground/35"></span>
+      </div>
+      </div>
     </div>
   </aside>
 
@@ -330,37 +339,102 @@ double-rendering. See issue #347.
 </div>
 
 <script>
-function toggleStudioSidebar() {
+(function() {
   var sidebar = document.getElementById('studio-sidebar');
   var backdrop = document.getElementById('studio-backdrop');
-  var iconOpen = document.getElementById('sidebar-icon-open');
-  var iconClose = document.getElementById('sidebar-icon-close');
-  var isOpen = !sidebar.classList.contains('hidden');
+  var toggleButton = document.getElementById('studio-sidebar-toggle');
+  var closeButton = document.getElementById('studio-sidebar-close');
+  var nav = document.getElementById('studio-sidebar-nav');
+  var scrollAffordance = document.getElementById('studio-sidebar-scroll-affordance');
+  var lastFocusedElement = null;
 
-  if (isOpen) {
-    sidebar.classList.add('hidden');
-    sidebar.classList.remove('block');
-    backdrop.classList.add('hidden');
-    iconOpen.classList.remove('hidden');
-    iconClose.classList.add('hidden');
-  } else {
+  function isStudioSidebarOpen() {
+    return !sidebar.classList.contains('hidden');
+  }
+
+  function updateScrollAffordance() {
+    if (!nav || !scrollAffordance) {
+      return;
+    }
+
+    var hasOverflowBelow = nav.scrollHeight > nav.clientHeight + 1 &&
+      nav.scrollTop + nav.clientHeight < nav.scrollHeight - 1;
+    var shouldShow = window.innerWidth < 768 && isStudioSidebarOpen() && hasOverflowBelow;
+
+    scrollAffordance.classList.toggle('hidden', !shouldShow);
+  }
+
+  function openStudioSidebar() {
+    if (isStudioSidebarOpen()) {
+      return;
+    }
+
+    lastFocusedElement = document.activeElement;
     sidebar.classList.remove('hidden');
     sidebar.classList.add('block');
     backdrop.classList.remove('hidden');
-    iconOpen.classList.add('hidden');
-    iconClose.classList.remove('hidden');
+    toggleButton.classList.add('hidden');
+    toggleButton.setAttribute('aria-expanded', 'true');
+    updateScrollAffordance();
+    if (closeButton) {
+      closeButton.focus();
+    }
   }
-}
 
-document.getElementById('studio-sidebar-toggle').addEventListener('click', toggleStudioSidebar);
+  function closeStudioSidebar(options) {
+    if (!isStudioSidebarOpen()) {
+      return;
+    }
 
-// Close sidebar on navigation for mobile
-document.querySelectorAll('#studio-sidebar a').forEach(function(link) {
-  link.addEventListener('click', function() {
-    if (window.innerWidth < 768) {
-      toggleStudioSidebar();
+    var shouldReturnFocus = !options || options.returnFocus !== false;
+    sidebar.classList.add('hidden');
+    sidebar.classList.remove('block');
+    backdrop.classList.add('hidden');
+    toggleButton.classList.remove('hidden');
+    toggleButton.setAttribute('aria-expanded', 'false');
+    updateScrollAffordance();
+
+    if (shouldReturnFocus) {
+      (lastFocusedElement || toggleButton).focus();
+    }
+  }
+
+  window.toggleStudioSidebar = function() {
+    if (isStudioSidebarOpen()) {
+      closeStudioSidebar();
+    } else {
+      openStudioSidebar();
+    }
+  };
+
+  toggleButton.addEventListener('click', window.toggleStudioSidebar);
+  closeButton.addEventListener('click', function() {
+    closeStudioSidebar();
+  });
+  backdrop.addEventListener('click', function() {
+    closeStudioSidebar();
+  });
+  nav.addEventListener('scroll', updateScrollAffordance);
+  window.addEventListener('resize', function() {
+    if (window.innerWidth >= 768 && isStudioSidebarOpen()) {
+      closeStudioSidebar({ returnFocus: false });
+    }
+    updateScrollAffordance();
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && window.innerWidth < 768 && isStudioSidebarOpen()) {
+      closeStudioSidebar();
     }
   });
-});
+
+  // Close sidebar on navigation for mobile
+  document.querySelectorAll('#studio-sidebar a').forEach(function(link) {
+    link.addEventListener('click', function() {
+      if (window.innerWidth < 768 && isStudioSidebarOpen()) {
+        closeStudioSidebar({ returnFocus: false });
+      }
+    });
+  });
+})();
 </script>
 {% endblock %}

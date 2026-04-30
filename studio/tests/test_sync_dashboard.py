@@ -9,6 +9,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from integrations.models import ContentSource, SyncLog
+from integrations.services.content_sync_queue import ContentSyncQueueResult
 
 User = get_user_model()
 
@@ -1382,6 +1383,20 @@ class StudioSyncTriggerTest(TestCase):
         args = mock_async.call_args
         self.assertEqual(args[0][0], 'integrations.services.github.sync_content_source')
 
+    @patch('studio.views.sync.enqueue_content_sync')
+    def test_trigger_uses_shared_enqueue_service(self, mock_enqueue):
+        mock_enqueue.return_value = ContentSyncQueueResult(
+            ok=True,
+            queued=False,
+            ran_inline=True,
+            source=self.source,
+        )
+        self.client.post(
+            f'/studio/sync/{self.source.pk}/trigger/',
+            {'force': '1'},
+        )
+        mock_enqueue.assert_called_once_with(self.source, force=True)
+
     def test_trigger_requires_post(self):
         response = self.client.get(f'/studio/sync/{self.source.pk}/trigger/')
         self.assertEqual(response.status_code, 405)
@@ -1403,6 +1418,33 @@ class StudioSyncTriggerTest(TestCase):
                 f'/studio/sync/{self.source.pk}/trigger/',
             )
         self.assertEqual(response.status_code, 302)
+        self.assertIn(
+            'Error triggering sync for AI-Shipping-Labs/blog',
+            logs.output[0],
+        )
+
+    def test_trigger_handles_inline_fallback_sync_error(self):
+        with (
+            patch(
+                'integrations.services.content_sync_queue._enqueue_async_task',
+                side_effect=ImportError('django-q unavailable'),
+            ),
+            patch(
+                'integrations.services.content_sync_queue.sync_content_source',
+                side_effect=Exception('inline sync error'),
+            ),
+            self.assertLogs('studio.views.sync', level='ERROR') as logs,
+        ):
+            response = self.client.post(
+                f'/studio/sync/{self.source.pk}/trigger/',
+                follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'Sync failed for AI-Shipping-Labs/blog: inline sync error',
+        )
         self.assertIn(
             'Error triggering sync for AI-Shipping-Labs/blog',
             logs.output[0],
@@ -1454,6 +1496,31 @@ class StudioSyncRepoTriggerTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(mock_async.call_count, 1)
         self.assertEqual(mock_async.call_args.args[1].pk, source.pk)
+
+    @patch('studio.views.sync.enqueue_content_syncs')
+    def test_repo_trigger_uses_shared_enqueue_service(self, mock_enqueue):
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+        )
+        mock_enqueue.return_value = [
+            ContentSyncQueueResult(
+                ok=True,
+                queued=True,
+                ran_inline=False,
+                source=source,
+            ),
+        ]
+
+        self.client.post(
+            '/studio/sync/AI-Shipping-Labs/content/trigger-repo/',
+            {'force': '1'},
+        )
+
+        mock_enqueue.assert_called_once()
+        args, kwargs = mock_enqueue.call_args
+        self.assertEqual(args[0], [source])
+        self.assertIsNotNone(kwargs['batch_id'])
+        self.assertTrue(kwargs['force'])
 
     @patch('django_q.tasks.async_task')
     def test_repo_trigger_creates_batch_id(self, mock_async):
@@ -1576,6 +1643,28 @@ class StudioSyncAllTest(TestCase):
         )
         self.client.post('/studio/sync/all/')
         self.assertEqual(mock_async.call_count, 2)
+
+    @patch('studio.views.sync.enqueue_content_syncs')
+    def test_sync_all_uses_shared_enqueue_service(self, mock_enqueue):
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/blog',
+        )
+        mock_enqueue.return_value = [
+            ContentSyncQueueResult(
+                ok=True,
+                queued=True,
+                ran_inline=False,
+                source=source,
+            ),
+        ]
+
+        self.client.post('/studio/sync/all/', {'force': '1'})
+
+        mock_enqueue.assert_called_once()
+        args, kwargs = mock_enqueue.call_args
+        self.assertEqual(list(args[0]), [source])
+        self.assertIsNotNone(kwargs['batch_id'])
+        self.assertTrue(kwargs['force'])
 
     @patch('django_q.tasks.async_task')
     def test_sync_all_passes_batch_id(self, mock_async):

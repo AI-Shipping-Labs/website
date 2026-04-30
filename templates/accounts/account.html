@@ -60,6 +60,17 @@
         </div>
         {% endif %}
 
+        {% if account_plan_state.badge or account_plan_state.note %}
+        <div class="rounded-lg border border-border bg-secondary/30 p-4 mb-6" id="account-plan-state">
+          {% if account_plan_state.badge %}
+          <p class="text-sm font-medium text-foreground">{{ account_plan_state.badge }}</p>
+          {% endif %}
+          {% if account_plan_state.note %}
+          <p class="text-sm text-muted-foreground {% if account_plan_state.badge %}mt-1{% endif %}">{{ account_plan_state.note }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
         <!-- Active Tier Override -->
         {% if active_override %}
         <div class="rounded-lg border border-accent/30 bg-accent/10 p-4 mb-6" id="tier-override-notice">
@@ -103,64 +114,51 @@
 
         <!-- Action Buttons -->
         <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-6">
-          {% if is_free %}
-            <!-- Free users: Upgrade button links to /pricing -->
+          {% if show_upgrade_action %}
+            {% if is_free or not stripe_checkout_enabled %}
             <a href="/pricing" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" id="upgrade-btn">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>
-          {% else %}
-            {% if stripe_checkout_enabled %}
-            {% if not is_premium and not is_pending_cancellation %}
-              <!-- Paid users (not premium): Upgrade button -->
-              <button type="button"
-                      class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-                      id="upgrade-btn"
-                      onclick="showUpgradeModal()">
-                <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
-                Upgrade
-              </button>
             {% endif %}
-
-            {% if not is_basic and not is_pending_downgrade and not is_pending_cancellation and downgrade_tiers %}
-              <!-- Paid users (not basic): Downgrade button -->
-              <button type="button"
-                      class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
-                      id="downgrade-btn"
-                      onclick="showDowngradeModal()">
-                <i data-lucide="arrow-down-circle" class="h-4 w-4"></i>
-                Downgrade
-              </button>
-            {% endif %}
-
-            {% if not is_pending_cancellation %}
-              <!-- Cancel button -->
-              <button type="button"
-                      class="inline-flex items-center gap-2 rounded-md border border-red-500/30 bg-transparent px-4 py-2.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                      id="cancel-btn"
-                      onclick="showCancelConfirm()">
-                <i data-lucide="x-circle" class="h-4 w-4"></i>
-                Cancel Subscription
-              </button>
-            {% endif %}
-            {% else %}
-            <!-- Payment links mode: Manage Subscription via Stripe Customer Portal -->
-            {% if has_subscription %}
-            <a href="{{ stripe_customer_portal_url }}"
-               class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-               id="manage-subscription-btn">
-              <i data-lucide="settings" class="h-4 w-4"></i>
-              Manage Subscription
-            </a>
-            {% else %}
-            <a href="/pricing"
-               class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-               id="upgrade-btn">
+            {% if stripe_checkout_enabled and not is_free %}
+            <button type="button"
+                    class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                    id="upgrade-btn"
+                    onclick="showUpgradeModal()">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
-            </a>
+            </button>
             {% endif %}
-            {% endif %}
+          {% endif %}
+
+          {% if show_manage_subscription %}
+          <a href="{{ stripe_customer_portal_url }}"
+             class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+             id="manage-subscription-btn">
+            <i data-lucide="settings" class="h-4 w-4"></i>
+            Manage Subscription
+          </a>
+          {% endif %}
+
+          {% if show_downgrade_action %}
+          <button type="button"
+                  class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                  id="downgrade-btn"
+                  onclick="showDowngradeModal()">
+            <i data-lucide="arrow-down-circle" class="h-4 w-4"></i>
+            Downgrade
+          </button>
+          {% endif %}
+
+          {% if show_cancel_action %}
+          <button type="button"
+                  class="inline-flex items-center gap-2 rounded-md border border-red-500/30 bg-transparent px-4 py-2.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                  id="cancel-btn"
+                  onclick="showCancelConfirm()">
+            <i data-lucide="x-circle" class="h-4 w-4"></i>
+            Cancel Subscription
+          </button>
           {% endif %}
         </div>
       </div>

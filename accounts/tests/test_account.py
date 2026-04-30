@@ -1,12 +1,13 @@
 """Tests for the Account page (issue #70)."""
 
 import json
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import TierOverride, User
 from accounts.services import timezones
 from accounts.services.timezones import build_timezone_options
 from payments.models import Tier
@@ -342,6 +343,129 @@ class AccountPagePendingCancellationTest(TestCase):
         response = self.client.get("/account/")
         self.assertTrue(response.context["is_pending_cancellation"])
         self.assertFalse(response.context["is_pending_downgrade"])
+
+
+@override_settings(
+    STRIPE_CHECKOUT_ENABLED=True,
+    STRIPE_CUSTOMER_PORTAL_URL="https://billing.example.test/portal",
+)
+class AccountPageMembershipActionStateTest(TestCase):
+    """Focused tests for plan-appropriate account actions (#401)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.free_tier = Tier.objects.get(slug="free")
+        cls.basic_tier = Tier.objects.get(slug="basic")
+        cls.main_tier = Tier.objects.get(slug="main")
+        cls.premium_tier = Tier.objects.get(slug="premium")
+
+    def _user(self, email, tier=None, subscription_id="", pending_tier=None):
+        user = User.objects.create_user(email=email)
+        user.tier = tier
+        user.subscription_id = subscription_id
+        user.pending_tier = pending_tier
+        user.billing_period_end = timezone.make_aware(
+            timezone.datetime(2026, 5, 29, 12, 0, 0)
+        )
+        user.save(
+            update_fields=[
+                "tier",
+                "subscription_id",
+                "pending_tier",
+                "billing_period_end",
+            ]
+        )
+        return user
+
+    def _account_response(self, user):
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_free_member_gets_upgrade_to_pricing(self):
+        response = self._account_response(
+            self._user("free-action@example.com", self.free_tier)
+        )
+
+        self.assertContains(response, "Current free plan")
+        self.assertContains(response, 'id="upgrade-btn"')
+        self.assertContains(response, 'href="/pricing"')
+        self.assertNotContains(response, 'id="manage-subscription-btn"')
+
+    def test_premium_member_has_no_upgrade_cta(self):
+        response = self._account_response(
+            self._user("premium-action@example.com", self.premium_tier, "sub_premium")
+        )
+
+        self.assertContains(response, "Current plan")
+        self.assertNotContains(response, 'id="upgrade-btn"')
+        self.assertContains(response, 'id="downgrade-btn"')
+        self.assertContains(response, 'id="cancel-btn"')
+
+    def test_pending_downgrade_uses_scheduled_change_state(self):
+        response = self._account_response(
+            self._user(
+                "pending-action@example.com",
+                self.main_tier,
+                "sub_pending",
+                self.basic_tier,
+            )
+        )
+
+        self.assertContains(response, "Your plan changes to Basic on May 29, 2026.")
+        self.assertContains(response, 'id="pending-downgrade-notice"')
+        self.assertNotContains(response, 'id="upgrade-btn"')
+        self.assertNotContains(response, 'id="downgrade-btn"')
+        self.assertContains(response, 'id="manage-subscription-btn"')
+
+    def test_pending_cancellation_directs_to_subscription_management(self):
+        response = self._account_response(
+            self._user(
+                "canceling-action@example.com",
+                self.basic_tier,
+                "sub_canceling",
+                self.free_tier,
+            )
+        )
+
+        self.assertContains(response, "Access ending")
+        self.assertContains(response, "Access ends on May 29, 2026.")
+        self.assertNotContains(response, 'id="cancel-btn"')
+        self.assertNotContains(response, 'id="upgrade-btn"')
+        self.assertContains(response, 'id="manage-subscription-btn"')
+
+    def test_temporary_override_hides_normal_upgrade_to_override_tier(self):
+        user = self._user("override-action@example.com", self.basic_tier, "sub_basic")
+        TierOverride.objects.create(
+            user=user,
+            original_tier=self.basic_tier,
+            override_tier=self.premium_tier,
+            expires_at=timezone.now() + timedelta(days=14),
+        )
+
+        response = self._account_response(user)
+
+        self.assertContains(response, "Temporary Premium access")
+        self.assertContains(
+            response,
+            "Base subscription. Temporary Premium access is active.",
+        )
+        self.assertEqual(
+            [tier.slug for tier in response.context["upgrade_tiers"]],
+            ["main", "premium"],
+        )
+        self.assertNotContains(response, 'id="upgrade-btn"')
+        self.assertContains(response, 'id="manage-subscription-btn"')
+
+    def test_stale_subscription_uses_manage_subscription_not_upgrade(self):
+        response = self._account_response(
+            self._user("stale-action@example.com", None, "sub_stale")
+        )
+
+        self.assertContains(response, "Your subscription needs review.")
+        self.assertNotContains(response, 'id="upgrade-btn"')
+        self.assertContains(response, 'id="manage-subscription-btn"')
 
 
 @tag('core')

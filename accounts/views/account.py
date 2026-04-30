@@ -13,8 +13,10 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
+from content.access import get_active_override
 from integrations.config import get_config, is_enabled
 from payments.models import Tier
+from payments.tier_state import build_tier_state
 
 
 @login_required
@@ -89,10 +91,19 @@ def account_view(request):
         and pending_tier.slug == "free"
     )
 
+    # Check for active tier override
+    active_override = get_active_override(user)
+
+    stripe_checkout_enabled = is_enabled("STRIPE_CHECKOUT_ENABLED")
+    stripe_customer_portal_url = get_config("STRIPE_CUSTOMER_PORTAL_URL", "")
+    has_stale_subscription = has_subscription and is_free
+
     # Get available tiers for upgrade/downgrade options
     all_tiers = list(Tier.objects.exclude(slug="free").order_by("level"))
+    free_tier = Tier.objects.filter(slug="free").first()
 
-    # Determine upgrade tiers (higher level than current)
+    # Determine upgrade tiers from the base subscription tier. Temporary
+    # overrides grant access, but they do not change subscription actions.
     current_level = tier.level if tier else 0
     upgrade_tiers = [t for t in all_tiers if t.level > current_level]
     downgrade_tiers = [t for t in all_tiers if 0 < t.level < current_level]
@@ -100,9 +111,48 @@ def account_view(request):
     # Get current tier's feature list for the cancel confirmation modal
     tier_features = tier.features if tier and tier.features else []
 
-    # Check for active tier override
-    from content.access import get_active_override
-    active_override = get_active_override(user)
+    state_tier = tier or free_tier
+    account_plan_state = (
+        build_tier_state(state_tier, user, active_override)
+        if state_tier else {}
+    )
+
+    portal_available = bool(stripe_customer_portal_url)
+    show_manage_subscription = has_subscription and portal_available and (
+        not stripe_checkout_enabled
+        or is_pending_cancellation
+        or is_pending_downgrade
+        or has_stale_subscription
+        or active_override is not None
+    )
+    show_upgrade_action = (
+        not has_stale_subscription
+        and not is_pending_cancellation
+        and not is_pending_downgrade
+        and active_override is None
+        and (
+            is_free
+            or (
+                stripe_checkout_enabled
+                and bool(upgrade_tiers)
+            )
+        )
+    )
+    show_downgrade_action = (
+        stripe_checkout_enabled
+        and not is_basic
+        and not is_free
+        and not is_pending_downgrade
+        and not is_pending_cancellation
+        and bool(downgrade_tiers)
+    )
+    show_cancel_action = (
+        stripe_checkout_enabled
+        and has_subscription
+        and not has_stale_subscription
+        and not is_pending_cancellation
+        and not is_free
+    )
 
     context = {
         "tier": tier,
@@ -122,8 +172,13 @@ def account_view(request):
         "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
         "tier_features": tier_features,
         "active_override": active_override,
-        "stripe_checkout_enabled": is_enabled("STRIPE_CHECKOUT_ENABLED"),
-        "stripe_customer_portal_url": get_config("STRIPE_CUSTOMER_PORTAL_URL", ""),
+        "account_plan_state": account_plan_state,
+        "show_manage_subscription": show_manage_subscription,
+        "show_upgrade_action": show_upgrade_action,
+        "show_downgrade_action": show_downgrade_action,
+        "show_cancel_action": show_cancel_action,
+        "stripe_checkout_enabled": stripe_checkout_enabled,
+        "stripe_customer_portal_url": stripe_customer_portal_url,
     }
 
     return render(request, "accounts/account.html", context)

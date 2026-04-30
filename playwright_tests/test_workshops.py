@@ -55,6 +55,7 @@ def _create_workshop(
     description='Workshop description body.',
     instructor='Alexey',
     status='published',
+    cover_image_url='',
 ):
     """Create a workshop with optional linked event + pages."""
     from django.utils import timezone
@@ -86,6 +87,7 @@ def _create_workshop(
         description=description,
         instructor_name=instructor,
         code_repo_url=code_repo_url,
+        cover_image_url=cover_image_url,
         event=event,
     )
 
@@ -117,6 +119,14 @@ class TestVisitorBrowsesCatalog:
     ):
         _clear_workshops()
         _create_workshop()
+        _create_workshop(
+            slug='visual-workshop',
+            title='Visual Systems',
+            pages=0,
+            recording=0,
+            with_event=False,
+            cover_image_url='https://example.com/workshop-cover.jpg',
+        )
 
         page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
         body = page.content()
@@ -126,6 +136,27 @@ class TestVisitorBrowsesCatalog:
         assert 'Production Agents' in body
         assert 'data-testid="workshop-tier-badge"' in body
         assert 'Basic+' in body
+
+        production_card = page.locator(
+            'article:has(a[href="/workshops/ws"])',
+        )
+        production_fallback = production_card.locator(
+            '[data-testid="workshop-card-preview-fallback"]',
+        )
+        assert production_fallback.count() == 1
+        assert 'Production Agents' in production_fallback.inner_text()
+        assert 'Alexey' in production_fallback.inner_text()
+        assert 'Apr 21, 2026' in production_fallback.inner_text()
+        assert production_card.locator('.h-12.w-12').count() == 0
+
+        visual_image = page.locator(
+            'img[src="https://example.com/workshop-cover.jpg"]',
+        )
+        assert visual_image.count() == 1
+        assert visual_image.get_attribute("alt") == (
+            "Cover image for Visual Systems"
+        )
+        assert visual_image.get_attribute("loading") == "lazy"
 
         # Click the workshop card to land on the landing page.
         page.locator('a:has-text("Production Agents")').first.click()
@@ -138,6 +169,12 @@ class TestVisitorBrowsesCatalog:
         assert 'data-testid="workshop-title"' in body
         assert 'data-testid="workshop-pages-paywall"' in body
         assert 'Upgrade to Basic to access this workshop' in body
+        detail_fallback = page.locator(
+            '[data-testid="workshop-detail-preview-fallback"]',
+        )
+        assert detail_fallback.count() == 1
+        assert 'Production Agents' in detail_fallback.inner_text()
+        assert 'Apr 21, 2026' in detail_fallback.inner_text()
 
         # Pricing CTA goes to /pricing
         upgrade_cta = page.locator(

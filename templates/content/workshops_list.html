@@ -25,14 +25,10 @@
         {% for workshop in workshops %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="workshop-card">
           <a href="{{ workshop.get_absolute_url }}">
-            {% if workshop.cover_image_url %}
-            <div class="aspect-video w-full overflow-hidden bg-muted">
-              <img src="{{ workshop.cover_image_url }}" alt="{{ workshop.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
-            </div>
+            {% if workshop.pages_required_level > 0 %}
+              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
             {% else %}
-            <div class="aspect-video w-full bg-muted flex items-center justify-center">
-              <i data-lucide="graduation-cap" class="h-12 w-12 text-muted-foreground"></i>
-            </div>
+              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label="Free" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
             {% endif %}
             <div class="p-6">
               <div class="flex flex-wrap items-center gap-2 mb-3">

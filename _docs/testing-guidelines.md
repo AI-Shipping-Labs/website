@@ -420,6 +420,31 @@ sub-issues, write it on the other layer to begin with.
 
 ---
 
+## Coverage gate (`make coverage`)
+
+`make coverage` is the local Django coverage gate. It starts from clean coverage
+data, runs the full Django unit/integration suite with Coverage.py, and reports
+against the project coverage configuration in `pyproject.toml`. The command
+must pass with at least 85% total coverage.
+
+The coverage scope is first-party runtime/application code: Django apps plus the
+project package. Django test modules, Playwright test modules, migrations,
+virtualenvs, cache/build output, and local generated artifacts are excluded from
+the percentage. Do not exclude runtime code solely to raise the reported total.
+
+Playwright E2E tests are a separate validation gate:
+
+```bash
+make coverage      # Django/runtime coverage, 85% minimum
+make playwright    # browser E2E scenarios
+```
+
+Playwright source files are not counted as uncovered Django coverage debt unless
+a future issue intentionally adds combined E2E coverage collection and combines
+the data deliberately.
+
+---
+
 ## Core test subset (`make test-core`)
 
 The full Django suite has thousands of tests and takes 1-3 minutes. For the

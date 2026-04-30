@@ -33,6 +33,47 @@ dependencies = [
 DJANGO_SETTINGS_MODULE = "website.settings"
 pythonpath = ["."]
 
+[tool.coverage.run]
+source = [
+    "accounts",
+    "analytics",
+    "comments",
+    "community",
+    "content",
+    "email_app",
+    "events",
+    "integrations",
+    "jobs",
+    "notifications",
+    "payments",
+    "studio",
+    "voting",
+    "website",
+]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "playwright_tests/*",
+    "tests/*",
+    ".venv/*",
+    "htmlcov/*",
+    "build/*",
+    "dist/*",
+    ".cache/*",
+    ".pytest_cache/*",
+    ".ruff_cache/*",
+]
+
+[tool.coverage.report]
+fail_under = 85
+skip_covered = true
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
 [dependency-groups]
 dev = [
     "honcho>=2.0.0",

@@ -1,5 +1,5 @@
 """
-Playwright coverage for content-repo rendered event recap pages.
+Playwright coverage for inline content-repo rendered event recaps.
 
 Usage:
     uv run pytest playwright_tests/test_event_recap.py -v
@@ -45,12 +45,11 @@ def _create_event_with_recap(slug='launch', status='completed'):
 
 @pytest.mark.django_db(transaction=True)
 class TestRecapPage:
-    def test_visitor_finds_rendered_recap_content(self, django_server, page):
+    def test_visitor_finds_rendered_recap_content_inline(self, django_server, page):
         _clear_events()
         _create_event_with_recap()
 
-        page.goto(f"{django_server}/events/launch/recap",
-                  wait_until="domcontentloaded")
+        page.goto(f"{django_server}/events/launch", wait_until="domcontentloaded")
         body = page.content()
 
         assert 'AI Shipping Labs Community Launch' in body
@@ -58,15 +57,23 @@ class TestRecapPage:
         assert 'youtube.com/embed/WQAs1LNxdvM' in body
         assert 'Execution' in body
         assert 'Ship real projects.' in body
+        assert '<!-- include:' not in body
 
-    def test_event_detail_links_to_rendered_recap(self, django_server, page):
+        response = page.goto(f"{django_server}/events/launch/recap",
+                             wait_until="domcontentloaded")
+        assert response.status == 404
+
+    def test_upcoming_event_does_not_render_synced_recap(self, django_server, page):
         _clear_events()
         _create_event_with_recap(status='upcoming')
 
         page.goto(f"{django_server}/events/launch", wait_until="domcontentloaded")
         body = page.content()
-        assert 'View event recap' in body
-        assert '/events/launch/recap' in body
+        assert 'Sign in to register for this event' in body
+        assert 'Watch the recording' not in body
+        assert 'Ship real projects.' not in body
+        assert 'View event recap' not in body
+        assert '/events/launch/recap' not in body
 
 
 @pytest.mark.django_db(transaction=True)

@@ -1,7 +1,7 @@
 <header id="site-header" class="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
   {% include "includes/announcement_banner.html" %}
-  <nav class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
-    <a href="/" class="flex items-center gap-2 min-w-0">
+  <nav class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4 lg:px-8">
+    <a href="/" class="flex max-w-[calc(100%-3.5rem)] items-center gap-2 min-w-0 md:max-w-none">
       <img src="/static/rocket-upscale-no-bg-small.png" alt="AI Shipping Labs" class="h-8 w-8 flex-shrink-0">
       <span class="text-lg font-semibold tracking-tight truncate">AI Shipping Labs</span>
     </a>
@@ -76,7 +76,7 @@
       {% endif %}
     </div>
 
-    <button type="button" class="md:hidden flex-shrink-0 p-2 -mr-2 min-h-[44px] min-w-[44px] flex items-center justify-center" id="mobile-menu-btn" aria-label="Toggle menu">
+    <button type="button" class="relative z-10 md:hidden flex-shrink-0 p-2 -mr-2 min-h-[44px] min-w-[44px] flex items-center justify-center" id="mobile-menu-btn" aria-label="Toggle menu">
       <svg class="h-6 w-6" id="mobile-menu-icon-open" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
       <svg class="h-6 w-6 hidden" id="mobile-menu-icon-close" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
     </button>

@@ -11,7 +11,6 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from content.models import Article, Course, Project
-from email_app.models import NewsletterSubscriber
 from events.models import Event
 
 User = get_user_model()
@@ -24,6 +23,7 @@ class StudioDashboardTest(TestCase):
         self.client = Client()
         self.staff_user = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
+            unsubscribed=True,
         )
         self.client.login(email='staff@test.com', password='testpass')
 
@@ -69,12 +69,12 @@ class StudioDashboardTest(TestCase):
         self.assertEqual(stats['published_articles'], 1)
 
     def test_dashboard_counts_subscribers(self):
-        NewsletterSubscriber.objects.create(email='a@test.com', is_active=True)
-        NewsletterSubscriber.objects.create(email='b@test.com', is_active=False)
+        User.objects.create_user(email='a@test.com', unsubscribed=False)
+        User.objects.create_user(email='b@test.com', unsubscribed=True)
         response = self.client.get('/studio/')
         stats = response.context['stats']
         self.assertEqual(stats['active_subscribers'], 1)
-        self.assertEqual(stats['total_subscribers'], 2)
+        self.assertEqual(stats['total_subscribers'], 3)
 
     def test_dashboard_counts_upcoming_events(self):
         Event.objects.create(

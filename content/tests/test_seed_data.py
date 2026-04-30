@@ -13,7 +13,6 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
 
-from email_app.models import NewsletterSubscriber
 from events.models import Event
 from notifications.models import Notification
 from voting.models import Poll, PollOption, PollVote
@@ -82,19 +81,21 @@ class SeedDataCommandTest(TestCase):
         self.assertGreater(Notification.objects.count(), 0)
 
     def test_creates_newsletter_subscribers(self):
-        """Command creates confirmed newsletter subscribers."""
+        """Command creates confirmed newsletter subscribers as Users."""
         run_seed()
         expected_emails = {
             'newsletter1@test.com', 'newsletter2@test.com',
             'newsletter3@test.com', 'newsletter4@test.com',
             'newsletter5@test.com',
         }
-        subs = NewsletterSubscriber.objects.filter(email__in=expected_emails)
+        subs = User.objects.filter(email__in=expected_emails)
         self.assertEqual(
             set(subs.values_list('email', flat=True)), expected_emails,
         )
         for sub in subs:
-            self.assertTrue(sub.is_active)
+            self.assertTrue(sub.email_verified)
+            self.assertFalse(sub.unsubscribed)
+            self.assertTrue(sub.email_preferences.get('newsletter'))
 
     def test_prints_summary(self):
         """Command prints a summary of created objects."""
@@ -141,7 +142,9 @@ class SeedDataIdempotencyTest(TestCase):
             'poll_options': PollOption.objects.count(),
             'poll_votes': PollVote.objects.count(),
             'notifications': Notification.objects.count(),
-            'newsletter_subs': NewsletterSubscriber.objects.count(),
+            'newsletter_subs': User.objects.filter(
+                email__startswith='newsletter',
+            ).count(),
         }
 
         run_seed()
@@ -152,7 +155,9 @@ class SeedDataIdempotencyTest(TestCase):
             'poll_options': PollOption.objects.count(),
             'poll_votes': PollVote.objects.count(),
             'notifications': Notification.objects.count(),
-            'newsletter_subs': NewsletterSubscriber.objects.count(),
+            'newsletter_subs': User.objects.filter(
+                email__startswith='newsletter',
+            ).count(),
         }
 
         for key in counts_first:

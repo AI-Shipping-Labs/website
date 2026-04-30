@@ -32,56 +32,8 @@ def account_view(request):
     is_basic = tier is not None and tier.slug == "basic"
     has_subscription = bool(user.subscription_id)
 
-    # Check if subscription is cancelled (cancel_at_period_end)
-    # We detect this by: user has a subscription and billing_period_end is set,
-    # but the tier will revert to free (no pending_tier means full cancellation
-    # vs pending_tier means downgrade). We use a convention: if the user has
-    # a subscription_id and no pending_tier, but the Stripe subscription is set
-    # to cancel_at_period_end, we store that state. Since we don't have a
-    # dedicated "cancelled" field, we check via a different approach:
-    # The cancel_subscription() service sets cancel_at_period_end on Stripe.
-    # The webhook handler for subscription.updated with cancel_at_period_end
-    # does NOT set pending_tier. So we need a way to track this.
-    #
-    # For now, we'll add a simple check: if the user has subscription_id and
-    # billing_period_end but no pending_tier, we can't distinguish "active" from
-    # "cancelled at period end" without querying Stripe. To avoid API calls on
-    # every page load, we'll use a convention in email_preferences to store
-    # cancel status, OR we detect it from the subscription_cancelled field.
-    #
-    # Actually, looking at the User model more carefully, there's no
-    # subscription_cancelled field. The cleanest approach for the account page
-    # is: if pending_tier is set, show "plan will change"; otherwise the user
-    # is either active or cancelled-at-period-end. We'll need to check Stripe
-    # or add a field. For this issue, let's add a simple boolean approach using
-    # the existing fields: we'll treat "no subscription_id" as not subscribed.
-    # The cancel flow sets cancel_at_period_end on Stripe but doesn't clear
-    # subscription_id until the subscription is actually deleted.
-    #
-    # The simplest approach without a new field: store cancellation status in
-    # a transient way. But the acceptance criteria say "If subscription is
-    # cancelled, page shows: Your {tier} access ends on {billing_period_end}".
-    # We need to know if the subscription is in "cancelled at period end" state.
-    #
-    # Let's check the email_preferences JSON to see if we can store it there,
-    # or better yet, let's just check if pending_tier is None and the user
-    # has a subscription. For the cancelled state, we need a dedicated field
-    # or a convention. Since the issue says "cancel button calls API to cancel
-    # subscription at period end", and the webhook handler in services.py
-    # doesn't set pending_tier for cancellation, we need another indicator.
-    #
-    # Decision: We'll use a convention where pending_tier with slug="free"
-    # means cancellation is scheduled. This aligns with the downgrade flow.
-    # But actually, the cancel_subscription service doesn't set pending_tier.
-    # Let's fix that in our cancel API endpoint instead, or use a different
-    # approach: store "subscription_cancel_at_period_end" in email_preferences.
-    #
-    # Simplest approach that works with existing fields: when the user clicks
-    # cancel on the account page, our API sets pending_tier to the free tier.
-    # This way the account page can detect cancellation by checking if
-    # pending_tier exists and pending_tier.slug == "free".
-
     # Determine display states
+    # pending_tier.slug == "free" means cancellation is scheduled at period end.
     is_pending_downgrade = (
         pending_tier is not None
         and pending_tier.slug != "free"

@@ -14,16 +14,10 @@ from django.conf import settings
 
 from jobs.tasks.recordings_s3 import (
     download_recording_to_temp_file,
-    extract_s3_key,
     get_recordings_s3_config,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_s3_key(s3_url, bucket, region):
-    """Backward-compatible wrapper for existing imports/tests."""
-    return extract_s3_key(s3_url, bucket, region)
 
 
 def upload_recording_to_youtube(event_id):

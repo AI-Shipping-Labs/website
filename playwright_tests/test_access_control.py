@@ -945,8 +945,8 @@ class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
         self, django_server
     , page):
         """Anonymous visitor sees course title, description, syllabus
-        with unit names as plain text (not clickable links), and an
-        upgrade CTA."""
+        with visibly locked unit links, then opens a lesson teaser with
+        an upgrade CTA."""
         _clear_all_content()
         course = _create_course(
             title="Main Gated Course",
@@ -972,23 +972,33 @@ class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
         # Syllabus visible with unit name
         assert "Lesson One" in body
 
-        # Unit is NOT a clickable link (plain text span, not <a>)
-        unit_links = page.locator(
-            'a:has-text("Lesson One")'
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
+        lock_icons = page.locator('[data-testid="syllabus-lock-icon"]')
+        assert lock_icons.count() >= 1
+
+        locked_link = page.locator(
+            '[data-testid="syllabus-locked-link"]:has-text("Lesson One")'
         )
-        assert unit_links.count() == 0
+        assert locked_link.count() == 1
 
         # Upgrade CTA visible
         assert "Unlock with Main" in body or "Upgrade" in body.lower()
 
-        # Pricing link
-        pricing_link = page.locator('a:has-text("View Pricing")')
-        assert pricing_link.count() >= 1
+        # Click the locked lesson row; the lesson detail renders a teaser
+        # and upgrade path for anonymous visitors.
+        locked_link.first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/courses/main-gated-course/module-1/lesson-one" in page.url
+        assert page.locator('[data-testid="teaser-title"]').inner_text() == "Lesson One"
+        assert page.locator('[data-testid="teaser-cta"]').count() == 1
+        assert "Sign in to access this lesson" in page.content()
 
-        # Click the pricing link
+        pricing_link = page.locator('[data-testid="teaser-upgrade-cta"]')
+        assert pricing_link.count() == 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/pricing" in page.url
+        assert "/accounts/login" in page.url
 # ---------------------------------------------------------------
 # Scenario 9: Main member navigates a course, reads a unit, marks complete
 # ---------------------------------------------------------------

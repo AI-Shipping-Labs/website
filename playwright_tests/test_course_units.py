@@ -140,6 +140,17 @@ def _mark_unit_completed(user_email, unit):
     return progress
 
 
+def _enroll_user(user_email, course):
+    """Create an active course Enrollment for dashboard Continue Learning."""
+    from accounts.models import User
+    from content.models import Enrollment
+
+    user = User.objects.get(email=user_email)
+    enrollment, _ = Enrollment.objects.get_or_create(user=user, course=course)
+    connection.close()
+    return enrollment
+
+
 # ---------------------------------------------------------------
 # Scenario 1: Premium member works through a course unit from
 #              start to finish
@@ -485,8 +496,8 @@ class TestScenario5AnonymousSyllabus:
         self, django_server
     , page):
         """Given an anonymous visitor and a Basic-level published course,
-        the syllabus shows unit titles but they are NOT clickable links.
-        A CTA says 'Unlock with Basic' and 'View Pricing' navigates to /pricing."""
+        the syllabus shows locked unit links. Clicking one opens a lesson
+        teaser with a tier-appropriate upgrade path."""
         _clear_courses()
 
         course = _create_course(
@@ -515,28 +526,34 @@ class TestScenario5AnonymousSyllabus:
         assert "Lesson A" in body
         assert "Lesson B" in body
 
-        # Unit titles are NOT clickable links (rendered as <span>)
-        # Check that there are no <a> tags linking to unit pages
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
+        # Unit titles are visibly locked and clickable so visitors can
+        # preview the lesson teaser before upgrading.
+        lock_icons = page.locator('[data-testid="syllabus-lock-icon"]')
+        assert lock_icons.count() == 2
         unit_links = page.locator(
-            'a[href*="/courses/anonymous-test-course/module-1/"]'
+            '[data-testid="syllabus-locked-link"][href*="/courses/anonymous-test-course/module-1/"]'
         )
-        assert unit_links.count() == 0
+        assert unit_links.count() == 2
 
         # CTA mentions "Unlock with Basic"
         assert "Unlock with Basic" in body
 
-        # "View Pricing" link present
-        pricing_link = page.locator(
-            'a:has-text("View Pricing")'
-        )
-        assert pricing_link.count() >= 1
+        unit_links.first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/courses/anonymous-test-course/module-1/lesson-a" in page.url
+        assert page.locator('[data-testid="teaser-title"]').inner_text() == "Lesson A"
+        assert page.locator('[data-testid="teaser-cta"]').count() == 1
+        assert "Sign in to access this lesson" in page.content()
 
-        # Step 2: Click "View Pricing"
+        # "View Pricing" sends anonymous visitors to login so they can
+        # authenticate before choosing a paid tier.
+        pricing_link = page.locator('[data-testid="teaser-upgrade-cta"]')
+        assert pricing_link.count() == 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
-
-        # Lands on /pricing
-        assert "/pricing" in page.url
+        assert "/accounts/login" in page.url
 # ---------------------------------------------------------------
 # Scenario 6: Member marks a unit completed and then undoes it
 # ---------------------------------------------------------------
@@ -836,6 +853,8 @@ class TestScenario10DashboardContinueLearning:
             module1, "Dash Unit 3", sort_order=2,
             body="# DU3\n\nThird.",
         )
+
+        _enroll_user("premium-dash@test.com", course)
 
         # Mark 1 unit as completed
         _mark_unit_completed("premium-dash@test.com", unit1)

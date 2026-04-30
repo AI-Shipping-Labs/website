@@ -55,6 +55,7 @@ def _clear_dashboard_data():
     from content.models import (
         Article,
         Course,
+        Enrollment,
         Module,
         Unit,
         UserCourseProgress,
@@ -69,6 +70,7 @@ def _clear_dashboard_data():
     Poll.objects.all().delete()
     EventRegistration.objects.all().delete()
     Event.objects.all().delete()
+    Enrollment.objects.all().delete()
     UserCourseProgress.objects.all().delete()
     Unit.objects.all().delete()
     Module.objects.all().delete()
@@ -217,6 +219,15 @@ def _mark_unit_completed(user, unit, completed_at=None):
         progress.save()
     connection.close()
     return progress
+
+
+def _enroll_user(user, course):
+    """Create an active course Enrollment for dashboard Continue Learning."""
+    from content.models import Enrollment
+
+    enrollment, _ = Enrollment.objects.get_or_create(user=user, course=course)
+    connection.close()
+    return enrollment
 
 
 def _create_event(
@@ -559,6 +570,8 @@ class TestScenario4BasicMemberResumesCourse:
                 units[i],
                 completed_at=base_time + datetime.timedelta(hours=i),
             )
+
+        _enroll_user(user, course)
 
         context = _auth_context(browser, "basic@test.com")
         page = context.new_page()
@@ -1051,6 +1064,7 @@ class TestScenario10CompletedCourseNotInContinueLearning:
                 unit,
                 completed_at=base_time + datetime.timedelta(hours=i),
             )
+        _enroll_user(user, course1)
 
         # Course 2: Python Fundamentals - partially completed (2/5)
         course2 = _create_course(
@@ -1075,6 +1089,7 @@ class TestScenario10CompletedCourseNotInContinueLearning:
                     minutes=i * 30
                 ),
             )
+        _enroll_user(user, course2)
 
         context = _auth_context(browser, "basic@test.com")
         page = context.new_page()
@@ -1101,6 +1116,39 @@ class TestScenario10CompletedCourseNotInContinueLearning:
 
         # Then: Completed course NOT shown
         assert "AI Agents Buildcamp" not in learning_text
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario10CompletedUnitsWithoutEnrollment:
+    """Completed units alone do not populate Continue Learning."""
+
+    def test_completed_units_without_enrollment_absent(
+        self, django_server, browser
+    ):
+        _clear_dashboard_data()
+        user = _create_user("basic-no-enrollment@test.com", tier_slug="basic")
+
+        course = _create_course(
+            title="Progress Without Enrollment",
+            slug="progress-without-enrollment",
+            required_level=0,
+        )
+        module = _create_module(course, "Module 1", sort_order=0)
+        first_unit = _create_unit(module, "First Unit", sort_order=0)
+        _create_unit(module, "Second Unit", sort_order=1)
+
+        _mark_unit_completed(user, first_unit)
+
+        context = _auth_context(browser, "basic-no-enrollment@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+        learning_section = page.locator(
+            'section:has(h2:has-text("Continue Learning"))'
+        )
+        learning_text = learning_section.inner_text()
+        assert "Progress Without Enrollment" not in learning_text
+        assert "Browse Courses" in learning_text
 # -------------------------------------------------------------------
 # Scenario 11: Free member uses the Upgrade link in the welcome
 #               banner to explore paid tiers

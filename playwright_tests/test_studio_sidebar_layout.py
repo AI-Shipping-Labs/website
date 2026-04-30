@@ -1,4 +1,4 @@
-"""End-to-end tests for the Studio sidebar layout fix (issue #351).
+"""End-to-end tests for the Studio sidebar layout fixes (#351, #411).
 
 The desktop sidebar previously used ``position: fixed`` with no explicit
 ``top``, so on Studio pages that render an in-flow banner (env-mismatch,
@@ -19,11 +19,12 @@ These tests cover the five Playwright scenarios listed in the issue:
      impersonation banner is absent for non-impersonating sessions, and
      a configured matching SITE_BASE_URL hides the env-mismatch banner).
   3. Sidebar nav scrolls independently when its content overflows.
-  4. Mobile drawer still opens and closes via the toggle button.
+  4. Mobile drawer opens, closes, and keeps its header controls separated.
   5. No horizontal overflow at common viewport widths.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,26 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 # the dev server runs on 127.0.0.1 the env-mismatch banner reliably renders.
 # A small tolerance covers sub-pixel rounding when comparing y-coordinates.
 PIXEL_TOLERANCE = 1.5
+SCREENSHOT_DIR = Path("/tmp/aisl-issue-411")
+
+
+def has_class(class_str, name):
+    """Match a Tailwind class name as a whole token."""
+    return name in (class_str or "").split()
+
+
+def assert_boxes_do_not_overlap(first, second):
+    horizontal_gap = (
+        first["x"] + first["width"] <= second["x"] + PIXEL_TOLERANCE
+        or second["x"] + second["width"] <= first["x"] + PIXEL_TOLERANCE
+    )
+    vertical_gap = (
+        first["y"] + first["height"] <= second["y"] + PIXEL_TOLERANCE
+        or second["y"] + second["height"] <= first["y"] + PIXEL_TOLERANCE
+    )
+    assert horizontal_gap or vertical_gap, (
+        f"Expected boxes not to overlap, got first={first}, second={second}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +261,9 @@ class TestSidebarScrollsIndependently:
 
 @pytest.mark.django_db(transaction=True)
 class TestMobileDrawerToggle:
-    """The hamburger button still opens and closes the sidebar on mobile."""
+    """The hamburger, close control, and backdrop work on mobile."""
 
-    def test_mobile_toggle_opens_and_closes_drawer(
+    def test_mobile_toggle_opens_drawer_without_header_overlap(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -257,15 +278,13 @@ class TestMobileDrawerToggle:
         sidebar = page.locator("aside#studio-sidebar")
         backdrop = page.locator("#studio-backdrop")
 
-        def has_class(class_str, name):
-            # Match a Tailwind class name as a whole token. Substring match
-            # would falsely flag e.g. ``md:hidden`` when looking for ``hidden``.
-            return name in (class_str or "").split()
-
         # Initially hidden on mobile (visually hidden via the bare ``hidden``
         # class — both sidebar and backdrop start collapsed).
         assert has_class(sidebar.get_attribute("class"), "hidden")
         assert has_class(backdrop.get_attribute("class"), "hidden")
+        assert page.locator("#studio-sidebar-toggle").get_attribute(
+            "aria-expanded"
+        ) == "false"
 
         # Tap the hamburger toggle.
         page.locator("#studio-sidebar-toggle").click()
@@ -282,6 +301,9 @@ class TestMobileDrawerToggle:
         # Sidebar visible and backdrop visible.
         assert not has_class(sidebar.get_attribute("class"), "hidden")
         assert not has_class(backdrop.get_attribute("class"), "hidden")
+        assert page.locator("#studio-sidebar-toggle").get_attribute(
+            "aria-expanded"
+        ) == "true"
 
         # The sidebar should be pinned to the viewport edges as a drawer
         # (fixed inset-y-0 left-0 on mobile).
@@ -290,6 +312,164 @@ class TestMobileDrawerToggle:
         assert sidebar_box["x"] <= PIXEL_TOLERANCE
         assert sidebar_box["y"] <= PIXEL_TOLERANCE
 
+        studio_brand = page.locator('aside#studio-sidebar a[href="/studio/"]').first
+        close_button = page.locator("#studio-sidebar-close")
+        brand_box = studio_brand.bounding_box()
+        close_box = close_button.bounding_box()
+        assert brand_box is not None and close_box is not None
+        assert close_box["width"] >= 44
+        assert close_box["height"] >= 44
+        assert_boxes_do_not_overlap(brand_box, close_box)
+        SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        page.screenshot(
+            path=SCREENSHOT_DIR / "studio-mobile-sidebar-open-390.png",
+            full_page=True,
+        )
+
+    def test_mobile_close_control_closes_drawer_and_returns_focus(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        toggle = page.locator("#studio-sidebar-toggle")
+        sidebar = page.locator("aside#studio-sidebar")
+        backdrop = page.locator("#studio-backdrop")
+
+        toggle.click()
+        page.locator("#studio-sidebar-close").click()
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                const backdrop = document.querySelector('#studio-backdrop');
+                return sidebar && backdrop
+                    && sidebar.classList.contains('hidden')
+                    && backdrop.classList.contains('hidden');
+            }"""
+        )
+
+        assert has_class(sidebar.get_attribute("class"), "hidden")
+        assert has_class(backdrop.get_attribute("class"), "hidden")
+        assert toggle.get_attribute("aria-expanded") == "false"
+        assert page.evaluate("document.activeElement.id") == "studio-sidebar-toggle"
+
+    def test_mobile_backdrop_closes_drawer(self, django_server, browser):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        sidebar = page.locator("aside#studio-sidebar")
+        backdrop = page.locator("#studio-backdrop")
+
+        page.locator("#studio-sidebar-toggle").click()
+        backdrop.click(position={"x": 340, "y": 100})
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                const backdrop = document.querySelector('#studio-backdrop');
+                return sidebar && backdrop
+                    && sidebar.classList.contains('hidden')
+                    && backdrop.classList.contains('hidden');
+            }"""
+        )
+
+        assert has_class(sidebar.get_attribute("class"), "hidden")
+        assert has_class(backdrop.get_attribute("class"), "hidden")
+
+    def test_mobile_nav_link_closes_drawer_after_scrolling(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 500})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+        page.locator("#studio-sidebar-toggle").click()
+
+        nav = page.locator("#studio-sidebar-nav")
+        settings_link = page.locator(
+            'aside#studio-sidebar a[href="/studio/settings/"]'
+        )
+
+        nav.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+        settings_link.click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert "/studio/settings/" in page.url
+        assert has_class(
+            page.locator("aside#studio-sidebar").get_attribute("class"),
+            "hidden",
+        )
+
+    def test_mobile_keyboard_toggles_drawer(self, django_server, browser):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        toggle = page.locator("#studio-sidebar-toggle")
+        toggle.focus()
+        page.keyboard.press("Enter")
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                return sidebar && !sidebar.classList.contains('hidden');
+            }"""
+        )
+
+        assert toggle.get_attribute("aria-expanded") == "true"
+        assert page.evaluate("document.activeElement.id") == "studio-sidebar-close"
+
+        page.keyboard.press("Escape")
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                return sidebar && sidebar.classList.contains('hidden');
+            }"""
+        )
+        assert toggle.get_attribute("aria-expanded") == "false"
+        assert page.evaluate("document.activeElement.id") == "studio-sidebar-toggle"
+
+        page.keyboard.press("Space")
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('aside#studio-sidebar');
+                return sidebar && !sidebar.classList.contains('hidden');
+            }"""
+        )
+        assert toggle.get_attribute("aria-expanded") == "true"
+
+    def test_mobile_toggle_opens_and_nav_link_closes_drawer(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        page.locator("#studio-sidebar-toggle").click()
         # Tap a nav link — the click handler should close the drawer.
         page.locator(
             'aside#studio-sidebar a[href="/studio/articles/"]'
@@ -301,6 +481,120 @@ class TestMobileDrawerToggle:
         backdrop_after = page.locator("#studio-backdrop")
         assert has_class(sidebar_after.get_attribute("class"), "hidden")
         assert has_class(backdrop_after.get_attribute("class"), "hidden")
+
+
+@pytest.mark.django_db(transaction=True)
+class TestMobileSidebarScrollAffordance:
+    """The mobile drawer communicates when more nav is available below."""
+
+    def test_scroll_affordance_is_visible_until_bottom(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 500})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+        page.locator("#studio-sidebar-toggle").click()
+
+        nav = page.locator("#studio-sidebar-nav")
+        affordance = page.locator("#studio-sidebar-scroll-affordance")
+        metrics = nav.evaluate(
+            "el => ({scrollHeight: el.scrollHeight, clientHeight: el.clientHeight})"
+        )
+        assert metrics["scrollHeight"] > metrics["clientHeight"]
+        assert affordance.is_visible()
+
+        nav.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+        page.wait_for_function(
+            """() => {
+                const affordance = document.querySelector('#studio-sidebar-scroll-affordance');
+                return affordance && affordance.classList.contains('hidden');
+            }"""
+        )
+        assert not affordance.is_visible()
+
+    def test_system_links_remain_reachable_after_scrolling(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 500})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+        page.locator("#studio-sidebar-toggle").click()
+
+        nav = page.locator("#studio-sidebar-nav")
+        nav.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+
+        for label in [
+            "Content Sync",
+            "Worker",
+            "Redirects",
+            "Announcement",
+            "Settings",
+        ]:
+            link = page.locator(f'aside#studio-sidebar a:has-text("{label}")')
+            assert link.count() == 1
+            assert link.is_visible()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestSidebarNavOrder:
+    """The Studio nav groups and links retain their existing order."""
+
+    def test_sidebar_nav_groups_and_links_stay_in_order(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        nav_items = page.locator("#studio-sidebar-nav p, #studio-sidebar-nav a")
+        actual = [
+            item.strip()
+            for item in nav_items.all_inner_texts()
+            if item.strip() and not item.strip().startswith("v")
+        ]
+        assert actual == [
+            "CONTENT",
+            "Courses",
+            "Articles",
+            "Projects",
+            "Recordings",
+            "Workshops",
+            "Downloads",
+            "EVENTS & OUTREACH",
+            "Events",
+            "Campaigns",
+            "Notifications",
+            "ANALYTICS",
+            "UTM Campaigns",
+            "UTM Analytics",
+            "USERS",
+            "Users",
+            "Tier Overrides",
+            "User imports",
+            "New User",
+            "SYSTEM",
+            "Content Sync",
+            "Worker",
+            "Redirects",
+            "Announcement",
+            "Settings",
+            "Back to site",
+        ]
 
 
 # ---------------------------------------------------------------------------

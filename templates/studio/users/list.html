@@ -110,65 +110,81 @@
 </div>
 
 <!-- User list -->
-<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto">
-  <table class="w-full">
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="studio-users-list">
+  <table class="w-full table-fixed">
+    <colgroup>
+      <col class="w-[30%]">
+      <col class="w-[31%]">
+      <col class="w-[21%]">
+      <col class="w-[18%]">
+    </colgroup>
     <thead class="bg-secondary">
       <tr>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Joined</th>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscribed</th>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Tier</th>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Tags</th>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Slack</th>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-3 sm:px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Membership</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tags</th>
+        <th class="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
       {% for row in user_rows %}
       <tr class="hover:bg-secondary/50 transition-colors">
-        <td class="px-3 sm:px-6 py-4 text-sm text-foreground break-all">{{ row.email }}</td>
-        <td class="px-3 sm:px-6 py-4 text-sm text-muted-foreground hidden sm:table-cell" data-label="Joined">{{ row.date_joined|date:"M d, Y" }}</td>
-        <td class="px-3 sm:px-6 py-4" data-label="Subscribed">
-          {% if row.is_subscribed %}
-          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Yes</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">No</span>
-          {% endif %}
+        <td class="px-4 py-2.5 align-top min-w-0" data-label="User">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-foreground truncate"
+                 title="{{ row.email }}"
+                 aria-label="Email {{ row.email }}"
+                 data-testid="user-email">{{ row.email }}</div>
+            <div class="mt-0.5 text-xs text-muted-foreground">Joined {{ row.date_joined|date:"M d, Y" }}</div>
+          </div>
         </td>
-        <td class="px-3 sm:px-6 py-4 text-sm text-foreground hidden sm:table-cell" data-label="Tier">{{ row.tier_name }}</td>
-        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-label="Tags" data-testid="user-tags-cell">
+        <td class="px-4 py-2.5 align-top" data-label="Membership">
+          <div class="flex flex-wrap items-center gap-1.5" data-testid="membership-badges" aria-label="Membership state for {{ row.email }}">
+            <span class="inline-flex items-center rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium leading-5 text-foreground">{{ row.tier_name }}</span>
+            {% if row.is_subscribed %}
+            <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-green-300">Newsletter</span>
+            {% else %}
+            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground">No newsletter</span>
+            {% endif %}
+            {% if row.slack_status == 'Member' %}
+            <span class="inline-flex items-center rounded-full bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-purple-300" data-testid="slack-status">Slack</span>
+            {% elif row.slack_status == 'Not in Slack' %}
+            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground" data-testid="slack-status">No Slack</span>
+            {% else %}
+            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
+            {% endif %}
+            {% if row.status == 'Staff' %}
+            <span class="inline-flex items-center rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-blue-300">Staff</span>
+            {% elif row.status == 'Inactive' %}
+            <span class="inline-flex items-center rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-red-300">Inactive</span>
+            {% else %}
+            <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-green-300">Active</span>
+            {% endif %}
+          </div>
+        </td>
+        <td class="px-4 py-2.5 align-top" data-label="Tags" data-testid="user-tags-cell">
           {% if row.tags %}
-          <div class="flex flex-wrap gap-1">
-            {% for tag in row.tags %}
-            <a href="?tag={{ tag }}{% if active_filter and active_filter != filter_all %}&amp;filter={{ active_filter }}{% endif %}{% if search %}&amp;q={{ search }}{% endif %}"
-               class="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent-foreground border border-accent/40 hover:bg-accent/30">{{ tag }}</a>
+          <div class="flex flex-wrap items-center gap-1" aria-label="Visible tags for {{ row.email }}">
+            {% for tag in row.visible_tags %}
+            <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;tag={{ tag|urlencode }}"
+               class="inline-flex max-w-[9rem] items-center rounded-full border border-accent/40 bg-accent/20 px-2 py-0.5 text-[11px] leading-5 text-accent-foreground hover:bg-accent/30"
+               title="Filter by tag {{ tag }}">
+              <span class="truncate">{{ tag }}</span>
+            </a>
             {% endfor %}
+            {% if row.tag_overflow_count %}
+            <span class="inline-flex items-center rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] leading-5 text-muted-foreground"
+                  title="Hidden tags: {{ row.hidden_tags_label }}"
+                  aria-label="{{ row.tag_overflow_count }} more tags: {{ row.hidden_tags_label }}"
+                  data-testid="user-tags-overflow">+{{ row.tag_overflow_count }}</span>
+            {% endif %}
           </div>
           {% else %}
           <span class="text-xs text-muted-foreground">-</span>
           {% endif %}
         </td>
-        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-label="Slack" data-testid="slack-status">
-          {% if row.slack_status == 'Member' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-400">Member</span>
-          {% elif row.slack_status == 'Not in Slack' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Not in Slack</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground italic">Never checked</span>
-          {% endif %}
-        </td>
-        <td class="px-3 sm:px-6 py-4" data-label="Status">
-          {% if row.status == 'Staff' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Staff</span>
-          {% elif row.status == 'Inactive' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-400">Inactive</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Active</span>
-          {% endif %}
-        </td>
-        <td class="px-3 sm:px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
-          <div class="{% studio_list_class 'action_group' %}">
+        <td class="px-4 py-2.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %} flex-nowrap" data-testid="user-row-actions">
             <a href="{% url 'studio_user_detail' row.pk %}" class="{% studio_action_class 'primary' %}" data-testid="user-view-link">View</a>
             <form method="post" action="{% url 'studio_impersonate' row.pk %}" class="{% studio_list_class 'action_form' %}">
               {% csrf_token %}
@@ -179,7 +195,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="8" class="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</td>
+        <td colspan="4" class="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</td>
       </tr>
       {% endfor %}
     </tbody>

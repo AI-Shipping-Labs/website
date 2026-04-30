@@ -417,12 +417,12 @@ class BuildDescriptionTest(TestCase):
 
 
 class ExtractS3KeyTest(TestCase):
-    """Test the _extract_s3_key helper."""
+    """Test S3 key extraction used by YouTube uploads."""
 
     def test_standard_s3_url(self):
-        from jobs.tasks.youtube_upload import _extract_s3_key
+        from jobs.tasks.recordings_s3 import extract_s3_key
 
-        key = _extract_s3_key(
+        key = extract_s3_key(
             'https://my-bucket.s3.eu-central-1.amazonaws.com/recordings/2026/video.mp4',
             'my-bucket',
             'eu-central-1',
@@ -430,9 +430,9 @@ class ExtractS3KeyTest(TestCase):
         self.assertEqual(key, 'recordings/2026/video.mp4')
 
     def test_fallback_parsing(self):
-        from jobs.tasks.youtube_upload import _extract_s3_key
+        from jobs.tasks.recordings_s3 import extract_s3_key
 
-        key = _extract_s3_key(
+        key = extract_s3_key(
             'https://other-format.s3.amazonaws.com/path/to/file.mp4',
             'different-bucket',
             'us-east-1',

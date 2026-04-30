@@ -74,7 +74,7 @@ class RecordingsS3HelperTest(TestCase):
             'video/mp4',
         )
 
-    def test_extract_s3_key_keeps_standard_and_fallback_behavior(self):
+    def test_s3_key_extraction_keeps_standard_and_fallback_behavior(self):
         standard = extract_s3_key(
             'https://helper-bucket.s3.eu-central-1.amazonaws.com/recordings/2026/helper.mp4',
             'helper-bucket',

@@ -1,9 +1,10 @@
 """
 Tests for the seed_data management command.
 
-This command seeds dev-only fixtures (users, events, cohorts, polls, notifications,
+This command seeds dev-only fixtures (users, cohorts, polls, notifications,
 subscribers). Content (articles, courses, recordings, projects, links, downloads)
-comes from GitHub sync, and tiers come from migration 0003_seed_tiers.
+and events come from GitHub sync or staff-created data, and tiers come from
+migration 0003_seed_tiers.
 """
 
 from io import StringIO
@@ -102,11 +103,10 @@ class SeedDataCommandTest(TestCase):
         self.assertIn('Users:', output)
         self.assertIn('Polls:', output)
 
-    def test_events_have_descriptions(self):
-        """All events have non-empty descriptions."""
+    def test_does_not_create_events(self):
+        """Events are content/staff data, not seed_data fixtures."""
         run_seed()
-        for event in Event.objects.all():
-            self.assertTrue(event.description)
+        self.assertEqual(Event.objects.count(), 0)
 
     def test_polls_include_topic_and_course_types(self):
         """Seeded polls include at least one topic and one course poll."""

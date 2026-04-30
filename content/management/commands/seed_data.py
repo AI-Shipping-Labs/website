@@ -2,10 +2,11 @@
 Seed development data (fake users, cohorts, polls, notifications, subscribers).
 
 Content (articles, courses, recordings, projects, curated links, downloads) now comes
-from GitHub sync (AI-Shipping-Labs/content). Tiers are seeded via migration 0003_seed_tiers.
+from GitHub sync (AI-Shipping-Labs/content). Events also come from content sync or
+staff-created data. Tiers are seeded via migration 0003_seed_tiers.
 
-This command creates only dev-only fixtures for testing access control, event pages,
-course flows, voting, notification UI, and email.
+This command creates only dev-only fixtures for testing access control, course flows,
+voting, notification UI, and email.
 
 Also seeds OAuth social apps (Google, GitHub, Slack) if the corresponding
 client ID / secret environment variables are set in .env.
@@ -145,7 +146,10 @@ NEWSLETTER_SUBSCRIBERS = [
 
 
 class Command(BaseCommand):
-    help = 'Seed development data (fake users, events, polls). Content comes from GitHub sync.'
+    help = (
+        'Seed development fixtures: users, cohorts, polls, notifications, subscribers, '
+        'and OAuth apps. Content and events come from GitHub sync or staff-created data.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(

@@ -2,7 +2,7 @@
 Playwright E2E tests for the test data seeding command (Issue #103).
 
 Only Scenario 11 remains here -- it requires a real browser to verify
-seeded content appears on the site. All other scenarios (1-10, 12) were
+seeded development fixtures appear on the site. All other scenarios (1-10, 12) were
 moved to content/tests/test_seed_data.py because they exercise the ORM
 directly and never open a browser.
 
@@ -33,7 +33,7 @@ ADMIN_PASSWORD = "admin123"
 # ---------------------------------------------------------------------------
 
 def _flush_all_seed_data():
-    """Remove all data that the seed_data command creates."""
+    """Remove seed_data fixtures and content so assertions only use seed_data."""
     from django.contrib.auth import get_user_model
 
     from content.models import (
@@ -61,7 +61,6 @@ def _flush_all_seed_data():
     EventRegistration.objects.all().delete()
     CohortEnrollment.objects.all().delete()
     Cohort.objects.all().delete()
-    Event.objects.all().delete()
     Event.objects.all().delete()
     Unit.objects.all().delete()
     Module.objects.all().delete()
@@ -93,25 +92,21 @@ def _run_seed_data(flush=False):
 
 # ---------------------------------------------------------------------------
 # Scenario 11: Developer seeds data and then browses the site as an admin
-#               to verify content appears
+#               to verify seed-owned fixtures appear
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario11BrowseSiteAsAdmin:
     """Developer seeds data and then browses the site as an admin to
-    verify content appears.
+    verify seed-owned fixtures appear.
 
     Given: A developer has run seed_data on an empty database
     1. Log in as admin@aishippinglabs.com with password admin123
-    2. Navigate to /blog
-    Then: Seeded articles appear with realistic titles
-    3. Navigate to /courses
-    Then: Seeded courses appear
-    4. Navigate to /events
-    Then: Seeded events appear with a mix of statuses
-    5. Navigate to /events?filter=past
-    Then: Seeded recordings appear
+    2. Navigate to /vote
+    Then: Seeded polls appear with their deterministic titles and types
+    3. Open a seeded poll
+    Then: Seeded options and vote counts appear
     """
 
     def test_browse_site_shows_seeded_content(self, django_server, browser):
@@ -124,22 +119,28 @@ class TestScenario11BrowseSiteAsAdmin:
         context = _auth_context(browser, ADMIN_EMAIL)
         page = context.new_page()
 
-        # Step 2: Navigate to /events
+        # Step 2: Navigate to /vote
         page.goto(
-            f"{django_server}/events",
+            f"{django_server}/vote",
             wait_until="domcontentloaded",
         )
         body = page.content()
 
-        # Then: Seeded events appear with a mix of statuses
-        assert "LLM Agents Workshop" in body
-        assert "Fine-Tuning Masterclass" in body
+        # Then: Seeded polls appear with deterministic titles and types
+        assert "What topic should our next deep-dive cover?" in body
+        assert "Which mini-course should we create next?" in body
 
-        # Verify status indicators are present
         body_text = page.inner_text("body").lower()
-        assert "upcoming" in body_text or "completed" in body_text
+        assert "topic poll" in body_text
+        assert "course poll" in body_text
 
-        # Recordings were loaded by load_content during server startup,
-        # but _flush_all_seed_data() deleted them. seed_data does not
-        # create recordings, so we skip the recordings check.
+        # Step 3: Open a seeded poll and verify seed-owned options/votes.
+        page.locator('a[href^="/vote/"]').filter(
+            has_text="What topic should our next deep-dive cover?",
+        ).first.click()
+        page.wait_for_load_state("domcontentloaded")
+        detail_text = page.inner_text("body")
+        assert "Advanced RAG: GraphRAG and Knowledge Graphs" in detail_text
+        assert "LLM Security: Prompt Injection and Defenses" in detail_text
+        assert "votes remaining" in detail_text.lower()
         context.close()

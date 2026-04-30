@@ -495,7 +495,7 @@ class StudioForceResyncFlagTest(TestCase):
             repo_name='owner/repo-235-force-flag',
         )
 
-    @mock.patch('studio.views.sync.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
     def test_per_source_trigger_forwards_force(self, mock_sync):
         with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
             response = self.client.post(
@@ -506,13 +506,13 @@ class StudioForceResyncFlagTest(TestCase):
         mock_sync.assert_called_once()
         self.assertTrue(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('studio.views.sync.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
     def test_per_source_trigger_default_is_not_forced(self, mock_sync):
         with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
             self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.assertFalse(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('studio.views.sync.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
     def test_repo_trigger_forwards_force(self, mock_sync):
         with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
             self.client.post(
@@ -522,7 +522,7 @@ class StudioForceResyncFlagTest(TestCase):
         mock_sync.assert_called_once()
         self.assertTrue(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('studio.views.sync.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
     def test_sync_all_forwards_force(self, mock_sync):
         with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
             self.client.post('/studio/sync/all/', {'force': '1'})

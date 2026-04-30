@@ -39,6 +39,7 @@ from content.models import (
 )
 from events.models import Event
 from integrations.models import ContentSource, SyncLog
+from integrations.services.content_sync_queue import ContentSyncQueueResult
 from integrations.services.github import (
     GitHubSyncError,
     find_content_source,
@@ -2040,11 +2041,59 @@ class AdminSyncTriggerTest(TestCase):
         )
 
     def test_trigger_sync_redirects(self):
-        with patch('integrations.views.admin_sync.sync_content_source'):
+        with patch('django_q.tasks.async_task'):
             response = self.client.post(
                 f'/admin/sync/{self.source.pk}/trigger/',
             )
         self.assertEqual(response.status_code, 302)
+
+    def test_trigger_sync_uses_shared_enqueue_service_for_json(self):
+        with patch(
+            'integrations.views.admin_sync.enqueue_content_sync',
+        ) as mock_enqueue:
+            mock_enqueue.return_value = ContentSyncQueueResult(
+                ok=True,
+                queued=True,
+                ran_inline=False,
+                source=self.source,
+                message='custom queued message',
+            )
+            response = self.client.post(
+                f'/admin/sync/{self.source.pk}/trigger/',
+                HTTP_ACCEPT='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['message'], 'custom queued message')
+        mock_enqueue.assert_called_once_with(self.source)
+
+    def test_trigger_sync_json_error_when_inline_fallback_sync_raises(self):
+        with (
+            patch(
+                'integrations.services.content_sync_queue._enqueue_async_task',
+                side_effect=ImportError('django-q unavailable'),
+            ),
+            patch(
+                'integrations.services.content_sync_queue.sync_content_source',
+                side_effect=Exception('inline sync error'),
+            ),
+            self.assertLogs('integrations.views.admin_sync', level='ERROR') as logs,
+        ):
+            response = self.client.post(
+                f'/admin/sync/{self.source.pk}/trigger/',
+                HTTP_ACCEPT='application/json',
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()['status'], 'error')
+        self.assertEqual(
+            response.json()['message'],
+            'Sync failed for AI-Shipping-Labs/blog: inline sync error',
+        )
+        self.assertIn(
+            'Error triggering sync for AI-Shipping-Labs/blog',
+            logs.output[0],
+        )
 
     def test_trigger_sync_requires_post(self):
         response = self.client.get(f'/admin/sync/{self.source.pk}/trigger/')
@@ -2072,9 +2121,33 @@ class AdminSyncAllTest(TestCase):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
         )
-        with patch('integrations.views.admin_sync.sync_content_source'):
+        with patch('django_q.tasks.async_task'):
             response = self.client.post('/admin/sync/all/')
         self.assertEqual(response.status_code, 302)
+
+    def test_sync_all_uses_shared_enqueue_service(self):
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/blog',
+        )
+        with patch(
+            'integrations.views.admin_sync.enqueue_content_syncs',
+        ) as mock_enqueue:
+            mock_enqueue.return_value = [
+                ContentSyncQueueResult(
+                    ok=True,
+                    queued=True,
+                    ran_inline=False,
+                    source=source,
+                ),
+            ]
+            response = self.client.post(
+                '/admin/sync/all/',
+                HTTP_ACCEPT='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['message'], 'Sync triggered for 1 sources')
+        mock_enqueue.assert_called_once_with([source])
 
     def test_sync_all_requires_post(self):
         response = self.client.get('/admin/sync/all/')

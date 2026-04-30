@@ -25,11 +25,20 @@ from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
 from integrations.models import ContentSource, SyncLog
-from integrations.services.github import sync_content_source
+from integrations.services import content_sync_queue
+from integrations.services.content_sync_queue import (
+    enqueue_content_sync,
+    enqueue_content_syncs,
+)
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
 logger = logging.getLogger(__name__)
+
+
+def _mark_source_queued(source, batch_id=None):
+    """Compatibility wrapper; queue-state implementation lives in the service."""
+    return content_sync_queue._mark_source_queued(source, batch_id=batch_id)
 
 
 # Error messages used by the watchdog when it auto-fails a stuck SyncLog.
@@ -104,24 +113,6 @@ def _run_sync_watchdog():
         ContentSource.objects.filter(
             pk__in=running_source_ids, last_sync_status='running',
         ).update(last_sync_status='failed', updated_at=now)
-
-
-def _mark_source_queued(source, batch_id=None):
-    """Set ``ContentSource.last_sync_status='queued'`` and create a SyncLog
-    row at status='queued' for it.
-
-    Called after a successful ``async_task`` enqueue from the trigger
-    views (issue #274). The new SyncLog row is the row the worker will
-    later UPDATE in place when it picks up the task — see
-    ``sync_content_source`` for the queued→running transition logic.
-    """
-    SyncLog.objects.create(
-        source=source,
-        batch_id=batch_id,
-        status='queued',
-    )
-    source.last_sync_status = 'queued'
-    source.save(update_fields=['last_sync_status', 'updated_at'])
 
 
 def _worker_warning_suffix():
@@ -835,43 +826,35 @@ def sync_trigger(request, source_id):
     source = get_object_or_404(ContentSource, pk=source_id)
     force = _force_flag(request)
 
-    try:
-        try:
-            from django_q.tasks import async_task
-            async_task(
-                'integrations.services.github.sync_content_source',
-                source,
-                force=force,
-                task_name=f'sync-{source.repo_name}',
-            )
-            # Issue #274: only AFTER the enqueue succeeds, mark the source
-            # ``queued`` and create a SyncLog row so the operator sees the
-            # click landed even if the worker is down.
-            _mark_source_queued(source)
-            warning = _worker_warning_suffix()
-            verb = 'Force resync queued' if force else 'Sync queued'
-            base_msg = format_html(
-                '{verb} for {label}. You can see the status '
-                '<a href="/studio/worker/" class="underline">here</a>{warning}',
-                verb=verb,
-                label=source.repo_name,
-                warning=warning,
-            )
-            if warning:
-                messages.warning(request, base_msg)
-            else:
-                messages.success(request, base_msg)
-        except ImportError:
-            sync_content_source(source, force=force)
-            messages.success(
-                request,
-                f'Sync completed for {source.repo_name}',
-            )
-    except Exception as e:
-        logger.exception('Error triggering sync for %s', source.repo_name)
+    result = enqueue_content_sync(source, force=force)
+    if result.ok and result.queued:
+        warning = _worker_warning_suffix()
+        verb = 'Force resync queued' if force else 'Sync queued'
+        base_msg = format_html(
+            '{verb} for {label}. You can see the status '
+            '<a href="/studio/worker/" class="underline">here</a>{warning}',
+            verb=verb,
+            label=source.repo_name,
+            warning=warning,
+        )
+        if warning:
+            messages.warning(request, base_msg)
+        else:
+            messages.success(request, base_msg)
+    elif result.ok and result.ran_inline:
+        messages.success(
+            request,
+            f'Sync completed for {source.repo_name}',
+        )
+    else:
+        logger.error(
+            'Error triggering sync for %s: %s',
+            source.repo_name,
+            result.error,
+        )
         messages.error(
             request,
-            f'Sync failed for {source.repo_name}: {e}',
+            result.message,
         )
 
     return redirect('studio_sync_dashboard')
@@ -897,24 +880,18 @@ def sync_repo_trigger(request, repo_name):
     count = len(sources)
     force = _force_flag(request)
 
-    for source in sources:
-        try:
-            try:
-                from django_q.tasks import async_task
-                async_task(
-                    'integrations.services.github.sync_content_source',
-                    source,
-                    batch_id=batch_id,
-                    force=force,
-                    task_name=f'sync-{source.repo_name}',
-                )
-                # Issue #274: visible queued state per source so the operator
-                # can tell their click landed before the worker picks up.
-                _mark_source_queued(source, batch_id=batch_id)
-            except ImportError:
-                sync_content_source(source, batch_id=batch_id, force=force)
-        except Exception:
-            logger.exception('Error triggering sync for %s', source.repo_name)
+    results = enqueue_content_syncs(
+        sources,
+        batch_id=batch_id,
+        force=force,
+    )
+    for result in results:
+        if not result.ok:
+            logger.error(
+                'Error triggering sync for %s: %s',
+                result.source.repo_name,
+                result.error,
+            )
 
     warning = _worker_warning_suffix()
     verb = 'Force resync queued' if force else 'Sync queued'
@@ -951,23 +928,18 @@ def sync_all(request):
     batch_id = uuid.uuid4()
     force = _force_flag(request)
 
-    for source in sources:
-        try:
-            try:
-                from django_q.tasks import async_task
-                async_task(
-                    'integrations.services.github.sync_content_source',
-                    source,
-                    batch_id=batch_id,
-                    force=force,
-                    task_name=f'sync-{source.repo_name}',
-                )
-                # Issue #274: visible queued state per source.
-                _mark_source_queued(source, batch_id=batch_id)
-            except ImportError:
-                sync_content_source(source, batch_id=batch_id, force=force)
-        except Exception:
-            logger.exception('Error triggering sync for %s', source.repo_name)
+    results = enqueue_content_syncs(
+        sources,
+        batch_id=batch_id,
+        force=force,
+    )
+    for result in results:
+        if not result.ok:
+            logger.error(
+                'Error triggering sync for %s: %s',
+                result.source.repo_name,
+                result.error,
+            )
 
     warning = _worker_warning_suffix()
     verb = 'Force resync queued' if force else 'Sync queued'
@@ -1108,44 +1080,34 @@ def sync_object_trigger(request, model_name, object_id):
         )
         return redirect(_safe_redirect_target(request, fallback_url))
 
-    try:
-        try:
-            from django_q.tasks import async_task
-            async_task(
-                'integrations.services.github.sync_content_source',
-                source,
-                task_name=f'sync-{source.repo_name}',
-            )
-            # Issue #274: mark queued only AFTER the enqueue succeeded so
-            # we don't lie about an in-flight sync that never landed.
-            _mark_source_queued(source)
-            warning = _worker_warning_suffix()
-            base_msg = format_html(
-                'Sync queued for {repo}. Watch progress at '
-                '<a href="/studio/sync/" class="underline">/studio/sync/</a>'
-                '{warning}',
-                repo=source.repo_name,
-                warning=warning,
-            )
-            if warning:
-                messages.warning(request, base_msg)
-            else:
-                messages.success(request, base_msg)
-        except ImportError:
-            # django_q is optional in test/dev shells — fall back to a
-            # synchronous run so the operator's click still does something.
-            sync_content_source(source)
-            messages.success(
-                request,
-                f'Sync completed for {source.repo_name}.',
-            )
-    except Exception as exc:
-        logger.exception(
-            'Error triggering object re-sync for %s', source.repo_name,
+    result = enqueue_content_sync(source)
+    if result.ok and result.queued:
+        warning = _worker_warning_suffix()
+        base_msg = format_html(
+            'Sync queued for {repo}. Watch progress at '
+            '<a href="/studio/sync/" class="underline">/studio/sync/</a>'
+            '{warning}',
+            repo=source.repo_name,
+            warning=warning,
+        )
+        if warning:
+            messages.warning(request, base_msg)
+        else:
+            messages.success(request, base_msg)
+    elif result.ok and result.ran_inline:
+        messages.success(
+            request,
+            f'Sync completed for {source.repo_name}.',
+        )
+    else:
+        logger.error(
+            'Error triggering object re-sync for %s: %s',
+            source.repo_name,
+            result.error,
         )
         messages.error(
             request,
-            f'Re-sync failed for {source.repo_name}: {exc}',
+            f'Re-sync failed for {source.repo_name}: {result.error}',
         )
 
     return redirect(_safe_redirect_target(request, fallback_url))

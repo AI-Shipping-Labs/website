@@ -9,6 +9,11 @@ import uuid
 from django.utils import timezone
 
 from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
+from integrations.services.github_sync.lifecycle import (
+    cleanup_stale_synced_objects,
+    find_synced_object,
+    upsert_synced_object,
+)
 from integrations.services.github_sync.media import rewrite_cover_image_url, rewrite_image_urls, _check_broken_image_refs
 from integrations.services.github_sync.parsing import (
     _check_slug_collision,
@@ -96,16 +101,19 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
         source_repo=source.repo_name,
         status='published',
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
-    for ws in stale:
-        stats['items_detail'].append({
+    cleanup_stale_synced_objects(
+        stale,
+        stats=stats,
+        detail=lambda ws, action: {
             'title': ws.title,
             'slug': ws.slug,
-            'action': 'deleted',
+            'action': action,
             'content_type': 'workshop',
-        })
-    deleted_count = stale.count()
-    stale.update(status='draft')
-    stats['deleted'] += deleted_count
+        },
+        cleanup=lambda workshops: Workshop.objects.filter(
+            pk__in=[ws.pk for ws in workshops],
+        ).update(status='draft'),
+    )
 
 
 def _sync_single_workshop(
@@ -270,51 +278,36 @@ def _sync_single_workshop(
         }
 
         # Find by content_id (stable) first, then slug (backward compat).
-        workshop = Workshop.objects.filter(
-            content_id=workshop_content_id,
-            source_repo=source.repo_name,
-        ).first()
-        if workshop is None:
-            workshop = Workshop.objects.filter(
+        workshop = find_synced_object((
+            lambda: Workshop.objects.filter(
+                content_id=workshop_content_id,
+                source_repo=source.repo_name,
+            ).first(),
+            lambda: Workshop.objects.filter(
                 slug=slug,
                 source_repo=source.repo_name,
-            ).first()
+            ).first(),
+        ))
 
-        if workshop is None:
-            workshop = Workshop(slug=slug, **workshop_defaults)
-            workshop.save()
-            created = True
-            changed = True
-        else:
-            identity_changed = (
-                workshop.slug != slug
-                or workshop.source_path != rel_path
-            )
-            if identity_changed or _defaults_differ(workshop, workshop_defaults):
-                workshop.slug = slug
-                for k, v in workshop_defaults.items():
-                    setattr(workshop, k, v)
-                workshop.save()
-                created = False
-                changed = True
-            else:
-                created = False
-                changed = False
-
-        if changed:
-            action = 'created' if created else 'updated'
-            if created:
-                stats['created'] += 1
-            else:
-                stats['updated'] += 1
-            stats['items_detail'].append({
+        result = upsert_synced_object(
+            model=Workshop,
+            lookup=lambda: workshop,
+            defaults=workshop_defaults,
+            stats=stats,
+            create_kwargs={'slug': slug},
+            identity_changed=lambda obj: (
+                obj.slug != slug
+                or obj.source_path != rel_path
+            ),
+            apply_identity=lambda obj: setattr(obj, 'slug', slug),
+            detail=lambda obj, action: {
                 'title': title,
                 'slug': slug,
                 'action': action,
                 'content_type': 'workshop',
-            })
-        else:
-            stats['unchanged'] += 1
+            },
+        )
+        workshop = result.instance
 
         # Resolve instructors: list and attach M2M (post-save).
         resolved_instructors = _resolve_instructors_for_yaml(
@@ -411,43 +404,34 @@ def _link_or_create_workshop_event(
     }
 
     # Look up by slug first — that's the idempotent key per the spec.
-    event = Event.objects.filter(slug=workshop.slug).first()
-    if event is None:
+    existing_event = Event.objects.filter(slug=workshop.slug).first()
+    if existing_event is None:
         start_dt = dt.datetime.combine(
             workshop_date, dt.time.min, tzinfo=dt.timezone.utc,
         )
-        event = Event(
-            slug=workshop.slug,
-            start_datetime=start_dt,
-            status='completed',
-            published=True,
-            **content_defaults,
-        )
-        event.save()
-        stats['items_detail'].append({
-            'title': workshop.title,
+        create_kwargs = {
             'slug': workshop.slug,
-            'action': 'created',
-            'content_type': 'event',
-        })
-        stats['created'] += 1
+            'start_datetime': start_dt,
+            'status': 'completed',
+            'published': True,
+        }
     else:
-        # Existing Event: update *content* fields only. Operational fields
-        # (start_datetime, status, join fields, published) are not in
-        # content_defaults so they're never touched.
-        if _defaults_differ(event, content_defaults):
-            for k, v in content_defaults.items():
-                setattr(event, k, v)
-            event.save()
-            stats['items_detail'].append({
-                'title': event.title,
-                'slug': event.slug,
-                'action': 'updated',
-                'content_type': 'event',
-            })
-            stats['updated'] += 1
-        else:
-            stats['unchanged'] += 1
+        create_kwargs = None
+
+    result = upsert_synced_object(
+        model=Event,
+        lookup=lambda: existing_event,
+        defaults=content_defaults,
+        stats=stats,
+        create_kwargs=create_kwargs,
+        detail=lambda event, action: {
+            'title': event.title,
+            'slug': event.slug,
+            'action': action,
+            'content_type': 'event',
+        },
+    )
+    event = result.instance
 
     # Link the Workshop to the Event if not already linked (or if linked
     # to a stale event row). Use update() to avoid re-running Workshop.save()
@@ -605,45 +589,28 @@ def _sync_workshop_pages(
             # key. Falling back to (workshop, source_path) misses when a
             # file is renamed but slug stays the same, then INSERT would
             # collide on the unique constraint instead of doing an update.
-            page = WorkshopPage.objects.filter(
-                workshop=workshop, slug=slug,
-            ).first()
-            if page is None:
-                page = WorkshopPage.objects.filter(
+            page = find_synced_object((
+                lambda: WorkshopPage.objects.filter(
+                    workshop=workshop, slug=slug,
+                ).first(),
+                lambda: WorkshopPage.objects.filter(
                     workshop=workshop, source_path=rel_path,
-                ).first()
+                ).first(),
+            ))
 
-            if page is None:
-                page = WorkshopPage(workshop=workshop, **defaults)
-                page.save()
-                created = True
-                changed = True
-            else:
-                if _defaults_differ(page, defaults):
-                    for k, v in defaults.items():
-                        setattr(page, k, v)
-                    page.save()
-                    created = False
-                    changed = True
-                else:
-                    created = False
-                    changed = False
-
-            if not changed:
-                stats['unchanged'] += 1
-                continue
-
-            action = 'created' if created else 'updated'
-            if created:
-                stats['created'] += 1
-            else:
-                stats['updated'] += 1
-            stats['items_detail'].append({
-                'title': page.title,
-                'slug': page.slug,
-                'action': action,
-                'content_type': 'workshop_page',
-            })
+            upsert_synced_object(
+                model=WorkshopPage,
+                lookup=lambda: page,
+                defaults=defaults,
+                stats=stats,
+                create_kwargs={'workshop': workshop},
+                detail=lambda obj, action: {
+                    'title': obj.title,
+                    'slug': obj.slug,
+                    'action': action,
+                    'content_type': 'workshop_page',
+                },
+            )
 
         except Exception as e:
             stats['errors'].append({'file': rel_path, 'error': str(e)})
@@ -653,14 +620,16 @@ def _sync_workshop_pages(
     stale = WorkshopPage.objects.filter(workshop=workshop).exclude(
         source_path__in=seen_paths,
     )
-    deleted_count = stale.count()
-    if deleted_count:
-        for p in stale:
-            stats['items_detail'].append({
-                'title': p.title,
-                'slug': p.slug,
-                'action': 'deleted',
-                'content_type': 'workshop_page',
-            })
-        stale.delete()
-        stats['deleted'] += deleted_count
+    cleanup_stale_synced_objects(
+        stale,
+        stats=stats,
+        detail=lambda page, action: {
+            'title': page.title,
+            'slug': page.slug,
+            'action': action,
+            'content_type': 'workshop_page',
+        },
+        cleanup=lambda pages: WorkshopPage.objects.filter(
+            pk__in=[page.pk for page in pages],
+        ).delete(),
+    )

@@ -60,8 +60,9 @@ Verify against the spec:
 - [ ] Model tests: object creation, field validation, custom methods (e.g. markdown rendering)
 - [ ] View tests: status codes, templates, context data for each page added/modified
 - [ ] Access control tests (if gating is involved): anonymous, free, and paid users
-- [ ] All Django tests pass: `uv run python manage.py test`
-- [ ] Playwright E2E tests pass: `uv run pytest playwright_tests/ -v`
+- [ ] All Django tests pass: `make test`
+- [ ] Django coverage passes: `make coverage` (85% minimum under the configured runtime-code scope)
+- [ ] Playwright E2E tests pass: `make playwright`
 - [ ] Report test counts by type: unit, integration, E2E (Playwright)
 
 #### Security
@@ -95,6 +96,20 @@ make playwright
 # All tests
 make test-all
 ```
+
+`make coverage` is the authoritative Django coverage gate. It erases stale
+coverage data, runs the full Django unit/integration suite under Coverage.py,
+and fails if total coverage is below 85%. The configured scope measures
+first-party runtime/application code and excludes Django test modules,
+Playwright test modules, migrations, and generated/local artifacts. Playwright
+browser scenarios are validated separately by `make playwright`; do not fail an
+issue because `playwright_tests/` files are absent from the Django coverage
+report.
+
+After this coverage fix, a failing `make coverage` is a test failure. If the
+failure appears to be unrelated pre-existing global coverage debt, document that
+with evidence from focused coverage on the Python paths changed by the issue,
+then still report the global gate result clearly.
 
 #### Verify server starts
 

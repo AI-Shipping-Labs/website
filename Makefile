@@ -55,8 +55,9 @@ test-core:
 
 # Run tests with coverage
 coverage:
+	uv run coverage erase
 	uv run coverage run manage.py test
-	uv run coverage report
+	uv run coverage report --fail-under=85
 
 # Run Playwright end-to-end tests
 playwright:

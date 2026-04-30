@@ -36,6 +36,11 @@ class StudioListComponentTemplateTest(TestCase):
                 self.assertIn("studio_list_class 'thead'", source)
                 self.assertIn("studio_list_class 'tbody'", source)
 
+    def test_shared_table_wrapper_opts_into_mobile_cards(self):
+        from studio.templatetags.studio_filters import studio_list_class
+
+        self.assertIn('studio-responsive-table', studio_list_class('wrapper'))
+
     def test_target_lists_use_shared_badges_and_actions(self):
         for path in self.template_paths:
             with self.subTest(path=path):
@@ -138,6 +143,11 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(response, 'target="_blank"')
         self.assertContains(response, '/courses/shared-course')
         self.assertContains(response, 'View')
+        self.assertContains(response, 'studio-responsive-table')
+        self.assertContains(response, 'data-label="Status"')
+        self.assertContains(response, 'data-label="Actions"')
+        self.assertContains(response, 'studio-actions-cell')
+        self.assertContains(response, 'whitespace-nowrap')
 
     def test_workshop_special_columns_and_empty_state_remain_intact(self):
         response = self.client.get('/studio/workshops/')

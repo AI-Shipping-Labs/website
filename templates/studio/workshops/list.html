@@ -49,25 +49,25 @@
           <a href="{% url 'studio_workshop_detail' workshop_id=workshop.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ workshop.title }}</a>
           <p class="text-xs text-muted-foreground mt-1">{{ workshop.slug }}</p>
         </td>
-        <td class="px-6 py-4">
+        <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge workshop.status workshop.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.date|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.get_landing_required_level_display }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.get_pages_required_level_display }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ workshop.get_recording_required_level_display }}</td>
-        <td class="px-6 py-4">{% studio_origin_badge workshop %}</td>
-        <td class="px-6 py-4 text-sm">
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ workshop.date|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Landing gate">{{ workshop.get_landing_required_level_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Pages gate">{{ workshop.get_pages_required_level_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Recording gate">{{ workshop.get_recording_required_level_display }}</td>
+        <td class="px-6 py-4" data-label="Origin">{% studio_origin_badge workshop %}</td>
+        <td class="px-6 py-4 text-sm" data-label="Linked event">
           {% if workshop.event_id %}
           <a href="{% url 'studio_event_edit' event_id=workshop.event_id %}" class="text-accent hover:underline">{{ workshop.event.title|truncatechars:36 }}</a>
           {% else %}
           <span class="text-muted-foreground">&mdash;</span>
           {% endif %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground font-mono">
+        <td class="px-6 py-4 text-sm text-muted-foreground font-mono" data-label="Last synced">
           {% if workshop.source_commit %}<span title="{{ workshop.source_commit }}">{{ workshop.source_commit|truncatechars:10 }}</span>{% else %}<span class="font-sans text-muted-foreground">No GitHub source metadata</span>{% endif %}
         </td>
-        <td class="px-6 py-4 text-right space-x-3 whitespace-nowrap">
+        <td class="px-6 py-4 text-right space-x-3 whitespace-nowrap studio-actions-cell" data-label="Actions">
           {% studio_list_action workshop.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer' %}
           {% url 'studio_workshop_detail' workshop_id=workshop.pk as workshop_detail_url %}
           {% studio_list_action workshop_detail_url 'View' 'primary' %}

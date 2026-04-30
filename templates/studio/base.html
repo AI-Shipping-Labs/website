@@ -11,6 +11,83 @@ double-rendering. See issue #347.
 {% block messages %}{% endblock %}
 
 {% block body %}
+<style>
+@media (max-width: 767px) {
+  .studio-responsive-table {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    overflow-x: visible;
+  }
+
+  .studio-responsive-table table,
+  .studio-responsive-table tbody,
+  .studio-responsive-table tr,
+  .studio-responsive-table td {
+    display: block;
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  .studio-responsive-table thead {
+    display: none;
+  }
+
+  .studio-responsive-table tbody {
+    border: 0;
+  }
+
+  .studio-responsive-table tr {
+    margin-bottom: 0.75rem;
+    padding: 1rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--card));
+  }
+
+  .studio-responsive-table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .studio-responsive-table td {
+    padding: 0.35rem 0 !important;
+    text-align: left !important;
+    white-space: normal;
+  }
+
+  .studio-responsive-table td:first-child {
+    padding-top: 0 !important;
+  }
+
+  .studio-responsive-table td:last-child {
+    padding-bottom: 0 !important;
+  }
+
+  .studio-responsive-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.125rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1rem;
+    color: hsl(var(--muted-foreground));
+    text-transform: uppercase;
+  }
+
+  .studio-responsive-table .studio-actions-cell,
+  .studio-responsive-table .studio-actions-cell > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .studio-responsive-table .studio-actions-cell a,
+  .studio-responsive-table .studio-actions-cell button {
+    white-space: nowrap;
+  }
+}
+</style>
 {% include "studio/includes/env_mismatch_banner.html" %}
 <div class="flex min-h-screen">
   <!-- Mobile sidebar toggle -->

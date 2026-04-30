@@ -16,7 +16,7 @@ poller swaps in place every ~3s.
         Tasks queued but not yet picked up by a worker. Updates automatically every few seconds.
       </p>
     </div>
-    <div class="overflow-x-auto">
+    <div class="studio-responsive-table overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-border">
@@ -30,11 +30,11 @@ poller swaps in place every ~3s.
           {% for q in queued_tasks %}
             <tr class="border-b border-border last:border-0 hover:bg-secondary/50" data-queued-task-id="{{ q.id }}">
               <td class="px-4 py-3 text-foreground">{{ q.name|default:"—" }}</td>
-              <td class="px-4 py-3 text-muted-foreground font-mono text-xs">{{ q.func|default:"—"|truncatechars:60 }}</td>
-              <td class="px-4 py-3 text-muted-foreground">
+              <td class="px-4 py-3 text-muted-foreground font-mono text-xs" data-label="Func">{{ q.func|default:"—"|truncatechars:60 }}</td>
+              <td class="px-4 py-3 text-muted-foreground" data-label="Lock expires">
                 {% if q.lock_state == 'future' %}in {{ q.lock_seconds|floatformat:0 }}s{% elif q.lock_state == 'expired' %}expired {{ q.lock_seconds|floatformat:0 }}s ago{% else %}—{% endif %}
               </td>
-              <td class="px-4 py-3 text-right">
+              <td class="px-4 py-3 text-right studio-actions-cell" data-label="Actions">
                 <a href="{% url 'studio_worker_inspect_task' q.id %}{% if q.task_id %}?task_id={{ q.task_id }}{% endif %}"
                    class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 mr-1"
                    data-action="inspect">Inspect</a>

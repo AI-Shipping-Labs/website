@@ -79,7 +79,7 @@
   </div>
 </div>
 
-<div class="bg-card border border-border rounded-lg overflow-x-auto">
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto">
   <table class="w-full min-w-[980px]">
     <thead class="bg-secondary">
       <tr>
@@ -100,7 +100,7 @@
       {% for batch in page_obj %}
       <tr class="hover:bg-secondary/50">
         <td class="px-4 py-3 text-sm"><a class="text-accent hover:underline" href="{% url 'studio_import_batch_detail' batch_id=batch.pk %}">{{ batch.get_source_display }}</a></td>
-        <td class="px-4 py-3 text-sm">
+        <td class="px-4 py-3 text-sm" data-label="Status">
           {% if batch.status == 'failed' %}
           <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-400">Failed</span>
           {% elif batch.status == 'completed' %}
@@ -109,15 +109,15 @@
           <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Running</span>
           {% endif %}
         </td>
-        <td class="px-4 py-3 text-sm text-muted-foreground">{{ batch.started_at|date:"Y-m-d H:i" }}</td>
-        <td class="px-4 py-3 text-sm text-muted-foreground">{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i" }}{% else %}running{% endif %}</td>
-        <td class="px-4 py-3 text-sm">{% if batch.dry_run %}<span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">dry-run</span>{% else %}<span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">live</span>{% endif %}</td>
-        <td class="px-4 py-3 text-sm text-right">{{ batch.users_created }}</td>
-        <td class="px-4 py-3 text-sm text-right">{{ batch.users_updated }}</td>
-        <td class="px-4 py-3 text-sm text-right">{{ batch.users_skipped }}</td>
-        <td class="px-4 py-3 text-sm text-right"><a class="text-accent hover:underline" href="{% url 'studio_import_batch_detail' batch_id=batch.pk %}#errors">{{ batch.errors|length }}</a></td>
-        <td class="px-4 py-3 text-sm text-right">{{ batch.emails_queued }}</td>
-        <td class="px-4 py-3 text-sm text-muted-foreground">{% if batch.actor %}{{ batch.actor.email }}{% else %}System{% endif %}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Started">{{ batch.started_at|date:"Y-m-d H:i" }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Finished">{% if batch.finished_at %}{{ batch.finished_at|date:"Y-m-d H:i" }}{% else %}running{% endif %}</td>
+        <td class="px-4 py-3 text-sm" data-label="Mode">{% if batch.dry_run %}<span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">dry-run</span>{% else %}<span class="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">live</span>{% endif %}</td>
+        <td class="px-4 py-3 text-sm text-right" data-label="Created">{{ batch.users_created }}</td>
+        <td class="px-4 py-3 text-sm text-right" data-label="Updated">{{ batch.users_updated }}</td>
+        <td class="px-4 py-3 text-sm text-right" data-label="Skipped">{{ batch.users_skipped }}</td>
+        <td class="px-4 py-3 text-sm text-right" data-label="Errors"><a class="text-accent hover:underline" href="{% url 'studio_import_batch_detail' batch_id=batch.pk %}#errors">{{ batch.errors|length }}</a></td>
+        <td class="px-4 py-3 text-sm text-right" data-label="Emails">{{ batch.emails_queued }}</td>
+        <td class="px-4 py-3 text-sm text-muted-foreground" data-label="Actor">{% if batch.actor %}{{ batch.actor.email }}{% else %}System{% endif %}</td>
       </tr>
       {% empty %}
       <tr>

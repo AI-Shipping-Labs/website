@@ -651,6 +651,7 @@ def _aggregate_batch(logs):
             entry['course_tree'] = _build_course_tree(combined)
 
     return {
+        'repo_names': [log.source.repo_name for log in logs],
         'total_created': total_created,
         'total_updated': total_updated,
         'total_unchanged': total_unchanged,

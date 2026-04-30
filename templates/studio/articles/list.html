@@ -32,16 +32,16 @@
           <a href="{% url 'studio_article_edit' article_id=article.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ article.title }}</a>
           {% studio_synced_badge article.source_repo %}
         </td>
-        <td class="px-6 py-4">
+        <td class="px-6 py-4" data-label="Status">
           {% if article.published %}
           {% studio_status_badge 'published' 'Published' %}
           {% else %}
           {% studio_status_badge 'draft' 'Draft' %}
           {% endif %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ article.author|default:"-" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ article.date|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right space-x-3">
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Author">{{ article.author|default:"-" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ article.date|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 text-right space-x-3 studio-actions-cell" data-label="Actions">
           {% studio_list_action article.get_absolute_url 'View on site' 'secondary' True %}
           {% url 'studio_article_edit' article_id=article.pk as article_edit_url %}
           {% if article.source_repo %}

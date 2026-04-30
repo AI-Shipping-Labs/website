@@ -109,7 +109,7 @@
 </div>
 
 <!-- User list -->
-<div class="bg-card border border-border rounded-lg overflow-x-auto">
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto">
   <table class="w-full">
     <thead class="bg-secondary">
       <tr>
@@ -127,16 +127,16 @@
       {% for row in user_rows %}
       <tr class="hover:bg-secondary/50 transition-colors">
         <td class="px-3 sm:px-6 py-4 text-sm text-foreground break-all">{{ row.email }}</td>
-        <td class="px-3 sm:px-6 py-4 text-sm text-muted-foreground hidden sm:table-cell">{{ row.date_joined|date:"M d, Y" }}</td>
-        <td class="px-3 sm:px-6 py-4">
+        <td class="px-3 sm:px-6 py-4 text-sm text-muted-foreground hidden sm:table-cell" data-label="Joined">{{ row.date_joined|date:"M d, Y" }}</td>
+        <td class="px-3 sm:px-6 py-4" data-label="Subscribed">
           {% if row.is_subscribed %}
           <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Yes</span>
           {% else %}
           <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">No</span>
           {% endif %}
         </td>
-        <td class="px-3 sm:px-6 py-4 text-sm text-foreground hidden sm:table-cell">{{ row.tier_name }}</td>
-        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-testid="user-tags-cell">
+        <td class="px-3 sm:px-6 py-4 text-sm text-foreground hidden sm:table-cell" data-label="Tier">{{ row.tier_name }}</td>
+        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-label="Tags" data-testid="user-tags-cell">
           {% if row.tags %}
           <div class="flex flex-wrap gap-1">
             {% for tag in row.tags %}
@@ -148,7 +148,7 @@
           <span class="text-xs text-muted-foreground">-</span>
           {% endif %}
         </td>
-        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-testid="slack-status">
+        <td class="px-3 sm:px-6 py-4 hidden md:table-cell" data-label="Slack" data-testid="slack-status">
           {% if row.slack_status == 'Member' %}
           <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-400">Member</span>
           {% elif row.slack_status == 'Not in Slack' %}
@@ -157,7 +157,7 @@
           <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground italic">Never checked</span>
           {% endif %}
         </td>
-        <td class="px-3 sm:px-6 py-4">
+        <td class="px-3 sm:px-6 py-4" data-label="Status">
           {% if row.status == 'Staff' %}
           <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-400">Staff</span>
           {% elif row.status == 'Inactive' %}
@@ -166,7 +166,7 @@
           <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Active</span>
           {% endif %}
         </td>
-        <td class="px-3 sm:px-6 py-4">
+        <td class="px-3 sm:px-6 py-4 studio-actions-cell" data-label="Actions">
           <div class="flex items-center gap-3">
             <a href="{% url 'studio_user_detail' row.pk %}" class="text-xs text-blue-400 hover:text-blue-300" data-testid="user-view-link">View</a>
             <form method="post" action="{% url 'studio_impersonate' row.pk %}" class="inline">

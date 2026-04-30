@@ -33,16 +33,16 @@
         <td class="px-6 py-4">
           <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ event.title }}</a>
         </td>
-        <td class="px-6 py-4">
+        <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge event.status event.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Kind / Platform">
           <span class="text-foreground">{{ event.get_kind_display }}</span>
           <p class="text-xs text-muted-foreground mt-1">{{ event.get_platform_display }}</p>
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{% if event.max_participants %}{{ event.registration_count }}/{{ event.max_participants }}{% else %}Unlimited{% endif %}</td>
-        <td class="px-6 py-4 text-right space-x-3">
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Capacity">{% if event.max_participants %}{{ event.registration_count }}/{{ event.max_participants }}{% else %}Unlimited{% endif %}</td>
+        <td class="px-6 py-4 text-right space-x-3 studio-actions-cell" data-label="Actions">
           {% studio_list_action event.get_absolute_url 'View on site' 'secondary' True %}
           {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
           {% studio_list_action event_edit_url 'Edit' 'primary' %}

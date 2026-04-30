@@ -114,7 +114,7 @@
       <div class="p-4 border-b border-border">
         <h2 class="text-lg font-medium text-foreground">Active Clusters</h2>
       </div>
-      <div class="overflow-x-auto">
+      <div class="studio-responsive-table overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border">
@@ -130,13 +130,13 @@
             {% for c in worker_info.clusters %}
               <tr class="border-b border-border last:border-0">
                 <td class="px-4 py-3 text-foreground font-mono text-xs">{{ c.cluster_id|truncatechars:12 }}</td>
-                <td class="px-4 py-3 text-muted-foreground">{{ c.host }}</td>
-                <td class="px-4 py-3 text-foreground">{{ c.worker_count }}</td>
-                <td class="px-4 py-3 text-muted-foreground">{{ c.status|default:"—" }}</td>
-                <td class="px-4 py-3 text-muted-foreground">
+                <td class="px-4 py-3 text-muted-foreground" data-label="Host">{{ c.host }}</td>
+                <td class="px-4 py-3 text-foreground" data-label="Workers">{{ c.worker_count }}</td>
+                <td class="px-4 py-3 text-muted-foreground" data-label="Status">{{ c.status|default:"—" }}</td>
+                <td class="px-4 py-3 text-muted-foreground" data-label="Heartbeat">
                   {% if c.heartbeat_age is not None %}{{ c.heartbeat_age|floatformat:0 }}s ago{% else %}—{% endif %}
                 </td>
-                <td class="px-4 py-3 text-muted-foreground">
+                <td class="px-4 py-3 text-muted-foreground" data-label="Uptime">
                   {% if c.uptime is not None %}{{ c.uptime|floatformat:0 }}s{% else %}—{% endif %}
                 </td>
               </tr>
@@ -158,7 +158,7 @@
       <h2 class="text-lg font-medium text-foreground">Recent Tasks</h2>
     </div>
     {% if tasks_with_duration %}
-      <div class="overflow-x-auto">
+      <div class="studio-responsive-table overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border">
@@ -181,22 +181,22 @@
                      class="hover:underline"
                      onclick="event.stopPropagation();">{{ item.task.name }}</a>
                 </td>
-                <td class="px-4 py-3 text-muted-foreground">{{ item.task.started|date:"Y-m-d H:i:s" }}</td>
-                <td class="px-4 py-3 text-muted-foreground">
+                <td class="px-4 py-3 text-muted-foreground" data-label="Started">{{ item.task.started|date:"Y-m-d H:i:s" }}</td>
+                <td class="px-4 py-3 text-muted-foreground" data-label="Duration">
                   {% if item.duration %}
                     {{ item.duration.total_seconds|floatformat:1 }}s
                   {% else %}
                     --
                   {% endif %}
                 </td>
-                <td class="px-4 py-3">
+                <td class="px-4 py-3" data-label="Status">
                   {% if item.task.success %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">Success</span>
                   {% else %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400">Failed</span>
                   {% endif %}
                 </td>
-                <td class="px-4 py-3 text-red-400 text-xs max-w-xs truncate" title="{{ item.error_message }}">
+                <td class="px-4 py-3 text-red-400 text-xs max-w-xs truncate" data-label="Error" title="{{ item.error_message }}">
                   {{ item.error_message|default:"" }}
                 </td>
               </tr>

@@ -7,7 +7,7 @@ from studio.worker_health import get_worker_status
 register = template.Library()
 
 
-LIST_TABLE_WRAPPER_CLASS = 'bg-card border border-border rounded-lg overflow-x-auto'
+LIST_TABLE_WRAPPER_CLASS = 'studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto'
 LIST_TABLE_CLASS = 'w-full'
 LIST_TABLE_HEAD_CLASS = 'bg-secondary'
 LIST_TABLE_HEAD_CELL_CLASS = (

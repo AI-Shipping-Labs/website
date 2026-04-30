@@ -71,6 +71,7 @@ SLACK_FILTER_YES = 'yes'
 SLACK_FILTER_NO = 'no'
 VALID_SLACK_FILTERS = {SLACK_FILTER_ANY, SLACK_FILTER_YES, SLACK_FILTER_NO}
 DEFAULT_SLACK_FILTER = SLACK_FILTER_ANY
+USER_LIST_TAG_LIMIT = 3
 
 
 def _normalize_filter(value):
@@ -208,6 +209,7 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
         if not _matches_slack_filter(user, slack_filter):
             continue
 
+        tags = list(user.tags or [])
         user_rows.append({
             'pk': user.pk,
             'email': user.email,
@@ -218,7 +220,10 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
             'email_verified': user.email_verified,
             'tier_name': _effective_tier_name(user, override),
             'status': _user_status(user),
-            'tags': list(user.tags or []),
+            'tags': tags,
+            'visible_tags': tags[:USER_LIST_TAG_LIMIT],
+            'tag_overflow_count': max(len(tags) - USER_LIST_TAG_LIMIT, 0),
+            'hidden_tags_label': ', '.join(tags[USER_LIST_TAG_LIMIT:]),
             'slack_status': _slack_status(user),
             'slack_member': bool(user.slack_member),
             'slack_checked_at': user.slack_checked_at,

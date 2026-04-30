@@ -87,6 +87,57 @@ class StudioUserListTagFilterTest(TestCase):
         self.assertContains(response, 'early-adopter')
         self.assertContains(response, 'beta')
 
+    def test_list_rows_render_single_line_email_with_full_value_access(self):
+        long_email = 'very-long-address-for-studio-scanability@example.test'
+        User.objects.create_user(email=long_email, password='testpass')
+
+        response = self.client.get('/studio/users/?q=very-long-address')
+
+        self.assertContains(response, 'data-testid="user-email"')
+        self.assertContains(response, 'class="text-sm font-medium text-foreground truncate"')
+        self.assertContains(response, f'title="{long_email}"')
+        self.assertContains(response, f'aria-label="Email {long_email}"')
+
+    def test_membership_state_is_grouped_into_compact_badges(self):
+        self.alice.slack_member = True
+        self.alice.slack_checked_at = self.alice.date_joined
+        self.alice.save(update_fields=['slack_member', 'slack_checked_at'])
+
+        response = self.client.get('/studio/users/?q=alice')
+
+        self.assertContains(response, 'data-testid="membership-badges"')
+        self.assertContains(response, self.alice.tier.name)
+        self.assertContains(response, 'Newsletter')
+        self.assertContains(response, 'Slack')
+        self.assertContains(response, 'Active')
+
+    def test_tag_display_is_bounded_with_visible_filter_links_and_overflow(self):
+        self.alice.tags = [
+            'early-adopter',
+            'beta',
+            'paid-2026',
+            'vip',
+            'cohort-a',
+        ]
+        self.alice.slack_member = True
+        self.alice.slack_checked_at = self.alice.date_joined
+        self.alice.tier = self.main_tier
+        self.alice.save(update_fields=['tags', 'slack_member', 'slack_checked_at', 'tier'])
+
+        response = self.client.get('/studio/users/?filter=paid&slack=yes&q=alice')
+        row = response.context['user_rows'][0]
+
+        self.assertEqual(row['visible_tags'], ['early-adopter', 'beta', 'paid-2026'])
+        self.assertEqual(row['tag_overflow_count'], 2)
+        self.assertEqual(row['hidden_tags_label'], 'vip, cohort-a')
+        self.assertContains(
+            response,
+            '?filter=paid&amp;slack=yes&amp;q=alice&amp;tag=early-adopter',
+        )
+        self.assertContains(response, 'data-testid="user-tags-overflow">+2</span>')
+        self.assertContains(response, 'aria-label="2 more tags: vip, cohort-a"')
+        self.assertNotContains(response, '>vip</a>')
+
     def test_active_tag_chip_renders_with_clear_link(self):
         response = self.client.get('/studio/users/?tag=early-adopter&filter=paid&q=dan')
         self.assertContains(response, 'data-testid="active-tag-chip"')
@@ -98,6 +149,16 @@ class StudioUserListTagFilterTest(TestCase):
     def test_filter_chip_links_carry_tag_value(self):
         response = self.client.get('/studio/users/?tag=early-adopter')
         self.assertContains(response, 'tag=early-adopter')
+
+    def test_export_link_preserves_active_filters_search_slack_and_tag(self):
+        response = self.client.get(
+            '/studio/users/?filter=paid&slack=yes&q=alice&tag=early-adopter',
+        )
+
+        self.assertContains(
+            response,
+            '/studio/users/export?filter=paid&amp;slack=yes&amp;q=alice&amp;tag=early-adopter',
+        )
 
     def test_view_link_present_for_each_user(self):
         response = self.client.get('/studio/users/')

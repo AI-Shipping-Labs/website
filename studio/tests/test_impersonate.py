@@ -249,6 +249,19 @@ class UserListLoginAsButtonTest(TestCase):
             response, f'/studio/impersonate/{self.non_subscriber_user.pk}/'
         )
 
+    def test_login_as_button_stays_post_in_row_action_area(self):
+        """The list action remains a CSRF-protected POST form."""
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/studio/users/?q=registered')
+
+        self.assertContains(response, 'data-testid="user-row-actions"')
+        self.assertContains(response, 'method="post"')
+        self.assertContains(
+            response, f'action="/studio/impersonate/{self.subscriber_user.pk}/"'
+        )
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        self.assertContains(response, 'whitespace-nowrap')
+
     def test_subscriber_filter_uses_user_newsletter_state(self):
         """The subscriber chip is backed by User.unsubscribed."""
         self.client.login(email='admin@test.com', password='testpass')

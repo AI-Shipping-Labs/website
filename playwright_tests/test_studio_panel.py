@@ -772,20 +772,21 @@ class TestScenario10StaffExportsSubscribers:
     """Staff member exports user/subscriber data as CSV for external analysis.
 
     Page moved from ``/studio/subscribers/`` to ``/studio/users/`` in #271.
-    The default filter chip is "Subscribers", so the landing view still shows
-    subscriber rows.
+    The default filter chip is "All", while the Subscribers chip still narrows
+    the table and export to newsletter-subscribed users.
     """
 
     def test_user_list_filter_and_csv_export(self, django_server, browser):
         """Given: A user logged in as admin@test.com (is_staff=True), and there are
-        5 active and 2 inactive newsletter subscribers (each with a User row).
+        5 subscribed and 2 unsubscribed contacts.
         1. Navigate to /studio/users/
-        Then: With the default "Subscribers" chip, only the 5 active subscriber
-              users appear.
-        2. Switch to the "All" chip
-        Then: All 7 user rows are listed.
-        3. Click the export CSV link/button
-        Then: A CSV file downloads with the new column set."""
+        Then: With the default "All" chip, all 7 contact rows appear.
+        2. Switch to the "Subscribers" chip
+        Then: Only the 5 subscribed users appear.
+        3. Switch back to the "All" chip
+        Then: All 7 contact rows are listed again.
+        4. Click the export CSV link/button
+        Then: A CSV file downloads with the locked column set including Slack."""
         _clear_subscribers()
         _ensure_tiers()
         _create_staff_user("admin@test.com")
@@ -796,18 +797,33 @@ class TestScenario10StaffExportsSubscribers:
             _create_user(f"active-{i}@test.com")
             _create_subscriber(f"active-{i}@test.com", is_active=True)
 
-        # Create 2 inactive subscribers, also backed by Users.
+        # Create 2 unsubscribed contacts, also backed by Users. The legacy
+        # NewsletterSubscriber row is deliberately inactive to mirror old data.
         for i in range(2):
-            _create_user(f"inactive-{i}@test.com")
+            _create_user(f"inactive-{i}@test.com", unsubscribed=True)
             _create_subscriber(f"inactive-{i}@test.com", is_active=False)
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /studio/users/ -- default chip is Subscribers.
+        # Step 1: Navigate to /studio/users/ -- default chip is All.
         page.goto(
             f"{django_server}/studio/users/",
             wait_until="domcontentloaded",
         )
+
+        all_chip = page.locator('a[data-filter="all"]')
+        assert "bg-accent" in (all_chip.get_attribute("class") or "")
+        table_body = page.locator("tbody")
+        table_text = table_body.inner_text()
+        for i in range(5):
+            assert f"active-{i}@test.com" in table_text
+        for i in range(2):
+            assert f"inactive-{i}@test.com" in table_text
+
+        # Step 2: Switch to the "Subscribers" chip.
+        page.locator('a[data-filter="subscribers"]').click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "filter=subscribers" in page.url
 
         table_body = page.locator("tbody")
         table_text = table_body.inner_text()
@@ -816,9 +832,10 @@ class TestScenario10StaffExportsSubscribers:
         for i in range(2):
             assert f"inactive-{i}@test.com" not in table_text
 
-        # Step 2: Switch to the "All" chip.
+        # Step 3: Switch back to the "All" chip.
         page.locator('a[data-filter="all"]').click()
         page.wait_for_load_state("domcontentloaded")
+        assert "filter=all" in page.url
 
         table_body = page.locator("tbody")
         table_text = table_body.inner_text()
@@ -827,25 +844,26 @@ class TestScenario10StaffExportsSubscribers:
         for i in range(2):
             assert f"inactive-{i}@test.com" in table_text
 
-        # Step 3: Click the export CSV link -- it inherits the current filter.
+        # Step 4: Click the export CSV link -- it inherits the current filter.
+        export_href = page.locator('a:has-text("Export CSV")').get_attribute("href")
+        assert "filter=all" in export_href
+        assert "slack=any" in export_href
         with page.expect_download() as download_info:
             page.click('a:has-text("Export CSV")')
 
         download = download_info.value
-        assert download.suggested_filename == "users.csv"
+        assert download.suggested_filename.startswith("aishippinglabs-contacts-")
 
         csv_path = download.path()
-        with open(csv_path, "r") as f:
+        with open(csv_path, encoding="utf-8") as f:
             csv_content = f.read()
 
-        # New column set introduced in #271
-        assert "Email" in csv_content
-        assert "Joined" in csv_content
-        assert "Subscribed" in csv_content
-        assert "Tier" in csv_content
-        assert "Status" in csv_content
+        assert csv_content.splitlines()[0] == (
+            "email,tier,tags,email_verified,unsubscribed,date_joined,last_login,slack"
+        )
+        assert "Never checked" in csv_content
 
-        # All 7 subscribers' user rows are in the CSV (filter=all)
+        # All 7 contact rows are in the CSV (filter=all).
         for i in range(5):
             assert f"active-{i}@test.com" in csv_content
         for i in range(2):

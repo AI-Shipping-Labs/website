@@ -5,8 +5,8 @@ Single happy-path scenario covering the operator workflow:
 2. Click "Export CSV".
 3. The downloaded file's name matches the locked timestamped pattern.
 4. The CSV header matches the locked column order.
-5. A tagged row, an untagged-unsubscribed row, and an override-tier row
-   each render the right cells.
+5. Tagged, unsubscribed, override-tier, and Slack status rows render the
+   right cells.
 
 Usage:
     uv run pytest playwright_tests/test_studio_users_export.py -v
@@ -73,10 +73,20 @@ def _grant_premium_override(email):
     connection.close()
 
 
+def _set_slack_status(email, *, member=False, checked=False):
+    from accounts.models import User
+
+    user = User.objects.get(email=email)
+    user.slack_member = member
+    user.slack_checked_at = timezone.now() if checked else None
+    user.save(update_fields=["slack_member", "slack_checked_at"])
+    connection.close()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestOperatorExportsContactCSV:
     """Operator clicks Export CSV; the downloaded file is parseable and
-    contains the locked columns plus correctly-rendered tag/tier cells."""
+    contains the locked columns plus correctly-rendered tag/tier/Slack cells."""
 
     def test_export_download_and_parse(self, django_server, browser):
         _ensure_tiers()
@@ -92,16 +102,19 @@ class TestOperatorExportsContactCSV:
             unsubscribed=False,
         )
         _set_tags("alice@test.com", ["early-adopter", "paid-2026"])
+        _set_slack_status("alice@test.com", member=True, checked=True)
 
-        # bob: main tier, no tags, unsubscribed.
+        # bob: main tier, no tags, unsubscribed, checked but absent from Slack.
         _create_user(
             "bob@test.com",
             tier_slug="main",
             email_verified=True,
             unsubscribed=True,
         )
+        _set_slack_status("bob@test.com", member=False, checked=True)
 
-        # charlie: free base, but with an active premium override; one tag.
+        # charlie: free base with active premium override; one tag; never checked
+        # for Slack membership.
         _create_user(
             "charlie@test.com",
             tier_slug="free",
@@ -156,6 +169,7 @@ class TestOperatorExportsContactCSV:
             "unsubscribed",
             "date_joined",
             "last_login",
+            "slack",
         ], f"Unexpected fieldnames: {fieldnames!r}"
 
         rows_by_email = {row["email"]: row for row in rows}
@@ -168,17 +182,20 @@ class TestOperatorExportsContactCSV:
         assert alice["email_verified"] == "Yes"
         assert alice["unsubscribed"] == "No"
         assert alice["last_login"] == ""
+        assert alice["slack"] == "Member"
 
-        # 5b. Bob: empty tags, unsubscribed=Yes.
+        # 5b. Bob: empty tags, unsubscribed=Yes, checked but not in Slack.
         bob = rows_by_email["bob@test.com"]
         assert bob["tags"] == ""
         assert bob["unsubscribed"] == "Yes"
+        assert bob["slack"] == "Not in Slack"
 
-        # 5c. Charlie: override-tier label and single tag.
+        # 5c. Charlie: override-tier label, single tag, and never-checked Slack.
         charlie = rows_by_email["charlie@test.com"]
         assert charlie["tier"] == "Premium (override)", (
             f"Charlie tier cell: {charlie['tier']!r}"
         )
         assert charlie["tags"] == "vip"
+        assert charlie["slack"] == "Never checked"
 
         context.close()

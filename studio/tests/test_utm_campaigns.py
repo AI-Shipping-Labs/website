@@ -82,6 +82,15 @@ class UtmCampaignListViewTest(TestCase):
         # Both CTAs visible
         self.assertContains(response, 'Add Campaign')
         self.assertContains(response, 'Import')
+        self.assertContains(
+            response,
+            'data-testid="utm-campaign-import-link"',
+        )
+        self.assertContains(
+            response,
+            'data-testid="utm-campaign-empty-import-link"',
+        )
+        self.assertContains(response, 'href="/studio/utm-campaigns/import"')
 
     def test_list_shows_active_only_by_default(self):
         active = UtmCampaign.objects.create(
@@ -448,3 +457,6 @@ class StudioSidebarTest(TestCase):
         # New UTM Campaigns link present and labeled distinctly
         self.assertContains(response, 'href="/studio/utm-campaigns/"')
         self.assertContains(response, 'UTM Campaigns')
+        # User Imports sidebar navigation remains separate from UTM campaign import.
+        self.assertContains(response, 'href="/studio/imports/"')
+        self.assertContains(response, 'User imports')

@@ -10,6 +10,7 @@
   </div>
   <div class="flex items-center space-x-2">
     <a href="{% url 'studio_utm_campaign_import' %}"
+       data-testid="utm-campaign-import-link"
        class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
       Import
     </a>
@@ -77,7 +78,7 @@
   {% if not show_archived %}
   <div class="flex items-center justify-center space-x-3">
     <a href="{% url 'studio_utm_campaign_create' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Add Campaign</a>
-    <a href="{% url 'studio_utm_campaign_import' %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Import</a>
+    <a href="{% url 'studio_utm_campaign_import' %}" data-testid="utm-campaign-empty-import-link" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Import</a>
   </div>
   {% endif %}
 </div>

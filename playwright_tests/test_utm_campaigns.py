@@ -211,7 +211,7 @@ class TestScenario4ImportLaunchUrls:
         page = context.new_page()
         page.goto(f"{django_server}/studio/utm-campaigns/", wait_until="domcontentloaded")
 
-        page.click('a:has-text("Import")')
+        page.locator('[data-testid="utm-campaign-import-link"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/utm-campaigns/import" in page.url
 

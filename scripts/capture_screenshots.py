@@ -13,6 +13,11 @@ This script:
 4. Saves them to a temporary directory
 5. Uploads them to the 'screenshots' orphan branch on GitHub
 6. Posts a comment on the issue with embedded images
+
+This is a manual QA/documentation helper. When it starts its own Django server,
+it intentionally uses the configured development database (db.sqlite3 by
+default) and loads synced content. Do not use it to create ad-hoc Playwright
+fixture rows; run `uv run pytest playwright_tests/...` for test validation.
 """
 
 import argparse

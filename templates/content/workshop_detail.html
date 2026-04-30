@@ -67,19 +67,7 @@
       {% if not can_access_landing %}
       <!-- Landing-level paywall: every section is gated. Show only the
            upgrade card so the visitor sees a single, clear CTA. -->
-      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="workshop-landing-paywall">
-        <div class="mb-4">
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">{{ landing_cta_message }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">Get full access to this workshop and more with a membership.</p>
-        <a href="{{ landing_cta_url }}"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-           data-testid="workshop-landing-upgrade-cta">
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          View Pricing
-        </a>
-      </div>
+      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-landing-paywall" gated_icon="lock" gated_heading=landing_cta_message gated_description="The public metadata stays visible; membership unlocks the workshop details." required_tier_name=landing_tier_name gated_cta_url=landing_cta_url gated_cta_label=landing_cta_label gated_cta_testid="workshop-landing-upgrade-cta" %}
       {% else %}
 
       <!-- Action buttons block: video + tutorial cards and the GitHub
@@ -201,19 +189,7 @@
            single, prominent CTA so the visitor doesn't have to click into
            a page to learn that they need to upgrade. -->
       {% if not can_access_pages %}
-      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="workshop-pages-paywall">
-        <div class="mb-4">
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">{{ pages_cta_message }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">Get full access to this workshop and more with a membership.</p>
-        <a href="{{ pages_cta_url }}"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-           data-testid="workshop-pages-upgrade-cta">
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          View Pricing
-        </a>
-      </div>
+      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-pages-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description="The workshop overview and page list are visible now; membership unlocks the step-by-step tutorial." required_tier_name=pages_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="workshop-pages-upgrade-cta" %}
       {% endif %}
 
       <!-- Cross-link back to the linked event (if any) -->

@@ -42,17 +42,8 @@
 
       {% if is_drip_locked %}
       <!-- Drip schedule path: keep the original simple lock card. -->
-      <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
-        <div class="mb-4">
-          <i data-lucide="clock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">This lesson will unlock based on your cohort schedule.</p>
-        <a href="{{ pricing_url }}"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-          <i data-lucide="arrow-left" class="h-4 w-4"></i>
-          Back to Course
-        </a>
+      <div class="mt-8">
+        {% include "content/_gated_access_card.html" %}
       </div>
       {% elif teaser_body_html %}
       <!-- Teaser path: video thumbnail + truncated body + homework intro
@@ -101,53 +92,14 @@
 
       <!-- Pinned upgrade CTA. Replaces the mark-complete button on the
            accessible layout — gating is the only meaningful action here. -->
-      <div class="mt-10 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="teaser-cta">
-        <div class="mb-4">
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">{{ cta_description }}</p>
-        <a href="{{ pricing_url }}"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-           data-testid="teaser-upgrade-cta">
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          {{ cta_label }}
-        </a>
-        {% if signup_cta_url %}
-        <div class="mt-4">
-          <a href="{{ signup_cta_url }}"
-             class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-             data-testid="teaser-signup-cta">
-            <i data-lucide="user-plus" class="h-4 w-4"></i>
-            {{ signup_cta_label }}
-          </a>
-        </div>
-        {% endif %}
+      <div class="mt-10">
+        {% include "content/_gated_access_card.html" %}
       </div>
       {% else %}
       <!-- Fallback: unit body is empty so there's nothing to tease. Render
            the original minimal lock card so we don't ship an empty fade-out. -->
-      <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
-        <div class="mb-4">
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">{{ cta_message }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">{{ cta_description }}</p>
-        <a href="{{ pricing_url }}"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          {{ cta_label }}
-        </a>
-        {% if signup_cta_url %}
-        <div class="mt-4">
-          <a href="{{ signup_cta_url }}"
-             class="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-             data-testid="teaser-signup-cta-fallback">
-            <i data-lucide="user-plus" class="h-4 w-4"></i>
-            {{ signup_cta_label }}
-          </a>
-        </div>
-        {% endif %}
+      <div class="mt-8">
+        {% include "content/_gated_access_card.html" %}
       </div>
       {% endif %}
     </div>

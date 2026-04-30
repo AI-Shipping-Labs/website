@@ -54,19 +54,7 @@
           <!-- Pages-level paywall. Title and breadcrumb are still visible
                so the page is SEO-indexable and the visitor knows what
                they would unlock. -->
-          <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="page-paywall">
-            <div class="mb-4">
-              <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-            </div>
-            <p class="text-lg font-semibold text-foreground">{{ pages_cta_message }}</p>
-            <p class="mt-2 text-sm text-muted-foreground">Get full access to this workshop and more with a membership.</p>
-            <a href="{{ pages_cta_url }}"
-               class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-               data-testid="page-upgrade-cta">
-              <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-              View Pricing
-            </a>
-          </div>
+          {% include "content/_gated_access_card.html" with gated_card_testid="page-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description="The page title and workshop navigation are visible now; membership unlocks the tutorial body." required_tier_name=pages_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="page-upgrade-cta" %}
           {% else %}
           <!-- Page body -->
           {% if page.body_html %}

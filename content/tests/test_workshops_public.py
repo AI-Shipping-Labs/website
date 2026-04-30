@@ -200,6 +200,8 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'data-testid="workshop-pages-paywall"')
         self.assertContains(response, 'Upgrade to Basic to access this workshop')
+        self.assertContains(response, 'Basic+ required')
+        self.assertNotContains(response, 'data-testid="gated-current-state"')
 
     def test_landing_basic_user_does_not_see_pages_paywall(self):
         self.client.force_login(self.user_basic)
@@ -256,6 +258,7 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get(f'/workshops/{ws.slug}')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="workshop-landing-paywall"')
+        self.assertContains(response, 'Basic+ required')
         # Description body is hidden
         self.assertNotContains(response, 'data-testid="workshop-description"')
         # Pages list is hidden
@@ -321,6 +324,8 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/ws/video')
         self.assertContains(response, 'data-testid="video-paywall"')
+        self.assertContains(response, 'Main+ required')
+        self.assertContains(response, 'Current access: Basic member')
 
     def test_video_main_renders_player(self):
         self.client.force_login(self.user_main)
@@ -359,6 +364,7 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         self.client.force_login(u)
         response = self.client.get(f'/workshops/{ws.slug}/video')
         self.assertContains(response, 'data-testid="video-landing-paywall"')
+        self.assertContains(response, 'Current access: Basic member')
 
 
 class WorkshopPageDetailTest(TierSetupMixin, TestCase):
@@ -404,8 +410,19 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'Upgrade to Basic to access this workshop',
         )
+        self.assertContains(response, 'Basic+ required')
+        self.assertNotContains(response, 'data-testid="gated-current-state"')
         # Body must NOT render
         self.assertNotContains(response, 'data-testid="page-body"')
+
+    def test_page_free_member_sees_current_access_state(self):
+        user_free = User.objects.create_user(
+            email='free-page@x.com', password='pw', tier=self.free_tier,
+        )
+        self.client.force_login(user_free)
+        response = self.client.get('/workshops/ws/tutorial/one')
+        self.assertContains(response, 'data-testid="page-paywall"')
+        self.assertContains(response, 'Current access: Free member')
 
     def test_page_basic_renders_body(self):
         self.client.force_login(self.user_basic)

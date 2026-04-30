@@ -23,7 +23,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from content.access import get_required_tier_name
+from content.access import get_required_tier_name, get_user_level
 from content.models import Workshop, WorkshopPage
 from content.services import completion as completion_service
 from content.templatetags.video_utils import (
@@ -82,6 +82,11 @@ def _build_landing_context(workshop, user):
     recording_tier_name = get_required_tier_name(
         workshop.recording_required_level,
     )
+    current_user_state = ''
+    if user.is_authenticated:
+        current_user_state = (
+            f'Current access: {get_required_tier_name(get_user_level(user))} member'
+        )
 
     pages_cta_message = ''
     pages_cta_url = ''
@@ -93,7 +98,7 @@ def _build_landing_context(workshop, user):
 
     recording_cta_message = ''
     recording_cta_url = ''
-    if can_access_pages and not can_access_recording:
+    if not can_access_recording:
         recording_cta_message = (
             f'Upgrade to {recording_tier_name} to watch the recording'
         )
@@ -121,6 +126,10 @@ def _build_landing_context(workshop, user):
         'pages_cta_url': pages_cta_url,
         'recording_cta_message': recording_cta_message,
         'recording_cta_url': recording_cta_url,
+        'current_user_state': current_user_state,
+        'landing_cta_label': 'View Pricing',
+        'pages_cta_label': 'View Pricing',
+        'recording_cta_label': f'Upgrade to {recording_tier_name}',
     }
 
 

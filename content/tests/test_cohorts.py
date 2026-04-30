@@ -538,6 +538,8 @@ class DripScheduleTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/drip-course/module-1/week-2-lesson')
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'This lesson will be available on', status_code=403)
+        self.assertContains(response, 'cohort schedule controls when this lesson opens', status_code=403)
+        self.assertNotContains(response, 'Upgrade to', status_code=403)
 
     def test_drip_unit_available_after_date_passes(self):
         """User enrolled in a cohort, unit available because start_date + days has passed."""

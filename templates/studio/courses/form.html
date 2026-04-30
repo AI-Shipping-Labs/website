@@ -21,11 +21,16 @@
   </div>
 </div>
 
-{% if course %}
-{% studio_origin_panel course %}
+{% url 'studio_course_list' as course_cancel_url %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,48rem)_20rem] lg:items-start">
+<div class="min-w-0 pb-24 md:pb-0">
+{% if is_synced %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="course-edit-form" obj=course title="Source-managed course" subtitle="Edit source content in GitHub, then re-sync." can_save=False primary_label="Save Changes" cancel_url=course_cancel_url github_edit_url=github_edit_url %}
+{% else %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="course-edit-form" obj=course title="Course changes" subtitle="Save remains available while you review the long form." can_save=True primary_label="Save Changes" cancel_url=course_cancel_url %}
 {% endif %}
 
-<form method="post" class="space-y-6 max-w-3xl">
+<form id="course-edit-form" method="post" class="space-y-6">
   {% csrf_token %}
 
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
@@ -169,50 +174,88 @@
     </div>
   </div>
 
+  {% if not is_synced %}
   <div class="flex items-center space-x-4">
-    {% if not is_synced %}
     <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
       {% if course %}Save Changes{% else %}Create Course{% endif %}
     </button>
     <a href="{% url 'studio_course_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
-    {% endif %}
-    {% if course %}
-    <a href="{% url 'studio_course_access_list' course_id=course.pk %}"
-       class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
-      <i data-lucide="shield" class="w-4 h-4"></i>
-      <span>Manage Access</span>
-    </a>
-    <a href="{% url 'studio_peer_review_management' course_id=course.pk %}"
-       class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
-      <i data-lucide="users" class="w-4 h-4"></i>
-      <span>Manage Peer Reviews</span>
-    </a>
-    <a href="{% url 'studio_course_enrollment_list' course_id=course.pk %}"
-       class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors flex items-center space-x-2">
-      <i data-lucide="user-check" class="w-4 h-4"></i>
-      <span>Manage Enrollments</span>
-    </a>
-    {% endif %}
   </div>
+  {% endif %}
 </form>
+</div>
 
-{% if course and course.status == 'published' %}
-{% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
-{% endif %}
+{% if course %}
+<aside class="space-y-4 lg:sticky lg:top-8" data-testid="studio-meta-actions-panel">
+  {% studio_origin_panel course %}
 
-{% if course and course.individual_price_eur and not course.stripe_product_id %}
-<div class="mt-8 max-w-3xl" id="stripe-product-section">
-  <div class="bg-card border border-border rounded-lg p-6">
-    <h2 class="text-lg font-medium text-foreground mb-4">Stripe Product</h2>
-    <p class="text-sm text-muted-foreground mb-4">No Stripe product created for this course yet. Create one to enable individual purchases.</p>
+  <div class="bg-card border border-border rounded-lg p-4" data-testid="course-state-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">State</h2>
+    <dl class="space-y-3 text-sm">
+      <div>
+        <dt class="text-muted-foreground">Publication</dt>
+        <dd class="text-foreground">{{ course.status|title }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Required level</dt>
+        <dd class="text-foreground">Level {{ course.required_level }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Individual purchase</dt>
+        <dd class="text-foreground">{% if course.individual_price_eur %}EUR {{ course.individual_price_eur }}{% else %}Disabled{% endif %}</dd>
+      </div>
+      {% if course.stripe_product_id %}
+      <div>
+        <dt class="text-muted-foreground">Stripe product</dt>
+        <dd class="text-foreground break-all">{{ course.stripe_product_id }}</dd>
+      </div>
+      {% endif %}
+    </dl>
+  </div>
+
+  <div class="bg-card border border-border rounded-lg p-4" data-testid="course-workflow-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Workflows</h2>
+    <div class="flex flex-col gap-2">
+      <a href="{{ course.get_absolute_url }}" target="_blank" class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted" data-testid="panel-view-on-site">
+        <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
+        <span>View on site</span>
+      </a>
+      <a href="{% url 'studio_course_access_list' course_id=course.pk %}" class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted">
+        <i data-lucide="shield" class="mr-2 h-4 w-4"></i>
+        <span>Manage Access</span>
+      </a>
+      <a href="{% url 'studio_peer_review_management' course_id=course.pk %}" class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted">
+        <i data-lucide="users" class="mr-2 h-4 w-4"></i>
+        <span>Manage Peer Reviews</span>
+      </a>
+      <a href="{% url 'studio_course_enrollment_list' course_id=course.pk %}" class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted">
+        <i data-lucide="user-check" class="mr-2 h-4 w-4"></i>
+        <span>Manage Enrollments</span>
+      </a>
+    </div>
+  </div>
+
+  {% if course.status == 'published' %}
+  {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}
+  {% endif %}
+
+  {% if course.individual_price_eur and not course.stripe_product_id %}
+  <div class="bg-card border border-border rounded-lg p-4" id="stripe-product-section" data-testid="stripe-product-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Stripe Product</h2>
+    <p class="text-sm text-muted-foreground mb-4">No Stripe product created for this course yet.</p>
     <button type="button" id="create-stripe-product-btn"
             onclick="createStripeProduct({{ course.pk }})"
-            class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+            class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
       Create Stripe Product
     </button>
-    <span id="stripe-product-status" class="ml-3 text-sm text-muted-foreground"></span>
+    <span id="stripe-product-status" class="mt-3 block text-sm text-muted-foreground"></span>
   </div>
+  {% endif %}
+</aside>
+{% endif %}
 </div>
+
+{% if course and course.individual_price_eur and not course.stripe_product_id %}
 
 <script>
 function createStripeProduct(courseId) {

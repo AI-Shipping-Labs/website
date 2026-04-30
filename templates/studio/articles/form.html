@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}{% if is_synced %}View Article{% elif article %}Edit Article{% else %}New Article{% endif %}{% endblock %}
 
@@ -22,7 +23,16 @@
 
 {% include "studio/includes/synced_banner.html" with obj=article %}
 
-<form method="post" class="space-y-6 max-w-3xl">
+{% url 'studio_article_list' as article_cancel_url %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,48rem)_20rem] lg:items-start">
+<div class="min-w-0 pb-24 md:pb-0">
+{% if is_synced %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="article-edit-form" obj=article title="Source-managed article" subtitle="Edit source content in GitHub, then re-sync." can_save=False primary_label="Save Changes" cancel_url=article_cancel_url github_edit_url=github_edit_url %}
+{% else %}
+{% include "studio/includes/sticky_action_bar.html" with form_id="article-edit-form" obj=article title="Article changes" subtitle="Save remains available while you review the long form." can_save=True primary_label="Save Changes" cancel_url=article_cancel_url %}
+{% endif %}
+
+<form id="article-edit-form" method="post" class="space-y-6">
   {% csrf_token %}
 
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
@@ -114,8 +124,43 @@
   </div>
   {% endif %}
 </form>
+</div>
 
-{% if article and article.published %}
-{% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url %}
+{% if article %}
+<aside class="space-y-4 lg:sticky lg:top-8" data-testid="studio-meta-actions-panel">
+  {% studio_origin_panel article show_actions=False %}
+
+  <div class="bg-card border border-border rounded-lg p-4" data-testid="article-state-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">State</h2>
+    <dl class="space-y-3 text-sm">
+      <div>
+        <dt class="text-muted-foreground">Publication</dt>
+        <dd class="text-foreground">{% if article.published %}Published{% else %}Draft{% endif %}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Required level</dt>
+        <dd class="text-foreground">Level {{ article.required_level }}</dd>
+      </div>
+      <div>
+        <dt class="text-muted-foreground">Author</dt>
+        <dd class="text-foreground">{{ article.author|default:"Not set" }}</dd>
+      </div>
+    </dl>
+  </div>
+
+  <div class="bg-card border border-border rounded-lg p-4" data-testid="article-workflow-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Workflows</h2>
+    <a href="{{ article.get_absolute_url }}" target="_blank" class="inline-flex w-full items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted" data-testid="panel-view-on-site">
+      <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
+      <span>View on site</span>
+    </a>
+  </div>
+
+  {% if article.published %}
+  {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True %}
+  {% endif %}
+</aside>
 {% endif %}
+</div>
+
 {% endblock %}

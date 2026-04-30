@@ -1,17 +1,17 @@
 <!-- Notification Actions: Notify Subscribers and Post to Slack -->
 <!-- Requires: notify_url, announce_url variables to be set before including -->
-<div class="mt-8 max-w-3xl">
-  <div class="bg-card border border-border rounded-lg p-6">
-    <h2 class="text-lg font-medium text-foreground mb-4">Notifications</h2>
-    <div class="flex items-center space-x-4">
+<div class="{% if compact %}space-y-3{% else %}mt-8 max-w-3xl{% endif %}" data-testid="notification-actions">
+  <div class="bg-card border border-border rounded-lg {% if compact %}p-4{% else %}p-6{% endif %}">
+    <h2 class="{% if compact %}text-sm{% else %}text-lg{% endif %} font-medium text-foreground mb-4">Notifications</h2>
+    <div class="{% if compact %}flex flex-col gap-2{% else %}flex items-center space-x-4{% endif %}">
       <button type="button" id="notify-subscribers-btn"
               onclick="notifySubscribers()"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity{% if compact %} w-full{% endif %}">
         Notify subscribers
       </button>
       <button type="button" id="post-to-slack-btn"
               onclick="postToSlack()"
-              class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+              class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors{% if compact %} w-full{% endif %}">
         Post to Slack
       </button>
     </div>

@@ -1,0 +1,56 @@
+{% load studio_filters %}
+<div class="sticky bottom-0 md:top-4 md:bottom-auto z-30 -mx-4 md:mx-0 mb-6" data-testid="sticky-action-bar">
+  <div class="border border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur md:rounded-lg">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-foreground">{{ title }}</p>
+        <p class="text-xs text-muted-foreground">{{ subtitle }}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        {% if can_save %}
+        <button type="submit"
+                form="{{ form_id }}"
+                class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent/50"
+                data-testid="sticky-save-action">
+          <i data-lucide="save" class="mr-2 h-4 w-4"></i>
+          <span>{{ primary_label }}</span>
+        </button>
+        <a href="{{ cancel_url }}"
+           class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+           data-testid="sticky-cancel-action">Cancel</a>
+        {% else %}
+        {% if github_edit_url %}
+        <a href="{{ github_edit_url }}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center justify-center rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/20"
+           data-testid="sticky-github-source-link">
+          <i data-lucide="github" class="mr-2 h-4 w-4"></i>
+          <span>Edit on GitHub</span>
+        </a>
+        {% endif %}
+        {% if obj.get_absolute_url %}
+        <a href="{{ obj.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+           data-testid="sticky-view-on-site">
+          <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
+          <span>View on site</span>
+        </a>
+        {% endif %}
+        {% if obj.source_repo %}
+        <form method="post"
+              action="{% url 'studio_sync_object_trigger' model_name=obj|model_name object_id=obj.pk %}"
+              class="inline-flex"
+              data-testid="sticky-resync-source-form">
+          {% csrf_token %}
+          <button type="submit"
+                  class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                  data-testid="sticky-resync-source-button">
+            <i data-lucide="refresh-cw" class="mr-2 h-4 w-4"></i>
+            <span>Re-sync source</span>
+          </button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

@@ -136,7 +136,9 @@ class NonEligibleUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def test_renders_upgrade_cta(self):
         response = self.client.get(self.unit_url)
-        self.assertContains(response, 'Upgrade to Main', status_code=403)
+        self.assertContains(response, 'Upgrade to Main to access this lesson', status_code=403)
+        self.assertContains(response, 'Main+ required', status_code=403)
+        self.assertContains(response, 'Current access: Basic member', status_code=403)
         self.assertContains(
             response, 'data-testid="teaser-upgrade-cta"', status_code=403,
         )
@@ -195,24 +197,22 @@ class AnonymousUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
         response = self.client.get(self.unit_url)
         self.assertContains(response, 'TEASERINTROMARKER', status_code=403)
 
-    def test_renders_signup_cta(self):
+    def test_renders_pricing_and_signup_ctas(self):
         response = self.client.get(self.unit_url)
         self.assertContains(
+            response, 'data-testid="teaser-upgrade-cta"', status_code=403,
+            count=1,
+        )
+        self.assertContains(response, 'Main+ required', status_code=403)
+        self.assertContains(response, 'View Pricing', status_code=403)
+        self.assertContains(
             response, 'data-testid="teaser-signup-cta"', status_code=403,
+            count=1,
         )
         self.assertContains(
             response, 'Sign in or create a free account', status_code=403,
         )
         self.assertContains(response, '/accounts/signup/', status_code=403)
-
-    def test_renders_pricing_cta_too(self):
-        """Anonymous on a paid course gets BOTH a signup CTA and the
-        pricing CTA — issue #248 requirement."""
-        response = self.client.get(self.unit_url)
-        self.assertContains(
-            response, 'data-testid="teaser-upgrade-cta"', status_code=403,
-        )
-        self.assertContains(response, 'View Pricing', status_code=403)
 
 
 # ------------------------------------------------------------
@@ -314,7 +314,7 @@ class EmptyBodyFallbackTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def test_still_shows_upgrade_cta(self):
         response = self.client.get(self.empty_url)
-        self.assertContains(response, 'Upgrade to Main', status_code=403)
+        self.assertContains(response, 'Upgrade to Main to access this lesson', status_code=403)
         self.assertContains(response, 'View Pricing', status_code=403)
 
 

@@ -430,6 +430,16 @@ def _get_prev_unit(course, current_unit):
     return None
 
 
+def _current_access_state(user, required_level):
+    """Return signed-in user access copy for gated cards only."""
+    if not user.is_authenticated:
+        return ''
+    user_level = get_user_level(user)
+    if user_level >= required_level:
+        return ''
+    return f'Current access: {get_required_tier_name(user_level)} member'
+
+
 def course_unit_detail(request, course_slug, module_slug, unit_slug):
     """Unit page: gated by tier level, except for preview units.
 
@@ -450,13 +460,15 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
 
     if not has_access:
         if not user.is_authenticated:
-            cta_message = 'Sign in to access this lesson'
-            tier_name = None
             if course.required_level == 0:
+                cta_message = 'Sign in to access this lesson'
+                tier_name = None
                 pricing_url = '/accounts/signup/'
                 cta_label = 'Sign Up'
                 cta_description = 'Create a free account to access this course.'
             else:
+                cta_message = 'Sign in to access this lesson'
+                tier_name = get_required_tier_name(course.required_level)
                 pricing_url = '/accounts/login/'
                 cta_label = 'View Pricing'
                 cta_description = 'Get full access to this course and more with a membership.'
@@ -509,6 +521,14 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
             'signup_cta_url': signup_cta_url,
             'signup_cta_label': signup_cta_label,
             'user_authenticated': user.is_authenticated,
+            'current_user_state': _current_access_state(user, course.required_level),
+            'gated_card_testid': 'teaser-cta',
+            'gated_icon': 'lock',
+            'gated_heading': cta_message,
+            'gated_description': cta_description,
+            'gated_cta_url': pricing_url,
+            'gated_cta_label': cta_label,
+            'gated_cta_testid': 'teaser-upgrade-cta',
         }
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
@@ -533,12 +553,22 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     if drip_locked:
         context = {
             'course': course,
+            'module': module,
             'unit': unit,
             'is_gated': True,
             'is_drip_locked': True,
             'drip_available_date': drip_available_date,
             'cta_message': f'This lesson will be available on {drip_available_date.strftime("%B %d, %Y")}',
             'pricing_url': f'/courses/{course.slug}',
+            'gated_card_testid': 'drip-locked-card',
+            'gated_icon': 'clock',
+            'gated_heading': f'This lesson will be available on {drip_available_date.strftime("%B %d, %Y")}',
+            'gated_description': 'Your membership already qualifies; the cohort schedule controls when this lesson opens.',
+            'required_tier_name': '',
+            'current_user_state': '',
+            'gated_cta_url': f'/courses/{course.slug}',
+            'gated_cta_label': 'Back to Course',
+            'gated_cta_testid': 'drip-back-cta',
         }
         return render(request, 'content/course_unit_detail.html', context, status=403)
 

@@ -41,34 +41,11 @@
       {% if not can_access_landing %}
       <!-- Landing gate failed: don't even tease the recording. Fall back
            to the same upgrade card the landing uses. -->
-      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="video-landing-paywall">
-        <div class="mb-4">
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">{{ landing_cta_message }}</p>
-        <p class="mt-2 text-sm text-muted-foreground">Get full access to this workshop and more with a membership.</p>
-        <a href="{{ landing_cta_url }}"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          View Pricing
-        </a>
-      </div>
+      {% include "content/_gated_access_card.html" with gated_card_testid="video-landing-paywall" gated_icon="lock" gated_heading=landing_cta_message gated_description="The workshop landing page must be unlocked before the recording is available." required_tier_name=landing_tier_name gated_cta_url=landing_cta_url gated_cta_label=landing_cta_label gated_cta_testid="video-landing-upgrade-cta" %}
       {% elif not can_access_recording %}
       <!-- Recording-specific paywall: lifted from the events recording
            panel pattern but with the recording-tier copy from the spec. -->
-      <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="video-paywall">
-        <div class="mb-4">
-          <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
-        </div>
-        <p class="text-lg font-semibold text-foreground">Upgrade to {{ recording_tier_name }} to watch the recording</p>
-        <p class="mt-2 text-sm text-muted-foreground">Watch the full session with timestamps and downloadable materials.</p>
-        <a href="/pricing"
-           class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-           data-testid="video-upgrade-cta">
-          <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
-          Upgrade to {{ recording_tier_name }}
-        </a>
-      </div>
+      {% include "content/_gated_access_card.html" with gated_card_testid="video-paywall" gated_icon="play" gated_heading=recording_cta_message gated_description="The tutorial can remain separate from the recording; this gate unlocks the video, timestamps, and materials." required_tier_name=recording_tier_name gated_cta_url=recording_cta_url gated_cta_label=recording_cta_label gated_cta_testid="video-upgrade-cta" %}
       {% else %}
 
       {% if event and event.has_recording %}

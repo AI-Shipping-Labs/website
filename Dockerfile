@@ -17,8 +17,9 @@ RUN uv sync --no-dev --frozen
 # Copy application code
 COPY . .
 
-# Collect static files
-RUN uv run python manage.py collectstatic --noinput
+# Collect static files with the same storage backend used at runtime.
+RUN DEBUG=False SECRET_KEY=collectstatic-build-secret ALLOWED_HOSTS=localhost \
+    uv run python manage.py collectstatic --noinput
 
 RUN chmod +x entrypoint.sh
 

@@ -2,9 +2,8 @@
 
 Provides:
 
-- ``/studio/settings/`` — dashboard with two zones: Auth & Login (OAuth
-  providers backed by ``SocialApp``) and Integrations (outbound service
-  credentials backed by ``IntegrationSetting``).
+- ``/studio/settings/`` — dashboard with navigable sections for Auth,
+  Payments, Content, Messaging, Storage, Site, and uncategorized settings.
 - ``/studio/settings/<group_name>/save/`` — save settings for a specific
   integration group.
 - ``/studio/settings/auth/<provider>/save/`` — save OAuth credentials
@@ -41,6 +40,63 @@ from studio.services.settings_io import (
     apply_import,
     build_export,
 )
+
+SETTINGS_SECTIONS = [
+    {
+        'id': 'auth',
+        'label': 'Auth',
+        'description': 'OAuth providers users see on the login page.',
+        'group_names': set(),
+    },
+    {
+        'id': 'payments',
+        'label': 'Payments',
+        'description': 'Billing and checkout integrations.',
+        'group_names': {'stripe'},
+    },
+    {
+        'id': 'content',
+        'label': 'Content',
+        'description': 'Content sync, video, and live-session service credentials.',
+        'group_names': {'github', 'youtube', 'zoom'},
+    },
+    {
+        'id': 'messaging',
+        'label': 'Messaging',
+        'description': 'Email, notifications, and community messaging integrations.',
+        'group_names': {'ses', 'slack'},
+    },
+    {
+        'id': 'storage',
+        'label': 'Storage',
+        'description': 'Buckets and public storage locations for generated assets.',
+        'group_names': {'s3_recordings', 's3_content'},
+    },
+    {
+        'id': 'site',
+        'label': 'Site',
+        'description': 'Platform-level URL and display settings.',
+        'group_names': {'site'},
+    },
+]
+
+OTHER_SECTION = {
+    'id': 'other',
+    'label': 'Other',
+    'description': 'Settings that are not yet mapped to a primary section.',
+    'group_names': set(),
+}
+
+HIGH_RISK_GROUP_NAMES = {'stripe', 'ses', 'github', 's3_recordings', 's3_content'}
+HIGH_RISK_AUTH_PROVIDERS = {'google', 'github', 'slack'}
+
+
+def _section_id_for_group_name(group_name):
+    """Return the settings section id for a registry group name."""
+    for section in SETTINGS_SECTIONS:
+        if group_name in section['group_names']:
+            return section['id']
+    return OTHER_SECTION['id']
 
 
 def _build_group_context(group_def, db_settings):
@@ -100,12 +156,110 @@ def _build_group_context(group_def, db_settings):
         'status': status,
         'keys_set': keys_set,
         'total_keys': total_keys,
+        'section_id': _section_id_for_group_name(group_def['name']),
+    }
+
+
+def _build_settings_sections(groups, auth_providers):
+    """Place every auth provider and integration group in one visible section."""
+    groups_by_section = {section['id']: [] for section in SETTINGS_SECTIONS}
+    other_groups = []
+    for group in groups:
+        section_id = group['section_id']
+        if section_id in groups_by_section:
+            groups_by_section[section_id].append(group)
+        else:
+            other_groups.append(group)
+
+    sections = []
+    for section in SETTINGS_SECTIONS:
+        section_context = {
+            'id': section['id'],
+            'label': section['label'],
+            'description': section['description'],
+            'groups': groups_by_section[section['id']],
+            'auth_providers': auth_providers if section['id'] == 'auth' else [],
+        }
+        if section_context['auth_providers'] or section_context['groups']:
+            sections.append(section_context)
+
+    if other_groups:
+        sections.append({
+            'id': OTHER_SECTION['id'],
+            'label': OTHER_SECTION['label'],
+            'description': OTHER_SECTION['description'],
+            'groups': other_groups,
+            'auth_providers': [],
+        })
+
+    return sections
+
+
+def _build_status_summary(groups, auth_providers):
+    """Summarize settings state using local metadata only."""
+    configured_count = 0
+    partial_count = 0
+    missing_count = 0
+    missing_required_values = 0
+    db_override_count = 0
+    env_backed_count = 0
+    high_risk_items = []
+
+    for provider in auth_providers:
+        if provider['is_configured']:
+            configured_count += 1
+            status = 'configured'
+        else:
+            missing_count += 1
+            missing_required_values += 1
+            status = 'not_configured'
+
+        if provider['provider'] in HIGH_RISK_AUTH_PROVIDERS:
+            high_risk_items.append({
+                'label': provider['label'],
+                'section_label': 'Auth',
+                'status': status,
+            })
+
+    section_labels = {
+        section['id']: section['label']
+        for section in [*SETTINGS_SECTIONS, OTHER_SECTION]
+    }
+
+    for group in groups:
+        if group['status'] == 'configured':
+            configured_count += 1
+        elif group['status'] == 'partial':
+            partial_count += 1
+        else:
+            missing_count += 1
+
+        missing_required_values += group['total_keys'] - group['keys_set']
+        db_override_count += sum(1 for field in group['fields'] if field['source'] == 'db')
+        env_backed_count += sum(1 for field in group['fields'] if field['source'] == 'env')
+
+        if group['name'] in HIGH_RISK_GROUP_NAMES:
+            high_risk_items.append({
+                'label': group['label'],
+                'section_label': section_labels[group['section_id']],
+                'status': group['status'],
+            })
+
+    return {
+        'total_items': len(auth_providers) + len(groups),
+        'configured_count': configured_count,
+        'partial_count': partial_count,
+        'missing_count': missing_count,
+        'missing_required_values': missing_required_values,
+        'db_override_count': db_override_count,
+        'env_backed_count': env_backed_count,
+        'high_risk_items': high_risk_items,
     }
 
 
 @staff_required
 def settings_dashboard(request):
-    """Render the two-zone settings dashboard (Auth & Login + Integrations)."""
+    """Render the sectioned settings dashboard."""
     db_settings = dict(
         IntegrationSetting.objects.values_list('key', 'value')
     )
@@ -119,9 +273,14 @@ def settings_dashboard(request):
         django_settings.SOCIALACCOUNT_PROVIDERS,
     )
 
+    sections = _build_settings_sections(groups, auth_providers)
+    status_summary = _build_status_summary(groups, auth_providers)
+
     return render(request, 'studio/settings/dashboard.html', {
         'groups': groups,
         'auth_providers': auth_providers,
+        'settings_sections': sections,
+        'status_summary': status_summary,
         'site_base_url': django_settings.SITE_BASE_URL,
     })
 
@@ -173,7 +332,7 @@ def settings_save_group(request, group_name):
 
     clear_config_cache()
     messages.success(request, f'{group_def["label"]} settings saved ({saved_count} keys).')
-    return redirect('studio_settings')
+    return redirect(f'/studio/settings/#{_section_id_for_group_name(group_name)}')
 
 
 @staff_required

@@ -18,7 +18,7 @@ User = get_user_model()
 
 @override_settings(SITE_BASE_URL='https://test.aishippinglabs.com')
 class AuthLoginDashboardTest(TestCase):
-    """Dashboard renders both zones with the expected auth-card content."""
+    """Dashboard renders sectioned settings with expected auth-card content."""
 
     @classmethod
     def setUpTestData(cls):
@@ -29,13 +29,20 @@ class AuthLoginDashboardTest(TestCase):
     def setUp(self):
         self.client.login(email='admin@test.com', password='testpass')
 
-    def test_dashboard_renders_two_zones(self):
+    def test_dashboard_renders_sectioned_settings_anchors(self):
         response = self.client.get('/studio/settings/')
         self.assertEqual(response.status_code, 200)
-        # Both section anchors must be present so the operator can see
-        # the Auth & Login zone above the Integrations zone.
-        self.assertContains(response, 'id="auth-login"')
-        self.assertContains(response, 'id="integrations"')
+        # Stable anchors for the sectioned dashboard. Auth has its own
+        # section; integrations are grouped by operational area instead of
+        # one legacy "integrations" zone.
+        self.assertContains(response, 'data-settings-section="auth"')
+        self.assertContains(response, 'id="auth"')
+        for section_id in ('payments', 'content', 'messaging', 'storage', 'site'):
+            self.assertContains(response, f'data-settings-section="{section_id}"')
+            self.assertContains(response, f'href="#{section_id}"')
+        self.assertContains(response, 'id="integration-stripe"')
+        self.assertContains(response, 'id="integration-github"')
+        self.assertContains(response, 'id="integration-slack"')
 
     def test_auth_zone_renders_three_provider_cards(self):
         response = self.client.get('/studio/settings/')

@@ -11,6 +11,11 @@ from django.conf import settings
 from django.utils import timezone
 
 from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
+from integrations.services.github_sync.lifecycle import (
+    cleanup_stale_synced_objects,
+    find_synced_object,
+    upsert_synced_object,
+)
 from integrations.services.github_sync.media import rewrite_cover_image_url, rewrite_image_urls, _check_broken_image_refs
 from integrations.services.github_sync.parsing import (
     _check_slug_collision,
@@ -242,27 +247,13 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                     else:
                         content_defaults['published_at'] = published_at
 
-            # Try to find existing event by slug + source_repo
-            try:
-                event = Event.objects.get(slug=slug, source_repo=source.repo_name)
-                # Issue #225: skip the save when every synced content field
-                # matches the DB row. Operational fields (start_datetime,
-                # zoom_join_url, status, etc.) are not in content_defaults,
-                # so they are never touched here.
-                if _defaults_differ(event, content_defaults):
-                    for key, value in content_defaults.items():
-                        setattr(event, key, value)
-                    event.save()
-                    stats['updated'] += 1
-                    stats['items_detail'].append({
-                        'title': content_defaults.get('title', slug),
-                        'slug': slug,
-                        'action': 'updated',
-                        'content_type': 'event',
-                    })
-                else:
-                    stats['unchanged'] += 1
-            except Event.DoesNotExist:
+            event = find_synced_object((
+                lambda: Event.objects.filter(
+                    slug=slug, source_repo=source.repo_name,
+                ).first(),
+            ))
+            create_kwargs = None
+            if event is None:
                 # Content-repo events still default to recording-style rows
                 # unless operational frontmatter explicitly says otherwise.
                 start_dt_value = _coerce_event_datetime(data.get('start_datetime'))
@@ -271,24 +262,33 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                 if not start_dt_value:
                     start_dt_value = timezone.now()
 
-                event = Event(
-                    slug=slug,
-                    start_datetime=start_dt_value,
-                    end_datetime=_coerce_event_datetime(data.get('end_datetime')),
-                    status=data.get('status') or 'completed',
-                    timezone=data.get('timezone') or settings.TIME_ZONE,
-                    platform=data.get('platform') or 'zoom',
-                    location=data.get('location', '') or '',
-                    **content_defaults,
-                )
-                event.save()
-                stats['created'] += 1
-                stats['items_detail'].append({
+                create_kwargs = {
+                    'slug': slug,
+                    'start_datetime': start_dt_value,
+                    'end_datetime': _coerce_event_datetime(
+                        data.get('end_datetime'),
+                    ),
+                    'status': data.get('status') or 'completed',
+                    'timezone': data.get('timezone') or settings.TIME_ZONE,
+                    'platform': data.get('platform') or 'zoom',
+                    'location': data.get('location', '') or '',
+                }
+
+            result = upsert_synced_object(
+                model=Event,
+                lookup=lambda: event,
+                defaults=content_defaults,
+                stats=stats,
+                create_kwargs=create_kwargs,
+                detail=lambda obj, action: {
                     'title': content_defaults.get('title', slug),
                     'slug': slug,
-                    'action': 'created',
+                    'action': action,
                     'content_type': 'event',
-                })
+                },
+            )
+            event = result.instance
+            if result.created:
                 _maybe_create_zoom_meeting_for_synced_event(event, data)
 
             # Resolve instructors: list and attach M2M (post-save).
@@ -323,13 +323,16 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs).exclude(
         kind='workshop',
     )
-    for ev in stale:
-        stats['items_detail'].append({
+    cleanup_stale_synced_objects(
+        stale,
+        stats=stats,
+        detail=lambda ev, action: {
             'title': ev.title,
             'slug': ev.slug,
-            'action': 'deleted',
+            'action': action,
             'content_type': 'event',
-        })
-    deleted_count = stale.count()
-    stale.update(published=False)
-    stats['deleted'] += deleted_count
+        },
+        cleanup=lambda events: Event.objects.filter(
+            pk__in=[event.pk for event in events],
+        ).update(published=False),
+    )

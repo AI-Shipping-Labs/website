@@ -9,6 +9,11 @@ import uuid
 from django.utils import timezone
 
 from integrations.services.github_sync.common import INSTRUCTOR_ID_RE, GitHubSyncError, logger
+from integrations.services.github_sync.lifecycle import (
+    cleanup_stale_synced_objects,
+    find_synced_object,
+    upsert_synced_object,
+)
 from integrations.services.github_sync.media import rewrite_cover_image_url, rewrite_image_urls, _check_broken_image_refs
 from integrations.services.github_sync.parsing import (
     _check_slug_collision,
@@ -61,38 +66,41 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
         status='published',
     ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs))
 
-    deleted_count = 0
-    for course in stale_courses:
-        stats['items_detail'].append({
+    def _cleanup_stale_courses(courses):
+        for course in courses:
+            # Issue #366: if a published sibling holds the same content_id
+            # (e.g. the course was renamed and re-synced earlier in this
+            # walk, or moved to another repo), reattach FKs to it and
+            # delete the orphan instead of leaving a draft behind. Without
+            # this, the dashboard's Continue Learning widget keeps building
+            # URLs against the old slug.
+            sibling = None
+            if course.content_id is not None:
+                sibling = Course.objects.filter(
+                    content_id=course.content_id,
+                    status='published',
+                ).exclude(pk=course.pk).first()
+
+            if sibling is not None:
+                _reattach_course_fks(course, sibling)
+                course.delete()
+            else:
+                course.status = 'draft'
+                course.save(update_fields=['status', 'updated_at'])
+
+    cleanup_stale_synced_objects(
+        stale_courses,
+        stats=stats,
+        detail=lambda course, action: {
             'title': course.title,
             'slug': course.slug,
-            'action': 'deleted',
+            'action': action,
             'content_type': 'course',
             'course_id': course.pk,
             'course_slug': course.slug,
-        })
-        deleted_count += 1
-
-        # Issue #366: if a published sibling holds the same content_id
-        # (e.g. the course was renamed and re-synced earlier in this
-        # walk, or moved to another repo), reattach FKs to it and
-        # delete the orphan instead of leaving a draft behind. Without
-        # this, the dashboard's Continue Learning widget keeps building
-        # URLs against the old slug.
-        sibling = None
-        if course.content_id is not None:
-            sibling = Course.objects.filter(
-                content_id=course.content_id,
-                status='published',
-            ).exclude(pk=course.pk).first()
-
-        if sibling is not None:
-            _reattach_course_fks(course, sibling)
-            course.delete()
-        else:
-            course.status = 'draft'
-            course.save(update_fields=['status', 'updated_at'])
-    stats['deleted'] += deleted_count
+        },
+        cleanup=_cleanup_stale_courses,
+    )
 
 
 def _reattach_course_fks(orphan_course, target_course):
@@ -300,7 +308,7 @@ def _sync_single_course(
         candidates = list(
             Course.objects.filter(content_id=course_content_id),
         )
-        course = None
+        course_by_content_id = None
         if candidates:
             # Stable preference order: same-repo published, other-repo
             # published, same-repo draft, other-repo draft. This keeps the
@@ -311,40 +319,44 @@ def _sync_single_course(
                 is_draft = 0 if c.status == 'published' else 1
                 return (is_draft, same_repo, c.pk)
             candidates.sort(key=_priority)
-            course = candidates[0]
+            course_by_content_id = candidates[0]
 
         # Backward-compat fallback: older synced rows may predate content_id
         # backfills, so still support slug-based matching when the stable-ID
         # lookup misses.
-        if course is None:
-            course = Course.objects.filter(
+        course = find_synced_object((
+            lambda: course_by_content_id,
+            lambda: Course.objects.filter(
                 slug=slug,
                 source_repo=source.repo_name,
-            ).first()
+            ).first(),
+        ))
 
-        if course is None:
-            course = Course(slug=slug, **course_defaults)
-            course.save()
-            created = True
-            changed = True
-        else:
-            identity_changed = (
-                course.slug != slug
-                or course.source_path != rel_path
-                or course.source_repo != source.repo_name
-                or course.status != 'published'
-            )
-            if identity_changed or _defaults_differ(course, course_defaults):
-                course.slug = slug
-                for k, v in course_defaults.items():
-                    setattr(course, k, v)
-                course.save()
-                created = False
-                changed = True
-            else:
-                created = False
-                changed = False
+        result = upsert_synced_object(
+            model=Course,
+            lookup=lambda: course,
+            defaults=course_defaults,
+            stats=stats,
+            create_kwargs={'slug': slug},
+            identity_changed=lambda obj: (
+                obj.slug != slug
+                or obj.source_path != rel_path
+                or obj.source_repo != source.repo_name
+                or obj.status != 'published'
+            ),
+            apply_identity=lambda obj: setattr(obj, 'slug', slug),
+            detail=lambda obj, action: {
+                'title': course_defaults.get('title', slug),
+                'slug': slug,
+                'action': action,
+                'content_type': 'course',
+                'course_id': obj.pk,
+                'course_slug': obj.slug,
+            },
+        )
+        course = result.instance
 
+        if not result.created:
             # Issue #366: any other Course row that shares this
             # content_id is an orphan from an earlier rename / cross-repo
             # move. Reattach its FKs to the live row and delete it so
@@ -354,23 +366,6 @@ def _sync_single_course(
                     continue
                 _reattach_course_fks(sibling, course)
                 sibling.delete()
-
-        if changed:
-            action = 'created' if created else 'updated'
-            if created:
-                stats['created'] += 1
-            else:
-                stats['updated'] += 1
-            stats['items_detail'].append({
-                'title': course_defaults.get('title', slug),
-                'slug': slug,
-                'action': action,
-                'content_type': 'course',
-                'course_id': course.pk,
-                'course_slug': course.slug,
-            })
-        else:
-            stats['unchanged'] += 1
 
         # Resolve instructors: list and attach M2M (post-save).
         resolved_instructors = _resolve_instructors_for_yaml(
@@ -1255,5 +1250,4 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     deleted_count = stale_units.count()
     stale_units.delete()
     stats['deleted'] += deleted_count
-
 

@@ -222,6 +222,24 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
             'img[src="https://example.com/intro-ml.jpg"]'
         )
         assert cover_img.count() >= 1
+        assert cover_img.first.get_attribute("alt") == "Cover image for Intro to ML"
+        assert cover_img.first.get_attribute("loading") == "lazy"
+
+        # Missing artwork uses the shared metadata fallback instead of the
+        # old icon-only placeholder panel.
+        advanced_card = page.locator(
+            'article:has(a[href="/courses/advanced-mlops"])'
+        )
+        assert (
+            advanced_card.locator(
+                '[data-testid="course-card-preview-fallback"]'
+            ).count()
+            == 1
+        )
+        assert "Advanced MLOps" in advanced_card.locator(
+            '[data-testid="course-card-preview-fallback"]'
+        ).inner_text()
+        assert advanced_card.locator(".h-12.w-12").count() == 0
 
         # "Advanced MLOps" card with "Main+" tier badge
         assert "Advanced MLOps" in body
@@ -260,6 +278,23 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         # Tag badges
         assert "python" in body
         assert "ai" in body
+
+        detail_cover = page.locator(
+            '[data-testid="course-detail-preview-image"]'
+        )
+        assert detail_cover.count() == 1
+        assert detail_cover.get_attribute("alt") == "Cover image for Intro to ML"
+
+        page.goto(
+            f"{django_server}/courses/advanced-mlops",
+            wait_until="domcontentloaded",
+        )
+        detail_fallback = page.locator(
+            '[data-testid="course-detail-preview-fallback"]'
+        )
+        assert detail_fallback.count() == 1
+        assert "Advanced MLOps" in detail_fallback.inner_text()
+        assert "Main+" in detail_fallback.inner_text()
 
         # "Join the discussion" link removed (see #151)
         discussion_link = page.locator(

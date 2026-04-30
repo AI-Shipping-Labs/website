@@ -25,14 +25,12 @@
         {% for course in courses %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50">
           <a href="/courses/{{ course.slug }}">
-            {% if course.cover_image_url %}
-            <div class="aspect-video w-full overflow-hidden bg-muted">
-              <img src="{{ course.cover_image_url }}" alt="{{ course.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
-            </div>
+            {% if course.is_free %}
+              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="lazy" %}
+            {% elif course.required_level > 0 %}
+              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label=course.required_level|required_tier_name|add:"+" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="lazy" %}
             {% else %}
-            <div class="aspect-video w-full bg-muted flex items-center justify-center">
-              <i data-lucide="book-open" class="h-12 w-12 text-muted-foreground"></i>
-            </div>
+              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="lazy" %}
             {% endif %}
             <div class="p-6">
               <div class="flex flex-wrap items-center gap-2 mb-3">

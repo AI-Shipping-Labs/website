@@ -130,6 +130,25 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops?tag=does-not-exist')
         self.assertContains(response, 'No workshops found')
 
+    def test_catalog_missing_cover_uses_metadata_fallback_preview(self):
+        response = self.client.get('/workshops')
+        self.assertContains(response, 'data-testid="workshop-card-preview-fallback"')
+        self.assertContains(response, 'Workshop')
+        self.assertContains(response, 'Alice')
+        self.assertContains(response, 'Apr 21, 2026')
+        self.assertContains(response, 'agents')
+        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
+
+    def test_catalog_cover_image_has_alt_text_and_lazy_loading(self):
+        self.published.cover_image_url = 'https://cdn.example/workshop-card.png'
+        self.published.save()
+        response = self.client.get('/workshops')
+        self.assertContains(response, 'data-testid="workshop-card-preview-image"')
+        self.assertContains(response, 'https://cdn.example/workshop-card.png')
+        self.assertContains(response, 'alt="Cover image for Visible Workshop"')
+        self.assertContains(response, 'loading="lazy"')
+        self.assertNotContains(response, 'data-testid="workshop-card-preview-fallback"')
+
 
 class WorkshopLandingTest(TierSetupMixin, TestCase):
     @classmethod
@@ -180,6 +199,24 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
     def test_landing_shows_cover_image_when_set(self):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'https://cdn.example/cover.png')
+        self.assertContains(response, 'alt="Cover image for Production Agents"')
+        self.assertContains(response, 'data-testid="workshop-detail-preview-image"')
+        self.assertNotContains(response, 'data-testid="workshop-detail-preview-fallback"')
+
+    def test_landing_missing_cover_uses_metadata_preview(self):
+        ws = _make_workshop(
+            slug='no-cover',
+            title='No Cover Workshop',
+            cover_image_url='',
+            tags=['agents'],
+        )
+        response = self.client.get(f'/workshops/{ws.slug}')
+        self.assertContains(response, 'data-testid="workshop-detail-preview-fallback"')
+        self.assertContains(response, 'No Cover Workshop')
+        self.assertContains(response, 'Workshop')
+        self.assertContains(response, 'Alice')
+        self.assertContains(response, 'Apr 21, 2026')
+        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
     def test_landing_shows_instructor_and_date(self):
         response = self.client.get('/workshops/ws')

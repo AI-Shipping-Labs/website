@@ -18,11 +18,13 @@
         Back to Workshops
       </a>
 
-      {% if workshop.cover_image_url %}
       <div class="mb-8 overflow-hidden rounded-lg">
-        <img src="{{ workshop.cover_image_url }}" alt="{{ workshop.title }}" class="w-full object-cover">
+        {% if workshop.pages_required_level > 0 %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
+        {% else %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label="Free" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
+        {% endif %}
       </div>
-      {% endif %}
 
       <header class="mb-12">
         <div class="mb-4 flex flex-wrap items-center gap-2">

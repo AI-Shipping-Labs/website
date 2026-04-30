@@ -436,6 +436,18 @@ class CoursesListViewTest(TestCase):
         self.published.save()
         response = self.client.get('/courses')
         self.assertContains(response, 'https://example.com/cover.jpg')
+        self.assertContains(response, 'alt="Cover image for Published Course"')
+        self.assertContains(response, 'loading="lazy"')
+        self.assertContains(response, 'data-testid="course-card-preview-image"')
+        self.assertNotContains(response, 'data-testid="course-card-preview-fallback"')
+
+    def test_missing_cover_uses_metadata_fallback_preview(self):
+        response = self.client.get('/courses')
+        self.assertContains(response, 'data-testid="course-card-preview-fallback"')
+        self.assertContains(response, 'Course')
+        self.assertContains(response, 'Test Instructor')
+        self.assertContains(response, 'python')
+        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
 
 # ============================================================
@@ -543,6 +555,22 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         self.assertIn('Introduction', content)
         self.assertIn('Setup', content)
         self.assertIn('Deep Dive', content)
+
+    def test_missing_cover_uses_metadata_preview(self):
+        response = self.client.get('/courses/detail-course')
+        self.assertContains(response, 'data-testid="course-detail-preview-fallback"')
+        self.assertContains(response, 'Main+')
+        self.assertContains(response, 'Jane Doe')
+        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
+
+    def test_cover_image_uses_preview_with_alt_text(self):
+        self.course.cover_image_url = 'https://example.com/detail-cover.jpg'
+        self.course.save()
+        response = self.client.get('/courses/detail-course')
+        self.assertContains(response, 'data-testid="course-detail-preview-image"')
+        self.assertContains(response, 'https://example.com/detail-cover.jpg')
+        self.assertContains(response, 'alt="Cover image for Detail Course"')
+        self.assertNotContains(response, 'data-testid="course-detail-preview-fallback"')
 
 
 @tag('core')

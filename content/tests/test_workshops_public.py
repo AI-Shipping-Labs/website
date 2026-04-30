@@ -445,6 +445,102 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'aria-current="page"')
 
 
+class LegacyWorkshopPageRedirectTest(TierSetupMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.workshop = _make_workshop(
+            slug='legacy-ws', title='Legacy Workshop',
+        )
+        cls.page = _make_page(
+            cls.workshop, 'starting-notebook', 'Starting Notebook', 1,
+        )
+        cls.user_basic = User.objects.create_user(
+            email='legacy-basic@x.com', password='pw', tier=cls.basic_tier,
+        )
+
+    def test_valid_legacy_page_redirects_permanently_to_tutorial(self):
+        response = self.client.get(
+            '/workshops/legacy-ws/starting-notebook',
+        )
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response['Location'],
+            '/workshops/legacy-ws/tutorial/starting-notebook',
+        )
+
+    def test_valid_legacy_page_redirect_preserves_query_string(self):
+        response = self.client.get(
+            '/workshops/legacy-ws/starting-notebook?utm_source=old-link',
+        )
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response['Location'],
+            '/workshops/legacy-ws/tutorial/starting-notebook'
+            '?utm_source=old-link',
+        )
+
+    def test_redirect_target_renders_canonical_page(self):
+        self.client.force_login(self.user_basic)
+        response = self.client.get(
+            '/workshops/legacy-ws/starting-notebook',
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.redirect_chain,
+            [
+                (
+                    '/workshops/legacy-ws/tutorial/starting-notebook',
+                    301,
+                ),
+            ],
+        )
+        self.assertContains(response, 'data-testid="page-title"')
+        self.assertContains(response, 'Starting Notebook')
+
+    def test_canonical_tutorial_page_renders_directly(self):
+        response = self.client.get(
+            '/workshops/legacy-ws/tutorial/starting-notebook',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('Location', response)
+
+    def test_video_route_is_not_captured_by_legacy_redirect(self):
+        response = self.client.get('/workshops/legacy-ws/video')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('Location', response)
+
+    def test_unknown_workshop_stays_404(self):
+        response = self.client.get(
+            '/workshops/missing-workshop/starting-notebook',
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Location', response)
+
+    def test_unknown_page_stays_404(self):
+        response = self.client.get('/workshops/legacy-ws/missing-page')
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Location', response)
+
+    def test_draft_workshop_page_stays_404(self):
+        draft = _make_workshop(
+            slug='draft-legacy', title='Draft Legacy', status='draft',
+        )
+        _make_page(draft, 'starting-notebook', 'Starting Notebook', 1)
+        response = self.client.get(
+            '/workshops/draft-legacy/starting-notebook',
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Location', response)
+
+    def test_reserved_tutorial_child_path_stays_404(self):
+        _make_page(self.workshop, 'tutorial', 'Reserved Tutorial', 2)
+        response = self.client.get('/workshops/legacy-ws/tutorial')
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Location', response)
+
+
 class EventWorkshopCrossLinksTest(TierSetupMixin, TestCase):
     """Past-event card and event-detail cross-links to /workshops."""
 
@@ -542,6 +638,7 @@ class WorkshopSitemapTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, '/workshops/ws-pub/tutorial/page-one',
         )
+        self.assertNotContains(response, '/workshops/ws-pub/page-one')
 
     def test_sitemap_excludes_draft_workshop(self):
         response = self.client.get('/sitemap.xml')

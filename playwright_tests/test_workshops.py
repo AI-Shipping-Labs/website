@@ -153,6 +153,40 @@ class TestVisitorBrowsesCatalog:
 
 @pytest.mark.django_db(transaction=True)
 class TestBasicUserReadsPagesButNotRecording:
+    def test_basic_user_legacy_link_redirects_to_canonical_tutorial(
+        self, browser, django_server,
+    ):
+        _clear_workshops()
+        _create_workshop(
+            pages_data=[
+                (
+                    'starting-notebook',
+                    'Starting Notebook',
+                    '# Starting notebook\n\nOpen the notebook.',
+                ),
+            ],
+        )
+        _create_user('basic@test.com', tier_slug='basic')
+
+        ctx = _auth_context(browser, 'basic@test.com')
+        page = ctx.new_page()
+        response = page.goto(
+            f'{django_server}/workshops/ws/starting-notebook',
+            wait_until='domcontentloaded',
+        )
+
+        assert response is not None and response.status == 200
+        assert (
+            page.url
+            == f'{django_server}/workshops/ws/tutorial/starting-notebook'
+        )
+        body = page.content()
+        assert 'Starting Notebook' in body
+        assert 'data-testid="page-body"' in body
+        assert 'Open the notebook.' in body
+
+        ctx.close()
+
     def test_basic_user_sees_unlocked_pages_and_locked_recording(
         self, browser, django_server,
     ):

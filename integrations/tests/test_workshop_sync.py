@@ -24,7 +24,6 @@ existing course sync tests.
 
 import os
 import shutil
-import tempfile
 import uuid
 from datetime import datetime
 from datetime import timezone as dt_timezone
@@ -34,7 +33,7 @@ from django.test import TestCase
 from content.models import Workshop, WorkshopPage
 from events.models import Event
 from integrations.models import ContentSource
-from integrations.services.github import sync_content_source
+from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 SAMPLE_WORKSHOP_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 
@@ -43,47 +42,48 @@ class _WorkshopSyncFixtureBase(TestCase):
     """Helpers to assemble a workshops-content-shaped repo on disk."""
 
     def setUp(self):
-        self.source = ContentSource.objects.create(
+        self.source, self.repo = make_sync_repo(
+            self,
             repo_name='AI-Shipping-Labs/workshops-content',
             is_private=False,
+            prefix='workshop-sync-',
         )
-        self.temp_dir = tempfile.mkdtemp(prefix='workshop-sync-')
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        self.temp_dir = str(self.repo.path)
 
     def _write(self, rel_path, text):
-        full = os.path.join(self.temp_dir, rel_path)
-        os.makedirs(os.path.dirname(full), exist_ok=True)
-        with open(full, 'w') as f:
-            f.write(text)
-        return full
+        return self.repo.write_text(rel_path, text)
 
     def _write_workshop_yaml(
         self, folder='2026/2026-04-21-demo', *, content_id=SAMPLE_WORKSHOP_UUID,
         slug='demo', title='Demo Workshop',
         pages_required_level=10, landing_required_level=None, extra_yaml='',
     ):
-        body = (
-            f'content_id: {content_id}\n'
-            f'slug: {slug}\n'
-            f'title: "{title}"\n'
-            f'date: 2026-04-21\n'
-            f'pages_required_level: {pages_required_level}\n'
-        )
+        data = {
+            'content_id': content_id,
+            'slug': slug,
+            'title': title,
+            'date': '2026-04-21',
+            'pages_required_level': pages_required_level,
+        }
         if landing_required_level is not None:
-            body += f'landing_required_level: {landing_required_level}\n'
-        body += 'instructor_name: "Alexey Grigorev"\n'
-        body += extra_yaml
-        self._write(f'{folder}/workshop.yaml', body)
+            data['landing_required_level'] = landing_required_level
+        data['instructor_name'] = 'Alexey Grigorev'
+        path = self.repo.write_yaml(f'{folder}/workshop.yaml', data)
+        if extra_yaml:
+            with path.open('a', encoding='utf-8') as f:
+                f.write(extra_yaml)
 
     def _write_page(self, folder, filename, *, title, body='Page body.\n',
                     extra_frontmatter=''):
-        text = (
-            '---\n'
-            f'title: "{title}"\n'
-        ) + extra_frontmatter + '---\n' + body
-        self._write(f'{folder}/{filename}', text)
+        if extra_frontmatter:
+            text = '---\n' f'title: "{title}"\n' + extra_frontmatter + '---\n' + body
+            return self._write(f'{folder}/{filename}', text)
+        return self.repo.write_markdown(
+            f'{folder}/{filename}',
+            {'title': title},
+            body,
+            ensure_content_id=False,
+        )
 
 
 class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
@@ -109,7 +109,7 @@ class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
         self._write_page(folder, '02-setup.md', title='Setup',
                          body='# Setup\n\nRun this.\n')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             sync_log.errors, [],
@@ -177,7 +177,7 @@ class WorkshopSyncFlatRootLayoutTest(_WorkshopSyncFixtureBase):
         self._write_page(folder, '01-overview.md', title='Overview',
                          body='Body.\n')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             sync_log.errors, [],
@@ -216,7 +216,7 @@ class WorkshopSyncIdempotencyTest(_WorkshopSyncFixtureBase):
         self._write_page(folder, '01-overview.md', title='Overview')
         self._write_page(folder, '02-setup.md', title='Setup')
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         self.assertEqual(Workshop.objects.count(), 1)
         self.assertEqual(Event.objects.filter(slug='demo').count(), 1)
         self.assertEqual(WorkshopPage.objects.count(), 2)
@@ -224,7 +224,7 @@ class WorkshopSyncIdempotencyTest(_WorkshopSyncFixtureBase):
         workshop_pk_before = Workshop.objects.get().pk
 
         # Second run — everything unchanged.
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(sync_log.errors, [])
         self.assertEqual(
             Workshop.objects.count(), 1,
@@ -271,7 +271,7 @@ class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
         )
         self._write_page(folder, '01-overview.md', title='Overview')
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         self.assertEqual(
             Event.objects.filter(slug='demo').count(), 1,
@@ -316,7 +316,7 @@ class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
             ),
         )
         self._write_page(folder, '01-overview.md', title='Overview')
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         event = Event.objects.get(pk=workshop.event_id)
@@ -342,7 +342,7 @@ class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
             ),
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         workshop.refresh_from_db()
         event.refresh_from_db()
@@ -378,7 +378,7 @@ class WorkshopSyncSkipsFolderWithoutYamlTest(_WorkshopSyncFixtureBase):
         self._write('2026/2026-05-12-code-only/README.md', '# Just code')
         self._write('2026/2026-05-12-code-only/app.py', 'print("hi")\n')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(sync_log.errors, [])
         self.assertEqual(Workshop.objects.count(), 1)
@@ -400,7 +400,7 @@ class WorkshopSyncMissingRequiredFieldTest(_WorkshopSyncFixtureBase):
         )
         self._write_page(folder, '01-overview.md', title='Overview')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(Workshop.objects.count(), 0)
         self.assertTrue(
@@ -418,7 +418,7 @@ class WorkshopSyncMissingRequiredFieldTest(_WorkshopSyncFixtureBase):
             'pages_required_level: 10\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(Workshop.objects.count(), 0)
         self.assertTrue(
@@ -436,7 +436,7 @@ class WorkshopSyncMissingRequiredFieldTest(_WorkshopSyncFixtureBase):
             'date: 2026-04-21\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(Workshop.objects.count(), 0)
         self.assertTrue(
@@ -458,7 +458,7 @@ class WorkshopSyncMissingRequiredFieldTest(_WorkshopSyncFixtureBase):
         )
         self._write_page('2026/2026-04-22-good', '01-p.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(Workshop.objects.count(), 1)
         self.assertEqual(Workshop.objects.get().slug, 'good')
@@ -481,7 +481,7 @@ class WorkshopSyncRecordingGateValidationTest(_WorkshopSyncFixtureBase):
         )
         self._write_page(folder, '01-p.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             Workshop.objects.count(), 0,
@@ -505,7 +505,7 @@ class WorkshopSyncRecordingGateValidationTest(_WorkshopSyncFixtureBase):
         )
         self._write_page(folder, '01-p.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             Workshop.objects.count(), 0,
@@ -526,7 +526,7 @@ class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
         self._write_workshop_yaml(folder=folder)
         self._write_page(folder, '01-p.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             sync_log.errors, [],
@@ -547,7 +547,7 @@ class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
         )
         self._write_page(folder, '01-p.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             sync_log.errors, [],
@@ -568,7 +568,7 @@ class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
         )
         self._write_page(folder, '01-p.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             Workshop.objects.count(), 0,
@@ -590,7 +590,7 @@ class WorkshopSyncLandingGateValidationTest(_WorkshopSyncFixtureBase):
         )
         self._write_page(folder, '01-p.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             Workshop.objects.count(), 0,
@@ -611,14 +611,14 @@ class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
         self._write_workshop_yaml(folder=folder, slug='demo')
         self._write_page(folder, '01-p.md', title='P')
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         self.assertEqual(
             Workshop.objects.get(slug='demo').status, 'published',
         )
 
         # Delete the workshop folder, re-sync.
         shutil.rmtree(os.path.join(self.temp_dir, folder))
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         self.assertEqual(
             Workshop.objects.get(slug='demo').status, 'draft',
@@ -647,7 +647,7 @@ class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
         self._write_page(folder, '01-p.md', title='P')
 
         # Step 1: write -> sync -> published
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.status, 'published')
         # Linked event must exist.
@@ -657,7 +657,7 @@ class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
 
         # Step 2: remove the workshop folder -> sync -> draft
         shutil.rmtree(os.path.join(self.temp_dir, folder))
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         workshop.refresh_from_db()
         self.assertEqual(
             workshop.status, 'draft',
@@ -671,7 +671,7 @@ class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
             pages_required_level=0,
         )
         self._write_page(folder, '01-p.md', title='P')
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         workshop.refresh_from_db()
         self.assertEqual(
             workshop.status, 'published',
@@ -688,12 +688,12 @@ class WorkshopSyncPageRemovalTest(_WorkshopSyncFixtureBase):
         self._write_page(folder, '01-a.md', title='A')
         self._write_page(folder, '02-b.md', title='B')
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         self.assertEqual(WorkshopPage.objects.count(), 2)
 
         # Remove page 02-b.md, re-sync.
         os.remove(os.path.join(self.temp_dir, folder, '02-b.md'))
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         self.assertEqual(WorkshopPage.objects.count(), 1)
         self.assertEqual(WorkshopPage.objects.get().slug, 'a')
@@ -747,7 +747,7 @@ class WorkshopPageVideoStartSyncTest(_WorkshopSyncFixtureBase):
             extra_frontmatter='video_start: "16:00"\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(sync_log.errors, [])
         page = WorkshopPage.objects.get(slug='page')
@@ -761,7 +761,7 @@ class WorkshopPageVideoStartSyncTest(_WorkshopSyncFixtureBase):
             extra_frontmatter='video_start: "not-a-time"\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         page = WorkshopPage.objects.get(slug='page')
         # Field stored empty so the watch bar is hidden until fixed.
@@ -782,7 +782,7 @@ class WorkshopPageVideoStartSyncTest(_WorkshopSyncFixtureBase):
         self._write_workshop_yaml(folder=folder)
         self._write_page(folder, '01-page.md', title='P')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(sync_log.errors, [])
         page = WorkshopPage.objects.get(slug='page')
@@ -798,11 +798,11 @@ class WorkshopPageVideoStartSyncTest(_WorkshopSyncFixtureBase):
             extra_frontmatter='video_start: "16:00"\n',
         )
 
-        first = sync_content_source(self.source, repo_dir=self.temp_dir)
+        first = sync_repo(self.source, self.repo)
         self.assertEqual(first.errors, [])
         self.assertGreaterEqual(first.items_created, 1)
 
-        second = sync_content_source(self.source, repo_dir=self.temp_dir)
+        second = sync_repo(self.source, self.repo)
         self.assertEqual(second.errors, [])
         # Second sync is a no-op — no updates and no creates.
         self.assertEqual(second.items_created, 0)
@@ -851,7 +851,7 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
             body='Back to the [start](01-overview.md).\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(
             sync_log.errors, [],
             f'Expected no errors, got: {sync_log.errors}',
@@ -923,7 +923,7 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
             body='Body.\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         # The page itself still synced — the rewriter never aborts the page.
         workshop = Workshop.objects.get(slug='end-to-end-agent-deployment')
@@ -981,7 +981,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             '```python\nprint("hi")\n```\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(
             [e for e in sync_log.errors if e.get('severity') != 'info'],
             [],
@@ -1015,7 +1015,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             body='# Intro heading\n\nIntro body content.\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(
             [e for e in sync_log.errors if e.get('severity') != 'info'],
             [],
@@ -1039,7 +1039,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         )
         # No README, no copy_file -> falls through to yaml description.
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.description, 'Plain yaml description.')
@@ -1053,7 +1053,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         # to mirror real layouts).
         self._write_page(folder, '01-only.md', title='Only')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         # No errors at all when nothing is configured.
         self.assertEqual(sync_log.errors, [])
 
@@ -1072,7 +1072,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             'README body wins.\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         self.assertIn('README body wins.', workshop.description)
@@ -1097,7 +1097,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         # Add a page so the workshop is non-trivial.
         self._write_page(folder, '01-page.md', title='Page')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         # The workshop row IS still created; copy_file errors do NOT skip.
         workshop = Workshop.objects.get(slug='demo')
@@ -1122,7 +1122,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         )
         self._write(f'{folder}/notes.txt', 'plain text body')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.description, '')
@@ -1141,7 +1141,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             folder, extra='copy_file: ../other/README.md\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.description, '')
@@ -1160,7 +1160,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         )
         self._write(f'{folder}/subdir/foo.md', 'body')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.description, '')
@@ -1180,7 +1180,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         self._write_yaml_no_description(folder)
         self._write(f'{folder}/README.md', '')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.description, '')
@@ -1206,7 +1206,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             '---\ntitle: Stub\n---\n',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.description, '')
@@ -1241,7 +1241,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             'Good workshop description.\n',
         )
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         # Both workshops created.
         broken = Workshop.objects.get(slug='broken')
@@ -1265,7 +1265,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             ),
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         # No "Unresolvable .md link" warning naming README.md.
         readme_link_errors = [
@@ -1308,7 +1308,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             body='Read [01-intro.md](01-intro.md).\n',
         )
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         next_page = WorkshopPage.objects.get(slug='next')
         # 01-intro.md routes to the workshop landing, not the tutorial URL,
@@ -1326,7 +1326,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
             'See ![arch](images/architecture.png)\n',
         )
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
 
         workshop = Workshop.objects.get(slug='ws')
         # The image path is rewritten to a CDN-prefixed URL — bare path
@@ -1344,14 +1344,14 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         self._write(f'{folder}/README.md', '# Title\n\nBody.\n')
         self._write_page(folder, '01-only.md', title='Only')
 
-        first = sync_content_source(self.source, repo_dir=self.temp_dir)
+        first = sync_repo(self.source, self.repo)
         # Filter out info-level shadowing notes when counting errors.
         self.assertEqual(
             [e for e in first.errors if e.get('severity') != 'info'], [],
         )
         self.assertGreaterEqual(first.items_created, 1)
 
-        second = sync_content_source(self.source, repo_dir=self.temp_dir)
+        second = sync_repo(self.source, self.repo)
         self.assertEqual(
             [e for e in second.errors if e.get('severity') != 'info'], [],
         )
@@ -1390,7 +1390,7 @@ class WorkshopRenameIdempotencyTest(_WorkshopSyncFixtureBase):
         self._write_page(original_folder, '01-overview.md', title='Overview')
         self._write_page(original_folder, '02-setup.md', title='Setup')
 
-        first_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        first_log = sync_repo(self.source, self.repo)
         self.assertEqual(first_log.errors, [])
 
         original_workshop = Workshop.objects.get(slug='demo')
@@ -1412,7 +1412,7 @@ class WorkshopRenameIdempotencyTest(_WorkshopSyncFixtureBase):
         )
 
         # Second sync after the rename.
-        second_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        second_log = sync_repo(self.source, self.repo)
         self.assertEqual(
             second_log.errors, [],
             f'Expected no errors after rename, got: {second_log.errors}',

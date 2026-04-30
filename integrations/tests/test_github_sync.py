@@ -18,7 +18,6 @@ import hmac
 import json
 import os
 import tempfile
-import uuid
 from datetime import date
 from unittest.mock import MagicMock, patch
 
@@ -47,6 +46,7 @@ from integrations.services.github import (
     sync_content_source,
     validate_webhook_signature,
 )
+from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 User = get_user_model()
 
@@ -535,33 +535,15 @@ class SyncArticlesTest(TestCase):
     """Test syncing articles from a mock repo directory."""
 
     def setUp(self):
-        self.source = ContentSource.objects.create(
+        self.source, self.repo = make_sync_repo(
+            self,
             repo_name='AI-Shipping-Labs/blog',
+            prefix='article-sync-',
         )
-        self.temp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        self.temp_dir = str(self.repo.path)
 
     def _write_article(self, filename, frontmatter_dict, body):
-        """Helper to write a markdown file with frontmatter."""
-        filepath = os.path.join(self.temp_dir, filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        if 'content_id' not in frontmatter_dict:
-            frontmatter_dict['content_id'] = str(uuid.uuid4())
-        lines = ['---']
-        for key, value in frontmatter_dict.items():
-            if isinstance(value, list):
-                lines.append(f'{key}:')
-                for item in value:
-                    lines.append(f'  - "{item}"')
-            else:
-                lines.append(f'{key}: "{value}"')
-        lines.append('---')
-        lines.append(body)
-        with open(filepath, 'w') as f:
-            f.write('\n'.join(lines))
+        return self.repo.write_markdown(filename, frontmatter_dict, body)
 
     def test_sync_creates_article(self):
         self._write_article(
@@ -575,7 +557,7 @@ class SyncArticlesTest(TestCase):
             },
             'Article body content here.',
         )
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(sync_log.status, 'success')
         self.assertEqual(sync_log.items_created, 1)
         article = Article.objects.get(slug='my-article')
@@ -594,7 +576,7 @@ class SyncArticlesTest(TestCase):
             {'title': 'New Title', 'slug': 'my-article', 'date': '2026-01-15'},
             'Updated body.',
         )
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(sync_log.items_updated, 1)
         article = Article.objects.get(slug='my-article')
         self.assertEqual(article.title, 'New Title')
@@ -606,7 +588,7 @@ class SyncArticlesTest(TestCase):
             published=True,
         )
         # No files in repo = stale article should be soft-deleted
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(sync_log.items_deleted, 1)
         article = Article.objects.get(slug='stale-article')
         self.assertFalse(article.published)
@@ -642,7 +624,7 @@ class SyncArticlesTest(TestCase):
 
         # Step 1: write yaml -> sync -> assert published
         write_file()
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         article = Article.objects.get(slug='roundtrip-article')
         self.assertTrue(article.published)
         self.assertEqual(article.status, 'published')
@@ -653,7 +635,7 @@ class SyncArticlesTest(TestCase):
 
         # Step 2: remove yaml -> sync -> assert soft-deleted
         remove_file()
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         article.refresh_from_db()
         self.assertFalse(article.published)
         self.assertEqual(article.status, 'draft')
@@ -664,7 +646,7 @@ class SyncArticlesTest(TestCase):
 
         # Step 3: re-add yaml -> sync -> assert restored
         write_file()
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         article.refresh_from_db()
         self.assertTrue(article.published)
         self.assertEqual(article.status, 'published')
@@ -680,7 +662,7 @@ class SyncArticlesTest(TestCase):
             source_repo=None,
             published=True,
         )
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         article = Article.objects.get(slug='admin-article')
         self.assertTrue(article.published)
 
@@ -691,7 +673,7 @@ class SyncArticlesTest(TestCase):
             {'title': 'Readme', 'slug': 'readme'},
             'This is the readme.',
         )
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(sync_log.items_created, 0)
         self.assertFalse(Article.objects.filter(slug='readme').exists())
 
@@ -702,18 +684,18 @@ class SyncArticlesTest(TestCase):
                 {'title': f'Article {i}', 'slug': f'article-{i}', 'date': '2026-01-15'},
                 f'Body of article {i}.',
             )
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertEqual(sync_log.items_created, 3)
         self.assertEqual(Article.objects.filter(source_repo='AI-Shipping-Labs/blog').count(), 3)
 
     def test_sync_log_created(self):
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertIsNotNone(sync_log)
         self.assertEqual(sync_log.source, self.source)
         self.assertIsNotNone(sync_log.finished_at)
 
     def test_sync_updates_source_status(self):
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         self.source.refresh_from_db()
         self.assertEqual(self.source.last_sync_status, 'success')
         self.assertIsNotNone(self.source.last_synced_at)
@@ -728,10 +710,8 @@ class SyncArticlesTest(TestCase):
             'Good content.',
         )
         # Write a file that will cause a parsing error (binary content)
-        filepath = os.path.join(self.temp_dir, 'bad-article.md')
-        with open(filepath, 'wb') as f:
-            f.write(b'\x00\x01\x02---\ntitle: bad\n---\n\x80\x81')
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.repo.write_bytes('bad-article.md', b'\x00\x01\x02---\ntitle: bad\n---\n\x80\x81')
+        sync_log = sync_repo(self.source, self.repo)
         # The good article should still be created
         self.assertTrue(Article.objects.filter(slug='good').exists())
         # If errors occurred, status should be partial
@@ -750,7 +730,7 @@ class SyncArticlesTest(TestCase):
             {'title': 'Repo Version', 'slug': 'same-slug', 'date': '2026-01-15'},
             'From repo.',
         )
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         # Studio article should be untouched
         article = Article.objects.get(slug='same-slug')
         self.assertEqual(article.title, 'Admin Version')
@@ -821,53 +801,46 @@ class SyncCoursesTest(TestCase):
     """Test syncing courses from a mock repo directory."""
 
     def setUp(self):
-        self.source = ContentSource.objects.create(
+        self.source, self.repo = make_sync_repo(
+            self,
             repo_name='AI-Shipping-Labs/courses',
+            prefix='course-sync-',
         )
-        self.temp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        self.temp_dir = str(self.repo.path)
 
     def _create_course_structure(self):
         """Create a minimal course directory structure."""
-        course_dir = os.path.join(self.temp_dir, 'python-data-ai')
-        os.makedirs(course_dir)
-
-        # course.yaml
-        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
-            f.write('title: "Python for Data AI"\n')
-            f.write('slug: "python-data-ai"\n')
-            f.write('description: "Learn Python"\n')
-            f.write('instructor_name: "Test Instructor"\n')
-            f.write('required_level: 0\n')
-            f.write('content_id: "22222222-2222-2222-2222-222222222222"\n')
-            f.write('tags:\n  - python\n  - data\n')
-
-        # module directory
-        module_dir = os.path.join(course_dir, 'module-01-setup')
-        os.makedirs(module_dir)
-
-        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
-            f.write('title: "Getting Started"\n')
-            f.write('sort_order: 1\n')
-
-        # unit file
-        with open(os.path.join(module_dir, 'unit-01-intro.md'), 'w') as f:
-            f.write('---\n')
-            f.write('title: "Introduction"\n')
-            f.write('sort_order: 1\n')
-            f.write('is_preview: true\n')
-            f.write('content_id: "33333333-3333-3333-3333-333333333333"\n')
-            f.write('---\n')
-            f.write('Welcome to the course!\n')
-
-        return course_dir
+        self.repo.write_yaml(
+            'python-data-ai/course.yaml',
+            {
+                'title': 'Python for Data AI',
+                'slug': 'python-data-ai',
+                'description': 'Learn Python',
+                'instructor_name': 'Test Instructor',
+                'required_level': 0,
+                'content_id': '22222222-2222-2222-2222-222222222222',
+                'tags': ['python', 'data'],
+            },
+        )
+        self.repo.write_yaml(
+            'python-data-ai/module-01-setup/module.yaml',
+            {'title': 'Getting Started', 'sort_order': 1},
+        )
+        self.repo.write_markdown(
+            'python-data-ai/module-01-setup/unit-01-intro.md',
+            {
+                'title': 'Introduction',
+                'sort_order': 1,
+                'is_preview': True,
+                'content_id': '33333333-3333-3333-3333-333333333333',
+            },
+            'Welcome to the course!\n',
+        )
+        return self.repo.path / 'python-data-ai'
 
     def test_sync_creates_course_with_modules_and_units(self):
         self._create_course_structure()
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertIn(sync_log.status, ('success', 'partial'))
         # 1 course + 1 module + 1 unit = 3 created
@@ -892,7 +865,7 @@ class SyncCoursesTest(TestCase):
             source_repo='AI-Shipping-Labs/courses',
             status='published',
         )
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         course = Course.objects.get(slug='stale-course')
         self.assertEqual(course.status, 'draft')
 
@@ -909,15 +882,19 @@ class SyncCoursesTest(TestCase):
         course_dir = self._create_course_structure()
         # Override the title so the listing assertion is unambiguous
         # (the helper uses 'Python for Data AI', which is generic).
-        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
-            f.write(f'title: "{unique_title}"\n')
-            f.write('slug: "python-data-ai"\n')
-            f.write('description: "Round trip course test"\n')
-            f.write('instructor_name: "Test Instructor"\n')
-            f.write('required_level: 0\n')
-            f.write('content_id: "22222222-2222-2222-2222-222222222222"\n')
+        self.repo.write_yaml(
+            'python-data-ai/course.yaml',
+            {
+                'title': unique_title,
+                'slug': 'python-data-ai',
+                'description': 'Round trip course test',
+                'instructor_name': 'Test Instructor',
+                'required_level': 0,
+                'content_id': '22222222-2222-2222-2222-222222222222',
+            },
+        )
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         course = Course.objects.get(slug='python-data-ai')
         self.assertEqual(course.status, 'published')
         # Public catalog must include the course title.
@@ -927,7 +904,7 @@ class SyncCoursesTest(TestCase):
 
         # Step 2: remove the entire course folder -> sync -> assert draft
         _shutil.rmtree(course_dir)
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         course.refresh_from_db()
         self.assertEqual(course.status, 'draft')
         # Catalog must hide the soft-deleted course.
@@ -937,16 +914,20 @@ class SyncCoursesTest(TestCase):
 
         # Step 3: re-create the same folder (same slug + content_id) ->
         # sync -> assert restored to published.
-        course_dir = self._create_course_structure()
-        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
-            f.write(f'title: "{unique_title}"\n')
-            f.write('slug: "python-data-ai"\n')
-            f.write('description: "Round trip course test"\n')
-            f.write('instructor_name: "Test Instructor"\n')
-            f.write('required_level: 0\n')
-            f.write('content_id: "22222222-2222-2222-2222-222222222222"\n')
+        self._create_course_structure()
+        self.repo.write_yaml(
+            'python-data-ai/course.yaml',
+            {
+                'title': unique_title,
+                'slug': 'python-data-ai',
+                'description': 'Round trip course test',
+                'instructor_name': 'Test Instructor',
+                'required_level': 0,
+                'content_id': '22222222-2222-2222-2222-222222222222',
+            },
+        )
 
-        sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_repo(self.source, self.repo)
         course.refresh_from_db()
         self.assertEqual(course.status, 'published')
         response = self.client.get('/courses')
@@ -960,32 +941,34 @@ class SyncCoursesTest(TestCase):
         but older content YAML may still contain the key. The parser must
         silently ignore it.
         """
-        course_dir = os.path.join(self.temp_dir, 'legacy-course')
-        os.makedirs(course_dir)
-        with open(os.path.join(course_dir, 'course.yaml'), 'w') as f:
-            f.write('title: "Legacy Course"\n')
-            f.write('slug: "legacy-course"\n')
-            f.write('description: "Has leftover is_free key."\n')
-            f.write('instructor_name: "Test"\n')
-            f.write('required_level: 0\n')
-            # Deprecated key that must be silently ignored by sync.
-            f.write('is_free: true\n')
-            f.write('content_id: "44444444-4444-4444-4444-444444444444"\n')
+        self.repo.write_yaml(
+            'legacy-course/course.yaml',
+            {
+                'title': 'Legacy Course',
+                'slug': 'legacy-course',
+                'description': 'Has leftover is_free key.',
+                'instructor_name': 'Test',
+                'required_level': 0,
+                # Deprecated key that must be silently ignored by sync.
+                'is_free': True,
+                'content_id': '44444444-4444-4444-4444-444444444444',
+            },
+        )
+        self.repo.write_yaml(
+            'legacy-course/module-01/module.yaml',
+            {'title': 'Intro', 'sort_order': 1},
+        )
+        self.repo.write_markdown(
+            'legacy-course/module-01/unit-01.md',
+            {
+                'title': 'Unit 1',
+                'sort_order': 1,
+                'content_id': '55555555-5555-5555-5555-555555555555',
+            },
+            'Body.\n',
+        )
 
-        module_dir = os.path.join(course_dir, 'module-01')
-        os.makedirs(module_dir)
-        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
-            f.write('title: "Intro"\n')
-            f.write('sort_order: 1\n')
-        with open(os.path.join(module_dir, 'unit-01.md'), 'w') as f:
-            f.write('---\n')
-            f.write('title: "Unit 1"\n')
-            f.write('sort_order: 1\n')
-            f.write('content_id: "55555555-5555-5555-5555-555555555555"\n')
-            f.write('---\n')
-            f.write('Body.\n')
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertIn(sync_log.status, ('success', 'partial'))
         course = Course.objects.get(slug='legacy-course')
@@ -1171,43 +1154,43 @@ class SyncSingleCourseRepoTest(TestCase):
 
     def setUp(self):
         # ContentSource with content_path='' - root of repo is the course root.
-        self.source = ContentSource.objects.create(
+        self.source, self.repo = make_sync_repo(
+            self,
             repo_name='AI-Shipping-Labs/python-course',
+            prefix='single-course-sync-',
         )
-        self.temp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        self.temp_dir = str(self.repo.path)
 
     def _write_root_course_yaml(self, content_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
                                 slug='python-course'):
-        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
-            f.write('title: "Python Course"\n')
-            f.write(f'slug: "{slug}"\n')
-            f.write('description: "Learn Python from scratch."\n')
-            f.write('instructor_name: "Alexey Grigorev"\n')
-            f.write('required_level: 20\n')
-            f.write(f'content_id: "{content_id}"\n')
-            f.write('tags:\n  - python\n  - fundamentals\n')
+        self.repo.write_yaml(
+            'course.yaml',
+            {
+                'title': 'Python Course',
+                'slug': slug,
+                'description': 'Learn Python from scratch.',
+                'instructor_name': 'Alexey Grigorev',
+                'required_level': 20,
+                'content_id': content_id,
+                'tags': ['python', 'fundamentals'],
+            },
+        )
 
     def _write_module(self, dirname, title, content_id, sort_order=None):
-        module_dir = os.path.join(self.temp_dir, dirname)
-        os.makedirs(module_dir, exist_ok=True)
-        with open(os.path.join(module_dir, 'module.yaml'), 'w') as f:
-            f.write(f'title: "{title}"\n')
-            f.write(f'content_id: "{content_id}"\n')
-            if sort_order is not None:
-                f.write(f'sort_order: {sort_order}\n')
+        module_data = {'title': title, 'content_id': content_id}
+        if sort_order is not None:
+            module_data['sort_order'] = sort_order
+        self.repo.write_yaml(f'{dirname}/module.yaml', module_data)
+        module_dir = self.repo.path / dirname
         return module_dir
 
     def _write_unit(self, module_dir, filename, title, content_id, body='Body text.\n'):
-        with open(os.path.join(module_dir, filename), 'w') as f:
-            f.write('---\n')
-            f.write(f'title: "{title}"\n')
-            f.write(f'content_id: "{content_id}"\n')
-            f.write('---\n')
-            f.write(body)
+        rel_module = module_dir.relative_to(self.repo.path)
+        self.repo.write_markdown(
+            rel_module / filename,
+            {'title': title, 'content_id': content_id},
+            body,
+        )
 
     def test_root_course_yaml_creates_single_course(self):
         """A course.yaml at the root is treated as one course; modules are children."""
@@ -1221,7 +1204,7 @@ class SyncSingleCourseRepoTest(TestCase):
             'cccccccc-cccc-cccc-cccc-cccccccccccc',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertIn(sync_log.status, ('success', 'partial'),
                       msg=f'Errors: {sync_log.errors}')
@@ -1265,7 +1248,7 @@ class SyncSingleCourseRepoTest(TestCase):
             'cccccccc-cccc-cccc-cccc-cccccccccccc',
         )
 
-        first_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        first_log = sync_repo(self.source, self.repo)
         self.assertIn(first_log.status, ('success', 'partial'))
         original_course = Course.objects.get(slug='python-course')
         original_course_id = original_course.pk
@@ -1276,20 +1259,20 @@ class SyncSingleCourseRepoTest(TestCase):
             Unit.objects.filter(module__course=original_course).values_list('pk', flat=True)
         )
 
-        self._write_root_course_yaml(
-            content_id=content_id,
-            slug='python-course-workshop',
+        self.repo.write_yaml(
+            'course.yaml',
+            {
+                'title': 'Python Course Workshop',
+                'slug': 'python-course-workshop',
+                'description': 'Learn Python from scratch.',
+                'instructor_name': 'Alexey Grigorev',
+                'required_level': 20,
+                'content_id': content_id,
+                'tags': ['python', 'fundamentals'],
+            },
         )
-        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
-            f.write('title: "Python Course Workshop"\n')
-            f.write('slug: "python-course-workshop"\n')
-            f.write('description: "Learn Python from scratch."\n')
-            f.write('instructor_name: "Alexey Grigorev"\n')
-            f.write('required_level: 20\n')
-            f.write(f'content_id: "{content_id}"\n')
-            f.write('tags:\n  - python\n  - fundamentals\n')
 
-        second_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        second_log = sync_repo(self.source, self.repo)
 
         self.assertIn(second_log.status, ('success', 'partial'))
         self.assertEqual(Course.objects.filter(
@@ -1317,26 +1300,25 @@ class SyncSingleCourseRepoTest(TestCase):
         """Without root course.yaml, each child dir with course.yaml is its own course (regression guard)."""
         # Two child course dirs, each with their own course.yaml + module + unit.
         for idx, slug in enumerate(['course-a', 'course-b'], start=1):
-            cdir = os.path.join(self.temp_dir, slug)
-            os.makedirs(cdir)
-            with open(os.path.join(cdir, 'course.yaml'), 'w') as f:
-                f.write(f'title: "Course {slug}"\n')
-                f.write(f'slug: "{slug}"\n')
-                f.write(f'content_id: "1{idx:07d}-1111-1111-1111-111111111111"\n')
+            self.repo.write_yaml(
+                f'{slug}/course.yaml',
+                {
+                    'title': f'Course {slug}',
+                    'slug': slug,
+                    'content_id': f'1{idx:07d}-1111-1111-1111-111111111111',
+                },
+            )
+            self.repo.write_yaml(f'{slug}/01-mod/module.yaml', {'title': 'Module 1'})
+            self.repo.write_markdown(
+                f'{slug}/01-mod/01-intro.md',
+                {
+                    'title': 'Intro',
+                    'content_id': f'2{idx:07d}-2222-2222-2222-222222222222',
+                },
+                'Body.\n',
+            )
 
-            mdir = os.path.join(cdir, '01-mod')
-            os.makedirs(mdir)
-            with open(os.path.join(mdir, 'module.yaml'), 'w') as f:
-                f.write('title: "Module 1"\n')
-
-            with open(os.path.join(mdir, '01-intro.md'), 'w') as f:
-                f.write('---\n')
-                f.write('title: "Intro"\n')
-                f.write(f'content_id: "2{idx:07d}-2222-2222-2222-222222222222"\n')
-                f.write('---\n')
-                f.write('Body.\n')
-
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertIn(sync_log.status, ('success', 'partial'),
                       msg=f'Errors: {sync_log.errors}')
@@ -1353,14 +1335,16 @@ class SyncSingleCourseRepoTest(TestCase):
         # Child dir with its own course.yaml that should be IGNORED as a
         # standalone course; without a module.yaml, the child dir is just
         # skipped by _sync_course_modules.
-        child = os.path.join(self.temp_dir, 'child-course')
-        os.makedirs(child)
-        with open(os.path.join(child, 'course.yaml'), 'w') as f:
-            f.write('title: "Child Course"\n')
-            f.write('slug: "child-course"\n')
-            f.write('content_id: "dddddddd-dddd-dddd-dddd-dddddddddddd"\n')
+        self.repo.write_yaml(
+            'child-course/course.yaml',
+            {
+                'title': 'Child Course',
+                'slug': 'child-course',
+                'content_id': 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+            },
+        )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertIn(sync_log.status, ('success', 'partial'),
                       msg=f'Errors: {sync_log.errors}')
@@ -1383,7 +1367,7 @@ class SyncSingleCourseRepoTest(TestCase):
         )
         self._write_root_course_yaml()
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
         self.assertIn(sync_log.status, ('success', 'partial'),
                       msg=f'Errors: {sync_log.errors}')
 
@@ -1396,11 +1380,15 @@ class SyncSingleCourseRepoTest(TestCase):
     def test_root_course_yaml_missing_content_id_is_rejected(self):
         """Single-course mode still enforces content_id validation."""
         # Write a course.yaml WITHOUT content_id.
-        with open(os.path.join(self.temp_dir, 'course.yaml'), 'w') as f:
-            f.write('title: "Python Course"\n')
-            f.write('slug: "python-course"\n')
+        self.repo.write_yaml(
+            'course.yaml',
+            {
+                'title': 'Python Course',
+                'slug': 'python-course',
+            },
+        )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         self.assertEqual(
             Course.objects.filter(slug='python-course').count(), 0,
@@ -1429,7 +1417,7 @@ class SyncSingleCourseRepoTest(TestCase):
             '11111111-2222-3333-4444-555555555555',
         )
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_repo(self.source, self.repo)
 
         # No errors, both modules created.
         self.assertEqual(sync_log.errors, [])

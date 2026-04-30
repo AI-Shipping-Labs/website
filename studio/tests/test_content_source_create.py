@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import Client, TestCase
 
-from integrations.models import ContentSource
+from integrations.models import ContentSource, SyncLog
 from integrations.services.github import (
     INSTALLATION_REPOS_CACHE_KEY,
     GitHubSyncError,
@@ -120,9 +120,11 @@ class ContentSourceCreateViewTest(TestCase):
 
     # -- POST: single-click create ------------------------------------------
 
+    @patch('django_q.tasks.async_task')
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
-    def test_post_creates_single_source_and_flashes_secret(self, _mock_list):
+    def test_post_creates_single_source_and_flashes_secret(
+            self, _mock_list, mock_async):
         response = self.client.post('/studio/content-sources/new/', {
             'repo_name': 'AI-Shipping-Labs/blog',
             'webhook_secret': 'manual-secret',
@@ -133,14 +135,29 @@ class ContentSourceCreateViewTest(TestCase):
         source = ContentSource.objects.get(repo_name='AI-Shipping-Labs/blog')
         self.assertEqual(source.webhook_secret, 'manual-secret')
         self.assertFalse(source.is_private)
+        self.assertEqual(source.last_sync_status, 'queued')
+
+        mock_async.assert_called_once_with(
+            'integrations.services.github.sync_content_source',
+            source,
+            task_name='sync-AI-Shipping-Labs/blog',
+        )
+        self.assertEqual(
+            SyncLog.objects.filter(source=source, status='queued').count(),
+            1,
+        )
 
         # Follow the redirect; the flash on the dashboard renders the secret.
         followed = self.client.get('/studio/sync/')
         self.assertContains(followed, 'manual-secret')
+        self.assertContains(followed, 'First sync queued')
+        self.assertContains(followed, '/studio/worker/')
 
+    @patch('django_q.tasks.async_task')
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
-    def test_post_auto_generates_webhook_secret_when_blank(self, _mock_list):
+    def test_post_auto_generates_webhook_secret_when_blank(
+            self, _mock_list, _mock_async):
         self.client.post('/studio/content-sources/new/', {
             'repo_name': 'AI-Shipping-Labs/blog',
             'webhook_secret': '',
@@ -149,9 +166,10 @@ class ContentSourceCreateViewTest(TestCase):
         self.assertTrue(source.webhook_secret)
         self.assertGreaterEqual(len(source.webhook_secret), 32)
 
+    @patch('django_q.tasks.async_task')
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
-    def test_post_takes_is_private_from_github_api(self, _mock_list):
+    def test_post_takes_is_private_from_github_api(self, _mock_list, _mock_async):
         self.client.post('/studio/content-sources/new/', {
             'repo_name': 'AI-Shipping-Labs/content',
             'webhook_secret': '',
@@ -159,11 +177,68 @@ class ContentSourceCreateViewTest(TestCase):
         source = ContentSource.objects.get(repo_name='AI-Shipping-Labs/content')
         self.assertTrue(source.is_private)
 
-    # -- POST: validation ----------------------------------------------------
-
+    @patch('django_q.tasks.async_task')
+    @patch('studio.views.sync.get_worker_status',
+           return_value={'expect_worker': True, 'alive': False})
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
-    def test_post_rejects_repo_not_in_installation(self, _mock_list):
+    def test_post_warns_when_worker_is_down(
+            self, _mock_list, _mock_worker, _mock_async):
+        response = self.client.post('/studio/content-sources/new/', {
+            'repo_name': 'AI-Shipping-Labs/blog',
+            'webhook_secret': 'manual-secret',
+        }, follow=True)
+        body = response.content.decode()
+        self.assertIn('First sync queued', body)
+        self.assertIn('worker is not running', body)
+        self.assertIn('manage.py qcluster', body)
+        self.assertIn('/studio/worker/', body)
+
+    @patch('django_q.tasks.async_task', side_effect=RuntimeError('queue offline'))
+    @patch('studio.views.content_sources.list_installation_repositories',
+           return_value=SAMPLE_REPOS)
+    def test_post_keeps_source_without_queued_state_when_enqueue_fails(
+            self, _mock_list, _mock_async):
+        with self.assertLogs('studio.views.content_sources', level='ERROR') as logs:
+            response = self.client.post('/studio/content-sources/new/', {
+                'repo_name': 'AI-Shipping-Labs/blog',
+                'webhook_secret': 'manual-secret',
+            }, follow=True)
+
+        self.assertEqual(response.redirect_chain[-1], ('/studio/sync/', 302))
+        source = ContentSource.objects.get(repo_name='AI-Shipping-Labs/blog')
+        self.assertIsNone(source.last_sync_status)
+        self.assertFalse(SyncLog.objects.filter(source=source).exists())
+        self.assertIn(
+            'Could not queue initial sync for AI-Shipping-Labs/blog',
+            logs.output[0],
+        )
+        body = response.content.decode()
+        self.assertIn('The first sync could not be queued', body)
+        self.assertIn('use Sync now', body)
+
+    @patch('django_q.tasks.async_task', side_effect=ImportError)
+    @patch('studio.views.content_sources.sync_content_source')
+    @patch('studio.views.content_sources.list_installation_repositories',
+           return_value=SAMPLE_REPOS)
+    def test_post_runs_sync_inline_when_django_q_unavailable(
+            self, _mock_list, mock_sync, _mock_async):
+        response = self.client.post('/studio/content-sources/new/', {
+            'repo_name': 'AI-Shipping-Labs/blog',
+            'webhook_secret': 'manual-secret',
+        }, follow=True)
+
+        source = ContentSource.objects.get(repo_name='AI-Shipping-Labs/blog')
+        mock_sync.assert_called_once_with(source)
+        self.assertFalse(SyncLog.objects.filter(source=source).exists())
+        self.assertContains(response, 'First sync completed')
+
+    # -- POST: validation ----------------------------------------------------
+
+    @patch('django_q.tasks.async_task')
+    @patch('studio.views.content_sources.list_installation_repositories',
+           return_value=SAMPLE_REPOS)
+    def test_post_rejects_repo_not_in_installation(self, _mock_list, mock_async):
         response = self.client.post('/studio/content-sources/new/', {
             'repo_name': 'evil-org/private-stuff',
             'webhook_secret': '',
@@ -177,20 +252,26 @@ class ContentSourceCreateViewTest(TestCase):
             'not accessible to the GitHub App installation',
             status_code=400,
         )
+        mock_async.assert_not_called()
+        self.assertFalse(SyncLog.objects.exists())
 
+    @patch('django_q.tasks.async_task')
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
-    def test_post_rejects_missing_repo(self, _mock_list):
+    def test_post_rejects_missing_repo(self, _mock_list, mock_async):
         response = self.client.post('/studio/content-sources/new/', {
             'repo_name': '',
             'webhook_secret': '',
         })
         self.assertEqual(response.status_code, 400)
         self.assertFalse(ContentSource.objects.exists())
+        mock_async.assert_not_called()
+        self.assertFalse(SyncLog.objects.exists())
 
+    @patch('django_q.tasks.async_task')
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
-    def test_post_rejects_repo_already_registered(self, _mock_list):
+    def test_post_rejects_repo_already_registered(self, _mock_list, mock_async):
         ContentSource.objects.create(repo_name='AI-Shipping-Labs/blog')
         response = self.client.post('/studio/content-sources/new/', {
             'repo_name': 'AI-Shipping-Labs/blog',
@@ -204,10 +285,14 @@ class ContentSourceCreateViewTest(TestCase):
             ).count(),
             1,
         )
+        mock_async.assert_not_called()
+        self.assertFalse(SyncLog.objects.exists())
 
+    @patch('django_q.tasks.async_task')
     @patch('studio.views.content_sources.list_installation_repositories',
            side_effect=GitHubSyncError('boom'))
-    def test_post_rejects_when_github_api_unreachable(self, _mock_list):
+    def test_post_rejects_when_github_api_unreachable(
+            self, _mock_list, mock_async):
         with self.assertLogs('studio.views.content_sources', level='WARNING') as logs:
             response = self.client.post('/studio/content-sources/new/', {
                 'repo_name': 'AI-Shipping-Labs/blog',
@@ -219,6 +304,8 @@ class ContentSourceCreateViewTest(TestCase):
             logs.output[0],
         )
         self.assertFalse(ContentSource.objects.exists())
+        mock_async.assert_not_called()
+        self.assertFalse(SyncLog.objects.exists())
 
 
 class ContentSourceRefreshViewTest(TestCase):

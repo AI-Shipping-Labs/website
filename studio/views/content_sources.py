@@ -18,6 +18,7 @@ import secrets
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
 from integrations.models import ContentSource
@@ -25,8 +26,10 @@ from integrations.services.github import (
     GitHubSyncError,
     clear_installation_repositories_cache,
     list_installation_repositories,
+    sync_content_source,
 )
 from studio.decorators import staff_required
+from studio.views.sync import _mark_source_queued, _worker_warning_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,61 @@ def _render_form(request, *, selected_repo='', webhook_secret='',
         context,
         status=status,
     )
+
+
+def _queue_initial_sync(request, source):
+    """Queue the first sync after a Studio ContentSource create.
+
+    Mirrors the manual single-source trigger: same task target, same
+    task_name, and the queued SyncLog is written only after enqueue succeeds.
+    """
+    try:
+        try:
+            from django_q.tasks import async_task
+            async_task(
+                'integrations.services.github.sync_content_source',
+                source,
+                task_name=f'sync-{source.repo_name}',
+            )
+            _mark_source_queued(source)
+            warning = _worker_warning_suffix()
+            message = format_html(
+                'Added {repo}. First sync queued. Webhook secret: {secret}. '
+                'You can see the status '
+                '<a href="/studio/worker/" class="underline">here</a>{warning}',
+                repo=source.repo_name,
+                secret=source.webhook_secret,
+                warning=warning,
+            )
+            if warning:
+                messages.warning(request, message)
+            else:
+                messages.success(request, message)
+        except ImportError:
+            sync_content_source(source)
+            messages.success(
+                request,
+                format_html(
+                    'Added {repo}. First sync completed. Webhook secret: {secret}',
+                    repo=source.repo_name,
+                    secret=source.webhook_secret,
+                ),
+            )
+    except Exception as exc:
+        logger.exception(
+            'Could not queue initial sync for %s', source.repo_name,
+        )
+        messages.warning(
+            request,
+            format_html(
+                'Added {repo}. Webhook secret: {secret}. The first sync '
+                'could not be queued: {error}. Fix the queue or worker, then '
+                'use Sync now from this dashboard.',
+                repo=source.repo_name,
+                secret=source.webhook_secret,
+                error=exc,
+            ),
+        )
 
 
 @staff_required
@@ -150,16 +208,13 @@ def content_source_create(request):
     if not webhook_secret:
         webhook_secret = secrets.token_urlsafe(32)
 
-    ContentSource.objects.create(
+    source = ContentSource.objects.create(
         repo_name=repo_name,
         webhook_secret=webhook_secret,
         is_private=match['private'],
     )
 
-    messages.success(
-        request,
-        f'Added {repo_name}. Webhook secret: {webhook_secret}',
-    )
+    _queue_initial_sync(request, source)
     return redirect('studio_sync_dashboard')
 
 

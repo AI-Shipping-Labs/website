@@ -91,10 +91,14 @@ def _clear_campaigns():
 
 
 def _clear_subscribers():
-    """Delete all newsletter subscribers to ensure clean state."""
-    from email_app.models import NewsletterSubscriber
+    """Reset User-backed newsletter state to ensure clean subscriber counts."""
+    from django.contrib.auth import get_user_model
 
-    NewsletterSubscriber.objects.all().delete()
+    User = get_user_model()
+    User.objects.all().update(
+        unsubscribed=True,
+        email_preferences={"newsletter": False},
+    )
     connection.close()
 
 
@@ -144,15 +148,17 @@ def _create_project(title, slug, status="pending_review", published=False, **kwa
     )
 
 
-def _create_subscriber(email, is_active=True):
-    """Create a NewsletterSubscriber via ORM."""
-    from email_app.models import NewsletterSubscriber
-
-    connection.close()
-    return NewsletterSubscriber.objects.create(
-        email=email,
-        is_active=is_active,
+def _create_newsletter_user(email, is_active=True):
+    """Create a User with canonical newsletter subscription state."""
+    user = _create_user(
+        email,
+        email_verified=True,
+        unsubscribed=not is_active,
     )
+    user.email_preferences["newsletter"] = bool(is_active)
+    user.save(update_fields=["email_preferences"])
+    connection.close()
+    return user
 
 
 # ---------------------------------------------------------------
@@ -268,7 +274,11 @@ class TestScenario3StaffReviewsDashboard:
         _clear_events()
         _clear_subscribers()
         _ensure_tiers()
-        _create_staff_user("admin@test.com")
+        admin = _create_staff_user("admin@test.com")
+        admin.unsubscribed = True
+        admin.email_preferences["newsletter"] = False
+        admin.save(update_fields=["unsubscribed", "email_preferences"])
+        connection.close()
 
         # Create 2 published articles and 1 draft
         _create_article("Published One", "published-one", published=True)
@@ -285,7 +295,7 @@ class TestScenario3StaffReviewsDashboard:
 
         # Create 3 active subscribers
         for i in range(3):
-            _create_subscriber(f"sub-{i}@test.com", is_active=True)
+            _create_newsletter_user(f"sub-{i}@test.com", is_active=True)
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
@@ -789,19 +799,19 @@ class TestScenario10StaffExportsSubscribers:
         Then: A CSV file downloads with the locked column set including Slack."""
         _clear_subscribers()
         _ensure_tiers()
-        _create_staff_user("admin@test.com")
+        admin = _create_staff_user("admin@test.com")
+        admin.unsubscribed = True
+        admin.email_preferences["newsletter"] = False
+        admin.save(update_fields=["unsubscribed", "email_preferences"])
+        connection.close()
 
-        # Create 5 active subscribers, each backed by a real User row so the
-        # users page lists them.
+        # Create 5 active subscribers as User rows.
         for i in range(5):
-            _create_user(f"active-{i}@test.com")
-            _create_subscriber(f"active-{i}@test.com", is_active=True)
+            _create_newsletter_user(f"active-{i}@test.com", is_active=True)
 
-        # Create 2 unsubscribed contacts, also backed by Users. The legacy
-        # NewsletterSubscriber row is deliberately inactive to mirror old data.
+        # Create 2 unsubscribed contacts.
         for i in range(2):
-            _create_user(f"inactive-{i}@test.com", unsubscribed=True)
-            _create_subscriber(f"inactive-{i}@test.com", is_active=False)
+            _create_newsletter_user(f"inactive-{i}@test.com", is_active=False)
 
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()

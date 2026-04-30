@@ -10,7 +10,6 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import TierOverride
-from email_app.models import NewsletterSubscriber
 from payments.models import Tier
 
 User = get_user_model()
@@ -68,12 +67,6 @@ class StudioUserListTest(TestCase):
             is_active=True,
         )
 
-        # Legacy newsletter rows should not affect the Studio users page any more.
-        NewsletterSubscriber.objects.create(
-            email='ghost@test.com',
-            is_active=True,
-        )
-
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
@@ -103,7 +96,6 @@ class StudioUserListTest(TestCase):
                 'staff@test.com',
             ],
         )
-        self.assertNotIn('ghost@test.com', emails)
 
     def test_filter_paid_uses_effective_tier(self):
         response = self.client.get('/studio/users/?filter=paid')

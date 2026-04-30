@@ -47,7 +47,6 @@ def _flush_all_seed_data():
         Project,
         Unit,
     )
-    from email_app.models import NewsletterSubscriber
     from events.models import Event, EventRegistration
     from notifications.models import Notification
     from voting.models import Poll, PollOption, PollVote
@@ -69,13 +68,15 @@ def _flush_all_seed_data():
     Project.objects.all().delete()
     CuratedLink.objects.filter(item_id__startswith="seed-").delete()
     Download.objects.all().delete()
-    NewsletterSubscriber.objects.all().delete()
 
     # Delete only the seeded users.
     seeded_emails = [
         "admin@aishippinglabs.com", "free@test.com", "basic@test.com",
         "main@test.com", "premium@test.com", "alice@test.com",
         "charlie@test.com", "diana@test.com",
+        "newsletter1@test.com", "newsletter2@test.com",
+        "newsletter3@test.com", "newsletter4@test.com",
+        "newsletter5@test.com",
     ]
     User.objects.filter(email__in=seeded_emails).delete()
 

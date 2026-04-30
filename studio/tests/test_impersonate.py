@@ -3,8 +3,6 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
-from email_app.models import NewsletterSubscriber
-
 User = get_user_model()
 
 
@@ -228,17 +226,11 @@ class UserListLoginAsButtonTest(TestCase):
         )
         cls.subscriber_user = User.objects.create_user(
             email='registered@test.com', password='testpass',
-        )
-        NewsletterSubscriber.objects.create(
-            email='registered@test.com', is_active=True,
+            unsubscribed=False,
         )
         cls.non_subscriber_user = User.objects.create_user(
             email='nosub@test.com', password='testpass',
-        )
-        # A subscriber with no User account: must NOT appear at all because
-        # the page now lists Users (not subscriber rows).
-        NewsletterSubscriber.objects.create(
-            email='ghost@test.com', is_active=True,
+            unsubscribed=True,
         )
 
     def test_login_as_button_present_for_subscriber_user(self):
@@ -257,9 +249,10 @@ class UserListLoginAsButtonTest(TestCase):
             response, f'/studio/impersonate/{self.non_subscriber_user.pk}/'
         )
 
-    def test_subscriber_without_user_account_is_not_listed(self):
-        """Email-only subscribers are not Users, so they do not appear."""
+    def test_subscriber_filter_uses_user_newsletter_state(self):
+        """The subscriber chip is backed by User.unsubscribed."""
         self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.get('/studio/users/?filter=all')
+        response = self.client.get('/studio/users/?filter=subscribers')
         emails = [row['email'] for row in response.context['user_rows']]
-        self.assertNotIn('ghost@test.com', emails)
+        self.assertIn('registered@test.com', emails)
+        self.assertNotIn('nosub@test.com', emails)

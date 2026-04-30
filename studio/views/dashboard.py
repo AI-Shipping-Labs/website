@@ -1,14 +1,17 @@
 """Studio dashboard view."""
 
+from django.contrib.auth import get_user_model
 from django.shortcuts import render
 from django.utils import timezone
 from django_q.models import OrmQ
 
 from content.models import Article, Course, Download, Project
-from email_app.models import EmailCampaign, NewsletterSubscriber
+from email_app.models import EmailCampaign
 from events.models import Event
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
+
+User = get_user_model()
 
 
 @staff_required
@@ -19,8 +22,8 @@ def dashboard(request):
         'published_courses': Course.objects.filter(status='published').count(),
         'total_articles': Article.objects.count(),
         'published_articles': Article.objects.filter(published=True).count(),
-        'active_subscribers': NewsletterSubscriber.objects.filter(is_active=True).count(),
-        'total_subscribers': NewsletterSubscriber.objects.count(),
+        'active_subscribers': User.objects.filter(unsubscribed=False).count(),
+        'total_subscribers': User.objects.count(),
         'upcoming_events': Event.objects.filter(
             status='upcoming',
             start_datetime__gte=timezone.now(),

@@ -24,7 +24,6 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from content.models import Cohort, CohortEnrollment, Course
-from email_app.models import NewsletterSubscriber
 from events.models import EventRegistration
 from notifications.models import Notification
 from payments.models import Tier
@@ -190,8 +189,12 @@ class Command(BaseCommand):
         EventRegistration.objects.all().delete()
         CohortEnrollment.objects.all().delete()
         Cohort.objects.all().delete()
-        NewsletterSubscriber.objects.all().delete()
-        User.objects.filter(email__in=[u['email'] for u in USERS]).delete()
+        User.objects.filter(
+            email__in=[
+                *[u['email'] for u in USERS],
+                *NEWSLETTER_SUBSCRIBERS,
+            ],
+        ).delete()
         self.stdout.write('  Flushed.')
 
     # ------------------------------------------------------------------
@@ -387,10 +390,29 @@ class Command(BaseCommand):
     def _seed_newsletter_subscribers(self):
         count = 0
         for email in NEWSLETTER_SUBSCRIBERS:
-            _, created = NewsletterSubscriber.objects.get_or_create(
+            user, created = User.objects.get_or_create(
                 email=email,
-                defaults={'is_active': True},
+                defaults={
+                    'email_verified': True,
+                    'unsubscribed': False,
+                    'email_preferences': {'newsletter': True},
+                },
             )
+            if not created:
+                updates = []
+                if not user.email_verified:
+                    user.email_verified = True
+                    updates.append('email_verified')
+                if user.unsubscribed:
+                    user.unsubscribed = False
+                    updates.append('unsubscribed')
+                preferences = dict(user.email_preferences or {})
+                if preferences.get('newsletter') is not True:
+                    preferences['newsletter'] = True
+                    user.email_preferences = preferences
+                    updates.append('email_preferences')
+                if updates:
+                    user.save(update_fields=updates)
             if created:
                 count += 1
         self.stdout.write(f'  Newsletter subscribers: {count} created')

@@ -660,8 +660,10 @@ class TestScenario7ProgressBar:
             wait_until="domcontentloaded",
         )
         complete_btn = page.locator("#mark-complete-btn")
+        from playwright.sync_api import expect as pw_expect
+
         complete_btn.click()
-        page.wait_for_load_state("domcontentloaded")
+        pw_expect(complete_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 3: Complete Unit 2
         page.goto(
@@ -670,7 +672,7 @@ class TestScenario7ProgressBar:
         )
         complete_btn = page.locator("#mark-complete-btn")
         complete_btn.click()
-        page.wait_for_load_state("domcontentloaded")
+        pw_expect(complete_btn).to_contain_text("Completed", timeout=5000)
 
         # Step 4: Navigate back to course detail
         page.goto(

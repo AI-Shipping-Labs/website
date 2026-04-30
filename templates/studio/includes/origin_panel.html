@@ -1,0 +1,83 @@
+{% load studio_filters %}
+<div class="bg-card border border-border rounded-lg p-4 mb-6" data-testid="origin-panel" data-origin="{% if is_synced %}synced{% else %}local{% endif %}">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h3 class="text-sm font-medium text-foreground mb-1">Origin</h3>
+      {% if is_synced %}
+      <span class="inline-flex items-center rounded bg-blue-500/20 px-2 py-1 text-xs font-medium text-blue-400">Synced from GitHub</span>
+      <p class="text-sm text-muted-foreground mt-2">This content is synced from GitHub. To edit it, update the source file and sync.</p>
+      {% else %}
+      <span class="inline-flex items-center rounded bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground">Local / manual</span>
+      <p class="text-sm text-muted-foreground mt-2">No GitHub source metadata exists for this row.</p>
+      {% endif %}
+    </div>
+    {% if show_actions and is_synced %}
+    <div class="flex flex-wrap items-center gap-3">
+      {% if github_url %}
+      <a href="{{ github_url }}" target="_blank" rel="noopener noreferrer"
+         class="text-sm text-accent hover:underline" data-testid="github-source-link">Edit on GitHub</a>
+      {% endif %}
+      {% if obj.get_absolute_url %}
+      <a href="{{ obj.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
+         class="text-sm text-accent hover:underline">View on site</a>
+      {% endif %}
+      {% if action_is_synced %}
+      <form method="post"
+            action="{% url 'studio_sync_object_trigger' model_name=action_obj|model_name object_id=action_obj.pk %}"
+            class="inline"
+            data-testid="resync-source-form">
+        {% csrf_token %}
+        <button type="submit"
+                class="text-sm text-accent hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                data-testid="resync-source-button">Re-sync source</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <dl class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mt-4">
+    {% if obj.source_repo %}
+    <div>
+      <dt class="text-muted-foreground">Source repo</dt>
+      <dd class="text-foreground break-all">{{ obj.source_repo }}</dd>
+    </div>
+    {% endif %}
+    {% if obj.source_path %}
+    <div>
+      <dt class="text-muted-foreground">Source file</dt>
+      <dd class="text-foreground break-all">
+        {% if github_url %}
+        <a href="{{ github_url }}" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline">{{ obj.source_path }}</a>
+        {% else %}
+        {{ obj.source_path }}
+        {% endif %}
+      </dd>
+    </div>
+    {% endif %}
+    {% if obj.source_commit %}
+    <div>
+      <dt class="text-muted-foreground">Last sync commit</dt>
+      <dd class="text-foreground font-mono" title="{{ obj.source_commit }}">{{ obj.source_commit|truncatechars:10 }}</dd>
+    </div>
+    {% endif %}
+    {% if obj.content_id %}
+    <div>
+      <dt class="text-muted-foreground">Content ID</dt>
+      <dd class="text-foreground font-mono break-all">{{ obj.content_id }}</dd>
+    </div>
+    {% endif %}
+    {% if obj.created_at %}
+    <div>
+      <dt class="text-muted-foreground">Created</dt>
+      <dd class="text-foreground">{{ obj.created_at|date:"M d, Y H:i" }}</dd>
+    </div>
+    {% endif %}
+    {% if obj.updated_at %}
+    <div>
+      <dt class="text-muted-foreground">Updated</dt>
+      <dd class="text-foreground">{{ obj.updated_at|date:"M d, Y H:i" }}</dd>
+    </div>
+    {% endif %}
+  </dl>
+</div>

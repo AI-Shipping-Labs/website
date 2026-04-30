@@ -1,6 +1,7 @@
 from django import template
 from django_q.models import OrmQ
 
+from studio.utils import get_github_edit_url, is_synced
 from studio.worker_health import get_worker_status
 
 register = template.Library()
@@ -101,6 +102,37 @@ def studio_status_badge(status, label=''):
 def studio_synced_badge(source_repo):
     """Render the shared synced badge when a row is source-managed."""
     return {'source_repo': source_repo}
+
+
+@register.inclusion_tag('studio/includes/origin_badge.html')
+def studio_origin_badge(obj, show_path=True):
+    """Render compact source provenance for Studio table/nested rows."""
+    return {
+        'obj': obj,
+        'is_synced': is_synced(obj),
+        'show_path': show_path,
+        'github_url': get_github_edit_url(obj),
+    }
+
+
+@register.inclusion_tag('studio/includes/origin_panel.html')
+def studio_origin_panel(obj, action_obj=None, show_actions=True):
+    """Render a dense provenance panel for source-aware Studio objects.
+
+    ``obj`` is the row whose metadata should be displayed. ``action_obj`` can
+    differ when the page is read-only because of a parent source-managed row,
+    such as unit edit pages where re-sync should still target the parent
+    course while the panel displays the unit's own markdown source.
+    """
+    action_obj = action_obj or obj
+    return {
+        'obj': obj,
+        'action_obj': action_obj,
+        'show_actions': show_actions,
+        'is_synced': is_synced(obj),
+        'github_url': get_github_edit_url(obj),
+        'action_is_synced': is_synced(action_obj),
+    }
 
 
 @register.inclusion_tag('studio/includes/list_action.html')

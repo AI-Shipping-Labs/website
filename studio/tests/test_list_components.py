@@ -43,10 +43,15 @@ class StudioListComponentTemplateTest(TestCase):
                 self.assertIn('studio_status_badge', source)
                 self.assertIn('studio_list_action', source)
 
-        for path in self.template_paths[:3]:
+        for path in self.template_paths[:1]:
             with self.subTest(path=path):
                 source = self._template_source(path)
                 self.assertIn('studio_synced_badge', source)
+
+        for path in self.template_paths[1:3]:
+            with self.subTest(path=path):
+                source = self._template_source(path)
+                self.assertIn('studio_origin_badge', source)
 
 
 class StudioListComponentRenderTest(TestCase):

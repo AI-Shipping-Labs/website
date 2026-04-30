@@ -9,6 +9,8 @@ Verifies:
 - Module reorder API
 """
 
+import uuid
+
 from django.test import TestCase
 
 from content.models import Course, Module, Unit
@@ -51,6 +53,26 @@ class StudioCourseListTest(StaffUserMixin, TestCase):
     def test_list_empty_state(self):
         response = self.client.get('/studio/courses/')
         self.assertContains(response, 'No courses found')
+
+    def test_list_shows_synced_and_local_origins(self):
+        Course.objects.create(
+            title='Synced Course', slug='synced-course',
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/synced/course.yaml',
+        )
+        Course.objects.create(title='Local Course', slug='local-course')
+
+        response = self.client.get('/studio/courses/')
+
+        self.assertContains(response, 'Synced')
+        self.assertContains(response, 'courses/synced/course.yaml')
+        self.assertContains(response, 'Local / manual')
+        self.assertContains(response, 'No GitHub source metadata')
+        body = response.content.decode()
+        synced_row = body[body.find('Synced Course'):body.find('</tr>', body.find('Synced Course'))]
+        local_row = body[body.find('Local Course'):body.find('</tr>', body.find('Local Course'))]
+        self.assertIn('>View</a>', synced_row)
+        self.assertIn('>Edit</a>', local_row)
 
 
 class StudioCourseCreateRemovedTest(StaffUserMixin, TestCase):
@@ -102,6 +124,71 @@ class StudioCourseEditTest(StaffUserMixin, TestCase):
     def test_edit_nonexistent_course_returns_404(self):
         response = self.client.get('/studio/courses/99999/edit')
         self.assertEqual(response.status_code, 404)
+
+    def test_synced_course_shows_origin_metadata_and_resync(self):
+        content_id = uuid.uuid4()
+        Course.objects.filter(pk=self.course.pk).update(
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/edit-course/course.yaml',
+            source_commit='abc1234def5678901234567890123456789abcde',
+            content_id=content_id,
+        )
+
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        self.assertContains(response, 'Synced from GitHub')
+        self.assertContains(response, 'AI-Shipping-Labs/content')
+        self.assertContains(response, 'courses/edit-course/course.yaml')
+        self.assertContains(response, 'abc1234def5678901234567890123456789abcde')
+        self.assertContains(response, str(content_id))
+        self.assertContains(
+            response,
+            'https://github.com/AI-Shipping-Labs/content/blob/main/'
+            'courses/edit-course/course.yaml',
+        )
+        self.assertContains(response, 'data-testid="resync-source-button"')
+
+    def test_local_course_shows_manual_origin_without_github_controls(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        self.assertContains(response, 'Local / manual')
+        self.assertContains(response, 'No GitHub source metadata exists')
+        self.assertNotContains(response, 'Edit on GitHub')
+        self.assertNotContains(response, 'data-testid="resync-source-button"')
+
+    def test_modules_and_units_show_row_level_origins(self):
+        synced_module = Module.objects.create(
+            course=self.course,
+            slug='synced-module',
+            title='Synced Module',
+            sort_order=1,
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/edit-course/synced-module/README.md',
+        )
+        Module.objects.create(
+            course=self.course, slug='local-module',
+            title='Local Module', sort_order=2,
+        )
+        Unit.objects.create(
+            module=synced_module,
+            slug='synced-unit',
+            title='Synced Unit',
+            sort_order=1,
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/edit-course/synced-module/synced-unit.md',
+        )
+        Unit.objects.create(
+            module=synced_module,
+            slug='local-unit',
+            title='Local Unit',
+            sort_order=2,
+        )
+
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        self.assertContains(response, 'courses/edit-course/synced-module/README.md')
+        self.assertContains(response, 'courses/edit-course/synced-module/synced-unit.md')
+        self.assertContains(response, 'Local / manual', count=3)
 
 
 class StudioModuleCreateTest(StaffUserMixin, TestCase):
@@ -227,6 +314,27 @@ class StudioUnitEditTest(StaffUserMixin, TestCase):
             response, f'/studio/courses/{self.course.pk}/edit',
             fetch_redirect_response=False,
         )
+
+    def test_synced_unit_detail_shows_unit_source_path(self):
+        self.course.source_repo = 'AI-Shipping-Labs/content'
+        self.course.source_path = 'courses/unit-edit/course.yaml'
+        self.course.save()
+        self.unit.source_repo = 'AI-Shipping-Labs/content'
+        self.unit.source_path = 'courses/unit-edit/module/unit.md'
+        self.unit.source_commit = 'def1234def5678901234567890123456789abcde'
+        self.unit.content_id = uuid.uuid4()
+        self.unit.save()
+
+        response = self.client.get(f'/studio/units/{self.unit.pk}/edit')
+
+        self.assertContains(response, 'Synced from GitHub')
+        self.assertContains(response, 'courses/unit-edit/module/unit.md')
+        self.assertContains(
+            response,
+            'https://github.com/AI-Shipping-Labs/content/blob/main/'
+            'courses/unit-edit/module/unit.md',
+        )
+        self.assertNotContains(response, 'courses/unit-edit/course.yaml')
 
 
 class StudioModuleReorderTest(StaffUserMixin, TestCase):

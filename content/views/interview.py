@@ -1,6 +1,7 @@
-import markdown
 from django.http import Http404
 from django.shortcuts import render
+
+from content.utils.markdown import render_markdown
 
 # Canonical ordering of interview question categories
 INTERVIEW_CATEGORY_ORDER = [
@@ -89,15 +90,11 @@ def interview_hub(request):
 
 def _render_markdown(text):
     """Render markdown text to HTML."""
-    return markdown.markdown(
+    return render_markdown(
         text,
-        extensions=[
-            'fenced_code',
-            'codehilite',
-            'tables',
-            'attr_list',
-            'md_in_html',
-        ],
+        include_mermaid=False,
+        include_external_links=False,
+        codehilite_guess_lang=True,
     )
 
 

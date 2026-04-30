@@ -11,49 +11,16 @@ they will be added in a follow-up. This module ships models + the helper
 methods the sync pipeline and admin need.
 """
 
-import markdown as md_lib
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from content.access import VISIBILITY_CHOICES, get_user_level
-from content.markdown_extensions import (
-    ExternalLinksExtension,
-    MermaidExtension,
-)
 from content.models.mixins import (
     SourceMetadataMixin,
     SyncedContentIdentityMixin,
     TimestampedModelMixin,
 )
-
-
-def render_markdown(text):
-    """Convert markdown to HTML with syntax highlighting.
-
-    Duplicates the helper from ``course.py`` to avoid cross-module coupling
-    between content types. The extensions list must stay in sync with the
-    one used by other content types so workshop pages render consistently
-    with course units and articles.
-    """
-    return md_lib.markdown(
-        text,
-        extensions=[
-            MermaidExtension(),
-            ExternalLinksExtension(),
-            'fenced_code',
-            'codehilite',
-            'tables',
-            'attr_list',
-            'md_in_html',
-        ],
-        extension_configs={
-            'codehilite': {
-                'css_class': 'codehilite',
-                'guess_lang': False,
-            },
-        },
-    )
-
+from content.utils.markdown import render_markdown
 
 STATUS_CHOICES = [
     ('draft', 'Draft'),

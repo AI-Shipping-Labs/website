@@ -15,31 +15,17 @@ path is soft-delete (``status='draft'``) handled by the sync layer when an
 instructor's yaml is removed.
 """
 
-import markdown as md_lib
 from django.db import models
 
-from content.markdown_extensions import MermaidExtension
 from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
+from content.utils.markdown import render_markdown as _render_markdown
 
 
 def render_markdown(text):
-    """Convert markdown to HTML matching the Course/Workshop pipeline."""
-    return md_lib.markdown(
+    """Convert instructor markdown to HTML without external-link rewriting."""
+    return _render_markdown(
         text,
-        extensions=[
-            MermaidExtension(),
-            'fenced_code',
-            'codehilite',
-            'tables',
-            'attr_list',
-            'md_in_html',
-        ],
-        extension_configs={
-            'codehilite': {
-                'css_class': 'codehilite',
-                'guess_lang': False,
-            },
-        },
+        include_external_links=False,
     )
 
 

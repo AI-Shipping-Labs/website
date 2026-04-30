@@ -38,6 +38,7 @@ from content.models import Article, CuratedLink, Unit
 from events.models import Event
 from integrations.models import ContentSource
 from integrations.services.github import _defaults_differ, sync_content_source
+from integrations.tests.sync_fixtures import write_markdown_file, write_yaml_file
 
 # ---------------------------------------------------------------------------
 # Helper for writing markdown frontmatter files in tests.
@@ -46,46 +47,12 @@ from integrations.services.github import _defaults_differ, sync_content_source
 
 def _write_md(filepath, frontmatter_dict, body=''):
     """Write a markdown file with frontmatter; same shape used elsewhere."""
-    if 'content_id' not in frontmatter_dict:
-        frontmatter_dict['content_id'] = str(uuid.uuid4())
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    lines = ['---']
-    for key, value in frontmatter_dict.items():
-        if isinstance(value, list):
-            lines.append(f'{key}:')
-            for item in value:
-                lines.append(f'  - "{item}"')
-        elif isinstance(value, bool):
-            lines.append(f'{key}: {str(value).lower()}')
-        elif isinstance(value, int):
-            lines.append(f'{key}: {value}')
-        else:
-            lines.append(f'{key}: "{value}"')
-    lines.append('---')
-    lines.append(body)
-    with open(filepath, 'w') as f:
-        f.write('\n'.join(lines))
+    return write_markdown_file(filepath, frontmatter_dict, body)
 
 
 def _write_yaml(filepath, data):
     """Write a YAML file (manually so we don't require pyyaml dump style)."""
-    if 'content_id' not in data:
-        data['content_id'] = str(uuid.uuid4())
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    lines = []
-    for key, value in data.items():
-        if isinstance(value, list):
-            lines.append(f'{key}:')
-            for item in value:
-                lines.append(f'  - "{item}"')
-        elif isinstance(value, bool):
-            lines.append(f'{key}: {str(value).lower()}')
-        elif isinstance(value, int):
-            lines.append(f'{key}: {value}')
-        else:
-            lines.append(f'{key}: "{value}"')
-    with open(filepath, 'w') as f:
-        f.write('\n'.join(lines))
+    return write_yaml_file(filepath, data)
 
 
 # ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ import uuid
 
 from django.test import TestCase
 
-from content.models import Course, Module
+from content.models import Course, CuratedLink, Module
 from integrations.models import ContentSource
 from integrations.services.github import (
     _build_course_unit_lookup,
@@ -271,6 +271,51 @@ class CourseYamlListBubblesAsErrorTest(TestCase):
         self.assertFalse(
             Course.objects.filter(source_repo='test-org/courses').exists(),
         )
+
+
+class CuratedLinksYamlManifestErrorTest(TestCase):
+    """Curated-link manifests accept top-level lists only and keep sync partial."""
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='test-org/resources',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+        self.links_dir = os.path.join(
+            self.temp_dir, 'resources', 'curated-links',
+        )
+        os.makedirs(self.links_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_malformed_curated_links_yaml_records_partial_error(self):
+        with open(os.path.join(self.links_dir, 'links.yaml'), 'w') as f:
+            f.write('- content_id: broken\n  title: [[[invalid\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.status, 'partial')
+        self.assertFalse(CuratedLink.objects.exists())
+        self.assertTrue(any(
+            error.get('file') == 'resources/curated-links/links.yaml'
+            and 'Failed to parse links.yaml' in error.get('error', '')
+            for error in sync_log.errors
+        ), sync_log.errors)
+
+    def test_mapping_curated_links_yaml_records_invalid_manifest_shape(self):
+        with open(os.path.join(self.links_dir, 'links.yaml'), 'w') as f:
+            f.write('title: "Not a list"\nurl: "https://example.com"\n')
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(sync_log.status, 'partial')
+        self.assertFalse(CuratedLink.objects.exists())
+        self.assertTrue(any(
+            error.get('file') == 'resources/curated-links/links.yaml'
+            and 'expected a top-level list, got dict' in error.get('error', '')
+            for error in sync_log.errors
+        ), sync_log.errors)
 
 
 # ============================================================================

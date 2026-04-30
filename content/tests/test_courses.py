@@ -897,6 +897,30 @@ class CourseTestimonialsViewTest(TestCase):
     def test_source_url_as_link(self):
         response = self.client.get('/courses/testimonial-course')
         self.assertContains(response, 'href="https://example.com/bob"')
+        self.assertContains(response, 'focus-visible:outline-accent')
+
+    def test_testimonials_use_shared_card_grid(self):
+        response = self.client.get('/courses/testimonial-course')
+        self.assertContains(response, 'data-testid="testimonial-grid"')
+        self.assertContains(response, 'data-testid="testimonial-card"', count=2)
+        self.assertContains(response, 'data-testid="testimonial-author"', count=2)
+        self.assertContains(response, 'md:grid-cols-2')
+        self.assertNotContains(response, 'columns-1')
+
+    def test_long_role_and_company_can_wrap(self):
+        self.course.testimonials = [
+            {
+                'quote': 'Dense and practical.',
+                'name': 'Long Metadata Learner',
+                'role': 'Principal Applied AI Systems Reliability Engineer',
+                'company': 'Very Long Company Name for Enterprise Research Platforms',
+            },
+        ]
+        self.course.save(update_fields=['testimonials'])
+        response = self.client.get('/courses/testimonial-course')
+        self.assertContains(response, 'break-words')
+        self.assertContains(response, 'Principal Applied AI Systems Reliability Engineer')
+        self.assertContains(response, 'Very Long Company Name for Enterprise Research Platforms')
 
     def test_no_section_when_empty(self):
         course = Course.objects.create(

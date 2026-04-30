@@ -70,6 +70,14 @@ class HomeViewTest(TestCase):
         self.assertIn('id="newsletter"', content)
         self.assertIn('id="faq"', content)
 
+    def test_home_testimonials_use_balanced_grid(self):
+        response = self.client.get('/')
+        self.assertContains(response, 'data-testid="testimonial-grid"')
+        self.assertContains(response, 'data-testid="testimonial-card"')
+        self.assertNotContains(response, '<footer class="mt-6 flex')
+        self.assertContains(response, 'md:grid-cols-2')
+        self.assertNotContains(response, 'columns-1')
+
     def test_home_contains_nav(self):
         response = self.client.get('/')
         content = response.content.decode()

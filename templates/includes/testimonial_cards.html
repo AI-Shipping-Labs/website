@@ -1,0 +1,29 @@
+<div class="grid gap-6 md:grid-cols-2" data-testid="testimonial-grid">
+  {% for t in testimonials %}
+  <article class="flex h-full min-w-0 flex-col rounded-lg border border-border bg-background p-6 shadow-sm" data-testid="testimonial-card">
+    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent/10">
+      <i data-lucide="quote" class="h-5 w-5 text-accent"></i>
+    </div>
+    <blockquote class="mt-5 flex-1 text-sm leading-relaxed text-muted-foreground" data-testid="testimonial-quote">
+      "{{ t.quote }}"
+    </blockquote>
+    <div class="mt-6 flex min-w-0 items-start gap-3 border-t border-border pt-5" data-testid="testimonial-author">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-medium text-foreground">
+        {{ t.name|first }}
+      </div>
+      <div class="min-w-0 flex-1">
+        {% if t.source_url %}
+        <a href="{{ t.source_url }}" target="_blank" rel="noopener noreferrer" class="break-words text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          {{ t.name }}
+        </a>
+        {% else %}
+        <p class="break-words text-sm font-medium text-foreground">{{ t.name }}</p>
+        {% endif %}
+        <p class="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
+          {% if t.role %}{{ t.role }}{% endif %}{% if t.role and t.company %} &middot; {% endif %}{% if t.company %}{{ t.company }}{% endif %}
+        </p>
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>

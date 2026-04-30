@@ -193,26 +193,8 @@
         </p>
       </div>
 
-      <div class="mt-16 columns-1 gap-6 sm:columns-2 lg:columns-3">
-        {% for t in testimonials %}
-        <div class="mb-6 break-inside-avoid rounded-xl border border-border bg-background p-6">
-          <i data-lucide="quote" class="h-6 w-6 text-accent/50"></i>
-          <blockquote class="mt-4 text-sm leading-relaxed text-muted-foreground">
-            "{{ t.quote }}"
-          </blockquote>
-          <div class="mt-6 flex items-center gap-3">
-            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-sm font-medium">
-              {{ t.name|first }}
-            </div>
-            <div>
-              <p class="font-medium text-sm">{{ t.name }}</p>
-              <p class="text-xs text-muted-foreground">
-                {{ t.role }}{% if t.company %} &middot; {{ t.company }}{% endif %}
-              </p>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
+      <div class="mx-auto mt-16 max-w-5xl">
+        {% include "includes/testimonial_cards.html" %}
       </div>
     </div>
   </section>

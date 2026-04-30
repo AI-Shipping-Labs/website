@@ -29,7 +29,8 @@ import os
 import shutil
 import tempfile
 import uuid
-from datetime import date
+from datetime import date, datetime
+from datetime import timezone as dt_timezone
 
 from django.test import TestCase
 
@@ -614,6 +615,60 @@ class SyncEventsUnchangedTest(TestCase):
 
         ev.refresh_from_db()
         self.assertEqual(ev.zoom_join_url, 'https://zoom.us/j/123')
+
+    def test_event_content_update_preserves_all_operational_fields(self):
+        self._seed_event()
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        existing_start = datetime(2026, 5, 1, 10, 0, tzinfo=dt_timezone.utc)
+        existing_end = datetime(2026, 5, 1, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.get(slug='workshop-1')
+        ev.start_datetime = existing_start
+        ev.end_datetime = existing_end
+        ev.status = 'upcoming'
+        ev.timezone = 'America/New_York'
+        ev.platform = 'custom'
+        ev.location = 'Studio-managed room'
+        ev.zoom_meeting_id = '999-999-999'
+        ev.zoom_join_url = 'https://zoom.us/j/999'
+        ev.published = False
+        ev.save()
+
+        _write_yaml(
+            os.path.join(self.temp_dir, 'workshop-1.yaml'),
+            {
+                'title': 'Workshop renamed from content',
+                'slug': 'workshop-1',
+                'description': 'A content-only update.',
+                'speaker_name': 'Alice',
+                'recording_url': 'https://example.com/recording',
+                'content_id': '99999999-0000-0000-0000-000000000001',
+                'published_at': '2026-01-10',
+                'start_datetime': '2026-06-01T15:00:00+00:00',
+                'end_datetime': '2026-06-01T16:00:00+00:00',
+                'status': 'completed',
+                'timezone': 'Europe/Berlin',
+                'platform': 'zoom',
+                'location': 'Zoom',
+                'published': True,
+            },
+        )
+
+        log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(log.items_updated, 1)
+        ev.refresh_from_db()
+        self.assertEqual(ev.title, 'Workshop renamed from content')
+        self.assertEqual(ev.description, 'A content-only update.')
+        self.assertEqual(ev.start_datetime, existing_start)
+        self.assertEqual(ev.end_datetime, existing_end)
+        self.assertEqual(ev.status, 'upcoming')
+        self.assertEqual(ev.timezone, 'America/New_York')
+        self.assertEqual(ev.platform, 'custom')
+        self.assertEqual(ev.location, 'Studio-managed room')
+        self.assertEqual(ev.zoom_meeting_id, '999-999-999')
+        self.assertEqual(ev.zoom_join_url, 'https://zoom.us/j/999')
+        self.assertFalse(ev.published)
 
 
 # ---------------------------------------------------------------------------

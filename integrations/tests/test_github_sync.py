@@ -1830,14 +1830,15 @@ class SyncResourcesTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, unique_title)
 
-        # Step 3: re-write yaml -> sync -> assert restored
+        # Step 3: re-write yaml -> sync -> content updates, but the
+        # existing row's operational visibility flag is preserved.
         write_file()
         sync_content_source(event_source, repo_dir=self.temp_dir)
         event.refresh_from_db()
-        self.assertTrue(event.published)
+        self.assertFalse(event.published)
         response = self.client.get('/events?filter=past')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, unique_title)
+        self.assertNotContains(response, unique_title)
 
 
 # ===========================================================================

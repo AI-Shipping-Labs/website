@@ -33,6 +33,104 @@ from integrations.services.github_sync.repo import derive_slug, extract_sort_ord
 
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_event, _resolve_instructors_for_yaml
 
+_UNSET = object()
+
+
+def _build_synced_event_content_defaults(
+    *,
+    source,
+    source_path,
+    commit_sha,
+    content_id,
+    title,
+    description='',
+    tags=None,
+    cover_image_url=_UNSET,
+    recording_url='',
+    recording_embed_url='',
+    transcript_url='',
+    timestamps=None,
+    materials=None,
+    core_tools=None,
+    learning_objectives=None,
+    outcome='',
+    required_level=0,
+    speaker_name='',
+    speaker_bio='',
+    related_course='',
+    kind='standard',
+    published_at=_UNSET,
+    recap=_UNSET,
+):
+    """Build content fields shared by standalone and workshop event sync.
+
+    Operational fields such as schedule, status, platform, Zoom details,
+    registration settings, and published state stay out of this mapping so
+    existing Studio-managed values are not overwritten during content sync.
+    """
+    defaults = {
+        'title': title,
+        'description': description,
+        'recording_url': recording_url,
+        'recording_embed_url': recording_embed_url,
+        'transcript_url': transcript_url,
+        'timestamps': timestamps or [],
+        'materials': materials or [],
+        'core_tools': core_tools or [],
+        'learning_objectives': learning_objectives or [],
+        'outcome': outcome,
+        'tags': tags or [],
+        'required_level': required_level,
+        'speaker_name': speaker_name,
+        'speaker_bio': speaker_bio,
+        'related_course': related_course,
+        'kind': kind,
+        'content_id': content_id,
+        'source_repo': source.repo_name,
+        'source_path': source_path,
+        'source_commit': commit_sha,
+    }
+    if cover_image_url is not _UNSET:
+        defaults['cover_image_url'] = cover_image_url
+    if published_at is not _UNSET:
+        defaults['published_at'] = published_at
+    if recap is not _UNSET:
+        defaults.update({
+            'recap_file': recap.get('recap_file', ''),
+            'recap_markdown': recap.get('recap_markdown', ''),
+            'recap_html': recap.get('recap_html', ''),
+            'recap_data': recap.get('recap_data', {}),
+        })
+    return defaults
+
+
+def _upsert_synced_event_content(
+    *,
+    lookup,
+    defaults,
+    stats,
+    create_kwargs=None,
+    detail_slug=None,
+):
+    """Apply synced event content fields through the shared lifecycle path."""
+    from events.models import Event
+
+    slug = detail_slug or (create_kwargs or {}).get('slug') or defaults.get('source_path')
+    return upsert_synced_object(
+        model=Event,
+        lookup=lookup,
+        defaults=defaults,
+        stats=stats,
+        create_kwargs=create_kwargs,
+        detail=lambda event, action: {
+            'title': defaults.get('title', event.title),
+            'slug': detail_slug or event.slug or slug,
+            'action': action,
+            'content_type': 'event',
+        },
+    )
+
+
 def _event_requests_zoom_meeting(data):
     """Return True when synced frontmatter requests a Zoom-backed event."""
     location = str(data.get('location', '') or '').strip().lower()
@@ -192,60 +290,60 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                     'recap_data': {},
                 }
 
-            # Content fields that sync always updates
-            content_defaults = {
-                'title': data.get('title', slug),
-                'description': data.get('description', ''),
-                'recording_url': data.get('recording_url', '') or data.get('video_url', ''),
-                'recording_embed_url': (
-                    data.get('recording_embed_url', '')
-                    or data.get('google_embed_url', '')
-                ),
-                'transcript_url': data.get('transcript_url', ''),
-                'timestamps': data.get('timestamps', []),
-                'materials': data.get('materials', []),
-                'core_tools': data.get('core_tools', []),
-                'learning_objectives': data.get('learning_objectives', []),
-                'outcome': data.get('outcome', ''),
-                'tags': data.get('tags', []),
-                'required_level': data.get('required_level', 0),
-                'speaker_name': data.get('speaker_name', ''),
-                'speaker_bio': data.get('speaker_bio', ''),
-                'related_course': data.get('related_course', ''),
-                'published': data.get('published', True),
-                'recap_file': rendered_recap['recap_file'],
-                'recap_markdown': rendered_recap['recap_markdown'],
-                'recap_html': rendered_recap['recap_html'],
-                'recap_data': rendered_recap['recap_data'],
-                'content_id': event_content_id,
-                'source_repo': source.repo_name,
-                'source_path': rel_path,
-                'source_commit': commit_sha,
-            }
-
             # Handle cover_image
+            cover_image_url = _UNSET
             cover_image = data.get('cover_image', '')
             if cover_image:
-                content_defaults['cover_image_url'] = rewrite_cover_image_url(
-                    cover_image, source, rel_path,
-                )
+                cover_image_url = rewrite_cover_image_url(cover_image, source, rel_path)
 
             # Handle published_at
+            published_at_value = _UNSET
             published_at = data.get('published_at')
             if published_at:
                 if isinstance(published_at, str):
-                    content_defaults['published_at'] = dt.datetime.combine(
+                    published_at_value = dt.datetime.combine(
                         dt.date.fromisoformat(published_at),
                         dt.time.min,
                         tzinfo=dt.timezone.utc,
                     )
                 elif isinstance(published_at, (dt.date, dt.datetime)):
                     if isinstance(published_at, dt.date) and not isinstance(published_at, dt.datetime):
-                        content_defaults['published_at'] = dt.datetime.combine(
+                        published_at_value = dt.datetime.combine(
                             published_at, dt.time.min, tzinfo=dt.timezone.utc,
                         )
                     else:
-                        content_defaults['published_at'] = published_at
+                        published_at_value = published_at
+
+            content_defaults = _build_synced_event_content_defaults(
+                source=source,
+                source_path=rel_path,
+                commit_sha=commit_sha,
+                content_id=event_content_id,
+                title=data.get('title', slug),
+                description=data.get('description', ''),
+                tags=data.get('tags', []),
+                cover_image_url=cover_image_url,
+                recording_url=(
+                    data.get('recording_url', '') or data.get('video_url', '')
+                ),
+                recording_embed_url=(
+                    data.get('recording_embed_url', '')
+                    or data.get('google_embed_url', '')
+                ),
+                transcript_url=data.get('transcript_url', ''),
+                timestamps=data.get('timestamps', []),
+                materials=data.get('materials', []),
+                core_tools=data.get('core_tools', []),
+                learning_objectives=data.get('learning_objectives', []),
+                outcome=data.get('outcome', ''),
+                required_level=data.get('required_level', 0),
+                speaker_name=data.get('speaker_name', ''),
+                speaker_bio=data.get('speaker_bio', ''),
+                related_course=data.get('related_course', ''),
+                kind=data.get('kind', 'standard') or 'standard',
+                published_at=published_at_value,
+                recap=rendered_recap,
+            )
 
             event = find_synced_object((
                 lambda: Event.objects.filter(
@@ -272,20 +370,15 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                     'timezone': data.get('timezone') or settings.TIME_ZONE,
                     'platform': data.get('platform') or 'zoom',
                     'location': data.get('location', '') or '',
+                    'published': data.get('published', True),
                 }
 
-            result = upsert_synced_object(
-                model=Event,
+            result = _upsert_synced_event_content(
                 lookup=lambda: event,
                 defaults=content_defaults,
                 stats=stats,
                 create_kwargs=create_kwargs,
-                detail=lambda obj, action: {
-                    'title': content_defaults.get('title', slug),
-                    'slug': slug,
-                    'action': action,
-                    'content_type': 'event',
-                },
+                detail_slug=slug,
             )
             event = result.instance
             if result.created:

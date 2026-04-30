@@ -30,7 +30,10 @@ from integrations.services.github_sync.parsing import (
 from integrations.services.github_sync.repo import derive_slug, extract_sort_order, _matches_ignore_patterns
 
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_workshop, _resolve_instructors_for_yaml
-from integrations.services.github_sync.dispatchers.events import _coerce_event_datetime, _event_requests_zoom_meeting, _maybe_create_zoom_meeting_for_synced_event
+from integrations.services.github_sync.dispatchers.events import (
+    _build_synced_event_content_defaults,
+    _upsert_synced_event_content,
+)
 from integrations.services.github_sync.dispatchers.courses import _build_workshop_page_lookup, _resolve_workshop_landing_copy
 
 def _coerce_workshop_date(value):
@@ -376,32 +379,25 @@ def _link_or_create_workshop_event(
     from content.models import Workshop
     from events.models import Event
 
-    # Content fields we always update from the workshop.yaml
-    tags = data.get('tags', []) or []
-    materials = recording.get('materials', []) or []
-    timestamps = recording.get('timestamps', []) or []
-    recording_url = recording.get('url', '') or ''
-    recording_embed_url = recording.get('embed_url', '') or ''
-
-    content_defaults = {
-        'title': workshop.title,
-        'description': workshop.description,
-        'tags': tags,
-        'cover_image_url': workshop.cover_image_url,
-        'recording_url': recording_url,
-        'recording_embed_url': recording_embed_url,
-        'timestamps': timestamps,
-        'materials': materials,
-        'required_level': recording_required_level,
-        'speaker_name': workshop.instructor_name,
-        'kind': 'workshop',
-        'content_id': _derive_workshop_event_content_id(
+    content_defaults = _build_synced_event_content_defaults(
+        source=source,
+        source_path=yaml_rel_path,
+        commit_sha=commit_sha,
+        content_id=_derive_workshop_event_content_id(
             source.repo_name, rel_path,
         ),
-        'source_repo': source.repo_name,
-        'source_path': yaml_rel_path,
-        'source_commit': commit_sha,
-    }
+        title=workshop.title,
+        description=workshop.description,
+        tags=data.get('tags', []) or [],
+        cover_image_url=workshop.cover_image_url,
+        recording_url=recording.get('url', '') or '',
+        recording_embed_url=recording.get('embed_url', '') or '',
+        timestamps=recording.get('timestamps', []) or [],
+        materials=recording.get('materials', []) or [],
+        required_level=recording_required_level,
+        speaker_name=workshop.instructor_name,
+        kind='workshop',
+    )
 
     # Look up by slug first — that's the idempotent key per the spec.
     existing_event = Event.objects.filter(slug=workshop.slug).first()
@@ -418,18 +414,12 @@ def _link_or_create_workshop_event(
     else:
         create_kwargs = None
 
-    result = upsert_synced_object(
-        model=Event,
+    result = _upsert_synced_event_content(
         lookup=lambda: existing_event,
         defaults=content_defaults,
         stats=stats,
         create_kwargs=create_kwargs,
-        detail=lambda event, action: {
-            'title': event.title,
-            'slug': event.slug,
-            'action': action,
-            'content_type': 'event',
-        },
+        detail_slug=workshop.slug,
     )
     event = result.instance
 

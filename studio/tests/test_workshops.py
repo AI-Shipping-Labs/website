@@ -6,6 +6,7 @@ three-gate invariant enforcement on the edit form.
 """
 
 import datetime
+import uuid
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -167,6 +168,23 @@ class StudioWorkshopListTest(TestCase):
         self.assertGreater(idx_rag, 0)
         self.assertLess(idx_fine, idx_rag)
 
+    def test_list_shows_synced_and_local_origins(self):
+        local = _make_workshop(
+            slug='local-workshop',
+            title='Local Workshop',
+            source_repo='',
+            source_path='',
+            source_commit='',
+        )
+
+        response = self.client.get('/studio/workshops/')
+
+        self.assertContains(response, 'Synced')
+        self.assertContains(response, '2026/rag-basics/workshop.yaml')
+        self.assertContains(response, local.title)
+        self.assertContains(response, 'Local / manual')
+        self.assertContains(response, 'No GitHub source metadata')
+
 
 class StudioWorkshopDetailTest(TestCase):
     """Detail page shows every field, the page list, and the linked event."""
@@ -226,9 +244,19 @@ class StudioWorkshopDetailTest(TestCase):
         self.assertContains(response, 'Main and above')
 
     def test_shows_synced_metadata(self):
+        content_id = uuid.uuid4()
+        Workshop.objects.filter(pk=self.workshop.pk).update(content_id=content_id)
         response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
         self.assertContains(response, 'AI-Shipping-Labs/workshops-content')
         self.assertContains(response, '2026/demo/workshop.yaml')
+        self.assertContains(response, 'abc1234def5678901234567890123456789abcde')
+        self.assertContains(response, str(content_id))
+        self.assertContains(
+            response,
+            'https://github.com/AI-Shipping-Labs/workshops-content/'
+            'blob/main/2026/demo/workshop.yaml',
+        )
+        self.assertContains(response, 'data-testid="resync-source-button"')
 
     def test_shows_linked_event_and_edit_link(self):
         response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
@@ -250,6 +278,8 @@ class StudioWorkshopDetailTest(TestCase):
         self.assertLess(body.find('Setup'), body.find('Build'))
 
     def test_pages_have_github_source_links(self):
+        self.page1.source_repo = 'AI-Shipping-Labs/workshops-content'
+        self.page1.save()
         response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
         # GitHub URL built from workshop.source_repo + page.source_path.
         self.assertContains(
@@ -257,6 +287,35 @@ class StudioWorkshopDetailTest(TestCase):
             'https://github.com/AI-Shipping-Labs/workshops-content/'
             'blob/main/2026/demo/setup.md',
         )
+
+    def test_pages_show_page_level_origin_for_synced_and_local_rows(self):
+        self.page1.source_repo = 'AI-Shipping-Labs/workshops-content'
+        self.page1.save()
+        self.page2.source_path = ''
+        self.page2.source_commit = ''
+        self.page2.save()
+
+        response = self.client.get(f'/studio/workshops/{self.workshop.pk}/')
+
+        self.assertContains(response, '2026/demo/setup.md')
+        self.assertContains(response, 'Local / manual')
+        self.assertContains(response, 'No GitHub source metadata')
+
+    def test_local_workshop_detail_has_no_github_controls(self):
+        local = _make_workshop(
+            slug='local-only',
+            title='Local Only',
+            source_repo='',
+            source_path='',
+            source_commit='',
+        )
+
+        response = self.client.get(f'/studio/workshops/{local.pk}/')
+
+        self.assertContains(response, 'Local / manual')
+        self.assertContains(response, 'No GitHub source metadata exists')
+        self.assertNotContains(response, 'Edit on GitHub')
+        self.assertNotContains(response, 'data-testid="resync-source-button"')
 
     def test_does_not_show_page_body(self):
         # Page body is not shown — only the source link.

@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Workshop: {{ workshop.title }}{% endblock %}
 
@@ -32,8 +33,7 @@
 
 <div class="max-w-4xl space-y-6">
 
-  {# Synced banner: shows source_repo, source_path, source_commit + Edit on GitHub #}
-  {% include "studio/includes/synced_banner.html" with obj=workshop is_synced=workshop.source_repo github_edit_url=github_edit_url %}
+  {% studio_origin_panel workshop %}
 
   <!-- Details card -->
   <div class="bg-card border border-border rounded-lg p-6">
@@ -177,8 +177,8 @@
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-lg font-semibold text-foreground mb-4">Pages</h2>
     <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-4 text-sm text-blue-300">
-      Page bodies are synced from GitHub. To edit them, update the markdown in
-      <code class="font-mono text-xs">workshops-content</code> and re-sync.
+      Synced page bodies are managed in GitHub. Local/manual pages have no
+      GitHub source metadata.
     </div>
     {% if pages_with_urls %}
     <div class="overflow-x-auto">
@@ -188,6 +188,7 @@
             <th class="px-3 py-2">#</th>
             <th class="px-3 py-2">Title</th>
             <th class="px-3 py-2">Slug</th>
+            <th class="px-3 py-2">Origin</th>
             <th class="px-3 py-2">Last synced</th>
             <th class="px-3 py-2 text-right">Source</th>
           </tr>
@@ -198,8 +199,9 @@
             <td class="px-3 py-3 text-muted-foreground">{{ entry.page.sort_order }}</td>
             <td class="px-3 py-3 text-foreground">{{ entry.page.title }}</td>
             <td class="px-3 py-3 text-muted-foreground font-mono text-xs">{{ entry.page.slug }}</td>
+            <td class="px-3 py-3">{% studio_origin_badge entry.page %}</td>
             <td class="px-3 py-3 text-muted-foreground font-mono text-xs">
-              {% if entry.page.source_commit %}{{ entry.page.source_commit|truncatechars:10 }}{% else %}&mdash;{% endif %}
+              {% if entry.page.source_commit %}<span title="{{ entry.page.source_commit }}">{{ entry.page.source_commit|truncatechars:10 }}</span>{% else %}<span class="font-sans">No GitHub source metadata</span>{% endif %}
             </td>
             <td class="px-3 py-3 text-right">
               {% if entry.github_url %}
@@ -207,7 +209,7 @@
                  data-testid="page-source-link"
                  class="text-accent hover:underline">View source on GitHub</a>
               {% else %}
-              <span class="text-muted-foreground">&mdash;</span>
+              <span class="text-muted-foreground">No GitHub source metadata</span>
               {% endif %}
             </td>
           </tr>

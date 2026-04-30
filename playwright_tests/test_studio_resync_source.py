@@ -372,8 +372,9 @@ class TestWorkshopResyncFromDetail:
         )
 
         body = page.content()
-        # Synced banner visible.
-        assert 'data-testid="synced-banner"' in body
+        # Origin panel visible.
+        assert 'data-testid="origin-panel"' in body
+        assert 'Synced from GitHub' in body
         assert 'data-testid="resync-source-button"' in body
 
         with mock.patch(

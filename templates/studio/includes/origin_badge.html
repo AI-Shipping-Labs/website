@@ -1,0 +1,27 @@
+{% if is_synced %}
+<div class="mt-1 space-y-0.5" data-testid="origin-badge" data-origin="synced">
+  <span class="inline-flex items-center rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400"
+        data-testid="synced-badge"
+        data-component="studio-synced-badge">Synced</span>
+  {% if show_path %}
+    {% if obj.source_path %}
+      {% if github_url %}
+      <a href="{{ github_url }}" target="_blank" rel="noopener noreferrer"
+         class="block max-w-xs truncate text-xs text-muted-foreground hover:text-accent"
+         title="{{ obj.source_repo }}/{{ obj.source_path }}">{{ obj.source_path }}</a>
+      {% else %}
+      <span class="block max-w-xs truncate text-xs text-muted-foreground" title="{{ obj.source_repo }}/{{ obj.source_path }}">{{ obj.source_path }}</span>
+      {% endif %}
+    {% elif obj.source_repo %}
+      <span class="block max-w-xs truncate text-xs text-muted-foreground" title="{{ obj.source_repo }}">{{ obj.source_repo }}</span>
+    {% endif %}
+  {% endif %}
+</div>
+{% else %}
+<div class="mt-1" data-testid="origin-badge" data-origin="local">
+  <span class="inline-flex items-center rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Local / manual</span>
+  {% if show_path %}
+  <span class="block text-xs text-muted-foreground">No GitHub source metadata</span>
+  {% endif %}
+</div>
+{% endif %}

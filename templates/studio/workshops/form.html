@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Edit Workshop: {{ workshop.title }}{% endblock %}
 
@@ -22,7 +23,7 @@
 
 <div class="max-w-3xl space-y-6">
 
-  {% include "studio/includes/synced_banner.html" with obj=workshop is_synced=workshop.source_repo github_edit_url=github_edit_url %}
+  {% studio_origin_panel workshop %}
 
   <!-- Read-only yaml-sourced fields. Rendered as <dd>/<p> so there's no
        visual hint they could be edited (no greyed-out <input>s). -->

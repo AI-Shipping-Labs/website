@@ -227,6 +227,48 @@ class StudioEnvMismatchBannerViewTest(TestCase):
         self.assertContains(response, 'http://testserver')
 
     @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=['testserver'],
+    )
+    def test_banner_defaults_to_compact_collapsed_state(self):
+        response = self.client.get('/studio/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="env-mismatch-banner"')
+        self.assertContains(response, 'data-testid="env-mismatch-toggle"')
+        self.assertContains(response, 'aria-controls="env-mismatch-details"')
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, 'id="env-mismatch-details"')
+        self.assertContains(response, 'class="hidden mt-2')
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=['testserver'],
+    )
+    def test_banner_details_keep_generated_link_risk_copy(self):
+        response = self.client.get('/studio/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'Generated links (unsubscribe, calendar invites, password resets, '
+            'share URLs, webhook configs) will point to',
+        )
+        self.assertContains(response, 'Fix <code')
+        self.assertContains(response, 'SITE_BASE_URL')
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=['testserver'],
+    )
+    def test_banner_is_not_fully_dismissible(self):
+        response = self.client.get('/studio/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="env-mismatch-banner"')
+        self.assertContains(response, 'data-testid="env-mismatch-configured"')
+        self.assertContains(response, 'data-testid="env-mismatch-request"')
+        self.assertNotContains(response, 'data-testid="env-mismatch-dismiss"')
+        self.assertNotContains(response, 'Dismiss')
+
+    @override_settings(
         SITE_BASE_URL='http://testserver',
         ALLOWED_HOSTS=['testserver'],
     )

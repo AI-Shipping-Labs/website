@@ -1,35 +1,79 @@
 <!--
-  Studio host-mismatch banner (issue #321).
+  Studio host-mismatch banner (issues #321, #408).
 
   Renders only when the website.context_processors.studio_env_mismatch_context
   context processor populates ``env_mismatch`` (i.e. SITE_BASE_URL's
   scheme/host/port doesn't match the live request). Amber-toned and
-  deliberately not dismissible — if it can be hidden, it can be ignored.
+  deliberately not dismissible. Details can collapse, but the compact
+  mismatch indicator remains visible.
 -->
 {% if env_mismatch %}
-<div class="bg-amber-500/10 border-b border-amber-500/30 px-4 py-3"
+<div class="bg-amber-50 dark:bg-amber-500/10 border-b border-amber-300 dark:border-amber-500/30 pl-14 pr-3 py-2 md:px-4"
      data-testid="env-mismatch-banner"
-     role="alert">
-  <div class="flex items-start space-x-3">
-    <svg class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+     role="alert"
+     aria-live="polite">
+  <div class="flex items-start gap-2 sm:gap-3">
+    <svg class="w-4 h-4 sm:w-5 sm:h-5 text-amber-700 dark:text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
     </svg>
-    <div class="flex-1 text-sm text-amber-300">
-      <p class="font-semibold">Environment mismatch</p>
-      <p class="mt-1">
-        <code class="px-1 py-0.5 rounded bg-amber-500/20">SITE_BASE_URL</code>
-        is set to
-        <code class="px-1 py-0.5 rounded bg-amber-500/20" data-testid="env-mismatch-configured">{{ env_mismatch.configured_base_url }}</code>
-        but you're on
-        <code class="px-1 py-0.5 rounded bg-amber-500/20" data-testid="env-mismatch-request">{{ env_mismatch.request_url }}</code>.
-      </p>
-      <p class="mt-1">
+    <div class="flex-1 min-w-0 text-xs sm:text-sm text-amber-900 dark:text-amber-200">
+      <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-x-3">
+        <p class="font-semibold text-amber-950 dark:text-amber-100 shrink-0">Environment mismatch</p>
+        <p class="min-w-0 leading-5">
+          <span class="text-amber-800 dark:text-amber-300">Configured</span>
+          <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20 break-all" data-testid="env-mismatch-configured">{{ env_mismatch.configured_base_url }}</code>
+          <span class="text-amber-800 dark:text-amber-300">current</span>
+          <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20 break-all" data-testid="env-mismatch-request">{{ env_mismatch.request_url }}</code>
+        </p>
+      </div>
+      <div id="env-mismatch-details"
+           class="hidden mt-2 max-w-5xl space-y-1 text-amber-900 dark:text-amber-300"
+           data-testid="env-mismatch-details">
+        <p>
+          <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20">SITE_BASE_URL</code>
+          is set to
+          <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20">{{ env_mismatch.configured_base_url }}</code>
+          but you're on
+          <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20">{{ env_mismatch.request_url }}</code>.
+        </p>
+        <p>
         Generated links (unsubscribe, calendar invites, password resets, share URLs, webhook configs) will point to
-        <code class="px-1 py-0.5 rounded bg-amber-500/20">{{ env_mismatch.configured_host }}</code>,
-        not where you are. Fix <code class="px-1 py-0.5 rounded bg-amber-500/20">SITE_BASE_URL</code>
+        <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20">{{ env_mismatch.configured_host }}</code>,
+        not where you are. Fix <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20">SITE_BASE_URL</code>
         or use the matching host before triggering anything that sends external links.
-      </p>
+        </p>
+      </div>
     </div>
+    <button type="button"
+            class="shrink-0 inline-flex items-center gap-1 rounded border border-amber-300 dark:border-amber-500/30 bg-amber-100 dark:bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-950 dark:text-amber-100 hover:bg-amber-200 dark:hover:bg-amber-500/20 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-background"
+            data-testid="env-mismatch-toggle"
+            aria-controls="env-mismatch-details"
+            aria-expanded="false"
+            onclick="toggleEnvMismatchDetails(this)">
+      <span data-env-mismatch-toggle-label>Details</span>
+      <svg class="w-3.5 h-3.5 transition-transform" data-env-mismatch-chevron fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/>
+      </svg>
+    </button>
   </div>
 </div>
+<script>
+function toggleEnvMismatchDetails(btn) {
+  var banner = btn.closest('[data-testid="env-mismatch-banner"]');
+  if (!banner) return;
+  var details = banner.querySelector('#env-mismatch-details');
+  if (!details) return;
+  var willExpand = details.classList.contains('hidden');
+  details.classList.toggle('hidden', !willExpand);
+  btn.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+  var label = btn.querySelector('[data-env-mismatch-toggle-label]');
+  if (label) {
+    label.textContent = willExpand ? 'Less' : 'Details';
+  }
+  var chevron = btn.querySelector('[data-env-mismatch-chevron]');
+  if (chevron) {
+    chevron.style.transform = willExpand ? 'rotate(180deg)' : 'rotate(0deg)';
+  }
+}
+</script>
 {% endif %}

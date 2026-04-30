@@ -1,27 +1,15 @@
-
-import markdown
 from django.db import models
 
 from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
+from content.utils.markdown import render_markdown as _render_markdown
 
 
 def render_markdown(text):
-    """Convert markdown to HTML with syntax highlighting."""
-    return markdown.markdown(
+    """Convert interview category markdown to HTML with the interview subset."""
+    return _render_markdown(
         text,
-        extensions=[
-            'fenced_code',
-            'codehilite',
-            'tables',
-            'attr_list',
-            'md_in_html',
-        ],
-        extension_configs={
-            'codehilite': {
-                'css_class': 'codehilite',
-                'guess_lang': False,
-            },
-        },
+        include_mermaid=False,
+        include_external_links=False,
     )
 
 

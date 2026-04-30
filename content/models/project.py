@@ -8,6 +8,7 @@ from content.models.mixins import (
     SyncedContentIdentityMixin,
     TimestampedModelMixin,
 )
+from content.utils.markdown import render_markdown
 
 PROJECT_STATUS_CHOICES = [
     ('pending_review', 'Pending Review'),
@@ -92,7 +93,6 @@ class Project(
 
         # Auto-render markdown to HTML on save
         if self.content_markdown:
-            from content.models.article import render_markdown
             from content.templatetags.video_utils import replace_video_urls_in_html
             from content.utils.linkify import linkify_urls
             html = render_markdown(self.content_markdown)

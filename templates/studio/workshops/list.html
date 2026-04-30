@@ -67,10 +67,12 @@
         <td class="px-6 py-4 text-sm text-muted-foreground font-mono" data-label="Last synced">
           {% if workshop.source_commit %}<span title="{{ workshop.source_commit }}">{{ workshop.source_commit|truncatechars:10 }}</span>{% else %}<span class="font-sans text-muted-foreground">No GitHub source metadata</span>{% endif %}
         </td>
-        <td class="px-6 py-4 text-right space-x-3 whitespace-nowrap studio-actions-cell" data-label="Actions">
-          {% studio_list_action workshop.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer' %}
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_workshop_detail' workshop_id=workshop.pk as workshop_detail_url %}
-          {% studio_list_action workshop_detail_url 'View' 'primary' %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% studio_list_action workshop_detail_url 'View' 'primary' %}
+            {% studio_list_action workshop.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer' %}
+          </div>
         </td>
       </tr>
       {% endfor %}

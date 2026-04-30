@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Worker Status{% endblock %}
 
@@ -94,11 +95,11 @@
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         {% if queue_depth > 0 %}
-          <form method="post" action="{% url 'studio_worker_drain_queue' %}"
+          <form method="post" action="{% url 'studio_worker_drain_queue' %}" class="{% studio_list_class 'action_form' %}"
                 onsubmit="return confirm('Delete {{ queue_depth }} pending task{{ queue_depth|pluralize }}? This cannot be undone.');">
             {% csrf_token %}
             <button type="submit"
-                    class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                    class="{% studio_action_class 'destructive' %}"
                     data-action="drain-queue">
               Drain queue ({{ queue_depth }})
             </button>
@@ -225,29 +226,29 @@
           <button type="button"
                   data-action="expand-all-failed"
                   onclick="toggleAllFailedTraces(true)"
-                  class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 border border-border">
+                  class="{% studio_action_class 'secondary' %}">
             Expand all
           </button>
           <button type="button"
                   data-action="collapse-all-failed"
                   onclick="toggleAllFailedTraces(false)"
-                  class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-secondary text-foreground hover:bg-secondary/70 border border-border">
+                  class="{% studio_action_class 'secondary' %}">
             Collapse all
           </button>
-          <form method="post" action="{% url 'studio_worker_bulk_retry_failed' %}"
+          <form method="post" action="{% url 'studio_worker_bulk_retry_failed' %}" class="{% studio_list_class 'action_form' %}"
                 onsubmit="return confirm('Re-queue {{ failure_count }} failed task{{ failure_count|pluralize }}?');">
             {% csrf_token %}
             <button type="submit"
-                    class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-blue-500/15 text-blue-200 border border-blue-500/30 hover:bg-blue-500/25"
+                    class="{% studio_action_class 'async' %}"
                     data-action="bulk-retry">
               Retry all ({{ failure_count }})
             </button>
           </form>
-          <form method="post" action="{% url 'studio_worker_bulk_delete_failed' %}"
+          <form method="post" action="{% url 'studio_worker_bulk_delete_failed' %}" class="{% studio_list_class 'action_form' %}"
                 onsubmit="return confirm('Delete {{ failure_count }} failed task{{ failure_count|pluralize }}? This cannot be undone.');">
             {% csrf_token %}
             <button type="submit"
-                    class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                    class="{% studio_action_class 'destructive' %}"
                     data-action="bulk-delete">
               Delete all ({{ failure_count }})
             </button>
@@ -276,18 +277,18 @@
                 </div>
               </button>
               <div class="flex items-center gap-2 shrink-0">
-                <form method="post" action="{% url 'studio_worker_retry_failed' item.task.id %}" class="inline"
+                <form method="post" action="{% url 'studio_worker_retry_failed' item.task.id %}" class="{% studio_list_class 'action_form' %}"
                       onsubmit="return confirm('Re-queue failed task {{ item.task.name|escapejs }}?');">
                   {% csrf_token %}
                   <button type="submit"
-                          class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-500/15 text-blue-200 border border-blue-500/30 hover:bg-blue-500/25"
+                          class="{% studio_action_class 'async' %}"
                           data-action="retry-failed">Retry</button>
                 </form>
-                <form method="post" action="{% url 'studio_worker_delete_failed' item.task.id %}" class="inline"
-                      onsubmit="return confirm('Delete failed task {{ item.task.name|escapejs }}?');">
+                <form method="post" action="{% url 'studio_worker_delete_failed' item.task.id %}" class="{% studio_list_class 'action_form' %}"
+                      onsubmit="return confirm('Delete failed task {{ item.task.name|escapejs }}? This cannot be undone.');">
                   {% csrf_token %}
                   <button type="submit"
-                          class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25"
+                          class="{% studio_action_class 'destructive' %}"
                           data-action="delete-failed">Delete</button>
                 </form>
               </div>

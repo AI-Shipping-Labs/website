@@ -41,14 +41,16 @@
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Access">{% if course.is_free %}Free{% else %}Level {{ course.required_level }}{% endif %}</td>
         <td class="px-6 py-4" data-label="Origin">{% studio_origin_badge course %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Updated">{{ course.updated_at|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right space-x-3 studio-actions-cell" data-label="Actions">
-          {% studio_list_action course.get_absolute_url 'View on site' 'secondary' True %}
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
-          {% if course.source_repo %}
-          {% studio_list_action course_edit_url 'View' 'primary' %}
-          {% else %}
-          {% studio_list_action course_edit_url 'Edit' 'primary' %}
-          {% endif %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% if course.source_repo %}
+            {% studio_list_action course_edit_url 'View' 'primary' %}
+            {% else %}
+            {% studio_list_action course_edit_url 'Edit' 'primary' %}
+            {% endif %}
+            {% studio_list_action course.get_absolute_url 'View on site' 'secondary' True %}
+          </div>
         </td>
       </tr>
       {% empty %}

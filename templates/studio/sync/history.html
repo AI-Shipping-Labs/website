@@ -47,6 +47,12 @@
         {% if batch.tiers_synced %}
         <span class="text-green-400">tiers synced</span>
         {% endif %}
+        <button type="button"
+                class="{% studio_action_class 'primary' %}"
+                aria-expanded="false"
+                data-action="sync-history-details">
+          Details
+        </button>
         <svg class="w-4 h-4 transition-transform batch-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </div>
     </div>
@@ -171,6 +177,11 @@ document.addEventListener('DOMContentLoaded', function() {
       var chevron = header.querySelector('.batch-chevron');
       if (detail) {
         detail.classList.toggle('hidden');
+        var expanded = detail.classList.contains('hidden') ? 'false' : 'true';
+        var detailsButton = header.querySelector('[data-action="sync-history-details"]');
+        if (detailsButton) {
+          detailsButton.setAttribute('aria-expanded', expanded);
+        }
         if (chevron) {
           chevron.style.transform = detail.classList.contains('hidden') ? '' : 'rotate(90deg)';
         }

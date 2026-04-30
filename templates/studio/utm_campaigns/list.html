@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}UTM Campaigns{% endblock %}
 
@@ -58,8 +59,10 @@
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.default_utm_source }} / {{ campaign.default_utm_medium }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.links.count }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ campaign.created_at|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right">
-          <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="text-sm text-accent hover:underline">View</a>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            <a href="{% url 'studio_utm_campaign_detail' campaign_id=campaign.pk %}" class="{% studio_action_class 'primary' %}">View</a>
+          </div>
         </td>
       </tr>
       {% endfor %}

@@ -37,9 +37,18 @@ class StudioListComponentTemplateTest(TestCase):
                 self.assertIn("studio_list_class 'tbody'", source)
 
     def test_shared_table_wrapper_opts_into_mobile_cards(self):
-        from studio.templatetags.studio_filters import studio_list_class
+        from studio.templatetags.studio_filters import (
+            studio_action_class,
+            studio_list_class,
+        )
 
         self.assertIn('studio-responsive-table', studio_list_class('wrapper'))
+        self.assertIn('studio-actions-cell', studio_list_class('action_cell'))
+        self.assertIn('studio-action-group', studio_list_class('action_group'))
+        self.assertIn('whitespace-nowrap', studio_action_class('primary'))
+        self.assertIn('border-accent', studio_action_class('primary'))
+        self.assertIn('border-red-500/40', studio_action_class('destructive'))
+        self.assertIn('border-blue-500/40', studio_action_class('async'))
 
     def test_target_lists_use_shared_badges_and_actions(self):
         for path in self.template_paths:
@@ -147,7 +156,39 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(response, 'data-label="Status"')
         self.assertContains(response, 'data-label="Actions"')
         self.assertContains(response, 'studio-actions-cell')
+        self.assertContains(response, 'studio-action-group')
+        self.assertContains(response, 'studio-action')
+        self.assertContains(response, 'border-accent bg-accent')
+        self.assertContains(response, 'border-border bg-secondary')
         self.assertContains(response, 'whitespace-nowrap')
+
+    def test_user_list_uses_primary_and_secondary_action_hierarchy(self):
+        user = User.objects.create_user(
+            email='action-user@test.com',
+            password='testpass',
+            is_staff=False,
+        )
+        response = self.client.get('/studio/users/?q=action-user')
+
+        self.assertContains(response, f'/studio/users/{user.pk}/')
+        self.assertContains(response, 'data-testid="user-view-link"')
+        self.assertContains(response, f'/studio/impersonate/{user.pk}/')
+        self.assertContains(response, 'studio-action-group')
+        self.assertContains(response, 'border-accent bg-accent')
+        self.assertContains(response, 'border-border bg-secondary')
+
+    def test_redirect_list_uses_destructive_action_confirming_item(self):
+        from integrations.models import Redirect
+
+        Redirect.objects.create(source_path='/old', target_path='/new')
+
+        response = self.client.get('/studio/redirects/')
+
+        self.assertContains(response, 'border-red-500/40')
+        self.assertContains(
+            response,
+            "Delete redirect from /old to /new? This cannot be undone.",
+        )
 
     def test_workshop_special_columns_and_empty_state_remain_intact(self):
         response = self.client.get('/studio/workshops/')

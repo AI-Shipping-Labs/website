@@ -42,10 +42,12 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Capacity">{% if event.max_participants %}{{ event.registration_count }}/{{ event.max_participants }}{% else %}Unlimited{% endif %}</td>
-        <td class="px-6 py-4 text-right space-x-3 studio-actions-cell" data-label="Actions">
-          {% studio_list_action event.get_absolute_url 'View on site' 'secondary' True %}
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_event_edit' event_id=event.pk as event_edit_url %}
-          {% studio_list_action event_edit_url 'Edit' 'primary' %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% studio_list_action event_edit_url 'Edit' 'primary' %}
+            {% studio_list_action event.get_absolute_url 'View on site' 'secondary' True %}
+          </div>
         </td>
       </tr>
       {% empty %}

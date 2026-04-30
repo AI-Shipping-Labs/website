@@ -2,24 +2,13 @@
 
 from dataclasses import dataclass
 from datetime import UTC
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
+from accounts.services.timezones import is_valid_timezone
 from integrations.config import get_config
 
 DEFAULT_EVENT_DISPLAY_TIMEZONE = 'Europe/Berlin'
 EVENT_DISPLAY_TIMEZONE_SETTING = 'EVENT_DISPLAY_TIMEZONE'
-
-EVENT_TIMEZONE_CHOICES = [
-    'Europe/Berlin',
-    'UTC',
-    'America/New_York',
-    'America/Los_Angeles',
-    'Europe/London',
-    'Europe/Paris',
-    'Asia/Tokyo',
-    'Asia/Singapore',
-    'Australia/Sydney',
-]
 
 
 @dataclass(frozen=True)
@@ -30,18 +19,7 @@ class EventTimeDisplay:
     end_utc_iso: str
     fallback_timezone: str
     fallback_range: str
-    timezone_choices: list[str]
-
-
-def is_valid_timezone(timezone_name):
-    """Return whether ``timezone_name`` is a valid IANA timezone."""
-    if not timezone_name:
-        return False
-    try:
-        ZoneInfo(str(timezone_name))
-    except (ZoneInfoNotFoundError, ValueError):
-        return False
-    return True
+    browser_timezone_enabled: bool
 
 
 def get_event_display_timezone():
@@ -55,10 +33,30 @@ def get_event_display_timezone():
     return DEFAULT_EVENT_DISPLAY_TIMEZONE
 
 
-def build_event_time_display(event):
+def resolve_event_display_timezone(user=None):
+    """Resolve a server-side event display timezone.
+
+    Browser timezone is resolved client-side when no valid signed-in preference
+    exists, so this returns the account preference or site fallback.
+    """
+    if user and user.is_authenticated and is_valid_timezone(user.preferred_timezone):
+        return user.preferred_timezone
+    return get_event_display_timezone()
+
+
+def should_use_browser_timezone(user=None):
+    """Return whether client-side browser timezone may replace the fallback."""
+    return not (
+        user
+        and user.is_authenticated
+        and is_valid_timezone(user.preferred_timezone)
+    )
+
+
+def build_event_time_display(event, user=None):
     """Build server fallback + client payload for an event time range."""
-    fallback_timezone = get_event_display_timezone()
-    timezone_choices = _build_timezone_choices(fallback_timezone)
+    fallback_timezone = resolve_event_display_timezone(user)
+    browser_timezone_enabled = should_use_browser_timezone(user)
     return EventTimeDisplay(
         start_utc_iso=_as_utc_iso(event.start_datetime),
         end_utc_iso=_as_utc_iso(event.end_datetime) if event.end_datetime else '',
@@ -68,7 +66,7 @@ def build_event_time_display(event):
             event.end_datetime,
             fallback_timezone,
         ),
-        timezone_choices=timezone_choices,
+        browser_timezone_enabled=browser_timezone_enabled,
     )
 
 
@@ -100,12 +98,6 @@ def should_display_event_location(event):
         return False
     is_stale_zoom = event.is_past and event.location.strip().lower() == 'zoom'
     return not is_stale_zoom
-
-
-def _build_timezone_choices(default_timezone):
-    choices = [default_timezone]
-    choices.extend(EVENT_TIMEZONE_CHOICES)
-    return list(dict.fromkeys(choices))
 
 
 def _as_utc_iso(value):

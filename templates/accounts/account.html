@@ -193,6 +193,58 @@
         </p>
       </div>
 
+      <!-- Display Preferences Section -->
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mt-8" id="display-preferences-section">
+        <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+          <i data-lucide="globe" class="h-5 w-5 text-accent"></i>
+          Display Preferences
+        </h2>
+
+        <div>
+          <label for="timezone-preference-input" class="block text-sm font-medium text-foreground mb-1">Timezone</label>
+          <p class="text-sm text-muted-foreground mb-3">Used for event times when you are signed in.</p>
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <input
+              id="timezone-preference-input"
+              data-testid="account-timezone-input"
+              type="text"
+              list="timezone-preference-options"
+              value="{{ preferred_timezone_label }}"
+              placeholder="Use browser timezone"
+              autocomplete="off"
+              class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+            <datalist id="timezone-preference-options" data-testid="account-timezone-options">
+              {% for option in timezone_options %}
+              <option value="{{ option.label }}" data-timezone="{{ option.value }}"></option>
+              {% endfor %}
+            </datalist>
+            <div class="flex gap-3">
+              <button
+                type="button"
+                id="save-timezone-btn"
+                data-testid="save-timezone-btn"
+                class="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                onclick="saveTimezonePreference()">
+                Save
+              </button>
+              <button
+                type="button"
+                id="clear-timezone-btn"
+                data-testid="clear-timezone-btn"
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                onclick="clearTimezonePreference()">
+                Clear
+              </button>
+            </div>
+          </div>
+          <p class="text-sm text-foreground mt-4" id="timezone-preference-status" data-testid="timezone-preference-status">
+            {% if user.preferred_timezone %}Current timezone: {{ preferred_timezone_label }}{% else %}Using browser timezone.{% endif %}
+          </p>
+          <p class="text-sm text-red-400 mt-2 hidden" id="timezone-preference-error" data-testid="timezone-preference-error"></p>
+        </div>
+      </div>
+
       <!-- Change Password Section -->
       <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mt-8" id="change-password-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
@@ -548,6 +600,80 @@ function toggleNewsletter() {
   .catch(function() {
     alert('An error occurred. Please try again.');
   });
+}
+
+function resolveTimezoneInputValue() {
+  var input = document.getElementById('timezone-preference-input');
+  if (!input) return '';
+  var rawValue = input.value.trim();
+  if (!rawValue) return '';
+
+  var options = document.querySelectorAll('#timezone-preference-options option');
+  for (var i = 0; i < options.length; i++) {
+    if (options[i].value === rawValue) {
+      return options[i].dataset.timezone || '';
+    }
+  }
+
+  var parts = rawValue.split(/\s+/);
+  return parts[parts.length - 1];
+}
+
+function setTimezonePreferenceStatus(timezoneName, label) {
+  var input = document.getElementById('timezone-preference-input');
+  var status = document.getElementById('timezone-preference-status');
+  if (!input || !status) return;
+  if (timezoneName) {
+    input.value = label || timezoneName;
+    status.textContent = 'Current timezone: ' + (label || timezoneName);
+  } else {
+    input.value = '';
+    status.textContent = 'Using browser timezone.';
+  }
+}
+
+function submitTimezonePreference(timezoneName) {
+  var error = document.getElementById('timezone-preference-error');
+  if (error) {
+    error.classList.add('hidden');
+    error.textContent = '';
+  }
+
+  fetch('/account/api/timezone-preference', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+    },
+    body: JSON.stringify({ timezone: timezoneName }),
+  })
+  .then(function(resp) {
+    return resp.json().then(function(data) {
+      return { ok: resp.ok, data: data };
+    });
+  })
+  .then(function(result) {
+    if (result.ok && result.data.status === 'ok') {
+      setTimezonePreferenceStatus(result.data.timezone, result.data.label);
+    } else if (error) {
+      error.textContent = result.data.error || 'Failed to update timezone';
+      error.classList.remove('hidden');
+    }
+  })
+  .catch(function() {
+    if (error) {
+      error.textContent = 'An error occurred. Please try again.';
+      error.classList.remove('hidden');
+    }
+  });
+}
+
+function saveTimezonePreference() {
+  submitTimezonePreference(resolveTimezoneInputValue());
+}
+
+function clearTimezonePreference() {
+  submitTimezonePreference('');
 }
 
 // Close modals when clicking backdrop

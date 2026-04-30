@@ -26,6 +26,7 @@ class UserAdmin(BaseUserAdmin):
                 "fields": (
                     "email_verified",
                     "unsubscribed",
+                    "preferred_timezone",
                     "email_preferences",
                 )
             },

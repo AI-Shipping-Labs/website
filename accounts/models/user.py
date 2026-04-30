@@ -139,6 +139,12 @@ class User(AbstractUser):
         default="",
         help_text="User's preferred theme: 'dark', 'light', or '' (follow system).",
     )
+    preferred_timezone = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="IANA timezone used for signed-in event time display.",
+    )
 
     # Operator-managed contact tags (issue #354). Free-form short slugs
     # ("early-adopter", "ai-hero-waitlist") used by Studio for segmentation.

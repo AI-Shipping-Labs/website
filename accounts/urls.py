@@ -6,6 +6,7 @@ from accounts.views.account import (
     cancel_subscription_view,
     email_preferences_view,
     theme_preference_view,
+    timezone_preference_view,
 )
 from accounts.views.auth import (
     change_password_api,
@@ -41,6 +42,7 @@ auth_api_urlpatterns = [
 account_urlpatterns = [
     path('', account_view, name='account'),
     path('api/email-preferences', email_preferences_view, name='email_preferences'),
+    path('api/timezone-preference', timezone_preference_view, name='timezone_preference'),
     path('api/cancel', cancel_subscription_view, name='account_cancel_subscription'),
     path('api/change-password', change_password_api, name='account_change_password'),
 ]

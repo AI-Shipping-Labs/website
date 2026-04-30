@@ -313,7 +313,7 @@ def event_detail(request, slug):
 
     context = {
         'event': event,
-        'event_time_display': build_event_time_display(event),
+        'event_time_display': build_event_time_display(event, user),
         'has_access': has_access,
         'is_registered': is_registered,
         'show_event_location': should_display_event_location(event),

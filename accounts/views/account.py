@@ -8,6 +8,11 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
+from accounts.services.timezones import (
+    build_timezone_options,
+    get_timezone_label,
+    is_valid_timezone,
+)
 from integrations.config import get_config, is_enabled
 from payments.models import Tier
 
@@ -113,6 +118,8 @@ def account_view(request):
         "downgrade_tiers": downgrade_tiers,
         "email_preferences": user.email_preferences,
         "newsletter_subscribed": not user.unsubscribed,
+        "timezone_options": build_timezone_options(),
+        "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
         "tier_features": tier_features,
         "active_override": active_override,
         "stripe_checkout_enabled": is_enabled("STRIPE_CHECKOUT_ENABLED"),
@@ -147,6 +154,36 @@ def email_preferences_view(request):
     return JsonResponse({
         "status": "ok",
         "newsletter": newsletter,
+    })
+
+
+@login_required
+@require_POST
+def timezone_preference_view(request):
+    """Save or clear the user's preferred event display timezone."""
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    timezone_name = data.get("timezone")
+    if timezone_name is None:
+        return JsonResponse({"error": "timezone field is required"}, status=400)
+    if not isinstance(timezone_name, str):
+        return JsonResponse({"error": "timezone must be a string"}, status=400)
+
+    timezone_name = timezone_name.strip()
+    if timezone_name and not is_valid_timezone(timezone_name):
+        return JsonResponse({"error": "Invalid timezone"}, status=400)
+
+    user = request.user
+    user.preferred_timezone = timezone_name
+    user.save(update_fields=["preferred_timezone"])
+
+    return JsonResponse({
+        "status": "ok",
+        "timezone": user.preferred_timezone,
+        "label": get_timezone_label(user.preferred_timezone),
     })
 
 

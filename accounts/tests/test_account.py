@@ -7,6 +7,8 @@ from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from accounts.models import User
+from accounts.services import timezones
+from accounts.services.timezones import build_timezone_options
 from payments.models import Tier
 
 
@@ -581,6 +583,160 @@ class AccountPageEmailPreferencesDisplayTest(TestCase):
         self.client.force_login(user)
         response = self.client.get("/account/")
         self.assertFalse(response.context["newsletter_subscribed"])
+
+
+class TimezonePreferenceAPITest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="timezone@example.com")
+        self.client.force_login(self.user)
+        self.url = "/account/api/timezone-preference"
+
+    def test_logged_out_redirects(self):
+        self.client.logout()
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": "Europe/Berlin"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_get_not_allowed(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 405)
+
+    def test_saves_valid_timezone(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": "Europe/Berlin"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["timezone"], "Europe/Berlin")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.preferred_timezone, "Europe/Berlin")
+
+    def test_clears_timezone(self):
+        self.user.preferred_timezone = "America/New_York"
+        self.user.save(update_fields=["preferred_timezone"])
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": ""}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.preferred_timezone, "")
+
+    def test_invalid_timezone_does_not_overwrite_existing_preference(self):
+        self.user.preferred_timezone = "Europe/Berlin"
+        self.user.save(update_fields=["preferred_timezone"])
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": "Invalid/Zone"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.preferred_timezone, "Europe/Berlin")
+
+    def test_missing_timezone_returns_400(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"other": "Europe/Berlin"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_json_returns_400(self):
+        response = self.client.post(
+            self.url,
+            data="not json",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_non_string_timezone_returns_400(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"timezone": 123}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "timezone must be a string")
+
+
+class AccountPageTimezonePreferenceDisplayTest(TestCase):
+    def test_shows_typeable_timezone_control_with_offset_labels(self):
+        user = User.objects.create_user(email="tz-display@example.com")
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'id="display-preferences-section"')
+        self.assertContains(response, 'id="timezone-preference-input"')
+        self.assertContains(response, 'list="timezone-preference-options"')
+        self.assertContains(response, "GMT+02:00 Europe/Berlin")
+        self.assertContains(response, "GMT-04:00 America/New_York")
+        self.assertContains(response, "Used for event times when you are signed in.")
+
+    def test_saved_timezone_label_is_selected(self):
+        user = User.objects.create_user(
+            email="tz-selected@example.com",
+            preferred_timezone="Europe/Berlin",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'value="GMT+02:00 Europe/Berlin"')
+        self.assertContains(response, "Current timezone: GMT+02:00 Europe/Berlin")
+
+    def test_timezone_options_are_sorted_by_offset_then_name(self):
+        options = build_timezone_options()
+        sort_keys = [(option.offset_minutes, option.value) for option in options]
+
+        self.assertEqual(sort_keys, sorted(sort_keys))
+
+
+class TimezoneOptionServiceTest(TestCase):
+    def test_invalid_timezone_values_are_rejected(self):
+        self.assertFalse(timezones.is_valid_timezone(""))
+        self.assertFalse(timezones.is_valid_timezone("Invalid/Zone"))
+
+    def test_get_timezone_label_returns_name_when_offset_is_unavailable(self):
+        fake_local = MagicMock()
+        fake_local.utcoffset.return_value = None
+        fake_now = MagicMock()
+        fake_now.astimezone.return_value = fake_local
+        fake_utc_now = MagicMock()
+        fake_utc_now.astimezone.return_value = fake_now
+
+        with (
+            patch("accounts.services.timezones.is_valid_timezone", return_value=True),
+            patch("accounts.services.timezones.ZoneInfo", return_value=object()),
+            patch("accounts.services.timezones.timezone.now", return_value=fake_utc_now),
+        ):
+            self.assertEqual(timezones.get_timezone_label("Etc/Unknown"), "Etc/Unknown")
+
+    def test_build_timezone_options_skips_zones_without_offsets(self):
+        fake_local = MagicMock()
+        fake_local.utcoffset.return_value = None
+        fake_now = MagicMock()
+        fake_now.astimezone.return_value = fake_local
+        fake_utc_now = MagicMock()
+        fake_utc_now.astimezone.return_value = fake_now
+
+        with (
+            patch("accounts.services.timezones.available_timezones", return_value={"UTC"}),
+            patch("accounts.services.timezones.ZoneInfo", return_value=object()),
+            patch("accounts.services.timezones.timezone.now", return_value=fake_utc_now),
+        ):
+            self.assertEqual(timezones.build_timezone_options(), [])
 
 
 class AccountPageNewsletterToggleContrastTest(TestCase):

@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from django.test import TestCase
 from django.utils import timezone
 
+from accounts.models import User
 from events.models import Event
 from events.services.display_time import format_event_time_range
 from integrations.config import clear_config_cache
@@ -27,6 +28,17 @@ class EventTimeDisplayServiceTest(TestCase):
         result = format_event_time_range(start, None, 'Europe/Berlin')
 
         self.assertEqual(result, 'April 13, 2026, 18:30 Europe/Berlin')
+
+    def test_formats_range_across_local_dates(self):
+        start = datetime(2026, 4, 13, 22, 30, tzinfo=UTC)
+        end = datetime(2026, 4, 14, 1, 0, tzinfo=UTC)
+
+        result = format_event_time_range(start, end, 'UTC')
+
+        self.assertEqual(
+            result,
+            'April 13, 2026, 22:30 - April 14, 2026, 01:00 UTC',
+        )
 
     def test_invalid_timezone_falls_back_to_berlin(self):
         start = datetime(2026, 4, 13, 16, 30, tzinfo=UTC)
@@ -68,6 +80,7 @@ class EventDetailTimeDisplayTest(TestCase):
             'April 13, 2026, 12:30-14:00 America/New_York',
         )
         self.assertContains(response, 'data-default-timezone="America/New_York"')
+        self.assertContains(response, 'data-browser-timezone-enabled="true"')
         self.assertContains(response, 'data-start-utc="2026-04-13T16:30:00Z"')
         self.assertContains(response, 'data-end-utc="2026-04-13T18:00:00Z"')
         self.assertNotContains(response, 'Until 18:00 UTC')
@@ -87,7 +100,48 @@ class EventDetailTimeDisplayTest(TestCase):
             response,
             'April 13, 2026, 18:30-20:00 Europe/Berlin',
         )
-        self.assertContains(response, 'data-testid="event-timezone-select"')
+        self.assertNotContains(response, 'event-timezone-select')
+        self.assertNotContains(response, 'data-event-timezone-select')
+
+    def test_logged_in_preferred_timezone_takes_server_precedence(self):
+        user = User.objects.create_user(
+            email='ny@example.com',
+            preferred_timezone='America/New_York',
+        )
+        self.client.force_login(user)
+        Event.objects.create(
+            title='Preferred Timezone Event',
+            slug='preferred-timezone-event',
+            start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
+            end_datetime=datetime(2026, 4, 13, 18, 0, tzinfo=UTC),
+            status='upcoming',
+            timezone='Europe/Berlin',
+        )
+
+        response = self.client.get('/events/preferred-timezone-event')
+
+        self.assertContains(
+            response,
+            'April 13, 2026, 12:30-14:00 America/New_York',
+        )
+        self.assertContains(response, 'data-default-timezone="America/New_York"')
+        self.assertContains(response, 'data-browser-timezone-enabled="false"')
+        self.assertNotContains(response, 'event-timezone-select')
+
+    def test_logged_in_without_preference_allows_browser_timezone_replacement(self):
+        user = User.objects.create_user(email='browser@example.com')
+        self.client.force_login(user)
+        Event.objects.create(
+            title='Browser Timezone Event',
+            slug='browser-timezone-event',
+            start_datetime=datetime(2026, 4, 13, 16, 30, tzinfo=UTC),
+            end_datetime=datetime(2026, 4, 13, 18, 0, tzinfo=UTC),
+            status='upcoming',
+        )
+
+        response = self.client.get('/events/browser-timezone-event')
+
+        self.assertContains(response, 'data-browser-timezone-enabled="true"')
 
     def test_detail_uses_berlin_fallback_when_setting_invalid(self):
         IntegrationSetting.objects.create(

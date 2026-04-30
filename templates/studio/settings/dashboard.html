@@ -12,7 +12,7 @@
     <a href="{% url 'studio_settings_export' %}" class="inline-flex items-center px-3 py-2 rounded-lg bg-muted text-foreground hover:bg-muted/80 text-sm font-medium border border-border" data-testid="settings-download">
       Download settings
     </a>
-    <form action="{% url 'studio_settings_import' %}" method="post" enctype="multipart/form-data" class="flex items-center gap-2">
+    <form action="{% url 'studio_settings_import' %}" method="post" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
       {% csrf_token %}
       <label class="inline-flex items-center px-3 py-2 rounded-lg bg-muted text-foreground hover:bg-muted/80 text-sm font-medium border border-border cursor-pointer">
         <span>Choose file</span>
@@ -28,37 +28,91 @@
 
 {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
 
-<!-- Zone 1: Auth & Login (OAuth login providers, backed by SocialApp) -->
-<section id="auth-login" class="mb-10">
-  <div class="mb-4 border-b border-border pb-3">
-    <h2 class="text-xl font-semibold text-foreground">Auth &amp; Login</h2>
-    <p class="text-sm text-muted-foreground mt-1">
-      OAuth providers users see on the login page. Configure one row here for every "Sign in with X" button you want enabled.
-    </p>
+<section aria-labelledby="settings-status-heading" class="mb-6 bg-card border border-border rounded-lg p-5" data-testid="settings-status-summary">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h2 id="settings-status-heading" class="text-lg font-semibold text-foreground">Setup status</h2>
+      <p class="text-sm text-muted-foreground mt-1">Local configuration summary from saved values, environment-backed values, and card metadata.</p>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+      <div class="rounded-md border border-border bg-muted/40 px-3 py-2">
+        <div class="text-xs text-muted-foreground">Configured</div>
+        <div class="text-lg font-semibold text-green-400">{{ status_summary.configured_count }}</div>
+      </div>
+      <div class="rounded-md border border-border bg-muted/40 px-3 py-2">
+        <div class="text-xs text-muted-foreground">Partial</div>
+        <div class="text-lg font-semibold text-yellow-400">{{ status_summary.partial_count }}</div>
+      </div>
+      <div class="rounded-md border border-border bg-muted/40 px-3 py-2">
+        <div class="text-xs text-muted-foreground">Missing</div>
+        <div class="text-lg font-semibold text-red-400">{{ status_summary.missing_count }}</div>
+      </div>
+      <div class="rounded-md border border-border bg-muted/40 px-3 py-2">
+        <div class="text-xs text-muted-foreground">Required values missing</div>
+        <div class="text-lg font-semibold text-foreground">{{ status_summary.missing_required_values }}</div>
+      </div>
+    </div>
   </div>
 
-  <div class="space-y-6">
-    {% for provider in auth_providers %}
-      {% include "studio/settings/_auth_card.html" with provider=provider %}
-    {% endfor %}
+  <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
+    <div>
+      <h3 class="text-sm font-medium text-foreground mb-2">High-risk groups</h3>
+      <div class="flex flex-wrap gap-2">
+        {% for item in status_summary.high_risk_items %}
+          <span class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs">
+            <span class="text-muted-foreground">{{ item.section_label }}</span>
+            <span class="text-foreground">{{ item.label }}</span>
+            <span class="{% if item.status == 'configured' %}text-green-400{% elif item.status == 'partial' %}text-yellow-400{% else %}text-red-400{% endif %}">
+              {% if item.status == 'configured' %}Configured{% elif item.status == 'partial' %}Partial{% else %}Missing{% endif %}
+            </span>
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-muted-foreground">DB overrides</span>
+        <span class="font-semibold text-amber-400">{{ status_summary.db_override_count }}</span>
+      </div>
+      <div class="mt-2 flex items-center justify-between gap-3">
+        <span class="text-muted-foreground">Env-backed values</span>
+        <span class="font-semibold text-blue-400">{{ status_summary.env_backed_count }}</span>
+      </div>
+    </div>
   </div>
 </section>
 
-<!-- Zone 2: Integrations (outbound service credentials, backed by IntegrationSetting) -->
-<section id="integrations">
-  <div class="mb-4 border-b border-border pb-3">
-    <h2 class="text-xl font-semibold text-foreground">Integrations</h2>
-    <p class="text-sm text-muted-foreground mt-1">
-      Credentials the platform uses to talk to external services (payments, email, video, content sync). Different from login providers above.
-    </p>
-  </div>
-
-  <div class="space-y-6">
-    {% for group in groups %}
-      {% include "studio/settings/_integration_card.html" with group=group %}
+<nav aria-label="Settings sections" class="sticky top-0 z-20 mb-8 border-y border-border bg-background/95 py-3 backdrop-blur" data-testid="settings-section-nav">
+  <div class="flex gap-2 overflow-x-auto">
+    {% for section in settings_sections %}
+      <a href="#{{ section.id }}"
+         data-section-nav-item="{{ section.id }}"
+         class="settings-section-link inline-flex whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+        {{ section.label }}
+      </a>
     {% endfor %}
   </div>
-</section>
+</nav>
+
+<div class="space-y-12">
+  {% for section in settings_sections %}
+    <section id="{{ section.id }}" class="scroll-mt-24" data-settings-section="{{ section.id }}" tabindex="-1">
+      <div class="mb-4 border-b border-border pb-3">
+        <h2 class="text-xl font-semibold text-foreground">{{ section.label }}</h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ section.description }}</p>
+      </div>
+
+      <div class="space-y-6">
+        {% for provider in section.auth_providers %}
+          {% include "studio/settings/_auth_card.html" with provider=provider %}
+        {% endfor %}
+        {% for group in section.groups %}
+          {% include "studio/settings/_integration_card.html" with group=group %}
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+</div>
 
 <script>
 function toggleReveal(btn) {
@@ -105,5 +159,23 @@ function copyCallbackUrl(btn) {
   }
 }
 
+function updateSettingsSectionNav() {
+  var currentId = window.location.hash ? window.location.hash.substring(1) : 'auth';
+  var target = currentId ? document.getElementById(currentId) : null;
+  var targetSection = target ? target.closest('[data-settings-section]') : null;
+  if (targetSection) {
+    currentId = targetSection.getAttribute('data-settings-section');
+  }
+  document.querySelectorAll('[data-section-nav-item]').forEach(function(link) {
+    var active = link.getAttribute('data-section-nav-item') === currentId;
+    link.setAttribute('aria-current', active ? 'true' : 'false');
+    link.classList.toggle('bg-muted', active);
+    link.classList.toggle('text-foreground', active);
+    link.classList.toggle('text-muted-foreground', !active);
+  });
+}
+
+window.addEventListener('hashchange', updateSettingsSectionNav);
+document.addEventListener('DOMContentLoaded', updateSettingsSectionNav);
 </script>
 {% endblock %}

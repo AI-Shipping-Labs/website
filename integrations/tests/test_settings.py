@@ -3,11 +3,13 @@
 import os
 from unittest.mock import patch
 
+from allauth.socialaccount.models import SocialApp
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from integrations.config import clear_config_cache, get_config
 from integrations.models import IntegrationSetting
+from integrations.settings_registry import INTEGRATION_GROUPS
 
 User = get_user_model()
 
@@ -158,6 +160,105 @@ class SettingsDashboardViewTest(TestCase):
         github_group = next(g for g in groups if g['name'] == 'github')
         pem_field = next(f for f in github_group['fields'] if f['key'] == 'GITHUB_APP_PRIVATE_KEY')
         self.assertTrue(pem_field['multiline'])
+
+    def test_dashboard_groups_settings_into_navigation_sections(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        response = self.client.get('/studio/settings/')
+
+        sections = response.context['settings_sections']
+        section_ids = [section['id'] for section in sections]
+        self.assertEqual(
+            section_ids,
+            ['auth', 'payments', 'content', 'messaging', 'storage', 'site'],
+        )
+
+        groups_by_section = {
+            section['id']: [group['name'] for group in section['groups']]
+            for section in sections
+        }
+        self.assertEqual(groups_by_section['payments'], ['stripe'])
+        self.assertEqual(groups_by_section['content'], ['zoom', 'youtube', 'github'])
+        self.assertEqual(groups_by_section['messaging'], ['ses', 'slack'])
+        self.assertEqual(groups_by_section['storage'], ['s3_recordings', 's3_content'])
+        self.assertEqual(groups_by_section['site'], ['site'])
+
+        assigned_group_names = [
+            group['name']
+            for section in sections
+            for group in section['groups']
+        ]
+        self.assertCountEqual(
+            assigned_group_names,
+            [group_def['name'] for group_def in INTEGRATION_GROUPS],
+        )
+
+        body = response.content.decode()
+        self.assertIn('data-testid="settings-status-summary"', body)
+        self.assertIn('data-testid="settings-section-nav"', body)
+        self.assertIn('href="#payments"', body)
+        self.assertIn('id="payments"', body)
+
+    def test_dashboard_status_summary_counts_sources_and_risk_groups(self):
+        SocialApp.objects.create(
+            provider='google',
+            name='Google',
+            client_id='google-client',
+            secret='google-secret',
+        )
+        IntegrationSetting.objects.create(
+            key='STRIPE_SECRET_KEY',
+            value='sk_test',
+            is_secret=True,
+            group='stripe',
+        )
+
+        self.client.login(email='admin@test.com', password='testpass')
+        with patch.dict(os.environ, {'SES_FROM_EMAIL': 'ops@example.test'}, clear=True):
+            response = self.client.get('/studio/settings/')
+
+        summary = response.context['status_summary']
+        self.assertEqual(summary['total_items'], 12)
+        self.assertEqual(summary['configured_count'], 1)
+        self.assertEqual(summary['partial_count'], 2)
+        self.assertEqual(summary['missing_count'], 9)
+        self.assertEqual(summary['db_override_count'], 1)
+        self.assertEqual(summary['env_backed_count'], 1)
+        self.assertGreater(summary['missing_required_values'], 0)
+        self.assertIn(
+            {'label': 'Stripe', 'section_label': 'Payments', 'status': 'partial'},
+            summary['high_risk_items'],
+        )
+        self.assertIn(
+            {'label': 'Google OAuth', 'section_label': 'Auth', 'status': 'configured'},
+            summary['high_risk_items'],
+        )
+
+    def test_uncategorized_registry_group_appears_in_other_section(self):
+        self.client.login(email='admin@test.com', password='testpass')
+        registry = [
+            *INTEGRATION_GROUPS,
+            {
+                'name': 'mystery',
+                'label': 'Mystery Service',
+                'keys': [
+                    {
+                        'key': 'MYSTERY_TOKEN',
+                        'is_secret': True,
+                        'description': 'Token for an unmapped integration.',
+                    },
+                ],
+            },
+        ]
+
+        with patch('studio.views.settings.INTEGRATION_GROUPS', registry):
+            response = self.client.get('/studio/settings/')
+
+        sections = response.context['settings_sections']
+        other_section = next(section for section in sections if section['id'] == 'other')
+        self.assertEqual([group['name'] for group in other_section['groups']], ['mystery'])
+        body = response.content.decode()
+        self.assertIn('href="#other"', body)
+        self.assertIn('Mystery Service', body)
 
 
 class SettingsSaveGroupViewTest(TestCase):

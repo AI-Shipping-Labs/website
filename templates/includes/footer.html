@@ -1,7 +1,8 @@
 <footer class="border-t border-border bg-card">
   <div class="mx-auto max-w-7xl px-6 py-10 sm:py-16 lg:px-8 lg:py-24">
     {% if not user.is_authenticated %}
-    <div class="mx-auto max-w-2xl">
+    {# Retained as the single anonymous newsletter placement and /#newsletter anchor target. #}
+    <div id="newsletter" class="mx-auto max-w-2xl">
       <div class="rounded-2xl border border-border bg-background p-6 sm:p-8 text-center">
         <h2 class="text-xl font-semibold tracking-tight sm:text-2xl" style="text-wrap: balance;">
           Build AI in public, with a group.
@@ -14,9 +15,9 @@
             <form class="subscribe-form flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center" novalidate onsubmit="return handleFooterSubscribe(event, this)">
               <input type="email" name="email" required
                      placeholder="Enter your email"
-                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-auto sm:flex-1 sm:max-w-xs">
+                     class="min-h-[44px] w-full rounded-md border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-auto sm:flex-1 sm:max-w-xs">
               <button type="submit"
-                      class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                      class="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
                 Subscribe
               </button>
             </form>

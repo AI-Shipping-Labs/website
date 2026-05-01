@@ -156,7 +156,7 @@ class HomepageTiersAnchorStillWorksTest(TestCase):
         # Look for the CTA (the same text appears on /about which now uses
         # /pricing -- here we restrict to the homepage response).
         match = re.search(
-            r'<a[^>]*href="([^"]+)"[^>]*>\s*View Membership Tiers\s*</a>',
+            r'<a[^>]*href="([^"]+)"[^>]*>\s*View Membership Tiers\s*(?:<i[^>]*></i>\s*)?</a>',
             content,
         )
         self.assertIsNotNone(match)

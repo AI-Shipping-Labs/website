@@ -3,7 +3,7 @@
 Covers:
 - Footer newsletter form hidden for authenticated users, visible for anonymous
 - Pricing page Free tier CTA hidden for authenticated users, visible for anonymous
-- Blog empty-state subscribe link hidden for authenticated users, visible for anonymous
+- Blog empty-state stays browse-first; footer remains the anonymous signup
 - Footer still shows logo, tagline, community links for all users
 """
 
@@ -81,7 +81,7 @@ class PricingFreeTierCTATest(TierSetupMixin, TestCase):
 
 
 class BlogEmptyStateSubscribeTest(TierSetupMixin, TestCase):
-    """Test that the blog empty-state subscribe link respects authentication."""
+    """Test that the blog empty-state no longer competes with the footer."""
 
     @classmethod
     def setUpTestData(cls):
@@ -90,11 +90,13 @@ class BlogEmptyStateSubscribeTest(TierSetupMixin, TestCase):
             email="member@test.com", password="testpass123"
         )
 
-    def test_anonymous_user_sees_subscribe_link_in_empty_blog(self):
+    def test_anonymous_user_sees_browse_first_empty_blog_copy(self):
         response = self.client.get("/blog")
-        # Post-launch CTA copy (issue #319).
-        self.assertContains(response, "Get articles in the Friday newsletter")
-        self.assertContains(response, '/#newsletter')
+        self.assertContains(
+            response,
+            "No articles match this filter yet. Browse all articles as the archive grows.",
+        )
+        self.assertNotContains(response, "Get articles in the Friday newsletter")
 
     def test_authenticated_user_does_not_see_subscribe_link_in_empty_blog(self):
         self.client.login(email="member@test.com", password="testpass123")

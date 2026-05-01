@@ -115,21 +115,21 @@ class MobileTypographyAndSpacingTest(TestCase):
     # ── Section vertical padding reduced on mobile ──
 
     def test_home_sections_use_reduced_mobile_padding(self):
-        """Home page sections should use py-16 sm:py-24 pattern instead of py-24 directly."""
+        """Home page sections should use the tightened mobile spacing pattern."""
         response = self.client.get("/")
         content = response.content.decode()
         # The about section should have the responsive padding pattern
         about_match = re.search(r'id="about"[^>]*class="[^"]*"', content)
         self.assertIsNotNone(about_match)
-        self.assertIn("py-16", about_match.group(0))
-        self.assertIn("sm:py-24", about_match.group(0))
+        self.assertIn("py-12", about_match.group(0))
+        self.assertIn("sm:py-20", about_match.group(0))
+        self.assertIn("lg:py-28", about_match.group(0))
 
     def test_hero_uses_reduced_mobile_padding(self):
-        """Hero section inner div should use py-16 sm:py-24 lg:py-32 pattern."""
+        """Hero section inner div should use the tightened mobile spacing pattern."""
         response = self.client.get("/")
         content = response.content.decode()
-        # The hero section has relative mx-auto... px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32
-        self.assertIn("px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32", content)
+        self.assertIn("px-4 py-10 sm:px-6 sm:py-20 lg:px-8 lg:py-28", content)
 
     def test_login_uses_reduced_mobile_padding(self):
         """Login page should use reduced padding on mobile."""

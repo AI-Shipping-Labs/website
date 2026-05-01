@@ -24,11 +24,11 @@
   </nav>
 
   <!-- Hero Section -->
-  <section class="relative min-h-screen overflow-hidden pt-24">
+  <section class="relative min-h-[calc(100svh-2rem)] overflow-hidden pt-20 sm:min-h-screen sm:pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
+    <div class="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-20 lg:px-8 lg:py-28">
       <div class="mx-auto max-w-3xl text-center">
-        <p class="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-sm text-muted-foreground">
+        <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-sm text-muted-foreground sm:mb-6">
           <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
           Action-oriented builders. Now open.
         </p>
@@ -38,22 +38,22 @@
           <span class="mt-2 block text-accent">real projects</span>
         </h1>
 
-        <p class="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+        <p class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:mt-8">
           A community for action-oriented builders interested in AI engineering and AI tools.
           Get the structure, focus, and accountability you need to ship practical AI products.
         </p>
 
-        <div class="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          <a href="/#newsletter" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto">
-            Get the Friday newsletter
+        <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-12 sm:flex-row sm:gap-4">
+          <a href="/#tiers" class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto">
+            View Membership Tiers
             <i data-lucide="arrow-right" class="h-4 w-4"></i>
           </a>
-          <a href="/#tiers" class="inline-flex w-full items-center justify-center rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary sm:w-auto">
-            View Membership Tiers
+          <a href="/resources" class="inline-flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary sm:w-auto">
+            Browse Resources
           </a>
         </div>
 
-        <div class="mt-16 grid grid-cols-1 gap-4 border-t border-border pt-8 sm:grid-cols-3 sm:gap-8">
+        <div class="mt-10 grid grid-cols-1 gap-4 border-t border-border pt-6 sm:mt-16 sm:grid-cols-3 sm:gap-8 sm:pt-8">
           <div>
             <p class="text-2xl font-semibold text-foreground">Build</p>
             <p class="mt-1 text-sm text-muted-foreground">Practical AI projects</p>
@@ -72,7 +72,7 @@
   </section>
 
   <!-- About / Philosophy Section -->
-  <section id="about" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
+  <section id="about" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Philosophy</p>
@@ -84,7 +84,7 @@
         </p>
       </div>
 
-      <div class="mx-auto mt-16 grid max-w-5xl gap-8 sm:grid-cols-2">
+      <div class="mx-auto mt-10 grid max-w-5xl gap-6 sm:mt-16 sm:grid-cols-2 sm:gap-8">
         {% for feature in features %}
         <div class="group rounded-lg border border-border bg-card p-8 transition-colors hover:border-accent/50">
           <div class="mb-4 inline-flex rounded-lg bg-secondary p-3">
@@ -99,7 +99,7 @@
   </section>
 
   <!-- Pricing / Tiers Section -->
-  <section id="tiers" class="border-t border-border bg-card py-16 sm:py-24 lg:py-32 overflow-x-hidden">
+  <section id="tiers" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28 overflow-x-hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
@@ -124,7 +124,7 @@
         </div>
       </div>
 
-      <div class="mx-auto mt-16 grid max-w-7xl gap-6 lg:grid-cols-3">
+      <div class="mx-auto mt-10 grid max-w-7xl gap-6 sm:mt-16 lg:grid-cols-3">
         {% for tier in tiers %}
         <div class="relative flex flex-col rounded-xl border p-8 transition-all {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 lg:scale-105{% else %}border-border bg-background{% endif %}" style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">
           {% if tier.highlighted %}
@@ -181,7 +181,7 @@
   </section>
 
   <!-- Testimonials Section -->
-  <section id="testimonials" class="border-t border-border bg-card px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
+  <section id="testimonials" class="border-t border-border bg-card px-4 py-12 sm:px-6 sm:py-20 lg:px-8 lg:py-28">
     <div class="mx-auto max-w-7xl">
       <div class="text-center">
         <p class="text-sm font-medium uppercase tracking-wider text-accent">What learners say</p>
@@ -193,14 +193,14 @@
         </p>
       </div>
 
-      <div class="mx-auto mt-16 max-w-5xl">
+      <div class="mx-auto mt-10 max-w-5xl sm:mt-16">
         {% include "includes/testimonial_cards.html" %}
       </div>
     </div>
   </section>
 
   <!-- Event Recordings / Resources Section -->
-  <section id="resources" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
+  <section id="resources" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -261,7 +261,7 @@
   </section>
 
   <!-- Blog Section -->
-  <section id="blog" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
+  <section id="blog" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -318,20 +318,14 @@
       </div>
       {% else %}
       <div class="mt-12 rounded-lg border border-border bg-card p-8 text-center">
-        <p class="text-muted-foreground">New articles drop every Friday. Get them in your inbox the moment they go live.</p>
-        <div class="mt-6 flex justify-center">
-          <a href="/#newsletter"
-             class="inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20">
-            Subscribe to the newsletter
-          </a>
-        </div>
+        <p class="text-muted-foreground">New articles drop every Friday. Browse the archive here as it grows.</p>
       </div>
       {% endif %}
     </div>
   </section>
 
   <!-- Projects Section -->
-  <section id="projects" class="border-t border-border bg-card py-16 sm:py-24 lg:py-32">
+  <section id="projects" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -398,14 +392,14 @@
       </div>
       {% else %}
       <div class="mt-12 rounded-lg border border-border bg-background p-8 text-center">
-        <p class="text-muted-foreground">Project ideas land here as the community ships them. Subscribe below to see new ones first.</p>
+        <p class="text-muted-foreground">Project ideas land here as the community ships them.</p>
       </div>
       {% endif %}
     </div>
   </section>
 
   <!-- Collection / Curated Links Section -->
-  <section id="collection" class="border-t border-border bg-background py-16 sm:py-24 lg:py-32">
+  <section id="collection" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -449,15 +443,6 @@
           </div>
         </a>
         {% endfor %}
-      </div>
-    </div>
-  </section>
-
-  <!-- Newsletter Section -->
-  <section id="newsletter" class="border-t border-border bg-card py-16 sm:py-24 lg:py-32">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl">
-        {% include "includes/subscribe_form.html" with heading="Stop shipping alone." description="Join builders trading drafts, demos, and standups every week. Action-oriented people who actually ship -- not just study." only %}
       </div>
     </div>
   </section>

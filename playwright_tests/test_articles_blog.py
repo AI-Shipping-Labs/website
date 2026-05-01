@@ -23,6 +23,7 @@ import datetime
 import os
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -738,16 +739,16 @@ class TestScenario9EmptyBlog:
         )
         assert response.status == 200
 
-        body = page.content()
+        main = page.locator("main")
 
         # Friendly empty state message
-        assert "No articles match this filter yet" in body
+        expect(main).to_contain_text("No articles match this filter yet")
+        expect(main).to_contain_text("Browse all articles as the archive grows.")
 
-        # Subscribe link
-        subscribe_link = page.locator(
-            'a:has-text("Get articles in the Friday newsletter")'
-        )
-        assert subscribe_link.count() >= 1
+        # Empty blog no longer renders its own newsletter CTA; the footer is
+        # the single retained anonymous newsletter placement.
+        expect(main).not_to_contain_text("Get articles in the Friday newsletter")
+        assert main.locator('a[href="/#newsletter"]').count() == 0
 @pytest.mark.django_db(transaction=True)
 class TestScenario10FilterByTagNoMatches:
     """

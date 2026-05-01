@@ -205,20 +205,20 @@ class TestScenario1SubscribeFromDedicatedPage:
         )
         assert submit_btn_new.count() >= 1
 # ---------------------------------------------------------------
-# Scenario 2: Anonymous visitor subscribes from the homepage
-#              newsletter section
+# Scenario 2: Anonymous visitor subscribes from the retained homepage
+#              footer newsletter placement
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario2SubscribeFromHomepageNewsletter:
-    """Anonymous visitor subscribes from the homepage newsletter section."""
+    """Anonymous visitor subscribes from the homepage footer newsletter."""
 
     def test_anonymous_subscribes_from_homepage_newsletter(
         self, django_server
     , page):
         """Given an anonymous visitor on the homepage.
         1. Navigate to /
-        2. Scroll to the newsletter section (anchor #newsletter)
+        2. Scroll to the retained footer newsletter anchor (#newsletter)
         3. Enter a new email address and submit
         Then: A confirmation message appears.
         Then: The visitor remains on the homepage (no redirect)."""
@@ -230,13 +230,12 @@ class TestScenario2SubscribeFromHomepageNewsletter:
             wait_until="domcontentloaded",
         )
 
-        # Step 2: Scroll to the #newsletter section
+        # Step 2: Scroll to the retained #newsletter placement
         newsletter_section = page.locator("#newsletter")
         assert newsletter_section.count() >= 1
         newsletter_section.scroll_into_view_if_needed()
 
-        # Step 3: Enter email and submit via the newsletter
-        # section form (not the footer form)
+        # Step 3: Enter email and submit via the retained footer form
         newsletter_form = newsletter_section.locator(
             ".subscribe-form"
         )
@@ -252,7 +251,7 @@ class TestScenario2SubscribeFromHomepageNewsletter:
 
         # Wait for the success message
         message_el = newsletter_section.locator(
-            ".subscribe-message"
+            ".footer-subscribe-message"
         )
         message_el.wait_for(state="visible", timeout=10000)
 

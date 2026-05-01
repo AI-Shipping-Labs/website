@@ -4,10 +4,9 @@ After we launched, every CTA must use post-launch framing. These tests
 pin the locked copy from the groomed issue body so a regression flips
 a test, not a silent string drift.
 
-Covers:
 - Home: hero pill, hero CTA button, footer block, articles empty-state
-  link target (the Substack bug fix), bottom CTA override.
-- Blog list: empty-state copy + CTA link text.
+  copy, and consolidated newsletter placement.
+- Blog list: browse-first empty-state copy.
 - Pricing: free-tier CTA button.
 - subscribe_form.html partial defaults (rendered via /subscribe).
 - Repository-wide grep guard against pre-launch phrases and the
@@ -38,24 +37,25 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
         self.assertContains(response, "Action-oriented builders. Now open.")
         self.assertNotContains(response, "Invite-only community")
 
-    def test_hero_button_reads_get_the_friday_newsletter(self):
+    def test_hero_primary_button_points_to_membership_tiers(self):
         response = self.client.get("/")
         # Match button-cell content rather than the whole HTML body so
         # we fail if the locked text disappears or changes.
         self.assertInHTML(
             (
-                '<a href="/#newsletter" '
-                'class="inline-flex w-full items-center justify-center '
-                'gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium '
-                'text-accent-foreground transition-colors '
+                '<a href="/#tiers" '
+                'class="inline-flex min-h-[44px] w-full items-center '
+                'justify-center gap-2 rounded-md bg-accent px-6 py-3 '
+                'text-sm font-medium text-accent-foreground transition-colors '
                 'hover:bg-accent/90 sm:w-auto">'
-                "Get the Friday newsletter"
+                "View Membership Tiers"
                 '<i data-lucide="arrow-right" class="h-4 w-4"></i>'
                 "</a>"
             ),
             response.content.decode(),
         )
         self.assertNotContains(response, "Subscribe for updates")
+        self.assertNotContains(response, "Get the Friday newsletter")
 
     def test_footer_heading_and_body_post_launch(self):
         response = self.client.get("/")
@@ -70,44 +70,24 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, "first ping")
         self.assertNotContains(response, "when the community opens")
 
-    def test_bottom_cta_override_post_launch(self):
+    def test_home_uses_footer_as_single_newsletter_form(self):
         response = self.client.get("/")
-        self.assertContains(response, "Stop shipping alone.")
-        self.assertContains(
-            response,
-            "Join builders trading drafts, demos, and standups every "
-            "week. Action-oriented people who actually ship -- not "
-            "just study.",
-        )
-        # The old override copy must be gone.
-        self.assertNotContains(
-            response, "Ready to turn your AI ideas into real projects?"
-        )
-        self.assertNotContains(response, "when the community opens")
+        body = response.content.decode()
+        self.assertContains(response, 'id="newsletter"')
+        self.assertEqual(len(re.findall(r'<form[^>]*class="subscribe-form', body)), 1)
+        self.assertNotContains(response, "Stop shipping alone.")
 
-    def test_articles_empty_state_link_points_to_internal_anchor(self):
+    def test_articles_empty_state_is_browse_first(self):
         # No published articles in the test DB, so the empty-state
         # branch always renders on /.
         response = self.client.get("/")
         # The locked body copy.
         self.assertContains(
             response,
-            "New articles drop every Friday. Get them in your inbox "
-            "the moment they go live.",
+            "New articles drop every Friday. Browse the archive here "
+            "as it grows.",
         )
-        # The fixed link points to the on-page newsletter anchor.
-        self.assertInHTML(
-            (
-                '<a href="/#newsletter" '
-                'class="inline-flex items-center gap-2 rounded-lg '
-                'border border-accent/30 bg-accent/10 px-4 py-2 '
-                'text-sm font-medium text-accent transition-colors '
-                'hover:bg-accent/20">'
-                "Subscribe to the newsletter"
-                "</a>"
-            ),
-            response.content.decode(),
-        )
+        self.assertNotContains(response, "Subscribe to the newsletter")
         # The Substack URL is gone, including target="_blank".
         self.assertNotContains(response, "alexeyondata.substack.com")
 
@@ -129,9 +109,9 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
         response = self.client.get("/")
         self.assertContains(
             response,
-            "Project ideas land here as the community ships them. "
-            "Subscribe below to see new ones first.",
+            "Project ideas land here as the community ships them.",
         )
+        self.assertNotContains(response, "Subscribe below to see new ones first.")
         self.assertNotContains(
             response,
             "Project ideas coming soon. Check back",
@@ -146,24 +126,14 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
 class BlogEmptyStateCopyTest(TierSetupMixin, TestCase):
     """Anonymous visitor on /blog with no published articles."""
 
-    def test_empty_state_copy_and_cta_link(self):
+    def test_empty_state_copy_is_browse_first(self):
         response = self.client.get("/blog")
         self.assertContains(
             response,
-            "No articles match this filter yet. Browse all articles "
-            "or subscribe for new ones.",
+            "No articles match this filter yet. Browse all articles as "
+            "the archive grows.",
         )
-        self.assertInHTML(
-            (
-                '<a href="/#newsletter" '
-                'class="mt-4 inline-flex items-center gap-2 '
-                'text-accent hover:underline">'
-                "Get articles in the Friday newsletter"
-                '<i data-lucide="arrow-right" class="h-4 w-4"></i>'
-                "</a>"
-            ),
-            response.content.decode(),
-        )
+        self.assertNotContains(response, "Get articles in the Friday newsletter")
         # The old short CTA text must be gone.
         self.assertNotContains(response, "Subscribe to get notified")
         # And the pre-launch "Check back soon" framing is replaced.

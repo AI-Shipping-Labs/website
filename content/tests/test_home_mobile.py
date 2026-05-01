@@ -113,13 +113,14 @@ class HomepageMobileLayoutTest(TestCase):
 
     # -- Hero CTA buttons --
 
-    def test_hero_cta_buttons_full_width_on_mobile(self):
-        """Hero CTA buttons should be full-width on mobile (w-full) and auto-width on sm+ (sm:w-auto)."""
+    def test_hero_primary_cta_full_width_on_mobile(self):
+        """Hero primary CTA should be full-width on mobile and auto-width on sm+."""
         content = self._get_homepage_content()
-        subscribe_match = re.search(r'<a[^>]*href="/#newsletter"[^>]*>', content)
-        self.assertIsNotNone(subscribe_match, "Subscribe CTA link not found")
-        self.assertIn("w-full", subscribe_match.group(0))
-        self.assertIn("sm:w-auto", subscribe_match.group(0))
+        tiers_match = re.search(r'<a[^>]*href="/#tiers"[^>]*>', content)
+        self.assertIsNotNone(tiers_match, "Membership CTA link not found")
+        self.assertIn("w-full", tiers_match.group(0))
+        self.assertIn("sm:w-auto", tiers_match.group(0))
+        self.assertIn("min-h-[44px]", tiers_match.group(0))
 
     # -- No bare grid-cols-3 without responsive in hero stats --
 

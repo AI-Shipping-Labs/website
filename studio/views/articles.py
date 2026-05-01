@@ -1,6 +1,5 @@
 """Studio views for article management."""
 
-from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
@@ -8,6 +7,10 @@ from django.utils.text import slugify
 from content.models import Article
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
+from studio.views.form_helpers import (
+    parse_comma_separated_tags,
+    reject_synced_content_post,
+)
 
 
 @staff_required
@@ -39,9 +42,7 @@ def article_edit(request, article_id):
 
     if request.method == 'POST':
         if synced:
-            return HttpResponseForbidden(
-                'This content is managed in GitHub. Edit it there.'
-            )
+            return reject_synced_content_post()
 
         article.title = request.POST.get('title', '').strip()
         article.slug = request.POST.get('slug', '').strip() or slugify(article.title)
@@ -50,8 +51,7 @@ def article_edit(request, article_id):
         article.cover_image_url = request.POST.get('cover_image_url', '')
         article.author = request.POST.get('author', '')
         article.required_level = int(request.POST.get('required_level', 0))
-        tags_raw = request.POST.get('tags', '')
-        article.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+        article.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
 
         date_str = request.POST.get('date', '')
         if date_str:

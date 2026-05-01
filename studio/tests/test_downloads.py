@@ -79,12 +79,14 @@ class StudioDownloadEditTest(StaffUserMixin, TestCase):
             'file_size_bytes': '2048',
             'published': 'on',
             'required_level': '10',
+            'tags': 'pdf, , resource ,, template ',
         })
         self.download.refresh_from_db()
         self.assertEqual(self.download.title, 'Updated DL')
         self.assertEqual(self.download.file_type, 'zip')
         self.assertEqual(self.download.file_size_bytes, 2048)
         self.assertEqual(self.download.required_level, 10)
+        self.assertEqual(self.download.tags, ['pdf', 'resource', 'template'])
 
     def test_edit_nonexistent_returns_404(self):
         response = self.client.get('/studio/downloads/99999/edit')

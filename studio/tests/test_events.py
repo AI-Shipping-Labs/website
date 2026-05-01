@@ -178,10 +178,12 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
             'timezone': 'UTC',
             'status': 'upcoming',
             'required_level': '10',
+            'tags': 'event, , live ,, workshop ',
         })
         self.event.refresh_from_db()
         self.assertEqual(self.event.title, 'Updated Event')
         self.assertEqual(self.event.status, 'upcoming')
+        self.assertEqual(self.event.tags, ['event', 'live', 'workshop'])
 
     def test_edit_event_saves_correct_datetimes(self):
         """Editing with time=09:00 and duration=3 saves correctly."""

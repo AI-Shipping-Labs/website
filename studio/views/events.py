@@ -13,6 +13,7 @@ from events.models import Event
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
+from studio.views.form_helpers import parse_comma_separated_tags
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +125,7 @@ def event_edit(request, event_id):
             event.max_participants = int(max_p) if max_p else None
             event.status = request.POST.get('status', 'draft')
             event.required_level = int(request.POST.get('required_level', 0))
-            tags_raw = request.POST.get('tags', '')
-            event.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+            event.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
 
             # When platform is custom, store the external join URL in the
             # existing join URL field and clear Zoom-specific metadata.

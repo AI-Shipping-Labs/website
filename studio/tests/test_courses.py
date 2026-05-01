@@ -109,12 +109,14 @@ class StudioCourseEditTest(StaffUserMixin, TestCase):
             'slug': 'edit-course',
             'status': 'published',
             'required_level': '10',
+            'tags': 'course, , ai ,, cohort ',
         })
         self.assertEqual(response.status_code, 302)
         self.course.refresh_from_db()
         self.assertEqual(self.course.title, 'Updated Course')
         self.assertEqual(self.course.status, 'published')
         self.assertEqual(self.course.required_level, 10)
+        self.assertEqual(self.course.tags, ['course', 'ai', 'cohort'])
 
     def test_edit_shows_modules(self):
         Module.objects.create(course=self.course, slug='module-1', title='Module 1', sort_order=0)

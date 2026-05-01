@@ -14,6 +14,10 @@ from django.views.decorators.http import require_POST
 from content.models import Course, CourseAccess, Module, Unit
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
+from studio.views.form_helpers import (
+    parse_comma_separated_tags,
+    reject_synced_content_post,
+)
 
 User = get_user_model()
 
@@ -47,9 +51,7 @@ def course_edit(request, course_id):
 
     if request.method == 'POST':
         if synced:
-            return HttpResponseForbidden(
-                'This content is managed in GitHub. Edit it there.'
-            )
+            return reject_synced_content_post()
 
         course.title = request.POST.get('title', '').strip()
         course.slug = request.POST.get('slug', '').strip() or slugify(course.title)
@@ -60,8 +62,7 @@ def course_edit(request, course_id):
         course.status = request.POST.get('status', 'draft')
         course.required_level = int(request.POST.get('required_level', 0))
         course.discussion_url = request.POST.get('discussion_url', '')
-        tags_raw = request.POST.get('tags', '')
-        course.tags = [t.strip() for t in tags_raw.split(',') if t.strip()] if tags_raw else []
+        course.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
         individual_price_raw = request.POST.get('individual_price_eur', '').strip()
         if individual_price_raw:
             from decimal import Decimal, InvalidOperation

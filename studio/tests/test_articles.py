@@ -121,10 +121,12 @@ class StudioArticleEditTest(TestCase):
             'author': 'New Author',
             'status': 'draft',
             'required_level': '0',
+            'tags': 'ai, , shipping ,, django ',
         })
         self.article.refresh_from_db()
         self.assertEqual(self.article.title, 'Updated Article')
         self.assertEqual(self.article.author, 'New Author')
+        self.assertEqual(self.article.tags, ['ai', 'shipping', 'django'])
 
     def test_edit_publish_article(self):
         self.assertFalse(self.article.published)

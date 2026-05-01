@@ -36,33 +36,13 @@
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
     <h2 class="text-lg font-semibold text-foreground mb-4">Course Details</h2>
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
-      <input type="text" name="title" value="{{ course.title|default:'' }}" required
-             {% if is_synced %}disabled{% endif %}
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-    </div>
+    {% include "studio/includes/forms/title.html" with value=course.title disabled=is_synced %}
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
-      <input type="text" name="slug" value="{{ course.slug|default:'' }}"
-             {% if is_synced %}disabled{% endif %}
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-    </div>
+    {% include "studio/includes/forms/slug.html" with value=course.slug disabled=is_synced %}
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Description (Markdown)</label>
-      <textarea name="description" rows="6"
-                {% if is_synced %}disabled{% endif %}
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono{% if is_synced %} opacity-60{% endif %}">{{ course.description|default:'' }}</textarea>
-    </div>
+    {% include "studio/includes/forms/textarea.html" with label="Description (Markdown)" name="description" rows=6 value=course.description disabled=is_synced monospace=True %}
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Cover Image URL</label>
-      <input type="url" name="cover_image_url" value="{{ course.cover_image_url|default:'' }}"
-             {% if is_synced %}disabled{% endif %}
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-    </div>
+    {% include "studio/includes/forms/cover_image_url.html" with value=course.cover_image_url disabled=is_synced %}
 
     <div class="grid grid-cols-2 gap-4">
       <div>
@@ -90,14 +70,7 @@
 
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-sm font-medium text-foreground mb-1">Required Level</label>
-        <select name="required_level" {% if is_synced %}disabled{% endif %}
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-          <option value="0" {% if course.required_level == 0 %}selected{% endif %}>Free (0)</option>
-          <option value="10" {% if course.required_level == 10 %}selected{% endif %}>Basic (10)</option>
-          <option value="20" {% if course.required_level == 20 %}selected{% endif %}>Main (20)</option>
-          <option value="30" {% if course.required_level == 30 %}selected{% endif %}>Premium (30)</option>
-        </select>
+        {% include "studio/includes/forms/required_level.html" with selected=course.required_level disabled=is_synced %}
       </div>
     </div>
 
@@ -108,12 +81,7 @@
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
-      <input type="text" name="tags" value="{% for tag in course.tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}"
-             {% if is_synced %}disabled{% endif %}
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-    </div>
+    {% include "studio/includes/forms/tags.html" with tags=course.tags disabled=is_synced %}
   </div>
 
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
@@ -174,13 +142,10 @@
     </div>
   </div>
 
-  {% if not is_synced %}
-  <div class="flex items-center space-x-4">
-    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-      {% if course %}Save Changes{% else %}Create Course{% endif %}
-    </button>
-    <a href="{% url 'studio_course_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
-  </div>
+  {% if course %}
+    {% include "studio/includes/forms/action_row.html" with is_synced=is_synced submit_label="Save Changes" cancel_url=course_cancel_url %}
+  {% else %}
+    {% include "studio/includes/forms/action_row.html" with is_synced=is_synced submit_label="Create Course" cancel_url=course_cancel_url %}
   {% endif %}
 </form>
 </div>

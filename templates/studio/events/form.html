@@ -41,26 +41,11 @@
   {% csrf_token %}
 
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Title</label>
-      <input type="text" name="title" value="{{ event.title|default:'' }}" required
-             {% if is_synced %}disabled{% endif %}
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-    </div>
+    {% include "studio/includes/forms/title.html" with value=event.title disabled=is_synced %}
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
-      <input type="text" name="slug" value="{{ event.slug|default:'' }}"
-             {% if is_synced %}disabled{% endif %}
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-    </div>
+    {% include "studio/includes/forms/slug.html" with value=event.slug disabled=is_synced %}
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Description (Markdown)</label>
-      <textarea name="description" rows="6"
-                {% if is_synced %}disabled{% endif %}
-                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono{% if is_synced %} opacity-60{% endif %}">{{ event.description|default:'' }}</textarea>
-    </div>
+    {% include "studio/includes/forms/textarea.html" with label="Description (Markdown)" name="description" rows=6 value=event.description disabled=is_synced monospace=True %}
 
     <div class="grid grid-cols-2 gap-4">
       <div>
@@ -142,24 +127,9 @@
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
     </div>
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Required Level</label>
-      <select name="required_level"
-              {% if is_synced %}disabled{% endif %}
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-        <option value="0" {% if event.required_level == 0 %}selected{% endif %}>Free (0)</option>
-        <option value="10" {% if event.required_level == 10 %}selected{% endif %}>Basic (10)</option>
-        <option value="20" {% if event.required_level == 20 %}selected{% endif %}>Main (20)</option>
-        <option value="30" {% if event.required_level == 30 %}selected{% endif %}>Premium (30)</option>
-      </select>
-    </div>
+    {% include "studio/includes/forms/required_level.html" with selected=event.required_level disabled=is_synced %}
 
-    <div>
-      <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
-      <input type="text" name="tags" value="{% if event %}{% for tag in event.tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}"
-             {% if is_synced %}disabled{% endif %}
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if is_synced %} opacity-60{% endif %}">
-    </div>
+    {% include "studio/includes/forms/tags.html" with tags=event.tags disabled=is_synced %}
   </div>
 
 </form>

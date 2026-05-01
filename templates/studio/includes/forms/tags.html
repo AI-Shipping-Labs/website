@@ -1,0 +1,6 @@
+<div>
+  <label class="block text-sm font-medium text-foreground mb-1">Tags (comma-separated)</label>
+  <input type="text" name="tags" value="{% if tags %}{% for tag in tags %}{{ tag }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}"
+         {% if disabled %}disabled{% endif %}
+         class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
+</div>

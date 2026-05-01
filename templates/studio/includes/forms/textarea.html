@@ -1,0 +1,6 @@
+<div>
+  <label class="block text-sm font-medium text-foreground mb-1">{{ label }}</label>
+  <textarea name="{{ name }}" rows="{{ rows|default:4 }}"
+            {% if disabled %}disabled{% endif %}
+            class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if monospace %} font-mono{% endif %}{% if disabled %} opacity-60{% endif %}">{{ value|default:'' }}</textarea>
+</div>

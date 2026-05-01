@@ -157,3 +157,30 @@ class StudioArticleEditTest(TestCase):
     def test_edit_nonexistent_article_returns_404(self):
         response = self.client.get('/studio/articles/99999/edit')
         self.assertEqual(response.status_code, 404)
+
+    def test_synced_article_shows_origin_panel(self):
+        article = Article.objects.create(
+            title='Synced Article',
+            slug='synced-article',
+            date=timezone.now().date(),
+            source_repo='AI-Shipping-Labs/content',
+            source_path='articles/synced-article.md',
+            source_commit='abc123def4567890',
+            published=True,
+        )
+
+        response = self.client.get(f'/studio/articles/{article.pk}/edit')
+
+        self.assertContains(response, 'data-testid="origin-panel"')
+        self.assertContains(response, 'Synced from GitHub')
+        self.assertContains(response, 'AI-Shipping-Labs/content')
+        self.assertContains(response, 'articles/synced-article.md')
+        self.assertContains(response, 'Edit on GitHub')
+        self.assertContains(response, 'Re-sync source')
+        self.assertNotContains(response, 'data-testid="synced-banner"')
+
+    def test_manual_article_has_no_origin_panel(self):
+        response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
+
+        self.assertNotContains(response, 'data-testid="origin-panel"')
+        self.assertNotContains(response, 'data-testid="synced-banner"')

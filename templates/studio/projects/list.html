@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Projects{% endblock %}
 
@@ -47,7 +48,7 @@
       <tr class="hover:bg-secondary/50 transition-colors">
         <td class="px-6 py-4">
           <a href="{% url 'studio_project_review' project_id=project.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ project.title }}</a>
-          {% if project.source_repo %}<span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400" data-testid="synced-badge">synced</span>{% endif %}
+          {% studio_origin_badge project show_path=False %}
         </td>
         <td class="px-6 py-4">
           <span class="text-xs px-2 py-1 rounded-full {% if project.status == 'published' %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">

@@ -1,7 +1,7 @@
 """Tests for the per-object Re-sync source button (issue #281).
 
 Covers:
-- Banner template renders the Re-sync button when ``obj.source_repo`` is set
+- Origin panel renders the Re-sync button when ``obj.source_repo`` is set
   and hides it for manually-created content.
 - New URL ``/studio/sync/object/<model_name>/<object_id>/trigger/`` resolves
   to ``studio_sync_object_trigger``, requires staff, accepts only POST.
@@ -12,8 +12,7 @@ Covers:
   missing ContentSource row → flash error, non-staff → 403.
 - Worker-down warning surfaces on the flash.
 - Redirects to HTTP_REFERER when same-host, else to /studio/sync/.
-- Banner button on a unit edit page targets the parent course (because
-  the include passes ``obj=course``).
+- Unit edit page origin actions target the parent course when requested.
 """
 
 import datetime
@@ -76,8 +75,8 @@ def _make_workshop(**kwargs):
     return Workshop.objects.create(**defaults)
 
 
-class BannerRendersResyncButtonTest(TestCase):
-    """The synced banner renders a Re-sync source button for synced content."""
+class OriginPanelRendersResyncButtonTest(TestCase):
+    """The origin panel renders a Re-sync source button for synced content."""
 
     @classmethod
     def setUpTestData(cls):
@@ -114,8 +113,7 @@ class BannerRendersResyncButtonTest(TestCase):
         )
 
     def test_manual_article_edit_page_does_not_render_resync_button(self):
-        """No source_repo → no Re-sync button. The synced banner itself
-        also stays hidden, so the page is clean for hand-authored content."""
+        """No source_repo → no Re-sync button or source metadata panel."""
         response = self.client.get(
             f'/studio/articles/{self.manual_article.pk}/edit',
         )
@@ -140,9 +138,8 @@ class BannerRendersResyncButtonTest(TestCase):
         self.assertIn('method="post"', body[max(0, idx - 200):idx + 50].lower())
 
 
-class BannerOnUnitEditPageTargetsParentCourseTest(TestCase):
-    """Course unit edit pages pass ``obj=course`` to the include, so the
-    Re-sync button on a unit page must target the parent course's pk."""
+class OriginPanelOnUnitEditPageTargetsParentCourseTest(TestCase):
+    """Course unit edit pages target the parent course's pk."""
 
     @classmethod
     def setUpTestData(cls):

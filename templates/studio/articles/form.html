@@ -21,8 +21,6 @@
   </div>
 </div>
 
-{% include "studio/includes/synced_banner.html" with obj=article %}
-
 {% url 'studio_article_list' as article_cancel_url %}
 <div class="grid gap-6 lg:grid-cols-[minmax(0,48rem)_20rem] lg:items-start">
 <div class="min-w-0 pb-24 md:pb-0">
@@ -88,7 +86,9 @@
 
 {% if article %}
 <aside class="space-y-4 lg:sticky lg:top-8" data-testid="studio-meta-actions-panel">
-  {% studio_origin_panel article show_actions=False %}
+  {% if is_synced %}
+  {% studio_origin_panel article %}
+  {% endif %}
 
   <div class="bg-card border border-border rounded-lg p-4" data-testid="article-state-panel">
     <h2 class="text-sm font-medium text-foreground mb-3">State</h2>

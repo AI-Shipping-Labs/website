@@ -102,3 +102,30 @@ class StudioRecordingEditTest(TestCase):
     def test_edit_nonexistent_recording_returns_404(self):
         response = self.client.get('/studio/recordings/99999/edit')
         self.assertEqual(response.status_code, 404)
+
+    def test_synced_recording_shows_origin_panel(self):
+        recording = Event.objects.create(
+            title='Synced Rec',
+            slug='synced-rec',
+            start_datetime=timezone.now(),
+            status='completed',
+            recording_url='https://youtube.com/watch?v=synced',
+            source_repo='AI-Shipping-Labs/content',
+            source_path='events/synced-rec.md',
+            source_commit='abc123def4567890',
+        )
+
+        response = self.client.get(f'/studio/recordings/{recording.pk}/edit')
+
+        self.assertContains(response, 'data-testid="origin-panel"')
+        self.assertContains(response, 'Synced from GitHub')
+        self.assertContains(response, 'events/synced-rec.md')
+        self.assertContains(response, 'Edit on GitHub')
+        self.assertContains(response, 'Re-sync source')
+        self.assertNotContains(response, 'data-testid="synced-banner"')
+
+    def test_manual_recording_has_no_origin_panel(self):
+        response = self.client.get(f'/studio/recordings/{self.recording.pk}/edit')
+
+        self.assertNotContains(response, 'data-testid="origin-panel"')
+        self.assertNotContains(response, 'data-testid="synced-banner"')

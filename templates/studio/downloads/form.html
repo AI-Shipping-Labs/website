@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}{% if is_synced %}View Download{% elif download %}Edit Download{% else %}New Download{% endif %}{% endblock %}
 
@@ -20,7 +21,9 @@
   </div>
 </div>
 
-{% include "studio/includes/synced_banner.html" with obj=download %}
+{% if download and is_synced %}
+{% studio_origin_panel download %}
+{% endif %}
 
 {% url 'studio_download_list' as download_cancel_url %}
 <form method="post" class="space-y-6 max-w-3xl">

@@ -158,3 +158,29 @@ class StudioProjectReviewTest(TestCase):
         # The approve/reject forms should not be shown for published projects
         self.assertNotContains(response, 'value="approve"')
         self.assertNotContains(response, 'value="reject"')
+
+    def test_synced_project_shows_origin_panel(self):
+        project = Project.objects.create(
+            title='Synced Project',
+            slug='synced-project',
+            date=timezone.now().date(),
+            source_repo='AI-Shipping-Labs/content',
+            source_path='projects/synced-project.md',
+            source_commit='abc123def4567890',
+        )
+
+        response = self.client.get(f'/studio/projects/{project.pk}/review')
+
+        self.assertContains(response, 'data-testid="origin-panel"')
+        self.assertContains(response, 'Synced from GitHub')
+        self.assertContains(response, 'AI-Shipping-Labs/content')
+        self.assertContains(response, 'projects/synced-project.md')
+        self.assertContains(response, 'Edit on GitHub')
+        self.assertContains(response, 'Re-sync source')
+        self.assertNotContains(response, 'data-testid="synced-banner"')
+
+    def test_manual_project_has_no_origin_panel(self):
+        response = self.client.get(f'/studio/projects/{self.project.pk}/review')
+
+        self.assertNotContains(response, 'data-testid="origin-panel"')
+        self.assertNotContains(response, 'data-testid="synced-banner"')

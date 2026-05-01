@@ -1031,7 +1031,7 @@ def sync_object_trigger(request, model_name, object_id):
 
     Resolves the matching ``ContentSource`` from the object's ``source_repo``
     and enqueues the same async task used by the dashboard ``Sync now``
-    button. The button is rendered by ``synced_banner.html`` only when the
+    button. The button is rendered by origin components only when the
     object has a ``source_repo``, but the view still guards each
     precondition so a hand-crafted POST cannot crash the server. See
     issue #281.

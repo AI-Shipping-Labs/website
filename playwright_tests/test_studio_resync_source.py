@@ -6,7 +6,7 @@ Scenarios:
 2. Operator re-syncs from a unit edit page; the click resolves to the
    parent course's source (units inherit course source).
 3. A manually-created article (no source_repo) hides both the synced
-   banner and the Re-sync button.
+   origin panel and the Re-sync button.
 4. Worker-down warning is surfaced on the flash when the django_q
    worker is not alive.
 5. Re-sync from a workshop detail page hits the workshop ContentSource.
@@ -165,9 +165,10 @@ class TestArticleResyncFromEditPage:
             wait_until='domcontentloaded',
         )
 
-        # Banner controls all visible.
+        # Origin controls all visible.
         body = page.content()
-        assert 'data-testid="synced-banner"' in body
+        assert 'data-testid="origin-panel"' in body
+        assert 'data-testid="synced-banner"' not in body
         assert 'Edit on GitHub' in body
         assert 'View on site' in body
         assert 'data-testid="resync-source-button"' in body
@@ -278,7 +279,7 @@ class TestUnitPageInheritsCourseSource:
 
 @pytest.mark.django_db(transaction=True)
 class TestManualArticleHidesResync:
-    def test_manual_article_no_banner_no_button(
+    def test_manual_article_no_origin_panel_no_button(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -295,7 +296,8 @@ class TestManualArticleHidesResync:
         )
 
         body = page.content()
-        # No synced banner, no Re-sync button anywhere.
+        # No origin panel, no Re-sync button anywhere.
+        assert 'data-testid="origin-panel"' not in body
         assert 'data-testid="synced-banner"' not in body
         assert 'data-testid="resync-source-button"' not in body
         assert 'Re-sync source' not in body

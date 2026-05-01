@@ -30,7 +30,7 @@
       <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_article_edit' article_id=article.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ article.title }}</a>
-          {% studio_synced_badge article.source_repo %}
+          {% studio_origin_badge article show_path=False %}
         </td>
         <td class="px-6 py-4" data-label="Status">
           {% if article.published %}

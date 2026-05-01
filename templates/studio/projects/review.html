@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}{% if is_synced %}View{% else %}Review{% endif %}: {{ project.title }}{% endblock %}
 
@@ -18,7 +19,9 @@
   </div>
 </div>
 
-{% include "studio/includes/synced_banner.html" with obj=project %}
+{% if is_synced %}
+{% studio_origin_panel project %}
+{% endif %}
 
 <div class="max-w-3xl space-y-6">
   <!-- Project Info -->

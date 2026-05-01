@@ -124,12 +124,6 @@ def studio_status_badge(status, label=''):
     }
 
 
-@register.inclusion_tag('studio/includes/synced_badge.html')
-def studio_synced_badge(source_repo):
-    """Render the shared synced badge when a row is source-managed."""
-    return {'source_repo': source_repo}
-
-
 @register.inclusion_tag('studio/includes/origin_badge.html')
 def studio_origin_badge(obj, show_path=True):
     """Render compact source provenance for Studio table/nested rows."""
@@ -181,9 +175,10 @@ def model_name(obj):
 
     Templates can't read ``obj._meta.model_name`` directly (any attribute
     starting with an underscore is blocked by the template engine), so
-    expose the value via a filter. Used by the synced banner's Re-sync
+    expose the value via a filter. Used by the origin panel's Re-sync
     source button (issue #281) to build the ``/studio/sync/object/<model>/``
-    URL without each include site having to hand-pass the model name.
+    URL without each origin component call site having to hand-pass the model
+    name.
     Returns an empty string for ``None`` or anything without an ``_meta``.
     """
     if obj is None:

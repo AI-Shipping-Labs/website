@@ -185,9 +185,11 @@ class SyncedArticleListTest(TestCase):
             date=timezone.now().date(),
         )
 
-    def test_synced_article_shows_synced_badge(self):
+    def test_synced_article_shows_origin_badge(self):
         response = self.client.get('/studio/articles/')
-        self.assertContains(response, 'synced')
+        self.assertContains(response, 'data-testid="origin-badge"')
+        self.assertContains(response, 'data-origin="synced"')
+        self.assertNotContains(response, 'data-testid="synced-badge"')
 
     def test_synced_article_shows_view_link(self):
         response = self.client.get('/studio/articles/')

@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}{% if is_synced %}View Recording{% elif recording %}Edit Recording{% else %}New Recording{% endif %}{% endblock %}
 
@@ -20,7 +21,9 @@
   </div>
 </div>
 
-{% include "studio/includes/synced_banner.html" with obj=recording %}
+{% if recording and is_synced %}
+{% studio_origin_panel recording %}
+{% endif %}
 
 <form method="post" class="space-y-6 max-w-3xl">
   {% csrf_token %}

@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from content.models import Article, Course, Workshop
+from content.models import Article, Course, Download, Project, Workshop
 from events.models import Event
 
 User = get_user_model()
@@ -22,6 +22,12 @@ class StudioListComponentTemplateTest(TestCase):
         'templates/studio/courses/list.html',
         'templates/studio/workshops/list.html',
         'templates/studio/events/list.html',
+    ]
+    compact_origin_template_paths = [
+        'templates/studio/articles/list.html',
+        'templates/studio/downloads/list.html',
+        'templates/studio/recordings/list.html',
+        'templates/studio/projects/list.html',
     ]
 
     def _template_source(self, relative_path):
@@ -57,15 +63,19 @@ class StudioListComponentTemplateTest(TestCase):
                 self.assertIn('studio_status_badge', source)
                 self.assertIn('studio_list_action', source)
 
-        for path in self.template_paths[:1]:
-            with self.subTest(path=path):
-                source = self._template_source(path)
-                self.assertIn('studio_synced_badge', source)
-
         for path in self.template_paths[1:3]:
             with self.subTest(path=path):
                 source = self._template_source(path)
                 self.assertIn('studio_origin_badge', source)
+
+    def test_compact_lists_use_origin_badge_not_legacy_synced_badge(self):
+        for path in self.compact_origin_template_paths:
+            with self.subTest(path=path):
+                source = self._template_source(path)
+                self.assertIn('studio_origin_badge', source)
+                self.assertNotIn('studio_synced_badge', source)
+                self.assertNotIn('data-testid="synced-badge"', source)
+                self.assertNotIn('studio-synced-badge', source)
 
 
 class StudioListComponentRenderTest(TestCase):
@@ -83,6 +93,13 @@ class StudioListComponentRenderTest(TestCase):
             title='Shared Article',
             slug='shared-article',
             date=cls.now.date(),
+            published=True,
+            source_repo='AI-Shipping-Labs/content',
+        )
+        Download.objects.create(
+            title='Shared Download',
+            slug='shared-download',
+            file_url='https://example.com/shared.pdf',
             published=True,
             source_repo='AI-Shipping-Labs/content',
         )
@@ -112,6 +129,23 @@ class StudioListComponentRenderTest(TestCase):
             status='upcoming',
             kind='workshop',
             platform='custom',
+        )
+        Event.objects.create(
+            title='Shared Recording',
+            slug='shared-recording',
+            start_datetime=cls.now,
+            status='completed',
+            recording_url='https://youtube.com/watch?v=shared',
+            published=True,
+            source_repo='AI-Shipping-Labs/content',
+        )
+        Project.objects.create(
+            title='Shared Project',
+            slug='shared-project',
+            date=cls.now.date(),
+            status='published',
+            published=True,
+            source_repo='AI-Shipping-Labs/content',
         )
 
     def setUp(self):
@@ -144,10 +178,12 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(event_response, 'bg-blue-500/20 text-blue-400')
         self.assertContains(event_response, 'Upcoming')
 
-    def test_shared_synced_badge_and_actions_preserve_list_links(self):
+    def test_shared_origin_badge_and_actions_preserve_list_links(self):
         response = self.client.get('/studio/courses/')
-        self.assertContains(response, 'data-testid="synced-badge"')
-        self.assertContains(response, 'data-component="studio-synced-badge"')
+        self.assertContains(response, 'data-testid="origin-badge"')
+        self.assertContains(response, 'data-origin="synced"')
+        self.assertNotContains(response, 'data-testid="synced-badge"')
+        self.assertNotContains(response, 'data-component="studio-synced-badge"')
         self.assertContains(response, 'data-testid="view-on-site"')
         self.assertContains(response, 'target="_blank"')
         self.assertContains(response, '/courses/shared-course')
@@ -161,6 +197,21 @@ class StudioListComponentRenderTest(TestCase):
         self.assertContains(response, 'border-accent bg-accent')
         self.assertContains(response, 'border-border bg-secondary')
         self.assertContains(response, 'whitespace-nowrap')
+
+    def test_compact_lists_render_shared_origin_badges(self):
+        paths = [
+            '/studio/articles/',
+            '/studio/downloads/',
+            '/studio/recordings/',
+            '/studio/projects/',
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertContains(response, 'data-testid="origin-badge"')
+                self.assertContains(response, 'data-origin="synced"')
+                self.assertNotContains(response, 'data-testid="synced-badge"')
+                self.assertNotContains(response, 'data-component="studio-synced-badge"')
 
     def test_user_list_uses_primary_and_secondary_action_hierarchy(self):
         user = User.objects.create_user(

@@ -91,3 +91,29 @@ class StudioDownloadEditTest(StaffUserMixin, TestCase):
     def test_edit_nonexistent_returns_404(self):
         response = self.client.get('/studio/downloads/99999/edit')
         self.assertEqual(response.status_code, 404)
+
+    def test_synced_download_shows_origin_panel(self):
+        download = Download.objects.create(
+            title='Synced Download',
+            slug='synced-download',
+            file_url='https://example.com/file.pdf',
+            source_repo='AI-Shipping-Labs/content',
+            source_path='downloads/synced-download.yaml',
+            source_commit='abc123def4567890',
+        )
+
+        response = self.client.get(f'/studio/downloads/{download.pk}/edit')
+
+        self.assertContains(response, 'data-testid="origin-panel"')
+        self.assertContains(response, 'Synced from GitHub')
+        self.assertContains(response, 'AI-Shipping-Labs/content')
+        self.assertContains(response, 'downloads/synced-download.yaml')
+        self.assertContains(response, 'Edit on GitHub')
+        self.assertContains(response, 'Re-sync source')
+        self.assertNotContains(response, 'data-testid="synced-banner"')
+
+    def test_manual_download_has_no_origin_panel(self):
+        response = self.client.get(f'/studio/downloads/{self.download.pk}/edit')
+
+        self.assertNotContains(response, 'data-testid="origin-panel"')
+        self.assertNotContains(response, 'data-testid="synced-banner"')

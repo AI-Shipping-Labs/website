@@ -242,10 +242,14 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
             source_path='my-event.md',
         )
 
-    def test_synced_event_shows_github_banner(self):
-        """Synced events display the synced-from-GitHub banner."""
+    def test_synced_event_shows_origin_panel(self):
+        """Synced events display the shared origin panel."""
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
-        self.assertContains(response, 'data-testid="synced-banner"')
+        self.assertContains(response, 'data-testid="origin-panel"')
+        self.assertContains(response, 'Synced from GitHub')
+        self.assertContains(response, 'AI-Shipping-Labs/content')
+        self.assertContains(response, 'my-event.md')
+        self.assertNotContains(response, 'data-testid="synced-banner"')
 
     def test_synced_event_shows_edit_on_github_link(self):
         """Synced events show an 'Edit on GitHub' link."""
@@ -326,8 +330,8 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         self.assertContains(response, 'View Event')
 
-    def test_non_synced_event_has_no_synced_banner(self):
-        """Non-synced events do not show the synced banner."""
+    def test_non_synced_event_has_no_origin_panel(self):
+        """Non-synced events do not show source metadata UI."""
         event = Event.objects.create(
             title='Local Event', slug='local-event',
             start_datetime=datetime(2026, 6, 1, 10, 0),
@@ -335,6 +339,7 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
         )
         response = self.client.get(f'/studio/events/{event.pk}/edit')
         self.assertNotContains(response, 'data-testid="synced-banner"')
+        self.assertNotContains(response, 'data-testid="origin-panel"')
 
 
 class StudioEventCreateZoomTest(StaffUserMixin, TestCase):

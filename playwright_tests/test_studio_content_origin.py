@@ -24,8 +24,22 @@ from django.db import connection  # noqa: E402
 
 
 def _reset_content():
-    from content.models import Course, Module, Unit, Workshop, WorkshopPage
+    from content.models import (
+        Article,
+        Course,
+        Download,
+        Module,
+        Project,
+        Unit,
+        Workshop,
+        WorkshopPage,
+    )
+    from events.models import Event
 
+    Event.objects.all().delete()
+    Article.objects.all().delete()
+    Download.objects.all().delete()
+    Project.objects.all().delete()
     Unit.objects.all().delete()
     Module.objects.all().delete()
     Course.objects.all().delete()
@@ -75,6 +89,75 @@ def _create_course_pair():
     )
     connection.close()
     return synced, local
+
+
+def _create_content_origin_pairs():
+    from content.models import Article, Download, Project
+    from events.models import Event
+
+    article = Article.objects.create(
+        title='Synced Origin Article',
+        slug='synced-origin-article',
+        date=datetime.date(2026, 5, 1),
+        published=True,
+        source_repo='AI-Shipping-Labs/content',
+        source_path='articles/synced-origin-article.md',
+        source_commit='art1234def5678901234567890123456789abcde',
+    )
+    local_article = Article.objects.create(
+        title='Local Origin Article',
+        slug='local-origin-article',
+        date=datetime.date(2026, 5, 2),
+        published=True,
+    )
+    download = Download.objects.create(
+        title='Synced Origin Download',
+        slug='synced-origin-download',
+        file_url='https://example.com/source.pdf',
+        source_repo='AI-Shipping-Labs/content',
+        source_path='downloads/synced-origin-download.yaml',
+        source_commit='dl1234def5678901234567890123456789abcde',
+    )
+    local_download = Download.objects.create(
+        title='Local Origin Download',
+        slug='local-origin-download',
+        file_url='https://example.com/local.pdf',
+    )
+    event = Event.objects.create(
+        title='Synced Origin Event',
+        slug='synced-origin-event',
+        start_datetime=datetime.datetime(2026, 6, 1, 10, 0),
+        status='upcoming',
+        source_repo='AI-Shipping-Labs/content',
+        source_path='events/synced-origin-event.md',
+        source_commit='evt1234def5678901234567890123456789abcde',
+    )
+    local_event = Event.objects.create(
+        title='Local Origin Event',
+        slug='local-origin-event',
+        start_datetime=datetime.datetime(2026, 6, 2, 10, 0),
+        status='upcoming',
+    )
+    project = Project.objects.create(
+        title='Synced Origin Project',
+        slug='synced-origin-project',
+        date=datetime.date(2026, 7, 1),
+        source_repo='AI-Shipping-Labs/content',
+        source_path='projects/synced-origin-project.md',
+        source_commit='prj1234def5678901234567890123456789abcde',
+    )
+    local_project = Project.objects.create(
+        title='Local Origin Project',
+        slug='local-origin-project',
+        date=datetime.date(2026, 7, 2),
+    )
+    connection.close()
+    return {
+        'article': (article, local_article),
+        'download': (download, local_download),
+        'event': (event, local_event),
+        'project': (project, local_project),
+    }
 
 
 def _create_workshop_pair():
@@ -216,6 +299,72 @@ class TestStudioWorkshopOrigin:
         assert 'Local / manual' in local_detail
         assert 'No GitHub source metadata' in local_detail
         assert 'Edit on GitHub' not in local_detail
+
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStudioSyncedContentOriginSurfaces:
+    def test_staff_can_inspect_article_download_event_project_sources(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _reset_content()
+        _create_staff_user('content-origin-staff@test.com')
+        pairs = _create_content_origin_pairs()
+
+        context = _auth_context(browser, 'content-origin-staff@test.com')
+        page = context.new_page()
+
+        synced_urls = [
+            (
+                f'{django_server}/studio/articles/{pairs["article"][0].pk}/edit',
+                'articles/synced-origin-article.md',
+                'art1234def5678901234567890123456789abcde',
+            ),
+            (
+                f'{django_server}/studio/downloads/{pairs["download"][0].pk}/edit',
+                'downloads/synced-origin-download.yaml',
+                'dl1234def5678901234567890123456789abcde',
+            ),
+            (
+                f'{django_server}/studio/events/{pairs["event"][0].pk}/edit',
+                'events/synced-origin-event.md',
+                'evt1234def5678901234567890123456789abcde',
+            ),
+            (
+                f'{django_server}/studio/projects/{pairs["project"][0].pk}/review',
+                'projects/synced-origin-project.md',
+                'prj1234def5678901234567890123456789abcde',
+            ),
+        ]
+
+        for url, source_path, source_commit in synced_urls:
+            page.goto(url, wait_until='domcontentloaded')
+            body = page.content()
+            assert 'data-testid="origin-panel"' in body
+            assert 'data-testid="synced-banner"' not in body
+            assert 'Synced from GitHub' in body
+            assert 'AI-Shipping-Labs/content' in body
+            assert source_path in body
+            assert source_commit in body
+            assert 'Edit on GitHub' in body
+            assert 'Re-sync source' in body
+
+        local_urls = [
+            f'{django_server}/studio/articles/{pairs["article"][1].pk}/edit',
+            f'{django_server}/studio/downloads/{pairs["download"][1].pk}/edit',
+            f'{django_server}/studio/events/{pairs["event"][1].pk}/edit',
+            f'{django_server}/studio/projects/{pairs["project"][1].pk}/review',
+        ]
+
+        for url in local_urls:
+            page.goto(url, wait_until='domcontentloaded')
+            body = page.content()
+            assert 'data-testid="origin-panel"' not in body
+            assert 'data-testid="synced-banner"' not in body
+            assert 'Synced from GitHub' not in body
+            assert 'Re-sync source' not in body
 
         context.close()
 

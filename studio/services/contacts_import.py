@@ -149,7 +149,13 @@ def _is_valid_email(value):
 
 
 def run_import(parsed, *, email_column, tag, tier, granted_by):
-    """Apply the import to the database.
+    """Apply a CSV import to the database.
+
+    Thin wrapper around :func:`import_contact_rows` that adapts the CSV-row
+    shape (dicts keyed by header column) to the per-row shape the shared
+    helper accepts. Both the Studio CSV view and the ``/api/contacts/import``
+    endpoint go through ``import_contact_rows`` so the per-row upsert logic
+    only lives in one place (issue #431).
 
     Args:
         parsed: a ``ParsedCsv`` returned by ``parse_csv``.
@@ -160,45 +166,81 @@ def run_import(parsed, *, email_column, tag, tier, granted_by):
 
     Returns an ``ImportResult``.
     """
+    rows = [
+        {"email": (row.get(email_column) or "").strip()}
+        for row in parsed.rows
+    ]
+    return import_contact_rows(
+        rows,
+        default_tag=tag or "",
+        default_tier=tier,
+        granted_by=granted_by,
+    )
+
+
+def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=None):
+    """Upsert a batch of contact rows.
+
+    Shared between the Studio CSV importer and the ``POST /api/contacts/import``
+    endpoint. Each row is a dict with at least ``email``; the API also passes
+    per-row ``tags`` (a list, MERGED into the user's existing tags) and
+    ``tier`` (a slug applied as a long-lived ``TierOverride`` if its level
+    is > 0).
+
+    Args:
+        rows: iterable of dicts. Each dict must contain ``email``; optionally
+            ``tags`` (list of raw strings) and ``tier`` (Tier slug). Any other
+            keys are ignored.
+        default_tag: raw tag string applied to every row in the batch.
+        default_tier: a ``Tier`` instance applied to every row whose tier is
+            not already set per-row. Pass None to leave tiers alone.
+        granted_by: ``User`` who initiated the batch (for ``TierOverride``).
+
+    Returns an ``ImportResult``. The whole batch runs in a single
+    ``transaction.atomic`` so a mid-batch failure rolls back cleanly.
+    """
     result = ImportResult()
-    normalized_tag = normalize_tag(tag) if tag else ''
-    # The "free" tier (level 0) is treated as a no-op for tier overrides --
-    # we don't downgrade existing users via override and we don't create an
-    # override that wouldn't grant any new access. Surface this as no-op
-    # rather than as an error.
-    apply_tier = tier is not None and tier.level > 0
+    normalized_default_tag = normalize_tag(default_tag) if default_tag else ""
+    apply_default_tier = default_tier is not None and default_tier.level > 0
 
     # Track first-occurrence emails so subsequent duplicates within the file
     # are counted as ``skipped`` without re-running upsert logic.
     seen_emails = set()
 
+    # Cache resolved per-row tier slugs so a 1000-row import doesn't issue
+    # 1000 ``Tier.objects.get()`` queries.
+    tier_cache = {}
+
+    def _resolve_tier(slug):
+        if slug not in tier_cache:
+            tier_cache[slug] = Tier.objects.filter(slug=slug).first()
+        return tier_cache[slug]
+
     with transaction.atomic():
-        for index, row in enumerate(parsed.rows, start=1):
-            # row_number is 1-indexed counting the header as row 1; data rows
-            # therefore start at row 2.
+        for index, row in enumerate(rows, start=1):
             row_number = index + 1
-            raw_value = (row.get(email_column) or '').strip()
+            raw_value = (row.get("email") or "").strip()
 
             if not _is_valid_email(raw_value):
                 result.malformed += 1
-                result.warnings.append((row_number, raw_value, 'malformed email'))
+                result.warnings.append(
+                    (row_number, raw_value, "malformed email")
+                )
                 continue
 
             normalized_email = User.objects.normalize_email(raw_value).lower()
             if normalized_email in seen_emails:
                 result.skipped += 1
                 result.warnings.append(
-                    (row_number, raw_value, 'duplicate within file')
+                    (row_number, raw_value, "duplicate within file")
                 )
                 continue
             seen_emails.add(normalized_email)
 
             existing = User.objects.filter(email__iexact=normalized_email).first()
             if existing is not None:
-                _apply_tag(existing, normalized_tag)
-                if apply_tier:
-                    _apply_tier_override(existing, tier, granted_by)
-                result.updated += 1
+                user = existing
+                created_now = False
             else:
                 user = User.objects.create_user(
                     email=normalized_email,
@@ -206,10 +248,30 @@ def run_import(parsed, *, email_column, tag, tier, granted_by):
                     email_verified=False,
                     unsubscribed=False,
                 )
-                _apply_tag(user, normalized_tag)
-                if apply_tier:
-                    _apply_tier_override(user, tier, granted_by)
+                created_now = True
+
+            # Default tag applies to every row.
+            _apply_tag(user, normalized_default_tag)
+            # Per-row tags: MERGE into the user's existing tags (idempotent
+            # append). The CSV importer never sets per-row tags, so only the
+            # API path exercises this branch.
+            for raw_tag in row.get("tags") or []:
+                _apply_tag(user, normalize_tag(raw_tag))
+
+            # Per-row tier wins over the default tier when both are set; the
+            # default tier still applies when the row has no tier of its own.
+            row_tier_slug = row.get("tier")
+            if row_tier_slug:
+                row_tier = _resolve_tier(row_tier_slug)
+                if row_tier is not None and row_tier.level > 0:
+                    _apply_tier_override(user, row_tier, granted_by)
+            elif apply_default_tier:
+                _apply_tier_override(user, default_tier, granted_by)
+
+            if created_now:
                 result.created += 1
+            else:
+                result.updated += 1
 
     return result
 

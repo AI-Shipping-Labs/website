@@ -1,0 +1,80 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}API tokens{% endblock %}
+
+{% block studio_content %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">API tokens</h1>
+    <p class="text-muted-foreground mt-1">
+      Long-lived tokens authenticate scripts hitting <code class="font-mono text-xs">/api/contacts/...</code>.
+      Tokens are full-power -- revoke any token whose script no longer needs access.
+    </p>
+  </div>
+  <div class="flex items-center gap-2 shrink-0">
+    <a href="{% url 'studio_api_token_create' %}"
+       data-testid="api-token-create-link"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Create token
+    </a>
+  </div>
+</div>
+
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="api-tokens-list">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Key</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
+        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Last used</th>
+        <th class="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for token in tokens %}
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="api-token-row">
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="Name">
+          {{ token.name|default:"-" }}
+        </td>
+        <td class="px-4 py-2.5 align-top text-sm text-foreground" data-label="User">
+          {{ token.user.email }}
+        </td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground font-mono" data-label="Key" data-testid="api-token-prefix">
+          {{ token.key_prefix }}
+        </td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="Created">
+          {{ token.created_at|date:"M d, Y" }}
+        </td>
+        <td class="px-4 py-2.5 align-top text-xs text-muted-foreground" data-label="Last used">
+          {% if token.last_used_at %}{{ token.last_used_at|date:"M d, Y H:i" }}{% else %}Never{% endif %}
+        </td>
+        <td class="px-4 py-2.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <form method="post"
+                action="{% url 'studio_api_token_revoke' token.key %}"
+                class="{% studio_list_class 'action_form' %}"
+                onsubmit="return confirm('Revoke this token? Any scripts using it will start failing.');">
+            {% csrf_token %}
+            <button type="submit"
+                    data-testid="api-token-revoke"
+                    class="{% studio_action_class 'danger' %}">
+              Revoke
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground" data-testid="api-tokens-empty">
+          No API tokens yet
+          <a href="{% url 'studio_api_token_create' %}"
+             class="text-accent hover:underline ml-1">Create one</a>.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

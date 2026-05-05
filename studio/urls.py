@@ -1,6 +1,12 @@
 from django.urls import path
 
 from studio.views.announcement import announcement_banner_edit
+from studio.views.api_tokens import (
+    studio_api_token_create,
+    studio_api_token_created,
+    studio_api_token_list,
+    studio_api_token_revoke,
+)
 from studio.views.articles import article_edit, article_list
 from studio.views.campaigns import (
     campaign_create,
@@ -331,6 +337,15 @@ urlpatterns = [
 
     # Announcement banner
     path('announcement/', announcement_banner_edit, name='studio_announcement_banner'),
+
+    # API tokens (issue #431). Superuser-only; the plaintext key is shown
+    # exactly once on the ``created/`` page via a session stash.
+    path('api-tokens/', studio_api_token_list, name='studio_api_token_list'),
+    path('api-tokens/new/', studio_api_token_create, name='studio_api_token_create'),
+    path('api-tokens/created/', studio_api_token_created, name='studio_api_token_created'),
+    # ``<path:key>`` because the urlsafe key contains '-' / '_' which
+    # ``<slug:>`` allows but the path converter is the conservative match.
+    path('api-tokens/<path:key>/revoke/', studio_api_token_revoke, name='studio_api_token_revoke'),
 
     # Redirects
     path('redirects/', redirect_list, name='studio_redirect_list'),

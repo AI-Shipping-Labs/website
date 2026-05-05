@@ -149,6 +149,7 @@ INSTALLED_APPS = [
     'studio',
     'comments',
     'analytics',
+    'api',
 ]
 
 MIDDLEWARE = [

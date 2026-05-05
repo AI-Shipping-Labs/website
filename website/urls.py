@@ -22,6 +22,7 @@ urlpatterns = [
     path('api/', include(auth_api_urlpatterns)),
     path('api/', include(email_api_urlpatterns)),
     path('api/', include(notification_api_urlpatterns)),
+    path('api/', include('api.urls')),
     path('', include(notification_page_urlpatterns)),
     path('register', RedirectView.as_view(url='/accounts/register/', permanent=False), name='register_shortcut'),
     path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),

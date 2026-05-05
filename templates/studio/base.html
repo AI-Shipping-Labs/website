@@ -294,6 +294,16 @@ double-rendering. See issue #347.
                 <span>Settings</span>
               </a>
             </li>
+            {% if request.user.is_superuser %}
+            <li>
+              <a href="{% url 'studio_api_token_list' %}"
+                 data-testid="api-tokens-nav-link"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/api-tokens' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="key" class="w-4 h-4"></i>
+                <span>API tokens</span>
+              </a>
+            </li>
+            {% endif %}
           </ul>
         </div>
 

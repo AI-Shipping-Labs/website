@@ -593,6 +593,7 @@ class TestSidebarNavOrder:
             "Redirects",
             "Announcement",
             "Settings",
+            "API tokens",
             "Back to site",
         ]
 

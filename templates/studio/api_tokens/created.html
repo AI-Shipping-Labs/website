@@ -1,0 +1,81 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}API token created{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_api_token_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to tokens
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">API token created</h1>
+  <p class="text-muted-foreground mt-1">
+    Token for <span class="font-mono text-foreground">{{ token.user.email }}</span>{% if token.name %} ({{ token.name }}){% endif %} is ready.
+  </p>
+</div>
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl space-y-6">
+  <div class="px-4 py-3 rounded-lg bg-yellow-500/15 border border-yellow-500/40 text-sm text-yellow-900 dark:text-yellow-200">
+    <p class="font-medium text-yellow-900 dark:text-yellow-300">Copy the token now.</p>
+    <p class="mt-1 text-yellow-900/90 dark:text-yellow-200/80" data-testid="api-token-warning">
+      This is the only time this token will be shown. Save it now -- once you
+      navigate away from this page the value cannot be retrieved. Revoke and
+      re-issue if the operator missed it.
+    </p>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium text-foreground mb-1">Token</label>
+    <div class="flex items-stretch gap-2">
+      <code id="api-token-value"
+            data-testid="api-token-value"
+            class="flex-1 bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground font-mono break-all select-all">{{ plaintext_key }}</code>
+      <button type="button"
+              id="copy-token-btn"
+              data-copy-target="api-token-value"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity shrink-0">
+        Copy
+      </button>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2">
+      Use it in the <code class="font-mono">Authorization: Token &lt;key&gt;</code> request header.
+    </p>
+  </div>
+
+  <div class="pt-2 border-t border-border flex flex-wrap items-center gap-3">
+    <a href="{% url 'studio_api_token_list' %}"
+       data-testid="api-token-back-to-list"
+       class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Back to tokens
+    </a>
+  </div>
+</div>
+
+<script>
+(function() {
+  document.querySelectorAll('[data-copy-target]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var targetId = btn.getAttribute('data-copy-target');
+      var el = document.getElementById(targetId);
+      if (!el) { return; }
+      var text = el.textContent || '';
+      var done = function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function() { btn.textContent = original; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

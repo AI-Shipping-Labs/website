@@ -69,6 +69,10 @@ class ContactsExportTest(TestCase):
                 "unsubscribed",
                 "date_joined",
                 "last_login",
+                "stripe_customer_id",
+                "subscription_id",
+                "slack_member",
+                "slack_checked_at",
             },
         )
 
@@ -97,6 +101,10 @@ class ContactsExportTest(TestCase):
                 "unsubscribed",
                 "date_joined",
                 "last_login",
+                "stripe_customer_id",
+                "subscription_id",
+                "slack_member",
+                "slack_checked_at",
             ],
         )
 

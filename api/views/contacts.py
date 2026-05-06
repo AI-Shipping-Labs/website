@@ -36,6 +36,8 @@ User = get_user_model()
 
 # Columns shared between the JSON and CSV export formats. The CSV header row
 # is taken verbatim from this list; the JSON dicts use the same keys.
+# The trailing four columns (Stripe / Slack identity fields) were added in
+# issue #437 so a round-trip (export -> modify -> import) carries the fields.
 EXPORT_COLUMNS = [
     "email",
     "first_name",
@@ -46,6 +48,10 @@ EXPORT_COLUMNS = [
     "unsubscribed",
     "date_joined",
     "last_login",
+    "stripe_customer_id",
+    "subscription_id",
+    "slack_member",
+    "slack_checked_at",
 ]
 
 
@@ -76,6 +82,10 @@ def _serialize_user(user):
         "unsubscribed": user.unsubscribed,
         "date_joined": _isoformat_or_none(user.date_joined),
         "last_login": _isoformat_or_none(user.last_login),
+        "stripe_customer_id": user.stripe_customer_id,
+        "subscription_id": user.subscription_id,
+        "slack_member": user.slack_member,
+        "slack_checked_at": _isoformat_or_none(user.slack_checked_at),
     }
 
 
@@ -186,6 +196,10 @@ def contacts_export(request):
                     "true" if row["unsubscribed"] else "false",
                     row["date_joined"] or "",
                     row["last_login"] or "",
+                    row["stripe_customer_id"],
+                    row["subscription_id"],
+                    "true" if row["slack_member"] else "false",
+                    row["slack_checked_at"] or "",
                 ]
             )
         return response

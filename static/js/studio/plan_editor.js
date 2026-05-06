@@ -609,7 +609,8 @@
   function enterInlineEdit(chip, textEl, id) {
     if (chip.dataset.editing === 'true') { return; }
     chip.dataset.editing = 'true';
-    const prior = textEl.textContent;
+    const prior = textEl.dataset.markdownSource || textEl.textContent;
+    const priorHtml = textEl.innerHTML;
     const ta = document.createElement('textarea');
     ta.value = prior;
     ta.className = 'flex-1 bg-transparent border-0 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent rounded';
@@ -622,13 +623,20 @@
       const value = ta.value.trim();
       const newSpan = textEl;
       newSpan.textContent = value || prior;
+      newSpan.dataset.markdownSource = value || prior;
       ta.replaceWith(newSpan);
       chip.dataset.editing = 'false';
       if (value && value !== prior) {
         apiCallWithRevert('PATCH', 'checkpoints/' + id, {
           description: value,
-        }, function () {
-          newSpan.textContent = prior;
+        }, function (retry) {
+          newSpan.innerHTML = priorHtml;
+          newSpan.dataset.markdownSource = prior;
+        }).then(function (result) {
+          if (result.ok && result.data) {
+            newSpan.innerHTML = result.data.description_html || value;
+            newSpan.dataset.markdownSource = result.data.description || value;
+          }
         });
       }
       chip.focus();
@@ -636,7 +644,8 @@
 
     function cancel() {
       const newSpan = textEl;
-      newSpan.textContent = prior;
+      newSpan.innerHTML = priorHtml;
+      newSpan.dataset.markdownSource = prior;
       ta.replaceWith(newSpan);
       chip.dataset.editing = 'false';
       chip.focus();
@@ -711,7 +720,7 @@
       li.innerHTML =
         '<span class="plan-editor-drag-handle cursor-grab text-muted-foreground" aria-hidden="true">::</span>' +
         '<input type="checkbox" data-testid="checkpoint-done-toggle" class="plan-editor-checkpoint-done">' +
-        '<span class="plan-editor-checkpoint-text flex-1" data-testid="checkpoint-text"></span>' +
+        '<span class="plan-editor-checkpoint-text plan-markdown flex-1" data-testid="checkpoint-text" data-markdown-source=""></span>' +
         '<button type="button" data-testid="checkpoint-delete" class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>';
       list.appendChild(li);
 

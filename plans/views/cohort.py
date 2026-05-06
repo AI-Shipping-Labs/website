@@ -22,6 +22,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from accounts.models import Token
 from plans.cohort_rows import build_progress_rows
 from plans.models import PLAN_VISIBILITY_CHOICES, Plan, Sprint, SprintEnrollment
 
@@ -175,6 +176,14 @@ def my_plan_detail(request, plan_id):
         .select_related('member', 'sprint')
         .prefetch_related('weeks__checkpoints', 'resources', 'deliverables', 'next_steps'),
     )
+    progress = plan.weeks.aggregate(
+        total=Count('checkpoints'),
+        done=Count('checkpoints', filter=Q(checkpoints__done_at__isnull=False)),
+    )
+    token, _created = Token.objects.get_or_create(
+        user=request.user,
+        name='member-plan-editor',
+    )
 
     return render(
         request,
@@ -182,6 +191,11 @@ def my_plan_detail(request, plan_id):
         {
             'sprint': plan.sprint,
             'plan': plan,
+            'api_base': '/api/',
+            'api_token': token.key,
+            'plan_can_edit': True,
+            'plan_progress_done': progress['done'],
+            'plan_progress_total': progress['total'],
             'visibility_choices': PLAN_VISIBILITY_CHOICES,
         },
     )

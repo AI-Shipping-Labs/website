@@ -21,6 +21,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Token
@@ -270,6 +271,58 @@ class PlanEditorRenderTest(TestCase):
         )
         self.assertContains(response, 'May 2026 sprint')
         self.assertContains(response, 'may-2026')
+
+
+class StudioPlanParticipantNavigationTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email='member@test.com', password='pw',
+        )
+        cls.sprint = Sprint.objects.create(
+            name='May 2026 sprint', slug='may-2026',
+            start_date=datetime.date(2026, 5, 1),
+        )
+        cls.plan = Plan.objects.create(
+            member=cls.member, sprint=cls.sprint, status='draft',
+        )
+        Week.objects.create(plan=cls.plan, week_number=1, position=0)
+        Week.objects.create(plan=cls.plan, week_number=2, position=1)
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+    def test_plan_list_links_participant_to_user_and_keeps_plan_actions(self):
+        response = self.client.get(reverse('studio_plan_list'))
+        user_url = reverse('studio_user_detail', kwargs={'user_id': self.member.pk})
+        detail_url = reverse('studio_plan_detail', kwargs={'plan_id': self.plan.pk})
+        edit_url = reverse('studio_plan_edit', kwargs={'plan_id': self.plan.pk})
+        self.assertContains(response, f'href="{user_url}"')
+        self.assertContains(response, f'href="{detail_url}"')
+        self.assertContains(response, 'View plan')
+        self.assertContains(response, f'href="{edit_url}"')
+
+    def test_sprint_detail_links_participant_to_user_and_keeps_plan_action(self):
+        response = self.client.get(
+            reverse('studio_sprint_detail', kwargs={'sprint_id': self.sprint.pk}),
+        )
+        user_url = reverse('studio_user_detail', kwargs={'user_id': self.member.pk})
+        detail_url = reverse('studio_plan_detail', kwargs={'plan_id': self.plan.pk})
+        self.assertContains(response, f'href="{user_url}"')
+        self.assertContains(response, f'href="{detail_url}"')
+        self.assertContains(response, 'View plan')
+
+    def test_plan_detail_header_links_participant_to_user(self):
+        response = self.client.get(
+            reverse('studio_plan_detail', kwargs={'plan_id': self.plan.pk}),
+        )
+        user_url = reverse('studio_user_detail', kwargs={'user_id': self.member.pk})
+        edit_url = reverse('studio_plan_edit', kwargs={'plan_id': self.plan.pk})
+        self.assertContains(response, f'href="{user_url}"')
+        self.assertContains(response, f'href="{edit_url}"')
 
     def test_header_renders_status_pill_with_data_attribute(self):
         """Pill renders the human label and a data attribute the JS reads.

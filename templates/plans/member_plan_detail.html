@@ -3,6 +3,19 @@
 
 {% block title %}{{ plan.member|display_name }}'s plan | {{ site_name }}{% endblock %}
 
+{% block extra_head %}
+<style>
+  .plan-markdown :where(p, ul, ol, pre, blockquote, table) { margin-top: 0.5rem; }
+  .plan-markdown :where(p:first-child, ul:first-child, ol:first-child, pre:first-child, blockquote:first-child, table:first-child) { margin-top: 0; }
+  .plan-markdown ul { list-style: disc; padding-left: 1.25rem; }
+  .plan-markdown ol { list-style: decimal; padding-left: 1.25rem; }
+  .plan-markdown a { color: hsl(var(--accent)); text-decoration: underline; }
+  .plan-markdown code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.25rem; }
+  .plan-markdown pre { overflow-x: auto; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--secondary)); padding: 0.75rem; }
+  .plan-markdown pre code { background: transparent; padding: 0; }
+</style>
+{% endblock %}
+
 {% block body %}
 <main class="min-h-screen">
   {% include "includes/header.html" %}

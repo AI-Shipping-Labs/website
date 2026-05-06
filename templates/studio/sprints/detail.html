@@ -75,7 +75,8 @@
       {% for plan in plans %}
       <tr class="hover:bg-secondary/50 transition-colors">
         <td class="px-6 py-4 text-sm">
-          <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-accent hover:underline">{{ plan.member.email }}</a>
+          <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}" class="text-accent hover:underline" data-testid="sprint-detail-plan-member-link">{{ plan.member.email }}</a>
+          <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="ml-3 text-xs text-muted-foreground hover:text-accent hover:underline">View plan</a>
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.get_status_display }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.created_at|date:"Y-m-d" }}</td>

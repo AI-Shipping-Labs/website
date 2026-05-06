@@ -12,6 +12,8 @@ endpoint does not N+1.
 
 from __future__ import annotations
 
+from plans.templatetags.plan_markdown import render_plan_markdown
+
 
 def _isoformat_or_none(value):
     """Return ``value.isoformat()`` for non-null datetimes, else ``None``."""
@@ -54,6 +56,7 @@ def serialize_checkpoint(checkpoint):
         "id": checkpoint.id,
         "week_id": checkpoint.week_id,
         "description": checkpoint.description,
+        "description_html": render_plan_markdown(checkpoint.description),
         "position": checkpoint.position,
         "done_at": _isoformat_or_none(checkpoint.done_at),
     }

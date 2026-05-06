@@ -1,4 +1,4 @@
-{% load static %}
+{% load static plan_markdown %}
 {# Plan editor body (issue #444). #}
 {# Extracted from ``edit.html`` so the staff Studio shell and the #}
 {# member ``/account/plan/<id>/edit/`` shell render the SAME markup. #}
@@ -11,7 +11,9 @@
         data-testid="plan-editor-header">
   <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div class="min-w-0">
+      {% if request.user.is_staff %}
       <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Sprint plan</p>
+      {% endif %}
       <h1 class="text-2xl font-semibold text-foreground">
         {% if request.user.is_staff %}
         <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}"
@@ -207,8 +209,9 @@
                    data-testid="checkpoint-done-toggle"
                    class="plan-editor-checkpoint-done"
                    {% if cp.done_at %}checked{% endif %}>
-            <span class="plan-editor-checkpoint-text flex-1 {% if cp.done_at %}line-through text-muted-foreground{% endif %}"
-                  data-testid="checkpoint-text">{{ cp.description }}</span>
+            <span class="plan-editor-checkpoint-text plan-markdown flex-1 {% if cp.done_at %}line-through text-muted-foreground{% endif %}"
+                  data-testid="checkpoint-text"
+                  data-markdown-source="{{ cp.description }}">{{ cp.description|plan_markdown }}</span>
             <button type="button"
                     data-testid="checkpoint-delete"
                     class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>
@@ -313,6 +316,7 @@
                 class="plan-editor-add-next-step text-sm text-accent hover:underline mt-2">+ Add next step</button>
       </section>
 
+      {% if request.user.is_staff %}
       {# Interview Notes panel with Internal/External tabs. #}
       <section class="bg-card border border-border rounded-lg p-6"
                data-testid="interview-notes-panel">
@@ -350,6 +354,7 @@
                 data-testid="add-interview-note"
                 class="plan-editor-add-note text-sm text-accent hover:underline mt-2">+ Add note</button>
       </section>
+      {% endif %}
 
     </aside>
   </div>

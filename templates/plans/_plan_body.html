@@ -14,26 +14,27 @@ Required context:
 - ``plan`` (with related ``weeks``, ``resources``, ``deliverables``,
   ``next_steps`` prefetched by the view).
 {% endcomment %}
+{% load plan_markdown %}
 
 <section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-summary">
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
-  <dl class="grid grid-cols-1 gap-4 text-sm">
+  <dl class="grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
     {% if plan.summary_current_situation %}
     <div>
       <dt class="text-muted-foreground">Current situation</dt>
-      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_current_situation }}</dd>
+      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_current_situation|plan_markdown }}</dd>
     </div>
     {% endif %}
     {% if plan.summary_goal %}
     <div>
       <dt class="text-muted-foreground">Goal</dt>
-      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_goal }}</dd>
+      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_goal|plan_markdown }}</dd>
     </div>
     {% endif %}
     {% if plan.summary_main_gap %}
     <div>
       <dt class="text-muted-foreground">Main gap</dt>
-      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_main_gap }}</dd>
+      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_main_gap|plan_markdown }}</dd>
     </div>
     {% endif %}
     {% if plan.summary_weekly_hours %}
@@ -45,7 +46,7 @@ Required context:
     {% if plan.summary_why_this_plan %}
     <div>
       <dt class="text-muted-foreground">Why this plan</dt>
-      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_why_this_plan }}</dd>
+      <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_why_this_plan|plan_markdown }}</dd>
     </div>
     {% endif %}
   </dl>
@@ -55,12 +56,12 @@ Required context:
 <section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-focus">
   <h2 class="text-xl font-semibold mb-4">Focus</h2>
   {% if plan.focus_main %}
-  <p class="text-foreground whitespace-pre-line" data-testid="plan-focus-main">{{ plan.focus_main }}</p>
+  <div class="plan-markdown text-foreground" data-testid="plan-focus-main">{{ plan.focus_main|plan_markdown }}</div>
   {% endif %}
   {% if plan.focus_supporting %}
   <ul class="mt-4 list-disc list-inside text-sm text-muted-foreground space-y-1">
     {% for item in plan.focus_supporting %}
-    <li>{{ item }}</li>
+    <li><span class="plan-markdown inline-block align-top">{{ item|plan_markdown }}</span></li>
     {% endfor %}
   </ul>
   {% endif %}
@@ -70,7 +71,7 @@ Required context:
 {% if plan.accountability %}
 <section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-accountability">
   <h2 class="text-xl font-semibold mb-4">Accountability</h2>
-  <p class="text-foreground whitespace-pre-line">{{ plan.accountability }}</p>
+  <div class="plan-markdown text-foreground">{{ plan.accountability|plan_markdown }}</div>
 </section>
 {% endif %}
 
@@ -83,15 +84,41 @@ Required context:
     </h3>
     <ul class="space-y-1 text-sm">
       {% for checkpoint in week.checkpoints.all %}
-      <li class="flex items-start gap-2" data-testid="plan-checkpoint">
-        {% if checkpoint.done_at %}
-        <span class="text-emerald-500" aria-label="Done">&#10003;</span>
+      <li class="flex items-start gap-3 rounded-lg border border-transparent py-1.5 {% if checkpoint.done_at %}is-complete{% endif %}"
+          data-testid="plan-checkpoint"
+          data-plan-item
+          data-item-type="checkpoint"
+          data-item-id="{{ checkpoint.pk }}">
+        {% if plan_can_edit %}
+        <input type="checkbox"
+               class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+               data-testid="plan-row-done-toggle"
+               data-done-toggle
+               aria-label="Mark checkpoint done"
+               {% if checkpoint.done_at %}checked{% endif %}>
         {% else %}
-        <span class="text-muted-foreground" aria-label="Not done">&#9633;</span>
+          {% if checkpoint.done_at %}
+          <span class="mt-0.5 text-emerald-500" aria-label="Done">&#10003;</span>
+          {% else %}
+          <span class="mt-0.5 text-muted-foreground" aria-label="Not done">&#9633;</span>
+          {% endif %}
         {% endif %}
-        <span class="{% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}">
-          {{ checkpoint.description }}
-        </span>
+        <div class="min-w-0 flex-1">
+          <div class="plan-markdown {% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+               data-rendered-markdown>{{ checkpoint.description|plan_markdown }}</div>
+          {% if plan_can_edit %}
+          <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                    rows="3"
+                    data-markdown-input
+                    data-testid="plan-item-markdown-input">{{ checkpoint.description }}</textarea>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
+            <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
+            <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
+            <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+          </div>
+          {% endif %}
+        </div>
       </li>
       {% empty %}
       <li class="text-sm text-muted-foreground italic">No checkpoints in this week.</li>
@@ -115,7 +142,7 @@ Required context:
       <span class="text-foreground">{{ resource.title }}</span>
       {% endif %}
       {% if resource.note %}
-      <span class="block text-muted-foreground mt-1 whitespace-pre-line">{{ resource.note }}</span>
+      <span class="plan-markdown block text-muted-foreground mt-1">{{ resource.note|plan_markdown }}</span>
       {% endif %}
     </li>
     {% endfor %}
@@ -128,13 +155,41 @@ Required context:
   <h2 class="text-xl font-semibold mb-4">Deliverables</h2>
   <ul class="space-y-2 text-sm">
     {% for deliverable in plan.deliverables.all %}
-    <li class="flex items-start gap-2">
-      {% if deliverable.done_at %}
-      <span class="text-emerald-500" aria-label="Done">&#10003;</span>
+    <li class="flex items-start gap-3 rounded-lg border border-transparent py-1.5 {% if deliverable.done_at %}is-complete{% endif %}"
+        data-testid="plan-deliverable"
+        data-plan-item
+        data-item-type="deliverable"
+        data-item-id="{{ deliverable.pk }}">
+      {% if plan_can_edit %}
+      <input type="checkbox"
+             class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+             data-testid="plan-row-done-toggle"
+             data-done-toggle
+             aria-label="Mark deliverable done"
+             {% if deliverable.done_at %}checked{% endif %}>
       {% else %}
-      <span class="text-muted-foreground" aria-label="Not done">&#9633;</span>
+        {% if deliverable.done_at %}
+        <span class="mt-0.5 text-emerald-500" aria-label="Done">&#10003;</span>
+        {% else %}
+        <span class="mt-0.5 text-muted-foreground" aria-label="Not done">&#9633;</span>
+        {% endif %}
       {% endif %}
-      <span class="text-foreground whitespace-pre-line">{{ deliverable.description }}</span>
+      <div class="min-w-0 flex-1">
+        <div class="plan-markdown {% if deliverable.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+             data-rendered-markdown>{{ deliverable.description|plan_markdown }}</div>
+        {% if plan_can_edit %}
+        <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                  rows="3"
+                  data-markdown-input
+                  data-testid="plan-item-markdown-input">{{ deliverable.description }}</textarea>
+        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
+          <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
+          <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
+          <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+        </div>
+        {% endif %}
+      </div>
     </li>
     {% endfor %}
   </ul>
@@ -146,15 +201,41 @@ Required context:
   <h2 class="text-xl font-semibold mb-4">Next Steps</h2>
   <ul class="space-y-2 text-sm">
     {% for step in plan.next_steps.all %}
-    <li class="flex items-start gap-2">
-      {% if step.done_at %}
-      <span class="text-emerald-500" aria-label="Done">&#10003;</span>
+    <li class="flex items-start gap-3 rounded-lg border border-transparent py-1.5 {% if step.done_at %}is-complete{% endif %}"
+        data-testid="plan-next-step"
+        data-plan-item
+        data-item-type="next-step"
+        data-item-id="{{ step.pk }}">
+      {% if plan_can_edit %}
+      <input type="checkbox"
+             class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+             data-testid="plan-row-done-toggle"
+             data-done-toggle
+             aria-label="Mark next step done"
+             {% if step.done_at %}checked{% endif %}>
       {% else %}
-      <span class="text-muted-foreground" aria-label="Not done">&#9633;</span>
+        {% if step.done_at %}
+        <span class="mt-0.5 text-emerald-500" aria-label="Done">&#10003;</span>
+        {% else %}
+        <span class="mt-0.5 text-muted-foreground" aria-label="Not done">&#9633;</span>
+        {% endif %}
       {% endif %}
-      <span class="text-foreground">
-        {{ step.description }}
-      </span>
+      <div class="min-w-0 flex-1">
+        <div class="plan-markdown inline-block align-top {% if step.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+             data-rendered-markdown>{{ step.description|plan_markdown }}</div>
+        {% if plan_can_edit %}
+        <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                  rows="3"
+                  data-markdown-input
+                  data-testid="plan-item-markdown-input">{{ step.description }}</textarea>
+        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
+          <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
+          <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
+          <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+        </div>
+        {% endif %}
+      </div>
     </li>
     {% endfor %}
   </ul>

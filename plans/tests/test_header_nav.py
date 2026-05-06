@@ -1,9 +1,4 @@
-"""Tests for the "Plan" link in the public site header (issue #440).
-
-Authenticated members with at least one ``Plan`` row see the link;
-members with zero plans do not. The link points to the most recently
-created plan's ``my_plan_detail``.
-"""
+"""Tests for the "Plan" link in the public site header (issue #440)."""
 
 import datetime
 
@@ -39,14 +34,15 @@ class HeaderPlanLinkTest(TestCase):
         expected_href = reverse(
             'my_plan_detail', kwargs={'plan_id': plan.pk},
         )
-        self.assertContains(
-            response, f'href="{expected_href}"',
-        )
+        self.assertContains(response, f'href="{expected_href}"')
+        self.assertContains(response, 'data-testid="header-plan-link"')
+        self.assertContains(response, 'data-testid="mobile-header-plan-link"')
 
     def test_authenticated_user_without_plan_does_not_see_plan_link(self):
         self.client.force_login(self.user)
         response = self.client.get('/')
         self.assertNotContains(response, 'data-testid="header-plan-link"')
+        self.assertNotContains(response, 'data-testid="mobile-header-plan-link"')
 
     def test_plan_link_points_to_most_recent_plan(self):
         older_sprint = Sprint.objects.create(
@@ -56,7 +52,6 @@ class HeaderPlanLinkTest(TestCase):
         older_plan = Plan.objects.create(
             member=self.user, sprint=older_sprint, visibility='private',
         )
-        # Force ``created_at`` ordering so the May plan is the latest.
         Plan.objects.filter(pk=older_plan.pk).update(
             created_at=timezone.now() - datetime.timedelta(days=30),
         )
@@ -73,7 +68,6 @@ class HeaderPlanLinkTest(TestCase):
             'my_plan_detail', kwargs={'plan_id': older_plan.pk},
         )
         self.assertContains(response, f'href="{expected_href}"')
-        # The header should NOT link to the older plan.
         self.assertNotContains(
             response,
             f'data-testid="header-plan-link" href="{older_href}"',
@@ -92,3 +86,6 @@ class HeaderPlanLinkTest(TestCase):
         )
         self.assertContains(response, f'href="{cohort_url}"')
         self.assertContains(response, 'data-testid="view-cohort-board-cta"')
+        edit_url = reverse('account_plan_edit', kwargs={'plan_id': plan.pk})
+        self.assertContains(response, f'href="{edit_url}"')
+        self.assertContains(response, 'data-testid="my-plan-edit-cta"')

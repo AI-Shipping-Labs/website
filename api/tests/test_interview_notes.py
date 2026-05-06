@@ -1,0 +1,288 @@
+"""Tests for the InterviewNote endpoints (issue #433).
+
+The visibility gate is the security-critical contract of this issue.
+Two cross-cutting tests in this module pin down the architectural
+invariant:
+
+- ``test_visibility_gate_lives_in_queryset_not_template`` reads
+  ``api/views/interview_notes.py`` as plain text and asserts the literal
+  string ``is_staff`` does not appear there. Every staff branch must
+  live in ``api/views/_permissions.py``, not the view module.
+- The non-staff detail-by-id case returns 404 with NO leak of the
+  internal note's body; the test checks the body string is absent from
+  the response.
+"""
+
+import datetime
+import json
+import pathlib
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+
+from accounts.models import Token
+from plans.models import InterviewNote, Plan, Sprint
+
+User = get_user_model()
+
+
+class InterviewNotesTestBase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email="staff@test.com", password="pw", is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email="member@test.com", password="pw",
+        )
+        cls.other = User.objects.create_user(
+            email="other@test.com", password="pw",
+        )
+        cls.staff_token = Token.objects.create(user=cls.staff, name="s")
+        cls.member_token = Token.objects.create(user=cls.member, name="m")
+        cls.other_token = Token.objects.create(user=cls.other, name="o")
+
+        cls.sprint = Sprint.objects.create(
+            name="s", slug="s",
+            start_date=datetime.date(2026, 5, 1),
+        )
+        cls.member_plan = Plan.objects.create(
+            member=cls.member, sprint=cls.sprint,
+        )
+        cls.internal_note = InterviewNote.objects.create(
+            plan=cls.member_plan, member=cls.member,
+            visibility="internal", kind="meeting",
+            body="Member is shy about asking questions in the cohort.",
+            created_by=cls.staff,
+        )
+        cls.external_note = InterviewNote.objects.create(
+            plan=cls.member_plan, member=cls.member,
+            visibility="external", kind="general",
+            body="Member to share progress in slack channel.",
+            created_by=cls.staff,
+        )
+
+    def _auth(self, token):
+        return {"HTTP_AUTHORIZATION": f"Token {token.key}"}
+
+
+class PlanInterviewNotesListTest(InterviewNotesTestBase):
+    def test_staff_sees_internal_and_external_notes(self):
+        response = self.client.get(
+            f"/api/plans/{self.member_plan.id}/interview-notes",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {n["id"] for n in response.json()["interview_notes"]}
+        self.assertIn(self.internal_note.id, ids)
+        self.assertIn(self.external_note.id, ids)
+
+    def test_non_staff_sees_only_external_notes(self):
+        response = self.client.get(
+            f"/api/plans/{self.member_plan.id}/interview-notes",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {n["id"] for n in response.json()["interview_notes"]}
+        self.assertIn(self.external_note.id, ids)
+        self.assertNotIn(self.internal_note.id, ids)
+        # And the internal note's body must not leak via the response
+        # text either.
+        body = response.content.decode()
+        self.assertNotIn("Member is shy", body)
+
+    def test_non_staff_visibility_internal_filter_returns_403(self):
+        response = self.client.get(
+            f"/api/plans/{self.member_plan.id}"
+            "/interview-notes?visibility=internal",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["code"], "forbidden_internal_note",
+        )
+
+
+class InterviewNoteDetailTest(InterviewNotesTestBase):
+    def test_non_staff_detail_on_internal_note_returns_404(self):
+        response = self.client.get(
+            f"/api/interview-notes/{self.internal_note.id}",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["code"], "unknown_note")
+        # Body must NOT echo the internal note's content.
+        body = response.content.decode()
+        self.assertNotIn("Member is shy", body)
+
+    def test_non_staff_detail_on_external_note_returns_200(self):
+        response = self.client.get(
+            f"/api/interview-notes/{self.external_note.id}",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], self.external_note.id)
+
+    def test_staff_detail_on_internal_note_returns_200(self):
+        response = self.client.get(
+            f"/api/interview-notes/{self.internal_note.id}",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["visibility"], "internal")
+
+
+class InterviewNoteCreateTest(InterviewNotesTestBase):
+    def _post(self, payload, *, token):
+        return self.client.post(
+            "/api/interview-notes",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._auth(token),
+        )
+
+    def test_staff_creates_internal_note(self):
+        before = InterviewNote.objects.count()
+        response = self._post(
+            {
+                "user_email": "member@test.com",
+                "visibility": "internal",
+                "kind": "intake",
+                "body": "secret",
+            },
+            token=self.staff_token,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(InterviewNote.objects.count(), before + 1)
+        self.assertEqual(response.json()["visibility"], "internal")
+
+    def test_non_staff_create_internal_returns_403(self):
+        before = InterviewNote.objects.count()
+        response = self._post(
+            {
+                "user_email": "member@test.com",
+                "visibility": "internal",
+                "body": "evil",
+            },
+            token=self.member_token,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["code"], "forbidden_internal_note",
+        )
+        self.assertEqual(InterviewNote.objects.count(), before)
+
+    def test_non_staff_can_create_external_note(self):
+        before = InterviewNote.objects.count()
+        response = self._post(
+            {
+                "user_email": "member@test.com",
+                "visibility": "external",
+                "body": "ok to share",
+            },
+            token=self.member_token,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(InterviewNote.objects.count(), before + 1)
+
+
+class UserInterviewNotesInboxTest(InterviewNotesTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Inbox notes (no plan) for the member.
+        cls.inbox_note = InterviewNote.objects.create(
+            plan=None, member=cls.member,
+            visibility="internal", kind="intake",
+            body="Member's intake form answers.",
+            created_by=cls.staff,
+        )
+
+    def test_staff_user_inbox_returns_unattached_notes(self):
+        response = self.client.get(
+            "/api/users/member@test.com/interview-notes",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {n["id"] for n in response.json()["interview_notes"]}
+        self.assertIn(self.inbox_note.id, ids)
+        # The plan-attached internal note should NOT appear -- inbox is
+        # ``plan IS NULL``.
+        self.assertNotIn(self.internal_note.id, ids)
+
+    def test_non_staff_inbox_other_email_returns_403(self):
+        response = self.client.get(
+            "/api/users/other@test.com/interview-notes",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["code"], "forbidden_other_user_plan",
+        )
+
+    def test_non_staff_inbox_own_email_returns_filtered_to_external(self):
+        # Add an external inbox note for the member.
+        external_inbox = InterviewNote.objects.create(
+            plan=None, member=self.member,
+            visibility="external", kind="general",
+            body="ok to share inbox",
+            created_by=self.staff,
+        )
+        response = self.client.get(
+            "/api/users/member@test.com/interview-notes",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {n["id"] for n in response.json()["interview_notes"]}
+        self.assertIn(external_inbox.id, ids)
+        # Internal inbox note must NOT leak.
+        self.assertNotIn(self.inbox_note.id, ids)
+
+
+class VisibilityGateInQuerysetTest(TestCase):
+    """Architecturally important test: every file in ``api/views/``
+    other than ``_permissions.py`` MUST NOT contain the literal string
+    ``is_staff``. The only place the API may inspect that attribute is
+    ``api/views/_permissions.py``; views compose against the queryset
+    helpers it exports.
+    """
+
+    def test_interview_notes_view_has_no_is_staff_reference(self):
+        view_path = (
+            pathlib.Path(__file__).resolve().parent.parent
+            / "views" / "interview_notes.py"
+        )
+        source = view_path.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "is_staff", source,
+            msg=(
+                "is_staff must not appear in interview_notes.py -- the "
+                "visibility gate must compose against "
+                "api/views/_permissions.py instead."
+            ),
+        )
+
+    def test_no_other_view_module_inspects_is_staff(self):
+        """Sweep every ``api/views/*.py`` module other than the
+        permissions helper and assert ``is_staff`` does not appear.
+        Adding a new view module that inlines ``request.user.is_staff``
+        will fail this test even if the developer forgets to add a
+        per-module check.
+        """
+        views_dir = (
+            pathlib.Path(__file__).resolve().parent.parent / "views"
+        )
+        offending = []
+        for path in sorted(views_dir.glob("*.py")):
+            if path.name in ("_permissions.py", "__init__.py"):
+                continue
+            source = path.read_text(encoding="utf-8")
+            if "is_staff" in source:
+                offending.append(path.name)
+        self.assertEqual(
+            offending, [],
+            msg=(
+                "These files inspect is_staff outside _permissions.py: "
+                f"{offending}"
+            ),
+        )

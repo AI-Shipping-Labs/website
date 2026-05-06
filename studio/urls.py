@@ -93,6 +93,7 @@ from studio.views.sprints import (
     sprint_edit,
     sprint_list,
 )
+from studio.views.sprints_enroll import sprint_bulk_enroll
 from studio.views.subscribers import (
     subscriber_export_redirect,
     subscriber_list_redirect,
@@ -357,6 +358,13 @@ urlpatterns = [
     path('sprints/new', sprint_create, name='studio_sprint_create'),
     path('sprints/<int:sprint_id>/', sprint_detail, name='studio_sprint_detail'),
     path('sprints/<int:sprint_id>/edit', sprint_edit, name='studio_sprint_edit'),
+    # Bulk enroll (issue #443). Staff-only; enrolls members from a
+    # textarea of emails. Allows under-tier with a warning per the spec.
+    path(
+        'sprints/<int:sprint_id>/enroll',
+        sprint_bulk_enroll,
+        name='studio_sprint_bulk_enroll',
+    ),
 
     # Plans (issue #432, drag-drop editor #434). Members section.
     # The ``/edit/`` route is the drag-drop authoring shell (#434); the

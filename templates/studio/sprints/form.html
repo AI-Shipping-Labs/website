@@ -60,6 +60,18 @@
       </select>
     </div>
 
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Minimum tier to join</label>
+      <select name="min_tier_level"
+              data-testid="sprint-min-tier-level"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% for value, label in tier_level_choices %}
+        <option value="{{ value }}" {% if form_data.min_tier_level == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Default Premium. Lower per-sprint for free pilots or Main+ sprints.</p>
+    </div>
+
     <div class="flex items-center space-x-4">
       <button type="submit"
               class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">

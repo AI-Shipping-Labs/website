@@ -22,7 +22,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from plans.models import PLAN_VISIBILITY_CHOICES, Plan, Sprint
+from plans.models import PLAN_VISIBILITY_CHOICES, Plan, Sprint, SprintEnrollment
 
 # Tuple of valid visibility values posted by the toggle form. We accept
 # only the active enum members from ``PLAN_VISIBILITY_CHOICES`` -- a
@@ -65,23 +65,32 @@ def cohort_board(request, sprint_slug):
     """Sprint cohort progress board.
 
     Anonymous users hit ``login_required``. An authenticated user who
-    is NOT enrolled in the sprint (no plan row of their own) gets 404
-    rather than 403 -- 404 keeps sprint membership opaque to outsiders.
+    is NOT enrolled in the sprint (no ``SprintEnrollment`` row of their
+    own) gets 404 rather than 403 -- 404 keeps sprint membership opaque
+    to outsiders. Membership is derived from ``SprintEnrollment`` (issue
+    #443), not plan-existence; an enrolled viewer with no plan still
+    sees the board (the viewer-plan panel renders a "plan being
+    prepared" placeholder).
     """
     sprint = get_object_or_404(Sprint, slug=sprint_slug)
-    viewer_plan = _viewer_plan_for_sprint(sprint, request.user)
-    if viewer_plan is None:
+    viewer_enrolled = SprintEnrollment.objects.filter(
+        sprint=sprint, user=request.user,
+    ).exists()
+    if not viewer_enrolled:
         # Not enrolled -> 404. Visible only to members of this sprint.
         raise Http404('Not enrolled in this sprint')
+
+    viewer_plan = _viewer_plan_for_sprint(sprint, request.user)
 
     plans_qs = Plan.objects.visible_on_cohort_board(
         sprint=sprint, viewer=request.user,
     ).select_related('member').prefetch_related('weeks')
     plans = list(_annotated_plans(plans_qs).order_by('created_at'))
 
-    viewer_plan = _annotated_plans(
-        Plan.objects.filter(pk=viewer_plan.pk),
-    ).select_related('sprint').first()
+    if viewer_plan is not None:
+        viewer_plan = _annotated_plans(
+            Plan.objects.filter(pk=viewer_plan.pk),
+        ).select_related('sprint').first()
 
     return render(
         request,

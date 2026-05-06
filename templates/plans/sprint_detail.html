@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ sprint.name }} | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-6 py-16 lg:px-8 lg:py-24">
+
+      <header class="mb-10">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Sprint</p>
+        <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="sprint-detail-name">{{ sprint.name }}</h1>
+        <p class="text-sm text-muted-foreground mt-2">
+          Starts {{ sprint.start_date }} &middot; {{ sprint.duration_weeks }} weeks
+          <span class="ml-2 inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground" data-testid="sprint-status-badge">
+            {{ sprint.get_status_display }}
+          </span>
+        </p>
+        <p class="mt-3">
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="sprint-tier-badge">
+            {{ required_tier_name }} tier required
+          </span>
+        </p>
+      </header>
+
+      {% if messages %}
+      <div class="mb-6 space-y-2" data-testid="sprint-messages">
+        {% for message in messages %}
+        <div class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" data-testid="sprint-message">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="rounded-2xl border border-border bg-card p-6">
+        {% if not is_authenticated %}
+          <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"
+             class="inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+             data-testid="sprint-cta-login">
+            Log in to join
+          </a>
+        {% elif enrolled %}
+          <p class="text-sm text-foreground" data-testid="sprint-cta-enrolled">You're enrolled.</p>
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            {% if viewer_plan %}
+            <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}"
+               class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors"
+               data-testid="sprint-cta-open-plan">
+              Open my plan
+            </a>
+            {% else %}
+            <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}"
+               class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors"
+               data-testid="sprint-cta-board">
+              Your plan is being prepared
+            </a>
+            {% endif %}
+            <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block">
+              {% csrf_token %}
+              <button type="submit"
+                      class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                      data-testid="sprint-cta-leave">
+                Leave sprint
+              </button>
+            </form>
+            <p class="text-xs text-muted-foreground" data-testid="sprint-cta-leave-hint">
+              Your plan and progress stay; the cohort just won&rsquo;t see them anymore.
+            </p>
+          </div>
+        {% elif not eligible %}
+          <p class="text-sm text-foreground">
+            This sprint requires the {{ required_tier_name }} tier.
+          </p>
+          <a href="/pricing"
+             class="mt-4 inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+             data-testid="sprint-cta-upgrade">
+            Upgrade to {{ required_tier_name }} to join
+          </a>
+        {% else %}
+          <form method="post" action="{% url 'sprint_join' sprint_slug=sprint.slug %}" class="inline-block">
+            {% csrf_token %}
+            <button type="submit"
+                    class="inline-flex items-center gap-2 rounded-md bg-emerald-500 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-600 transition-colors"
+                    data-testid="sprint-cta-join">
+              Join sprint
+            </button>
+          </form>
+        {% endif %}
+      </div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

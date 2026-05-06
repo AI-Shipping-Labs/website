@@ -12,10 +12,17 @@
       <h1 class="text-2xl font-semibold text-foreground">{{ sprint.name }}</h1>
       <p class="text-sm text-muted-foreground mt-1 font-mono">{{ sprint.slug }}</p>
     </div>
-    <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}"
-       class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
-      Edit sprint
-    </a>
+    <div class="flex items-center gap-2">
+      <a href="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}"
+         class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+         data-testid="sprint-bulk-enroll-link">
+        Enroll members
+      </a>
+      <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}"
+         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
+        Edit sprint
+      </a>
+    </div>
   </div>
 </div>
 
@@ -36,6 +43,14 @@
     <div>
       <dt class="text-xs text-muted-foreground uppercase">Created</dt>
       <dd class="text-foreground mt-1">{{ sprint.created_at|date:"Y-m-d" }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase">Min tier level</dt>
+      <dd class="text-foreground mt-1" data-testid="sprint-min-tier-display">{{ sprint.get_min_tier_level_display }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs text-muted-foreground uppercase">Enrollments</dt>
+      <dd class="text-foreground mt-1" data-testid="sprint-enrollment-count">{{ enrollment_count }}</dd>
     </div>
   </dl>
 </div>

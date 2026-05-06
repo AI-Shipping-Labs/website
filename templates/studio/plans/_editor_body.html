@@ -179,6 +179,16 @@
                    placeholder="(theme)"
                    class="plan-editor-week-theme w-full mt-1 bg-transparent border-0 border-b border-transparent hover:border-border focus:border-accent focus:outline-none text-foreground text-md font-medium">
           </div>
+          {# Carry-forward button (issue #458). Render on every week card #}
+          {# except the final one — there's no next week to receive moves. #}
+          {% if not forloop.last %}
+          <button type="button"
+                  data-testid="move-incomplete-to-next-week"
+                  data-week-id="{{ week.pk }}"
+                  class="plan-editor-move-incomplete shrink-0 text-xs text-accent hover:underline">
+            Move incomplete to Week {{ week.week_number|add:1 }}
+          </button>
+          {% endif %}
         </header>
 
         <ul data-testid="checkpoint-list"

@@ -105,3 +105,12 @@ class GhostPlanExcludedFromBoardTest(TestCase):
             ).values_list('pk', flat=True)
         )
         self.assertNotIn(self.ghost_plan.pk, ids)
+
+    def test_ghost_plan_not_in_progress_rows_queryset(self):
+        """Issue #461: the new queryset must respect the same invariant."""
+        ids = set(
+            Plan.objects.cohort_progress_rows(
+                sprint=self.sprint, viewer=self.viewer,
+            ).values_list('pk', flat=True)
+        )
+        self.assertNotIn(self.ghost_plan.pk, ids)

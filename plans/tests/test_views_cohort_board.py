@@ -135,21 +135,44 @@ class CohortBoardContentTest(TestCase):
         self.client.force_login(self.viewer)
 
     def test_board_renders_other_members_cohort_plans(self):
+        """Issue #461: rows for cohort-visible teammates render names + content."""
         url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        plan_ids = {plan.pk for plan in response.context['plans']}
-        self.assertEqual(plan_ids, {self.alice_plan.pk, self.bob_plan.pk})
+        rows_by_plan_pk = {
+            row['plan'].pk: row
+            for row in response.context['progress_rows']
+            if row['plan'] is not None
+        }
+        # Alice and Bob are cohort-visible; Charlie is private (still
+        # shown but as a counts-only row, see CohortBoardPrivateRowTest).
+        self.assertEqual(
+            rows_by_plan_pk[self.alice_plan.pk]['kind'], 'cohort',
+        )
+        self.assertEqual(
+            rows_by_plan_pk[self.bob_plan.pk]['kind'], 'cohort',
+        )
+        self.assertEqual(
+            rows_by_plan_pk[self.charlie_plan.pk]['kind'], 'private',
+        )
         self.assertContains(response, 'Alice Smith')
         self.assertContains(response, 'Bob Jones')
-        self.assertNotContains(response, 'Charlie Hidden')
+        # Charlie's display name still renders in the private row -- the
+        # privacy guarantee covers PLAN CONTENT, not the member's name.
+        self.assertContains(response, 'Charlie Hidden')
 
-    def test_board_excludes_viewer_own_plan_from_main_list(self):
+    def test_board_includes_viewer_own_row_with_self_flag(self):
+        """Issue #461: the viewer's own row appears, marked ``is_self``."""
         url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        plan_ids = {plan.pk for plan in response.context['plans']}
-        self.assertNotIn(self.viewer_plan.pk, plan_ids)
+        viewer_rows = [
+            row for row in response.context['progress_rows']
+            if row['plan'] is not None
+            and row['plan'].pk == self.viewer_plan.pk
+        ]
+        self.assertEqual(len(viewer_rows), 1)
+        self.assertTrue(viewer_rows[0]['is_self'])
 
 
 class CohortBoardProgressTest(TestCase):
@@ -194,6 +217,14 @@ class CohortBoardProgressTest(TestCase):
                 )
         return plan
 
+    def _row_for_plan(self, response, plan_pk):
+        rows = [
+            row for row in response.context['progress_rows']
+            if row['plan'] is not None and row['plan'].pk == plan_pk
+        ]
+        self.assertEqual(len(rows), 1)
+        return rows[0]
+
     def test_board_renders_progress_counts(self):
         plan = self._make_plan_with_checkpoints(
             total=18, done=12, email='alpha@test.com',
@@ -201,13 +232,12 @@ class CohortBoardProgressTest(TestCase):
         url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        # Verify computed annotations match expected counts.
-        plans_by_id = {p.pk: p for p in response.context['plans']}
-        self.assertEqual(plans_by_id[plan.pk].progress_total, 18)
-        self.assertEqual(plans_by_id[plan.pk].progress_done, 12)
+        row = self._row_for_plan(response, plan.pk)
+        self.assertEqual(row['progress_total'], 18)
+        self.assertEqual(row['progress_done'], 12)
         self.assertContains(
             response,
-            f'data-testid="progress-{plan.pk}">12/18</span>',
+            f'data-testid="progress-count-{plan.member.pk}">12 of 18',
         )
 
     def test_board_renders_zero_checkpoints_safely(self):
@@ -217,10 +247,12 @@ class CohortBoardProgressTest(TestCase):
         url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+        # Zero-checkpoint plan still appears with the explicit "0 of 0"
+        # count (counts are intentionally exposed for every kind).
         self.assertContains(response, 'No checkpoints yet')
+        # But there is no progress bar for zero-total rows.
         self.assertNotContains(
-            response,
-            f'data-testid="progress-{plan.pk}">0/0',
+            response, f'data-testid="progress-bar-{plan.member.pk}"',
         )
 
     def test_board_renders_all_done_progress(self):
@@ -231,12 +263,19 @@ class CohortBoardProgressTest(TestCase):
         response = self.client.get(url)
         self.assertContains(
             response,
-            f'data-testid="progress-{plan.pk}">6/6</span>',
+            f'data-testid="progress-count-{plan.member.pk}">6 of 6',
         )
 
 
 class CohortBoardEmptyStateTest(TestCase):
-    def test_board_empty_state_when_only_viewer_has_cohort_plan(self):
+    def test_board_shows_viewer_row_when_viewer_is_solo_with_plan(self):
+        """Issue #461: solo viewer with a plan still sees their own row.
+
+        The pre-#461 board returned an empty state when nobody else had
+        shared. The new board renders the viewer's own row inline, so
+        only the no-row case (no plan + nobody else enrolled) shows the
+        empty state.
+        """
         sprint = Sprint.objects.create(
             name='May 2026', slug='may-2026',
             start_date=datetime.date(2026, 5, 1),
@@ -244,14 +283,21 @@ class CohortBoardEmptyStateTest(TestCase):
         viewer = User.objects.create_user(
             email='solo@test.com', password='pw',
         )
-        Plan.objects.create(
+        viewer_plan = Plan.objects.create(
             member=viewer, sprint=sprint, visibility='cohort',
         )
         self.client.force_login(viewer)
         url = reverse('cohort_board', kwargs={'sprint_slug': sprint.slug})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Nobody else has shared their plan yet')
+        # The viewer's own row IS in the list now.
+        plan_pks = [
+            row['plan'].pk for row in response.context['progress_rows']
+            if row['plan'] is not None
+        ]
+        self.assertEqual(plan_pks, [viewer_plan.pk])
+        # And the empty-state callout does NOT fire.
+        self.assertNotContains(response, 'data-testid="cohort-board-empty"')
 
 
 class CohortBoardInterviewNoteIsolationTest(TestCase):

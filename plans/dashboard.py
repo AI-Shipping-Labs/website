@@ -5,16 +5,20 @@ page (``/account/``) and the authenticated home dashboard (``/`` rendered
 from ``content/dashboard.html``). Both surfaces need the same context
 keys with identical semantics, so we centralise the lookup here.
 
-The visibility literal ``'cohort'`` lives in this module (and at the
-queryset boundary) rather than in the view bodies. The regression test
-in ``plans/tests/test_view_layer_no_visibility_literals.py`` is scoped
-to ``plans/views/cohort.py`` only -- the literal here is the
-single-presence-probe exception documented in #440.
+Issue #461 widens the gate that controls the "View cohort" CTA. The
+previous flag (``cohort_has_other_shared_plans``) only fired when at
+least one OTHER plan in the sprint had ``visibility='cohort'``. With
+the cohort progress board now rendering every enrolled member's progress
+(including private-plan members as counts-only rows and no-plan members
+as "No plan yet" stubs), the board is useful as soon as the sprint has
+ANY other enrolled member -- so the renamed flag
+``cohort_has_other_members`` checks ``SprintEnrollment`` rather than
+plan visibility.
 """
 
 from django.db.models import Count, Q
 
-from plans.models import Plan
+from plans.models import Plan, SprintEnrollment
 
 
 def build_sprint_plan_card_context(user):
@@ -28,10 +32,11 @@ def build_sprint_plan_card_context(user):
       (``0`` when there is no plan).
     - ``plan_progress_done``: completed checkpoint count
       (``0`` when there is no plan).
-    - ``cohort_has_other_shared_plans``: ``True`` iff at least one OTHER
-      plan in the same sprint has cohort visibility. Used to gate the
-      "View cohort" CTA so we never link to a board that would render
-      empty for the viewer.
+    - ``cohort_has_other_members``: ``True`` iff the plan's sprint has
+      at least one OTHER enrolled member (with or without a plan, with
+      any visibility). Used to gate the "View cohort" CTA so the card
+      surfaces it only when the cohort board would render at least one
+      other row.
 
     Anonymous / unauthenticated callers receive an all-empty payload
     (``plan`` is ``None``); both calling templates omit the card when
@@ -42,7 +47,7 @@ def build_sprint_plan_card_context(user):
             'plan': None,
             'plan_progress_total': 0,
             'plan_progress_done': 0,
-            'cohort_has_other_shared_plans': False,
+            'cohort_has_other_members': False,
         }
 
     plan = (
@@ -66,13 +71,13 @@ def build_sprint_plan_card_context(user):
             'plan': None,
             'plan_progress_total': 0,
             'plan_progress_done': 0,
-            'cohort_has_other_shared_plans': False,
+            'cohort_has_other_members': False,
         }
 
-    cohort_has_other_shared_plans = (
-        Plan.objects
-        .filter(sprint=plan.sprint, visibility='cohort')
-        .exclude(member=user)
+    cohort_has_other_members = (
+        SprintEnrollment.objects
+        .filter(sprint=plan.sprint)
+        .exclude(user=user)
         .exists()
     )
 
@@ -80,5 +85,5 @@ def build_sprint_plan_card_context(user):
         'plan': plan,
         'plan_progress_total': plan.progress_total,
         'plan_progress_done': plan.progress_done,
-        'cohort_has_other_shared_plans': cohort_has_other_shared_plans,
+        'cohort_has_other_members': cohort_has_other_members,
     }

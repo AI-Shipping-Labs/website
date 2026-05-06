@@ -142,19 +142,19 @@ class TestMemberOptsInToCohortVisibility:
         try:
             page = context.new_page()
 
-            # Step 1: viewer lands on the cohort board. Alice's card is
-            # visible, the private callout is shown, and viewer's own
-            # plan is excluded.
+            # Step 1: viewer lands on the cohort board. Alice's cohort
+            # card is visible alongside the viewer's own private row,
+            # and the private callout points at the visibility toggle.
             page.goto(
                 f'{django_server}/sprints/{sprint.slug}/board',
                 wait_until='domcontentloaded',
             )
-            board_cards = page.locator('[data-testid="cohort-plan-card"]')
-            board_cards.first.wait_for(state='visible')
-            assert board_cards.count() == 1
-            assert 'Alice Smith' in board_cards.first.inner_text()
-            # Alice's progress reads ``6/12`` somewhere inside her card.
-            assert '6/12' in board_cards.first.inner_text()
+            cohort_cards = page.locator('[data-progress-row-kind="cohort"]')
+            cohort_cards.first.wait_for(state='visible')
+            assert cohort_cards.count() == 1
+            assert 'Alice Smith' in cohort_cards.first.inner_text()
+            # Alice's progress reads ``6 of 12`` somewhere on her card.
+            assert '6 of 12' in cohort_cards.first.inner_text()
 
             callout = page.locator('[data-testid="viewer-plan-callout"]')
             callout.wait_for(state='visible')
@@ -180,19 +180,27 @@ class TestMemberOptsInToCohortVisibility:
                 '[data-testid="visibility-select"]',
             ).input_value() == 'cohort'
 
-            # Step 5: navigate back to the board. Viewer's own plan
-            # still does not show (the board excludes the viewer); but
-            # Alice's plan is still there.
+            # Step 5: navigate back to the board. The viewer's row now
+            # renders as a cohort kind too, so there are two cohort
+            # cards. Alice's is still there.
             page.goto(
                 f'{django_server}/sprints/{sprint.slug}/board',
                 wait_until='domcontentloaded',
             )
             page.locator(
-                '[data-testid="cohort-plan-card"]',
+                '[data-progress-row-kind="cohort"]',
             ).first.wait_for(state='visible')
-            cards_after = page.locator('[data-testid="cohort-plan-card"]')
-            assert cards_after.count() == 1
-            assert 'Alice Smith' in cards_after.first.inner_text()
+            cohort_after = page.locator('[data-progress-row-kind="cohort"]')
+            assert cohort_after.count() == 2
+            names = [
+                cohort_after.nth(i).locator(
+                    '[data-testid="cohort-plan-name"]',
+                ).inner_text()
+                for i in range(cohort_after.count())
+            ]
+            assert any('Alice Smith' in n for n in names)
+            # Viewer's own cohort row carries the "(you)" suffix.
+            assert any('(you)' in n for n in names)
         finally:
             context.close()
 
@@ -285,7 +293,7 @@ class TestReadOnlyPlanPage:
                 wait_until='domcontentloaded',
             )
             page.locator(
-                '[data-testid="cohort-plan-card"]',
+                '[data-progress-row-kind="cohort"]',
             ).first.wait_for(state='visible')
 
             # Click Alice's card.

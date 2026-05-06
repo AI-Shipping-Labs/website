@@ -129,7 +129,7 @@
     </thead>
     <tbody class="divide-y divide-border">
       {% for row in page.object_list %}
-      <tr class="hover:bg-secondary/50 transition-colors">
+      <tr class="hover:bg-secondary/50 transition-colors" data-testid="user-row-{{ row.pk }}">
         <td class="px-4 py-2.5 align-top min-w-0" data-label="User">
           <div class="min-w-0">
             <div class="text-sm font-medium text-foreground truncate"
@@ -153,6 +153,25 @@
             <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground" data-testid="slack-status">No Slack</span>
             {% else %}
             <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
+            {% endif %}
+            {% if row.stripe_customer_id %}
+              {% if stripe_account_id %}
+              <a href="https://dashboard.stripe.com/{{ stripe_account_id }}/customers/{{ row.stripe_customer_id }}"
+                 target="_blank" rel="noopener"
+                 aria-label="Stripe customer"
+                 title="Open {{ row.stripe_customer_id }} in Stripe"
+                 data-testid="stripe-indicator"
+                 class="inline-flex items-center text-muted-foreground hover:text-foreground">
+                {% include "studio/_icons.html" with name="stripe" %}
+              </a>
+              {% else %}
+              <span aria-label="Stripe customer"
+                    title="{{ row.stripe_customer_id }}"
+                    data-testid="stripe-indicator"
+                    class="inline-flex items-center text-muted-foreground">
+                {% include "studio/_icons.html" with name="stripe" %}
+              </span>
+              {% endif %}
             {% endif %}
             {% if row.status == 'Staff' %}
             <span class="inline-flex items-center rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-blue-300">Staff</span>

@@ -45,6 +45,7 @@ from accounts.utils.tags import (
 from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
+from integrations.config import get_config
 from studio.decorators import staff_required, superuser_required
 
 User = get_user_model()
@@ -268,6 +269,7 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
             'slack_status': _slack_status(user),
             'slack_member': bool(user.slack_member),
             'slack_checked_at': user.slack_checked_at,
+            'stripe_customer_id': user.stripe_customer_id or '',
         })
 
     counts = {
@@ -376,6 +378,10 @@ def user_list(request):
     # both are 0 when the result set is empty (Django convention).
     show_pager = paginator.num_pages > 1
 
+    # Single Stripe account ID per request (issue #441). When blank the
+    # Stripe icon falls back to a non-clickable span with a tooltip.
+    stripe_account_id = get_config('STRIPE_DASHBOARD_ACCOUNT_ID', '')
+
     return render(request, 'studio/users/list.html', {
         'page': page,
         'paginator': paginator,
@@ -408,6 +414,7 @@ def user_list(request):
         'slack_filter_any': SLACK_FILTER_ANY,
         'slack_filter_yes': SLACK_FILTER_YES,
         'slack_filter_no': SLACK_FILTER_NO,
+        'stripe_account_id': stripe_account_id,
     })
 
 

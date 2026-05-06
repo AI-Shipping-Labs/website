@@ -121,38 +121,52 @@
     </colgroup>
     <thead class="bg-secondary">
       <tr>
-        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Membership</th>
-        <th class="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tags</th>
-        <th class="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Membership</th>
+        <th class="text-left px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Tags</th>
+        <th class="text-right px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
       {% for row in page.object_list %}
       <tr class="hover:bg-secondary/50 transition-colors" data-testid="user-row-{{ row.pk }}">
-        <td class="px-4 py-2.5 align-top min-w-0" data-label="User">
+        <td class="px-3 py-1.5 align-top min-w-0" data-label="User">
           <div class="min-w-0">
+            {% if row.full_name %}
+            <div class="text-sm font-medium text-foreground truncate"
+                 title="{{ row.full_name }}"
+                 aria-label="Name {{ row.full_name }}"
+                 data-testid="user-name">{{ row.full_name }}</div>
+            <div class="flex min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
+              <div class="truncate"
+                   title="{{ row.email }}"
+                   aria-label="Email {{ row.email }}"
+                   data-testid="user-email">{{ row.email }}</div>
+              <span class="shrink-0 text-[11px]">&middot; Joined {{ row.date_joined|date:"M d, Y" }}</span>
+            </div>
+            {% else %}
             <div class="text-sm font-medium text-foreground truncate"
                  title="{{ row.email }}"
                  aria-label="Email {{ row.email }}"
                  data-testid="user-email">{{ row.email }}</div>
-            <div class="mt-0.5 text-xs text-muted-foreground">Joined {{ row.date_joined|date:"M d, Y" }}</div>
+            <div class="text-[11px] leading-4 text-muted-foreground">Joined {{ row.date_joined|date:"M d, Y" }}</div>
+            {% endif %}
           </div>
         </td>
-        <td class="px-4 py-2.5 align-top" data-label="Membership">
-          <div class="flex flex-wrap items-center gap-1.5" data-testid="membership-badges" aria-label="Membership state for {{ row.email }}">
-            <span class="inline-flex items-center rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium leading-5 text-foreground">{{ row.tier_name }}</span>
+        <td class="px-3 py-1.5 align-top" data-label="Membership">
+          <div class="flex flex-wrap items-center gap-1" data-testid="membership-badges" aria-label="Membership state for {{ row.email }}">
+            <span class="inline-flex items-center rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[11px] font-medium leading-4 text-foreground">{{ row.tier_name }}</span>
             {% if row.is_subscribed %}
-            <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-green-300">Newsletter</span>
+            <span class="inline-flex items-center rounded-full bg-green-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-green-300">Newsletter</span>
             {% else %}
-            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground">No newsletter</span>
+            <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground">No newsletter</span>
             {% endif %}
             {% if row.slack_status == 'Member' %}
-            <span class="inline-flex items-center rounded-full bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-purple-300" data-testid="slack-status">Slack</span>
+            <span class="inline-flex items-center rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-purple-300" data-testid="slack-status">Slack</span>
             {% elif row.slack_status == 'Not in Slack' %}
-            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground" data-testid="slack-status">No Slack</span>
+            <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">No Slack</span>
             {% else %}
-            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium leading-5 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
+            <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
             {% endif %}
             {% if row.stripe_customer_id %}
               {% if stripe_account_id %}
@@ -174,26 +188,26 @@
               {% endif %}
             {% endif %}
             {% if row.status == 'Staff' %}
-            <span class="inline-flex items-center rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-blue-300">Staff</span>
+            <span class="inline-flex items-center rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-blue-300">Staff</span>
             {% elif row.status == 'Inactive' %}
-            <span class="inline-flex items-center rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-red-300">Inactive</span>
+            <span class="inline-flex items-center rounded-full bg-red-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-red-300">Inactive</span>
             {% else %}
-            <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] font-medium leading-5 text-green-300">Active</span>
+            <span class="inline-flex items-center rounded-full bg-green-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-green-300">Active</span>
             {% endif %}
           </div>
         </td>
-        <td class="px-4 py-2.5 align-top" data-label="Tags" data-testid="user-tags-cell">
+        <td class="px-3 py-1.5 align-top" data-label="Tags" data-testid="user-tags-cell">
           {% if row.tags %}
           <div class="flex flex-wrap items-center gap-1" aria-label="Visible tags for {{ row.email }}">
             {% for tag in row.visible_tags %}
             <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;tag={{ tag|urlencode }}"
-               class="inline-flex max-w-[9rem] items-center rounded-full border border-accent/40 bg-accent/20 px-2 py-0.5 text-[11px] leading-5 text-accent-foreground hover:bg-accent/30"
+               class="inline-flex max-w-[9rem] items-center rounded-full border border-accent/40 bg-accent/20 px-1.5 py-0.5 text-[11px] leading-4 text-accent-foreground hover:bg-accent/30"
                title="Filter by tag {{ tag }}">
               <span class="truncate">{{ tag }}</span>
             </a>
             {% endfor %}
             {% if row.tag_overflow_count %}
-            <span class="inline-flex items-center rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] leading-5 text-muted-foreground"
+            <span class="inline-flex items-center rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[11px] leading-4 text-muted-foreground"
                   title="Hidden tags: {{ row.hidden_tags_label }}"
                   aria-label="{{ row.tag_overflow_count }} more tags: {{ row.hidden_tags_label }}"
                   data-testid="user-tags-overflow">+{{ row.tag_overflow_count }}</span>
@@ -203,7 +217,7 @@
           <span class="text-xs text-muted-foreground">-</span>
           {% endif %}
         </td>
-        <td class="px-4 py-2.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
+        <td class="px-3 py-1.5 align-top {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %} flex-nowrap" data-testid="user-row-actions">
             <a href="{% url 'studio_user_detail' row.pk %}" class="{% studio_action_class 'primary' %}" data-testid="user-view-link">View</a>
             <form method="post" action="{% url 'studio_impersonate' row.pk %}" class="{% studio_list_class 'action_form' %}">

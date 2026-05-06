@@ -25,7 +25,7 @@ ACTION_GROUP_CLASS = 'studio-action-group inline-flex flex-wrap items-center jus
 ACTION_FORM_CLASS = 'inline-flex'
 ACTION_BASE_CLASS = (
     'studio-action inline-flex items-center justify-center whitespace-nowrap rounded-md '
-    'border px-3 py-1.5 text-xs font-medium transition-colors '
+    'border px-2.5 py-1 text-xs font-medium transition-colors '
     'focus:outline-none focus:ring-2 focus:ring-accent/50'
 )
 ACTION_KIND_CLASSES = {

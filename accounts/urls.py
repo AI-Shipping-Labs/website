@@ -2,11 +2,11 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from accounts.views.account import (
+    account_profile_post_view,
     account_view,
     cancel_subscription_view,
     email_preferences_view,
     member_plan_edit,
-    profile_view,
     theme_preference_view,
     timezone_preference_view,
 )
@@ -43,7 +43,7 @@ auth_api_urlpatterns = [
 # Account page and API endpoints (mounted at /account/ in project urls.py)
 account_urlpatterns = [
     path('', account_view, name='account'),
-    path('profile', profile_view, name='account_profile'),
+    path('profile', account_profile_post_view, name='account_profile'),
     # Member-facing plan editor (issue #444). Owner-only; renders the
     # SAME drag-drop editor partial staff see in Studio.
     path('plan/<int:plan_id>/edit/', member_plan_edit, name='account_plan_edit'),

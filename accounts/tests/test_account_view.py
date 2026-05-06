@@ -1,10 +1,20 @@
-"""Tests for the member profile page (issue #439).
+"""Tests for the consolidated /account/ profile name form (issue #447).
 
-Covers ``/account/profile`` GET pre-fill / POST save / validation, the
-"Profile" discovery card on ``/account/``, the mobile header Profile link,
-and the round-trip with the contacts import + export API. The Studio
-user-create form is also smoke-checked so the unrelated regression
-called out in the spec is caught here.
+Issue #447 folded the standalone ``/account/profile`` page back into
+``/account/``. The legacy URL keeps responding (``301`` on GET / HEAD,
+``POST`` writes the new name and redirects to ``/account/#profile``) so
+saved bookmarks and the mobile header link keep working.
+
+This file replaces ``accounts/tests/test_profile_view.py``:
+
+- GET-renders-form assertions now target ``/account/`` instead of
+  ``/account/profile``.
+- POST persistence / validation target ``POST /account/profile`` and
+  assert on the new redirect target ``/account/#profile``.
+- ``MobileHeaderProfileLinkTest`` pins the new ``/account/#profile``
+  ``href`` (anchor scroll target on the consolidated page).
+- ``StudioUserCreateRegressionTest`` is preserved as a smoke check on
+  the unrelated user-create form.
 """
 
 from django.test import TestCase
@@ -12,8 +22,8 @@ from django.test import TestCase
 from accounts.models import Token, User
 
 
-class ProfileViewGetTest(TestCase):
-    """GET /account/profile renders the form pre-filled from the user row."""
+class AccountPageProfileFormTest(TestCase):
+    """GET /account/ renders the inline Profile name form."""
 
     def test_get_pre_fills_form_with_current_values(self):
         user = User.objects.create_user(email="alice@example.com")
@@ -22,7 +32,7 @@ class ProfileViewGetTest(TestCase):
         user.save(update_fields=["first_name", "last_name"])
         self.client.force_login(user)
 
-        response = self.client.get("/account/profile")
+        response = self.client.get("/account/")
 
         self.assertEqual(response.status_code, 200)
         # Assert against the specific input element, not the whole body, so
@@ -44,7 +54,7 @@ class ProfileViewGetTest(TestCase):
         user = User.objects.create_user(email="empty@example.com")
         self.client.force_login(user)
 
-        response = self.client.get("/account/profile")
+        response = self.client.get("/account/")
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
@@ -55,11 +65,80 @@ class ProfileViewGetTest(TestCase):
         last_tag = content[content.rfind("<", 0, last_idx):content.find(">", last_idx) + 1]
         self.assertIn('value=""', last_tag)
 
+    def test_get_renders_save_button_and_form_action(self):
+        # Pin the Save button and the form ``action`` so re-arranging the
+        # page cannot accidentally drop the inline form.
+        user = User.objects.create_user(email="form@example.com")
+        self.client.force_login(user)
 
-class ProfileViewPostTest(TestCase):
-    """POST /account/profile updates first_name and last_name."""
+        response = self.client.get("/account/")
+        content = response.content.decode()
 
-    def test_post_updates_user_and_redirects(self):
+        section_idx = content.find('id="profile-section"')
+        self.assertNotEqual(section_idx, -1, "profile-section card must exist")
+
+        # The Save button must render after the section opens but before
+        # the next card starts (next ``<!-- `` comment marker).
+        save_idx = content.find('id="profile-save-btn"', section_idx)
+        self.assertNotEqual(save_idx, -1, "profile-save-btn must render")
+        next_card_idx = content.find("<!-- ", section_idx + 1)
+        self.assertNotEqual(next_card_idx, -1, "another card must follow Profile")
+        self.assertLess(
+            save_idx, next_card_idx,
+            "Save button must live inside the profile card",
+        )
+
+        # The form ``action`` points at the legacy ``/account/profile``.
+        action_idx = content.find('action="/account/profile"', section_idx)
+        self.assertNotEqual(
+            action_idx, -1,
+            "Profile form must POST to /account/profile",
+        )
+        self.assertLess(
+            action_idx, save_idx,
+            "Form action must come before the Save button it wraps",
+        )
+
+
+class AccountPageProfileOrderTest(TestCase):
+    """The Profile card sits at the top of the cards stack on /account/."""
+
+    def test_profile_card_appears_before_other_cards(self):
+        user = User.objects.create_user(email="order@example.com")
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+        content = response.content.decode()
+
+        profile_idx = content.find('id="profile-section"')
+        self.assertNotEqual(profile_idx, -1, "profile-section must render")
+
+        # Cards that must appear AFTER the Profile card on the page. Use
+        # ``id=`` attribute markers (or a unique HTML comment for the
+        # Membership block, which has no id) so the assertion is not
+        # tripped by stray occurrences of the word elsewhere on the page.
+        for marker in (
+            "<!-- Membership Section -->",
+            'id="email-preferences-section"',
+            'id="display-preferences-section"',
+            'id="change-password-section"',
+            'id="account-info-section"',
+        ):
+            marker_idx = content.find(marker)
+            self.assertNotEqual(
+                marker_idx, -1,
+                f"{marker!r} must render on /account/",
+            )
+            self.assertLess(
+                profile_idx, marker_idx,
+                f"Profile card must appear above {marker!r}",
+            )
+
+
+class AccountProfilePostTest(TestCase):
+    """POST /account/profile updates first_name and last_name (issue #447)."""
+
+    def test_post_updates_user_and_redirects_to_anchored_account_page(self):
         user = User.objects.create_user(email="post@example.com")
         self.client.force_login(user)
 
@@ -69,7 +148,9 @@ class ProfileViewPostTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/account/profile")
+        # Redirect target now points at /account/#profile so the user's
+        # browser scrolls back to the form they just submitted.
+        self.assertEqual(response.url, "/account/#profile")
         user.refresh_from_db()
         self.assertEqual(user.first_name, "Alice")
         self.assertEqual(user.last_name, "Doe")
@@ -87,6 +168,7 @@ class ProfileViewPostTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/account/#profile")
         user.refresh_from_db()
         self.assertEqual(user.first_name, "")
         self.assertEqual(user.last_name, "")
@@ -107,7 +189,9 @@ class ProfileViewPostTest(TestCase):
         self.assertEqual(user.first_name, "Alice")
         self.assertEqual(user.last_name, "Doe")
 
-    def test_post_too_long_first_name_renders_error_and_does_not_save(self):
+    def test_post_too_long_first_name_renders_inline_error_on_account_page(self):
+        # Overflow re-renders /account/ with a 400 and an inline error in
+        # the Profile card. The user keeps their typed (rejected) input.
         user = User.objects.create_user(email="long@example.com")
         user.first_name = "Alice"
         user.save(update_fields=["first_name"])
@@ -119,16 +203,50 @@ class ProfileViewPostTest(TestCase):
             {"first_name": long_name, "last_name": "Doe"},
         )
 
-        # Re-rendered, not redirected, with an inline error.
         self.assertEqual(response.status_code, 400)
+        # Re-renders the account page (full template), not the deleted
+        # ``accounts/profile.html``.
+        self.assertTemplateUsed(response, "accounts/account.html")
+
+        content = response.content.decode()
+        # The error block carries a stable test selector.
+        err_idx = content.find('data-testid="profile-form-error"')
+        self.assertNotEqual(err_idx, -1, "profile-form-error must render")
+        # And the copy is the spec-defined string.
         self.assertContains(
             response,
             "Name is too long",
             status_code=400,
         )
+
+        # Rejected input is preserved in the form so the user can fix it.
+        first_idx = content.find('id="id_first_name"')
+        first_tag = content[content.rfind("<", 0, first_idx):content.find(">", first_idx) + 1]
+        self.assertIn(f'value="{long_name}"', first_tag)
+        last_idx = content.find('id="id_last_name"')
+        last_tag = content[content.rfind("<", 0, last_idx):content.find(">", last_idx) + 1]
+        self.assertIn('value="Doe"', last_tag)
+
         # The stored value must not have changed.
         user.refresh_from_db()
         self.assertEqual(user.first_name, "Alice")
+        self.assertEqual(user.last_name, "")
+
+    def test_post_too_long_last_name_also_rejected(self):
+        # Symmetry test -- ``last_name`` overflow has the same contract.
+        user = User.objects.create_user(email="long-last@example.com")
+        self.client.force_login(user)
+
+        long_name = "Z" * 200
+        response = self.client.post(
+            "/account/profile",
+            {"first_name": "Alice", "last_name": long_name},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "Name is too long", status_code=400)
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "")
         self.assertEqual(user.last_name, "")
 
     def test_success_message_visible_after_save_redirect(self):
@@ -147,16 +265,41 @@ class ProfileViewPostTest(TestCase):
         self.assertContains(response, "Your profile has been updated.")
 
 
-class ProfileViewAccessTest(TestCase):
-    """Anonymous access to /account/profile is denied (login redirect)."""
+class AccountProfileGetRedirectTest(TestCase):
+    """GET / HEAD /account/profile -> 301 to /account/ (issue #447)."""
 
-    def test_anonymous_get_redirects_to_login_with_next(self):
+    def test_get_redirects_permanently_to_account(self):
+        # Authenticated GET still 301s -- the form lives on /account/ now.
+        user = User.objects.create_user(email="get@example.com")
+        self.client.force_login(user)
+
         response = self.client.get("/account/profile")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response.url)
-        self.assertIn("next=/account/profile", response.url)
 
-    def test_anonymous_post_does_not_mutate_any_user(self):
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/account/")
+
+    def test_head_redirects_permanently_to_account(self):
+        user = User.objects.create_user(email="head@example.com")
+        self.client.force_login(user)
+
+        response = self.client.head("/account/profile")
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/account/")
+
+    def test_anonymous_get_still_redirects(self):
+        # The redirect is unconditional; auth gating only applies to POST.
+        # An anonymous bookmark visit lands on /account/ which then runs
+        # its own login redirect -- but the FIRST hop is always 301.
+        response = self.client.get("/account/profile")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/account/")
+
+
+class AccountProfileAccessTest(TestCase):
+    """Anonymous POST is bounced to login without mutating any user."""
+
+    def test_anonymous_post_redirects_to_login_with_next(self):
         # Establish a user so the test can prove no row was touched.
         user = User.objects.create_user(email="alice@example.com")
         user.first_name = "Alice"
@@ -170,62 +313,35 @@ class ProfileViewAccessTest(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response.url)
+        # Django/allauth percent-encodes the ``next`` param. Compare the
+        # decoded form so the assertion is not coupled to the encoder.
+        from urllib.parse import parse_qs, urlparse
+
+        qs = parse_qs(urlparse(response.url).query)
+        self.assertEqual(qs.get("next"), ["/account/profile"])
+
         user.refresh_from_db()
         self.assertEqual(user.first_name, "Alice")
         self.assertEqual(user.last_name, "Doe")
 
 
-class AccountPageProfileSectionTest(TestCase):
-    """The Profile section card on /account/ must link to /account/profile."""
-
-    def test_account_page_shows_current_name_and_edit_link(self):
-        user = User.objects.create_user(email="show@example.com")
-        user.first_name = "Alice"
-        user.last_name = "Doe"
-        user.save(update_fields=["first_name", "last_name"])
-        self.client.force_login(user)
-
-        response = self.client.get("/account/")
-        self.assertEqual(response.status_code, 200)
-
-        # Link to the profile editor must exist.
-        self.assertContains(response, 'href="/account/profile"')
-        # Current name is rendered inside the profile card.
-        content = response.content.decode()
-        section_idx = content.find('id="profile-current-name"')
-        self.assertNotEqual(section_idx, -1, "profile-current-name element missing")
-        tag_end = content.find(">", section_idx)
-        close_idx = content.find("</p>", tag_end)
-        rendered = content[tag_end + 1:close_idx].strip()
-        self.assertEqual(rendered, "Alice Doe")
-
-    def test_account_page_says_name_not_set_for_empty_user(self):
-        user = User.objects.create_user(email="noname@example.com")
-        self.client.force_login(user)
-
-        response = self.client.get("/account/")
-        self.assertContains(response, "Your name is not set yet")
-        self.assertContains(response, 'href="/account/profile"')
-
-
 class MobileHeaderProfileLinkTest(TestCase):
-    """Mobile menu (authenticated user) gains a Profile link."""
+    """Mobile menu Profile link points at the anchored /account/#profile."""
 
-    def test_authenticated_mobile_menu_has_profile_link(self):
+    def test_authenticated_mobile_menu_has_anchored_profile_link(self):
         user = User.objects.create_user(email="mobile@example.com")
         self.client.force_login(user)
 
         response = self.client.get("/account/")
         content = response.content.decode()
-        # Scope the assertion to the new mobile-only Profile button so the
-        # test isn't satisfied by some unrelated 'Profile' string appearing
-        # in the page (e.g. the new Profile section card on /account/).
+        # Scope to the mobile-only Profile button so the test is not
+        # satisfied by some unrelated 'Profile' string on the page.
         idx = content.find('id="mobile-profile-link"')
         self.assertNotEqual(idx, -1, "mobile-profile-link element missing")
         tag_end = content.find(">", idx)
         tag_start = content.rfind("<", 0, idx)
         link_tag = content[tag_start:tag_end + 1]
-        self.assertIn('href="/account/profile"', link_tag)
+        self.assertIn('href="/account/#profile"', link_tag)
 
     def test_anonymous_mobile_menu_has_no_profile_link(self):
         # Use a public page that includes the header so the anonymous block
@@ -236,10 +352,11 @@ class MobileHeaderProfileLinkTest(TestCase):
 
 
 class ContactsExportRoundTripTest(TestCase):
-    """Saving a name in the profile must surface in the contacts API export.
+    """Saving a name on /account/ surfaces in the contacts API export.
 
-    The export side already exists from issue #431. This test pins that the
-    round-trip from the profile UI -> the API consumer keeps working.
+    The export side already exists from issue #431. This test pins that
+    the round-trip from the consolidated profile UI -> the API consumer
+    keeps working after issue #447.
     """
 
     @classmethod
@@ -256,7 +373,8 @@ class ContactsExportRoundTripTest(TestCase):
         user = User.objects.create_user(email="member@example.com")
         self.client.force_login(user)
 
-        # Save name through the new profile form.
+        # Save name through the consolidated profile form (POST target
+        # is still ``/account/profile``).
         save_response = self.client.post(
             "/account/profile",
             {"first_name": "Alice", "last_name": "Doe"},
@@ -282,10 +400,10 @@ class ContactsExportRoundTripTest(TestCase):
 
 
 class ContactsImportRoundTripTest(TestCase):
-    """Importing a name through the API must pre-fill the profile form.
+    """Importing a name through the API pre-fills the inline /account/ form.
 
     Pins the contract on the import side (issue #437) end-to-end with the
-    new profile UI.
+    consolidated profile UI on /account/ (issue #447).
     """
 
     @classmethod
@@ -298,7 +416,7 @@ class ContactsImportRoundTripTest(TestCase):
         )
         cls.token = Token.objects.create(user=cls.admin, name="import-roundtrip")
 
-    def test_imported_name_pre_fills_profile_form(self):
+    def test_imported_name_pre_fills_account_profile_form(self):
         bob = User.objects.create_user(email="bob@example.com")
         # Confirm starting state is empty so the import has something to set.
         self.assertEqual(bob.first_name, "")
@@ -320,9 +438,9 @@ class ContactsImportRoundTripTest(TestCase):
         )
         self.assertEqual(import_response.status_code, 200)
 
-        # Log in as Bob and load the profile form.
+        # Log in as Bob and load the consolidated /account/ page.
         self.client.force_login(bob)
-        response = self.client.get("/account/profile")
+        response = self.client.get("/account/")
         self.assertEqual(response.status_code, 200)
 
         content = response.content.decode()

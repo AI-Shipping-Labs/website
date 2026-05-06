@@ -341,7 +341,6 @@ class CohortBoardPrivacySentinelTest(TestCase):
         )
         NextStep.objects.create(
             plan=cls.dana_plan,
-            assignee_label='SENTINEL_NEXTSTEP_ASSIGNEE',
             description='SENTINEL_NEXTSTEP_DESC',
         )
         InterviewNote.objects.create(

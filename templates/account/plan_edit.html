@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load static %}
+
+{# Member-facing plan editor shell (issue #444). #}
+{# Extends the public ``base.html`` (member chrome) and includes the #}
+{# SAME ``_editor_body.html`` partial that the Studio editor at #}
+{# ``/studio/plans/<id>/edit/`` includes -- there is no parallel #}
+{# editor template. The shell is intentionally thin: any markup that #}
+{# changes here must change once and propagate to both URLs via the #}
+{# partial. #}
+
+{% block title %}Edit your plan | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-6xl px-6 py-10 sm:py-14 lg:px-8">
+
+      <div class="mb-4">
+        <a href="{% url 'account' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          &larr; Back to your account
+        </a>
+      </div>
+
+      {% include "studio/plans/_editor_body.html" %}
+
+    </div>
+  </section>
+</main>
+{% endblock %}

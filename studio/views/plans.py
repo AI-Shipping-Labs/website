@@ -1,4 +1,4 @@
-"""Studio views for managing personal sprint plans (issues #432, #434).
+"""Studio views for managing personal sprint plans (issues #432, #434, #444).
 
 The form-based CRUD pages from #432 (list / new / detail / note) live
 unchanged here. ``plan_edit`` was replaced in #434 with a thin
@@ -6,6 +6,13 @@ client-side shell that renders the drag-and-drop authoring UI; all
 writes from that page go through the JSON API in #433. The view is
 intentionally GET-only -- there is no ``request.POST`` handling, no
 ``Save`` button, and no parallel reorder endpoint inside Studio.
+
+Issue #444 extracts the editor body into ``_editor_body.html`` and the
+context-build into ``studio.services.plan_editor.build_plan_editor_context``
+so the member-facing ``/account/plan/<id>/edit/`` view can include the
+SAME partial rather than introducing a parallel editor surface. The
+token name parameter (``studio-plan-editor`` here, ``member-plan-editor``
+in the member view) is the only difference.
 
 Interview-note visibility is enforced at the queryset layer
 (:meth:`plans.models.InterviewNoteQuerySet.visible_to`). The plan detail
@@ -15,16 +22,12 @@ plan, so a staff member glancing at the page understands the visibility
 before reading.
 """
 
-import json
-
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from accounts.models import Token
 from plans.models import (
     KIND_CHOICES,
     PLAN_STATUS_CHOICES,
@@ -33,8 +36,9 @@ from plans.models import (
     Plan,
     Sprint,
 )
+from plans.services import create_plan_for_enrollment
 from studio.decorators import staff_required
-from studio.services.plan_editor import serialize_plan_detail
+from studio.services.plan_editor import build_plan_editor_context
 
 User = get_user_model()
 
@@ -43,22 +47,6 @@ User = get_user_model()
 # sessions means we get-or-create at most one token per staff user for
 # this UI -- never accumulate one per page load.
 EDITOR_TOKEN_NAME = 'studio-plan-editor'
-
-
-def _get_or_create_editor_token(user):
-    """Return a Token bound to ``user`` for the drag-drop editor.
-
-    Tokens minted by the Studio token UI (#431) live under operator-
-    chosen names. The editor mints its own token under a reserved name
-    so revoking it from the API-tokens page does not also kill ad-hoc
-    operator tokens. ``Token.save()`` populates ``key`` on first save
-    when blank, so a single ``get_or_create`` is enough.
-    """
-    token, _ = Token.objects.get_or_create(
-        user=user,
-        name=EDITOR_TOKEN_NAME,
-    )
-    return token
 
 
 def _normalize_plan_status(raw):
@@ -125,7 +113,16 @@ def plan_list(request):
 
 @staff_required
 def plan_create(request):
-    """Form: pick member, pick sprint. ``status`` defaults to draft."""
+    """Form: pick member, pick sprint. ``status`` defaults to draft.
+
+    The plan-creation path goes through
+    :func:`plans.services.create_plan_for_enrollment` (issue #444) so
+    the empty plan + enrollment artefacts match exactly what the new
+    ``Add member`` button on the sprint detail page produces. This
+    view kept its own duplicate-detection branch so the dedicated
+    ``A plan already exists`` error message still fires (the sprint-
+    detail flow surfaces idempotency as a flash message instead).
+    """
     sprints = Sprint.objects.order_by('-start_date')
     members = User.objects.order_by('email')
 
@@ -173,25 +170,16 @@ def plan_create(request):
     if sprint is None:
         return _render_with_error('Selected sprint does not exist.')
 
-    status_value = _normalize_plan_status(form_data['status'])
-
     if Plan.objects.filter(member=member, sprint=sprint).exists():
         return _render_with_error(
             f'A plan already exists for {member.email} in sprint "{sprint.name}".',
         )
 
-    try:
-        with transaction.atomic():
-            plan = Plan.objects.create(
-                member=member,
-                sprint=sprint,
-                status=status_value,
-            )
-    except IntegrityError:
-        # Defence against a race between the .exists() check and the create.
-        return _render_with_error(
-            f'A plan already exists for {member.email} in sprint "{sprint.name}".',
-        )
+    plan, _enrollment, _created = create_plan_for_enrollment(
+        sprint=sprint,
+        user=member,
+        enrolled_by=request.user,
+    )
 
     messages.success(request, f'Plan created for {member.email} in "{sprint.name}".')
     return redirect('studio_plan_detail', plan_id=plan.pk)
@@ -254,6 +242,11 @@ def plan_edit(request, plan_id):
     (text edits, drags, toggles, add/delete) goes through the JSON API.
     There is no ``request.POST`` handling here -- if you find yourself
     wanting to add one, route through the API instead.
+
+    Issue #444: the context-build is shared with the member-facing
+    editor view via ``build_plan_editor_context``. The token name
+    ``studio-plan-editor`` is the staff label; the member view uses
+    ``member-plan-editor``.
     """
     plan = get_object_or_404(
         Plan.objects
@@ -268,51 +261,12 @@ def plan_edit(request, plan_id):
         pk=plan_id,
     )
 
-    plan_payload = serialize_plan_detail(plan)
-    token = _get_or_create_editor_token(request.user)
-
-    # Internal/external interview notes are split into two lists in the
-    # bootstrap payload so the editor can render the two visibility tabs
-    # without additional filtering. The visibility filter MUST be
-    # applied here so a non-staff token used against the same shape
-    # could not see internal notes -- mirrors #433's queryset gate.
-    notes = list(plan.interview_notes.all().order_by('-created_at'))
-    internal_notes = [
-        _serialize_interview_note(n) for n in notes if n.visibility == 'internal'
-    ]
-    external_notes = [
-        _serialize_interview_note(n) for n in notes if n.visibility == 'external'
-    ]
-    plan_payload['interview_notes'] = {
-        'internal': internal_notes,
-        'external': external_notes,
-    }
-
-    # Activity counts -- "X checkpoints across Y weeks" line below the grid.
-    weeks_count = len(plan_payload['weeks'])
-    checkpoints_count = sum(len(w['checkpoints']) for w in plan_payload['weeks'])
-
-    return render(request, 'studio/plans/edit.html', {
-        'plan': plan,
-        'plan_json': json.dumps(plan_payload),
-        'api_token': token.key,
-        'api_base': '/api/',
-        'plan_status_choices': PLAN_STATUS_CHOICES,
-        'weeks_count': weeks_count,
-        'checkpoints_count': checkpoints_count,
-    })
-
-
-def _serialize_interview_note(note):
-    """Match the API note shape; used by the editor bootstrap payload."""
-    return {
-        'id': note.pk,
-        'visibility': note.visibility,
-        'kind': note.kind,
-        'body': note.body,
-        'created_at': note.created_at.isoformat() if note.created_at else None,
-        'updated_at': note.updated_at.isoformat() if note.updated_at else None,
-    }
+    context = build_plan_editor_context(
+        plan,
+        viewer=request.user,
+        token_name=EDITOR_TOKEN_NAME,
+    )
+    return render(request, 'studio/plans/edit.html', context)
 
 
 @staff_required

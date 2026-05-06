@@ -88,6 +88,7 @@ from studio.views.settings import (
     settings_save_group,
 )
 from studio.views.sprints import (
+    sprint_add_member,
     sprint_create,
     sprint_detail,
     sprint_edit,
@@ -364,6 +365,13 @@ urlpatterns = [
         'sprints/<int:sprint_id>/enroll',
         sprint_bulk_enroll,
         name='studio_sprint_bulk_enroll',
+    ),
+    # Add a single member + create their plan (issue #444). Staff-only.
+    # Reuses ``templates/studio/plans/form.html`` with the sprint locked.
+    path(
+        'sprints/<int:sprint_id>/add-member',
+        sprint_add_member,
+        name='studio_sprint_add_member',
     ),
 
     # Plans (issue #432, drag-drop editor #434). Members section.

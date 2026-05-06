@@ -1,0 +1,361 @@
+{% load static %}
+{# Plan editor body (issue #444). #}
+{# Extracted from ``edit.html`` so the staff Studio shell and the #}
+{# member ``/account/plan/<id>/edit/`` shell render the SAME markup. #}
+{# Pure markup + scripts; no ``extends`` and no ``block`` tags. #}
+{# Do NOT add ``{% extends %}`` or ``{% block %}`` here — both shells #}
+{# include this partial via ``{% include %}`` and would break otherwise. #}
+
+{# Plan header (full width). Member email links to the user detail page. #}
+<header class="bg-card border border-border rounded-lg p-6 mb-6"
+        data-testid="plan-editor-header">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div class="min-w-0">
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Sprint plan</p>
+      <h1 class="text-2xl font-semibold text-foreground">
+        {% if request.user.is_staff %}
+        <a href="{% url 'studio_user_detail' user_id=plan.member.pk %}"
+           class="hover:underline">{{ plan.member.email }}</a>
+        {% else %}
+        {{ plan.member.email }}
+        {% endif %}
+      </h1>
+      <p class="text-sm text-muted-foreground mt-1">
+        {{ plan.sprint.name }}
+        <span class="mx-1">&middot;</span>
+        <span class="font-mono text-xs">{{ plan.sprint.slug }}</span>
+      </p>
+    </div>
+
+    <div class="flex flex-col items-start gap-2 sm:items-end">
+      {# Status pill -- updated via PATCH /api/plans/<id>/. #}
+      <span data-testid="plan-status-pill"
+            data-current-status="{{ plan.status }}"
+            class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary text-foreground border border-border">
+        {{ plan.get_status_display }}
+      </span>
+      <p class="text-xs text-muted-foreground">
+        {% if plan.shared_at %}
+          Shared <time datetime="{{ plan.shared_at.isoformat }}">{{ plan.shared_at|date:"Y-m-d H:i" }}</time>
+        {% else %}
+          Not yet shared
+        {% endif %}
+      </p>
+
+      {# Saved/Saving indicator. JS toggles the data-state attribute. #}
+      <div data-testid="save-indicator"
+           data-state="saved"
+           class="flex items-center gap-2 text-xs">
+        <span data-testid="save-indicator-dot"
+              class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span data-testid="save-indicator-label" class="text-muted-foreground">Saved</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+{# Toast region for transient error messages (drag failures, API errors). #}
+<div id="plan-editor-toast"
+     data-testid="plan-editor-toast"
+     class="fixed bottom-4 right-4 z-50 hidden max-w-sm bg-card border border-destructive/40 text-foreground rounded-lg shadow-lg p-3 text-sm">
+</div>
+
+{% comment %}
+  The editor root carries the bootstrap payload (plan JSON), API token,
+  and API base. The token is exposed via the data-api-token HTML
+  attribute rather than inlined in a script tag, so a CSP that
+  disallows inline script values does not have to allow this one.
+{% endcomment %}
+<div id="plan-editor"
+     data-testid="plan-editor"
+     data-api-base="{{ api_base }}"
+     data-api-token="{{ api_token }}"
+     data-plan-id="{{ plan.pk }}">
+
+  {# JSON bootstrap. <script type="application/json"> avoids HTML escaping #}
+  {# headaches and is parsed once on load. ``json_script`` would also work #}
+  {# but emits a wrapping script tag with id="..." which is fine; we use #}
+  {# a plain script tag so the test can read the textContent directly. #}
+  <script id="plan-editor-data"
+          type="application/json"
+          data-testid="plan-editor-data">{{ plan_json|safe }}</script>
+
+  {# Summary block. Five textareas, debounced PATCH on plan. #}
+  <section class="bg-card border border-border rounded-lg p-6 mb-6"
+           data-testid="summary-block">
+    <h2 class="text-md font-semibold text-foreground mb-4">Summary</h2>
+    <div class="grid gap-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="plan-summary-current_situation">Current situation</label>
+        <textarea id="plan-summary-current_situation"
+                  data-testid="summary-current_situation"
+                  data-field="summary_current_situation"
+                  rows="3"
+                  class="plan-editor-textarea w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ plan.summary_current_situation }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="plan-summary-goal">
+          Goal for the next {{ plan.sprint.duration_weeks }} weeks
+        </label>
+        <textarea id="plan-summary-goal"
+                  data-testid="summary-goal"
+                  data-field="summary_goal"
+                  rows="3"
+                  class="plan-editor-textarea w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ plan.summary_goal }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="plan-summary-main_gap">Main gap</label>
+        <textarea id="plan-summary-main_gap"
+                  data-testid="summary-main_gap"
+                  data-field="summary_main_gap"
+                  rows="3"
+                  class="plan-editor-textarea w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ plan.summary_main_gap }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="plan-summary-weekly_hours">Weekly hours</label>
+        <textarea id="plan-summary-weekly_hours"
+                  data-testid="summary-weekly_hours"
+                  data-field="summary_weekly_hours"
+                  rows="2"
+                  class="plan-editor-textarea w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ plan.summary_weekly_hours }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="plan-summary-why_this_plan">Why this plan</label>
+        <textarea id="plan-summary-why_this_plan"
+                  data-testid="summary-why_this_plan"
+                  data-field="summary_why_this_plan"
+                  rows="3"
+                  class="plan-editor-textarea w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ plan.summary_why_this_plan }}</textarea>
+      </div>
+    </div>
+  </section>
+
+  {# Focus block (full width). Main + supporting chips. #}
+  <section class="bg-card border border-border rounded-lg p-6 mb-6"
+           data-testid="focus-block">
+    <h2 class="text-md font-semibold text-foreground mb-4">Focus</h2>
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1" for="plan-focus-main">Main focus</label>
+      <textarea id="plan-focus-main"
+                data-testid="focus-main"
+                data-field="focus_main"
+                rows="2"
+                class="plan-editor-textarea w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ plan.focus_main }}</textarea>
+    </div>
+    <div>
+      <p class="block text-sm font-medium text-foreground mb-2">Supporting focuses</p>
+      <ul data-testid="focus-supporting-list"
+          class="flex flex-wrap gap-2">
+        {% for chip in plan.focus_supporting %}
+        <li data-focus-supporting-index="{{ forloop.counter0 }}"
+            class="inline-flex items-center px-3 py-1 rounded-full text-xs bg-secondary text-foreground border border-border">
+          {{ chip }}
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="text-xs text-muted-foreground mt-2">
+        Tip: supporting focuses are stored as a JSON list; the editor will let you reorder them via drag once the API in #433 is wired.
+      </p>
+    </div>
+  </section>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    {# Weeks column (left two-thirds on lg+). #}
+    <div class="lg:col-span-2 space-y-6"
+         data-testid="weeks-column">
+      {% for week in plan.weeks.all|dictsort:"position" %}
+      <article class="bg-card border border-border rounded-lg p-6"
+               data-testid="week-card"
+               data-week-id="{{ week.pk }}"
+               data-week-number="{{ week.week_number }}">
+        <header class="flex items-start justify-between gap-3 mb-3">
+          <div class="min-w-0">
+            <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Week {{ week.week_number }}</p>
+            <input type="text"
+                   data-testid="week-theme"
+                   data-week-id="{{ week.pk }}"
+                   data-field="theme"
+                   value="{{ week.theme }}"
+                   placeholder="(theme)"
+                   class="plan-editor-week-theme w-full mt-1 bg-transparent border-0 border-b border-transparent hover:border-border focus:border-accent focus:outline-none text-foreground text-md font-medium">
+          </div>
+        </header>
+
+        <ul data-testid="checkpoint-list"
+            data-week-id="{{ week.pk }}"
+            class="plan-editor-checkpoint-list space-y-2">
+          {% for cp in week.checkpoints.all|dictsort:"position" %}
+          <li data-testid="checkpoint-chip"
+              data-checkpoint-id="{{ cp.pk }}"
+              data-week-id="{{ week.pk }}"
+              data-position="{{ cp.position }}"
+              data-done="{% if cp.done_at %}true{% else %}false{% endif %}"
+              tabindex="0"
+              class="plan-editor-checkpoint group flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent">
+            <span class="plan-editor-drag-handle cursor-grab text-muted-foreground" aria-hidden="true">::</span>
+            <input type="checkbox"
+                   data-testid="checkpoint-done-toggle"
+                   class="plan-editor-checkpoint-done"
+                   {% if cp.done_at %}checked{% endif %}>
+            <span class="plan-editor-checkpoint-text flex-1 {% if cp.done_at %}line-through text-muted-foreground{% endif %}"
+                  data-testid="checkpoint-text">{{ cp.description }}</span>
+            <button type="button"
+                    data-testid="checkpoint-delete"
+                    class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>
+          </li>
+          {% endfor %}
+        </ul>
+
+        <div class="mt-3">
+          <button type="button"
+                  data-testid="add-checkpoint"
+                  data-week-id="{{ week.pk }}"
+                  class="plan-editor-add-checkpoint text-sm text-accent hover:underline">
+            + Add checkpoint
+          </button>
+          <p data-testid="empty-week-hint"
+             class="text-xs text-muted-foreground mt-1 {% if week.checkpoints.count %}hidden{% endif %}">
+            No checkpoints yet -- add one above or drag one from another week.
+          </p>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+
+    {# Side panels (right one-third). #}
+    <aside class="space-y-6" data-testid="side-panels">
+
+      {# Resources panel. #}
+      <section class="bg-card border border-border rounded-lg p-6"
+               data-testid="resources-panel">
+        <h2 class="text-md font-semibold text-foreground mb-3">Resources</h2>
+        <ul data-testid="resource-list"
+            class="plan-editor-resource-list space-y-2">
+          {% for r in plan.resources.all|dictsort:"position" %}
+          <li data-testid="resource-row"
+              data-resource-id="{{ r.pk }}"
+              tabindex="0"
+              class="plan-editor-resource group flex flex-col gap-1 px-3 py-2 rounded-lg bg-secondary border border-border focus:outline-none focus:ring-2 focus:ring-accent">
+            <span class="text-sm text-foreground">{{ r.title }}</span>
+            {% if r.url %}
+            <a href="{{ r.url }}" target="_blank" rel="noopener" class="text-xs text-accent truncate">{{ r.url }}</a>
+            {% endif %}
+            {% if r.note %}
+            <span class="text-xs text-muted-foreground">{{ r.note }}</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        <button type="button"
+                data-testid="add-resource"
+                class="plan-editor-add-resource text-sm text-accent hover:underline mt-2">+ Add resource</button>
+      </section>
+
+      {# Deliverables panel. #}
+      <section class="bg-card border border-border rounded-lg p-6"
+               data-testid="deliverables-panel">
+        <h2 class="text-md font-semibold text-foreground mb-3">Deliverables</h2>
+        <ul data-testid="deliverable-list"
+            class="plan-editor-deliverable-list space-y-2">
+          {% for d in plan.deliverables.all|dictsort:"position" %}
+          <li data-testid="deliverable-row"
+              data-deliverable-id="{{ d.pk }}"
+              data-done="{% if d.done_at %}true{% else %}false{% endif %}"
+              tabindex="0"
+              class="plan-editor-deliverable flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border focus:outline-none focus:ring-2 focus:ring-accent">
+            <input type="checkbox"
+                   data-testid="deliverable-done-toggle"
+                   class="plan-editor-deliverable-done"
+                   {% if d.done_at %}checked{% endif %}>
+            <span class="text-sm text-foreground flex-1 {% if d.done_at %}line-through text-muted-foreground{% endif %}">{{ d.description }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        <button type="button"
+                data-testid="add-deliverable"
+                class="plan-editor-add-deliverable text-sm text-accent hover:underline mt-2">+ Add deliverable</button>
+      </section>
+
+      {# Next Steps panel. #}
+      <section class="bg-card border border-border rounded-lg p-6"
+               data-testid="next-steps-panel">
+        <h2 class="text-md font-semibold text-foreground mb-3">Next Steps</h2>
+        <ul data-testid="next-step-list"
+            class="plan-editor-next-step-list space-y-2">
+          {% for n in plan.next_steps.all|dictsort:"position" %}
+          <li data-testid="next-step-row"
+              data-next-step-id="{{ n.pk }}"
+              data-done="{% if n.done_at %}true{% else %}false{% endif %}"
+              tabindex="0"
+              class="plan-editor-next-step flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border focus:outline-none focus:ring-2 focus:ring-accent">
+            <input type="checkbox"
+                   data-testid="next-step-done-toggle"
+                   class="plan-editor-next-step-done"
+                   {% if n.done_at %}checked{% endif %}>
+            <div class="flex-1">
+              <span class="text-xs text-muted-foreground">{{ n.assignee_label }}</span>
+              <span class="text-sm text-foreground block {% if n.done_at %}line-through text-muted-foreground{% endif %}">{{ n.description }}</span>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        <button type="button"
+                data-testid="add-next-step"
+                class="plan-editor-add-next-step text-sm text-accent hover:underline mt-2">+ Add next step</button>
+      </section>
+
+      {# Interview Notes panel with Internal/External tabs. #}
+      <section class="bg-card border border-border rounded-lg p-6"
+               data-testid="interview-notes-panel">
+        <h2 class="text-md font-semibold text-foreground mb-3">Interview Notes</h2>
+        <div role="tablist" class="flex gap-1 mb-3 border-b border-border">
+          <button type="button"
+                  role="tab"
+                  data-testid="interview-notes-tab-internal"
+                  data-tab="internal"
+                  aria-selected="true"
+                  class="plan-editor-notes-tab px-3 py-1 text-sm border-b-2 border-accent text-foreground">
+            Internal
+          </button>
+          <button type="button"
+                  role="tab"
+                  data-testid="interview-notes-tab-external"
+                  data-tab="external"
+                  aria-selected="false"
+                  class="plan-editor-notes-tab px-3 py-1 text-sm border-b-2 border-transparent text-muted-foreground hover:text-foreground">
+            External
+          </button>
+        </div>
+
+        <ul data-testid="interview-notes-internal"
+            data-tab-panel="internal"
+            class="plan-editor-notes-list space-y-2">
+        </ul>
+        <ul data-testid="interview-notes-external"
+            data-tab-panel="external"
+            hidden
+            class="plan-editor-notes-list space-y-2">
+        </ul>
+
+        <button type="button"
+                data-testid="add-interview-note"
+                class="plan-editor-add-note text-sm text-accent hover:underline mt-2">+ Add note</button>
+      </section>
+
+    </aside>
+  </div>
+
+  {# Activity line below the grid. #}
+  <p class="text-xs text-muted-foreground mt-6"
+     data-testid="plan-editor-activity">
+    Created <time datetime="{{ plan.created_at.isoformat }}">{{ plan.created_at|date:"Y-m-d" }}</time>
+    &middot; Last updated <time datetime="{{ plan.updated_at.isoformat }}">{{ plan.updated_at|date:"Y-m-d" }}</time>
+    &middot; <span data-testid="plan-editor-counts">{{ checkpoints_count }} checkpoint{{ checkpoints_count|pluralize }} across {{ weeks_count }} week{{ weeks_count|pluralize }}</span>.
+  </p>
+</div>
+
+{# SortableJS pinned via SRI. crossorigin="anonymous" is required for SRI. #}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"
+        integrity="sha384-BSxuMLxX+FCbTdYec3TbXlnMGEEM2QXTFdtDaveen71o+jswm2J36+xFqp8k4VHM"
+        crossorigin="anonymous"></script>
+<script src="{% static 'js/studio/plan_editor.js' %}" defer></script>

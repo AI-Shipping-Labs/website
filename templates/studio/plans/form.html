@@ -1,28 +1,41 @@
 {% extends "studio/base.html" %}
 
-{% block studio_title %}New plan{% endblock %}
+{% block studio_title %}{% if sprint %}Add member to "{{ sprint.name }}"{% else %}New plan{% endif %}{% endblock %}
 
 {% block studio_content %}
 <div class="mb-8">
+  {% if sprint %}
+  <a href="{% url 'studio_sprint_detail' sprint_id=sprint.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to {{ sprint.name }}
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2" data-testid="add-member-heading">
+    Add member to &ldquo;{{ sprint.name }}&rdquo;
+  </h1>
+  {% else %}
   <a href="{% url 'studio_plan_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
     &larr; Back to Plans
   </a>
   <h1 class="text-2xl font-semibold text-foreground mt-2">New plan</h1>
+  {% endif %}
 </div>
 
 {% if error %}
-<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm">
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" data-testid="plan-form-error">
   {{ error }}
 </div>
 {% endif %}
 
 <div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
-  <form method="post" action="{% url 'studio_plan_create' %}">
+  {# ``form_action_url`` lets callers post to either ``studio_plan_create`` #}
+  {# or a sprint-scoped route (``studio_sprint_add_member``) without #}
+  {# branching the <form action> attribute itself. Default keeps the #}
+  {# original create-plan form working unchanged. #}
+  <form method="post" action="{{ form_action_url|default:'' }}{% if not form_action_url %}{% url 'studio_plan_create' %}{% endif %}">
     {% csrf_token %}
 
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Member</label>
-      <select name="member" required
+      <select name="member" required data-testid="add-member-select"
               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="">-- pick a member --</option>
         {% for m in members %}
@@ -31,6 +44,21 @@
       </select>
     </div>
 
+    {% if sprint %}
+    {# Sprint locked from the URL (issue #444). Render as read-only and #}
+    {# pass the value through a hidden input so the existing POST shape #}
+    {# stays compatible with what the create-plan view expects. #}
+    <div class="mb-6">
+      <dl class="grid grid-cols-1 gap-1">
+        <dt class="text-sm font-medium text-foreground mb-1">Sprint</dt>
+        <dd class="text-sm text-foreground" data-testid="add-member-sprint-locked">
+          {{ sprint.name }} <span class="mx-1 text-muted-foreground">&middot;</span>
+          <span class="font-mono text-xs">{{ sprint.slug }}</span>
+        </dd>
+      </dl>
+      <input type="hidden" name="sprint" value="{{ sprint.pk }}">
+    </div>
+    {% else %}
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Sprint</label>
       <select name="sprint" required
@@ -51,15 +79,22 @@
         {% endfor %}
       </select>
     </div>
+    {% endif %}
 
     <div class="flex items-center space-x-4">
       <button type="submit"
               class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Create plan
+        {% if sprint %}Add member{% else %}Create plan{% endif %}
       </button>
+      {% if sprint %}
+      <a href="{% url 'studio_sprint_detail' sprint_id=sprint.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+      {% else %}
       <a href="{% url 'studio_plan_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
         Cancel
       </a>
+      {% endif %}
     </div>
   </form>
 </div>

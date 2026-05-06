@@ -58,9 +58,6 @@ def _start_django_server():
     # Run migrations first (uses in-memory or file-based sqlite)
     call_command("migrate", "--run-syncdb", verbosity=0)
 
-    # Load content from markdown files so pages have real data
-    call_command("load_content")
-
     # Start the server in a daemon thread
     original_argv = sys.argv
     sys.argv = [

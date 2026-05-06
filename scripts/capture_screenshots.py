@@ -60,7 +60,6 @@ def _start_django_server():
     from django.core.management import call_command, execute_from_command_line
 
     call_command("migrate", "--run-syncdb", verbosity=0)
-    call_command("load_content")
 
     original_argv = sys.argv
     sys.argv = [

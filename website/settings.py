@@ -382,9 +382,6 @@ SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED'
 # row count manageable (5000 recipients => 25 chunks).
 EMAIL_BATCH_SIZE = int(os.environ.get('EMAIL_BATCH_SIZE', 200))
 
-# Content directory (markdown files from reference)
-CONTENT_DIR = BASE_DIR / 'reference' / 'content'
-
 # GitHub App authentication for private repo access
 GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
 GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')

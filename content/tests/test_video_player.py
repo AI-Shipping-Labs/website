@@ -653,7 +653,7 @@ class ContentPipelineVideoEmbedTest(TestCase):
     def test_markdown_youtube_url_becomes_embed_in_article(self):
         """Standalone YouTube URL in markdown body produces a video embed
         in the stored content_html after the full rendering pipeline."""
-        from content.management.commands.load_content import md_to_html
+        from content.utils.markdown import render_markdown
 
         markdown_body = (
             "Some intro text.\n"
@@ -662,7 +662,7 @@ class ContentPipelineVideoEmbedTest(TestCase):
             "\n"
             "Some closing text."
         )
-        html = md_to_html(markdown_body)
+        html = render_markdown(markdown_body)
         html = replace_video_urls_in_html(html)
 
         # The YouTube URL should be replaced with a video player embed
@@ -678,7 +678,7 @@ class ContentPipelineVideoEmbedTest(TestCase):
     def test_article_with_video_url_renders_embed_in_view(self):
         """An Article whose content_html contains an embedded video player
         is served correctly in the blog detail view."""
-        from content.management.commands.load_content import md_to_html
+        from content.utils.markdown import render_markdown
 
         markdown_body = (
             "# Article with Video\n"
@@ -687,7 +687,7 @@ class ContentPipelineVideoEmbedTest(TestCase):
             "\n"
             "Read more below."
         )
-        content_html = md_to_html(markdown_body)
+        content_html = render_markdown(markdown_body)
         content_html = replace_video_urls_in_html(content_html)
 
         Article.objects.create(
@@ -711,7 +711,7 @@ class ContentPipelineVideoEmbedTest(TestCase):
 
     def test_markdown_loom_url_becomes_embed(self):
         """Standalone Loom URL in markdown is replaced with a Loom embed."""
-        from content.management.commands.load_content import md_to_html
+        from content.utils.markdown import render_markdown
 
         markdown_body = (
             "Watch the demo:\n"
@@ -720,7 +720,7 @@ class ContentPipelineVideoEmbedTest(TestCase):
             "\n"
             "End of post."
         )
-        html = md_to_html(markdown_body)
+        html = render_markdown(markdown_body)
         html = replace_video_urls_in_html(html)
 
         self.assertIn('data-source="loom"', html)
@@ -729,10 +729,10 @@ class ContentPipelineVideoEmbedTest(TestCase):
 
     def test_inline_youtube_url_not_replaced_in_pipeline(self):
         """A YouTube URL within a sentence should NOT be replaced."""
-        from content.management.commands.load_content import md_to_html
+        from content.utils.markdown import render_markdown
 
         markdown_body = "Check out https://www.youtube.com/watch?v=inline1 for details."
-        html = md_to_html(markdown_body)
+        html = render_markdown(markdown_body)
         html = replace_video_urls_in_html(html)
 
         self.assertNotIn('data-source', html)

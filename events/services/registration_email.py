@@ -5,12 +5,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import boto3
-from django.conf import settings
 from django.template.loader import render_to_string
 
 from email_app.services.email_service import EmailService
 from events.services.calendar_invite import generate_ics
-from integrations.config import get_config
+from integrations.config import get_config, site_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ def send_registration_confirmation(registration):
         )
         return None
 
-    site_url = settings.SITE_BASE_URL
+    site_url = site_base_url()
     join_url = f'{site_url}/events/{event.slug}/join'
 
     # Render the email template

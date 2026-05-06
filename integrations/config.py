@@ -44,6 +44,12 @@ def get_config(key, default='', *, use_settings=True):
     return default
 
 
+def site_base_url():
+    """Resolved canonical site URL: DB override > env value > default."""
+    from django.conf import settings  # noqa: PLC0415
+    return get_config('SITE_BASE_URL', settings.SITE_BASE_URL)
+
+
 def is_enabled(key):
     """Check if a config flag is enabled (handles both bool and string values).
 

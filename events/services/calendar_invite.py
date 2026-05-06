@@ -2,12 +2,11 @@
 
 from datetime import timedelta
 
-from django.conf import settings
 from django.utils import timezone
 from icalendar import Calendar, vCalAddress, vText
 from icalendar import Event as ICalEvent
 
-from integrations.config import get_config
+from integrations.config import get_config, site_base_url
 
 
 def generate_ics(event, method='REQUEST'):
@@ -48,7 +47,7 @@ def generate_ics(event, method='REQUEST'):
         vevent.add('description', event.description)
 
     # Join URL
-    site_url = settings.SITE_BASE_URL
+    site_url = site_base_url()
     join_url = f'{site_url}/events/{event.slug}/join'
     vevent.add('url', join_url)
     vevent.add('location', vText(join_url))

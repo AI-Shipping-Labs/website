@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 
-from integrations.config import get_config
+from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
 
 # Default ports per scheme. Used by the host-mismatch detector so an
@@ -87,7 +87,7 @@ def _build_env_mismatch_payload(request):
     netloc) it returns ``None`` rather than raising — the banner is a
     best-effort warning, not a hard failure.
     """
-    configured = (settings.SITE_BASE_URL or '').rstrip('/')
+    configured = (site_base_url() or '').rstrip('/')
     if not configured:
         return None
 
@@ -127,7 +127,7 @@ def site_context(request):
     return {
         'VERSION': settings.VERSION,
         'site_name': settings.SITE_NAME,
-        'site_url': settings.SITE_BASE_URL,
+        'site_url': site_base_url(),
         'site_description': settings.SITE_DESCRIPTION,
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'current_year': __import__('datetime').datetime.now().year,
@@ -165,7 +165,8 @@ def studio_env_mismatch_context(request):
     Mirrors :func:`announcement_banner_context`'s path-based scoping so
     the banner only renders inside ``/studio/``. The detector compares
     the request's ``(scheme, host, port)`` triple against the one
-    derived from ``settings.SITE_BASE_URL``. Returns ``{'env_mismatch':
+    derived from the resolved ``SITE_BASE_URL`` (DB override > env).
+    Returns ``{'env_mismatch':
     None}`` for non-Studio paths or when the triples match (after
     normalization rules in ``_normalize_host_triple``).
 

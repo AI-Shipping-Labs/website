@@ -10,8 +10,7 @@ Flow:
 import logging
 import os
 
-from django.conf import settings
-
+from integrations.config import site_base_url
 from jobs.tasks.recordings_s3 import (
     download_recording_to_temp_file,
     get_recordings_s3_config,
@@ -124,7 +123,7 @@ def _build_description(event):
             parts.append(f'- {obj}')
 
     parts.append('')
-    parts.append(f'AI Shipping Labs - {settings.SITE_BASE_URL}')
+    parts.append(f'AI Shipping Labs - {site_base_url()}')
 
     return '\n'.join(parts)
 

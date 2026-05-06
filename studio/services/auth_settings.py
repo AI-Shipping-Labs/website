@@ -63,9 +63,9 @@ def get_auth_provider_data(provider, site_base_url, socialaccount_providers):
 
     Args:
         provider: One of ``SUPPORTED_PROVIDERS``.
-        site_base_url: ``settings.SITE_BASE_URL`` — used to render the
-            absolute callback URL the operator pastes into the provider
-            console.
+        site_base_url: Resolved canonical site URL (DB override > env)
+            — used to render the absolute callback URL the operator
+            pastes into the provider console.
         socialaccount_providers: ``settings.SOCIALACCOUNT_PROVIDERS`` —
             scope source of truth.
 

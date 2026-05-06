@@ -16,6 +16,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.models import User
+from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,7 @@ def _send_verification_email(user):
         user: User model instance.
     """
     token = _generate_verification_token(user.pk)
-    site_url = settings.SITE_BASE_URL
+    site_url = site_base_url()
     verify_url = f"{site_url}/api/verify-email?token={token}"
 
     try:
@@ -198,7 +199,7 @@ def _send_password_reset_email(user):
         user: User model instance.
     """
     token = _generate_password_reset_token(user.pk)
-    site_url = settings.SITE_BASE_URL
+    site_url = site_base_url()
     reset_url = f"{site_url}/api/password-reset?token={token}"
 
     try:

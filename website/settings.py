@@ -146,7 +146,7 @@ INSTALLED_APPS = [
     'jobs',
     'community',
     'notifications',
-    'plans',
+    'plans.apps.PlansConfig',
     'studio',
     'comments',
     'analytics',

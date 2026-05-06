@@ -13,6 +13,7 @@ from plans.views.cohort import (
     my_plan_detail,
     update_plan_visibility,
 )
+from plans.views.sprints import sprint_detail, sprint_join, sprint_leave
 
 urlpatterns = [
     # ``/sprints/...`` paths are NOT in
@@ -26,10 +27,28 @@ urlpatterns = [
         cohort_board,
         name='cohort_board',
     ),
+    # Sprint join / leave (issue #443). Registered BEFORE the generic
+    # ``<slug:sprint_slug>`` detail route so the literal ``join`` /
+    # ``leave`` segments are not swallowed by the slug capture.
+    path(
+        'sprints/<slug:sprint_slug>/join',
+        sprint_join,
+        name='sprint_join',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>/leave',
+        sprint_leave,
+        name='sprint_leave',
+    ),
     path(
         'sprints/<slug:sprint_slug>/plans/<int:plan_id>',
         member_plan_detail,
         name='member_plan_detail',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>',
+        sprint_detail,
+        name='sprint_detail',
     ),
     path(
         'account/plan/<int:plan_id>',

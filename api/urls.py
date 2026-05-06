@@ -25,6 +25,10 @@ from api.views.contacts import (
     contacts_import,
     contacts_set_tags,
 )
+from api.views.enrollments import (
+    sprint_enrollment_detail,
+    sprint_enrollments_collection,
+)
 from api.views.interview_notes import (
     interview_note_detail,
     interview_notes_create,
@@ -76,6 +80,20 @@ urlpatterns = [
         "sprints/<slug:slug>",
         sprint_detail,
         name="api_sprint_detail",
+    ),
+    # ---- Sprint enrollments (issue #443) ------------------------------
+    # Register the collection BEFORE the per-email detail so the
+    # ``enrollments`` literal isn't swallowed by the path converter
+    # capturing an email like ``foo@bar.com/extra``.
+    path(
+        "sprints/<slug:slug>/enrollments",
+        sprint_enrollments_collection,
+        name="api_sprint_enrollments_collection",
+    ),
+    path(
+        "sprints/<slug:slug>/enrollments/<path:email>",
+        sprint_enrollment_detail,
+        name="api_sprint_enrollment_detail",
     ),
     # ---- Plans (issue #433) -------------------------------------------
     # Bulk-import comes BEFORE the generic plans collection so the

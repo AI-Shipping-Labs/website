@@ -18,8 +18,28 @@ from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 
+from content.access import LEVEL_PREMIUM
+from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from plans.models import SPRINT_STATUS_CHOICES, Plan, Sprint
 from studio.decorators import staff_required
+
+# The set of tier levels accepted by the form. Mirror the values in
+# ``content.access.VISIBILITY_CHOICES`` so the dropdown stays consistent
+# with the rest of the gating surface.
+_VALID_TIER_LEVELS = {value for value, _label in TIER_LEVEL_CHOICES}
+
+
+def _parse_min_tier_level(raw):
+    """Parse the ``min_tier_level`` form field. ``(value, error)``."""
+    if raw in (None, ''):
+        return LEVEL_PREMIUM, ''
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None, 'Min tier level must be a whole number.'
+    if value not in _VALID_TIER_LEVELS:
+        return None, 'Min tier level must be one of 0, 10, 20, 30.'
+    return value, ''
 
 
 def _parse_duration_weeks(raw):
@@ -64,6 +84,7 @@ def _render_form(request, *, sprint, form_action, form_data, error='', status=20
         'form_action': form_action,
         'form_data': form_data,
         'status_choices': SPRINT_STATUS_CHOICES,
+        'tier_level_choices': TIER_LEVEL_CHOICES,
         'error': error,
     }
     return render(request, 'studio/sprints/form.html', context, status=status)
@@ -76,6 +97,7 @@ def _form_data_from_post(request):
         'start_date': (request.POST.get('start_date') or '').strip(),
         'duration_weeks': (request.POST.get('duration_weeks') or '').strip(),
         'status': (request.POST.get('status') or '').strip(),
+        'min_tier_level': (request.POST.get('min_tier_level') or '').strip(),
     }
 
 
@@ -86,6 +108,7 @@ def _form_data_from_sprint(sprint):
         'start_date': sprint.start_date.isoformat() if sprint.start_date else '',
         'duration_weeks': str(sprint.duration_weeks),
         'status': sprint.status,
+        'min_tier_level': str(sprint.min_tier_level),
     }
 
 
@@ -116,6 +139,7 @@ def sprint_create(request):
                 'start_date': '',
                 'duration_weeks': '6',
                 'status': 'draft',
+                'min_tier_level': str(LEVEL_PREMIUM),
             },
         )
 
@@ -126,6 +150,7 @@ def sprint_create(request):
     start_date, date_error = _parse_start_date(form_data['start_date'])
     duration, duration_error = _parse_duration_weeks(form_data['duration_weeks'])
     status_value = _normalize_status(form_data['status'])
+    min_tier_level, tier_error = _parse_min_tier_level(form_data['min_tier_level'])
 
     if not name:
         return _render_form(
@@ -150,6 +175,11 @@ def sprint_create(request):
             request, sprint=None, form_action='create',
             form_data=form_data, error=duration_error, status=400,
         )
+    if tier_error:
+        return _render_form(
+            request, sprint=None, form_action='create',
+            form_data=form_data, error=tier_error, status=400,
+        )
 
     if Sprint.objects.filter(slug=slug).exists():
         return _render_form(
@@ -165,6 +195,7 @@ def sprint_create(request):
         start_date=start_date,
         duration_weeks=duration,
         status=status_value,
+        min_tier_level=min_tier_level,
     )
     messages.success(request, f'Sprint "{sprint.name}" created.')
     return redirect('studio_sprint_detail', sprint_id=sprint.pk)
@@ -179,9 +210,11 @@ def sprint_detail(request, sprint_id):
         .select_related('member')
         .order_by('-created_at')
     )
+    enrollment_count = sprint.enrollments.count()
     return render(request, 'studio/sprints/detail.html', {
         'sprint': sprint,
         'plans': plans,
+        'enrollment_count': enrollment_count,
     })
 
 
@@ -204,6 +237,7 @@ def sprint_edit(request, sprint_id):
     start_date, date_error = _parse_start_date(form_data['start_date'])
     duration, duration_error = _parse_duration_weeks(form_data['duration_weeks'])
     status_value = _normalize_status(form_data['status'])
+    min_tier_level, tier_error = _parse_min_tier_level(form_data['min_tier_level'])
 
     if not name:
         return _render_form(
@@ -228,6 +262,11 @@ def sprint_edit(request, sprint_id):
             request, sprint=sprint, form_action='edit',
             form_data=form_data, error=duration_error, status=400,
         )
+    if tier_error:
+        return _render_form(
+            request, sprint=sprint, form_action='edit',
+            form_data=form_data, error=tier_error, status=400,
+        )
 
     if Sprint.objects.filter(slug=slug).exclude(pk=sprint.pk).exists():
         return _render_form(
@@ -242,6 +281,7 @@ def sprint_edit(request, sprint_id):
     sprint.start_date = start_date
     sprint.duration_weeks = duration
     sprint.status = status_value
+    sprint.min_tier_level = min_tier_level
     sprint.save()
 
     messages.success(request, f'Sprint "{sprint.name}" updated.')

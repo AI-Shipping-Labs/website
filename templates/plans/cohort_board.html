@@ -38,6 +38,12 @@
         </p>
         {% endif %}
       </aside>
+      {% else %}
+      <aside class="mb-8 rounded-2xl border border-border bg-card p-5" data-testid="viewer-plan-pending">
+        <p class="text-sm text-foreground">
+          Your plan is being prepared. You can still see other members' plans here.
+        </p>
+      </aside>
       {% endif %}
 
       {% if plans %}

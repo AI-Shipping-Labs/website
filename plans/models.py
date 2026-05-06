@@ -17,6 +17,12 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
+from content.access import (
+    LEVEL_PREMIUM,
+)
+from content.access import (
+    VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES,
+)
 from content.models.mixins import TimestampedModelMixin
 
 SPRINT_STATUS_CHOICES = [
@@ -82,6 +88,21 @@ class Sprint(TimestampedModelMixin, models.Model):
         choices=SPRINT_STATUS_CHOICES,
         default='draft',
     )
+    # Minimum tier level required for a member to self-join (issue #443).
+    # Default is Premium (30) because sprints are the highest-touch product
+    # surface; staff can lower per-sprint (e.g. 0 for an open pilot, 20
+    # for a Main+ sprint). The choices come from
+    # ``content.access.VISIBILITY_CHOICES`` so the same level integers used
+    # elsewhere for content gating apply here too.
+    min_tier_level = models.IntegerField(
+        default=LEVEL_PREMIUM,
+        choices=TIER_VISIBILITY_CHOICES,
+        help_text=(
+            'Minimum tier level required to join this sprint. Default 30 '
+            '(Premium); staff can lower per-sprint, e.g. 0 for an open '
+            'pilot or 20 for a Main+ sprint.'
+        ),
+    )
 
     class Meta:
         ordering = ['-start_date']
@@ -91,6 +112,63 @@ class Sprint(TimestampedModelMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+
+class SprintEnrollment(TimestampedModelMixin, models.Model):
+    """Authoritative membership row for a sprint (issue #443).
+
+    A user is "in" a sprint iff a ``SprintEnrollment`` row exists for the
+    pair. Plans (``plans.Plan``) used to imply membership; that proxy is
+    replaced by this table. A ``post_save`` signal on ``Plan`` ensures
+    plan creation back-creates the enrollment so legacy code paths
+    (Studio plan create, the API plans bulk-import, the cohort board
+    tests in #440) keep working unchanged.
+
+    ``enrolled_by`` is ``NULL`` when the member self-joined and points at
+    the staff user otherwise. We use ``SET_NULL`` (not the default
+    ``CASCADE``) because deleting a staff account must NOT delete every
+    enrollment they ever created -- enrollment history is audit data and
+    survives the staff user.
+    """
+
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.CASCADE,
+        related_name='enrollments',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sprint_enrollments',
+    )
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+    enrolled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        help_text=(
+            'Staff user who enrolled this member, or NULL when the '
+            'member self-joined.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['-enrolled_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sprint', 'user'],
+                name='unique_sprint_enrollment',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['sprint']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f'{self.user} in {self.sprint}'
 
 
 class PlanQuerySet(models.QuerySet):
@@ -109,22 +187,30 @@ class PlanQuerySet(models.QuerySet):
 
         Returns:
         - Empty queryset if viewer is anonymous / unauthenticated.
-        - Empty queryset if viewer is NOT enrolled in ``sprint`` (has no
-          plan row for that sprint), even if viewer is_staff -- the
-          board is the member view; staff use Studio for full access.
-        - Otherwise: plans in ``sprint`` with cohort visibility,
-          excluding the viewer's own plan.
+        - Empty queryset if viewer is NOT enrolled in ``sprint`` (no
+          ``SprintEnrollment`` row for the pair), even if viewer is_staff
+          -- the board is the member view; staff use Studio for full
+          access. Membership is authoritative via ``SprintEnrollment``
+          (issue #443); plan-existence is no longer the proxy.
+        - Otherwise: plans in ``sprint`` with cohort visibility whose
+          owner is also enrolled in this sprint, excluding the viewer's
+          own plan. Filtering by enrollment on BOTH sides means a plan
+          whose owner had their enrollment removed (e.g. via
+          ``DELETE /api/sprints/<slug>/enrollments/<email>``) drops off
+          the board even if the visibility was not auto-privated.
         """
         if viewer is None or not getattr(viewer, 'is_authenticated', False):
             return self.none()
-        viewer_plan_exists = self.filter(
-            sprint=sprint, member=viewer,
+        viewer_enrolled = SprintEnrollment.objects.filter(
+            sprint=sprint, user=viewer,
         ).exists()
-        if not viewer_plan_exists:
+        if not viewer_enrolled:
             return self.none()
-        return self.filter(sprint=sprint, visibility='cohort').exclude(
-            member=viewer,
-        )
+        return self.filter(
+            sprint=sprint,
+            visibility='cohort',
+            member__sprint_enrollments__sprint=sprint,
+        ).exclude(member=viewer).distinct()
 
     def visible_to_member(self, *, plan_id, viewer):
         """Single plan visible to ``viewer`` for the read-only individual view.
@@ -132,8 +218,8 @@ class PlanQuerySet(models.QuerySet):
         Returns a queryset (0 or 1 row) so the caller can use
         ``.get()`` / ``get_object_or_404``. Visibility rules:
         - Owner can always see their own plan (regardless of visibility).
-        - Other sprint members can see a cohort-visibility plan in a
-          sprint they themselves are enrolled in.
+        - Other sprint members (i.e. users with a ``SprintEnrollment``
+          for the same sprint) can see a cohort-visibility plan.
         - Anonymous / non-enrolled / not-cohort -> empty.
         """
         if viewer is None or not getattr(viewer, 'is_authenticated', False):
@@ -141,7 +227,7 @@ class PlanQuerySet(models.QuerySet):
         base = self.filter(pk=plan_id)
         owner_q = models.Q(member=viewer)
         cohort_q = models.Q(visibility='cohort') & models.Q(
-            sprint__plans__member=viewer,
+            sprint__enrollments__user=viewer,
         )
         return base.filter(owner_q | cohort_q).distinct()
 

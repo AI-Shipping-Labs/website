@@ -737,6 +737,152 @@
     });
   });
 
+  // ---------- carry-forward incomplete checkpoints (issue #458) ----------
+  //
+  // Each week card except the final week renders a "Move incomplete to
+  // Week N+1" button. Clicking it iterates the source week's checkpoint
+  // chips in DISPLAY order, filters to those with data-done="false",
+  // optimistically prepends them (in the same relative order) to the
+  // top of the next week, then fires one
+  // ``POST /api/checkpoints/<id>/move`` per chip with sequential target
+  // positions 0, 1, 2, ... so the destination order matches the source.
+  //
+  // On any per-chip API failure the whole batch reverts via the same
+  // global snapshot used by drag/keyboard moves; the indicator flips to
+  // ``failed`` and the existing toast surfaces the failure code.
+
+  function updateEmptyWeekHint(weekId) {
+    const list = root.querySelector(
+      '[data-testid="checkpoint-list"][data-week-id="' + weekId + '"]'
+    );
+    if (!list) { return; }
+    const card = list.closest('[data-testid="week-card"]');
+    if (!card) { return; }
+    const hint = card.querySelector('[data-testid="empty-week-hint"]');
+    if (!hint) { return; }
+    const count = list.querySelectorAll(
+      '[data-testid="checkpoint-chip"]'
+    ).length;
+    if (count === 0) {
+      hint.classList.remove('hidden');
+    } else {
+      hint.classList.add('hidden');
+    }
+  }
+
+  function nextWeekListAfter(sourceWeekId) {
+    const allLists = Array.from(
+      root.querySelectorAll('[data-testid="checkpoint-list"]')
+    );
+    const idx = allLists.findIndex(function (l) {
+      return parseInt(l.dataset.weekId, 10) === sourceWeekId;
+    });
+    if (idx < 0 || idx + 1 >= allLists.length) { return null; }
+    return allLists[idx + 1];
+  }
+
+  function snapshotAllCheckpoints() {
+    const snapshot = [];
+    root.querySelectorAll('[data-testid="checkpoint-list"]').forEach(function (l) {
+      const wid = parseInt(l.dataset.weekId, 10);
+      snapshot.push.apply(snapshot, snapshotCheckpointPositions(wid));
+    });
+    return snapshot;
+  }
+
+  function moveIncompleteToNextWeek(sourceWeekId) {
+    const sourceList = root.querySelector(
+      '[data-testid="checkpoint-list"][data-week-id="' + sourceWeekId + '"]'
+    );
+    if (!sourceList) { return; }
+    const destList = nextWeekListAfter(sourceWeekId);
+    if (!destList) { return; }
+    const destWeekId = parseInt(destList.dataset.weekId, 10);
+
+    // Iterate chips in display order; pick only those still incomplete.
+    const incomplete = Array.from(
+      sourceList.querySelectorAll('[data-testid="checkpoint-chip"]')
+    ).filter(function (chip) {
+      return chip.dataset.done !== 'true';
+    });
+    if (incomplete.length === 0) { return; }
+
+    const snapshot = snapshotAllCheckpoints();
+
+    // Optimistic DOM move: insert each chip into the destination at
+    // sequential indices so the resulting prefix preserves source order.
+    incomplete.forEach(function (chip, idx) {
+      const refNode = destList.children[idx] || null;
+      destList.insertBefore(chip, refNode);
+      chip.dataset.weekId = String(destWeekId);
+    });
+    renumberCheckpoints(sourceWeekId);
+    renumberCheckpoints(destWeekId);
+    updateEmptyWeekHint(sourceWeekId);
+    updateEmptyWeekHint(destWeekId);
+
+    // Fire moves sequentially. The server locks both weeks per call so
+    // concurrent posts to the same week pair would serialize anyway,
+    // but sequential keeps the position semantics simple to reason
+    // about. On the FIRST failure we revert from the snapshot and stop.
+    let position = 0;
+    let aborted = false;
+
+    function step(i) {
+      if (i >= incomplete.length) {
+        return Promise.resolve({ ok: true });
+      }
+      const chip = incomplete[i];
+      return apiCall('POST', 'checkpoints/' + chip.dataset.checkpointId + '/move', {
+        week_id: destWeekId,
+        position: position,
+      }).then(function (result) {
+        if (!result.ok) {
+          aborted = true;
+          restoreCheckpointSnapshot(snapshot);
+          updateEmptyWeekHint(sourceWeekId);
+          updateEmptyWeekHint(destWeekId);
+          setIndicator('failed', result.message);
+          showToast("Couldn't save change — your edit was reverted (" + result.code + ').');
+          return result;
+        }
+        // Reconcile from envelope so positions stay contiguous and
+        // any concurrent edit (rare here) shows up.
+        if (result.data && result.data.source_week) {
+          renumberCheckpointsFromIds(
+            result.data.source_week.id,
+            result.data.source_week.checkpoint_ids,
+          );
+        }
+        if (result.data && result.data.destination_week) {
+          renumberCheckpointsFromIds(
+            result.data.destination_week.id,
+            result.data.destination_week.checkpoint_ids,
+          );
+        }
+        position += 1;
+        if (aborted) { return result; }
+        return step(i + 1);
+      });
+    }
+
+    return step(0).then(function (final) {
+      if (final && final.ok) {
+        updateEmptyWeekHint(sourceWeekId);
+        updateEmptyWeekHint(destWeekId);
+      }
+      return final;
+    });
+  }
+
+  root.querySelectorAll('[data-testid="move-incomplete-to-next-week"]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      const weekId = parseInt(btn.dataset.weekId, 10);
+      moveIncompleteToNextWeek(weekId);
+    });
+  });
+
   // ---------- interview notes (Internal/External tabs) ----------
 
   function renderNotes() {
@@ -800,5 +946,6 @@
     plan: plan,
     setIndicator: setIndicator,
     apiCall: apiCall,
+    moveIncompleteToNextWeek: moveIncompleteToNextWeek,
   };
 })();

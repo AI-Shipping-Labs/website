@@ -21,6 +21,7 @@ from content.models import (
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
 from events.models import Event
+from plans.dashboard import build_sprint_plan_card_context
 
 TESTIMONIALS = [
     {
@@ -273,6 +274,9 @@ def _dashboard(request):
         'slack_connected': slack_connected,
         'slack_invite_url': slack_invite_url,
     }
+    # Sprint plan card (issue #442). Same context keys as the Account
+    # page so the duplicated card markup reads identically.
+    context.update(build_sprint_plan_card_context(user))
     return render(request, 'content/dashboard.html', context)
 
 

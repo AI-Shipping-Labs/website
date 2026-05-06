@@ -64,7 +64,7 @@
 </div>
 
 <!-- Second stats row -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
   <div class="bg-card border border-border rounded-lg p-6">
     <div class="flex items-center justify-between">
       <div>
@@ -91,6 +91,18 @@
       </div>
       <i data-lucide="folder-kanban" class="w-5 h-5 text-muted-foreground"></i>
     </div>
+  </div>
+  <div class="bg-card border border-border rounded-lg p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-muted-foreground">Active Sprints</p>
+        <p class="text-2xl font-semibold text-foreground mt-1" data-testid="studio-dashboard-active-sprints">{{ stats.active_sprints }}</p>
+      </div>
+      <a href="{% url 'studio_sprint_list' %}" class="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center hover:bg-indigo-500/30 transition-colors" data-testid="studio-dashboard-sprints-link" aria-label="Sprints">
+        <i data-lucide="calendar-days" class="w-5 h-5 text-indigo-400"></i>
+      </a>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2" data-testid="studio-dashboard-plans-subline">{{ stats.total_plans }} plan{{ stats.total_plans|pluralize }}</p>
   </div>
 </div>
 

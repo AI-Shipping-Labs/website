@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.core.validators import URLValidator
 from django.db import models
 
 SUBMISSION_STATUS_CHOICES = [
@@ -104,6 +105,16 @@ class CourseCertificate(models.Model):
         null=True,
         blank=True,
         related_name='certificates',
+    )
+    pdf_url = models.URLField(
+        blank=True,
+        default='',
+        max_length=500,
+        validators=[URLValidator(schemes=['http', 'https'])],
+        help_text=(
+            'Optional external URL to a PDF version of the certificate. '
+            'Surfaced as a Download PDF button on the public cert page.'
+        ),
     )
 
     class Meta:

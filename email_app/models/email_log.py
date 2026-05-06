@@ -41,6 +41,26 @@ class EmailLog(models.Model):
         default='',
         help_text='Amazon SES message ID for delivery tracking.',
     )
+    opened_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp of the first SES open event, if any.',
+    )
+    opens = models.PositiveIntegerField(
+        default=0,
+        help_text='Count of SES open events received for this email.',
+    )
+    clicked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp of the first SES click event, if any.',
+    )
+    clicks = models.PositiveIntegerField(
+        default=0,
+        help_text='Count of SES click events received for this email.',
+    )
 
     class Meta:
         ordering = ['-sent_at']

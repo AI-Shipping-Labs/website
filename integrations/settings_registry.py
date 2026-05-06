@@ -53,6 +53,7 @@ INTEGRATION_GROUPS = [
             {'key': 'AWS_SECRET_ACCESS_KEY', 'is_secret': True, 'description': 'AWS secret key paired with the access key above. Without these no email is sent.'},
             {'key': 'AWS_SES_REGION', 'is_secret': False, 'description': 'AWS region for SES (e.g. eu-west-1). Must match the verified domain region.'},
             {'key': 'SES_FROM_EMAIL', 'is_secret': False, 'description': 'Sender address for transactional and campaign email. Must be verified in SES.'},
+            {'key': 'SES_CONFIGURATION_SET_NAME', 'is_secret': False, 'description': 'Optional SES configuration set name that publishes delivery, open, and click events to SNS.'},
             {'key': 'SES_WEBHOOK_VALIDATION_ENABLED', 'is_secret': False, 'is_boolean': True, 'description': 'Set true to verify SNS bounce/complaint signatures (recommended in production).'},
         ],
     },

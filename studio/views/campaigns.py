@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -30,9 +31,27 @@ User = get_user_model()
 
 def _build_campaign_detail_context(campaign, *, test_recipients=""):
     """Build the shared context for the campaign detail page."""
+    engagement = campaign.email_logs.aggregate(
+        sent=Count("id"),
+        opened=Count("id", filter=Q(opened_at__isnull=False)),
+        clicked=Count("id", filter=Q(clicked_at__isnull=False)),
+    )
+    sent = engagement["sent"] or 0
+    opened = engagement["opened"] or 0
+    clicked = engagement["clicked"] or 0
+    opened_rate = (opened / sent * 100) if sent else 0
+    clicked_rate = (clicked / sent * 100) if sent else 0
+
     return {
         "campaign": campaign,
         "recipient_count": campaign.get_recipient_count(),
+        "engagement": {
+            "sent": sent,
+            "opened": opened,
+            "clicked": clicked,
+            "opened_rate": opened_rate,
+            "clicked_rate": clicked_rate,
+        },
         "test_recipients": test_recipients,
     }
 

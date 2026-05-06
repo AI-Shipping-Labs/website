@@ -27,6 +27,8 @@ class SesEvent(models.Model):
     EVENT_TYPE_BOUNCE_OTHER = "bounce_other"
     EVENT_TYPE_COMPLAINT = "complaint"
     EVENT_TYPE_DELIVERY = "delivery"
+    EVENT_TYPE_OPEN = "open"
+    EVENT_TYPE_CLICK = "click"
     EVENT_TYPE_SUBSCRIPTION_CONFIRMATION = "subscription_confirmation"
     EVENT_TYPE_UNSUBSCRIBE_CONFIRMATION = "unsubscribe_confirmation"
     EVENT_TYPE_OTHER = "other"
@@ -37,6 +39,8 @@ class SesEvent(models.Model):
         (EVENT_TYPE_BOUNCE_OTHER, "Bounce (other)"),
         (EVENT_TYPE_COMPLAINT, "Complaint"),
         (EVENT_TYPE_DELIVERY, "Delivery"),
+        (EVENT_TYPE_OPEN, "Open"),
+        (EVENT_TYPE_CLICK, "Click"),
         (EVENT_TYPE_SUBSCRIPTION_CONFIRMATION, "SubscriptionConfirmation"),
         (EVENT_TYPE_UNSUBSCRIBE_CONFIRMATION, "UnsubscribeConfirmation"),
         (EVENT_TYPE_OTHER, "Other"),

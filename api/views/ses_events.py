@@ -1,6 +1,6 @@
 """SES bounce / complaint webhook (issue #453).
 
-Receives SNS notifications for bounce, complaint, and (optionally) delivery
+Receives SNS notifications for bounce, complaint, delivery, open, and click
 events from Amazon SES. The signature on the SNS message is the auth layer;
 there is intentionally no token requirement and the endpoint is CSRF-exempt.
 
@@ -18,6 +18,9 @@ Branching:
       ``unsubscribed=True``, append ``bounced``, reset the counter to 0.
     * ``Complaint``  -> set ``unsubscribed=True``, append ``complained``.
     * ``Delivery``   -> log only.
+    * ``Open``       -> set first-open timestamp and increment open count.
+    * ``Click``      -> set first-click timestamp and increment click count;
+      also sets first-open timestamp when no open was received.
 
 Idempotency: dedup on the SNS ``MessageId``. The ``SesEvent.message_id`` field
 has a unique constraint; the view uses ``get_or_create`` so a retried delivery
@@ -31,15 +34,19 @@ failure, just a no-op event we still log for audit.
 import json
 import logging
 import urllib.request
+from datetime import timezone as datetime_timezone
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from accounts.utils.tags import add_tag
-from email_app.models import SesEvent
+from email_app.models import EmailLog, SesEvent
 from integrations.services.ses import validate_sns_notification
 
 logger = logging.getLogger(__name__)
@@ -193,6 +200,10 @@ def _handle_notification(payload, message_id):
         return _handle_complaint(payload, inner, message_id)
     if notification_type == "Delivery":
         return _handle_delivery(payload, inner, message_id)
+    if notification_type == "Open":
+        return _handle_open(payload, inner, message_id)
+    if notification_type == "Click":
+        return _handle_click(payload, inner, message_id)
 
     _record_event(
         message_id=message_id,
@@ -376,6 +387,99 @@ def _handle_delivery(payload, inner, message_id):
     return JsonResponse({"status": "ok"}, status=200)
 
 
+def _handle_open(payload, inner, message_id):
+    """Record an SES open event against the matching EmailLog."""
+    return _handle_engagement(
+        payload=payload,
+        inner=inner,
+        message_id=message_id,
+        notification_type="Open",
+    )
+
+
+def _handle_click(payload, inner, message_id):
+    """Record an SES click event against the matching EmailLog."""
+    return _handle_engagement(
+        payload=payload,
+        inner=inner,
+        message_id=message_id,
+        notification_type="Click",
+    )
+
+
+def _handle_engagement(*, payload, inner, message_id, notification_type):
+    event_type = (
+        SesEvent.EVENT_TYPE_OPEN
+        if notification_type == "Open"
+        else SesEvent.EVENT_TYPE_CLICK
+    )
+    event_timestamp = _parse_engagement_timestamp(inner, notification_type)
+    ses_message_id = ((inner.get("mail") or {}).get("messageId") or "").strip()
+    recipient_email = _first_mail_destination(inner)
+
+    existing = SesEvent.objects.filter(message_id=message_id).first()
+    if existing is not None:
+        return JsonResponse({"status": "duplicate"}, status=200)
+
+    email_log = None
+    if ses_message_id:
+        email_log = (
+            EmailLog.objects
+            .select_related("user")
+            .filter(ses_message_id=ses_message_id)
+            .first()
+        )
+
+    if email_log is None:
+        logger.warning(
+            "SES %s event for unknown ses_message_id=%s MessageId=%s",
+            notification_type,
+            ses_message_id,
+            message_id,
+        )
+        _record_event(
+            message_id=message_id,
+            event_type=event_type,
+            raw_payload=payload,
+            recipient_email=recipient_email,
+            user=None,
+            action_taken=(
+                f"unknown ses_message_id={ses_message_id!r}; logged only"
+            ),
+        )
+        return JsonResponse({"status": "ok"}, status=200)
+
+    try:
+        with transaction.atomic():
+            SesEvent.objects.create(
+                message_id=message_id,
+                event_type=event_type,
+                raw_payload=payload,
+                recipient_email=recipient_email or email_log.user.email,
+                user=email_log.user,
+                action_taken=f"{notification_type.lower()} recorded",
+            )
+            locked_log = EmailLog.objects.select_for_update().get(pk=email_log.pk)
+            if notification_type == "Open":
+                updates = {"opens": F("opens") + 1}
+                if locked_log.opened_at is None:
+                    updates["opened_at"] = event_timestamp
+            else:
+                updates = {"clicks": F("clicks") + 1}
+                if locked_log.clicked_at is None:
+                    updates["clicked_at"] = event_timestamp
+                if locked_log.opened_at is None:
+                    updates["opened_at"] = event_timestamp
+            EmailLog.objects.filter(pk=locked_log.pk).update(**updates)
+    except IntegrityError:
+        logger.info(
+            "Duplicate SesEvent for MessageId=%s; skipping engagement update",
+            message_id,
+        )
+
+    return JsonResponse({"status": "ok"}, status=200)
+
+
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
@@ -386,6 +490,30 @@ def _find_user(email):
     if not email:
         return None
     return User.objects.filter(email__iexact=email).first()
+
+
+def _parse_engagement_timestamp(inner, notification_type):
+    """Return the SES event timestamp as an aware datetime."""
+    detail_key = notification_type.lower()
+    raw_timestamp = (
+        (inner.get(detail_key) or {}).get("timestamp")
+        or (inner.get("mail") or {}).get("timestamp")
+    )
+    if isinstance(raw_timestamp, str):
+        parsed = parse_datetime(raw_timestamp)
+        if parsed is not None:
+            if timezone.is_naive(parsed):
+                return timezone.make_aware(parsed, datetime_timezone.utc)
+            return parsed
+    return timezone.now()
+
+
+def _first_mail_destination(inner):
+    destinations = (inner.get("mail") or {}).get("destination") or []
+    for address in destinations:
+        if isinstance(address, str) and address.strip():
+            return address.strip()
+    return ""
 
 
 def _mark_permanent_bounce(user):

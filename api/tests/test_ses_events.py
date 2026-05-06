@@ -11,8 +11,9 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils.dateparse import parse_datetime
 
-from email_app.models import SesEvent
+from email_app.models import EmailLog, SesEvent
 
 User = get_user_model()
 
@@ -88,6 +89,32 @@ def _delivery_payload(message_id, email):
         "TopicArn": "arn:aws:sns:us-east-1:1:ses-bounces",
         "Message": json.dumps(inner),
         "Timestamp": "2026-05-06T00:00:00.000Z",
+        "SignatureVersion": "1",
+        "Signature": "stub",
+        "SigningCertURL": "https://sns.us-east-1.amazonaws.com/cert.pem",
+    }
+
+
+def _engagement_payload(message_id, email, ses_message_id, notification_type, timestamp):
+    detail_key = notification_type.lower()
+    inner = {
+        "notificationType": notification_type,
+        detail_key: {"timestamp": timestamp},
+        "mail": {
+            "timestamp": "2026-05-06T00:00:00.000Z",
+            "source": "noreply@aishippinglabs.com",
+            "messageId": ses_message_id,
+            "destination": [email],
+        },
+    }
+    if notification_type == "Click":
+        inner[detail_key]["link"] = "https://example.test/article"
+    return {
+        "Type": "Notification",
+        "MessageId": message_id,
+        "TopicArn": "arn:aws:sns:us-east-1:1:ses-engagement",
+        "Message": json.dumps(inner),
+        "Timestamp": timestamp,
         "SignatureVersion": "1",
         "Signature": "stub",
         "SigningCertURL": "https://sns.us-east-1.amazonaws.com/cert.pem",
@@ -300,6 +327,126 @@ class SesEventsDeliveryTest(TestCase):
         # Audit row IS created so operators can see deliveries went through.
         self.assertEqual(
             SesEvent.objects.filter(message_id="m-del-1").count(), 1,
+        )
+
+
+class SesEventsEngagementTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="engaged@example.com")
+        self.log = EmailLog.objects.create(
+            user=self.user,
+            email_type="campaign",
+            ses_message_id="ses-eng-1",
+        )
+
+    def _post(self, payload):
+        with mock.patch(VALIDATOR_PATH, return_value=True):
+            return self.client.post(
+                URL,
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+
+    def test_open_event_sets_opened_at_and_increments_opens(self):
+        timestamp = "2026-05-06T10:00:00.000Z"
+        response = self._post(
+            _engagement_payload(
+                "m-open-1", self.user.email, "ses-eng-1", "Open", timestamp,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.opened_at, parse_datetime(timestamp))
+        self.assertEqual(self.log.opens, 1)
+
+    def test_repeat_open_increments_count_but_keeps_first_timestamp(self):
+        first = "2026-05-06T10:00:00.000Z"
+        second = "2026-05-06T11:00:00.000Z"
+
+        self._post(_engagement_payload(
+            "m-open-a", self.user.email, "ses-eng-1", "Open", first,
+        ))
+        self._post(_engagement_payload(
+            "m-open-b", self.user.email, "ses-eng-1", "Open", second,
+        ))
+
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.opened_at, parse_datetime(first))
+        self.assertEqual(self.log.opens, 2)
+
+    def test_click_event_sets_clicked_at_and_clicks(self):
+        timestamp = "2026-05-06T12:00:00.000Z"
+        response = self._post(
+            _engagement_payload(
+                "m-click-1", self.user.email, "ses-eng-1", "Click", timestamp,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.clicked_at, parse_datetime(timestamp))
+        self.assertEqual(self.log.clicks, 1)
+
+    def test_click_event_sets_opened_at_when_open_was_missed(self):
+        timestamp = "2026-05-06T12:00:00.000Z"
+        self._post(
+            _engagement_payload(
+                "m-click-2", self.user.email, "ses-eng-1", "Click", timestamp,
+            ),
+        )
+
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.opened_at, parse_datetime(timestamp))
+        self.assertEqual(self.log.clicked_at, parse_datetime(timestamp))
+        self.assertEqual(self.log.opens, 0)
+        self.assertEqual(self.log.clicks, 1)
+
+    def test_unknown_ses_message_id_logged_no_error(self):
+        response = self._post(
+            _engagement_payload(
+                "m-open-ghost", self.user.email, "ghost", "Open",
+                "2026-05-06T10:00:00.000Z",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        event = SesEvent.objects.get(message_id="m-open-ghost")
+        self.assertEqual(event.event_type, SesEvent.EVENT_TYPE_OPEN)
+        self.assertIsNone(event.user)
+
+    def test_duplicate_message_id_idempotent_for_open(self):
+        payload = _engagement_payload(
+            "m-open-dup", self.user.email, "ses-eng-1", "Open",
+            "2026-05-06T10:00:00.000Z",
+        )
+
+        r1 = self._post(payload)
+        r2 = self._post(payload)
+
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 200)
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.opens, 1)
+        self.assertEqual(
+            SesEvent.objects.filter(message_id="m-open-dup").count(), 1,
+        )
+
+    def test_duplicate_message_id_idempotent_for_click(self):
+        payload = _engagement_payload(
+            "m-click-dup", self.user.email, "ses-eng-1", "Click",
+            "2026-05-06T10:00:00.000Z",
+        )
+
+        r1 = self._post(payload)
+        r2 = self._post(payload)
+
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 200)
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.clicks, 1)
+        self.assertEqual(
+            SesEvent.objects.filter(message_id="m-click-dup").count(), 1,
         )
 
 

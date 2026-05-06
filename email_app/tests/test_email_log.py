@@ -93,6 +93,16 @@ class EmailLogModelTest(TestCase):
         )
         self.assertEqual(log.ses_message_id, '')
 
+    def test_engagement_defaults(self):
+        log = EmailLog.objects.create(
+            user=self.user,
+            email_type='welcome',
+        )
+        self.assertIsNone(log.opened_at)
+        self.assertEqual(log.opens, 0)
+        self.assertIsNone(log.clicked_at)
+        self.assertEqual(log.clicks, 0)
+
     def test_campaign_deletion_sets_null(self):
         campaign = EmailCampaign.objects.create(
             subject='Delete Me',

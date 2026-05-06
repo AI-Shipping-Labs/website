@@ -410,14 +410,19 @@ class EmailService:
         if headers:
             content["Simple"]["Headers"] = headers
 
+        send_kwargs = {
+            "FromEmailAddress": from_email,
+            "Destination": {
+                "ToAddresses": [to_email],
+            },
+            "Content": content,
+        }
+        configuration_set_name = get_config("SES_CONFIGURATION_SET_NAME", "").strip()
+        if configuration_set_name:
+            send_kwargs["ConfigurationSetName"] = configuration_set_name
+
         try:
-            response = self.ses_client.send_email(
-                FromEmailAddress=from_email,
-                Destination={
-                    "ToAddresses": [to_email],
-                },
-                Content=content,
-            )
+            response = self.ses_client.send_email(**send_kwargs)
             return response.get("MessageId", "")
         except Exception as e:
             logger.exception("Failed to send email via SES to %s", to_email)

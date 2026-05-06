@@ -137,9 +137,10 @@ Keys to set in Studio:
 | `AWS_SECRET_ACCESS_KEY` | secret | Paired with the access key ID. |
 | `AWS_SES_REGION` | non-secret | e.g. `us-east-1`, `eu-west-1`. |
 | `SES_FROM_EMAIL` | non-secret | Must be a verified sender (or be on a verified domain) in SES. |
+| `SES_CONFIGURATION_SET_NAME` | non-secret | Optional SES configuration set name for delivery, open, and click event publishing. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
 
-Webhook endpoint (for SES bounce/complaint notifications via SNS): `{SITE_BASE_URL}/api/ses-events` (no trailing slash; the slashless form avoids the trailing-slash redirect that strips POST bodies). Configure in your SNS topic subscription.
+Webhook endpoint (for SES bounce/complaint/open/click notifications via SNS): `{SITE_BASE_URL}/api/ses-events` (no trailing slash; the slashless form avoids the trailing-slash redirect that strips POST bodies). Configure in your SNS topic subscription.
 
 SES bounce / complaint webhook setup (issue #453):
 
@@ -150,6 +151,14 @@ SES bounce / complaint webhook setup (issue #453):
 5. Verify by sending an email to the SES `mailbox-simulator` address `bounce@simulator.amazonses.com`; the recipient User row should flip to `unsubscribed=True` and pick up the `bounced` tag, and a row should appear in the `email_app.SesEvent` audit table.
 
 The webhook validates the SNS signature using `integrations.services.ses.validate_sns_notification`. In production keep `SES_WEBHOOK_VALIDATION_ENABLED=true`; in development the default (`DEBUG=True`) skips signature checks so local SNS replay is possible.
+
+SES engagement tracking setup (issue #454):
+
+1. SES console -> Configuration Sets -> create a configuration set, e.g. `ais-engagement-prod`.
+2. Add an event destination that publishes to the SNS topic subscribed to `{SITE_BASE_URL}/api/ses-events`.
+3. Tick `Open`, `Click`, `Bounce`, `Complaint`, and `Delivery`.
+4. Save the configuration set name in Studio -> Settings -> Email (SES) -> `SES_CONFIGURATION_SET_NAME`.
+5. Send a campaign test email and confirm the matching `EmailLog` row records `opened_at` / `clicked_at` after SES publishes engagement events.
 
 Soft-bounce policy: a `Transient` (soft) bounce increments `User.soft_bounce_count`. The third soft bounce in a row flips `unsubscribed=True`, appends the `bounced` tag, and resets the counter. A single `Complaint` (Gmail "Report spam" etc.) unsubscribes immediately and tags `complained`.
 

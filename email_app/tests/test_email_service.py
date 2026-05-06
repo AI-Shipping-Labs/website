@@ -395,6 +395,35 @@ class EmailServiceSESIntegrationTest(TestCase):
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['FromEmailAddress'], 'sender@example.com')
 
+    @patch('email_app.services.email_service.boto3')
+    def test_send_email_passes_configuration_set_when_set(self, mock_boto3):
+        IntegrationSetting.objects.create(
+            key='SES_CONFIGURATION_SET_NAME',
+            value='my-set',
+            group='ses',
+        )
+        clear_config_cache()
+
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-123'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses('to@example.com', 'Sub', '<html/>')
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(call_kwargs['ConfigurationSetName'], 'my-set')
+
+    @patch('email_app.services.email_service.boto3')
+    def test_send_email_omits_configuration_set_when_empty(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-123'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses('to@example.com', 'Sub', '<html/>')
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertNotIn('ConfigurationSetName', call_kwargs)
+
 
 class BuildUnsubscribeUrlTest(TestCase):
     """Regression test for issue #321: the unsubscribe link must use

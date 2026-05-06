@@ -53,6 +53,14 @@
         <p class="text-sm text-muted-foreground">Sent Count</p>
         <p class="text-sm text-foreground mt-1">{{ campaign.sent_count }}</p>
       </div>
+      <div class="col-span-2">
+        <p class="text-sm text-muted-foreground">Engagement</p>
+        <p class="text-sm text-foreground mt-1" data-testid="campaign-engagement">
+          Sent: {{ engagement.sent }} /
+          Opened: {{ engagement.opened }} ({{ engagement.opened_rate|floatformat:1 }}%) /
+          Clicked: {{ engagement.clicked }} ({{ engagement.clicked_rate|floatformat:1 }}%)
+        </p>
+      </div>
       {% if campaign.sent_at %}
       <div>
         <p class="text-sm text-muted-foreground">Sent At</p>

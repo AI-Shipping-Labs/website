@@ -6,6 +6,8 @@ from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
 
+from integrations.config import site_base_url
+
 UTM_SLUG_VALIDATOR = RegexValidator(
     regex=r'^[a-z0-9_]+$',
     message='Use lowercase letters, digits, and underscores only.',
@@ -130,7 +132,11 @@ class UtmCampaignLink(models.Model):
         """
         destination = self.destination or ''
         if destination.startswith('/'):
-            base = getattr(settings, 'SITE_BASE_URL', 'https://aishippinglabs.com').rstrip('/')
+            # Resolve at call time via integrations.config.site_base_url()
+            # so DB overrides (Studio > Settings > Site) take effect
+            # without a process restart. Reading settings.SITE_BASE_URL
+            # directly would only see the boot-time env snapshot.
+            base = (site_base_url() or '').rstrip('/')
             destination = f'{base}{destination}'
 
         parsed = urlparse(destination)

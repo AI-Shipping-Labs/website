@@ -4,7 +4,8 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
 
-from integrations.models import UtmCampaign, UtmCampaignLink
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting, UtmCampaign, UtmCampaignLink
 
 
 class UtmCampaignModelTest(TestCase):
@@ -163,6 +164,49 @@ class UtmCampaignLinkModelTest(TestCase):
             destination='/events/launch',
         )
         self.assertTrue(link.build_url().startswith('https://staging.example.com/events/launch?'))
+
+
+class UtmCampaignLinkSiteBaseUrlOverrideTest(TestCase):
+    """``UtmLink.build_url()`` must read ``site_base_url()`` at call time
+    so DB overrides (Studio > Settings > Site) take effect on tracking
+    URLs without a process restart (issue #462 — backfill of #435).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.campaign = UtmCampaign.objects.create(
+            name='Override',
+            slug='override_campaign_april2026',
+            default_utm_source='newsletter',
+            default_utm_medium='email',
+        )
+
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    @override_settings(SITE_BASE_URL='https://env.example.com')
+    def test_db_override_used_instead_of_settings(self):
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://override.example.com',
+            group='site',
+        )
+        clear_config_cache()
+        link = UtmCampaignLink.objects.create(
+            campaign=self.campaign,
+            utm_content='ai_hero_list',
+            destination='/events/launch',
+        )
+        url = link.build_url()
+        self.assertTrue(
+            url.startswith('https://override.example.com/events/launch?'),
+            f'Expected override host in URL, got {url}',
+        )
+        # Negative assertion: env value must not appear when override is set.
+        self.assertNotIn('env.example.com', url)
 
 
 class UtmCampaignSlugLockTest(TestCase):

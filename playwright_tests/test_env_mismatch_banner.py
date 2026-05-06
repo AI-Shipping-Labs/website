@@ -17,6 +17,22 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
+# Tests added by issue #462 use these helpers.
+from django.db import connection  # noqa: E402
+
+from integrations.config import clear_config_cache  # noqa: E402
+
+
+def _reset_site_settings():
+    """Delete SITE_BASE_URL* rows so each test starts clean."""
+    from integrations.models import IntegrationSetting
+
+    IntegrationSetting.objects.filter(
+        key__in=['SITE_BASE_URL', 'SITE_BASE_URL_ALIASES'],
+    ).delete()
+    clear_config_cache()
+    connection.close()
+
 SCREENSHOT_DIR = Path("/tmp/aisl-issue-408-screenshots")
 MOBILE_VIEWPORT = {"width": 390, "height": 900}
 
@@ -112,4 +128,69 @@ def test_studio_mismatch_banner_stays_compact_on_mobile(django_server, browser, 
     assert overflow <= 2
 
     _capture(page, "mobile-collapsed")
+    context.close()
+
+
+# ---------------------------------------------------------------------------
+# Issue #462: cross-process DB override of SITE_BASE_URL clears the banner
+# without a process restart. Exercises the operator-reported flow end to end:
+# env value disagrees with the request host, the operator saves the matching
+# value via Studio, and on the next page load the banner is gone.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+def test_db_override_clears_banner_on_next_page_load(django_server, browser, settings):
+    settings.SITE_BASE_URL = "https://prod.aishippinglabs.com"
+    _reset_site_settings()
+    context = _login_staff(browser, "env-mismatch-override@test.com")
+    page = context.new_page()
+
+    # Step 1: env says prod, the test server runs on 127.0.0.1 — banner fires.
+    page.goto(f"{django_server}/studio/settings/", wait_until="domcontentloaded")
+    banner = page.locator('[data-testid="env-mismatch-banner"]')
+    assert banner.is_visible()
+    assert "https://prod.aishippinglabs.com" in banner.inner_text()
+
+    # Step 2: save SITE_BASE_URL to the test server URL via the Site card form.
+    site_card = page.locator("#integration-site")
+    site_card.locator('input[name="SITE_BASE_URL"]').fill(django_server)
+    site_card.locator('button[type="submit"]').click()
+    page.wait_for_load_state("domcontentloaded")
+
+    # Step 3: navigate to a different Studio page and confirm the banner is gone.
+    page.goto(f"{django_server}/studio/courses/", wait_until="domcontentloaded")
+    assert not page.locator('[data-testid="env-mismatch-banner"]').is_visible(), (
+        "Banner must disappear after the DB override matches the request host. "
+        "If it is still visible, the worker that served this request is reading "
+        "the env-time settings.SITE_BASE_URL because the cross-process cache "
+        "stamp was not updated by the previous save."
+    )
+
+    _reset_site_settings()
+    context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_alias_set_via_db_suppresses_banner(django_server, browser, settings):
+    # Env disagrees with request host, but operator sets SITE_BASE_URL_ALIASES
+    # to include the request host — banner must not fire.
+    settings.SITE_BASE_URL = "https://prod.aishippinglabs.com"
+    _reset_site_settings()
+    context = _login_staff(browser, "env-mismatch-alias@test.com")
+    page = context.new_page()
+
+    page.goto(f"{django_server}/studio/settings/", wait_until="domcontentloaded")
+    site_card = page.locator("#integration-site")
+    site_card.locator('textarea[name="SITE_BASE_URL_ALIASES"]').fill(django_server)
+    site_card.locator('button[type="submit"]').click()
+    page.wait_for_load_state("domcontentloaded")
+
+    page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+    assert not page.locator('[data-testid="env-mismatch-banner"]').is_visible(), (
+        "Banner must not fire when the request host is listed in "
+        "SITE_BASE_URL_ALIASES."
+    )
+
+    _reset_site_settings()
     context.close()

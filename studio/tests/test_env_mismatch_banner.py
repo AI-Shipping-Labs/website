@@ -19,9 +19,11 @@ from pathlib import Path
 
 from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model
+from django.core.cache import caches
 from django.test import Client, RequestFactory, TestCase, override_settings
 
-from integrations.config import clear_config_cache
+from integrations import config as config_module
+from integrations.config import clear_config_cache, get_config
 from integrations.models import IntegrationSetting
 from website.context_processors import (
     _build_env_mismatch_payload,
@@ -700,3 +702,113 @@ class EnvMismatchOverrideTest(TestCase):
         self.assertEqual(
             payload['configured_base_url'], 'https://aishippinglabs.com',
         )
+
+
+class EnvMismatchCrossProcessTest(TestCase):
+    """Reproduce the operator-reported scenario from issue #462.
+
+    Env var is ``https://prod.aishippinglabs.com``, the DB row is
+    ``https://aishippinglabs.com``, the request comes in on
+    ``aishippinglabs.com``. Before the cross-process stamp fix, a
+    gunicorn worker that had populated its in-process ``_cache`` BEFORE
+    the Studio save would never re-read the DB and would keep using the
+    env value, falsely firing the banner. The fix publishes a stamp on
+    every ``clear_config_cache()`` so the next ``get_config()`` notices
+    and repopulates.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        clear_config_cache()
+        caches['django_q'].delete('integration_settings_stamp')
+        config_module._cache = {}
+        config_module._cache_populated = False
+        config_module._cache_stamp = None
+
+    def tearDown(self):
+        clear_config_cache()
+        caches['django_q'].delete('integration_settings_stamp')
+        config_module._cache = {}
+        config_module._cache_populated = False
+        config_module._cache_stamp = None
+
+    def _request(self, host, scheme='https'):
+        return self.factory.get(
+            '/studio/',
+            HTTP_HOST=host,
+            **{'wsgi.url_scheme': scheme},
+        )
+
+    @override_settings(
+        SITE_BASE_URL='https://prod.aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+        ],
+    )
+    def test_stale_worker_picks_up_db_override_after_save(self):
+        # Worker A boots and populates its cache with no DB row in place
+        # (so SITE_BASE_URL falls back to the env value via settings).
+        first_read = get_config('SITE_BASE_URL', '')
+        # With no DB row, get_config returns settings.SITE_BASE_URL (the
+        # env-time snapshot). The cache itself is populated but empty.
+        self.assertTrue(config_module._cache_populated)
+        self.assertEqual(first_read, 'https://prod.aishippinglabs.com')
+        stamp_seen_by_worker_a = config_module._cache_stamp
+
+        # Worker B (simulated) handles the Studio save: it writes the DB
+        # row and calls clear_config_cache(). That publishes a fresh
+        # stamp into caches['django_q'].
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+
+        # Restore Worker A's perspective: cache_populated=True with the
+        # OLD stamp. It receives the next request on aishippinglabs.com.
+        config_module._cache = {}
+        config_module._cache_populated = True
+        config_module._cache_stamp = stamp_seen_by_worker_a
+
+        request = self._request('aishippinglabs.com', scheme='https')
+        # Banner must NOT fire. Before the fix, Worker A never refreshed
+        # its cache and kept comparing against settings.SITE_BASE_URL
+        # (= prod.aishippinglabs.com), which produced a false-positive
+        # banner.
+        self.assertIsNone(_build_env_mismatch_payload(request))
+
+    @override_settings(
+        SITE_BASE_URL='https://prod.aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+        ],
+    )
+    def test_alias_set_via_db_suppresses_banner_after_cross_process_save(self):
+        # Worker A populates with no DB rows.
+        from integrations.config import get_config  # noqa: PLC0415
+        get_config('SITE_BASE_URL', '')
+        stamp_seen_by_worker_a = config_module._cache_stamp
+
+        # Worker B saves both SITE_BASE_URL and SITE_BASE_URL_ALIASES.
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://aishippinglabs.com',
+            group='site',
+        )
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL_ALIASES',
+            value='https://aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+
+        # Worker A sees the old stamp.
+        config_module._cache = {}
+        config_module._cache_populated = True
+        config_module._cache_stamp = stamp_seen_by_worker_a
+
+        request = self._request('aishippinglabs.com', scheme='https')
+        # Both the canonical and alias paths must agree to suppress the
+        # banner once the stamp is invalidated.
+        self.assertIsNone(_build_env_mismatch_payload(request))

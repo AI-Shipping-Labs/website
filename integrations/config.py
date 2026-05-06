@@ -3,12 +3,36 @@
 Provides get_config() which checks the database first, then falls back
 to environment variables. Uses an in-process cache that is cleared
 when settings are saved via Studio.
+
+Cross-process invalidation
+==========================
+
+In production we run three gunicorn workers plus a separate qcluster
+process — four independent Python processes that each hold their own
+copy of ``_cache``. ``clear_config_cache()`` only mutates the globals in
+the process that handled the Studio save, so the other three keep
+serving stale values until they restart. To make a save visible
+everywhere we publish a short stamp into the shared ``caches['django_q']``
+DatabaseCache (already on every host that talks to the application DB —
+see ``website.settings`` CACHES). Each process records the stamp it saw
+when it last read the DB; on every ``get_config()`` call we re-read the
+shared stamp and, if it changed, repopulate the in-process cache from
+the DB. That costs one cache GET per ``get_config()`` call and zero
+extra DB queries when nothing has changed.
+
+The stamp is intentionally opaque (a random uuid hex). We never compare
+the value, only "is it the same string we recorded last time".
 """
 
 import os
+import uuid
+
+_STAMP_CACHE_KEY = 'integration_settings_stamp'
+_STAMP_CACHE_ALIAS = 'django_q'
 
 _cache = {}
 _cache_populated = False
+_cache_stamp = None
 
 
 def get_config(key, default='', *, use_settings=True):
@@ -21,9 +45,17 @@ def get_config(key, default='', *, use_settings=True):
     Returns:
         str: The setting value.
     """
-    global _cache, _cache_populated
+    global _cache, _cache_populated, _cache_stamp
     if not _cache_populated:
         _populate_cache()
+    else:
+        # The in-process cache thinks it's fresh — but another process
+        # may have written via clear_config_cache() since we last read.
+        # Compare the published stamp with the one we recorded during
+        # _populate_cache() and repopulate if they differ.
+        current_stamp = _read_stamp()
+        if current_stamp is not None and current_stamp != _cache_stamp:
+            _populate_cache()
     if key in _cache and _cache[key]:
         return _cache[key]
     # Check Django settings first (supports @override_settings in tests).
@@ -65,19 +97,56 @@ def is_enabled(key):
     return str(val).strip().lower() in ('true', '1', 'yes')
 
 
+def _read_stamp():
+    """Return the published cross-process stamp, or None if unavailable.
+
+    Wrapped in a try/except so a missing cache backend or table during
+    boot/tests does not crash callers — when the stamp can't be read we
+    treat it as "no change" and let the in-process cache stand.
+    """
+    try:
+        from django.core.cache import caches  # noqa: PLC0415
+        return caches[_STAMP_CACHE_ALIAS].get(_STAMP_CACHE_KEY)
+    except Exception:
+        return None
+
+
 def _populate_cache():
-    """Load all IntegrationSetting values into the in-process cache."""
-    global _cache, _cache_populated
+    """Load all IntegrationSetting values into the in-process cache.
+
+    Captures the published stamp BEFORE reading rows, so if another
+    process writes a new stamp + new row between our reads we'll see a
+    fresh stamp on the next call and repopulate again.
+    """
+    global _cache, _cache_populated, _cache_stamp
     try:
         from integrations.models import IntegrationSetting  # noqa: PLC0415
+        stamp_at_read = _read_stamp()
         _cache = dict(IntegrationSetting.objects.values_list('key', 'value'))
         _cache_populated = True
+        _cache_stamp = stamp_at_read
     except Exception:
+        # Failed populate (DB unreachable, schema not migrated yet,
+        # etc.) — do NOT mutate the stamp so the next call retries
+        # rather than locking in a stale stamp.
         _cache_populated = False
 
 
 def clear_config_cache():
-    """Clear the in-process config cache. Call after saving settings."""
-    global _cache, _cache_populated
+    """Clear the in-process cache and publish a fresh cross-process stamp.
+
+    Called by ``studio.views.settings.settings_save_group`` after a
+    successful upsert/delete on ``IntegrationSetting``. Other processes
+    notice the new stamp on their next ``get_config()`` and repopulate.
+    """
+    global _cache, _cache_populated, _cache_stamp
     _cache = {}
     _cache_populated = False
+    _cache_stamp = None
+    try:
+        from django.core.cache import caches  # noqa: PLC0415
+        caches[_STAMP_CACHE_ALIAS].set(_STAMP_CACHE_KEY, uuid.uuid4().hex)
+    except Exception:
+        # If the shared cache is unreachable we still cleared in-process
+        # state, so the calling process at least sees fresh values.
+        pass

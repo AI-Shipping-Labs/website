@@ -241,7 +241,11 @@ class CustomURLPublicEventDetailTest(TestCase):
             platform='custom',
             zoom_join_url='https://youtube.com/live/abc123',
         )
-        user = User.objects.create_user(email='user@test.com', password='pass')
+        user = User.objects.create_user(
+            email='user@test.com',
+            password='pass',
+            email_verified=True,
+        )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='user@test.com', password='pass')
 
@@ -259,7 +263,11 @@ class CustomURLPublicEventDetailTest(TestCase):
             platform='custom',
             zoom_join_url='https://discord.gg/abc',
         )
-        user = User.objects.create_user(email='user2@test.com', password='pass')
+        user = User.objects.create_user(
+            email='user2@test.com',
+            password='pass',
+            email_verified=True,
+        )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='user2@test.com', password='pass')
 
@@ -278,7 +286,11 @@ class CustomURLPublicEventDetailTest(TestCase):
             zoom_join_url='https://zoom.us/j/99999',
             zoom_meeting_id='99999',
         )
-        user = User.objects.create_user(email='user3@test.com', password='pass')
+        user = User.objects.create_user(
+            email='user3@test.com',
+            password='pass',
+            email_verified=True,
+        )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='user3@test.com', password='pass')
 

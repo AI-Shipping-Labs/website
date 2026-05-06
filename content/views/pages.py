@@ -1,7 +1,12 @@
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
-from content.access import build_gating_context, can_access, get_required_tier_name
+from content.access import (
+    build_gating_context,
+    can_access,
+    get_gated_reason,
+    get_required_tier_name,
+)
 from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
 from content.tier_config import get_activities
 
@@ -209,14 +214,18 @@ def collection_list(request):
     # Build per-link access info and strip URLs from gated links
     annotated_links = []
     for link in links:
-        has_access = can_access(request.user, link)
+        gated_reason = get_gated_reason(request.user, link)
+        has_access = not gated_reason or gated_reason == 'unverified_email'
+        url = link.url if not gated_reason else None
+        if gated_reason == 'unverified_email':
+            url = f'/resources/{link.pk}/go'
         annotated_links.append({
             'link': link,
             'has_access': has_access,
-            'url': link.url if has_access else None,
+            'url': url,
             'cta_message': (
                 f'Upgrade to {link.required_level_tier_name} to access this resource'
-                if not has_access else ''
+                if gated_reason == 'insufficient_tier' else ''
             ),
         })
 
@@ -250,6 +259,21 @@ def collection_list(request):
         'base_path': '/resources',
     }
     return render(request, 'content/collection_list.html', context)
+
+
+def curated_link_go(request, link_id):
+    """Redirect to a curated link or render the verification gate for free users."""
+    link = get_object_or_404(CuratedLink, pk=link_id, published=True)
+    gating = build_gating_context(request.user, link, 'curated_link')
+    if not gating['is_gated']:
+        return redirect(link.url)
+    if gating.get('gated_reason') == 'unverified_email':
+        return render(
+            request,
+            'content/curated_link_verify_required.html',
+            {'link': link, **gating},
+        )
+    return redirect('/pricing')
 
 
 def tutorials_list(request):
@@ -288,6 +312,9 @@ def downloads_list(request):
         has_access = can_access(request.user, download)
         is_lead_magnet = download.required_level == 0
         is_anonymous = not request.user.is_authenticated
+        gated_reason = get_gated_reason(request.user, download)
+        if gated_reason == 'unverified_email':
+            has_access = True
 
         annotated_downloads.append({
             'download': download,

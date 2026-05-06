@@ -35,6 +35,7 @@ class TierOverrideTestBase(TestCase):
         cls.premium_tier = Tier.objects.get(slug="premium")
 
     def _make_user(self, email="user@example.com", tier=None, **kwargs):
+        kwargs.setdefault("email_verified", True)
         user = User.objects.create_user(email=email, **kwargs)
         if tier is not None:
             user.tier = tier
@@ -42,7 +43,7 @@ class TierOverrideTestBase(TestCase):
         return user
 
     def _make_staff(self, email="staff@example.com"):
-        return User.objects.create_user(email=email, is_staff=True)
+        return User.objects.create_user(email=email, is_staff=True, email_verified=True)
 
     def _make_override(self, user, override_tier, granted_by=None, **kwargs):
         defaults = {

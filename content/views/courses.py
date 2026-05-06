@@ -10,6 +10,7 @@ from django.views.decorators.http import require_POST
 
 from content.access import (
     LEVEL_MAIN,
+    build_gating_context,
     can_access,
     get_required_tier_name,
     get_user_level,
@@ -116,29 +117,34 @@ def course_detail(request, slug):
             module_id_counts[module_id] += 1
         completed_count_by_module = dict(module_id_counts)
 
+    gating = build_gating_context(user, course, 'course')
+
     # Determine CTA
     cta_message = ''
     cta_url = ''
     buy_individual = False
     buy_individual_price = None
     if not has_access:
-        tier_name = get_required_tier_name(course.required_level)
-        # Find yearly price for the tier if available
-        from payments.models import Tier
-        try:
-            tier = Tier.objects.get(level=course.required_level)
-            price_str = f'{tier.price_eur_year}/year' if tier.price_eur_year else ''
-            if price_str:
-                cta_message = f'Unlock with {tier_name} \u2014 \u20ac{price_str}'
-            else:
+        if gating.get('gated_reason') == 'unverified_email':
+            cta_message = ''
+        else:
+            tier_name = get_required_tier_name(course.required_level)
+            # Find yearly price for the tier if available
+            from payments.models import Tier
+            try:
+                tier = Tier.objects.get(level=course.required_level)
+                price_str = f'{tier.price_eur_year}/year' if tier.price_eur_year else ''
+                if price_str:
+                    cta_message = f'Unlock with {tier_name} \u2014 \u20ac{price_str}'
+                else:
+                    cta_message = f'Unlock with {tier_name}'
+            except Tier.DoesNotExist:
                 cta_message = f'Unlock with {tier_name}'
-        except Tier.DoesNotExist:
-            cta_message = f'Unlock with {tier_name}'
-        cta_url = '/pricing'
-        # Show individual purchase button if price is set
-        if course.individual_price_eur is not None and user.is_authenticated:
-            buy_individual = True
-            buy_individual_price = course.individual_price_eur
+            cta_url = '/pricing'
+            # Show individual purchase button if price is set
+            if course.individual_price_eur is not None and user.is_authenticated:
+                buy_individual = True
+                buy_individual_price = course.individual_price_eur
     elif course.is_free and not user.is_authenticated:
         cta_message = 'Sign up free to start this course'
         cta_url = '/accounts/signup'
@@ -195,6 +201,10 @@ def course_detail(request, slug):
         'user_is_enrolled': user_is_enrolled,
         'next_unit_for_user': next_unit_for_user,
     }
+    if gating.get('gated_reason') == 'unverified_email':
+        context.update(gating)
+    elif gating.get('gated_reason'):
+        context['gated_reason'] = gating['gated_reason']
     return render(request, 'content/course_detail.html', context)
 
 
@@ -459,6 +469,8 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         has_access = can_access(user, course)
 
     if not has_access:
+        gating = build_gating_context(user, course, 'course')
+        is_unverified_gate = gating.get('gated_reason') == 'unverified_email'
         if not user.is_authenticated:
             if course.required_level == 0:
                 cta_message = 'Sign in to access this lesson'
@@ -474,10 +486,16 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
                 cta_description = 'Get full access to this course and more with a membership.'
         else:
             tier_name = get_required_tier_name(course.required_level)
-            cta_message = f'Upgrade to {tier_name} to access this lesson'
-            pricing_url = '/pricing'
-            cta_label = 'View Pricing'
-            cta_description = 'Get full access to this course and more with a membership.'
+            if is_unverified_gate:
+                cta_message = ''
+                pricing_url = '/pricing'
+                cta_label = ''
+                cta_description = ''
+            else:
+                cta_message = f'Upgrade to {tier_name} to access this lesson'
+                pricing_url = '/pricing'
+                cta_label = 'View Pricing'
+                cta_description = 'Get full access to this course and more with a membership.'
 
         # Build the teaser body / homework preview here (issue #248) so the
         # template stays a flat layout and we don't run heavy HTML parsing
@@ -530,7 +548,10 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
             'gated_cta_label': cta_label,
             'gated_cta_testid': 'teaser-upgrade-cta',
         }
-        return render(request, 'content/course_unit_detail.html', context, status=403)
+        if is_unverified_gate:
+            context.update(gating)
+        status = 200 if is_unverified_gate else 403
+        return render(request, 'content/course_unit_detail.html', context, status=status)
 
     # Drip schedule check: if user is enrolled in a cohort and unit has
     # available_after_days, check if the unit is available yet.

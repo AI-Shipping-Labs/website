@@ -29,6 +29,7 @@ from content.views.pages import (
     blog_detail,
     blog_list,
     collection_list,
+    curated_link_go,
     downloads_list,
     project_detail,
     projects_list,
@@ -79,6 +80,7 @@ urlpatterns = [
     path('projects', projects_list, name='projects_list'),
     path('projects/<slug:slug>', project_detail, name='project_detail'),
     path('resources', collection_list, name='collection_list'),
+    path('resources/<int:link_id>/go', curated_link_go, name='curated_link_go'),
     path('collection', collection_list),  # backward compat redirect
     path('tutorials', tutorials_list, name='tutorials_list'),
     path('tutorials/<slug:slug>', tutorial_detail, name='tutorial_detail'),

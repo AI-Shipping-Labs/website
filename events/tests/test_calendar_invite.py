@@ -313,6 +313,7 @@ class RegistrationApiEmailTest(TestCase):
         cls.user = User.objects.create_user(
             email='api@example.com',
             password='testpass123',
+            email_verified=True,
         )
         cls.user.tier = cls.tier
         cls.user.save()

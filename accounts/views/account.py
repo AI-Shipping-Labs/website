@@ -10,6 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 # Issue #448: per-user resend throttle for the account verification banner.
@@ -448,10 +449,17 @@ def member_plan_edit(request, plan_id):
 def resend_verification_view(request):
     """Resend the email-verification message to the current user."""
     user = request.user
+    next_url = request.POST.get("next") or "account"
+    if next_url != "account" and not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = "account"
 
     if user.email_verified:
         messages.info(request, "Your email is already verified.")
-        return redirect("account")
+        return redirect(next_url)
 
     cache_key = RESEND_VERIFICATION_CACHE_KEY_TEMPLATE.format(user_id=user.id)
     if not cache.add(cache_key, "1", RESEND_VERIFICATION_THROTTLE_SECONDS):
@@ -460,10 +468,10 @@ def resend_verification_view(request):
             "We just sent a verification email -- check your inbox. "
             "You can request another in a minute.",
         )
-        return redirect("account")
+        return redirect(next_url)
 
     from accounts.views.auth import _send_verification_email
 
     _send_verification_email(user)
     messages.success(request, "Verification email sent. Check your inbox.")
-    return redirect("account")
+    return redirect(next_url)

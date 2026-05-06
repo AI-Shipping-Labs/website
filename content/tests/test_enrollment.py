@@ -60,7 +60,7 @@ class EnrollmentModelTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='m@example.com', password='testpass',
+            email='m@example.com', password='testpass', email_verified=True,
         )
         self.course, _ = _make_course_with_units(slug='m-course')
 
@@ -112,7 +112,7 @@ class EnrollmentServiceTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='svc@example.com', password='testpass',
+            email='svc@example.com', password='testpass', email_verified=True,
         )
         self.course, _ = _make_course_with_units(slug='svc-course')
 
@@ -174,7 +174,7 @@ class EnrollViewTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='ev@example.com', password='testpass',
+            email='ev@example.com', password='testpass', email_verified=True,
         )
         self.course, self.units = _make_course_with_units(slug='ev-course')
         self.client.login(email='ev@example.com', password='testpass')
@@ -241,7 +241,7 @@ class UnenrollViewTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='un@example.com', password='testpass',
+            email='un@example.com', password='testpass', email_verified=True,
         )
         self.course, _ = _make_course_with_units(slug='un-course')
         self.client.login(email='un@example.com', password='testpass')
@@ -269,7 +269,7 @@ class AutoEnrollOnCompleteTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='auto@example.com', password='testpass',
+            email='auto@example.com', password='testpass', email_verified=True,
         )
         self.course, self.units = _make_course_with_units(slug='auto-course')
         self.client.login(email='auto@example.com', password='testpass')
@@ -315,7 +315,7 @@ class CourseDetailEnrollButtonTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='cd@example.com', password='testpass',
+            email='cd@example.com', password='testpass', email_verified=True,
         )
         self.course, self.units = _make_course_with_units(slug='cd-course')
         self.client.login(email='cd@example.com', password='testpass')
@@ -363,7 +363,7 @@ class CatalogEnrolledBadgeTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='cat@example.com', password='testpass',
+            email='cat@example.com', password='testpass', email_verified=True,
         )
         self.enrolled_course, _ = _make_course_with_units(
             title='Enrolled Course', slug='cat-enrolled',
@@ -402,7 +402,7 @@ class DashboardEnrollmentSourceTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='dsh@example.com', password='testpass',
+            email='dsh@example.com', password='testpass', email_verified=True,
         )
         # Use a distinctive title so substring matching against the
         # rendered dashboard isn't confused by template chrome words.
@@ -512,7 +512,7 @@ class BackfillMigrationTest(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email='bf@example.com', password='testpass',
+            email='bf@example.com', password='testpass', email_verified=True,
         )
         self.course, self.units = _make_course_with_units(slug='bf-course')
 

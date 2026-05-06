@@ -396,6 +396,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
     def test_authenticated_user_can_download_free_resource(self):
         User.objects.create_user(
             email='dl_auth@test.com', password='testpass',
+            email_verified=True,
         )
         self.client.login(email='dl_auth@test.com', password='testpass')
         response = self.client.get('/api/downloads/free-pdf/file')
@@ -405,6 +406,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
     def test_download_increments_count(self):
         User.objects.create_user(
             email='dl_count@test.com', password='testpass',
+            email_verified=True,
         )
         self.client.login(email='dl_count@test.com', password='testpass')
         self.client.get('/api/downloads/free-pdf/file')
@@ -414,6 +416,7 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
     def test_multiple_downloads_increment_count(self):
         User.objects.create_user(
             email='dl_multi@test.com', password='testpass',
+            email_verified=True,
         )
         self.client.login(email='dl_multi@test.com', password='testpass')
         self.client.get('/api/downloads/free-pdf/file')
@@ -646,6 +649,7 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
     def test_shortcode_authenticated_shows_download_button(self):
         user = User.objects.create_user(
             email='sc_auth@test.com', password='testpass',
+            email_verified=True,
         )
         html = self._render_shortcode('{{download:shortcode-pdf}}', user=user)
         self.assertIn('/api/downloads/shortcode-pdf/file', html)
@@ -1098,6 +1102,7 @@ class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
         User.objects.create_user(
             email='free_sc@test.com', password='testpass',
             tier=self.free_tier,
+            email_verified=True,
         )
         self.client.login(email='free_sc@test.com', password='testpass')
 
@@ -1126,6 +1131,7 @@ class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
         User.objects.create_user(
             email='free_gated@test.com', password='testpass',
             tier=self.free_tier,
+            email_verified=True,
         )
         self.client.login(email='free_gated@test.com', password='testpass')
 

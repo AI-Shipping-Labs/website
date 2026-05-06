@@ -124,7 +124,11 @@ def can_access(user, content):
         or if the user has individual CourseAccess for a Course.
     """
     if content.required_level == 0:
-        return True
+        if user is None or not user.is_authenticated:
+            return True
+        if get_user_level(user) >= LEVEL_BASIC:
+            return True
+        return bool(user.email_verified)
     if get_user_level(user) >= content.required_level:
         return True
     # Check individual course access (CourseAccess model)
@@ -132,6 +136,39 @@ def can_access(user, content):
         from content.models import CourseAccess
         return CourseAccess.objects.filter(user=user, course=content).exists()
     return False
+
+
+def get_gated_reason(user, content):
+    """Return why access is denied, or an empty string when access is allowed."""
+    if can_access(user, content):
+        return ''
+    if (
+        content.required_level == LEVEL_OPEN
+        and user is not None
+        and user.is_authenticated
+        and get_user_level(user) < LEVEL_BASIC
+        and not user.email_verified
+    ):
+        return 'unverified_email'
+    return 'insufficient_tier'
+
+
+def is_unverified_email_gate(user, content):
+    """True when a free authenticated user is blocked only by email verification."""
+    return get_gated_reason(user, content) == 'unverified_email'
+
+
+def build_verify_email_context(user):
+    """Build shared context for the verify-email-required partial."""
+    from django.urls import reverse
+
+    return {
+        'gated_reason': 'unverified_email',
+        'verify_email_address': user.email,
+        'verify_resend_url': reverse('account_resend_verification'),
+        'verify_resend_label': 'Resend verification email',
+        'pricing_url': '/pricing',
+    }
 
 
 def _is_course(content):
@@ -181,10 +218,16 @@ def build_gating_context(user, content, content_type='article'):
         If the user has access, ``is_gated`` will be False and other keys
         will be absent.
     """
-    has_access = can_access(user, content)
+    gated_reason = get_gated_reason(user, content)
 
-    if has_access:
+    if not gated_reason:
         return {'is_gated': False}
+
+    if gated_reason == 'unverified_email':
+        return {
+            'is_gated': True,
+            **build_verify_email_context(user),
+        }
 
     tier_name = get_required_tier_name(content.required_level)
     teaser = get_teaser_text(content)
@@ -204,6 +247,7 @@ def build_gating_context(user, content, content_type='article'):
 
     return {
         'is_gated': True,
+        'gated_reason': 'insufficient_tier',
         'teaser': teaser,
         'cta_message': cta_message,
         'required_tier_name': tier_name,

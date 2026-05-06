@@ -410,7 +410,11 @@ class CohortEnrollApiTest(TierSetupMixin, TestCase):
             end_date=datetime.date(2026, 6, 1),
             is_active=True,
         )
-        User.objects.create_user(email='freeuser@test.com', password='testpass')
+        User.objects.create_user(
+            email='freeuser@test.com',
+            password='testpass',
+            email_verified=True,
+        )
         self.client.login(email='freeuser@test.com', password='testpass')
         response = self.client.post(
             f'/api/courses/free-course/cohorts/{cohort.pk}/enroll',

@@ -104,6 +104,8 @@
               Sign In
             </a>
           </div>
+        {% elif not has_access and gated_reason == "unverified_email" %}
+          {% include "content/_verify_email_required.html" %}
         {% elif not has_access %}
           <!-- User doesn't have access - show upgrade CTA -->
           <div class="text-center">

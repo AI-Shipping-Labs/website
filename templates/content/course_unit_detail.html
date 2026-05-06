@@ -45,6 +45,10 @@
       <div class="mt-8">
         {% include "content/_gated_access_card.html" %}
       </div>
+      {% elif gated_reason == "unverified_email" %}
+      <div class="mt-8">
+        {% include "content/_verify_email_required.html" %}
+      </div>
       {% elif teaser_body_html %}
       <!-- Teaser path: video thumbnail + truncated body + homework intro
            + CTA. Body has a fade-out gradient at the bottom so it visually
@@ -93,13 +97,21 @@
       <!-- Pinned upgrade CTA. Replaces the mark-complete button on the
            accessible layout — gating is the only meaningful action here. -->
       <div class="mt-10">
+        {% if gated_reason == "unverified_email" %}
+        {% include "content/_verify_email_required.html" %}
+        {% else %}
         {% include "content/_gated_access_card.html" %}
+        {% endif %}
       </div>
       {% else %}
       <!-- Fallback: unit body is empty so there's nothing to tease. Render
            the original minimal lock card so we don't ship an empty fade-out. -->
       <div class="mt-8">
+        {% if gated_reason == "unverified_email" %}
+        {% include "content/_verify_email_required.html" %}
+        {% else %}
         {% include "content/_gated_access_card.html" %}
+        {% endif %}
       </div>
       {% endif %}
     </div>

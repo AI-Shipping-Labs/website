@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Verify your email | AI Shipping Labs{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-6 lg:px-8">
+      <a href="/resources" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Resources
+      </a>
+      <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">{{ link.title }}</h1>
+      {% if link.description %}
+      <p class="mt-4 text-lg text-muted-foreground">{{ link.description }}</p>
+      {% endif %}
+      {% include "content/_verify_email_required.html" %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

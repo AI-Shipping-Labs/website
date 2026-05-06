@@ -1,11 +1,13 @@
 """Tests for access control and content gating (issue #71)."""
 
-from datetime import date
+from datetime import date, timedelta
 
+from django.contrib.auth.models import AnonymousUser
 from django.test import Client, TestCase, tag
 from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import TierOverride, User
+from accounts.signals import mark_email_verified_on_social_login
 from content.access import (
     LEVEL_BASIC,
     LEVEL_MAIN,
@@ -17,7 +19,17 @@ from content.access import (
     get_teaser_text,
     get_user_level,
 )
-from content.models import Article, CuratedLink, Project, Tutorial
+from content.models import (
+    Article,
+    Course,
+    CourseAccess,
+    CuratedLink,
+    Download,
+    Module,
+    Project,
+    Tutorial,
+    Unit,
+)
 from events.models import Event
 from tests.fixtures import TierSetupMixin
 
@@ -35,8 +47,6 @@ class GetUserLevelTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        from django.contrib.auth.models import AnonymousUser
-
         cls.anon = AnonymousUser()
         cls.no_tier_user = User.objects.create_user(email='notier@example.com')
         cls.no_tier_user.tier = None
@@ -107,19 +117,19 @@ class CanAccessTest(TierSetupMixin, TestCase):
 
         cls.anon = AnonymousUser()
 
-        cls.free_user = User.objects.create_user(email='free@test.com')
+        cls.free_user = User.objects.create_user(email='free@test.com', email_verified=True)
         cls.free_user.tier = cls.free_tier
         cls.free_user.save()
 
-        cls.basic_user = User.objects.create_user(email='basic@test.com')
+        cls.basic_user = User.objects.create_user(email='basic@test.com', email_verified=True)
         cls.basic_user.tier = cls.basic_tier
         cls.basic_user.save()
 
-        cls.main_user = User.objects.create_user(email='main@test.com')
+        cls.main_user = User.objects.create_user(email='main@test.com', email_verified=True)
         cls.main_user.tier = cls.main_tier
         cls.main_user.save()
 
-        cls.premium_user = User.objects.create_user(email='prem@test.com')
+        cls.premium_user = User.objects.create_user(email='prem@test.com', email_verified=True)
         cls.premium_user.tier = cls.premium_tier
         cls.premium_user.save()
 
@@ -188,6 +198,113 @@ class CanAccessTest(TierSetupMixin, TestCase):
             for article in [self.open_article, self.basic_article, self.main_article, self.premium_article]:
                 with self.subTest(user=label, article=article.slug):
                     self.assertTrue(can_access(user, article))
+
+
+@tag('core')
+class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
+    """Email verification gates only authenticated free users on free content."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.anon = AnonymousUser()
+        cls.open_article = Article.objects.create(
+            title='Open Email Gate', slug='open-email-gate',
+            date=date(2025, 1, 1), required_level=LEVEL_OPEN,
+        )
+        cls.basic_article = Article.objects.create(
+            title='Basic Email Gate', slug='basic-email-gate',
+            date=date(2025, 1, 1), required_level=LEVEL_BASIC,
+        )
+
+    def _user(self, label, tier, verified, **kwargs):
+        user = User.objects.create_user(
+            email=f'{label}-{verified}@example.com',
+            email_verified=verified,
+            **kwargs,
+        )
+        user.tier = tier
+        user.save()
+        return user
+
+    def test_email_verified_access_matrix(self):
+        free_unverified = self._user('free', self.free_tier, False)
+        free_verified = self._user('free', self.free_tier, True)
+        basic_unverified = self._user('basic', self.basic_tier, False)
+        basic_verified = self._user('basic', self.basic_tier, True)
+        main_unverified = self._user('main', self.main_tier, False)
+        main_verified = self._user('main', self.main_tier, True)
+        premium_unverified = self._user('premium', self.premium_tier, False)
+        premium_verified = self._user('premium', self.premium_tier, True)
+        staff_unverified = self._user('staff', self.free_tier, False, is_staff=True)
+        staff_verified = self._user('staff', self.free_tier, True, is_staff=True)
+
+        override_user = self._user('override', self.free_tier, False)
+        TierOverride.objects.create(
+            user=override_user,
+            original_tier=self.free_tier,
+            override_tier=self.basic_tier,
+            expires_at=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+
+        cases = [
+            ('anonymous', self.anon, True, False),
+            ('free unverified', free_unverified, False, False),
+            ('free verified', free_verified, True, False),
+            ('basic unverified', basic_unverified, True, True),
+            ('basic verified', basic_verified, True, True),
+            ('main unverified', main_unverified, True, True),
+            ('main verified', main_verified, True, True),
+            ('premium unverified', premium_unverified, True, True),
+            ('premium verified', premium_verified, True, True),
+            ('staff unverified', staff_unverified, True, True),
+            ('staff verified', staff_verified, True, True),
+            ('free override unverified', override_user, True, True),
+        ]
+        for label, user, expected_open, expected_basic in cases:
+            with self.subTest(user=label, level=LEVEL_OPEN):
+                self.assertEqual(can_access(user, self.open_article), expected_open)
+            with self.subTest(user=label, level=LEVEL_BASIC):
+                self.assertEqual(can_access(user, self.basic_article), expected_basic)
+
+    def test_build_gating_context_unverified_free(self):
+        user = self._user('ctx-free', self.free_tier, False)
+        ctx = build_gating_context(user, self.open_article, 'article')
+        self.assertTrue(ctx['is_gated'])
+        self.assertEqual(ctx['gated_reason'], 'unverified_email')
+        self.assertEqual(ctx['verify_email_address'], user.email)
+        self.assertEqual(ctx['verify_resend_url'], '/account/api/resend-verification')
+
+    def test_build_gating_context_insufficient_tier(self):
+        user = self._user('ctx-tier', self.free_tier, True)
+        ctx = build_gating_context(user, self.basic_article, 'article')
+        self.assertTrue(ctx['is_gated'])
+        self.assertEqual(ctx['gated_reason'], 'insufficient_tier')
+        self.assertEqual(ctx['cta_message'], 'Upgrade to Basic to read this article')
+
+    def test_course_access_row_bypasses_email_check(self):
+        user = self._user('course-access', self.free_tier, False)
+        course = Course.objects.create(
+            title='Granted Course', slug='granted-course',
+            required_level=LEVEL_BASIC, status='published',
+        )
+        CourseAccess.objects.create(user=user, course=course, access_type='granted')
+        self.assertTrue(can_access(user, course))
+
+    def test_oauth_signal_marks_email_verified_and_unblocks_free_content(self):
+        user = self._user('oauth', self.free_tier, False)
+
+        class SocialLogin:
+            pass
+
+        sociallogin = SocialLogin()
+        sociallogin.user = user
+        mark_email_verified_on_social_login(sender=None, request=None, sociallogin=sociallogin)
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertTrue(can_access(user, self.open_article))
 
 
 @tag('core')
@@ -483,6 +600,186 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Upgrade to Premium to read this tutorial')
 
 
+@tag('core')
+class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
+    """Each content detail surface renders the verify-email gate for free users."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            email='unverified-detail@example.com',
+            password='testpass',
+            email_verified=False,
+        )
+        self.user.tier = self.free_tier
+        self.user.save()
+        self.client.login(email='unverified-detail@example.com', password='testpass')
+
+    def assert_verify_gate(self, response):
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="verify-email-required-card"')
+        self.assertContains(response, 'unverified-detail@example.com')
+        self.assertContains(response, 'Resend verification email')
+        self.assertNotContains(response, 'data-testid="gated-access-card"')
+
+    def test_blog_detail_renders_verify_gate(self):
+        Article.objects.create(
+            title='Free Blog Gate', slug='free-blog-gate',
+            content_html='<p>Free blog body</p>',
+            date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
+        )
+        response = self.client.get('/blog/free-blog-gate')
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'Free blog body')
+
+    def test_tutorial_detail_renders_verify_gate(self):
+        Tutorial.objects.create(
+            title='Free Tutorial Gate', slug='free-tutorial-gate',
+            content_html='<p>Free tutorial body</p>',
+            date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
+        )
+        response = self.client.get('/tutorials/free-tutorial-gate')
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'Free tutorial body')
+
+    def test_project_detail_renders_verify_gate(self):
+        Project.objects.create(
+            title='Free Project Gate', slug='free-project-gate',
+            content_html='<p>Free project body</p>',
+            date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
+        )
+        response = self.client.get('/projects/free-project-gate')
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'Free project body')
+
+    def test_recording_detail_renders_verify_gate(self):
+        Event.objects.create(
+            title='Free Recording Gate', slug='free-recording-gate',
+            description='Recording description',
+            recording_url='https://youtube.com/watch?v=free',
+            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)),
+            status='completed', published=True, required_level=LEVEL_OPEN,
+        )
+        response = self.client.get('/events/free-recording-gate')
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'youtube.com/embed')
+
+    def test_event_detail_renders_verify_gate(self):
+        Event.objects.create(
+            title='Free Event Gate', slug='free-event-gate',
+            description='Event description',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming', published=True, required_level=LEVEL_OPEN,
+        )
+        response = self.client.get('/events/free-event-gate')
+        self.assert_verify_gate(response)
+
+    def test_course_detail_renders_verify_gate(self):
+        Course.objects.create(
+            title='Free Course Gate', slug='free-course-gate',
+            description='Free course description',
+            status='published', required_level=LEVEL_OPEN,
+        )
+        response = self.client.get('/courses/free-course-gate')
+        self.assert_verify_gate(response)
+
+    def test_course_unit_detail_renders_verify_gate(self):
+        course = Course.objects.create(
+            title='Free Unit Course Gate', slug='free-unit-course-gate',
+            status='published', required_level=LEVEL_OPEN,
+        )
+        module = Module.objects.create(course=course, title='Module 1', slug='module-1')
+        Unit.objects.create(
+            module=module, title='Unit 1', slug='unit-1',
+            body='<p>Free unit body</p>', is_preview=False,
+        )
+        response = self.client.get('/courses/free-unit-course-gate/module-1/unit-1')
+        self.assert_verify_gate(response)
+        self.assertNotContains(response, 'data-testid="teaser-cta"')
+
+    def test_curated_link_click_through_renders_verify_gate(self):
+        link = CuratedLink.objects.create(
+            item_id='free-link-gate',
+            title='Free Link Gate',
+            description='Free link description',
+            url='https://example.com/free-link',
+            category='tools',
+            required_level=LEVEL_OPEN,
+        )
+        response = self.client.get(f'/resources/{link.pk}/go')
+        self.assert_verify_gate(response)
+
+    def test_download_file_renders_verify_gate(self):
+        Download.objects.create(
+            title='Free Download Gate',
+            slug='free-download-gate',
+            description='Free download description',
+            file_url='https://example.com/free.pdf',
+            required_level=LEVEL_OPEN,
+            published=True,
+        )
+        response = self.client.get('/api/downloads/free-download-gate/file')
+        self.assert_verify_gate(response)
+
+    def test_free_listings_still_render_normally(self):
+        Article.objects.create(
+            title='Listed Free Blog', slug='listed-free-blog',
+            date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
+        )
+        Tutorial.objects.create(
+            title='Listed Free Tutorial', slug='listed-free-tutorial',
+            date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
+        )
+        Project.objects.create(
+            title='Listed Free Project', slug='listed-free-project',
+            date=date(2025, 1, 1), published=True, required_level=LEVEL_OPEN,
+        )
+        Event.objects.create(
+            title='Listed Free Recording', slug='listed-free-recording',
+            start_datetime=timezone.now() - timedelta(days=7),
+            status='completed', published=True, required_level=LEVEL_OPEN,
+            recording_url='https://youtube.com/watch?v=listed',
+        )
+        Event.objects.create(
+            title='Listed Free Event', slug='listed-free-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming', published=True, required_level=LEVEL_OPEN,
+        )
+        Course.objects.create(
+            title='Listed Free Course', slug='listed-free-course',
+            status='published', required_level=LEVEL_OPEN,
+        )
+        CuratedLink.objects.create(
+            item_id='listed-free-link',
+            title='Listed Free Link',
+            url='https://example.com/listed-link',
+            category='tools',
+            required_level=LEVEL_OPEN,
+        )
+        Download.objects.create(
+            title='Listed Free Download',
+            slug='listed-free-download',
+            file_url='https://example.com/listed.pdf',
+            required_level=LEVEL_OPEN,
+            published=True,
+        )
+        cases = [
+            ('/blog', 'Listed Free Blog'),
+            ('/tutorials', 'Listed Free Tutorial'),
+            ('/projects', 'Listed Free Project'),
+            ('/events?filter=past', 'Listed Free Recording'),
+            ('/events', 'Listed Free Event'),
+            ('/courses', 'Listed Free Course'),
+            ('/resources', 'Listed Free Link'),
+            ('/downloads', 'Listed Free Download'),
+        ]
+        for path, text in cases:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, text)
+
+
 # --- Lock icon in listing pages ---
 # Lock icon presence on listing pages is covered end-to-end by:
 #   playwright_tests/test_articles_blog.py  (blog listing lock icon)
@@ -541,5 +838,3 @@ class AccessTemplateTagsTest(TierSetupMixin, TestCase):
         self.assertEqual(required_tier_name(10), 'Basic')
         self.assertEqual(required_tier_name(20), 'Main')
         self.assertEqual(required_tier_name(30), 'Premium')
-
-

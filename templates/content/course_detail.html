@@ -264,7 +264,9 @@
       {% endif %}
 
       <!-- CTA for unauthorized users -->
-      {% if cta_message %}
+      {% if gated_reason == "unverified_email" %}
+      {% include "content/_verify_email_required.html" %}
+      {% elif cta_message %}
       <div class="rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
         <div class="mb-4">
           {% if is_free_course and not user_authenticated %}

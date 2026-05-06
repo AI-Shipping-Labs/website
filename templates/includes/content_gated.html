@@ -7,6 +7,9 @@ Expects these context variables:
   - pricing_url: URL to the pricing page (defaults to /pricing)
 {% endcomment %}
 
+{% if gated_reason == "unverified_email" %}
+  {% include "content/_verify_email_required.html" %}
+{% else %}
 <div class="relative mt-8">
   <!-- Teaser text -->
   {% if teaser %}
@@ -31,7 +34,7 @@ Expects these context variables:
   </div>
 
   <!-- CTA Banner -->
-  <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center">
+  <div class="mt-8 rounded-lg border border-accent/30 bg-accent/5 p-8 text-center" data-testid="gated-access-card">
     <div class="mb-4">
       <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
     </div>
@@ -44,3 +47,4 @@ Expects these context variables:
     </a>
   </div>
 </div>
+{% endif %}

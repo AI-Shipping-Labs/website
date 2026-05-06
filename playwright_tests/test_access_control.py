@@ -361,6 +361,96 @@ def _clear_all_content():
 
 
 # ---------------------------------------------------------------
+# Scenario 449: Newly signed-up reader hits a free article
+# ---------------------------------------------------------------
+
+@pytest.mark.django_db(transaction=True)
+class TestScenario449UnverifiedSignupFreeArticle:
+    """New email/password signups must verify before reading free details."""
+
+    def test_new_signup_gets_verify_email_gate_for_free_article(
+        self, django_server, page
+    ):
+        _clear_all_content()
+
+        from accounts.models import User
+
+        User.objects.filter(email="unverified@test.com").delete()
+        connection.close()
+
+        _create_article(
+            title="Free Article Requires Verification",
+            slug="free-article-requires-verification",
+            description="A free article visible in listings.",
+            content_markdown=(
+                "# Free Article Requires Verification\n\n"
+                "Full article body after verification.\n\n"
+                "Related articles should remain below the page."
+            ),
+            author="Alice",
+            tags=["verification"],
+            required_level=0,
+        )
+        _create_article(
+            title="Related Verification Article",
+            slug="related-verification-article",
+            description="A related free article.",
+            content_markdown="# Related Verification Article\n\nRelated body.",
+            tags=["verification"],
+            required_level=0,
+        )
+
+        page.goto(f"{django_server}/accounts/register/", wait_until="domcontentloaded")
+        csrf_cookie = page.context.cookies(django_server)
+        csrf_token = next(
+            cookie["value"] for cookie in csrf_cookie if cookie["name"] == "csrftoken"
+        )
+
+        register_response = page.request.post(
+            f"{django_server}/api/register",
+            data={"email": "unverified@test.com", "password": "pass1234"},
+            headers={"X-CSRFToken": csrf_token},
+        )
+        assert register_response.status == 201
+
+        page.goto(f"{django_server}/accounts/login/", wait_until="domcontentloaded")
+        page.fill("#login-email", "unverified@test.com")
+        page.fill("#login-password", "pass1234")
+        page.click("#login-submit")
+        page.wait_for_url(f"{django_server}/")
+
+        page.goto(f"{django_server}/blog", wait_until="domcontentloaded")
+        assert "Free Article Requires Verification" in page.content()
+
+        page.locator('text="Free Article Requires Verification"').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.locator('[data-testid="verify-email-required-card"]').is_visible()
+        body = page.content()
+        assert "unverified@test.com" in body
+        assert "Full article body after verification" not in body
+        assert 'data-testid="gated-access-card"' not in body
+        assert page.get_by_role("button", name="Resend verification email").is_visible()
+        assert page.locator('a[href="/pricing"]').count() > 0
+
+        article_url = page.url
+        page.get_by_role("button", name="Resend verification email").click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url == article_url
+        assert "Verification email sent." in page.content()
+
+        user = User.objects.get(email="unverified@test.com")
+        user.email_verified = True
+        user.save(update_fields=["email_verified"])
+        connection.close()
+
+        page.reload(wait_until="domcontentloaded")
+        final_body = page.content()
+        assert "Full article body after verification" in final_body
+        assert 'data-testid="verify-email-required-card"' not in final_body
+        assert "Related Articles" in final_body
+
+
+# ---------------------------------------------------------------
 # Scenario 1: Anonymous visitor reads open content freely
 # ---------------------------------------------------------------
 

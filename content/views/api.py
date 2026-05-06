@@ -1,11 +1,11 @@
 import json
 
 from django.http import HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.utils.text import slugify
 from django.views.decorators.http import require_GET, require_POST
 
-from content.access import can_access
+from content.access import build_gating_context, can_access
 from content.models import Download, Project
 
 
@@ -120,6 +120,13 @@ def download_file(request, slug):
 
     # Gated download: user does not have sufficient access level
     if not can_access(request.user, download):
+        gating = build_gating_context(request.user, download, 'download')
+        if gating.get('gated_reason') == 'unverified_email':
+            return render(
+                request,
+                'content/download_verify_required.html',
+                {'download': download, **gating},
+            )
         return JsonResponse(
             {'error': 'Insufficient access level'},
             status=403,

@@ -80,7 +80,9 @@ class EventListRegisteredBadgeInlineTest(TierSetupMixin, TestCase):
             required_level=LEVEL_OPEN,
         )
         cls.user = User.objects.create_user(
-            email="reg@test.com", password="testpass"
+            email="reg@test.com",
+            password="testpass",
+            email_verified=True,
         )
         EventRegistration.objects.create(user=cls.user, event=cls.event)
 
@@ -141,7 +143,9 @@ class EventDetailRegisterButtonFullWidthMobileTest(TestCase):
             required_level=LEVEL_OPEN,
         )
         cls.user = User.objects.create_user(
-            email="btn@test.com", password="testpass"
+            email="btn@test.com",
+            password="testpass",
+            email_verified=True,
         )
 
     def test_register_button_full_width_on_mobile(self):

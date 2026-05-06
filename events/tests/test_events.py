@@ -581,7 +581,11 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         # is an upgrade prompt that appears for any insufficient-tier user.
 
     def test_main_user_sees_register_button(self):
-        user = User.objects.create_user(email='main@test.com', password='pass')
+        user = User.objects.create_user(
+            email='main@test.com',
+            password='pass',
+            email_verified=True,
+        )
         user.tier = self.main_tier
         user.save()
         self.client.login(email='main@test.com', password='pass')
@@ -591,7 +595,11 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Upgrade to Main')
 
     def test_basic_user_sees_upgrade_cta_for_main_event(self):
-        user = User.objects.create_user(email='basic@test.com', password='pass')
+        user = User.objects.create_user(
+            email='basic@test.com',
+            password='pass',
+            email_verified=True,
+        )
         user.tier = self.basic_tier
         user.save()
         self.client.login(email='basic@test.com', password='pass')
@@ -609,7 +617,11 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         other_user = User.objects.create_user(email='other@test.com', password='pass')
         EventRegistration.objects.create(event=event, user=other_user)
 
-        User.objects.create_user(email='viewer@test.com', password='pass')
+        User.objects.create_user(
+            email='viewer@test.com',
+            password='pass',
+            email_verified=True,
+        )
         self.client.login(email='viewer@test.com', password='pass')
         response = self.client.get('/events/full-event-detail')
         self.assertContains(response, 'Event is full')
@@ -626,7 +638,11 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
             status='upcoming',
             zoom_join_url='https://zoom.us/j/123456',
         )
-        user = User.objects.create_user(email='soon@test.com', password='pass')
+        user = User.objects.create_user(
+            email='soon@test.com',
+            password='pass',
+            email_verified=True,
+        )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='soon@test.com', password='pass')
         response = self.client.get('/events/soon-event')
@@ -640,7 +656,11 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
             status='upcoming',
             zoom_join_url='https://zoom.us/j/999999',
         )
-        user = User.objects.create_user(email='far@test.com', password='pass')
+        user = User.objects.create_user(
+            email='far@test.com',
+            password='pass',
+            email_verified=True,
+        )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='far@test.com', password='pass')
         response = self.client.get('/events/far-event')
@@ -654,7 +674,11 @@ class EventDetailZoomLinkTest(TierSetupMixin, TestCase):
             status='upcoming',
             zoom_join_url='https://zoom.us/j/111111',
         )
-        User.objects.create_user(email='notreg@test.com', password='pass')
+        User.objects.create_user(
+            email='notreg@test.com',
+            password='pass',
+            email_verified=True,
+        )
         self.client.login(email='notreg@test.com', password='pass')
         response = self.client.get('/events/not-reg-event')
         self.assertNotContains(response, 'https://zoom.us/j/111111')
@@ -670,7 +694,11 @@ class EventDetailRegisteredStatusTest(TierSetupMixin, TestCase):
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        user = User.objects.create_user(email='regstat@test.com', password='pass')
+        user = User.objects.create_user(
+            email='regstat@test.com',
+            password='pass',
+            email_verified=True,
+        )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='regstat@test.com', password='pass')
         response = self.client.get('/events/reg-status-event')
@@ -683,7 +711,11 @@ class EventDetailRegisteredStatusTest(TierSetupMixin, TestCase):
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        User.objects.create_user(email='unreg@test.com', password='pass')
+        User.objects.create_user(
+            email='unreg@test.com',
+            password='pass',
+            email_verified=True,
+        )
         self.client.login(email='unreg@test.com', password='pass')
         response = self.client.get('/events/unreg-event')
         self.assertFalse(response.context['is_registered'])
@@ -707,7 +739,7 @@ class RegisterForEventAPITest(TierSetupMixin, TestCase):
             required_level=LEVEL_OPEN,
         )
         self.user = User.objects.create_user(
-            email='apiuser@test.com', password='pass',
+            email='apiuser@test.com', password='pass', email_verified=True,
         )
 
     def test_register_success(self):
@@ -816,7 +848,7 @@ class UnregisterFromEventAPITest(TestCase):
             status='upcoming',
         )
         self.user = User.objects.create_user(
-            email='unreg@test.com', password='pass',
+            email='unreg@test.com', password='pass', email_verified=True,
         )
 
     def test_unregister_success(self):
@@ -1001,7 +1033,11 @@ class EventsListRegisteredBadgeTest(TestCase):
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        user = User.objects.create_user(email='badge@test.com', password='pass')
+        user = User.objects.create_user(
+            email='badge@test.com',
+            password='pass',
+            email_verified=True,
+        )
         EventRegistration.objects.create(event=event, user=user)
         self.client.login(email='badge@test.com', password='pass')
         response = self.client.get('/events')
@@ -1018,7 +1054,11 @@ class EventsListRegisteredBadgeTest(TestCase):
             start_datetime=timezone.now() + timedelta(days=7),
             status='upcoming',
         )
-        User.objects.create_user(email='nobadge@test.com', password='pass')
+        User.objects.create_user(
+            email='nobadge@test.com',
+            password='pass',
+            email_verified=True,
+        )
         self.client.login(email='nobadge@test.com', password='pass')
         response = self.client.get('/events')
         # No registered event IDs in context

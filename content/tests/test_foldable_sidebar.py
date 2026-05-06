@@ -55,6 +55,7 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email="foldable-markup@test.com",
             password="pw12345!",
+            email_verified=True,
         )
         cls.user.tier = cls.free_tier
         cls.user.save()

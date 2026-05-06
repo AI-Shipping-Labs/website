@@ -99,7 +99,10 @@ class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
     """
 
     def setUp(self):
-        self.user = User.objects.create_user(email='access@test.com')
+        self.user = User.objects.create_user(
+            email='access@test.com',
+            email_verified=True,
+        )
         # User has free tier (level 0)
         self.paid_course = Course.objects.create(
             title='Paid Course', slug='paid-access-test',

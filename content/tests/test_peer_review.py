@@ -57,6 +57,7 @@ def _create_course(peer_review_enabled=True, **kwargs):
 
 
 def _create_user(email, **kwargs):
+    kwargs.setdefault('email_verified', True)
     return User.objects.create_user(email=email, password='testpass123', **kwargs)
 
 

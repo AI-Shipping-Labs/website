@@ -24,7 +24,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
-from integrations.config import clear_config_cache
+from integrations.config import clear_config_cache, site_base_url
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import INTEGRATION_GROUPS, get_group_by_name
 from studio.decorators import staff_required
@@ -268,8 +268,9 @@ def settings_dashboard(request):
     for group_def in INTEGRATION_GROUPS:
         groups.append(_build_group_context(group_def, db_settings))
 
+    resolved_site_base_url = site_base_url()
     auth_providers = get_all_auth_providers(
-        django_settings.SITE_BASE_URL,
+        resolved_site_base_url,
         django_settings.SOCIALACCOUNT_PROVIDERS,
     )
 
@@ -281,7 +282,7 @@ def settings_dashboard(request):
         'auth_providers': auth_providers,
         'settings_sections': sections,
         'status_summary': status_summary,
-        'site_base_url': django_settings.SITE_BASE_URL,
+        'site_base_url': resolved_site_base_url,
     })
 
 

@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 
 from email_app.models import EmailLog
 from email_app.services.email_service import EmailService
+from integrations.config import site_base_url
 
 JWT_ALGORITHM = "HS256"
 
@@ -44,7 +45,7 @@ def send_imported_welcome_email(user_id):
 
 
 def _build_context(user):
-    site_url = settings.SITE_BASE_URL.rstrip("/")
+    site_url = site_base_url().rstrip("/")
     course_db_metadata = (user.import_metadata or {}).get("course_db") or {}
     course_slugs = course_db_metadata.get("course_slugs") or []
     slack_metadata = (user.import_metadata or {}).get("slack") or {}
@@ -61,7 +62,7 @@ def _build_context(user):
 
 
 def _build_password_reset_url(user):
-    site_url = settings.SITE_BASE_URL.rstrip("/")
+    site_url = site_base_url().rstrip("/")
     payload = {
         "user_id": user.pk,
         "action": "password_reset",

@@ -17,6 +17,8 @@ from django import template
 from django.conf import settings
 from django.utils.safestring import mark_safe
 
+from integrations.config import site_base_url
+
 register = template.Library()
 
 
@@ -26,8 +28,8 @@ DEFAULT_OG_IMAGE_ALT = 'AI Shipping Labs'
 
 
 def _get_site_url():
-    """Return the site URL from settings."""
-    return settings.SITE_BASE_URL
+    """Return the site URL, honoring the Studio DB override."""
+    return site_base_url()
 
 
 def _truncate_description(text, max_length=160):

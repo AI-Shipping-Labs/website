@@ -574,3 +574,129 @@ class EnvMismatchAliasTest(TestCase):
         self.assertIsNotNone(payload)
         self.assertEqual(payload['configured_host'], 'aishippinglabs.com')
         self.assertEqual(payload['request_url'], 'http://localhost:8000')
+
+
+class EnvMismatchOverrideTest(TestCase):
+    """A Studio DB override of ``SITE_BASE_URL`` must drive the banner
+    comparison instead of ``settings.SITE_BASE_URL`` (issue #435).
+
+    Mirrors :class:`EnvMismatchAliasTest`'s setup style: a fresh
+    ``RequestFactory`` per test, ``clear_config_cache()`` in
+    ``setUp``/``tearDown`` so DB rows are visible but don't leak.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def _request(self, host, scheme='http'):
+        return self.factory.get(
+            '/studio/',
+            HTTP_HOST=host,
+            **{'wsgi.url_scheme': scheme},
+        )
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_db_override_clears_banner_when_matches_request_host(self):
+        # The original bug: env says aishippinglabs.com, override is
+        # prod.aishippinglabs.com, request comes in on prod — banner
+        # MUST be suppressed because the override is what we want.
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://prod.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        request = self._request('prod.aishippinglabs.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(request))
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_db_override_replaces_env_value_in_banner_payload(self):
+        # When the override does not match the request host, the
+        # payload must show the OVERRIDE value (not the env value)
+        # under "Configured" — this is the operator-visible symptom.
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://prod.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        request = self._request('localhost:8000', scheme='http')
+        payload = _build_env_mismatch_payload(request)
+        self.assertIsNotNone(payload)
+        self.assertEqual(
+            payload['configured_base_url'],
+            'https://prod.aishippinglabs.com',
+        )
+        self.assertEqual(
+            payload['configured_host'], 'prod.aishippinglabs.com',
+        )
+        # Negative assertion: the env value must not appear.
+        self.assertNotEqual(
+            payload['configured_base_url'], 'https://aishippinglabs.com',
+        )
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=['aishippinglabs.com', 'localhost'],
+    )
+    def test_no_override_preserves_env_value_in_banner_payload(self):
+        # No DB row => the banner reads the env value, exactly as it
+        # did before this issue. Regression guard.
+        self.assertFalse(
+            IntegrationSetting.objects.filter(key='SITE_BASE_URL').exists()
+        )
+        request = self._request('localhost:8000', scheme='http')
+        payload = _build_env_mismatch_payload(request)
+        self.assertIsNotNone(payload)
+        self.assertEqual(
+            payload['configured_base_url'], 'https://aishippinglabs.com',
+        )
+
+    @override_settings(
+        SITE_BASE_URL='https://aishippinglabs.com',
+        ALLOWED_HOSTS=[
+            'aishippinglabs.com', 'prod.aishippinglabs.com',
+            'localhost',
+        ],
+    )
+    def test_clearing_override_via_save_revives_env_value(self):
+        # Mirrors the Studio empty-string flow at
+        # studio/views/settings.py: saving an empty value deletes the
+        # row, which must restore env-only behaviour.
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://prod.aishippinglabs.com',
+            group='site',
+        )
+        clear_config_cache()
+        # Sanity: with override, prod request is suppressed.
+        prod_request = self._request('prod.aishippinglabs.com', scheme='https')
+        self.assertIsNone(_build_env_mismatch_payload(prod_request))
+
+        # Now delete the override the same way settings_save_group does.
+        IntegrationSetting.objects.filter(key='SITE_BASE_URL').delete()
+        clear_config_cache()
+
+        # With no override, the prod request now triggers the banner
+        # (env value is aishippinglabs.com which doesn't match prod).
+        payload = _build_env_mismatch_payload(prod_request)
+        self.assertIsNotNone(payload)
+        self.assertEqual(
+            payload['configured_base_url'], 'https://aishippinglabs.com',
+        )

@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 
 from content.models import Article
 from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 from notifications.services.slack_announcements import (
     _build_slack_blocks,
     post_slack_announcement,
@@ -193,3 +194,47 @@ class PostSlackAnnouncementTest(TestCase):
             result = post_slack_announcement('article', article)
 
         self.assertFalse(result)
+
+
+@override_settings(SITE_BASE_URL='https://env.example.com')
+class SlackAnnouncementSiteUrlOverrideTest(TestCase):
+    """Slack announcement URLs respect the Studio override (issue #435)."""
+
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def test_announcement_blocks_use_db_override_for_content_url(self):
+        IntegrationSetting.objects.create(
+            key='SITE_BASE_URL',
+            value='https://override.example.com',
+            group='site',
+        )
+        clear_config_cache()
+        article = Article.objects.create(
+            title='Override Slack', slug='override-slack',
+            date=date(2025, 1, 1),
+        )
+        _, blocks = _build_slack_blocks('article', article)
+        button = blocks[1]['elements'][0]
+        self.assertEqual(
+            button['url'],
+            f'https://override.example.com{article.get_absolute_url()}',
+        )
+        self.assertNotIn(
+            'env.example.com', blocks[0]['text']['text'],
+        )
+
+    def test_announcement_blocks_fall_back_to_settings(self):
+        article = Article.objects.create(
+            title='Env Slack', slug='env-slack',
+            date=date(2025, 1, 1),
+        )
+        _, blocks = _build_slack_blocks('article', article)
+        button = blocks[1]['elements'][0]
+        self.assertEqual(
+            button['url'],
+            f'https://env.example.com{article.get_absolute_url()}',
+        )

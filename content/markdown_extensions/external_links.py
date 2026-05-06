@@ -1,7 +1,8 @@
 """External-link rewriting for python-markdown (issue #303).
 
 Adds ``target="_blank"`` and ``rel="...noopener"`` to ``<a>`` elements that
-point to a host other than ``settings.SITE_BASE_URL``. Internal links
+point to a host other than the resolved ``SITE_BASE_URL`` (DB override
+preferred, env fallback). Internal links
 (anchors, relative paths, root-relative paths, same-domain absolute
 URLs, and non-http schemes such as ``mailto:`` and ``tel:``) are left
 alone.
@@ -27,16 +28,18 @@ Notes on what the treeprocessor does and does NOT touch:
 
 from urllib.parse import urlparse
 
-from django.conf import settings
 from markdown.extensions import Extension
 from markdown.treeprocessors import Treeprocessor
+
+from integrations.config import site_base_url
 
 
 def _site_hosts():
     """Return the set of lowercase hostnames considered "internal".
 
-    Source of truth is ``settings.SITE_BASE_URL``. We deliberately do
-    NOT use ``ALLOWED_HOSTS`` because it can include wildcards (``*``)
+    Source of truth is the resolved ``SITE_BASE_URL`` (DB override >
+    env), via ``integrations.config.site_base_url()``. We deliberately
+    do NOT use ``ALLOWED_HOSTS`` because it can include wildcards (``*``)
     and dev hosts (``localhost``); a wildcard would silently treat every
     link as internal.
 
@@ -57,7 +60,7 @@ def _site_hosts():
     take effect.
     """
     hosts = set()
-    site_url = getattr(settings, 'SITE_BASE_URL', '') or ''
+    site_url = site_base_url() or ''
     if site_url:
         netloc = urlparse(site_url).netloc.lower()
         if netloc:

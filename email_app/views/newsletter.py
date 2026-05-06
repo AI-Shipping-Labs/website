@@ -11,6 +11,8 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from integrations.config import site_base_url
+
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
@@ -69,7 +71,7 @@ def _send_subscribe_verification_email(user, redirect_to=None):
         redirect_to: Optional download URL for lead magnet flow.
     """
     token = _generate_verification_token(user.pk, redirect_to=redirect_to)
-    site_url = settings.SITE_BASE_URL
+    site_url = site_base_url()
     verify_url = f"{site_url}/api/verify-email?token={token}"
 
     try:

@@ -21,7 +21,7 @@ from django.conf import settings
 from django.template import Context, Template
 from django.template.loader import render_to_string
 
-from integrations.config import get_config
+from integrations.config import get_config, site_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ class EmailService:
         full_context = {
             "user_name": user.first_name or user.email.split("@")[0],
             "user_email": user.email,
-            "site_url": settings.SITE_BASE_URL,
+            "site_url": site_base_url(),
             "site_name": getattr(settings, "SITE_NAME", "AI Shipping Labs"),
         }
         full_context.update(context)
@@ -185,7 +185,7 @@ class EmailService:
         """
         import jwt
 
-        site_url = settings.SITE_BASE_URL
+        site_url = site_base_url()
         secret = settings.SECRET_KEY
 
         token = jwt.encode(

@@ -8,10 +8,9 @@ when new content is published.
 import logging
 
 import requests
-from django.conf import settings
 
 from community.slack_config import get_slack_announcements_channel_id
-from integrations.config import get_config, is_enabled
+from integrations.config import get_config, is_enabled, site_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ def _build_slack_blocks(content_type, content):
     Returns:
         Tuple of (text_fallback, blocks_list).
     """
-    site_url = settings.SITE_BASE_URL
+    site_url = site_base_url()
     url = content.get_absolute_url() if hasattr(content, 'get_absolute_url') else ''
     full_url = f'{site_url}{url}'
 

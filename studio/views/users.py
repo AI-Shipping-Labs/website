@@ -252,9 +252,19 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
             continue
 
         tags = list(user.tags or [])
+        first_name = user.first_name or ''
+        last_name = user.last_name or ''
+        # ``full_name`` is the strip-collapsed concatenation so the template
+        # can branch on truthiness alone (no ``f"{first} {last}".strip()``
+        # repeated across templates). When both names are blank it is the
+        # empty string and the User cell falls back to email-as-headline.
+        full_name = f'{first_name} {last_name}'.strip()
         user_rows.append({
             'pk': user.pk,
             'email': user.email,
+            'first_name': first_name,
+            'last_name': last_name,
+            'full_name': full_name,
             'date_joined': user.date_joined,
             'last_login': user.last_login,
             'is_subscribed': not user.unsubscribed,

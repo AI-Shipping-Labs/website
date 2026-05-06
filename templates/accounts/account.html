@@ -14,13 +14,22 @@
       <p class="text-muted-foreground mb-10">Manage your membership and preferences</p>
 
       {% if not user.email_verified %}
-      <!-- Email Verification Banner -->
+      <!-- Email Verification Banner (issue #448) -->
       <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 mb-8" id="email-verification-banner">
         <div class="flex items-start gap-3">
           <i data-lucide="mail-warning" class="h-5 w-5 text-amber-400 mt-0.5 shrink-0"></i>
-          <div>
+          <div class="flex-1">
             <p class="text-sm text-amber-200 font-medium">Verify your email</p>
-            <p class="text-sm text-amber-200/80 mt-1">Please check your inbox and verify your email address to get the most out of your account.</p>
+            <p class="text-sm text-amber-200/80 mt-1">Your email isn't verified yet. Verify it to keep your account active and receive notifications.</p>
+            <form method="post" action="{% url 'account_resend_verification' %}" class="mt-3">
+              {% csrf_token %}
+              <button type="submit"
+                      id="resend-verification-btn"
+                      class="inline-flex items-center gap-2 rounded-md border border-amber-500/40 bg-transparent px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/20">
+                <i data-lucide="mail" class="h-4 w-4"></i>
+                Resend verification email
+              </button>
+            </form>
           </div>
         </div>
       </div>

@@ -7,9 +7,14 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
+
+# Issue #448: per-user resend throttle for the account verification banner.
+RESEND_VERIFICATION_THROTTLE_SECONDS = 60
+RESEND_VERIFICATION_CACHE_KEY_TEMPLATE = "verify-email-resend:{user_id}"
 
 # Matches AbstractUser.first_name / last_name max_length so an over-long
 # value is rejected before Django's model-level validator complains. Keeping
@@ -436,3 +441,29 @@ def member_plan_edit(request, plan_id):
         token_name=MEMBER_EDITOR_TOKEN_NAME,
     )
     return render(request, "account/plan_edit.html", context)
+
+
+@login_required
+@require_POST
+def resend_verification_view(request):
+    """Resend the email-verification message to the current user."""
+    user = request.user
+
+    if user.email_verified:
+        messages.info(request, "Your email is already verified.")
+        return redirect("account")
+
+    cache_key = RESEND_VERIFICATION_CACHE_KEY_TEMPLATE.format(user_id=user.id)
+    if not cache.add(cache_key, "1", RESEND_VERIFICATION_THROTTLE_SECONDS):
+        messages.warning(
+            request,
+            "We just sent a verification email -- check your inbox. "
+            "You can request another in a minute.",
+        )
+        return redirect("account")
+
+    from accounts.views.auth import _send_verification_email
+
+    _send_verification_email(user)
+    messages.success(request, "Verification email sent. Check your inbox.")
+    return redirect("account")

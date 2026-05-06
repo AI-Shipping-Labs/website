@@ -929,3 +929,126 @@ class TestScenarioEmailVerificationBanner:
 
         assert page.locator("#email-verification-banner").count() == 0
         ctx.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestScenarioResendVerificationEmail:
+    """Unverified member can resend verification email from /account/."""
+
+    def _clear_throttle_cache(self, db_blocker):
+        with db_blocker.unblock():
+            from django.core.cache import cache as _cache
+            _cache.clear()
+
+    def test_unverified_member_sees_resend_button_and_can_send(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        from playwright.sync_api import expect
+
+        self._clear_throttle_cache(django_db_blocker)
+        ctx = _auth_context(
+            browser, "free-unverified@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        banner = page.locator("#email-verification-banner")
+        expect(banner).to_be_visible()
+        button = banner.locator("#resend-verification-btn")
+        expect(button).to_be_visible()
+        assert "Resend verification email" in button.inner_text()
+
+        banner_y = banner.bounding_box()["y"]
+        profile_y = page.locator("#profile-section").bounding_box()["y"]
+        assert banner_y < profile_y
+
+        button.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.rstrip("/").endswith("/account")
+
+        success = page.locator(
+            '[data-testid="messages-region"] [data-message-tag="success"]'
+        )
+        expect(success).to_be_visible(timeout=5000)
+        assert "Verification email sent" in success.inner_text()
+        expect(page.locator("#email-verification-banner")).to_be_visible()
+        ctx.close()
+
+    def test_rapid_second_click_shows_throttle_warning(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        from playwright.sync_api import expect
+
+        self._clear_throttle_cache(django_db_blocker)
+        ctx = _auth_context(
+            browser, "free-unverified@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        page.click("#resend-verification-btn")
+        page.wait_for_load_state("domcontentloaded")
+        success = page.locator(
+            '[data-testid="messages-region"] [data-message-tag="success"]'
+        )
+        expect(success).to_be_visible(timeout=5000)
+
+        page.click("#resend-verification-btn")
+        page.wait_for_load_state("domcontentloaded")
+        warning = page.locator(
+            '[data-testid="messages-region"] [data-message-tag="warning"]'
+        )
+        expect(warning).to_be_visible(timeout=5000)
+        assert "minute" in warning.inner_text()
+        assert page.locator(
+            '[data-testid="messages-region"] [data-message-tag="success"]'
+        ).count() == 0
+        ctx.close()
+
+    def test_verified_member_sees_no_banner(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        ctx = _auth_context(
+            browser, "free@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+
+        assert page.locator("#email-verification-banner").count() == 0
+        heading_y = page.locator("h1").bounding_box()["y"]
+        profile_y = page.locator("#profile-section").bounding_box()["y"]
+        assert profile_y > heading_y
+        ctx.close()
+
+    def test_anonymous_post_redirects_to_login(
+        self, django_server, test_users, django_db_blocker, browser
+    ):
+        self._clear_throttle_cache(django_db_blocker)
+
+        anon = browser.new_context(viewport=VIEWPORT)
+        anon_page = anon.new_page()
+        anon_page.goto(
+            f"{django_server}/accounts/login/", wait_until="domcontentloaded"
+        )
+        cookies = {c["name"]: c["value"] for c in anon.cookies()}
+        csrf = cookies.get("csrftoken", "")
+
+        response = anon.request.post(
+            f"{django_server}/account/api/resend-verification",
+            headers={
+                "X-CSRFToken": csrf,
+                "Referer": f"{django_server}/account/",
+            },
+            max_redirects=0,
+        )
+        assert response.status == 302
+        assert "/accounts/login/" in response.headers.get("location", "")
+        anon.close()
+
+        ctx = _auth_context(
+            browser, "free-unverified@test.com", django_db_blocker
+        )
+        page = ctx.new_page()
+        _go_to_account(page, django_server)
+        assert page.locator("#email-verification-banner").is_visible()
+        ctx.close()

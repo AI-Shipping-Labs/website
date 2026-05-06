@@ -1077,3 +1077,120 @@ class CsrfCookieOnAuthPagesTest(TestCase):
             "CSRF token from register page cookie may not be working.",
         )
         self.assertEqual(register_resp.json()["status"], "ok")
+
+
+class ResendVerificationApiTest(TestCase):
+    """Tests for POST /account/api/resend-verification."""
+
+    URL = "/account/api/resend-verification"
+
+    def setUp(self):
+        from django.core.cache import cache as _cache
+        _cache.clear()
+
+    def _make_unverified_user(self, email="resend-unverified@example.com"):
+        return User.objects.create_user(email=email, password="test1234")
+
+    def _make_verified_user(self, email="resend-verified@example.com"):
+        user = User.objects.create_user(email=email, password="test1234")
+        user.email_verified = True
+        user.save(update_fields=["email_verified"])
+        return user
+
+    def test_unverified_user_post_sends_one_email(self):
+        with patch("accounts.views.auth._send_verification_email") as patched_send:
+            user = self._make_unverified_user()
+            self.client.force_login(user)
+
+            response = self.client.post(self.URL, follow=True)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.redirect_chain, [("/account/", 302)])
+            patched_send.assert_called_once()
+            sent_user = patched_send.call_args[0][0]
+            self.assertEqual(sent_user.pk, user.pk)
+            self.assertContains(response, "Verification email sent")
+            self.assertContains(response, 'data-message-tag="success"')
+
+    def test_second_post_within_window_does_not_resend(self):
+        with patch("accounts.views.auth._send_verification_email") as patched_send:
+            user = self._make_unverified_user("throttle@example.com")
+            self.client.force_login(user)
+
+            self.client.post(self.URL)
+            self.assertEqual(patched_send.call_count, 1)
+
+            response = self.client.post(self.URL, follow=True)
+
+            self.assertEqual(patched_send.call_count, 1)
+            self.assertEqual(response.redirect_chain, [("/account/", 302)])
+            self.assertContains(response, "minute")
+            self.assertContains(response, 'data-message-tag="warning"')
+
+    def test_clearing_throttle_key_allows_resend(self):
+        from django.core.cache import cache as _cache
+
+        with patch("accounts.views.auth._send_verification_email") as patched_send:
+            user = self._make_unverified_user("reset@example.com")
+            self.client.force_login(user)
+
+            self.client.post(self.URL)
+            self.client.post(self.URL)
+            self.assertEqual(patched_send.call_count, 1)
+
+            _cache.delete(f"verify-email-resend:{user.id}")
+
+            self.client.post(self.URL)
+            self.assertEqual(patched_send.call_count, 2)
+
+    def test_verified_user_post_does_not_send(self):
+        with patch("accounts.views.auth._send_verification_email") as patched_send:
+            user = self._make_verified_user()
+            self.client.force_login(user)
+
+            response = self.client.post(self.URL, follow=True)
+
+            self.assertEqual(response.redirect_chain, [("/account/", 302)])
+            patched_send.assert_not_called()
+            self.assertContains(response, "already verified")
+            self.assertContains(response, 'data-message-tag="info"')
+
+    def test_anonymous_post_redirects_to_login_and_does_not_send(self):
+        from django.core.cache import cache as _cache
+
+        with patch("accounts.views.auth._send_verification_email") as patched_send:
+            response = self.client.post(self.URL)
+
+            self.assertEqual(response.status_code, 302)
+            self.assertIn("/accounts/login/", response.url)
+            patched_send.assert_not_called()
+            self.assertIsNone(_cache.get("verify-email-resend:1"))
+
+    def test_get_returns_405(self):
+        user = self._make_unverified_user("get405@example.com")
+        self.client.force_login(user)
+
+        response = self.client.get(self.URL)
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_per_user_throttle_does_not_block_other_users(self):
+        with patch("accounts.views.auth._send_verification_email") as patched_send:
+            user_a = self._make_unverified_user("a-throttle@example.com")
+            user_b = self._make_unverified_user("b-throttle@example.com")
+
+            self.client.force_login(user_a)
+            self.client.post(self.URL)
+
+            self.client.logout()
+            self.client.force_login(user_b)
+            self.client.post(self.URL)
+
+            self.assertEqual(patched_send.call_count, 2)
+            send_emails = sorted(
+                call.args[0].email for call in patched_send.call_args_list
+            )
+            self.assertEqual(
+                send_emails,
+                ["a-throttle@example.com", "b-throttle@example.com"],
+            )

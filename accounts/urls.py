@@ -7,6 +7,7 @@ from accounts.views.account import (
     cancel_subscription_view,
     email_preferences_view,
     member_plan_edit,
+    resend_verification_view,
     theme_preference_view,
     timezone_preference_view,
 )
@@ -51,4 +52,9 @@ account_urlpatterns = [
     path('api/timezone-preference', timezone_preference_view, name='timezone_preference'),
     path('api/cancel', cancel_subscription_view, name='account_cancel_subscription'),
     path('api/change-password', change_password_api, name='account_change_password'),
+    path(
+        'api/resend-verification',
+        resend_verification_view,
+        name='account_resend_verification',
+    ),
 ]

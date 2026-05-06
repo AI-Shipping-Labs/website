@@ -51,6 +51,28 @@ class SetupSchedulesCommandTest(TestCase):
         )
         self.assertEqual(schedule.cron, '*/30 * * * *')
 
+    def test_creates_remind_unverified_users_schedule(self):
+        """Command creates remind-unverified-users schedule (issue #452)."""
+        call_command('setup_schedules', stdout=StringIO())
+        schedule = Schedule.objects.get(name='remind-unverified-users')
+        self.assertEqual(
+            schedule.func,
+            'accounts.tasks.remind_unverified_users',
+        )
+        self.assertEqual(schedule.cron, '0 7 * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+
+    def test_creates_purge_unverified_users_schedule(self):
+        """Command creates purge-unverified-users schedule (issue #452)."""
+        call_command('setup_schedules', stdout=StringIO())
+        schedule = Schedule.objects.get(name='purge-unverified-users')
+        self.assertEqual(
+            schedule.func,
+            'accounts.tasks.purge_unverified_users',
+        )
+        self.assertEqual(schedule.cron, '0 8 * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+
     def test_idempotent(self):
         """Running command twice does not create duplicate schedules."""
         call_command('setup_schedules', stdout=StringIO())
@@ -62,6 +84,8 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='slack-membership-refresh').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='import-slack-daily').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='import-stripe-daily').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='remind-unverified-users').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='purge-unverified-users').count(), 1)
 
     def test_no_unexpected_schedules_created(self):
         """Command does not create any schedules outside the expected set."""
@@ -75,6 +99,8 @@ class SetupSchedulesCommandTest(TestCase):
             'slack-membership-refresh',
             'import-slack-daily',
             'import-stripe-daily',
+            'remind-unverified-users',
+            'purge-unverified-users',
         }
         self.assertEqual(names, expected)
 

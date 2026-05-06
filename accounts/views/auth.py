@@ -1,5 +1,6 @@
 """Authentication views for email+password and OAuth login flows."""
 
+import datetime
 import json
 import logging
 import time
@@ -12,11 +13,17 @@ from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.models import User
-from integrations.config import site_base_url
+from integrations.config import get_config, site_base_url
+
+# Default grace period before an unverified email-signup account is
+# hard-deleted by the daily purge task. Operators override per
+# environment via the ``UNVERIFIED_USER_TTL_DAYS`` integration setting.
+DEFAULT_UNVERIFIED_USER_TTL_DAYS = 7
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +129,26 @@ def _generate_password_reset_token(user_id, expiry_hours=1):
         + datetime.timedelta(hours=expiry_hours),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def _resolve_unverified_ttl_days():
+    """Resolve the unverified-account grace period from operator config.
+
+    Reads ``UNVERIFIED_USER_TTL_DAYS`` (Studio > Settings > Auth) with
+    a 7-day fallback. Non-positive or non-numeric values fall back to
+    the default so a typo cannot disable the feature accidentally.
+    """
+    raw = get_config(
+        "UNVERIFIED_USER_TTL_DAYS",
+        str(DEFAULT_UNVERIFIED_USER_TTL_DAYS),
+    )
+    try:
+        days = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return DEFAULT_UNVERIFIED_USER_TTL_DAYS
+    if days <= 0:
+        return DEFAULT_UNVERIFIED_USER_TTL_DAYS
+    return days
 
 
 def _send_verification_email(user):
@@ -246,8 +273,18 @@ def register_api(request):
             {"error": "A user with this email already exists"}, status=400
         )
 
-    # Create user with email_verified=False and free tier
-    user = User.objects.create_user(email=email, password=password)
+    # Create user with email_verified=False and free tier. Issue #452:
+    # set ``verification_expires_at`` so the daily purge job can clean
+    # up email-only signups that never verify. Social signups go
+    # through allauth and never hit this path, so the field stays NULL
+    # for them — see ``accounts/signals.py``.
+    ttl_days = _resolve_unverified_ttl_days()
+    verification_expires_at = timezone.now() + datetime.timedelta(days=ttl_days)
+    user = User.objects.create_user(
+        email=email,
+        password=password,
+        verification_expires_at=verification_expires_at,
+    )
     # email_verified defaults to False, tier defaults to free (in model save)
 
     # Best-effort Slack workspace membership probe. If the email is
@@ -300,7 +337,18 @@ def verify_email_api(request):
 
     if not user.email_verified:
         user.email_verified = True
-        user.save(update_fields=["email_verified"])
+        # Issue #452: a successful verification cancels the auto-purge
+        # window. Clear ``verification_expires_at`` so the daily job
+        # leaves this user alone forever.
+        user.verification_expires_at = None
+        user.save(
+            update_fields=["email_verified", "verification_expires_at"],
+        )
+    elif user.verification_expires_at is not None:
+        # Defensive: if a user is already verified but still has an
+        # expiry hanging around (e.g. legacy data), clear it.
+        user.verification_expires_at = None
+        user.save(update_fields=["verification_expires_at"])
 
     # Check for redirect_to (lead magnet flow from newsletter subscribe)
     redirect_to = payload.get("redirect_to")

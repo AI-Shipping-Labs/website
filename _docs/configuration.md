@@ -35,7 +35,7 @@ Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_UR
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. Every integration group from `INTEGRATION_GROUPS` is rendered there with a status badge (`configured`, `partial`, `not_configured`).
 
-Test: visit `/studio/settings/` and confirm 9 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, YouTube, GitHub App, Slack, Site).
+Test: visit `/studio/settings/` and confirm 10 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, YouTube, GitHub App, Slack, Site, Auth).
 
 ## 3. OAuth login providers
 
@@ -80,6 +80,18 @@ Test: visit `{SITE_BASE_URL}/accounts/login/`, click "Sign in with GitHub", comp
 Foot-gun: this is a different Slack app from the BOT used for community posting (section 6). The login app needs `openid`, `profile`, `email`. The bot needs `chat:write`, `channels:read`, etc. Two Slack apps, two sets of credentials.
 
 Test: visit `{SITE_BASE_URL}/accounts/login/`, click "Sign in with Slack", complete the OAuth dance, confirm a `User` row is created.
+
+### 3.4 Email-signup account lifecycle
+
+Studio path: `Studio > Settings > Auth`.
+
+| Key | Source | Notes |
+|-----|--------|-------|
+| `UNVERIFIED_USER_TTL_DAYS` | non-secret | Days an email-signup account survives without verifying. Default 7. The daily `purge-unverified-users` job hard-deletes expired rows that have no related activity (no `last_login`, no Stripe customer, no `EmailLog` / project / submission rows). The companion `remind-unverified-users` job sends a one-shot reminder ~24 hours before the window closes. Social-login signups are auto-verified by the OAuth provider and never enter this lifecycle. Issue #452. |
+
+Foot-gun: lowering this value retroactively shortens the window for users already in the queue. Existing rows from before the issue #452 migration have `verification_expires_at` set to NULL and are NOT subject to purge — only signups created after the migration are.
+
+Test: register a new email-only account, confirm `verification_expires_at` is populated on the User row in Studio. After `UNVERIFIED_USER_TTL_DAYS` days without verification, the daily purge cleans the row.
 
 ## 4. Stripe (payments)
 

@@ -8,7 +8,7 @@ get it, what breaks without it. Kept to one sentence so the dashboard
 stays scannable. See issue #322 for the locked rewrites.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 9 integration groups are
+groups in the Studio sign-in section ("confirm 10 integration groups are
 listed (...)"). When adding, removing, or renaming a group here, update
 that line of the doc in the same PR.
 """
@@ -115,6 +115,21 @@ INTEGRATION_GROUPS = [
             {'key': 'SITE_BASE_URL', 'is_secret': False, 'description': 'Canonical absolute URL — used for generated links, OAuth callbacks, etc.'},
             {'key': 'SITE_BASE_URL_ALIASES', 'is_secret': False, 'description': 'Additional hosts that should not trigger the host-mismatch banner. Comma- or whitespace-separated.'},
             {'key': 'EVENT_DISPLAY_TIMEZONE', 'is_secret': False, 'description': 'Default IANA timezone for public event times when the browser cannot provide one.'},
+        ],
+    },
+    {
+        'name': 'auth',
+        'label': 'Auth',
+        'keys': [
+            {
+                'key': 'UNVERIFIED_USER_TTL_DAYS',
+                'is_secret': False,
+                'description': (
+                    'Number of days an email-signup account stays alive without verifying '
+                    'before the daily purge job hard-deletes it. Default 7. Lower this '
+                    '(e.g. 3) during spam waves; raise it for relaxed launches. Issue #452.'
+                ),
+            },
         ],
     },
 ]

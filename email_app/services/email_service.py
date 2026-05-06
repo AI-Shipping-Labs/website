@@ -36,6 +36,7 @@ TRANSACTIONAL_TYPES = {
     "lead_magnet_delivery",
     "event_reminder",
     "email_verification",
+    "email_verification_reminder",
     "password_reset",
     "event_registration",
     "welcome_imported",

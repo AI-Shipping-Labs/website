@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from django.core.mail import mail_admins
 from django.core.management.base import CommandError
 from django.utils import timezone
 
+import accounts.tasks as _tasks_pkg
 from accounts.models import (
     IMPORT_SOURCE_COURSE_DB,
     IMPORT_SOURCE_SLACK,
@@ -11,7 +11,7 @@ from accounts.models import (
     ImportBatch,
 )
 from accounts.services.import_course_db import CourseDbCsvError
-from accounts.services.import_users import get_import_adapter, run_import_batch
+from accounts.services.import_users import get_import_adapter
 
 SCHEDULED_IMPORT_SOURCES = frozenset({IMPORT_SOURCE_SLACK, IMPORT_SOURCE_STRIPE})
 SCHEDULE_NAME_BY_SOURCE = {
@@ -26,7 +26,7 @@ def run_import_batch_task(batch_id):
 
     try:
         adapter = _adapter_for_batch(batch)
-        run_import_batch(
+        _tasks_pkg.run_import_batch(
             batch.source,
             adapter,
             dry_run=batch.dry_run,
@@ -108,7 +108,7 @@ def run_scheduled_import(source):
         adapter = get_import_adapter(source)
         if adapter is None:
             raise CommandError(f"No import adapter registered for source: {source}")
-        run_import_batch(
+        _tasks_pkg.run_import_batch(
             source,
             adapter,
             dry_run=False,
@@ -169,7 +169,7 @@ def _maybe_send_scheduled_failure_alert(batch):
         return
 
     review_path = f"/studio/imports/{batch.pk}/"
-    mail_admins(
+    _tasks_pkg.mail_admins(
         subject=f"[AI Shipping Labs] Scheduled {batch.source} import failed 3 times",
         message=(
             f"Scheduled import source: {batch.source}\n"

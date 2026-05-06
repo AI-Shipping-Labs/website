@@ -68,6 +68,28 @@ class User(AbstractUser):
         default=False,
         help_text="Whether the user's email has been verified.",
     )
+    # Lifecycle of an unverified email-signup account (issue #452).
+    # ``verification_expires_at`` is set on email-only registration to
+    # ``now + UNVERIFIED_USER_TTL_DAYS`` (default 7 days). Cleared to
+    # NULL when the user verifies. Social signups never set this field
+    # because OAuth providers already verify the address. Existing rows
+    # are left NULL by the migration so the policy only applies forward.
+    verification_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, the unverified user is hard-deleted by the daily "
+            "purge task once this timestamp is in the past."
+        ),
+    )
+    verification_reminder_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the one-shot 'verify or expire' reminder email was "
+            "sent. Prevents the daily reminder task from spamming."
+        ),
+    )
     unsubscribed = models.BooleanField(
         default=False,
         help_text="Whether the user has unsubscribed from emails.",

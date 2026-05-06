@@ -74,4 +74,21 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: import-stripe-daily (daily at 03:30 UTC)'))
 
+        # Issue #452: lifecycle of unverified email-signup accounts.
+        # Reminder runs first (07:00 UTC) so users get a 24h heads-up
+        # before the purge sweep (08:00 UTC) on the same calendar day.
+        schedule(
+            'accounts.tasks.remind_unverified_users',
+            cron='0 7 * * *',
+            name='remind-unverified-users',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: remind-unverified-users (daily at 07:00 UTC)'))
+
+        schedule(
+            'accounts.tasks.purge_unverified_users',
+            cron='0 8 * * *',
+            name='purge-unverified-users',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: purge-unverified-users (daily at 08:00 UTC)'))
+
         self.stdout.write(self.style.SUCCESS('All default schedules registered.'))

@@ -165,21 +165,21 @@ class StudioSprintCreateMinTierTest(TestCase):
     def setUp(self):
         self.client.force_login(self.staff)
 
-    def test_create_defaults_to_premium_min_tier(self):
+    def test_create_defaults_to_main_min_tier(self):
         response = self.client.post(
             '/studio/sprints/new',
             data={
                 'name': 'Test', 'slug': 'test-sprint',
                 'start_date': '2026-09-01', 'duration_weeks': '4',
                 'status': 'draft',
-                # No min_tier_level supplied -> defaults to 30 (Premium).
+                # No min_tier_level supplied -> defaults to 20 (Main).
             },
         )
         self.assertEqual(response.status_code, 302)
         sprint = Sprint.objects.get(slug='test-sprint')
-        self.assertEqual(sprint.min_tier_level, 30)
+        self.assertEqual(sprint.min_tier_level, 20)
 
-    def test_create_accepts_explicit_min_tier(self):
+    def test_create_accepts_explicit_open_min_tier(self):
         response = self.client.post(
             '/studio/sprints/new',
             data={
@@ -192,3 +192,17 @@ class StudioSprintCreateMinTierTest(TestCase):
         self.assertEqual(response.status_code, 302)
         sprint = Sprint.objects.get(slug='open-pilot')
         self.assertEqual(sprint.min_tier_level, 0)
+
+    def test_create_accepts_explicit_premium_min_tier(self):
+        response = self.client.post(
+            '/studio/sprints/new',
+            data={
+                'name': 'Premium', 'slug': 'premium-sprint',
+                'start_date': '2026-09-01', 'duration_weeks': '4',
+                'status': 'draft',
+                'min_tier_level': '30',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        sprint = Sprint.objects.get(slug='premium-sprint')
+        self.assertEqual(sprint.min_tier_level, 30)

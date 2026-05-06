@@ -127,6 +127,18 @@ class StudioEventEditTest(StaffUserMixin, TestCase):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         self.assertEqual(response.status_code, 200)
 
+    def test_edit_form_selects_use_studio_select_class(self):
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+
+        self.assertContains(response, 'select.studio-select')
+        content = response.content.decode()
+        status_pos = content.index('name="status"')
+        status_tag = content[content.rfind('<select', 0, status_pos):status_pos + 250]
+        platform_pos = content.index('name="platform"')
+        platform_tag = content[content.rfind('<select', 0, platform_pos):platform_pos + 250]
+        self.assertIn('studio-select', status_tag)
+        self.assertIn('studio-select', platform_tag)
+
     def test_edit_form_has_no_datetime_local_input(self):
         """The old datetime-local inputs must be removed from edit form."""
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')

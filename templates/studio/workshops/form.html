@@ -84,7 +84,7 @@
       <label for="status" class="block text-sm font-medium text-foreground mb-1">Status</label>
       <select id="status" name="status"
               data-testid="status-select"
-              class="w-full bg-secondary border {% if form_errors.status %}border-red-500{% else %}border-border{% endif %} rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              class="studio-select w-full bg-secondary border {% if form_errors.status %}border-red-500{% else %}border-border{% endif %} rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="draft" {% if submitted.status == 'draft' %}selected{% endif %}>Draft</option>
         <option value="published" {% if submitted.status == 'published' %}selected{% endif %}>Published</option>
       </select>
@@ -115,7 +115,7 @@
           <label for="landing_required_level" class="block text-sm font-medium text-foreground mb-1">Landing gate</label>
           <select id="landing_required_level" name="landing_required_level"
                   data-testid="landing-gate-select"
-                  class="w-full bg-secondary border {% if form_errors.landing_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+                  class="studio-select w-full bg-secondary border {% if form_errors.landing_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
             {% for value, label in tier_level_choices %}
             <option value="{{ value }}" {% if submitted.landing_required_level == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -130,7 +130,7 @@
           <label for="pages_required_level" class="block text-sm font-medium text-foreground mb-1">Pages gate</label>
           <select id="pages_required_level" name="pages_required_level"
                   data-testid="pages-gate-select"
-                  class="w-full bg-secondary border {% if form_errors.pages_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+                  class="studio-select w-full bg-secondary border {% if form_errors.pages_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
             {% for value, label in tier_level_choices %}
             <option value="{{ value }}" {% if submitted.pages_required_level == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -145,7 +145,7 @@
           <label for="recording_required_level" class="block text-sm font-medium text-foreground mb-1">Recording gate</label>
           <select id="recording_required_level" name="recording_required_level"
                   data-testid="recording-gate-select"
-                  class="w-full bg-secondary border {% if form_errors.recording_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+                  class="studio-select w-full bg-secondary border {% if form_errors.recording_required_level %}border-red-500{% else %}border-border{% endif %} rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
             {% for value, label in tier_level_choices %}
             <option value="{{ value }}" {% if submitted.recording_required_level == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}

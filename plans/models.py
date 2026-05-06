@@ -17,9 +17,7 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-from content.access import (
-    LEVEL_PREMIUM,
-)
+from content.access import LEVEL_MAIN
 from content.access import (
     VISIBILITY_CHOICES as TIER_VISIBILITY_CHOICES,
 )
@@ -89,18 +87,18 @@ class Sprint(TimestampedModelMixin, models.Model):
         default='draft',
     )
     # Minimum tier level required for a member to self-join (issue #443).
-    # Default is Premium (30) because sprints are the highest-touch product
-    # surface; staff can lower per-sprint (e.g. 0 for an open pilot, 20
-    # for a Main+ sprint). The choices come from
+    # Default is Main (20) so community members can join by default; staff
+    # can lower per-sprint (e.g. 0 for an open pilot) or raise to Premium
+    # for high-touch sprints. The choices come from
     # ``content.access.VISIBILITY_CHOICES`` so the same level integers used
     # elsewhere for content gating apply here too.
     min_tier_level = models.IntegerField(
-        default=LEVEL_PREMIUM,
+        default=LEVEL_MAIN,
         choices=TIER_VISIBILITY_CHOICES,
         help_text=(
-            'Minimum tier level required to join this sprint. Default 30 '
-            '(Premium); staff can lower per-sprint, e.g. 0 for an open '
-            'pilot or 20 for a Main+ sprint.'
+            'Minimum tier level required to join this sprint. Default 20 '
+            '(Main); staff can lower per-sprint, e.g. 0 for an open '
+            'pilot, or raise to Premium for high-touch sprints.'
         ),
     )
 

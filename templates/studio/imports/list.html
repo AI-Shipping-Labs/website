@@ -17,7 +17,7 @@
 <form method="get" class="flex flex-wrap items-end gap-4 mb-6">
   <div>
     <label for="source" class="block text-xs font-medium text-muted-foreground mb-1">Source</label>
-    <select id="source" name="source" class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+    <select id="source" name="source" class="studio-select bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
       <option value="">All sources</option>
       {% for value,label in source_options %}
       <option value="{{ value }}" {% if source_filter == value %}selected{% endif %}>{{ label }}</option>
@@ -26,7 +26,7 @@
   </div>
   <div>
     <label for="dry_run" class="block text-xs font-medium text-muted-foreground mb-1">Dry-run</label>
-    <select id="dry_run" name="dry_run" class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+    <select id="dry_run" name="dry_run" class="studio-select bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
       <option value="">All</option>
       <option value="yes" {% if dry_run_filter == 'yes' %}selected{% endif %}>Yes</option>
       <option value="no" {% if dry_run_filter == 'no' %}selected{% endif %}>No</option>

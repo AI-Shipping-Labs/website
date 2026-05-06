@@ -36,7 +36,7 @@
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Member</label>
       <select name="member" required data-testid="add-member-select"
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="">-- pick a member --</option>
         {% for m in members %}
         <option value="{{ m.pk }}" {% if form_data.member == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.email }}</option>
@@ -62,7 +62,7 @@
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Sprint</label>
       <select name="sprint" required
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="">-- pick a sprint --</option>
         {% for s in sprints %}
         <option value="{{ s.pk }}" {% if form_data.sprint == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
@@ -73,7 +73,7 @@
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Status</label>
       <select name="status"
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         {% for value, label in plan_status_choices %}
         <option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}

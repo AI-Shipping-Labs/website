@@ -17,7 +17,7 @@
 <form method="get" action="{% url 'studio_plan_list' %}" class="bg-card border border-border rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-4 gap-3">
   <div>
     <label class="block text-xs text-muted-foreground mb-1">Sprint</label>
-    <select name="sprint" class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+    <select name="sprint" class="studio-select w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
       <option value="">All sprints</option>
       {% for sprint in sprints %}
       <option value="{{ sprint.pk }}" {% if sprint.pk == sprint_filter_id %}selected{% endif %}>{{ sprint.name }}</option>
@@ -26,7 +26,7 @@
   </div>
   <div>
     <label class="block text-xs text-muted-foreground mb-1">Status</label>
-    <select name="status" class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+    <select name="status" class="studio-select w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
       <option value="">All statuses</option>
       {% for value, label in plan_status_choices %}
       <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>

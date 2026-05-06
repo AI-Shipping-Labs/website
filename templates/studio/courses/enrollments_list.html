@@ -38,7 +38,7 @@
   <div>
     <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1" for="filter-status">Status</label>
     <select id="filter-status" name="status" onchange="this.form.submit()"
-            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+            class="studio-select bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
       <option value="active" {% if status == 'active' %}selected{% endif %}>Active only</option>
       <option value="all" {% if status == 'all' %}selected{% endif %}>Including unenrolled</option>
     </select>

@@ -131,3 +131,24 @@ class SprintDurationTest(TestCase):
         self.assertEqual(
             Sprint.objects.get(pk=sprint_8.pk).duration_weeks, 8,
         )
+
+
+class SprintMinTierLevelTest(TestCase):
+    def test_sprint_default_min_tier_level_is_main(self):
+        sprint = Sprint.objects.create(
+            name='Main Sprint',
+            slug='main-sprint',
+            start_date=datetime.date(2026, 5, 1),
+        )
+
+        self.assertEqual(sprint.min_tier_level, 20)
+
+    def test_existing_explicit_premium_sprint_keeps_min_tier_level(self):
+        sprint = Sprint.objects.create(
+            name='Premium Sprint',
+            slug='premium-sprint',
+            start_date=datetime.date(2026, 5, 1),
+            min_tier_level=30,
+        )
+
+        self.assertEqual(Sprint.objects.get(pk=sprint.pk).min_tier_level, 30)

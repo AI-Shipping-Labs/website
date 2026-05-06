@@ -24,7 +24,7 @@ from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 
-from content.access import LEVEL_PREMIUM
+from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
 from plans.models import PLAN_STATUS_CHOICES, SPRINT_STATUS_CHOICES, Plan, Sprint
 from plans.services import create_plan_for_enrollment
@@ -41,7 +41,7 @@ _VALID_TIER_LEVELS = {value for value, _label in TIER_LEVEL_CHOICES}
 def _parse_min_tier_level(raw):
     """Parse the ``min_tier_level`` form field. ``(value, error)``."""
     if raw in (None, ''):
-        return LEVEL_PREMIUM, ''
+        return LEVEL_MAIN, ''
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -148,7 +148,7 @@ def sprint_create(request):
                 'start_date': '',
                 'duration_weeks': '6',
                 'status': 'draft',
-                'min_tier_level': str(LEVEL_PREMIUM),
+                'min_tier_level': str(LEVEL_MAIN),
             },
         )
 

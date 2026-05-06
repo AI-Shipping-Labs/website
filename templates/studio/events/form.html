@@ -48,7 +48,7 @@
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Status</label>
-        <select name="status" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <select name="status" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
           <option value="draft" {% if event.status == 'draft' %}selected{% endif %}>Draft</option>
           <option value="upcoming" {% if event.status == 'upcoming' %}selected{% endif %}>Upcoming</option>
           <option value="completed" {% if event.status == 'completed' %}selected{% endif %}>Completed</option>
@@ -57,7 +57,7 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-foreground mb-1">Platform</label>
-        <select name="platform" id="platform-select" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <select name="platform" id="platform-select" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
           <option value="zoom" {% if not event or event.platform == 'zoom' %}selected{% endif %}>Zoom</option>
           <option value="custom" {% if event.platform == 'custom' %}selected{% endif %}>Custom URL</option>
         </select>

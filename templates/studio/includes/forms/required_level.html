@@ -1,7 +1,7 @@
 <div>
   <label class="block text-sm font-medium text-foreground mb-1">Required Level</label>
   <select name="required_level" {% if disabled %}disabled{% endif %}
-          class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
+          class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if disabled %} opacity-60{% endif %}">
     <option value="0" {% if selected == 0 or selected == "0" %}selected{% endif %}>Free (0)</option>
     <option value="10" {% if selected == 10 or selected == "10" %}selected{% endif %}>Basic (10)</option>
     <option value="20" {% if selected == 20 or selected == "20" %}selected{% endif %}>Main (20)</option>

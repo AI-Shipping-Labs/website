@@ -109,6 +109,18 @@ class StudioArticleEditTest(TestCase):
         response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
         self.assertEqual(response.status_code, 200)
 
+    def test_edit_form_selects_use_studio_select_class(self):
+        response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
+
+        self.assertContains(response, 'select.studio-select')
+        content = response.content.decode()
+        status_pos = content.index('name="status"')
+        status_tag = content[content.rfind('<select', 0, status_pos):status_pos + 250]
+        level_pos = content.index('name="required_level"')
+        level_tag = content[content.rfind('<select', 0, level_pos):level_pos + 300]
+        self.assertIn('studio-select', status_tag)
+        self.assertIn('studio-select', level_tag)
+
     def test_edit_shows_article_data(self):
         response = self.client.get(f'/studio/articles/{self.article.pk}/edit')
         self.assertContains(response, 'Edit Me')

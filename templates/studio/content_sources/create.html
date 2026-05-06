@@ -45,7 +45,7 @@
         <span class="text-xs text-muted-foreground">{{ repos|length }} available</span>
       </div>
       <select id="id_repo_name" name="repo_name" required
-              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="">-- Select a repository --</option>
         {% for repo in repos %}
         <option value="{{ repo.full_name }}"

@@ -32,7 +32,7 @@
 
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Audience (minimum tier level)</label>
-      <select name="target_min_level" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <select name="target_min_level" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="0" {% if campaign.target_min_level == 0 %}selected{% endif %}>Everyone (including free)</option>
         <option value="10" {% if campaign.target_min_level == 10 %}selected{% endif %}>Basic and above</option>
         <option value="20" {% if campaign.target_min_level == 20 %}selected{% endif %}>Main and above</option>
@@ -90,7 +90,7 @@
     {# Issue #358: Slack-membership filter ANDs with the tier and tag filters above. #}
     <div>
       <label class="block text-sm font-medium text-foreground mb-1">Slack workspace</label>
-      <select name="slack_filter" data-testid="campaign-slack-filter" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <select name="slack_filter" data-testid="campaign-slack-filter" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
         <option value="any" {% if not campaign.slack_filter or campaign.slack_filter == 'any' %}selected{% endif %}>Any (no filter)</option>
         <option value="yes" {% if campaign.slack_filter == 'yes' %}selected{% endif %}>Members only</option>
         <option value="no" {% if campaign.slack_filter == 'no' %}selected{% endif %}>Non-members only</option>

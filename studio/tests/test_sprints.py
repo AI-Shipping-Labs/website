@@ -118,6 +118,32 @@ class SprintCreateTest(TestCase):
         self.assertContains(response, 'already exists', status_code=400)
         self.assertEqual(Sprint.objects.count(), before)
 
+    def test_sprint_create_form_defaults_to_main_min_tier(self):
+        response = self.client.get('/studio/sprints/new')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['form_data']['min_tier_level'], '20')
+        self.assertContains(response, '<option value="20" selected>Main and above</option>', html=True)
+        self.assertContains(response, 'Default Main.')
+        self.assertNotContains(response, 'Default Premium.')
+
+    def test_sprint_create_form_selects_use_studio_select_class(self):
+        response = self.client.get('/studio/sprints/new')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'select.studio-select')
+        self.assertContains(response, 'appearance: none')
+        self.assertContains(response, '-webkit-appearance: none')
+        self.assertContains(response, '-moz-appearance: none')
+        self.assertContains(response, 'hsl(var(--muted-foreground))')
+        content = response.content.decode()
+        status_pos = content.index('name="status"')
+        status_tag = content[content.rfind('<select', 0, status_pos):status_pos + 250]
+        min_tier_pos = content.index('name="min_tier_level"')
+        min_tier_tag = content[content.rfind('<select', 0, min_tier_pos):min_tier_pos + 300]
+        self.assertIn('studio-select', status_tag)
+        self.assertIn('studio-select', min_tier_tag)
+
 
 class SprintEditTest(TestCase):
     @classmethod

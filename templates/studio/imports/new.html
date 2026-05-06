@@ -18,7 +18,7 @@
     {% csrf_token %}
     <div class="mb-6">
       <label for="id_source" class="block text-sm font-medium text-foreground mb-1">Source</label>
-      <select id="id_source" name="source" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+      <select id="id_source" name="source" required class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
         <option value="">Choose source</option>
         {% for option in source_options %}
         <option value="{{ option.value }}" {% if not option.available %}disabled{% endif %} {% if posted.source == option.value %}selected{% endif %}>

@@ -94,10 +94,10 @@ class AccountSprintPlanCardVisibleWithPlanTest(TestCase):
             response, 'data-testid="account-sprint-plan-open"',
         )
 
-    def test_card_does_not_show_cohort_link_when_no_other_shared_plan(self):
+    def test_card_does_not_show_cohort_link_when_solo_in_sprint(self):
         response = self.client.get('/account/')
 
-        self.assertFalse(response.context['cohort_has_other_shared_plans'])
+        self.assertFalse(response.context['cohort_has_other_members'])
         self.assertNotContains(
             response, 'data-testid="account-sprint-plan-cohort"',
         )
@@ -119,7 +119,14 @@ class AccountSprintPlanCardCohortLinkTest(TestCase):
             email='teammate@test.com', password='pw',
         )
 
-    def test_card_hides_cohort_link_when_only_private_plans(self):
+    def test_card_shows_cohort_link_when_teammate_has_private_plan(self):
+        """Issue #461 widened the gate to ``cohort_has_other_members``.
+
+        With the cohort progress board surfacing private rows as
+        counts-only stubs, the "View cohort" CTA is useful as soon as
+        the sprint has any other enrolled member -- regardless of plan
+        visibility.
+        """
         Plan.objects.create(
             member=self.viewer, sprint=self.sprint, visibility='private',
         )
@@ -130,8 +137,8 @@ class AccountSprintPlanCardCohortLinkTest(TestCase):
 
         response = self.client.get('/account/')
 
-        self.assertFalse(response.context['cohort_has_other_shared_plans'])
-        self.assertNotContains(
+        self.assertTrue(response.context['cohort_has_other_members'])
+        self.assertContains(
             response, 'data-testid="account-sprint-plan-cohort"',
         )
 
@@ -146,7 +153,7 @@ class AccountSprintPlanCardCohortLinkTest(TestCase):
 
         response = self.client.get('/account/')
 
-        self.assertTrue(response.context['cohort_has_other_shared_plans'])
+        self.assertTrue(response.context['cohort_has_other_members'])
         self.assertContains(
             response, 'data-testid="account-sprint-plan-cohort"',
         )
@@ -155,24 +162,22 @@ class AccountSprintPlanCardCohortLinkTest(TestCase):
         )
         self.assertContains(response, f'href="{expected_href}"')
 
-    def test_cohort_link_ignores_viewers_own_cohort_visibility(self):
-        """A solo cohort-visibility plan (no teammate) does NOT light up the link.
+    def test_cohort_link_when_viewer_solo_in_sprint(self):
+        """A solo-viewer sprint (no other enrollment) does NOT light up the link.
 
-        The link advertises content, not just intent. If the viewer is
-        the only person on cohort, clicking would lead to an empty
-        board -- so we hide it.
+        The link advertises content. If the viewer is the only enrolled
+        member, the cohort board would render only the viewer's own
+        row -- so we hide the CTA.
         """
         Plan.objects.create(
             member=self.viewer, sprint=self.sprint, visibility='cohort',
         )
-        Plan.objects.create(
-            member=self.teammate, sprint=self.sprint, visibility='private',
-        )
+        # Teammate exists but is NOT enrolled in this sprint.
         self.client.force_login(self.viewer)
 
         response = self.client.get('/account/')
 
-        self.assertFalse(response.context['cohort_has_other_shared_plans'])
+        self.assertFalse(response.context['cohort_has_other_members'])
         self.assertNotContains(
             response, 'data-testid="account-sprint-plan-cohort"',
         )

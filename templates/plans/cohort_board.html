@@ -12,7 +12,7 @@
     <div class="relative mx-auto max-w-5xl px-6 py-16 lg:px-8 lg:py-24">
 
       <header class="mb-10">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">Cohort board</p>
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Cohort progress</p>
         <h1 class="text-3xl font-semibold tracking-tight mt-1">{{ sprint.name }}</h1>
         <p class="text-sm text-muted-foreground mt-2">
           Starts {{ sprint.start_date }} &middot; {{ sprint.duration_weeks }} weeks
@@ -46,39 +46,81 @@
       </aside>
       {% endif %}
 
-      {% if plans %}
+      {% if progress_rows %}
       <ul class="grid grid-cols-1 gap-5 md:grid-cols-2" data-testid="cohort-plan-list">
-        {% for plan in plans %}
-        <li class="rounded-2xl border border-border bg-card p-5 hover:border-accent transition-colors" data-testid="cohort-plan-card">
-          <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=plan.pk %}" class="block">
-            <h2 class="text-lg font-semibold text-foreground" data-testid="cohort-plan-name">
-              {{ plan.member|display_name }}
-            </h2>
-            {% if plan.focus_main %}
-            <p class="text-sm text-muted-foreground mt-2 line-clamp-3">{{ plan.focus_main }}</p>
+        {% for row in progress_rows %}
+        <li class="rounded-2xl border border-border bg-card p-5{% if row.kind == 'cohort' %} hover:border-accent transition-colors{% endif %}"
+            data-testid="progress-row-{{ row.member.pk }}"
+            data-progress-row-kind="{{ row.kind }}">
+          <span class="hidden" data-testid="progress-row-kind-{{ row.member.pk }}">{{ row.kind }}</span>
+
+          {% if row.kind == 'cohort' %}
+            {% if row.is_self %}
+            <a href="{% url 'my_plan_detail' plan_id=row.plan.pk %}" class="block" data-testid="progress-row-link-{{ row.member.pk }}">
+            {% else %}
+            <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="block" data-testid="progress-row-link-{{ row.member.pk }}">
             {% endif %}
-            <div class="mt-4">
-              {% if plan.progress_total %}
-              <p class="text-xs uppercase tracking-wide text-muted-foreground">Progress</p>
-              <div class="mt-1 flex items-center gap-3">
-                <div class="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div class="h-full bg-emerald-500" style="width: {% widthratio plan.progress_done plan.progress_total 100 %}%"></div>
-                </div>
-                <span class="text-sm text-foreground" data-testid="progress-{{ plan.pk }}">{{ plan.progress_done }}/{{ plan.progress_total }}</span>
-              </div>
-              {% else %}
-              <p class="text-sm text-muted-foreground" data-testid="progress-{{ plan.pk }}-empty">No checkpoints yet</p>
+              <h2 class="text-lg font-semibold text-foreground" data-testid="cohort-plan-name">
+                {{ row.member|display_name }}{% if row.is_self %} (you){% endif %}
+              </h2>
+              {% if row.plan.focus_main %}
+              <p class="text-sm text-muted-foreground mt-2 line-clamp-3">{{ row.plan.focus_main }}</p>
               {% endif %}
+              <div class="mt-4">
+                {% if row.progress_total %}
+                <p class="text-xs uppercase tracking-wide text-muted-foreground">Progress</p>
+                <div class="mt-1 flex items-center gap-3">
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-muted" data-testid="progress-bar-{{ row.member.pk }}">
+                    <div class="h-full bg-emerald-500" style="width: {% widthratio row.progress_done row.progress_total 100 %}%"></div>
+                  </div>
+                  <span class="text-sm text-foreground" data-testid="progress-count-{{ row.member.pk }}">{{ row.progress_done }} of {{ row.progress_total }}</span>
+                </div>
+                {% else %}
+                <p class="text-sm text-muted-foreground" data-testid="progress-{{ row.plan.pk }}-empty">No checkpoints yet</p>
+                {% endif %}
+              </div>
+            </a>
+
+          {% elif row.kind == 'private' %}
+            <div data-testid="progress-row-private-{{ row.member.pk }}">
+              <h2 class="text-lg font-semibold text-foreground" data-testid="cohort-plan-name">
+                {{ row.member|display_name }}{% if row.is_self %} (you){% endif %}
+                <span class="ml-2 inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground" data-testid="private-badge-{{ row.member.pk }}">Private</span>
+              </h2>
+              <div class="mt-4">
+                {% if row.progress_total %}
+                <p class="text-xs uppercase tracking-wide text-muted-foreground">Progress</p>
+                <div class="mt-1 flex items-center gap-3">
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-muted" data-testid="progress-bar-{{ row.member.pk }}">
+                    <div class="h-full bg-emerald-500" style="width: {% widthratio row.progress_done row.progress_total 100 %}%"></div>
+                  </div>
+                  <span class="text-sm text-foreground" data-testid="progress-count-{{ row.member.pk }}">{{ row.progress_done }} of {{ row.progress_total }}</span>
+                </div>
+                {% else %}
+                <p class="text-sm text-muted-foreground"><span data-testid="progress-count-{{ row.member.pk }}">{{ row.progress_done }} of {{ row.progress_total }}</span></p>
+                {% endif %}
+              </div>
             </div>
-          </a>
+
+          {% else %}
+            <div data-testid="progress-row-no-plan-{{ row.member.pk }}">
+              <h2 class="text-lg font-semibold text-foreground" data-testid="cohort-plan-name">
+                {{ row.member|display_name }}{% if row.is_self %} (you){% endif %}
+              </h2>
+              <div class="mt-4 flex items-center gap-3">
+                <span class="text-sm text-foreground" data-testid="progress-count-{{ row.member.pk }}">&mdash;</span>
+                <span class="text-sm text-muted-foreground" data-testid="no-plan-caption-{{ row.member.pk }}">No plan yet</span>
+              </div>
+            </div>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
       {% else %}
       <div class="rounded-2xl border border-border bg-card p-8 text-center" data-testid="cohort-board-empty">
-        <h2 class="text-lg font-semibold text-foreground">Nobody else has shared their plan yet</h2>
+        <h2 class="text-lg font-semibold text-foreground">Nobody else has joined this sprint yet</h2>
         <p class="text-sm text-muted-foreground mt-2">
-          When teammates make their plans cohort-visible, they will appear here.
+          As teammates enroll, they will appear here with their progress.
         </p>
         {% if viewer_plan %}
         <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">

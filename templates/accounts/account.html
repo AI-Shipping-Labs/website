@@ -106,7 +106,7 @@
             <i data-lucide="arrow-right-circle" class="h-4 w-4"></i>
             Open my plan
           </a>
-          {% if cohort_has_other_shared_plans %}
+          {% if cohort_has_other_members %}
           <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}"
              class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
              data-testid="account-sprint-plan-cohort">

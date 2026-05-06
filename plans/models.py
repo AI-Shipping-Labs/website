@@ -210,6 +210,47 @@ class PlanQuerySet(models.QuerySet):
             member__sprint_enrollments__sprint=sprint,
         ).exclude(member=viewer).distinct()
 
+    def cohort_progress_rows(self, *, sprint, viewer):
+        """Plans for ``sprint``'s cohort progress board, regardless of visibility.
+
+        Sibling helper to :meth:`visible_on_cohort_board` (issue #461).
+        The progress board renders one row per enrolled member, with
+        cohort-visibility plans clickable and private-visibility plans
+        rendered as counts-only stubs. This queryset returns the plans
+        that back those rows -- visibility filtering is intentionally
+        NOT applied here; the view layer classifies each row by
+        ``visibility`` to decide whether to expose plan content.
+
+        Returns:
+        - Empty queryset if viewer is anonymous / unauthenticated.
+        - Empty queryset if viewer is NOT enrolled in ``sprint`` (no
+          ``SprintEnrollment`` row for the pair). Mirrors
+          :meth:`visible_on_cohort_board` -- the board is member-scoped.
+        - Otherwise: plans in ``sprint`` whose owner is also enrolled in
+          this sprint, including the viewer's own plan (the view
+          renders the viewer row inline). Annotated with
+          ``progress_total`` and ``progress_done`` checkpoint counts via
+          the same ``Count`` pattern used elsewhere on the board.
+        """
+        if viewer is None or not getattr(viewer, 'is_authenticated', False):
+            return self.none()
+        viewer_enrolled = SprintEnrollment.objects.filter(
+            sprint=sprint, user=viewer,
+        ).exists()
+        if not viewer_enrolled:
+            return self.none()
+        return self.filter(
+            sprint=sprint,
+            member__sprint_enrollments__sprint=sprint,
+        ).annotate(
+            progress_total=models.Count('weeks__checkpoints', distinct=True),
+            progress_done=models.Count(
+                'weeks__checkpoints',
+                filter=models.Q(weeks__checkpoints__done_at__isnull=False),
+                distinct=True,
+            ),
+        ).distinct()
+
     def visible_to_member(self, *, plan_id, viewer):
         """Single plan visible to ``viewer`` for the read-only individual view.
 

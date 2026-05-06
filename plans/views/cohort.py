@@ -22,6 +22,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from plans.cohort_rows import build_progress_rows
 from plans.models import PLAN_VISIBILITY_CHOICES, Plan, Sprint, SprintEnrollment
 
 # Tuple of valid visibility values posted by the toggle form. We accept
@@ -62,7 +63,7 @@ def _viewer_plan_for_sprint(sprint, user):
 
 @login_required
 def cohort_board(request, sprint_slug):
-    """Sprint cohort progress board.
+    """Sprint cohort progress board (issue #461).
 
     Anonymous users hit ``login_required``. An authenticated user who
     is NOT enrolled in the sprint (no ``SprintEnrollment`` row of their
@@ -71,6 +72,13 @@ def cohort_board(request, sprint_slug):
     #443), not plan-existence; an enrolled viewer with no plan still
     sees the board (the viewer-plan panel renders a "plan being
     prepared" placeholder).
+
+    The board renders one row per enrolled member, classified by
+    :func:`plans.cohort_rows.build_progress_rows` into ``cohort``
+    (clickable card with focus + weeks), ``private`` (counts-only stub,
+    non-clickable), and ``no_plan`` (em-dash, "No plan yet" caption).
+    Pagination is a future concern when sprints exceed roughly 50
+    members; current cohorts are 5-30 so a single page is fine.
     """
     sprint = get_object_or_404(Sprint, slug=sprint_slug)
     viewer_enrolled = SprintEnrollment.objects.filter(
@@ -82,10 +90,30 @@ def cohort_board(request, sprint_slug):
 
     viewer_plan = _viewer_plan_for_sprint(sprint, request.user)
 
-    plans_qs = Plan.objects.visible_on_cohort_board(
-        sprint=sprint, viewer=request.user,
-    ).select_related('member').prefetch_related('weeks')
-    plans = list(_annotated_plans(plans_qs).order_by('created_at'))
+    plans = list(
+        Plan.objects.cohort_progress_rows(
+            sprint=sprint, viewer=request.user,
+        )
+        .select_related('member')
+        .prefetch_related('weeks'),
+    )
+
+    # Enrolled members who have NOT authored a plan in this sprint --
+    # rendered as ``no_plan`` rows pinned to the bottom of the list.
+    no_plan_members = [
+        enrollment.user
+        for enrollment in (
+            sprint.enrollments
+            .exclude(user__plans__sprint=sprint)
+            .select_related('user')
+        )
+    ]
+
+    progress_rows = build_progress_rows(
+        plans=plans,
+        no_plan_members=no_plan_members,
+        viewer=request.user,
+    )
 
     if viewer_plan is not None:
         viewer_plan = _annotated_plans(
@@ -97,7 +125,7 @@ def cohort_board(request, sprint_slug):
         'plans/cohort_board.html',
         {
             'sprint': sprint,
-            'plans': plans,
+            'progress_rows': progress_rows,
             'viewer_plan': viewer_plan,
         },
     )

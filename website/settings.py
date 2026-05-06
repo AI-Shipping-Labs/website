@@ -146,6 +146,7 @@ INSTALLED_APPS = [
     'jobs',
     'community',
     'notifications',
+    'plans',
     'studio',
     'comments',
     'analytics',

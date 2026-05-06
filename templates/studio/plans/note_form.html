@@ -1,0 +1,65 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit interview note{% else %}New interview note{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to plan
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">
+    {% if form_action == 'edit' %}Edit interview note{% else %}New interview note{% endif %}
+  </h1>
+  <p class="text-sm text-muted-foreground mt-1">{{ plan.member.email }} -- {{ plan.sprint.name }}</p>
+</div>
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post"
+        action="{% if form_action == 'edit' %}{% url 'studio_interview_note_edit' plan_id=plan.pk note_id=note.pk %}{% else %}{% url 'studio_interview_note_create' plan_id=plan.pk %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Kind</label>
+      <select name="kind"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% for value, label in kind_choices %}
+        <option value="{{ value }}" {% if form_data.kind == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Visibility</label>
+      <select name="visibility"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% for value, label in visibility_choices %}
+        <option value="{{ value }}" {% if form_data.visibility == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Internal notes never leave staff. External notes are shareable with the member.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Body</label>
+      <textarea name="body" rows="6" required
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">{{ form_data.body }}</textarea>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        {% if form_action == 'edit' %}Save changes{% else %}Save note{% endif %}
+      </button>
+      <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

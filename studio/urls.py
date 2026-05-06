@@ -68,6 +68,15 @@ from studio.views.peer_reviews import (
     peer_review_issue_certificates,
     peer_review_management,
 )
+from studio.views.plans import (
+    interview_note_create,
+    interview_note_delete,
+    interview_note_edit,
+    plan_create,
+    plan_detail,
+    plan_edit,
+    plan_list,
+)
 from studio.views.projects import project_list, project_review
 from studio.views.recordings import recording_edit, recording_list, recording_publish_youtube
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
@@ -77,6 +86,12 @@ from studio.views.settings import (
     settings_import,
     settings_save_auth_provider,
     settings_save_group,
+)
+from studio.views.sprints import (
+    sprint_create,
+    sprint_detail,
+    sprint_edit,
+    sprint_list,
 )
 from studio.views.subscribers import (
     subscriber_export_redirect,
@@ -334,6 +349,33 @@ urlpatterns = [
     path('users/<int:user_id>/', user_detail, name='studio_user_detail'),
     path('users/<int:user_id>/tags/add', user_tag_add, name='studio_user_tag_add'),
     path('users/<int:user_id>/tags/remove', user_tag_remove, name='studio_user_tag_remove'),
+
+    # Sprints (issue #432). Members section.
+    path('sprints/', sprint_list, name='studio_sprint_list'),
+    path('sprints/new', sprint_create, name='studio_sprint_create'),
+    path('sprints/<int:sprint_id>/', sprint_detail, name='studio_sprint_detail'),
+    path('sprints/<int:sprint_id>/edit', sprint_edit, name='studio_sprint_edit'),
+
+    # Plans (issue #432). Members section.
+    path('plans/', plan_list, name='studio_plan_list'),
+    path('plans/new', plan_create, name='studio_plan_create'),
+    path('plans/<int:plan_id>/', plan_detail, name='studio_plan_detail'),
+    path('plans/<int:plan_id>/edit', plan_edit, name='studio_plan_edit'),
+    path(
+        'plans/<int:plan_id>/notes/new',
+        interview_note_create,
+        name='studio_interview_note_create',
+    ),
+    path(
+        'plans/<int:plan_id>/notes/<int:note_id>/edit',
+        interview_note_edit,
+        name='studio_interview_note_edit',
+    ),
+    path(
+        'plans/<int:plan_id>/notes/<int:note_id>/delete',
+        interview_note_delete,
+        name='studio_interview_note_delete',
+    ),
 
     # Announcement banner
     path('announcement/', announcement_banner_edit, name='studio_announcement_banner'),

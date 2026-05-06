@@ -1,0 +1,57 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Sprints{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Sprints</h1>
+    <p class="text-muted-foreground mt-1">Rolling cohort windows. Plans hang off a sprint.</p>
+  </div>
+  <a href="{% url 'studio_sprint_create' %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    New sprint
+  </a>
+</div>
+
+{% if sprints %}
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Start date</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Duration</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Plans</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for sprint in sprints %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm text-foreground">
+          <a href="{% url 'studio_sprint_detail' sprint_id=sprint.pk %}" class="text-accent hover:underline">{{ sprint.name }}</a>
+          <div class="text-xs text-muted-foreground font-mono">{{ sprint.slug }}</div>
+        </td>
+        <td class="px-6 py-4">
+          <span class="text-xs px-2 py-1 rounded-full bg-secondary text-foreground">{{ sprint.get_status_display }}</span>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.start_date|date:"Y-m-d" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.duration_weeks }} weeks</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ sprint.plan_count }}</td>
+        <td class="px-6 py-4 text-right">
+          <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center">
+  <p class="text-muted-foreground">No sprints yet.</p>
+  <a href="{% url 'studio_sprint_create' %}" class="text-accent hover:underline text-sm mt-2 inline-block">Create your first sprint</a>
+</div>
+{% endif %}
+{% endblock %}

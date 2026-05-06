@@ -1,0 +1,203 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Plan: {{ plan.member.email }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_plan_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Plans
+  </a>
+  <div class="mt-2 flex items-start justify-between">
+    <div>
+      <h1 class="text-2xl font-semibold text-foreground">{{ plan.member.email }}</h1>
+      <p class="text-sm text-muted-foreground mt-1">
+        Sprint: <a href="{% url 'studio_sprint_detail' sprint_id=plan.sprint.pk %}" class="text-accent hover:underline">{{ plan.sprint.name }}</a>
+        · Status: {{ plan.get_status_display }}
+        {% if plan.shared_at %}· Shared {{ plan.shared_at|date:"Y-m-d" }}{% endif %}
+      </p>
+    </div>
+    <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}"
+       class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
+      Edit plan
+    </a>
+  </div>
+</div>
+
+{# Shareable Summary block. The five bullets here track _plan.md. #}
+<section data-testid="plan-summary" class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Summary</h2>
+  <dl class="space-y-3 text-sm">
+    <div data-field="summary_current_situation">
+      <dt class="text-xs text-muted-foreground uppercase">Current situation</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_current_situation|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_goal">
+      <dt class="text-xs text-muted-foreground uppercase">Goal for the next {{ plan.sprint.duration_weeks }} weeks</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_goal|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_main_gap">
+      <dt class="text-xs text-muted-foreground uppercase">Main gap to close</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_main_gap|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_weekly_hours">
+      <dt class="text-xs text-muted-foreground uppercase">Weekly time commitment</dt>
+      <dd class="text-foreground mt-1">{{ plan.summary_weekly_hours|default:"-" }}</dd>
+    </div>
+    <div data-field="summary_why_this_plan">
+      <dt class="text-xs text-muted-foreground uppercase">Why this plan</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_why_this_plan|default:"-" }}</dd>
+    </div>
+  </dl>
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Focus</h2>
+  <p class="text-sm text-foreground"><span class="text-xs text-muted-foreground uppercase">Main:</span> {{ plan.focus_main|default:"-" }}</p>
+  {% if plan.focus_supporting %}
+  <ul class="list-disc list-inside text-sm text-foreground mt-2 space-y-1">
+    {% for item in plan.focus_supporting %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Timeline</h2>
+  {% if weeks %}
+  <ol class="space-y-4">
+    {% for week in weeks %}
+    <li data-week-number="{{ week.week_number }}" class="border border-border rounded-lg p-4">
+      <h3 class="text-sm font-semibold text-foreground">Week {{ week.week_number }}{% if week.theme %} -- {{ week.theme }}{% endif %}</h3>
+      {% if week.checkpoints.all %}
+      <ul class="list-disc list-inside text-sm text-foreground mt-2 space-y-1">
+        {% for cp in week.checkpoints.all %}
+        <li>{{ cp.description }}{% if cp.done_at %} <span class="text-xs text-muted-foreground">(done {{ cp.done_at|date:"Y-m-d" }})</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-xs text-muted-foreground mt-2">No checkpoints yet.</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No weeks defined yet. Use the editor (#434) to add weeks and checkpoints.</p>
+  {% endif %}
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Resources</h2>
+  {% if resources %}
+  <ul class="text-sm text-foreground space-y-2">
+    {% for r in resources %}
+    <li>
+      {% if r.url %}<a href="{{ r.url }}" class="text-accent hover:underline">{{ r.title }}</a>{% else %}{{ r.title }}{% endif %}
+      {% if r.note %} -- <span class="text-muted-foreground">{{ r.note }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No resources yet.</p>
+  {% endif %}
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Deliverables</h2>
+  {% if deliverables %}
+  <ul class="list-disc list-inside text-sm text-foreground space-y-1">
+    {% for d in deliverables %}
+    <li>{{ d.description }}{% if d.done_at %} <span class="text-xs text-muted-foreground">(done {{ d.done_at|date:"Y-m-d" }})</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No deliverables yet.</p>
+  {% endif %}
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Accountability</h2>
+  <p class="text-sm text-foreground whitespace-pre-line">{{ plan.accountability|default:"-" }}</p>
+</section>
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Next steps</h2>
+  {% if next_steps %}
+  <ul class="text-sm text-foreground space-y-1">
+    {% for ns in next_steps %}
+    <li>
+      <span class="text-xs text-muted-foreground uppercase mr-2">[{{ ns.assignee_label }}]</span>
+      {{ ns.description }}
+      {% if ns.done_at %} <span class="text-xs text-muted-foreground">(done)</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No next steps yet.</p>
+  {% endif %}
+</section>
+
+<div class="flex items-center justify-between mb-4">
+  <h2 class="text-lg font-semibold text-foreground">Interview notes</h2>
+  <a href="{% url 'studio_interview_note_create' plan_id=plan.pk %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    Add interview note
+  </a>
+</div>
+
+{% comment %}
+Internal block: explicitly labelled "staff only" so a glance at the
+page tells the operator the visibility before they read.
+{% endcomment %}
+<section data-testid="internal-notes" class="bg-card border border-border rounded-lg p-6 mb-6">
+  <h3 data-testid="internal-notes-heading" class="text-md font-semibold text-foreground mb-3">Internal notes (staff only)</h3>
+  {% if internal_notes %}
+  <ul class="space-y-3">
+    {% for note in internal_notes %}
+    <li class="border border-border rounded-lg p-3">
+      <div class="flex items-center justify-between text-xs text-muted-foreground mb-1">
+        <span>{{ note.get_kind_display }} · {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} · {{ note.created_by.email }}{% endif %}</span>
+        <span class="space-x-2">
+          <a href="{% url 'studio_interview_note_edit' plan_id=plan.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
+          <form method="post" action="{% url 'studio_interview_note_delete' plan_id=plan.pk note_id=note.pk %}" class="inline"
+                onsubmit="return confirm('Delete this internal note?');">
+            {% csrf_token %}
+            <button type="submit" class="text-destructive hover:underline">Delete</button>
+          </form>
+        </span>
+      </div>
+      <p class="text-sm text-foreground whitespace-pre-line">{{ note.body }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No internal notes yet.</p>
+  {% endif %}
+</section>
+
+<section data-testid="external-notes" class="bg-card border border-border rounded-lg p-6 mb-6">
+  <h3 data-testid="external-notes-heading" class="text-md font-semibold text-foreground mb-3">External notes (shareable with member)</h3>
+  {% if external_notes %}
+  <ul class="space-y-3">
+    {% for note in external_notes %}
+    <li class="border border-border rounded-lg p-3">
+      <div class="flex items-center justify-between text-xs text-muted-foreground mb-1">
+        <span>{{ note.get_kind_display }} · {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} · {{ note.created_by.email }}{% endif %}</span>
+        <span class="space-x-2">
+          <a href="{% url 'studio_interview_note_edit' plan_id=plan.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
+          <form method="post" action="{% url 'studio_interview_note_delete' plan_id=plan.pk note_id=note.pk %}" class="inline"
+                onsubmit="return confirm('Delete this external note?');">
+            {% csrf_token %}
+            <button type="submit" class="text-destructive hover:underline">Delete</button>
+          </form>
+        </span>
+      </div>
+      <p class="text-sm text-foreground whitespace-pre-line">{{ note.body }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No external notes yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

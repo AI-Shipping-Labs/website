@@ -2,10 +2,12 @@
 
 import json
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -27,9 +29,23 @@ from payments.tier_state import build_tier_state
 from plans.dashboard import build_sprint_plan_card_context
 
 
-@login_required
-def account_view(request):
-    """Render the account page showing tier, billing info, and actions."""
+def _render_account_page(
+    request,
+    *,
+    profile_error="",
+    profile_form_first_name=None,
+    profile_form_last_name=None,
+    status=200,
+):
+    """Build the ``/account/`` context and render ``accounts/account.html``.
+
+    Extracted so both ``account_view`` (GET) and the
+    ``account_profile_post_view`` overflow path (400) can share the
+    full account-page render. The profile-form context keys default to
+    the saved ``user.first_name`` / ``user.last_name`` so a normal GET
+    pre-fills the inputs; the overflow path passes the rejected typed
+    values through so the user keeps their input.
+    """
     user = request.user
     tier = user.tier
     pending_tier = user.pending_tier
@@ -139,13 +155,32 @@ def account_view(request):
         "show_cancel_action": show_cancel_action,
         "stripe_checkout_enabled": stripe_checkout_enabled,
         "stripe_customer_portal_url": stripe_customer_portal_url,
+        # Profile name form (consolidated onto /account/, issue #447). The
+        # form posts to ``account_profile``; this view renders it inline.
+        "profile_error": profile_error,
+        "profile_form_first_name": (
+            user.first_name
+            if profile_form_first_name is None
+            else profile_form_first_name
+        ),
+        "profile_form_last_name": (
+            user.last_name
+            if profile_form_last_name is None
+            else profile_form_last_name
+        ),
     }
 
     # Sprint plan card (issue #442). The helper handles the empty case
     # (no plan -> ``plan`` is ``None`` and the template omits the card).
     context.update(build_sprint_plan_card_context(user))
 
-    return render(request, "accounts/account.html", context)
+    return render(request, "accounts/account.html", context, status=status)
+
+
+@login_required
+def account_view(request):
+    """Render the account page showing tier, billing info, and actions."""
+    return _render_account_page(request)
 
 
 @login_required
@@ -288,60 +323,63 @@ def theme_preference_view(request):
     return JsonResponse({"status": "ok"})
 
 
-@login_required
-def profile_view(request):
-    """Render and handle the member's profile (first name / last name) form.
+def account_profile_post_view(request):
+    """Handle the consolidated ``/account/profile`` URL (issue #447).
 
-    GET pre-fills the inputs with the current ``first_name`` / ``last_name``.
-    POST validates length, saves on success (PRG redirect with a flashed
-    success message), and re-renders with an inline error on overflow.
+    The Profile name form now lives inline on ``/account/``. The legacy
+    ``/account/profile`` URL stays bound to the ``account_profile`` URL
+    name so saved bookmarks, the ``{% url %}`` reverse lookup, and the
+    form ``action`` keep working. Behaviour:
 
-    Empty values are allowed and clear an existing name -- members can
-    blank out a name they don't want stored. Mirrors the plain-POST pattern
-    in ``studio/views/users.py::user_create`` rather than introducing a JSON
-    endpoint, because this is a primary user-facing form (no JS in the loop).
+    - ``POST`` (authenticated): validate length, save on success and
+      ``302`` redirect to ``/account/#profile`` with a success flash.
+      On overflow, re-render ``/account/`` inline with the error in the
+      Profile card (HTTP 400) and keep the rejected typed input in the
+      fields. Anonymous POST is sent through allauth's login flow by
+      ``@login_required`` (302 to ``/accounts/login/?next=...``) and no
+      user row is mutated.
+    - Any other method (``GET``, ``HEAD``): permanent ``301`` redirect
+      to ``/account/``. The redirect is unconditional -- it fires for
+      anonymous users too, since the form-rendering surface lives on
+      ``/account/`` (which is itself ``@login_required``).
     """
+    if request.method != "POST":
+        return HttpResponsePermanentRedirect("/account/")
+
+    if not request.user.is_authenticated:
+        # Mirror ``@login_required`` for the POST path so an anonymous
+        # caller is bounced to login WITHOUT writing to any user row.
+        login_url = getattr(settings, "LOGIN_URL", "/accounts/login/")
+        next_qs = urlencode({"next": "/account/profile"})
+        return redirect(f"{login_url}?{next_qs}")
+
     user = request.user
+    first_name = (request.POST.get("first_name") or "").strip()
+    last_name = (request.POST.get("last_name") or "").strip()
 
-    if request.method == "POST":
-        first_name = (request.POST.get("first_name") or "").strip()
-        last_name = (request.POST.get("last_name") or "").strip()
+    if (
+        len(first_name) > _NAME_MAX_LENGTH
+        or len(last_name) > _NAME_MAX_LENGTH
+    ):
+        error = (
+            "Name is too long — keep it under "
+            f"{_NAME_MAX_LENGTH} characters."
+        )
+        return _render_account_page(
+            request,
+            profile_error=error,
+            profile_form_first_name=first_name,
+            profile_form_last_name=last_name,
+            status=400,
+        )
 
-        if (
-            len(first_name) > _NAME_MAX_LENGTH
-            or len(last_name) > _NAME_MAX_LENGTH
-        ):
-            error = (
-                "Name is too long — keep it under "
-                f"{_NAME_MAX_LENGTH} characters."
-            )
-            return render(
-                request,
-                "accounts/profile.html",
-                {
-                    "first_name": first_name,
-                    "last_name": last_name,
-                    "error": error,
-                },
-                status=400,
-            )
+    user.first_name = first_name
+    user.last_name = last_name
+    user.save(update_fields=["first_name", "last_name"])
 
-        user.first_name = first_name
-        user.last_name = last_name
-        user.save(update_fields=["first_name", "last_name"])
-
-        messages.success(request, "Your profile has been updated.")
-        return redirect("account_profile")
-
-    return render(
-        request,
-        "accounts/profile.html",
-        {
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "error": "",
-        },
-    )
+    messages.success(request, "Your profile has been updated.")
+    # Redirect to /account/#profile so the page scrolls to the form.
+    return redirect("/account/#profile")
 
 
 # Reserved Token name for the member-facing plan editor (issue #444).

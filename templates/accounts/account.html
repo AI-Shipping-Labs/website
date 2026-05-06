@@ -26,7 +26,7 @@
       </div>
       {% endif %}
 
-      <!-- Profile Section -->
+      <!-- Profile Section (issue #447: name form lives inline here) -->
       <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-8" id="profile-section">
         <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
           <i data-lucide="user" class="h-5 w-5 text-accent"></i>
@@ -37,11 +37,38 @@
         {% else %}
         <p class="text-muted-foreground mb-4" id="profile-current-name">Your name is not set yet</p>
         {% endif %}
-        <a href="{% url 'account_profile' %}" id="edit-profile-link"
-           class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
-          <i data-lucide="edit-3" class="h-4 w-4"></i>
-          Edit profile
-        </a>
+
+        {% if profile_error %}
+        <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-red-500/20 text-red-400" id="profile-error" data-testid="profile-form-error">
+          {{ profile_error }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'account_profile' %}" id="profile-form">
+          {% csrf_token %}
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label for="id_first_name" class="block text-sm font-medium text-foreground mb-1">First name</label>
+              <input type="text" id="id_first_name" name="first_name"
+                     value="{{ profile_form_first_name }}" maxlength="150" placeholder="Optional"
+                     autocomplete="given-name"
+                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+            </div>
+            <div>
+              <label for="id_last_name" class="block text-sm font-medium text-foreground mb-1">Last name</label>
+              <input type="text" id="id_last_name" name="last_name"
+                     value="{{ profile_form_last_name }}" maxlength="150" placeholder="Optional"
+                     autocomplete="family-name"
+                     class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+            </div>
+          </div>
+
+          <button type="submit" id="profile-save-btn"
+                  class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            Save
+          </button>
+        </form>
       </div>
 
       {% if plan %}

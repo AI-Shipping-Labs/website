@@ -5,6 +5,7 @@ from accounts.views.account import (
     account_view,
     cancel_subscription_view,
     email_preferences_view,
+    profile_view,
     theme_preference_view,
     timezone_preference_view,
 )
@@ -41,6 +42,7 @@ auth_api_urlpatterns = [
 # Account page and API endpoints (mounted at /account/ in project urls.py)
 account_urlpatterns = [
     path('', account_view, name='account'),
+    path('profile', profile_view, name='account_profile'),
     path('api/email-preferences', email_preferences_view, name='email_preferences'),
     path('api/timezone-preference', timezone_preference_view, name='timezone_preference'),
     path('api/cancel', cancel_subscription_view, name='account_cancel_subscription'),

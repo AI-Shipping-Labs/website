@@ -144,8 +144,7 @@ class PlanEditorBootstrapPayloadTest(TestCase):
             plan=cls.plan, description='Working prototype', position=0,
         )
         cls.next_step = NextStep.objects.create(
-            plan=cls.plan, assignee_label='Alexey',
-            description='Schedule check-in', position=0,
+            plan=cls.plan, description='Schedule check-in', position=0,
         )
         cls.internal_note = InterviewNote.objects.create(
             plan=cls.plan, member=cls.member,
@@ -224,8 +223,8 @@ class PlanEditorBootstrapPayloadTest(TestCase):
         )
         self.assertEqual(len(self.payload['next_steps']), 1)
         self.assertEqual(
-            self.payload['next_steps'][0]['assignee_label'],
-            'Alexey',
+            self.payload['next_steps'][0]['description'],
+            'Schedule check-in',
         )
 
     def test_payload_splits_interview_notes_by_visibility(self):

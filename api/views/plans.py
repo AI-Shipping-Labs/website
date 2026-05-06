@@ -253,7 +253,7 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
     for collection_name, model, fields in (
         ("resources", Resource, ("title", "url", "note")),
         ("deliverables", Deliverable, ("description",)),
-        ("next_steps", NextStep, ("assignee_label", "description")),
+        ("next_steps", NextStep, ("description",)),
     ):
         rows = plan_data.get(collection_name) or []
         if not isinstance(rows, list):

@@ -55,8 +55,8 @@ ITEM_TYPES = {
     "next_step": {
         "model": NextStep,
         "related_name": "next_steps",
-        "required": ["assignee_label", "description"],
-        "writable": ("assignee_label", "description"),
+        "required": ["description"],
+        "writable": ("description",),
         "has_done_at": True,
         "serialize": serialize_next_step,
     },

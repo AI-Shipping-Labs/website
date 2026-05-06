@@ -2,8 +2,7 @@
 
 The three child collections share the same shape, so we parametrize the
 shared cases (list ordering, create-appends, position reorder, delete)
-across all three. The next-step ``assignee_label`` free-text test is
-specific to that resource.
+across all three.
 """
 
 import datetime
@@ -75,12 +74,10 @@ ITEM_CONFIGS = [
         "detail_url": lambda item_id: f"/api/next-steps/{item_id}",
         "list_key": "next_steps",
         "create_payload": {
-            "assignee_label": "Member",
             "description": "do thing",
         },
         "create_kwargs": lambda plan, position: {
-            "plan": plan, "assignee_label": "x",
-            "description": "row", "position": position,
+            "plan": plan, "description": "row", "position": position,
         },
     },
 ]
@@ -180,16 +177,16 @@ class PlanItemsDeleteTest(PlanItemsTestBase):
                 self.assertEqual(rows[3].position, 2)
 
 
-class NextStepFreeformTest(PlanItemsTestBase):
-    def test_assignee_label_stored_verbatim(self):
+class NextStepCreateTest(PlanItemsTestBase):
+    def test_next_step_create_only_requires_description(self):
         response = self.client.post(
             f"/api/plans/{self.plan.id}/next-steps",
             data=json.dumps({
-                "assignee_label": "Valeriia",
                 "description": "Review thing",
             }),
             content_type="application/json",
             **self._auth(),
         )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["assignee_label"], "Valeriia")
+        self.assertEqual(response.json()["description"], "Review thing")
+        self.assertNotIn("assignee_label", response.json())

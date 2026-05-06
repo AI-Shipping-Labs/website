@@ -126,7 +126,6 @@
   <ul class="text-sm text-foreground space-y-1">
     {% for ns in next_steps %}
     <li>
-      <span class="text-xs text-muted-foreground uppercase mr-2">[{{ ns.assignee_label }}]</span>
       {{ ns.description }}
       {% if ns.done_at %} <span class="text-xs text-muted-foreground">(done)</span>{% endif %}
     </li>

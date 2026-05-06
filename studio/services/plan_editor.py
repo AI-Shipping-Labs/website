@@ -85,7 +85,6 @@ def _serialize_deliverable(deliverable):
 def _serialize_next_step(next_step):
     return {
         'id': next_step.pk,
-        'assignee_label': next_step.assignee_label,
         'description': next_step.description,
         'position': next_step.position,
         'done_at': (

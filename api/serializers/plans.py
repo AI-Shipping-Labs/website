@@ -104,7 +104,6 @@ def serialize_next_step(next_step):
     """Next-step row dict."""
     return {
         "id": next_step.id,
-        "assignee_label": next_step.assignee_label,
         "description": next_step.description,
         "position": next_step.position,
         "done_at": _isoformat_or_none(next_step.done_at),

@@ -97,7 +97,6 @@ class BulkImportHappyPathTest(BulkImportTestBase):
                     ],
                     "next_steps": [
                         {
-                            "assignee_label": "Member",
                             "description": "join channel",
                         },
                     ],

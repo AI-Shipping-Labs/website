@@ -408,17 +408,11 @@ class Deliverable(TimestampedModelMixin, models.Model):
 
 
 class NextStep(TimestampedModelMixin, models.Model):
-    """An entry in the Next Steps block.
-
-    ``assignee_label`` is free text. Real plans use varied names
-    ("Carlos", "Alexey", "Valeriia", "Member"), so we keep it loose
-    rather than wiring it to ``User``.
-    """
+    """An entry in the Next Steps block."""
 
     plan = models.ForeignKey(
         Plan, on_delete=models.CASCADE, related_name='next_steps',
     )
-    assignee_label = models.CharField(max_length=120)
     description = models.TextField()
     position = models.PositiveSmallIntegerField(default=0)
     done_at = models.DateTimeField(null=True, blank=True)
@@ -427,7 +421,7 @@ class NextStep(TimestampedModelMixin, models.Model):
         ordering = ['plan', 'position', 'id']
 
     def __str__(self):
-        return f'{self.assignee_label}: {self.description[:60]}'
+        return self.description[:80]
 
 
 class WeekNote(TimestampedModelMixin, models.Model):

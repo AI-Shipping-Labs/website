@@ -166,8 +166,7 @@ class AuthMatrixTest(TestCase):
             plan=self.plan, description="d", position=0,
         )
         self.next_step = NextStep.objects.create(
-            plan=self.plan, assignee_label="Member",
-            description="ns", position=0,
+            plan=self.plan, description="ns", position=0,
         )
         self.endpoints = _build_endpoints(
             plan_id=self.plan.id,

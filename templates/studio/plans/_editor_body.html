@@ -303,7 +303,6 @@
                    class="plan-editor-next-step-done"
                    {% if n.done_at %}checked{% endif %}>
             <div class="flex-1">
-              <span class="text-xs text-muted-foreground">{{ n.assignee_label }}</span>
               <span class="text-sm text-foreground block {% if n.done_at %}line-through text-muted-foreground{% endif %}">{{ n.description }}</span>
             </div>
           </li>

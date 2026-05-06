@@ -186,8 +186,7 @@ class PlanDetailTest(PlansApiTestBase):
             plan=cls.plan, description="ship something", position=0,
         )
         NextStep.objects.create(
-            plan=cls.plan, assignee_label="Member",
-            description="do thing", position=0,
+            plan=cls.plan, description="do thing", position=0,
         )
 
     def test_get_detail_returns_full_nested_shape(self):

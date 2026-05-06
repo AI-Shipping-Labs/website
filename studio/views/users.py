@@ -28,6 +28,7 @@ import secrets
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -72,6 +73,11 @@ SLACK_FILTER_NO = 'no'
 VALID_SLACK_FILTERS = {SLACK_FILTER_ANY, SLACK_FILTER_YES, SLACK_FILTER_NO}
 DEFAULT_SLACK_FILTER = SLACK_FILTER_ANY
 USER_LIST_TAG_LIMIT = 3
+
+# Page size for the Studio users list (issue #438). Hard-coded for v1; the
+# spec deliberately defers operator-configurable page sizes. The CSV export
+# always exports the full filtered set, so this constant only affects HTML.
+USER_LIST_PAGE_SIZE = 50
 
 
 def _normalize_filter(value):
@@ -179,6 +185,37 @@ def _matches_slack_filter(user, slack_filter):
     return True
 
 
+def _matches_search(user, search_lower, normalized_search):
+    """OR-match the search query across email, names, Stripe ID, and tags.
+
+    Issue #438 broadened ``?q=`` from email-only to a four-field disjunction:
+
+    - ``email`` (case-insensitive substring; original behavior).
+    - ``first_name`` / ``last_name`` (case-insensitive substring).
+    - ``stripe_customer_id`` (case-insensitive substring; covers the
+      "I pasted a prefix" case operators reach for first).
+    - Any entry in ``tags`` (case-insensitive substring on the
+      already-normalized list, after running ``normalize_tag`` on the input
+      so ``AI Buildcamp`` matches ``ai-buildcamp``).
+
+    A user is included if ANY of these match. Empty search is handled by the
+    caller (skip this filter entirely).
+    """
+    if search_lower in user.email.lower():
+        return True
+    if user.first_name and search_lower in user.first_name.lower():
+        return True
+    if user.last_name and search_lower in user.last_name.lower():
+        return True
+    if user.stripe_customer_id and search_lower in user.stripe_customer_id.lower():
+        return True
+    if normalized_search:
+        for tag in user.tags or []:
+            if normalized_search in tag.lower():
+                return True
+    return False
+
+
 def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER):
     """Build filtered rows plus aggregate counts for the users page/export.
 
@@ -188,15 +225,19 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
 
     ``slack_filter`` is the tri-state Slack-membership filter (issue
     #358). It ANDs with the tier and tag filters.
+
+    The full filtered list is returned (unpaginated). Pagination for the
+    HTML view happens in ``user_list``; the CSV export uses the full list.
     """
     all_users = list(User.objects.select_related('tier').all())
     override_map = _active_override_map(all_users)
     search_lower = search.lower()
+    normalized_search = normalize_tag(search) if search else ''
     normalized_tag = normalize_tag(tag_filter) if tag_filter else ''
 
     user_rows = []
     for user in all_users:
-        if search and search_lower not in user.email.lower():
+        if search and not _matches_search(user, search_lower, normalized_search):
             continue
 
         override = override_map.get(user.pk)
@@ -266,6 +307,38 @@ def _user_status(user):
     return 'Active'
 
 
+def _coerce_page_number(raw, num_pages):
+    """Map a raw ``?page=`` value to a valid 1..num_pages page number.
+
+    The spec asks for clamping (not 404) so bookmarked links survive when
+    the underlying data changes. ``num_pages`` is always at least 1 because
+    Django's ``Paginator`` reports 1 page even for an empty list when
+    ``allow_empty_first_page=True`` (the default).
+    """
+    try:
+        page_num = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    if page_num < 1:
+        return 1
+    if page_num > num_pages:
+        return num_pages
+    return page_num
+
+
+def _pager_querystring(request, page_number):
+    """Build the ``?...`` part of a pager link, preserving existing params.
+
+    Copies every ``request.GET`` key except ``page`` (which we overwrite)
+    and re-adds ``page`` as the requested number. Returns the encoded query
+    string WITH the leading ``?`` so the template can interpolate it
+    directly into ``href``.
+    """
+    params = request.GET.copy()
+    params['page'] = str(page_number)
+    return '?' + params.urlencode()
+
+
 @staff_required
 def user_list(request):
     """List platform Users with tier and subscriber filter chips."""
@@ -279,8 +352,44 @@ def user_list(request):
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
     )
 
+    paginator = Paginator(user_rows, USER_LIST_PAGE_SIZE)
+    page_number = _coerce_page_number(request.GET.get('page'), paginator.num_pages)
+    page = paginator.page(page_number)
+
+    # Pre-build pager link URLs so the template stays simple and the
+    # query-param-preservation rule has one obvious home.
+    if page.has_previous():
+        first_url = _pager_querystring(request, 1)
+        prev_url = _pager_querystring(request, page.previous_page_number())
+    else:
+        first_url = None
+        prev_url = None
+    if page.has_next():
+        next_url = _pager_querystring(request, page.next_page_number())
+        last_url = _pager_querystring(request, paginator.num_pages)
+    else:
+        next_url = None
+        last_url = None
+
+    # "Showing 51-100 of 374" math. Use the page's start_index/end_index
+    # which are already 1-indexed and clamp correctly on the last page;
+    # both are 0 when the result set is empty (Django convention).
+    show_pager = paginator.num_pages > 1
+
     return render(request, 'studio/users/list.html', {
-        'user_rows': user_rows,
+        'page': page,
+        'paginator': paginator,
+        # Preserved for tests that read the rendered page slice directly.
+        # The full unpaginated list is on ``paginator.object_list``.
+        'user_rows': page.object_list,
+        'show_pager': show_pager,
+        'pager_first_url': first_url,
+        'pager_prev_url': prev_url,
+        'pager_next_url': next_url,
+        'pager_last_url': last_url,
+        'page_start_index': page.start_index(),
+        'page_end_index': page.end_index(),
+        'filtered_total': paginator.count,
         'active_filter': active_filter,
         'slack_filter': slack_filter,
         'search': search,

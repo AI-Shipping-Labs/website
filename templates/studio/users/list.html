@@ -103,7 +103,7 @@
     <input type="hidden" name="filter" value="{{ active_filter }}">
     <input type="hidden" name="slack" value="{{ slack_filter }}">
     {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
-    <input type="text" name="q" value="{{ search }}" placeholder="Search by email..."
+    <input type="text" name="q" value="{{ search }}" placeholder="Email, name, Stripe ID, or tag"
            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
     <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
   </form>
@@ -111,6 +111,7 @@
 
 <!-- User list -->
 <div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="studio-users-list">
+  {% if show_pager %}{% include "studio/users/_pager.html" %}{% endif %}
   <table class="w-full table-fixed">
     <colgroup>
       <col class="w-[30%]">
@@ -127,7 +128,7 @@
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
-      {% for row in user_rows %}
+      {% for row in page.object_list %}
       <tr class="hover:bg-secondary/50 transition-colors">
         <td class="px-4 py-2.5 align-top min-w-0" data-label="User">
           <div class="min-w-0">
@@ -200,5 +201,6 @@
       {% endfor %}
     </tbody>
   </table>
+  {% if show_pager %}{% include "studio/users/_pager.html" %}{% endif %}
 </div>
 {% endblock %}

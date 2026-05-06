@@ -117,8 +117,13 @@ class EmailService:
             )
             return None
 
-        # Load and render the template
-        subject, body_html = self._render_template(template_name, user, context)
+        # Load and render the template. DB overrides beat filesystem
+        # templates, but no override keeps the historical file path.
+        subject, body_html, footer_note = self._render_template_with_footer(
+            template_name,
+            user,
+            context,
+        )
 
         # Build the unsubscribe URL
         unsubscribe_url = self._build_unsubscribe_url(user)
@@ -135,6 +140,7 @@ class EmailService:
             subject,
             body_html,
             unsubscribe_url=unsubscribe_url,
+            footer_note=footer_note,
             verify_email_url=verify_email_url,
         )
 
@@ -160,7 +166,20 @@ class EmailService:
         return email_log
 
     def _render_template(self, template_name, user, context):
-        """Load a markdown template, render with context, convert to HTML.
+        """Load a template, render with context, convert to HTML."""
+        subject, body_html, _ = self._render_template_with_footer(
+            template_name,
+            user,
+            context,
+        )
+        return subject, body_html
+
+    def _render_template_with_footer(self, template_name, user, context):
+        """Load a template, render with context, convert to HTML.
+
+        Database overrides are preferred over filesystem templates. When no
+        override exists, behavior is identical to the original markdown file
+        path.
 
         Args:
             template_name: Template file name (without .md extension).
@@ -168,18 +187,14 @@ class EmailService:
             context: Additional template variables.
 
         Returns:
-            Tuple of (subject, body_html).
+            Tuple of (subject, body_html, footer_note).
 
         Raises:
-            EmailServiceError: If template file not found.
+            EmailServiceError: If no override or template file is found.
         """
-        template_path = TEMPLATES_DIR / f"{template_name}.md"
-
-        if not template_path.exists():
-            raise EmailServiceError(f"Email template not found: {template_name} (looked in {template_path})")
-
-        # Parse frontmatter and body
-        post = frontmatter.load(str(template_path))
+        subject_source, body_source, footer_note = self._load_template_source(
+            template_name,
+        )
 
         # Build full context with defaults
         full_context = {
@@ -191,11 +206,11 @@ class EmailService:
         full_context.update(context)
 
         # Render subject as Django template
-        subject_template = Template(post.metadata.get("subject", template_name))
+        subject_template = Template(subject_source)
         subject = subject_template.render(Context(full_context))
 
         # Render body as Django template first (for variable substitution)
-        body_template = Template(post.content)
+        body_template = Template(body_source)
         rendered_body = body_template.render(Context(full_context))
 
         # Convert markdown to HTML
@@ -204,7 +219,27 @@ class EmailService:
             extensions=["extra"],
         )
 
-        return subject, body_html
+        return subject, body_html, footer_note
+
+    def _load_template_source(self, template_name):
+        """Return ``(subject, body_markdown, footer_note)`` for a template."""
+        from email_app.models import EmailTemplateOverride
+
+        override = EmailTemplateOverride.objects.filter(
+            template_name=template_name,
+        ).first()
+        if override is not None:
+            return override.subject, override.body_markdown, override.footer_note
+
+        template_path = TEMPLATES_DIR / f"{template_name}.md"
+        if not template_path.exists():
+            raise EmailServiceError(
+                f"Email template not found: {template_name} "
+                f"(looked in {template_path})"
+            )
+
+        post = frontmatter.load(str(template_path))
+        return post.metadata.get("subject", template_name), post.content, ""
 
     def _build_unsubscribe_url(self, user):
         """Build a one-click unsubscribe URL for the user.

@@ -1,0 +1,74 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Email templates{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold text-foreground">Email templates</h1>
+  <p class="text-muted-foreground mt-1">
+    Edit the subject, body, and footer note for each transactional email.
+    Changes here override the on-disk markdown files. Use
+    <code>Reset to default</code> to revert.
+  </p>
+</div>
+
+<div class="bg-card border border-border rounded-lg overflow-hidden studio-responsive-table">
+  <table class="w-full text-sm">
+    <thead class="bg-secondary/40 text-xs uppercase tracking-wider text-muted-foreground">
+      <tr>
+        <th class="text-left px-4 py-3">Template</th>
+        <th class="text-left px-4 py-3">Subject</th>
+        <th class="text-left px-4 py-3">Status</th>
+        <th class="text-left px-4 py-3">Last edited</th>
+        <th class="text-right px-4 py-3">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in rows %}
+      <tr data-template-name="{{ row.template_name }}">
+        <td class="px-4 py-3 font-medium text-foreground" data-label="Template">
+          <code>{{ row.template_name }}</code>
+        </td>
+        <td class="px-4 py-3 text-muted-foreground" data-label="Subject">
+          {{ row.subject }}
+        </td>
+        <td class="px-4 py-3" data-label="Status">
+          {% if row.edited %}
+            <span class="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent" data-testid="edited-badge">
+              <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+              Edited
+            </span>
+          {% else %}
+            <span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              Default
+            </span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-muted-foreground" data-label="Last edited">
+          {% if row.updated_at %}{{ row.updated_at|date:"Y-m-d H:i" }}{% else %}&mdash;{% endif %}
+        </td>
+        <td class="px-4 py-3 studio-actions-cell" data-label="Actions">
+          <div class="flex flex-wrap gap-2 justify-end">
+            <a href="{% url 'studio_email_template_edit' row.template_name %}"
+               class="text-accent hover:underline text-xs font-medium">Edit</a>
+            <form method="post" action="{% url 'studio_email_template_send_test' row.template_name %}" class="inline">
+              {% csrf_token %}
+              <button type="submit" class="text-xs text-muted-foreground hover:text-foreground">Send test to me</button>
+            </form>
+            {% if row.edited %}
+            <form method="post"
+                  action="{% url 'studio_email_template_reset' row.template_name %}"
+                  class="inline"
+                  onsubmit="return confirm('Reset {{ row.template_name }} to the filesystem default? This deletes the override.');">
+              {% csrf_token %}
+              <button type="submit" class="text-xs text-destructive hover:underline">Reset to default</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

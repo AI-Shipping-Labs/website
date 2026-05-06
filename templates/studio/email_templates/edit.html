@@ -1,0 +1,145 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Edit {{ template_name }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <p class="text-xs text-muted-foreground">
+    <a href="{% url 'studio_email_template_list' %}" class="hover:underline">Email templates</a>
+    <span class="mx-2">/</span>
+    <code>{{ template_name }}</code>
+  </p>
+  <h1 class="text-2xl font-semibold text-foreground mt-1">Edit <code>{{ template_name }}</code></h1>
+  <p class="text-muted-foreground mt-1">
+    Edits are persisted as a database override and beat the on-disk template
+    on the next send. Use the preview pane on the right to see the rendered
+    chrome. Variables like <code>{{ '{' }}{{ '{' }} user_name {{ '}' }}{{ '}' }}</code>
+    are filled with placeholder values in the preview.
+  </p>
+</div>
+
+<div class="grid gap-6 lg:grid-cols-2">
+  <form method="post" action="{% url 'studio_email_template_edit' template_name %}"
+        class="bg-card border border-border rounded-lg p-6 space-y-5"
+        data-testid="email-template-edit-form">
+    {% csrf_token %}
+
+    <div>
+      <label for="tpl-subject" class="block text-sm font-medium text-foreground mb-1">Subject</label>
+      <input id="tpl-subject" name="subject" type="text" maxlength="200" required
+             value="{{ initial.subject }}"
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+             data-preview-field="subject">
+      <p class="text-xs text-muted-foreground mt-1">Supports Django variables, e.g.
+        <code>{{ '{' }}{{ '{' }} tier_name {{ '}' }}{{ '}' }}</code>.</p>
+    </div>
+
+    <div>
+      <label for="tpl-body" class="block text-sm font-medium text-foreground mb-1">Body (markdown)</label>
+      <textarea id="tpl-body" name="body_markdown" rows="14" required
+                class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+                data-preview-field="body_markdown">{{ initial.body_markdown }}</textarea>
+    </div>
+
+    <div>
+      <label for="tpl-footer" class="block text-sm font-medium text-foreground mb-1">Footer note <span class="text-muted-foreground font-normal">(optional)</span></label>
+      <input id="tpl-footer" name="footer_note" type="text" maxlength="500"
+             value="{{ initial.footer_note }}"
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+             data-preview-field="footer_note">
+      <p class="text-xs text-muted-foreground mt-1">Appended to the email footer below the copyright. Leave blank to omit.</p>
+    </div>
+
+    <div class="flex items-center justify-between gap-4 pt-2 border-t border-border">
+      <a href="{% url 'studio_email_template_list' %}" class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+      <div class="flex items-center gap-3">
+        {% if initial.has_override %}
+        <button type="submit"
+                formaction="{% url 'studio_email_template_reset' template_name %}"
+                formmethod="post"
+                onclick="return confirm('Reset {{ template_name }} to the filesystem default? This deletes the override.');"
+                class="text-sm text-destructive hover:underline">Reset to default</button>
+        {% endif %}
+        <button type="submit"
+                class="bg-accent text-accent-foreground px-5 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+          Save override
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <div class="space-y-2">
+    <div class="flex items-center justify-between">
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preview</p>
+      <p class="text-xs text-muted-foreground" data-testid="preview-status" aria-live="polite">Idle</p>
+    </div>
+    <iframe id="tpl-preview"
+            data-testid="email-template-preview"
+            data-preview-url="{% url 'studio_email_template_preview' template_name %}"
+            class="w-full h-[640px] rounded-lg border border-border bg-white"
+            title="Email preview"
+            sandbox="allow-same-origin"></iframe>
+  </div>
+</div>
+
+<script>
+(function() {
+  var form = document.querySelector('[data-testid="email-template-edit-form"]');
+  var iframe = document.getElementById('tpl-preview');
+  var status = document.querySelector('[data-testid="preview-status"]');
+  if (!form || !iframe) {
+    return;
+  }
+  var url = iframe.dataset.previewUrl;
+  var csrf = form.querySelector('input[name=csrfmiddlewaretoken]').value;
+  var debounceMs = 250;
+  var timer = null;
+  var inflight = null;
+
+  function gather() {
+    var data = new FormData();
+    form.querySelectorAll('[data-preview-field]').forEach(function(el) {
+      data.append(el.dataset.previewField, el.value);
+    });
+    return data;
+  }
+
+  function refresh() {
+    if (inflight && inflight.abort) {
+      try { inflight.abort(); } catch (e) {}
+    }
+    if (status) { status.textContent = 'Updating preview...'; }
+    var controller = new AbortController();
+    inflight = controller;
+    fetch(url, {
+      method: 'POST',
+      headers: {'X-CSRFToken': csrf},
+      body: gather(),
+      credentials: 'same-origin',
+      signal: controller.signal,
+    })
+      .then(function(r) { return r.text(); })
+      .then(function(html) {
+        iframe.setAttribute('srcdoc', html);
+        if (status) { status.textContent = 'Up to date'; }
+      })
+      .catch(function(err) {
+        if (err && err.name === 'AbortError') { return; }
+        if (status) { status.textContent = 'Preview error'; }
+      });
+  }
+
+  function schedule() {
+    if (timer) { clearTimeout(timer); }
+    timer = setTimeout(refresh, debounceMs);
+  }
+
+  form.querySelectorAll('[data-preview-field]').forEach(function(el) {
+    el.addEventListener('input', schedule);
+  });
+
+  // Initial render so the iframe shows the saved template.
+  refresh();
+})();
+</script>
+{% endblock %}

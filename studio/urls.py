@@ -37,6 +37,13 @@ from studio.views.courses import (
 )
 from studio.views.dashboard import dashboard
 from studio.views.downloads import download_edit, download_list
+from studio.views.email_templates import (
+    email_template_edit,
+    email_template_list,
+    email_template_preview,
+    email_template_reset,
+    email_template_send_test,
+)
 from studio.views.enrollments import (
     enrollment_create,
     enrollment_list,
@@ -402,6 +409,33 @@ urlpatterns = [
 
     # Announcement banner
     path('announcement/', announcement_banner_edit, name='studio_announcement_banner'),
+
+    # Transactional email templates (issue #455)
+    path(
+        'email-templates/',
+        email_template_list,
+        name='studio_email_template_list',
+    ),
+    path(
+        'email-templates/<slug:template_name>/edit/',
+        email_template_edit,
+        name='studio_email_template_edit',
+    ),
+    path(
+        'email-templates/<slug:template_name>/reset/',
+        email_template_reset,
+        name='studio_email_template_reset',
+    ),
+    path(
+        'email-templates/<slug:template_name>/preview/',
+        email_template_preview,
+        name='studio_email_template_preview',
+    ),
+    path(
+        'email-templates/<slug:template_name>/send-test/',
+        email_template_send_test,
+        name='studio_email_template_send_test',
+    ),
 
     # API tokens (issue #431). Superuser-only; the plaintext key is shown
     # exactly once on the ``created/`` page via a session stash.

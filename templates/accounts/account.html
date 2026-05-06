@@ -26,6 +26,24 @@
       </div>
       {% endif %}
 
+      <!-- Profile Section -->
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-8" id="profile-section">
+        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+          <i data-lucide="user" class="h-5 w-5 text-accent"></i>
+          Profile
+        </h2>
+        {% if user.first_name or user.last_name %}
+        <p class="text-foreground mb-4" id="profile-current-name">{{ user.first_name }} {{ user.last_name }}</p>
+        {% else %}
+        <p class="text-muted-foreground mb-4" id="profile-current-name">Your name is not set yet</p>
+        {% endif %}
+        <a href="{% url 'account_profile' %}" id="edit-profile-link"
+           class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          <i data-lucide="edit-3" class="h-4 w-4"></i>
+          Edit profile
+        </a>
+      </div>
+
       <!-- Membership Section -->
       <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-8">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">

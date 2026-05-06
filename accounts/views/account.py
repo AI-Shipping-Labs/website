@@ -3,10 +3,17 @@
 import json
 from datetime import datetime, timezone
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
+
+# Matches AbstractUser.first_name / last_name max_length so an over-long
+# value is rejected before Django's model-level validator complains. Keeping
+# this in sync with AbstractUser is intentional -- the constraint is
+# implicit in the column type, so we keep one named constant in the view.
+_NAME_MAX_LENGTH = 150
 
 from accounts.services.timezones import (
     build_timezone_options,
@@ -274,3 +281,59 @@ def theme_preference_view(request):
     user.save(update_fields=["theme_preference"])
 
     return JsonResponse({"status": "ok"})
+
+
+@login_required
+def profile_view(request):
+    """Render and handle the member's profile (first name / last name) form.
+
+    GET pre-fills the inputs with the current ``first_name`` / ``last_name``.
+    POST validates length, saves on success (PRG redirect with a flashed
+    success message), and re-renders with an inline error on overflow.
+
+    Empty values are allowed and clear an existing name -- members can
+    blank out a name they don't want stored. Mirrors the plain-POST pattern
+    in ``studio/views/users.py::user_create`` rather than introducing a JSON
+    endpoint, because this is a primary user-facing form (no JS in the loop).
+    """
+    user = request.user
+
+    if request.method == "POST":
+        first_name = (request.POST.get("first_name") or "").strip()
+        last_name = (request.POST.get("last_name") or "").strip()
+
+        if (
+            len(first_name) > _NAME_MAX_LENGTH
+            or len(last_name) > _NAME_MAX_LENGTH
+        ):
+            error = (
+                "Name is too long — keep it under "
+                f"{_NAME_MAX_LENGTH} characters."
+            )
+            return render(
+                request,
+                "accounts/profile.html",
+                {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "error": error,
+                },
+                status=400,
+            )
+
+        user.first_name = first_name
+        user.last_name = last_name
+        user.save(update_fields=["first_name", "last_name"])
+
+        messages.success(request, "Your profile has been updated.")
+        return redirect("account_profile")
+
+    return render(
+        request,
+        "accounts/profile.html",
+        {
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "error": "",
+        },
+    )

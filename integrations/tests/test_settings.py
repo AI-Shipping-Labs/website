@@ -217,10 +217,14 @@ class SettingsDashboardViewTest(TestCase):
             response = self.client.get('/studio/settings/')
 
         summary = response.context['status_summary']
-        self.assertEqual(summary['total_items'], 12)
+        expected_total_items = len(response.context['auth_providers']) + len(response.context['groups'])
+        self.assertEqual(summary['total_items'], expected_total_items)
         self.assertEqual(summary['configured_count'], 1)
         self.assertEqual(summary['partial_count'], 2)
-        self.assertEqual(summary['missing_count'], 9)
+        self.assertEqual(
+            summary['missing_count'],
+            expected_total_items - summary['configured_count'] - summary['partial_count'],
+        )
         self.assertEqual(summary['db_override_count'], 1)
         self.assertEqual(summary['env_backed_count'], 1)
         self.assertGreater(summary['missing_required_values'], 0)

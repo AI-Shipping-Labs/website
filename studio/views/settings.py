@@ -46,7 +46,7 @@ SETTINGS_SECTIONS = [
         'id': 'auth',
         'label': 'Auth',
         'description': 'OAuth providers users see on the login page.',
-        'group_names': set(),
+        'group_names': {'auth'},
     },
     {
         'id': 'payments',

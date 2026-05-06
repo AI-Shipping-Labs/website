@@ -1,3 +1,4 @@
+import copy
 import json
 import sys
 
@@ -70,12 +71,30 @@ def _site_base_url_for_env(deploy_env):
     return SITE_BASE_URL_BY_ENV.get(deploy_env, SITE_BASE_URL_BY_ENV["dev"])
 
 
+def _ensure_worker_container(containers):
+    # Source-of-truth for the qcluster sidecar. Cloning from the web
+    # container keeps image, secrets, and log config in sync — only the
+    # name, command, port mappings, and essential flag differ.
+    if any(c["name"].endswith("-worker") for c in containers):
+        return
+
+    web = next(c for c in containers if c.get("essential"))
+    worker = copy.deepcopy(web)
+    worker["name"] = f"{web['name']}-worker"
+    worker["essential"] = False
+    worker["command"] = ["uv", "run", "python", "manage.py", "qcluster"]
+    worker["portMappings"] = []
+    containers.append(worker)
+
+
 def update_task_definition(input_file, new_tag, output_file, deploy_env="dev"):
     print(f"Updating task definition from {input_file} with tag {new_tag}")
 
     try:
         with open(input_file, "r") as f:
             task_def = json.load(f)["taskDefinition"]
+
+        _ensure_worker_container(task_def["containerDefinitions"])
 
         for container_def in task_def["containerDefinitions"]:
             if "image" in container_def:

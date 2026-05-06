@@ -24,6 +24,7 @@ from content.access import get_active_override
 from integrations.config import get_config, is_enabled
 from payments.models import Tier
 from payments.tier_state import build_tier_state
+from plans.dashboard import build_sprint_plan_card_context
 
 
 @login_required
@@ -139,6 +140,10 @@ def account_view(request):
         "stripe_checkout_enabled": stripe_checkout_enabled,
         "stripe_customer_portal_url": stripe_customer_portal_url,
     }
+
+    # Sprint plan card (issue #442). The helper handles the empty case
+    # (no plan -> ``plan`` is ``None`` and the template omits the card).
+    context.update(build_sprint_plan_card_context(user))
 
     return render(request, "accounts/account.html", context)
 

@@ -66,6 +66,46 @@
       </div>
     </section>
 
+    {% if plan %}
+    <!-- Sprint Plan Section (issue #442) -->
+    <section class="mb-10">
+      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8" id="sprint-plan-section" data-testid="account-sprint-plan-card">
+        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+          <i data-lucide="map" class="h-5 w-5 text-accent"></i>
+          Your sprint plan
+        </h2>
+        <p class="text-sm text-muted-foreground" data-testid="account-sprint-plan-name">
+          {{ plan.sprint.name }}
+        </p>
+        <p class="text-sm text-muted-foreground mt-1" data-testid="account-sprint-plan-meta">
+          {{ plan.sprint.start_date|date:"d M Y" }} &middot; {{ plan.sprint.duration_weeks }} week{{ plan.sprint.duration_weeks|pluralize }}
+          &middot; <span data-testid="account-sprint-plan-status">{{ plan.get_status_display }}</span>
+        </p>
+        {% if plan_progress_total %}
+        <p class="text-sm text-foreground mt-3" data-testid="account-sprint-plan-progress">
+          {{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done
+        </p>
+        {% endif %}
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-5">
+          <a href="{% url 'my_plan_detail' plan_id=plan.pk %}"
+             class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+             data-testid="account-sprint-plan-open">
+            <i data-lucide="arrow-right-circle" class="h-4 w-4"></i>
+            Open my plan
+          </a>
+          {% if cohort_has_other_shared_plans %}
+          <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}"
+             class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+             data-testid="account-sprint-plan-cohort">
+            <i data-lucide="users" class="h-4 w-4"></i>
+            View cohort
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
     <!-- Slack Community Section -->
     {% if show_slack_join %}
     <section class="mb-10">

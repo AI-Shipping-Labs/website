@@ -8,6 +8,7 @@ from django_q.models import OrmQ
 from content.models import Article, Course, Download, Project
 from email_app.models import EmailCampaign
 from events.models import Event
+from plans.models import Plan, Sprint
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
@@ -35,6 +36,11 @@ def dashboard(request):
         'total_downloads': Download.objects.count(),
         'pending_projects': Project.objects.filter(status='pending_review').count(),
         'total_campaigns': EmailCampaign.objects.count(),
+        # Sprint plan tile (issue #442). Two flat ``count()`` queries --
+        # no per-sprint annotation, no N+1. The ``sprint_list`` view's
+        # annotated plan_count is a separate concern and not reused here.
+        'active_sprints': Sprint.objects.filter(status='active').count(),
+        'total_plans': Plan.objects.count(),
     }
 
     # Recent items for quick access

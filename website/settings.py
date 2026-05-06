@@ -320,6 +320,15 @@ SITE_NAME = 'AI Shipping Labs'
 # finishes booting).
 from integrations.config import get_config  # noqa: E402
 
+# IMPORTANT: this assignment runs ONCE at module load. At this point
+# `settings.configured == False`, so `get_config()` skips the django-conf
+# branch and falls through to the env var or the literal default. The
+# resulting `settings.SITE_BASE_URL` is therefore a frozen boot-time
+# snapshot of the env var, not a live view of the DB. It is only used as
+# the last-resort fallback inside `integrations.config.site_base_url()`
+# when no `IntegrationSetting` row exists. Runtime callers MUST go
+# through `site_base_url()` (not `settings.SITE_BASE_URL`) so that
+# Studio overrides take effect without a process restart.
 SITE_BASE_URL = get_config(
     'SITE_BASE_URL',
     os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com'),

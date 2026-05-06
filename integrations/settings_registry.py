@@ -114,7 +114,7 @@ INTEGRATION_GROUPS = [
         'label': 'Site',
         'keys': [
             {'key': 'SITE_BASE_URL', 'is_secret': False, 'description': 'Canonical absolute URL — used for generated links, OAuth callbacks, etc.'},
-            {'key': 'SITE_BASE_URL_ALIASES', 'is_secret': False, 'description': 'Additional hosts that should not trigger the host-mismatch banner. Comma- or whitespace-separated.'},
+            {'key': 'SITE_BASE_URL_ALIASES', 'is_secret': False, 'multiline': True, 'description': 'Additional hosts that should not trigger the host-mismatch banner. Comma- or whitespace-separated (newlines work too).'},
             {'key': 'EVENT_DISPLAY_TIMEZONE', 'is_secret': False, 'description': 'Default IANA timezone for public event times when the browser cannot provide one.'},
         ],
     },

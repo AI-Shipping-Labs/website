@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}{{ plan.member|display_name }}'s plan | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-6 py-16 lg:px-8 lg:py-24">
+
+      <header class="mb-8">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">{{ sprint.name }}</p>
+        <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="plan-owner-name">
+          {{ plan.member|display_name }}'s plan
+        </h1>
+        <p class="text-sm text-muted-foreground mt-2">
+          <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}" class="text-accent hover:underline">&larr; Back to cohort board</a>
+        </p>
+      </header>
+
+      {% include "plans/_plan_body.html" %}
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

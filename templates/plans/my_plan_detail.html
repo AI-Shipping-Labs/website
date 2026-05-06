@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Your plan &mdash; {{ sprint.name }} | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-6 py-16 lg:px-8 lg:py-24">
+
+      <header class="mb-8">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">{{ sprint.name }}</p>
+        <h1 class="text-3xl font-semibold tracking-tight mt-1">Your plan</h1>
+        <p class="text-sm text-muted-foreground mt-2">
+          <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}" class="text-accent hover:underline" data-testid="view-cohort-board-cta">View cohort board</a>
+        </p>
+      </header>
+
+      {% if messages %}
+      <div class="mb-6 space-y-2" data-testid="plan-messages">
+        {% for message in messages %}
+        <div class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" data-testid="plan-message">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-visibility-form">
+        <h2 class="text-xl font-semibold mb-2">Visibility</h2>
+        <p class="text-sm text-muted-foreground mb-4">
+          Cohort visibility lets the rest of your sprint see this plan and your progress. Switch to private to hide it again.
+        </p>
+        <form method="post" action="{% url 'update_plan_visibility' plan_id=plan.pk %}" class="flex flex-wrap items-center gap-3">
+          {% csrf_token %}
+          <label for="id_visibility" class="text-sm text-foreground">Who can see this plan?</label>
+          <select id="id_visibility" name="visibility" class="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="visibility-select">
+            {% for value, label in visibility_choices %}
+            <option value="{{ value }}" {% if plan.visibility == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="visibility-save">
+            Save
+          </button>
+        </form>
+      </section>
+
+      {% include "plans/_plan_body.html" %}
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

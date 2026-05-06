@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}{{ sprint.name }} cohort board | {{ site_name }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-5xl px-6 py-16 lg:px-8 lg:py-24">
+
+      <header class="mb-10">
+        <p class="text-sm uppercase tracking-wide text-muted-foreground">Cohort board</p>
+        <h1 class="text-3xl font-semibold tracking-tight mt-1">{{ sprint.name }}</h1>
+        <p class="text-sm text-muted-foreground mt-2">
+          Starts {{ sprint.start_date }} &middot; {{ sprint.duration_weeks }} weeks
+          {% if sprint.status %}
+          <span class="ml-2 inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs uppercase tracking-wide text-muted-foreground" data-testid="sprint-status-badge">
+            {{ sprint.get_status_display }}
+          </span>
+          {% endif %}
+        </p>
+      </header>
+
+      {% if viewer_plan %}
+      <aside class="mb-8 rounded-2xl border border-border bg-card p-5" data-testid="viewer-plan-callout">
+        {% if viewer_plan.visibility == "cohort" %}
+        <p class="text-sm text-foreground">
+          Your plan is shared with the cohort.
+          <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
+        </p>
+        {% else %}
+        <p class="text-sm text-foreground">
+          Your plan is private &mdash; share it with your cohort to appear on the board.
+          <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
+        </p>
+        {% endif %}
+      </aside>
+      {% endif %}
+
+      {% if plans %}
+      <ul class="grid grid-cols-1 gap-5 md:grid-cols-2" data-testid="cohort-plan-list">
+        {% for plan in plans %}
+        <li class="rounded-2xl border border-border bg-card p-5 hover:border-accent transition-colors" data-testid="cohort-plan-card">
+          <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=plan.pk %}" class="block">
+            <h2 class="text-lg font-semibold text-foreground" data-testid="cohort-plan-name">
+              {{ plan.member|display_name }}
+            </h2>
+            {% if plan.focus_main %}
+            <p class="text-sm text-muted-foreground mt-2 line-clamp-3">{{ plan.focus_main }}</p>
+            {% endif %}
+            <div class="mt-4">
+              {% if plan.progress_total %}
+              <p class="text-xs uppercase tracking-wide text-muted-foreground">Progress</p>
+              <div class="mt-1 flex items-center gap-3">
+                <div class="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div class="h-full bg-emerald-500" style="width: {% widthratio plan.progress_done plan.progress_total 100 %}%"></div>
+                </div>
+                <span class="text-sm text-foreground" data-testid="progress-{{ plan.pk }}">{{ plan.progress_done }}/{{ plan.progress_total }}</span>
+              </div>
+              {% else %}
+              <p class="text-sm text-muted-foreground" data-testid="progress-{{ plan.pk }}-empty">No checkpoints yet</p>
+              {% endif %}
+            </div>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="rounded-2xl border border-border bg-card p-8 text-center" data-testid="cohort-board-empty">
+        <h2 class="text-lg font-semibold text-foreground">Nobody else has shared their plan yet</h2>
+        <p class="text-sm text-muted-foreground mt-2">
+          When teammates make their plans cohort-visible, they will appear here.
+        </p>
+        {% if viewer_plan %}
+        <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          View your own plan
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

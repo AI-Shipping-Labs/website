@@ -1,0 +1,19 @@
+{% comment %}
+Reusable inline SVG glyphs for Studio surfaces (issue #441).
+
+Render with the standard ``{% include %}`` tag and pass ``name`` via
+``with``. Each glyph is a small, neutral-color SVG sized for inline use
+next to text or badges. Add ``aria-label`` on the wrapping element when
+the icon is the only label for an action.
+
+Available names:
+- ``stripe`` — the Stripe "S" mark, used as the customer-row indicator
+  on /studio/users/.
+{% endcomment %}
+{% if name == 'stripe' %}
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="14" height="14"
+     fill="currentColor" aria-hidden="true" focusable="false"
+     class="inline-block align-text-bottom text-muted-foreground">
+  <path d="M14.768 12.928c0-1.024.832-1.408 2.176-1.408 1.984 0 4.48.608 6.464 1.696V7.072c-2.176-.864-4.32-1.216-6.464-1.216C11.68 5.856 8.192 8.608 8.192 13.184c0 7.168 9.792 6.016 9.792 9.088 0 1.216-1.024 1.6-2.464 1.6-2.176 0-4.96-.896-7.168-2.112v6.272c2.432 1.056 4.896 1.504 7.168 1.504 5.376 0 9.024-2.656 9.024-7.296-.032-7.744-9.856-6.368-9.776-9.312z"/>
+</svg>
+{% endif %}

@@ -23,6 +23,16 @@ INTEGRATION_GROUPS = [
             {'key': 'STRIPE_PUBLISHABLE_KEY', 'is_secret': False, 'description': 'Public Stripe key embedded in the frontend. Get from Stripe Dashboard > Developers > API keys.'},
             {'key': 'STRIPE_CHECKOUT_ENABLED', 'is_secret': False, 'is_boolean': True, 'description': 'Set true to use hosted Stripe Checkout sessions; false to use payment links.'},
             {'key': 'STRIPE_CUSTOMER_PORTAL_URL', 'is_secret': False, 'description': 'Stripe-hosted page where members manage their subscription. Get from Stripe Dashboard > Settings > Billing > Customer portal.'},
+            {
+                'key': 'STRIPE_DASHBOARD_ACCOUNT_ID',
+                'is_secret': False,
+                'description': (
+                    'Stripe account ID used to build dashboard deep-links '
+                    '(e.g. "acct_1T1mfGB7mZrgL7H5"). Find it in the Stripe URL when '
+                    'you are signed in to your account. Optional — when blank, the '
+                    'Stripe icon next to a user is shown but not clickable.'
+                ),
+            },
         ],
     },
     {

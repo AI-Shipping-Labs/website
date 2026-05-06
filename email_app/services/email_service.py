@@ -41,6 +41,21 @@ TRANSACTIONAL_TYPES = {
     "welcome_imported",
 }
 
+# Issue #450: footer "verify your email" CTA shown to unverified recipients.
+# Default-on for every transactional + campaign email; this set names the
+# template_name values that opt OUT because the footer would be redundant or
+# would derail the user mid-flow.
+#   - "email_verification": the body itself is a verify CTA; duplicating it
+#     in the footer is absurd.
+#   - "password_reset": the recipient is here to reset a password; nudging
+#     them to click "verify your email" first would derail that flow.
+EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {"email_verification", "password_reset"}
+
+# Token lifetime for the footer verify link. 7 days is long enough that an
+# email opened days after delivery still works, but bounded so an old archived
+# email does not stay verifiable forever.
+VERIFY_FOOTER_TOKEN_EXPIRY_HOURS = 24 * 7
+
 
 class EmailServiceError(Exception):
     """Raised when email sending fails."""
@@ -75,7 +90,11 @@ class EmailService:
         """Send a transactional email to a user.
 
         Args:
-            user: User model instance (must have .email attribute).
+            user: User model instance (must have .email attribute). The
+                ``user.email_verified`` value at the moment of ``.send()``
+                is what determines whether the verify-email footer CTA
+                renders (issue #450). Callers passing a stale instance
+                accept the staleness — refresh from DB if needed.
             template_name: Name of the email template (e.g. 'welcome').
             context: Dict of template variables to render the template with.
 
@@ -103,11 +122,19 @@ class EmailService:
         # Build the unsubscribe URL
         unsubscribe_url = self._build_unsubscribe_url(user)
 
+        # Issue #450: only mint the verify-email token when the footer CTA
+        # will actually render (unverified recipient + opted-in template).
+        # Skip the token mint entirely for verified users — wasted work.
+        verify_email_url = None
+        if self._should_include_verify_footer(user, template_name):
+            verify_email_url = self._build_verify_email_url(user)
+
         # Wrap in base HTML email template
         full_html = self.render_html_email(
             subject,
             body_html,
             unsubscribe_url=unsubscribe_url,
+            verify_email_url=verify_email_url,
         )
 
         # Send via SES
@@ -196,6 +223,44 @@ class EmailService:
 
         return f"{site_url}/api/unsubscribe?token={token}"
 
+    def _should_include_verify_footer(self, user, template_name):
+        """Issue #450: decide if the verify-email footer renders for this send.
+
+        Returns ``True`` only when:
+        - the recipient is currently unverified
+          (``user.email_verified is False``), AND
+        - the template is not in ``EMAIL_TYPES_WITHOUT_VERIFY_FOOTER``.
+
+        Verified users never see the footer — there is nothing to nudge.
+        Templates in the opt-out set never carry the footer regardless of
+        verification state (it would be redundant or off-flow).
+        """
+        if getattr(user, "email_verified", True):
+            return False
+        if template_name in EMAIL_TYPES_WITHOUT_VERIFY_FOOTER:
+            return False
+        return True
+
+    def _build_verify_email_url(self, user):
+        """Issue #450: build a one-click email-verification URL.
+
+        Reuses the existing JWT primitive from ``accounts.views.auth`` so
+        the registration-flow link and the footer link are identical and
+        decode through the same handler at ``/api/verify-email``. Token
+        lifetime is ``VERIFY_FOOTER_TOKEN_EXPIRY_HOURS`` (7 days), longer
+        than the 24h registration link because email recipients open
+        messages on their own schedule.
+        """
+        # Imported lazily to avoid a circular import at module load
+        # (accounts.views.auth imports the EmailService back).
+        from accounts.views.auth import _generate_verification_token
+
+        token = _generate_verification_token(
+            user.pk,
+            expiry_hours=VERIFY_FOOTER_TOKEN_EXPIRY_HOURS,
+        )
+        return f"{site_base_url()}/api/verify-email?token={token}"
+
     def render_html_email(
         self,
         subject,
@@ -203,8 +268,16 @@ class EmailService:
         *,
         unsubscribe_url=None,
         footer_note=None,
+        verify_email_url=None,
     ):
-        """Wrap rendered HTML in the shared email chrome template."""
+        """Wrap rendered HTML in the shared email chrome template.
+
+        ``verify_email_url`` (issue #450) is rendered as a footer CTA
+        positioned ABOVE the unsubscribe block when set. Callers should
+        not populate this directly when going through ``send`` —
+        ``send`` decides per-recipient based on
+        ``_should_include_verify_footer``.
+        """
         return render_to_string(
             "email_app/base_email.html",
             {
@@ -212,6 +285,7 @@ class EmailService:
                 "body_html": body_html,
                 "unsubscribe_url": unsubscribe_url,
                 "footer_note": footer_note,
+                "verify_email_url": verify_email_url,
             },
         )
 
@@ -222,6 +296,7 @@ class EmailService:
         *,
         unsubscribe_url=None,
         footer_note=None,
+        verify_email_url=None,
     ):
         """Convert markdown to HTML and wrap it in the shared template."""
         body_html = markdown.markdown(body_markdown, extensions=["extra"])
@@ -230,6 +305,7 @@ class EmailService:
             body_html,
             unsubscribe_url=unsubscribe_url,
             footer_note=footer_note,
+            verify_email_url=verify_email_url,
         )
 
     def _build_unsubscribe_headers(self, unsubscribe_url):

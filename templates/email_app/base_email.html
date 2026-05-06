@@ -59,6 +59,19 @@
       color: #999999;
       text-decoration: underline;
     }
+    /* Issue #450: footer "verify your email" CTA. Amber-toned and
+       slightly larger than the muted footer text so the recipient
+       actually notices it. The link inside inherits this colour to
+       stay distinct from the grey unsubscribe link below. */
+    .email-footer .verify-email-cta {
+      color: #92400e;
+      font-size: 14px;
+      margin: 0 0 12px 0;
+    }
+    .email-footer .verify-email-cta a {
+      color: #92400e;
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -73,6 +86,16 @@
       <p>&copy; AI Shipping Labs</p>
       {% if footer_note %}
       <p>{{ footer_note }}</p>
+      {% endif %}
+      {# Issue #450: the verify CTA must render BEFORE the unsubscribe block
+         so the recipient reads "verify your email" before the unsubscribe
+         link. Block ordering is enforced here, not in caller code. #}
+      {% if verify_email_url %}
+      <p class="verify-email-cta">
+        Your email isn't verified.
+        <a href="{{ verify_email_url }}">Verify your email</a>
+        to access our content.
+      </p>
       {% endif %}
       {% if unsubscribe_url %}
       <p>

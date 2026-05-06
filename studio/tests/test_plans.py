@@ -47,7 +47,7 @@ class PlanAccessControlTest(TestCase):
             '/studio/plans/',
             '/studio/plans/new',
             f'/studio/plans/{self.plan.pk}/',
-            f'/studio/plans/{self.plan.pk}/edit',
+            f'/studio/plans/{self.plan.pk}/edit/',
         ]:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200, msg=f'{url} -> {response.status_code}')
@@ -58,7 +58,7 @@ class PlanAccessControlTest(TestCase):
             '/studio/plans/',
             '/studio/plans/new',
             f'/studio/plans/{self.plan.pk}/',
-            f'/studio/plans/{self.plan.pk}/edit',
+            f'/studio/plans/{self.plan.pk}/edit/',
         ]:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 403, msg=f'{url} -> {response.status_code}')

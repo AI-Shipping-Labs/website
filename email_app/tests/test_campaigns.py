@@ -1206,6 +1206,106 @@ class CampaignAdminUnauthenticatedTest(TestCase):
 
 
 @tag('core')
+class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
+    """Issue #450: per-recipient verify-email footer CTA on campaigns.
+
+    The footer renders ABOVE the unsubscribe block when the recipient
+    is unverified at SEND time. ``send_campaign_batch`` already
+    re-fetches each user from the DB inside its loop, so a recipient
+    who verifies between enqueue and send sees no CTA — same model as
+    the existing ``unsubscribed`` handling.
+
+    Note: ``EmailCampaign.get_eligible_recipients`` excludes unverified
+    users, so in normal operator flow no campaign reaches an unverified
+    recipient. These tests drive ``send_campaign_batch`` directly with
+    explicit ``user_ids`` to exercise the footer hook itself, which
+    must hold even when callers bypass the eligibility filter (e.g. a
+    future relaxation of the include rule, or an internal preview send).
+    """
+
+    def setUp(self):
+        self.campaign = EmailCampaign.objects.create(
+            subject='Hello there',
+            body='# Body\n\nbody copy',
+            target_min_level=0,
+            status='sending',
+        )
+
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c1')
+    def test_campaign_recipient_unverified_at_send_time_sees_cta(
+        self, mock_ses,
+    ):
+        unverified = User.objects.create_user(
+            email='unv@test.com', tier=self.free_tier,
+            email_verified=False, unsubscribed=False,
+        )
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+        send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[unverified.pk],
+            send_delay=0,
+        )
+
+        # Captured HTML is the third positional arg to _send_ses.
+        html = mock_ses.call_args[0][2]
+        self.assertIn('<p class="verify-email-cta">', html)
+        self.assertIn('Verify your email', html)
+        self.assertIn('/api/verify-email?token=', html)
+
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c2')
+    def test_campaign_recipient_verified_at_send_time_omits_cta(
+        self, mock_ses,
+    ):
+        verified = User.objects.create_user(
+            email='ver@test.com', tier=self.free_tier,
+            email_verified=True, unsubscribed=False,
+        )
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+        send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[verified.pk],
+            send_delay=0,
+        )
+
+        html = mock_ses.call_args[0][2]
+        self.assertNotIn('<p class="verify-email-cta">', html)
+        self.assertNotIn('/api/verify-email?token=', html)
+
+    @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c3')
+    def test_campaign_recipient_verified_after_enqueue_omits_cta(
+        self, mock_ses,
+    ):
+        """The check happens at SEND time, not enqueue time.
+
+        Verifies the spec decision: if a recipient flips
+        ``email_verified`` between fan-out and chunk execution,
+        ``send_campaign_batch`` must use the fresh DB value (no CTA),
+        not the stale in-memory value (would-render CTA).
+        """
+        recipient = User.objects.create_user(
+            email='flip@test.com', tier=self.free_tier,
+            email_verified=False, unsubscribed=False,
+        )
+
+        # Simulate the user verifying after the fan-out enqueued their
+        # PK but before send_campaign_batch runs.
+        User.objects.filter(pk=recipient.pk).update(email_verified=True)
+
+        from email_app.tasks.send_campaign import send_campaign_batch
+        send_campaign_batch(
+            self.campaign.pk,
+            user_ids=[recipient.pk],
+            send_delay=0,
+        )
+
+        html = mock_ses.call_args[0][2]
+        self.assertNotIn('<p class="verify-email-cta">', html)
+        self.assertNotIn('/api/verify-email?token=', html)
+
+
+@tag('core')
 class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
     """Campaign send respects tier, verification, and subscription status.
 

@@ -14,6 +14,7 @@ Covers:
 
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 
@@ -421,3 +422,221 @@ class BuildUnsubscribeUrlTest(TestCase):
             url.startswith('http://localhost:8000/api/unsubscribe?token='),
             msg=f'Expected localhost in unsubscribe URL, got: {url}',
         )
+
+
+# ---------------------------------------------------------------------------
+# Issue #450: footer "verify your email" CTA for unverified recipients
+# ---------------------------------------------------------------------------
+
+
+def _extract_verify_url_from_footer(html):
+    """Pull the verify URL out of the rendered footer CTA paragraph.
+
+    Returns ``None`` if the CTA is absent. Scoping the regex to the
+    ``verify-email-cta`` paragraph guarantees we don't accidentally
+    match the verify link a body template (e.g. ``email_verification``)
+    might also contain.
+    """
+    import re
+
+    match = re.search(
+        r'<p class="verify-email-cta">.*?<a href="([^"]+)"',
+        html,
+        re.DOTALL,
+    )
+    if match is None:
+        return None
+    return match.group(1)
+
+
+@tag('core')
+class VerifyEmailFooterTest(TestCase):
+    """Issue #450: unverified recipients see a "verify your email" CTA
+    in the footer above the unsubscribe link, on every transactional
+    template except the explicitly opted-out ones."""
+
+    def setUp(self):
+        self.unverified = User.objects.create_user(
+            email='unverified@example.com',
+            first_name='Unv',
+        )
+        # email_verified defaults to False on User.create_user; assert
+        # the precondition so a future model-default change cannot make
+        # this test pass for the wrong reason.
+        self.assertFalse(self.unverified.email_verified)
+
+        self.verified = User.objects.create_user(
+            email='verified@example.com',
+            first_name='Ver',
+            email_verified=True,
+        )
+        self.service = EmailService()
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-1')
+    def test_unverified_recipient_email_contains_verify_cta(self, mock_ses):
+        self.service.send(
+            self.unverified, 'welcome', {'tier_name': 'Free'},
+        )
+        html = mock_ses.call_args[0][2]
+
+        self.assertIn('<p class="verify-email-cta">', html)
+        self.assertIn('Verify your email', html)
+        verify_url = _extract_verify_url_from_footer(html)
+        self.assertIsNotNone(verify_url)
+        self.assertIn('/api/verify-email?token=', verify_url)
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-2')
+    def test_verified_recipient_email_omits_verify_cta(self, mock_ses):
+        self.service.send(
+            self.verified, 'welcome', {'tier_name': 'Free'},
+        )
+        html = mock_ses.call_args[0][2]
+
+        self.assertNotIn('<p class="verify-email-cta">', html)
+        self.assertIsNone(_extract_verify_url_from_footer(html))
+        # Defensive: also confirm no token URL leaked anywhere on the
+        # page (would indicate the body template embedded one we did
+        # not intend to render for a verified user).
+        self.assertNotIn('/api/verify-email?token=', html)
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-3')
+    def test_email_verification_template_does_not_carry_verify_footer(
+        self, mock_ses,
+    ):
+        # The body has its own verify link via ``verify_url``; the footer
+        # CTA must NOT appear on top of that.
+        self.service.send(
+            self.unverified,
+            'email_verification',
+            {'verify_url': 'https://example.test/api/verify-email?token=body'},
+        )
+        html = mock_ses.call_args[0][2]
+
+        # Body's own verify link is fine; footer CTA paragraph must not exist.
+        self.assertNotIn('<p class="verify-email-cta">', html)
+        self.assertIsNone(_extract_verify_url_from_footer(html))
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-4')
+    def test_password_reset_template_does_not_carry_verify_footer(
+        self, mock_ses,
+    ):
+        self.service.send(
+            self.unverified,
+            'password_reset',
+            {'reset_url': 'https://example.test/api/password-reset?token=x'},
+        )
+        html = mock_ses.call_args[0][2]
+
+        self.assertNotIn('<p class="verify-email-cta">', html)
+        self.assertIsNone(_extract_verify_url_from_footer(html))
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-5')
+    def test_verify_cta_is_above_unsubscribe_in_rendered_html(self, mock_ses):
+        self.service.send(
+            self.unverified, 'welcome', {'tier_name': 'Free'},
+        )
+        html = mock_ses.call_args[0][2]
+
+        # Find the rendered CTA paragraph, not the CSS rule in <style>.
+        verify_idx = html.find('<p class="verify-email-cta">')
+        unsub_idx = html.find('/api/unsubscribe?token=')
+
+        self.assertNotEqual(verify_idx, -1, 'verify CTA missing')
+        self.assertNotEqual(unsub_idx, -1, 'unsubscribe link missing')
+        self.assertLess(
+            verify_idx,
+            unsub_idx,
+            'verify CTA must appear before the unsubscribe link in DOM order',
+        )
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-6')
+    def test_verify_url_is_one_click_jwt_token(self, mock_ses):
+        import jwt as _jwt
+
+        self.service.send(
+            self.unverified, 'welcome', {'tier_name': 'Free'},
+        )
+        html = mock_ses.call_args[0][2]
+
+        verify_url = _extract_verify_url_from_footer(html)
+        self.assertIsNotNone(verify_url)
+        token = verify_url.split('token=', 1)[1]
+
+        payload = _jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=['HS256'],
+        )
+        self.assertEqual(payload['action'], 'verify_email')
+        self.assertEqual(payload['user_id'], self.unverified.pk)
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-7')
+    def test_verify_url_token_expires_in_seven_days(self, mock_ses):
+        import datetime
+
+        import jwt as _jwt
+        from freezegun import freeze_time
+
+        with freeze_time('2026-05-01 12:00:00'):
+            self.service.send(
+                self.unverified, 'welcome', {'tier_name': 'Free'},
+            )
+
+        html = mock_ses.call_args[0][2]
+        verify_url = _extract_verify_url_from_footer(html)
+        token = verify_url.split('token=', 1)[1]
+
+        # Decode without checking exp so we can assert the value itself.
+        payload = _jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=['HS256'],
+            options={'verify_exp': False},
+        )
+        expected_exp = datetime.datetime(
+            2026, 5, 8, 12, 0, 0, tzinfo=datetime.timezone.utc,
+        )
+        actual_exp = datetime.datetime.fromtimestamp(
+            payload['exp'], tz=datetime.timezone.utc,
+        )
+        # 168 hours == 7 days from frozen ``now``.
+        self.assertEqual(actual_exp, expected_exp)
+
+    def test_send_does_not_mint_token_for_verified_user(self):
+        # Patch the helper at its definition site so any import path the
+        # service uses goes through the mock.
+        with (
+            patch.object(EmailService, '_send_ses', return_value='ses-450-8'),
+            patch(
+                'accounts.views.auth._generate_verification_token',
+            ) as mock_mint,
+        ):
+            self.service.send(
+                self.verified, 'welcome', {'tier_name': 'Free'},
+            )
+        mock_mint.assert_not_called()
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-450-9')
+    def test_render_html_email_passes_verify_url_to_template(self, mock_ses):
+        # Direct unit test of the keyword-arg plumbing: when the caller
+        # passes ``verify_email_url`` to ``render_html_email`` the wrapped
+        # HTML must contain the CTA paragraph and the URL itself.
+        html = self.service.render_html_email(
+            'Subject',
+            '<p>body</p>',
+            unsubscribe_url='https://example.test/api/unsubscribe?token=u',
+            verify_email_url='https://example.test/api/verify-email?token=v',
+        )
+        self.assertIn('<p class="verify-email-cta">', html)
+        self.assertIn(
+            'https://example.test/api/verify-email?token=v', html,
+        )
+
+    def test_render_html_email_omits_cta_when_url_none(self):
+        html = self.service.render_html_email(
+            'Subject',
+            '<p>body</p>',
+            unsubscribe_url='https://example.test/api/unsubscribe?token=u',
+            verify_email_url=None,
+        )
+        self.assertNotIn('<p class="verify-email-cta">', html)

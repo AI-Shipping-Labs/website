@@ -208,10 +208,22 @@ def send_campaign_batch(campaign_id, user_ids, send_delay=None):
         try:
             unsubscribe_url = service._build_unsubscribe_url(user)
 
+            # Issue #450: per-recipient verify-email footer CTA. The
+            # ``users`` list is freshly fetched from the DB above
+            # (``User.objects.filter(pk__in=pending_ids)``) so the
+            # ``email_verified`` flag reflects the SEND-time value, not
+            # whatever it was when the campaign was enqueued. This
+            # mirrors how ``unsubscribed`` is handled — the latest DB
+            # state wins, even if the user verified after enqueue.
+            verify_email_url = None
+            if service._should_include_verify_footer(user, 'campaign'):
+                verify_email_url = service._build_verify_email_url(user)
+
             full_html = render_to_string('email_app/base_email.html', {
                 'subject': campaign.subject,
                 'body_html': body_html,
                 'unsubscribe_url': unsubscribe_url,
+                'verify_email_url': verify_email_url,
             })
 
             ses_message_id = service._send_ses(

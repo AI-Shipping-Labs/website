@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -337,3 +337,59 @@ def profile_view(request):
             "error": "",
         },
     )
+
+
+# Reserved Token name for the member-facing plan editor (issue #444).
+# Parallel to ``studio-plan-editor`` for staff. Mints at most one row
+# per (member, name) so reloading the editor never spams tokens.
+MEMBER_EDITOR_TOKEN_NAME = "member-plan-editor"
+
+
+@login_required
+def member_plan_edit(request, plan_id):
+    """Member-facing plan editor at ``/account/plan/<id>/edit/``.
+
+    Issue #444. Renders the SAME drag-drop authoring UI staff use in
+    Studio. Owner-only: a logged-in user who is NOT the plan's
+    ``member`` gets a 404 (not 403) to avoid leaking that the plan
+    exists at all (visibility-leak prevention per #440).
+
+    The editor body comes from ``templates/studio/plans/_editor_body.html``
+    -- the SAME partial the Studio editor at ``/studio/plans/<id>/edit/``
+    uses. The shell here extends the public ``base.html`` (member chrome)
+    rather than the Studio chrome. Writes flow through the existing
+    plans API; the API queryset gate
+    (``api/views/_permissions.py::visible_plans_for``) restricts a
+    non-staff bearer to ``member=user`` so writes to other members'
+    plans are impossible at the queryset boundary.
+    """
+    # Local imports keep the heavy plans app off the import path of
+    # the account index page.
+    from plans.models import Plan
+    from studio.services.plan_editor import build_plan_editor_context
+
+    # Owner-only ``Plan.objects.get`` -- explicit ``member=request.user``
+    # so an attacker cannot enumerate plan ids. Use ``Http404`` (not
+    # 403) so existence is not leaked.
+    plan = (
+        Plan.objects
+        .select_related("member", "sprint")
+        .prefetch_related(
+            "weeks__checkpoints",
+            "resources",
+            "deliverables",
+            "next_steps",
+            "interview_notes",
+        )
+        .filter(pk=plan_id, member=request.user)
+        .first()
+    )
+    if plan is None:
+        raise Http404("Plan not found")
+
+    context = build_plan_editor_context(
+        plan,
+        viewer=request.user,
+        token_name=MEMBER_EDITOR_TOKEN_NAME,
+    )
+    return render(request, "account/plan_edit.html", context)

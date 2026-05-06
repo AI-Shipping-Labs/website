@@ -13,8 +13,13 @@
       <p class="text-sm text-muted-foreground mt-1 font-mono">{{ sprint.slug }}</p>
     </div>
     <div class="flex items-center gap-2">
-      <a href="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}"
+      <a href="{% url 'studio_sprint_add_member' sprint_id=sprint.pk %}"
          class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+         data-testid="sprint-add-member-link">
+        Add member
+      </a>
+      <a href="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}"
+         class="bg-secondary text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
          data-testid="sprint-bulk-enroll-link">
         Enroll members
       </a>

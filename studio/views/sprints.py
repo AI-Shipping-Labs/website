@@ -7,11 +7,17 @@ in practice but not enforced at the DB layer.
 All views are staff-only. Anonymous users are redirected to the login
 page; authenticated non-staff users get a 403. See
 ``studio/decorators.py``.
+
+Issue #444 adds ``sprint_add_member`` -- a one-click enrollment +
+plan-creation flow off the sprint detail page that reuses the
+existing plan create form (``templates/studio/plans/form.html``)
+with the sprint locked from the URL.
 """
 
 from datetime import datetime
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Count
@@ -20,8 +26,11 @@ from django.utils.text import slugify
 
 from content.access import LEVEL_PREMIUM
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
-from plans.models import SPRINT_STATUS_CHOICES, Plan, Sprint
+from plans.models import PLAN_STATUS_CHOICES, SPRINT_STATUS_CHOICES, Plan, Sprint
+from plans.services import create_plan_for_enrollment
 from studio.decorators import staff_required
+
+User = get_user_model()
 
 # The set of tier levels accepted by the form. Mirror the values in
 # ``content.access.VISIBILITY_CHOICES`` so the dropdown stays consistent
@@ -286,3 +295,84 @@ def sprint_edit(request, sprint_id):
 
     messages.success(request, f'Sprint "{sprint.name}" updated.')
     return redirect('studio_sprint_detail', sprint_id=sprint.pk)
+
+
+@staff_required
+def sprint_add_member(request, sprint_id):
+    """Form: pick a member and one-click enroll + create their plan.
+
+    Issue #444. The sprint is locked from the URL; the member picker
+    is the same single-select widget the standalone create-plan form
+    uses (``templates/studio/plans/form.html``). On a valid POST we
+    delegate to :func:`plans.services.create_plan_for_enrollment`,
+    which is shared with ``studio_plan_create`` so the empty-plan
+    artefact (one Week per ``sprint.duration_weeks``, theme blank,
+    zero checkpoints) stays consistent across surfaces.
+
+    Idempotent. Re-submitting the same ``(sprint, user)`` pair never
+    duplicates rows: we redirect back to the existing plan editor with
+    a ``messages.info`` flash containing ``Already enrolled``.
+    """
+    sprint = get_object_or_404(Sprint, pk=sprint_id)
+    members = User.objects.order_by('email')
+
+    if request.method != 'POST':
+        return render(request, 'studio/plans/form.html', {
+            'plan': None,
+            'form_action': 'add_member',
+            'form_action_url': request.path,
+            'form_data': {
+                'member': '',
+                'sprint': str(sprint.pk),
+                'status': 'draft',
+            },
+            'sprint': sprint,
+            'members': members,
+            'plan_status_choices': PLAN_STATUS_CHOICES,
+            'error': '',
+        })
+
+    raw_member = (request.POST.get('member') or '').strip()
+    form_data = {
+        'member': raw_member,
+        'sprint': str(sprint.pk),
+        'status': 'draft',
+    }
+
+    def _render_with_error(error, status=400):
+        return render(request, 'studio/plans/form.html', {
+            'plan': None,
+            'form_action': 'add_member',
+            'form_action_url': request.path,
+            'form_data': form_data,
+            'sprint': sprint,
+            'members': members,
+            'plan_status_choices': PLAN_STATUS_CHOICES,
+            'error': error,
+        }, status=status)
+
+    if not raw_member.isdigit():
+        return _render_with_error('Pick a member.')
+
+    member = User.objects.filter(pk=int(raw_member)).first()
+    if member is None:
+        return _render_with_error('Selected member does not exist.')
+
+    plan, _enrollment, created_now = create_plan_for_enrollment(
+        sprint=sprint,
+        user=member,
+        enrolled_by=request.user,
+    )
+
+    if created_now:
+        messages.success(
+            request,
+            f'Plan created for {member.email} in "{sprint.name}".',
+        )
+    else:
+        messages.info(
+            request,
+            f'Already enrolled — opening existing plan for {member.email}.',
+        )
+
+    return redirect('studio_plan_edit', plan_id=plan.pk)

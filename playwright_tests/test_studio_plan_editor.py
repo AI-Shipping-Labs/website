@@ -1,19 +1,8 @@
 """Playwright E2E tests for the Studio drag-and-drop plan editor (issue #434).
 
-Most scenarios in this file exercise the JSON API from #433 (drags
-persist via ``POST /api/checkpoints/<id>/move``, autosave PATCHes the
-plan and the children, etc.). Until #433 lands on main, those scenarios
-are skipped via ``pytest.mark.skipif`` keyed off
-``settings.PLANS_API_AVAILABLE``. The skip decorator becomes a no-op as
-soon as that flag flips to True.
-
-Two scenarios in this file run end-to-end TODAY because they only
-exercise the editor's render path:
-
-- ``TestNonStaffBlockedFromEditor`` — confirms a free-tier user gets a
-  403 and no editor markup leaks into the response.
-- ``TestEditorRendersWithoutErrors`` — confirms a fresh editor page
-  loads with the SortableJS bundle and the bootstrap data node.
+Every scenario runs end-to-end against the live sprint plans API
+shipped in #433 (drags persist via ``POST /api/checkpoints/<id>/move``,
+autosave PATCHes the plan and its children, etc.).
 
 The drag and keyboard scenarios use Playwright's real drag primitives
 (``locator.drag_to`` / ``mouse.down/move/up``) and the keyboard
@@ -25,7 +14,6 @@ import datetime
 import os
 
 import pytest
-from django.conf import settings
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -42,22 +30,6 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
-
-# Flag flipped to True once issue #433 lands on main and the API
-# endpoints are wired into ``website/urls.py``. Until then, scenarios
-# that exercise the API are skipped (the editor is built and unit-tested
-# against the documented contract).
-plans_api_available = getattr(settings, "PLANS_API_AVAILABLE", False)
-
-skip_until_api = pytest.mark.skipif(
-    not plans_api_available,
-    reason=(
-        "Sprint plans API (issue #433) not yet on main. The editor's "
-        "drag, keyboard, and autosave paths exercise that API; this "
-        "scenario will run as soon as #433 merges and "
-        "PLANS_API_AVAILABLE flips to True."
-    ),
-)
 
 
 def _clear_plans_data():
@@ -110,6 +82,90 @@ def _seed_plan(staff_email, member_email, weeks_with_checkpoints):
             )
     connection.close()
     return plan
+
+
+def _drag_chip(page, source_chip, target_chip, drop="before"):
+    """Drag ``source_chip`` onto ``target_chip`` via SortableJS.
+
+    The editor's SortableJS instance only listens for mousedown on the
+    ``.plan-editor-drag-handle`` glyph; mousedown anywhere else on the
+    chip (text span, checkbox, delete button) is ignored. We therefore
+    grab the handle's bounding box and synthesize a real
+    ``mouse.down/move/up`` sequence.
+
+    SortableJS reorders the list progressively as the cursor crosses
+    each intermediate chip's midline -- a too-coarse mousemove jumps
+    over those midlines and the dragged chip lands in the wrong slot,
+    while a too-fine mousemove crosses the TARGET's midline as well
+    and SortableJS commits the wrong before/after slot.
+
+    The compromise is two phases:
+
+    1. ``approach``: walk from source to a point just OUTSIDE the
+       target chip's bounding box, using ~1 step per pixel so every
+       intermediate chip's midline is crossed. This handles same-list
+       reorders that need to pass through chips between source and
+       target.
+    2. ``commit``: a fast 2-step move into the target's near edge.
+       This enters the target's bounding box without crossing its
+       midline, so SortableJS commits the requested before/after
+       slot.
+
+    Both source and target are scrolled into view first so that
+    ``bounding_box()`` returns coordinates inside the viewport (the
+    page is taller than 720 px when there are 2+ weeks).
+    """
+    if drop not in ("before", "after"):
+        raise ValueError(f"unknown drop position: {drop!r}")
+
+    source_chip.scroll_into_view_if_needed()
+    handle = source_chip.locator('.plan-editor-drag-handle')
+    sb = handle.bounding_box()
+    sx = sb["x"] + sb["width"] / 2
+    sy = sb["y"] + sb["height"] / 2
+
+    page.mouse.move(sx, sy)
+    page.mouse.down()
+    # Two short nudges so SortableJS leaves its idle state before the
+    # long traverse to the target.
+    page.mouse.move(sx + 2, sy + 2, steps=3)
+    page.mouse.move(sx + 10, sy + 10, steps=5)
+
+    target_chip.scroll_into_view_if_needed()
+    tb = target_chip.bounding_box()
+    tx = tb["x"] + tb["width"] / 2
+    if drop == "before":
+        approach_y = tb["y"] - 2
+        commit_y = tb["y"] + 5
+    else:
+        approach_y = tb["y"] + tb["height"] + 2
+        commit_y = tb["y"] + tb["height"] - 5
+
+    # Phase 1: dense traversal up to (but not into) the target.
+    distance = max(abs(approach_y - sy), abs(tx - sx))
+    steps = max(int(distance), 30)
+    page.mouse.move(tx, approach_y, steps=steps)
+    # Phase 2: discrete move into the target's near edge, committing
+    # the before/after slot.
+    page.mouse.move(tx, commit_y, steps=2)
+    page.mouse.up()
+
+
+def _checkpoint_descriptions(page, week_number):
+    """Return the description text from each checkpoint chip in a week.
+
+    Reads the inner ``[data-testid="checkpoint-text"]`` element
+    explicitly so the assertion is not polluted by the drag handle's
+    ``::`` glyph or the delete button's ``x`` label.
+    """
+    return (
+        page.locator(
+            f'[data-week-number="{week_number}"] '
+            f'[data-testid="checkpoint-chip"] '
+            f'[data-testid="checkpoint-text"]'
+        )
+        .all_text_contents()
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -199,15 +255,12 @@ class TestEditorRendersWithoutErrors:
 
 
 # ---------------------------------------------------------------------------
-# Scenarios below exercise issue #433's API. They run end-to-end as soon as
-# the API lands on main; until then, ``skip_until_api`` keeps the suite
-# green while the editor work proceeds in parallel.
+# Scenarios below exercise issue #433's plans API end-to-end.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffDragsCheckpointAcrossWeeks:
-    @skip_until_api
     def test_drag_persists_across_reload(self, django_server, browser):
         """Drag ``Build prototype`` from Week 1 to Week 2; reload; persists."""
         _ensure_tiers()
@@ -234,35 +287,29 @@ class TestStaffDragsCheckpointAcrossWeeks:
         target = page.locator(
             '[data-week-number="2"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="Write blog post")
-        # Real drag via Playwright primitives.
-        source.drag_to(target)
+        _drag_chip(page, source, target)
 
-        # The chip moves into Week 2 above ``Write blog post``.
-        moved = page.locator(
-            '[data-week-number="2"] [data-testid="checkpoint-chip"]'
-        ).first
-        moved.wait_for(state="visible")
-        assert "Build prototype" in moved.text_content()
+        # The drag triggers POST /api/checkpoints/<id>/move; wait for
+        # the indicator to settle on saved before asserting on the DOM.
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
 
-        page.locator('[data-testid="save-indicator"][data-state="saved"]').wait_for()
+        # The chip is now in Week 2 above ``Write blog post``.
+        week_2_descriptions = _checkpoint_descriptions(page, 2)
+        assert week_2_descriptions == ["Build prototype", "Write blog post"]
+        assert "Build prototype" not in _checkpoint_descriptions(page, 1)
 
+        # And the move persisted -- reload and re-check from the server.
         page.reload(wait_until="networkidle")
-
-        week_1_chips = page.locator(
-            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
-        ).all_text_contents()
-        week_2_chips = page.locator(
-            '[data-week-number="2"] [data-testid="checkpoint-chip"]'
-        ).all_text_contents()
-        assert any("Read paper" in t for t in week_1_chips)
-        assert not any("Build prototype" in t for t in week_1_chips)
-        assert week_2_chips[0].strip().endswith("Build prototype")
-        assert any("Write blog post" in t for t in week_2_chips)
+        assert _checkpoint_descriptions(page, 1) == ["Read paper"]
+        assert _checkpoint_descriptions(page, 2) == [
+            "Build prototype", "Write blog post",
+        ]
 
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffReordersWithinWeekViaDrag:
-    @skip_until_api
     def test_reorder_within_week_persists(self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
@@ -283,29 +330,26 @@ class TestStaffReordersWithinWeekViaDrag:
         )
 
         c_chip = page.locator(
-            '[data-testid="checkpoint-chip"]'
+            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="C")
         a_chip = page.locator(
-            '[data-testid="checkpoint-chip"]'
+            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="A")
-        c_chip.drag_to(a_chip)
+        _drag_chip(page, c_chip, a_chip)
 
-        page.locator('[data-testid="save-indicator"][data-state="saved"]').wait_for()
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
         page.reload(wait_until="networkidle")
 
-        chips = page.locator(
-            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
-        ).all_text_contents()
-        order = [t.strip() for t in chips]
-        # Strip leading drag handle and checkbox text noise; assert the
-        # last visible word per chip matches the expected description.
-        descriptions = [t.split()[-1] for t in order]
-        assert descriptions == ["C", "A", "B"]
+        # Read the inner ``checkpoint-text`` rather than the whole chip
+        # so the assertion isn't polluted by ``::`` (drag handle) or
+        # ``x`` (delete button) glyphs.
+        assert _checkpoint_descriptions(page, 1) == ["C", "A", "B"]
 
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffReordersByKeyboard:
-    @skip_until_api
     def test_keyboard_reorder_within_week_persists(self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
@@ -325,30 +369,51 @@ class TestStaffReordersByKeyboard:
             wait_until="networkidle",
         )
 
+        # Use ``focus()`` rather than ``click()``: a click lands on the
+        # inner ``checkpoint-text`` span, which has its own click
+        # handler that enters inline-edit mode (sets
+        # ``chip.dataset.editing = 'true'``). Once editing is true the
+        # chip's keydown handler returns early, so ArrowUp does
+        # nothing. The chip's ``tabindex="0"`` makes ``focus()`` a
+        # supported and direct way to give it keyboard focus without
+        # entering edit mode.
         c_chip = page.locator(
-            '[data-testid="checkpoint-chip"]'
+            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="C")
-        c_chip.click()  # focus
+        c_chip.scroll_into_view_if_needed()
+        c_chip.focus()
         page.keyboard.press("ArrowUp")
+        # Wait for the indicator to settle so the optimistic DOM
+        # reorder is reconciled with the server's
+        # ``destination_week.checkpoint_ids`` envelope before we send
+        # the next keypress. Without this, two presses can race and
+        # the second one finds the chip already at the target index.
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
         page.keyboard.press("ArrowUp")
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
 
-        page.locator('[data-testid="save-indicator"][data-state="saved"]').wait_for()
-
-        # The same chip retains focus (document.activeElement matches).
-        focused_text = page.evaluate("document.activeElement.textContent || ''")
-        assert "C" in focused_text
+        # The same chip retains focus across both reorders -- the
+        # editor's ``renumberCheckpointsFromIds`` rebinder is supposed
+        # to preserve ``document.activeElement``.
+        focused_id = page.evaluate(
+            "document.activeElement && document.activeElement.dataset"
+            " ? document.activeElement.dataset.checkpointId : null"
+        )
+        c_id = c_chip.get_attribute("data-checkpoint-id")
+        assert focused_id == c_id, (
+            f"focus drifted off the moved chip: {focused_id!r} vs {c_id!r}"
+        )
 
         page.reload(wait_until="networkidle")
-        chips = page.locator(
-            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
-        ).all_text_contents()
-        descriptions = [t.split()[-1] for t in chips]
-        assert descriptions == ["C", "A", "B"]
+        assert _checkpoint_descriptions(page, 1) == ["C", "A", "B"]
 
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffMovesCheckpointAcrossWeeksByKeyboard:
-    @skip_until_api
     def test_alt_arrow_down_moves_to_next_week(self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
@@ -368,31 +433,33 @@ class TestStaffMovesCheckpointAcrossWeeksByKeyboard:
             wait_until="networkidle",
         )
 
+        # ``focus()`` instead of ``click()`` -- click on the chip lands
+        # on the ``checkpoint-text`` span and enters inline-edit mode,
+        # which would short-circuit the keydown handler.
         a_chip = page.locator(
             '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="A")
-        a_chip.click()
+        a_chip.scroll_into_view_if_needed()
+        a_chip.focus()
         page.keyboard.down("Alt")
         page.keyboard.press("ArrowDown")
         page.keyboard.up("Alt")
 
-        page.locator('[data-testid="save-indicator"][data-state="saved"]').wait_for()
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
         page.reload(wait_until="networkidle")
 
-        week_1 = page.locator(
+        # Week 1 is empty; week 2 now has [A, B] in that order.
+        week_1_count = page.locator(
             '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).count()
-        week_2_chips = page.locator(
-            '[data-week-number="2"] [data-testid="checkpoint-chip"]'
-        ).all_text_contents()
-        assert week_1 == 0
-        descriptions = [t.split()[-1] for t in week_2_chips]
-        assert descriptions == ["A", "B"]
+        assert week_1_count == 0
+        assert _checkpoint_descriptions(page, 2) == ["A", "B"]
 
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffEditsSummaryInline:
-    @skip_until_api
     def test_summary_textarea_autosaves(self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
@@ -430,7 +497,6 @@ class TestStaffEditsSummaryInline:
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffAddsAndDeletesCheckpoint:
-    @skip_until_api
     def test_add_then_delete_checkpoint(self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
@@ -449,40 +515,42 @@ class TestStaffAddsAndDeletesCheckpoint:
             wait_until="networkidle",
         )
 
-        page.locator('[data-week-number="1"] [data-testid="add-checkpoint"]').click()
-        # The new chip's textarea is focused.
+        # Add a checkpoint: click ``+ Add checkpoint``, fill the inline
+        # textarea that auto-opens, blur to commit. Two API calls run
+        # under the hood -- POST /api/weeks/<id>/checkpoints (create
+        # empty), then PATCH /api/checkpoints/<id> with the text.
+        page.locator(
+            '[data-week-number="1"] [data-testid="add-checkpoint"]'
+        ).click()
         edit_ta = page.locator('[data-testid="checkpoint-edit-textarea"]')
         edit_ta.wait_for(state="visible")
         edit_ta.fill("New checkpoint")
-        # Blur to commit.
-        page.locator('[data-testid="summary-goal"]').click()
-
+        page.locator('[data-testid="summary-goal"]').click()  # blur
         page.locator(
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
 
-        # Delete chip A: click x, confirm.
+        # Both chips now exist with the right text content.
+        assert _checkpoint_descriptions(page, 1) == ["A", "New checkpoint"]
+
+        # Delete chip A. The delete button has ``opacity-0`` until
+        # hover, so ``force=True`` is required.
         a_chip = page.locator(
             '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="A")
         a_chip.locator('[data-testid="checkpoint-delete"]').click(force=True)
         page.locator('[data-testid="checkpoint-delete-confirm"]').click()
-
         page.locator(
             '[data-testid="save-indicator"][data-state="saved"]'
         ).wait_for()
 
+        # Reload and verify the survivor is the new checkpoint, not A.
         page.reload(wait_until="networkidle")
-        chips = page.locator(
-            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
-        ).all_text_contents()
-        descriptions = [t.split()[-1] for t in chips]
-        assert descriptions == ["checkpoint"]  # "New checkpoint" tail word
+        assert _checkpoint_descriptions(page, 1) == ["New checkpoint"]
 
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffSeesRevertOnApiFailure:
-    @skip_until_api
     def test_drag_reverts_when_api_returns_422(self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
@@ -497,7 +565,8 @@ class TestStaffSeesRevertOnApiFailure:
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
-        # Intercept the move endpoint and return 422.
+        # Intercept the move endpoint and return 422 so the editor's
+        # ``moveCheckpoint`` revert path runs end-to-end.
         page.route(
             "**/api/checkpoints/*/move",
             lambda route: route.fulfill(
@@ -512,26 +581,33 @@ class TestStaffSeesRevertOnApiFailure:
         )
 
         a_chip = page.locator(
-            '[data-testid="checkpoint-chip"]'
+            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="A")
         b_chip = page.locator(
-            '[data-testid="checkpoint-chip"]'
+            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
         ).filter(has_text="B")
-        a_chip.drag_to(b_chip)
+        # Drag A onto B via the drag handle so SortableJS actually
+        # picks up the gesture (the handle filter rejects mousedown
+        # outside ``.plan-editor-drag-handle``).
+        _drag_chip(page, a_chip, b_chip)
 
-        # Saved indicator transitions to ``failed``.
+        # The editor flips the indicator to ``failed`` and surfaces a
+        # toast. We assert on the indicator first because the toast is
+        # only shown briefly (autohide).
         page.locator(
             '[data-testid="save-indicator"][data-state="failed"]'
         ).wait_for()
-        # Toast shows the failure copy.
         toast = page.locator('[data-testid="plan-editor-toast"]')
         toast.wait_for(state="visible")
         assert "Couldn't save change" in toast.text_content()
+        # And the optimistic reorder was reverted: A is back in front
+        # of B. The snapshot is restored from
+        # ``restoreCheckpointSnapshot`` once the 422 returns.
+        assert _checkpoint_descriptions(page, 1) == ["A", "B"]
 
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffTogglesCheckpointDone:
-    @skip_until_api
     def test_done_toggle_persists_via_api(self, django_server, browser):
         _ensure_tiers()
         _clear_plans_data()
@@ -567,7 +643,6 @@ class TestStaffTogglesCheckpointDone:
 
 @pytest.mark.django_db(transaction=True)
 class TestEditorSurfacesNoErrorsDuringSession:
-    @skip_until_api
     def test_full_session_records_only_2xx(self, django_server, browser):
         """Edit each summary field, add three checkpoints, drag, toggle.
 

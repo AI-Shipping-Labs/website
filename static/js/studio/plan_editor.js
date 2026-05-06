@@ -114,8 +114,14 @@
     }
 
     return fetch(url, init).then(function (resp) {
+      // 204 No Content has no body per RFC 7230 -- browsers strip it
+      // even when the server set Content-Type: application/json. Calling
+      // resp.json() on a 204 rejects with a SyntaxError, which would
+      // bubble into our .catch as a phantom network_error and trigger a
+      // spurious retry of the (already successful) write.
       const isJson = (resp.headers.get('content-type') || '').indexOf('application/json') !== -1;
-      const parse = isJson ? resp.json() : Promise.resolve(null);
+      const hasBody = resp.status !== 204 && resp.status !== 205;
+      const parse = (isJson && hasBody) ? resp.json() : Promise.resolve(null);
       return parse.then(function (data) {
         inflight -= 1;
         if (resp.ok) {
@@ -206,7 +212,7 @@
       body[field] = value;
       // ``focus_main`` lives on the plan, but is also a textarea -- the
       // backend accepts both flat and nested patches per #433.
-      return apiCallWithRevert('PATCH', 'plans/' + planId + '/', body);
+      return apiCallWithRevert('PATCH', 'plans/' + planId, body);
     });
   });
 
@@ -313,15 +319,37 @@
       '[data-testid="checkpoint-list"][data-week-id="' + weekId + '"]'
     );
     if (!list || !ids) { return; }
+    // Preserve focus across the reconciliation. ``appendChild`` of an
+    // already-attached node detaches and re-attaches it, which blurs the
+    // active element. Skip the DOM move when the chip is already in the
+    // right slot so a successful drag/keyboard reorder doesn't
+    // immediately lose focus once the API echo comes back.
+    const focusedId = document.activeElement
+      && document.activeElement.dataset
+      ? document.activeElement.dataset.checkpointId
+      : null;
     ids.forEach(function (id, idx) {
       const chip = root.querySelector(
         '[data-testid="checkpoint-chip"][data-checkpoint-id="' + id + '"]'
       );
-      if (chip) {
-        list.appendChild(chip);
-        chip.dataset.weekId = String(weekId);
-        chip.dataset.position = String(idx);
+      if (!chip) { return; }
+      const existingChildren = list.children;
+      const alreadyHere = (
+        chip.parentNode === list && existingChildren[idx] === chip
+      );
+      if (!alreadyHere) {
+        // Insert at the target index without using appendChild so the
+        // ordering is exact; insertBefore against the current
+        // child-at-index is still a detach+reattach in the spec, so we
+        // explicitly re-focus the chip if it was the active element.
+        const ref = existingChildren[idx] || null;
+        list.insertBefore(chip, ref);
+        if (focusedId && String(focusedId) === String(id)) {
+          chip.focus();
+        }
       }
+      chip.dataset.weekId = String(weekId);
+      chip.dataset.position = String(idx);
     });
   }
 
@@ -371,7 +399,7 @@
         onEnd: function (evt) {
           const li = evt.item;
           const id = parseInt(li.dataset.resourceId, 10);
-          apiCallWithRevert('PATCH', 'resources/' + id + '/', {
+          apiCallWithRevert('PATCH', 'resources/' + id, {
             position: evt.newIndex,
           });
         },
@@ -385,7 +413,7 @@
         onEnd: function (evt) {
           const li = evt.item;
           const id = parseInt(li.dataset.deliverableId, 10);
-          apiCallWithRevert('PATCH', 'deliverables/' + id + '/', {
+          apiCallWithRevert('PATCH', 'deliverables/' + id, {
             position: evt.newIndex,
           });
         },
@@ -399,7 +427,7 @@
         onEnd: function (evt) {
           const li = evt.item;
           const id = parseInt(li.dataset.nextStepId, 10);
-          apiCallWithRevert('PATCH', 'next-steps/' + id + '/', {
+          apiCallWithRevert('PATCH', 'next-steps/' + id, {
             position: evt.newIndex,
           });
         },
@@ -433,7 +461,7 @@
         const prior = chip.dataset.done === 'true';
         updateCheckpointDoneVisual(chip, isDone);
         const body = { done_at: isDone ? new Date().toISOString() : null };
-        apiCallWithRevert('PATCH', 'checkpoints/' + id + '/', body, function () {
+        apiCallWithRevert('PATCH', 'checkpoints/' + id, body, function () {
           updateCheckpointDoneVisual(chip, prior);
           doneToggle.checked = prior;
         });
@@ -449,7 +477,7 @@
           const parent = chip.parentNode;
           const sibling = chip.nextSibling;
           chip.remove();
-          apiCallWithRevert('DELETE', 'checkpoints/' + id + '/', null, function () {
+          apiCallWithRevert('DELETE', 'checkpoints/' + id, null, function () {
             parent.insertBefore(chip, sibling);
           });
           // Move focus to the next sibling, prev sibling, or add button.
@@ -597,7 +625,7 @@
       ta.replaceWith(newSpan);
       chip.dataset.editing = 'false';
       if (value && value !== prior) {
-        apiCallWithRevert('PATCH', 'checkpoints/' + id + '/', {
+        apiCallWithRevert('PATCH', 'checkpoints/' + id, {
           description: value,
         }, function () {
           newSpan.textContent = prior;
@@ -687,7 +715,7 @@
         '<button type="button" data-testid="checkpoint-delete" class="plan-editor-checkpoint-delete text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">x</button>';
       list.appendChild(li);
 
-      apiCall('POST', 'weeks/' + weekId + '/checkpoints/', {
+      apiCall('POST', 'weeks/' + weekId + '/checkpoints', {
         description: '',
       }).then(function (result) {
         if (result.ok && result.data && result.data.id) {

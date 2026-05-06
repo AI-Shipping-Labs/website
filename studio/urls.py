@@ -98,6 +98,8 @@ from studio.views.subscribers import (
     subscriber_list_redirect,
 )
 from studio.views.sync import (
+    content_sources_export,
+    content_sources_import,
     sync_all,
     sync_dashboard,
     sync_history,
@@ -461,6 +463,19 @@ urlpatterns = [
     path('sync/', sync_dashboard, name='studio_sync_dashboard'),
     path('sync/all/', sync_all, name='studio_sync_all'),
     path('sync/history/', sync_history, name='studio_sync_history'),
+    # Export / import (issue #436) registered BEFORE the generic
+    # ``<uuid:source_id>/...`` and ``<path:repo_name>/...`` routes so the
+    # literal ``export/`` and ``import/`` prefixes aren't swallowed.
+    path(
+        'sync/export/',
+        content_sources_export,
+        name='studio_content_sources_export',
+    ),
+    path(
+        'sync/import/',
+        content_sources_import,
+        name='studio_content_sources_import',
+    ),
     path('sync/<uuid:source_id>/trigger/', sync_trigger, name='studio_sync_trigger'),
     path('sync/<uuid:source_id>/status/', sync_status, name='studio_sync_status'),
     # Per-object Re-sync source button (issue #281). Registered before the

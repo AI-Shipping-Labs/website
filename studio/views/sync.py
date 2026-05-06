@@ -3,6 +3,8 @@
 Provides:
 - /studio/sync/ - Unified sync dashboard with repo-level card and results
 - /studio/sync/history/ - Aggregated sync history per batch
+- /studio/sync/export/ - Download every ContentSource as a JSON file
+- /studio/sync/import/ - Upload a previously-exported file and upsert rows
 - /studio/sync/<source_id>/trigger/ - Trigger sync for a single source
 - /studio/sync/<repo_name>/trigger-repo/ - Trigger sync for every source
   sharing one repo_name (fan-out under one button, see issue #232)
@@ -11,6 +13,7 @@ Provides:
 """
 
 import datetime
+import json
 import logging
 import uuid
 from collections import OrderedDict
@@ -18,7 +21,7 @@ from collections import OrderedDict
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Max, Min
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.html import format_html
@@ -31,6 +34,15 @@ from integrations.services.content_sync_queue import (
     enqueue_content_syncs,
 )
 from studio.decorators import staff_required
+from studio.services.content_sources_io import (
+    ImportError as ContentSourcesImportError,
+)
+from studio.services.content_sources_io import (
+    apply_import as apply_content_sources_import,
+)
+from studio.services.content_sources_io import (
+    build_export as build_content_sources_export,
+)
 from studio.worker_health import get_worker_status
 
 logger = logging.getLogger(__name__)
@@ -1111,3 +1123,93 @@ def sync_object_trigger(request, model_name, object_id):
         )
 
     return redirect(_safe_redirect_target(request, fallback_url))
+
+
+@staff_required
+def content_sources_export(request):
+    """Download every ContentSource row as a JSON file (issue #436).
+
+    Plaintext on purpose — the export contains webhook secrets so the
+    operator can bootstrap a fresh environment with one upload. The view
+    layer surfaces a sensitivity disclaimer to the operator both in-page
+    and in the success flash. ``staff_required`` is the only gate; the
+    operator is trusted to handle the file like a password manager export.
+    """
+    payload = build_content_sources_export()
+    body = json.dumps(payload, indent=2, sort_keys=False)
+    timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    filename = f'aishippinglabs-content-sources-{timestamp}.json'
+    response = HttpResponse(body, content_type='application/json')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@staff_required
+@require_POST
+def content_sources_import(request):
+    """Upsert ContentSource rows from a previously-exported JSON upload.
+
+    Validation: malformed JSON and unknown ``format_version`` are rejected
+    with a flash error and no DB writes. Entries with missing or invalid
+    ``repo_name`` are skipped and surfaced as a warning so a partial file
+    still bootstraps the rest. The import does not trigger a sync — the
+    operator runs sync separately from the dashboard.
+
+    The error-handling branches surface only the type of failure (e.g.
+    ``'JSON parse error'``) through ``messages``; the payload contents
+    are never logged.
+    """
+    upload = request.FILES.get('content_sources_file')
+    if upload is None:
+        messages.error(
+            request,
+            'No file uploaded. Pick a content sources JSON file and try again.',
+        )
+        return redirect('studio_sync_dashboard')
+
+    try:
+        raw = upload.read().decode('utf-8')
+    except UnicodeDecodeError:
+        messages.error(
+            request,
+            'Content sources file must be UTF-8 encoded JSON.',
+        )
+        return redirect('studio_sync_dashboard')
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        messages.error(
+            request,
+            f'Content sources file is not valid JSON: {exc.msg} (line {exc.lineno}).',
+        )
+        return redirect('studio_sync_dashboard')
+
+    try:
+        result = apply_content_sources_import(payload)
+    except ContentSourcesImportError as exc:
+        messages.error(request, str(exc))
+        return redirect('studio_sync_dashboard')
+
+    if result.created or result.updated:
+        messages.success(
+            request,
+            f'Content sources imported ({result.created} created, '
+            f'{result.updated} updated). Treat any exported file as '
+            'sensitive — it contains webhook secrets.',
+        )
+    else:
+        messages.info(
+            request,
+            'Content sources file contained no recognised entries.',
+        )
+
+    if result.skipped_repos:
+        messages.warning(
+            request,
+            'Skipped entries with missing or invalid repo_name: '
+            + ', '.join(result.skipped_repos)
+            + '.',
+        )
+
+    return redirect('studio_sync_dashboard')

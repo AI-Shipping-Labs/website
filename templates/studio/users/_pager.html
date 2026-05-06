@@ -1,0 +1,52 @@
+{% comment %}
+Pager partial for the Studio users list (issue #438).
+
+Inputs (from user_list view):
+  - page                   Django Page instance
+  - paginator              Django Paginator instance
+  - pager_first_url        ?page=1&...  or  None when on page 1
+  - pager_prev_url         ?page=N-1&... or  None when on page 1
+  - pager_next_url         ?page=N+1&... or  None on the last page
+  - pager_last_url         ?page=last&... or None on the last page
+  - page_start_index       1-indexed start of the visible slice
+  - page_end_index         1-indexed end of the visible slice
+  - filtered_total         total rows in the filtered set (paginator.count)
+
+Renders:
+  "Showing 1-50 of 374     << first  < prev   page 1 of 8   next >  last >>"
+Disabled buttons render as <span aria-disabled="true"> with muted style
+so the layout does not jump and there are no dead links to click.
+{% endcomment %}
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2 text-xs text-muted-foreground border-t border-border bg-secondary/40"
+     data-testid="user-list-pager">
+  <div data-testid="user-list-pager-range">
+    Showing {{ page_start_index }}-{{ page_end_index }} of {{ filtered_total }}
+  </div>
+  <div class="flex items-center gap-1">
+    {% with btn_base="px-2 py-1 rounded border text-xs" btn_active="bg-secondary border-border text-foreground hover:bg-muted transition-colors" btn_disabled="bg-secondary border-border text-muted-foreground opacity-50 cursor-not-allowed" %}
+    {% if pager_first_url %}
+    <a href="{{ pager_first_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="user-list-pager-first">&laquo; first</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="user-list-pager-first">&laquo; first</span>
+    {% endif %}
+    {% if pager_prev_url %}
+    <a href="{{ pager_prev_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="user-list-pager-prev">&lsaquo; prev</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="user-list-pager-prev">&lsaquo; prev</span>
+    {% endif %}
+    <span class="px-2 py-1 text-muted-foreground" data-testid="user-list-pager-status">
+      page {{ page.number }} of {{ paginator.num_pages }}
+    </span>
+    {% if pager_next_url %}
+    <a href="{{ pager_next_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="user-list-pager-next">next &rsaquo;</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="user-list-pager-next">next &rsaquo;</span>
+    {% endif %}
+    {% if pager_last_url %}
+    <a href="{{ pager_last_url }}" class="{{ btn_base }} {{ btn_active }}" data-testid="user-list-pager-last">last &raquo;</a>
+    {% else %}
+    <span aria-disabled="true" class="{{ btn_base }} {{ btn_disabled }}" data-testid="user-list-pager-last">last &raquo;</span>
+    {% endif %}
+    {% endwith %}
+  </div>
+</div>

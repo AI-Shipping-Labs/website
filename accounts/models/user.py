@@ -94,6 +94,13 @@ class User(AbstractUser):
         default=False,
         help_text="Whether the user has unsubscribed from emails.",
     )
+    soft_bounce_count = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Running count of transient (soft) SES bounces. Reset to 0 once "
+            "the user is auto-unsubscribed at the configured threshold."
+        ),
+    )
     email_preferences = models.JSONField(
         default=dict,
         blank=True,

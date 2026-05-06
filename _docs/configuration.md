@@ -139,7 +139,19 @@ Keys to set in Studio:
 | `SES_FROM_EMAIL` | non-secret | Must be a verified sender (or be on a verified domain) in SES. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
 
-Webhook endpoint (for SES bounce/complaint notifications via SNS): `{SITE_BASE_URL}/api/webhooks/ses` (no trailing slash). Configure in your SNS topic subscription.
+Webhook endpoint (for SES bounce/complaint notifications via SNS): `{SITE_BASE_URL}/api/ses-events` (no trailing slash; the slashless form avoids the trailing-slash redirect that strips POST bodies). Configure in your SNS topic subscription.
+
+SES bounce / complaint webhook setup (issue #453):
+
+1. Create an SNS topic, e.g. `ses-bounces-prod` (region must match `AWS_SES_REGION`).
+2. SES console -> Configuration -> Configuration sets (or Email destinations) -> enable Bounce and Complaint notifications and point them at the SNS topic. Delivery notifications are optional; the webhook accepts and logs them but takes no action.
+3. SNS console -> Subscriptions -> Create subscription -> Protocol `HTTPS`, Endpoint `https://prod.aishippinglabs.com/api/ses-events`.
+4. AWS posts a `SubscriptionConfirmation` to that endpoint; our webhook auto-confirms by fetching the `SubscribeURL`. The subscription state in SNS will flip from `PendingConfirmation` to `Confirmed` once that succeeds.
+5. Verify by sending an email to the SES `mailbox-simulator` address `bounce@simulator.amazonses.com`; the recipient User row should flip to `unsubscribed=True` and pick up the `bounced` tag, and a row should appear in the `email_app.SesEvent` audit table.
+
+The webhook validates the SNS signature using `integrations.services.ses.validate_sns_notification`. In production keep `SES_WEBHOOK_VALIDATION_ENABLED=true`; in development the default (`DEBUG=True`) skips signature checks so local SNS replay is possible.
+
+Soft-bounce policy: a `Transient` (soft) bounce increments `User.soft_bounce_count`. The third soft bounce in a row flips `unsubscribed=True`, appends the `bounced` tag, and resets the counter. A single `Complaint` (Gmail "Report spam" etc.) unsubscribes immediately and tags `complained`.
 
 Foot-gun: SES is in sandbox mode by default. Sandbox accounts can only send to verified addresses. Request production access via the AWS console BEFORE the launch — approval can take 24+ hours.
 

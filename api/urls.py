@@ -56,6 +56,7 @@ from api.views.plans import (
     sprint_plans_bulk_import,
     sprint_plans_collection,
 )
+from api.views.ses_events import ses_events
 from api.views.sprints import sprint_detail, sprints_collection
 from api.views.weeks import plan_weeks_collection, week_detail
 
@@ -224,5 +225,14 @@ urlpatterns = [
         "interview-notes/<int:note_id>",
         interview_note_detail,
         name="api_interview_note_detail",
+    ),
+    # ---- SES bounce / complaint webhook (issue #453) ------------------
+    # SNS POSTs notifications here. Auth is the SNS signature, not a
+    # token (SNS doesn't carry one). The slashless form is canonical so
+    # the trailing-slash middleware doesn't 301 the POST.
+    path(
+        "ses-events",
+        ses_events,
+        name="api_ses_events",
     ),
 ]

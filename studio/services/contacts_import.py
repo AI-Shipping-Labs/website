@@ -187,10 +187,24 @@ def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=N
     ``tier`` (a slug applied as a long-lived ``TierOverride`` if its level
     is > 0).
 
+    Optional per-row keys (issue #437):
+        first_name / last_name -- last-write-wins on non-empty trimmed input;
+            empty / whitespace-only / missing leaves existing names alone.
+        stripe_customer_id / subscription_id -- write-once. Sets the field
+            only if the existing User row's value is empty. If the row carries
+            a non-empty value AND the user already has a different value, the
+            row is NOT overwritten and a warning is appended with reason
+            ``stripe_customer_id_conflict`` / ``subscription_id_conflict``.
+        slack_member -- bool only. ``True`` / ``False`` writes the field and
+            sets ``slack_checked_at = timezone.now()``. Omitted leaves both
+            untouched. Any non-bool value is ignored and a warning is appended
+            with reason ``invalid_slack_member``.
+
     Args:
         rows: iterable of dicts. Each dict must contain ``email``; optionally
-            ``tags`` (list of raw strings) and ``tier`` (Tier slug). Any other
-            keys are ignored.
+            ``tags``, ``tier``, ``first_name``, ``last_name``,
+            ``stripe_customer_id``, ``subscription_id``, ``slack_member``. Any
+            other keys are ignored.
         default_tag: raw tag string applied to every row in the batch.
         default_tier: a ``Tier`` instance applied to every row whose tier is
             not already set per-row. Pass None to leave tiers alone.
@@ -268,12 +282,109 @@ def import_contact_rows(rows, *, default_tag="", default_tier=None, granted_by=N
             elif apply_default_tier:
                 _apply_tier_override(user, default_tier, granted_by)
 
+            # Per-row name / Stripe / Slack writes (issue #437). These are
+            # all backwards-compatible: payloads without the keys behave the
+            # same as before.
+            _apply_name_fields(user, row)
+            _apply_write_once_id(
+                user,
+                row,
+                row_key="stripe_customer_id",
+                user_attr="stripe_customer_id",
+                conflict_reason="stripe_customer_id_conflict",
+                row_number=row_number,
+                warnings=result.warnings,
+            )
+            _apply_write_once_id(
+                user,
+                row,
+                row_key="subscription_id",
+                user_attr="subscription_id",
+                conflict_reason="subscription_id_conflict",
+                row_number=row_number,
+                warnings=result.warnings,
+            )
+            _apply_slack_member(
+                user,
+                row,
+                row_number=row_number,
+                warnings=result.warnings,
+            )
+
             if created_now:
                 result.created += 1
             else:
                 result.updated += 1
 
     return result
+
+
+def _apply_name_fields(user, row):
+    """Write ``first_name`` / ``last_name`` from ``row`` if non-empty.
+
+    Last-write-wins on non-empty trimmed input. Empty / whitespace-only /
+    missing values leave the existing field alone (issue #437).
+    """
+    update_fields = []
+    for row_key, user_attr in (("first_name", "first_name"), ("last_name", "last_name")):
+        raw = row.get(row_key)
+        if not isinstance(raw, str):
+            continue
+        trimmed = raw.strip()
+        if not trimmed:
+            continue
+        if getattr(user, user_attr) != trimmed:
+            setattr(user, user_attr, trimmed)
+            update_fields.append(user_attr)
+    if update_fields:
+        user.save(update_fields=update_fields)
+
+
+def _apply_write_once_id(
+    user, row, *, row_key, user_attr, conflict_reason, row_number, warnings,
+):
+    """Write a Stripe ID-style field only when the user's value is empty.
+
+    If the row carries a non-empty value and the user already has a different
+    non-empty value, the field is NOT overwritten and a warning with
+    ``conflict_reason`` is appended. Identical values are a silent no-op.
+    Issue #437: the Stripe webhook is the canonical writer; the import must
+    never silently clobber a value already set elsewhere.
+    """
+    raw = row.get(row_key)
+    if not isinstance(raw, str):
+        return
+    trimmed = raw.strip()
+    if not trimmed:
+        return
+    current = getattr(user, user_attr) or ""
+    if current == trimmed:
+        return
+    if current:
+        warnings.append((row_number, trimmed, conflict_reason))
+        return
+    setattr(user, user_attr, trimmed)
+    user.save(update_fields=[user_attr])
+
+
+def _apply_slack_member(user, row, *, row_number, warnings):
+    """Write ``slack_member`` and stamp ``slack_checked_at`` to now.
+
+    The import is authoritative when it ships a value: the operator just
+    verified the membership against Slack admin. Omitting the key leaves both
+    fields untouched so the 30-min background refresher's state is preserved.
+    Non-bool values (``"yes"``, ``1``, ``None``) are ignored with an
+    ``invalid_slack_member`` warning instead of silently coercing.
+    """
+    if "slack_member" not in row:
+        return
+    raw = row["slack_member"]
+    if not isinstance(raw, bool):
+        warnings.append((row_number, raw, "invalid_slack_member"))
+        return
+    user.slack_member = raw
+    user.slack_checked_at = timezone.now()
+    user.save(update_fields=["slack_member", "slack_checked_at"])
 
 
 def _apply_tag(user, normalized_tag):

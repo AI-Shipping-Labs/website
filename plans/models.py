@@ -38,6 +38,17 @@ VISIBILITY_CHOICES = [
     ('external', 'External (shareable with member)'),
 ]
 
+# Plan-level visibility (issue #440). ``private`` is the safe default; only
+# the owner and staff see private plans. ``cohort`` opens the plan to other
+# members of the same sprint via the cohort board. ``public`` is RESERVED
+# for a future issue and is deliberately NOT included in the active choices
+# tuple -- a separate later migration will add it.
+PLAN_VISIBILITY_CHOICES = [
+    ('private', 'Private (only the member and staff)'),
+    ('cohort', 'Cohort (visible to other members of the same sprint)'),
+    # 'public' is reserved for a future issue. Do NOT add it here.
+]
+
 KIND_CHOICES = [
     ('persona', 'Persona'),
     ('background', 'Background'),
@@ -82,12 +93,71 @@ class Sprint(TimestampedModelMixin, models.Model):
         return self.name
 
 
+class PlanQuerySet(models.QuerySet):
+    """Visibility-aware queryset for :class:`Plan` (issue #440).
+
+    The cohort board and the read-only individual plan view MUST query
+    plans through these helpers, never through a raw
+    ``Plan.objects.filter(visibility='cohort')`` -- the gating logic
+    (viewer-is-enrolled, viewer-is-not-the-owner, distinct-sprint
+    isolation) lives here so views stay thin and a regression test can
+    forbid visibility literals in view bodies.
+    """
+
+    def visible_on_cohort_board(self, *, sprint, viewer):
+        """Plans that should appear on ``sprint``'s cohort board for ``viewer``.
+
+        Returns:
+        - Empty queryset if viewer is anonymous / unauthenticated.
+        - Empty queryset if viewer is NOT enrolled in ``sprint`` (has no
+          plan row for that sprint), even if viewer is_staff -- the
+          board is the member view; staff use Studio for full access.
+        - Otherwise: plans in ``sprint`` with cohort visibility,
+          excluding the viewer's own plan.
+        """
+        if viewer is None or not getattr(viewer, 'is_authenticated', False):
+            return self.none()
+        viewer_plan_exists = self.filter(
+            sprint=sprint, member=viewer,
+        ).exists()
+        if not viewer_plan_exists:
+            return self.none()
+        return self.filter(sprint=sprint, visibility='cohort').exclude(
+            member=viewer,
+        )
+
+    def visible_to_member(self, *, plan_id, viewer):
+        """Single plan visible to ``viewer`` for the read-only individual view.
+
+        Returns a queryset (0 or 1 row) so the caller can use
+        ``.get()`` / ``get_object_or_404``. Visibility rules:
+        - Owner can always see their own plan (regardless of visibility).
+        - Other sprint members can see a cohort-visibility plan in a
+          sprint they themselves are enrolled in.
+        - Anonymous / non-enrolled / not-cohort -> empty.
+        """
+        if viewer is None or not getattr(viewer, 'is_authenticated', False):
+            return self.none()
+        base = self.filter(pk=plan_id)
+        owner_q = models.Q(member=viewer)
+        cohort_q = models.Q(visibility='cohort') & models.Q(
+            sprint__plans__member=viewer,
+        )
+        return base.filter(owner_q | cohort_q).distinct()
+
+
 class Plan(TimestampedModelMixin, models.Model):
     """One plan per member per sprint.
 
     Stores the shareable Summary + Plan blocks; weekly content is in the
     ``Week`` child rows. ``shared_at`` is a real timestamp distinct from
     ``status='shared'`` so the share moment survives status churn.
+
+    ``visibility`` (issue #440) controls who can see the plan:
+    ``private`` (the default) is owner + staff only; ``cohort`` opens it
+    up to other members of the same sprint via the cohort board. The
+    enum reserves ``public`` for a future issue but does NOT include it
+    in the active choices -- adding it requires a separate migration.
     """
 
     member = models.ForeignKey(
@@ -104,6 +174,11 @@ class Plan(TimestampedModelMixin, models.Model):
         max_length=20,
         choices=PLAN_STATUS_CHOICES,
         default='draft',
+    )
+    visibility = models.CharField(
+        max_length=10,
+        choices=PLAN_VISIBILITY_CHOICES,
+        default='private',
     )
 
     # Shareable Summary block (matches the bullets in ``_plan.md``)
@@ -131,6 +206,8 @@ class Plan(TimestampedModelMixin, models.Model):
     # ``shared`` status value so we keep a real timestamp.
     shared_at = models.DateTimeField(null=True, blank=True)
 
+    objects = PlanQuerySet.as_manager()
+
     class Meta:
         ordering = ['-created_at']
         constraints = [
@@ -142,6 +219,7 @@ class Plan(TimestampedModelMixin, models.Model):
         indexes = [
             models.Index(fields=['status']),
             models.Index(fields=['sprint', 'status']),
+            models.Index(fields=['sprint', 'visibility']),
         ]
 
     def __str__(self):

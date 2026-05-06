@@ -1,0 +1,163 @@
+{% comment %}
+Shared shareable-plan body partial (issue #440).
+
+Used by both ``plans/member_plan_detail.html`` (read-only, viewed by
+teammates) and ``plans/my_plan_detail.html`` (owner edit surface). The
+two templates differ only in the visibility-toggle form at the top and
+in the "View cohort board" CTA -- everything else is rendered here.
+
+DO NOT render ``InterviewNote`` rows in this partial. Internal and
+external interview notes are deliberately omitted from member-facing
+views in this issue.
+
+Required context:
+- ``plan`` (with related ``weeks``, ``resources``, ``deliverables``,
+  ``next_steps`` prefetched by the view).
+{% endcomment %}
+
+<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-summary">
+  <h2 class="text-xl font-semibold mb-4">Summary</h2>
+  <dl class="grid grid-cols-1 gap-4 text-sm">
+    {% if plan.summary_current_situation %}
+    <div>
+      <dt class="text-muted-foreground">Current situation</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_current_situation }}</dd>
+    </div>
+    {% endif %}
+    {% if plan.summary_goal %}
+    <div>
+      <dt class="text-muted-foreground">Goal</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_goal }}</dd>
+    </div>
+    {% endif %}
+    {% if plan.summary_main_gap %}
+    <div>
+      <dt class="text-muted-foreground">Main gap</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_main_gap }}</dd>
+    </div>
+    {% endif %}
+    {% if plan.summary_weekly_hours %}
+    <div>
+      <dt class="text-muted-foreground">Weekly hours</dt>
+      <dd class="text-foreground mt-1">{{ plan.summary_weekly_hours }}</dd>
+    </div>
+    {% endif %}
+    {% if plan.summary_why_this_plan %}
+    <div>
+      <dt class="text-muted-foreground">Why this plan</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_why_this_plan }}</dd>
+    </div>
+    {% endif %}
+  </dl>
+</section>
+
+{% if plan.focus_main or plan.focus_supporting %}
+<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-focus">
+  <h2 class="text-xl font-semibold mb-4">Focus</h2>
+  {% if plan.focus_main %}
+  <p class="text-foreground whitespace-pre-line" data-testid="plan-focus-main">{{ plan.focus_main }}</p>
+  {% endif %}
+  {% if plan.focus_supporting %}
+  <ul class="mt-4 list-disc list-inside text-sm text-muted-foreground space-y-1">
+    {% for item in plan.focus_supporting %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if plan.accountability %}
+<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-accountability">
+  <h2 class="text-xl font-semibold mb-4">Accountability</h2>
+  <p class="text-foreground whitespace-pre-line">{{ plan.accountability }}</p>
+</section>
+{% endif %}
+
+<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-weeks">
+  <h2 class="text-xl font-semibold mb-4">Weeks</h2>
+  {% for week in plan.weeks.all %}
+  <div class="mb-6 last:mb-0">
+    <h3 class="text-base font-medium mb-2">
+      Week {{ week.week_number }}{% if week.theme %} &mdash; {{ week.theme }}{% endif %}
+    </h3>
+    <ul class="space-y-1 text-sm">
+      {% for checkpoint in week.checkpoints.all %}
+      <li class="flex items-start gap-2" data-testid="plan-checkpoint">
+        {% if checkpoint.done_at %}
+        <span class="text-emerald-500" aria-label="Done">&#10003;</span>
+        {% else %}
+        <span class="text-muted-foreground" aria-label="Not done">&#9633;</span>
+        {% endif %}
+        <span class="{% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}">
+          {{ checkpoint.description }}
+        </span>
+      </li>
+      {% empty %}
+      <li class="text-sm text-muted-foreground italic">No checkpoints in this week.</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% empty %}
+  <p class="text-sm text-muted-foreground">No weeks yet.</p>
+  {% endfor %}
+</section>
+
+{% if plan.resources.all %}
+<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-resources">
+  <h2 class="text-xl font-semibold mb-4">Resources</h2>
+  <ul class="space-y-2 text-sm">
+    {% for resource in plan.resources.all %}
+    <li>
+      {% if resource.url %}
+      <a href="{{ resource.url }}" class="text-accent hover:underline" rel="noopener noreferrer" target="_blank">{{ resource.title }}</a>
+      {% else %}
+      <span class="text-foreground">{{ resource.title }}</span>
+      {% endif %}
+      {% if resource.note %}
+      <span class="block text-muted-foreground mt-1 whitespace-pre-line">{{ resource.note }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if plan.deliverables.all %}
+<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-deliverables">
+  <h2 class="text-xl font-semibold mb-4">Deliverables</h2>
+  <ul class="space-y-2 text-sm">
+    {% for deliverable in plan.deliverables.all %}
+    <li class="flex items-start gap-2">
+      {% if deliverable.done_at %}
+      <span class="text-emerald-500" aria-label="Done">&#10003;</span>
+      {% else %}
+      <span class="text-muted-foreground" aria-label="Not done">&#9633;</span>
+      {% endif %}
+      <span class="text-foreground whitespace-pre-line">{{ deliverable.description }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if plan.next_steps.all %}
+<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-next-steps">
+  <h2 class="text-xl font-semibold mb-4">Next Steps</h2>
+  <ul class="space-y-2 text-sm">
+    {% for step in plan.next_steps.all %}
+    <li class="flex items-start gap-2">
+      {% if step.done_at %}
+      <span class="text-emerald-500" aria-label="Done">&#10003;</span>
+      {% else %}
+      <span class="text-muted-foreground" aria-label="Not done">&#9633;</span>
+      {% endif %}
+      <span class="text-foreground">
+        <span class="text-muted-foreground">{{ step.assignee_label }}:</span>
+        {{ step.description }}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

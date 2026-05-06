@@ -1,20 +1,54 @@
-"""URL routes for the JSON API (issue #431).
+"""URL routes for the JSON API.
 
-All routes are mounted under ``/api/`` from ``website/urls.py``. This module
-handles ``/api/contacts/...``; existing ``/api/checkout/``, ``/api/notifications/``,
-etc. routes keep working because Django evaluates ``include()``s in order and
-none of them collide with the contacts prefix.
+Routes mounted under ``/api/`` from ``website/urls.py``. This module
+hosts the contacts endpoints (issue #431) and the plans-API surface
+(issue #433). Every route is JSON-in / JSON-out and gated by
+``token_required``.
+
+Path style: no trailing slash. The site-wide
+``RemoveTrailingSlashMiddleware`` strips trailing slashes from any
+request that doesn't go to admin/accounts/studio, so ``/api/sprints/``
+gets 301-redirected to ``/api/sprints``. We register the slashless form
+to match the contacts endpoints and skip that redirect on every API
+call.
 """
 
 from django.urls import path
 
+from api.views.checkpoints import (
+    checkpoint_detail,
+    checkpoint_move,
+    week_checkpoints_create,
+)
 from api.views.contacts import (
     contacts_export,
     contacts_import,
     contacts_set_tags,
 )
+from api.views.interview_notes import (
+    interview_note_detail,
+    interview_notes_create,
+    plan_interview_notes,
+    user_interview_notes,
+)
+from api.views.plan_items import (
+    deliverable_detail,
+    next_step_detail,
+    plan_deliverables,
+    plan_next_steps,
+    plan_resources,
+    resource_detail,
+)
+from api.views.plans import (
+    plan_detail,
+    sprint_plans_bulk_import,
+    sprint_plans_collection,
+)
+from api.views.sprints import sprint_detail, sprints_collection
+from api.views.weeks import plan_weeks_collection, week_detail
 
 urlpatterns = [
+    # ---- Contacts (issue #431) ----------------------------------------
     path(
         "contacts/import",
         contacts_import,
@@ -31,5 +65,113 @@ urlpatterns = [
         "contacts/<path:email>/tags",
         contacts_set_tags,
         name="api_contacts_set_tags",
+    ),
+    # ---- Sprints (issue #433) -----------------------------------------
+    path(
+        "sprints",
+        sprints_collection,
+        name="api_sprints_collection",
+    ),
+    path(
+        "sprints/<slug:slug>",
+        sprint_detail,
+        name="api_sprint_detail",
+    ),
+    # ---- Plans (issue #433) -------------------------------------------
+    # Bulk-import comes BEFORE the generic plans collection so the
+    # ``bulk-import`` literal does not collide with the slug captures.
+    path(
+        "sprints/<slug:slug>/plans/bulk-import",
+        sprint_plans_bulk_import,
+        name="api_sprint_plans_bulk_import",
+    ),
+    path(
+        "sprints/<slug:slug>/plans",
+        sprint_plans_collection,
+        name="api_sprint_plans_collection",
+    ),
+    path(
+        "plans/<int:plan_id>",
+        plan_detail,
+        name="api_plan_detail",
+    ),
+    # ---- Weeks (issue #433) -------------------------------------------
+    path(
+        "plans/<int:plan_id>/weeks",
+        plan_weeks_collection,
+        name="api_plan_weeks_collection",
+    ),
+    path(
+        "weeks/<int:week_id>",
+        week_detail,
+        name="api_week_detail",
+    ),
+    # ---- Checkpoints (issue #433) -------------------------------------
+    path(
+        "weeks/<int:week_id>/checkpoints",
+        week_checkpoints_create,
+        name="api_week_checkpoints_create",
+    ),
+    path(
+        "checkpoints/<int:checkpoint_id>/move",
+        checkpoint_move,
+        name="api_checkpoint_move",
+    ),
+    path(
+        "checkpoints/<int:checkpoint_id>",
+        checkpoint_detail,
+        name="api_checkpoint_detail",
+    ),
+    # ---- Resources / Deliverables / NextSteps (issue #433) ------------
+    path(
+        "plans/<int:plan_id>/resources",
+        plan_resources,
+        name="api_plan_resources",
+    ),
+    path(
+        "resources/<int:item_id>",
+        resource_detail,
+        name="api_resource_detail",
+    ),
+    path(
+        "plans/<int:plan_id>/deliverables",
+        plan_deliverables,
+        name="api_plan_deliverables",
+    ),
+    path(
+        "deliverables/<int:item_id>",
+        deliverable_detail,
+        name="api_deliverable_detail",
+    ),
+    path(
+        "plans/<int:plan_id>/next-steps",
+        plan_next_steps,
+        name="api_plan_next_steps",
+    ),
+    path(
+        "next-steps/<int:item_id>",
+        next_step_detail,
+        name="api_next_step_detail",
+    ),
+    # ---- Interview notes (issue #433) ---------------------------------
+    path(
+        "plans/<int:plan_id>/interview-notes",
+        plan_interview_notes,
+        name="api_plan_interview_notes",
+    ),
+    path(
+        "users/<path:email>/interview-notes",
+        user_interview_notes,
+        name="api_user_interview_notes",
+    ),
+    path(
+        "interview-notes",
+        interview_notes_create,
+        name="api_interview_notes_create",
+    ),
+    path(
+        "interview-notes/<int:note_id>",
+        interview_note_detail,
+        name="api_interview_note_detail",
     ),
 ]

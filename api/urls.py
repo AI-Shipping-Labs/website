@@ -25,6 +25,14 @@ from api.views.contacts import (
     contacts_import,
     contacts_set_tags,
 )
+from api.views.course_certificates import (
+    course_certificate_detail,
+    course_certificates_collection,
+)
+from api.views.course_enrollments import (
+    course_enrollment_detail,
+    course_enrollments_collection,
+)
 from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
@@ -94,6 +102,31 @@ urlpatterns = [
         "sprints/<slug:slug>/enrollments/<path:email>",
         sprint_enrollment_detail,
         name="api_sprint_enrollment_detail",
+    ),
+    # ---- Course enrollments (issue #445) ------------------------------
+    # Register the collection BEFORE the per-email detail so the
+    # ``enrollments`` literal isn't swallowed by the path converter
+    # capturing an email like ``alice@example.com/extra``.
+    path(
+        "courses/<slug:slug>/enrollments",
+        course_enrollments_collection,
+        name="api_course_enrollments_collection",
+    ),
+    path(
+        "courses/<slug:slug>/enrollments/<path:email>",
+        course_enrollment_detail,
+        name="api_course_enrollment_detail",
+    ),
+    # ---- Course certificates (issue #445) -----------------------------
+    path(
+        "courses/<slug:slug>/certificates",
+        course_certificates_collection,
+        name="api_course_certificates_collection",
+    ),
+    path(
+        "courses/<slug:slug>/certificates/<path:email>",
+        course_certificate_detail,
+        name="api_course_certificate_detail",
     ),
     # ---- Plans (issue #433) -------------------------------------------
     # Bulk-import comes BEFORE the generic plans collection so the

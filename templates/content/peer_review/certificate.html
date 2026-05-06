@@ -24,6 +24,18 @@
     <p class="text-xs text-muted-foreground">
       Certificate ID: {{ certificate.id }}
     </p>
+
+    {% if certificate.pdf_url %}
+    <div class="mt-8 no-print">
+      <a href="{{ certificate.pdf_url }}"
+         target="_blank"
+         rel="noopener noreferrer"
+         class="inline-flex items-center gap-2 px-6 py-3 bg-accent text-accent-foreground rounded-lg font-semibold hover:opacity-90 transition"
+         data-testid="certificate-pdf-link">
+        Download PDF
+      </a>
+    </div>
+    {% endif %}
   </div>
 </div>
 

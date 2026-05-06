@@ -1,0 +1,117 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Edit plan{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to plan
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">Edit plan</h1>
+  <p class="text-sm text-muted-foreground mt-1">{{ plan.member.email }} -- {{ plan.sprint.name }}</p>
+</div>
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
+  <form method="post" action="{% url 'studio_plan_edit' plan_id=plan.pk %}">
+    {% csrf_token %}
+
+    <h2 class="text-md font-semibold text-foreground mb-3">Summary</h2>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Current situation</label>
+      <textarea name="summary_current_situation" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ form_data.summary_current_situation }}</textarea>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Goal for the next {{ plan.sprint.duration_weeks }} weeks</label>
+      <textarea name="summary_goal" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ form_data.summary_goal }}</textarea>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Main gap to close</label>
+      <textarea name="summary_main_gap" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ form_data.summary_main_gap }}</textarea>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Weekly time commitment</label>
+      <input type="text" name="summary_weekly_hours" value="{{ form_data.summary_weekly_hours }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground"
+             placeholder="e.g. 2 hr/week">
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Why this plan</label>
+      <textarea name="summary_why_this_plan" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ form_data.summary_why_this_plan }}</textarea>
+    </div>
+
+    <h2 class="text-md font-semibold text-foreground mb-3">Focus</h2>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Main focus</label>
+      <textarea name="focus_main" rows="2"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ form_data.focus_main }}</textarea>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Supporting focuses (one per line)</label>
+      <textarea name="focus_supporting" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ form_data.focus_supporting }}</textarea>
+    </div>
+
+    <h2 class="text-md font-semibold text-foreground mb-3">Accountability</h2>
+
+    <div class="mb-6">
+      <textarea name="accountability" rows="3"
+                class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">{{ form_data.accountability }}</textarea>
+    </div>
+
+    <h2 class="text-md font-semibold text-foreground mb-3">Metadata</h2>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Assigned persona</label>
+      <input type="text" name="assigned_persona" value="{{ form_data.assigned_persona }}"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground"
+             placeholder="e.g. Sam — The Technical Professional Moving to AI">
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+      <select name="status"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+        {% for value, label in plan_status_choices %}
+        <option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-6">
+      <label class="flex items-center space-x-2 cursor-pointer">
+        <input type="checkbox" name="shared" {% if form_data.shared %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent">
+        <span class="text-sm text-foreground">Plan has been shared with the member</span>
+      </label>
+      <p class="text-xs text-muted-foreground mt-1">Toggling this on records the share timestamp.</p>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Save changes
+      </button>
+      <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

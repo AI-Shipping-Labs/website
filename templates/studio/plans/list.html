@@ -1,0 +1,91 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Plans{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold text-foreground">Plans</h1>
+    <p class="text-muted-foreground mt-1">Personal sprint plans -- one per member per sprint.</p>
+  </div>
+  <a href="{% url 'studio_plan_create' %}"
+     class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    New plan
+  </a>
+</div>
+
+<form method="get" action="{% url 'studio_plan_list' %}" class="bg-card border border-border rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-4 gap-3">
+  <div>
+    <label class="block text-xs text-muted-foreground mb-1">Sprint</label>
+    <select name="sprint" class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+      <option value="">All sprints</option>
+      {% for sprint in sprints %}
+      <option value="{{ sprint.pk }}" {% if sprint.pk == sprint_filter_id %}selected{% endif %}>{{ sprint.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs text-muted-foreground mb-1">Status</label>
+    <select name="status" class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+      <option value="">All statuses</option>
+      {% for value, label in plan_status_choices %}
+      <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs text-muted-foreground mb-1">Member ID</label>
+    <input type="text" name="member" value="{% if member_filter_id %}{{ member_filter_id }}{% endif %}"
+           class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground" placeholder="user pk">
+  </div>
+  <div>
+    <label class="block text-xs text-muted-foreground mb-1">Search (email/name)</label>
+    <div class="flex gap-2">
+      <input type="text" name="q" value="{{ search }}"
+             class="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-3 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Filter
+      </button>
+    </div>
+  </div>
+</form>
+
+{% if plans %}
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <table class="w-full">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Sprint</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Shared</th>
+        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for plan in plans %}
+      <tr class="hover:bg-secondary/50 transition-colors">
+        <td class="px-6 py-4 text-sm">
+          <a href="{% url 'studio_plan_detail' plan_id=plan.pk %}" class="text-accent hover:underline">{{ plan.member.email }}</a>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.sprint.name }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ plan.get_status_display }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">
+          {% if plan.shared_at %}{{ plan.shared_at|date:"Y-m-d" }}{% else %}-{% endif %}
+        </td>
+        <td class="px-6 py-4 text-right">
+          <a href="{% url 'studio_plan_edit' plan_id=plan.pk %}" class="text-sm text-accent hover:underline">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-card border border-border rounded-lg p-12 text-center">
+  <p class="text-muted-foreground">No plans match these filters.</p>
+  <a href="{% url 'studio_plan_create' %}" class="text-accent hover:underline text-sm mt-2 inline-block">Create a new plan</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}New plan{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_plan_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Plans
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">New plan</h1>
+</div>
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post" action="{% url 'studio_plan_create' %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Member</label>
+      <select name="member" required
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="">-- pick a member --</option>
+        {% for m in members %}
+        <option value="{{ m.pk }}" {% if form_data.member == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.email }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Sprint</label>
+      <select name="sprint" required
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="">-- pick a sprint --</option>
+        {% for s in sprints %}
+        <option value="{{ s.pk }}" {% if form_data.sprint == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+      <select name="status"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% for value, label in plan_status_choices %}
+        <option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Create plan
+      </button>
+      <a href="{% url 'studio_plan_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

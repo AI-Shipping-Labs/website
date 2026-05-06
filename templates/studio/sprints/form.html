@@ -1,0 +1,74 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}{% if form_action == 'edit' %}Edit sprint{% else %}New sprint{% endif %}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-8">
+  <a href="{% url 'studio_sprint_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to Sprints
+  </a>
+  <h1 class="text-2xl font-semibold text-foreground mt-2">
+    {% if form_action == 'edit' %}Edit sprint{% else %}New sprint{% endif %}
+  </h1>
+</div>
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post" action="{% if form_action == 'edit' %}{% url 'studio_sprint_edit' sprint_id=sprint.pk %}{% else %}{% url 'studio_sprint_create' %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Name</label>
+      <input type="text" name="name" value="{{ form_data.name }}" required
+             placeholder="May 2026 sprint"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ form_data.slug }}"
+             placeholder="may-2026"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">URL-safe id. Leave blank to auto-derive from name.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Start date</label>
+      <input type="date" name="start_date" value="{{ form_data.start_date }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Duration (weeks)</label>
+      <input type="number" name="duration_weeks" value="{{ form_data.duration_weeks }}" min="1" max="26" required
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <p class="text-xs text-muted-foreground mt-1">Variable per sprint. Common values are 4, 6, or 8.</p>
+    </div>
+
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-foreground mb-1">Status</label>
+      <select name="status"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% for value, label in status_choices %}
+        <option value="{{ value }}" {% if form_data.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flex items-center space-x-4">
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        {% if form_action == 'edit' %}Save changes{% else %}Create sprint{% endif %}
+      </button>
+      <a href="{% url 'studio_sprint_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

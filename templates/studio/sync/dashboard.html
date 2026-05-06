@@ -24,38 +24,9 @@
     <p class="text-muted-foreground mt-1">Sync content from GitHub repositories.</p>
     {% worker_status_inline %}
   </div>
-  <div class="flex flex-col items-end gap-2 shrink-0">
-    <div class="flex flex-wrap items-center gap-3">
-      <a href="{% url 'studio_content_sources_export' %}"
-         class="{% studio_action_class 'secondary' %}"
-         data-testid="content-sources-download"
-         title="Includes webhook secrets — treat the file as sensitive.">
-        Download content sources
-      </a>
-      <form method="post"
-            action="{% url 'studio_content_sources_import' %}"
-            enctype="multipart/form-data"
-            class="flex flex-wrap items-center gap-2"
-            id="content-sources-import-form">
-        {% csrf_token %}
-        <label class="{% studio_action_class 'secondary' %} cursor-pointer">
-          <span>Choose file</span>
-          <input type="file"
-                 name="content_sources_file"
-                 accept="application/json,.json"
-                 class="sr-only"
-                 required
-                 onchange="this.form.querySelector('[data-content-sources-upload-filename]').textContent = this.files[0] ? this.files[0].name : 'No file chosen'; this.form.querySelector('[data-content-sources-upload-submit]').disabled = !this.files[0];">
-        </label>
-        <span class="text-xs text-muted-foreground" data-content-sources-upload-filename>No file chosen</span>
-        <button type="submit"
-                disabled
-                data-content-sources-upload-submit
-                data-testid="content-sources-upload"
-                class="{% studio_action_class 'secondary' %} disabled:opacity-50 disabled:cursor-not-allowed">
-          Upload content sources
-        </button>
-      </form>
+  <div class="flex flex-col items-stretch sm:items-end gap-3 shrink-0">
+    {# Primary actions: routine sync management. #}
+    <div class="flex flex-wrap items-center gap-3 sm:justify-end">
       <a href="{% url 'studio_content_source_create' %}"
          class="{% studio_action_class 'secondary' %}">
         Add content source
@@ -72,10 +43,45 @@
         </button>
       </form>
     </div>
-    <p class="text-xs text-muted-foreground"
-       data-testid="content-sources-sensitivity-caption">
-      Includes webhook secrets — treat the file as sensitive.
-    </p>
+    {# Import/export tools — separate row so the action bar doesn't get crowded. #}
+    <div class="flex flex-col items-stretch sm:items-end gap-1">
+      <div class="flex flex-wrap items-center gap-3 sm:justify-end">
+        <a href="{% url 'studio_content_sources_export' %}"
+           class="{% studio_action_class 'secondary' %}"
+           data-testid="content-sources-download"
+           title="Includes webhook secrets — treat the file as sensitive.">
+          Download content sources
+        </a>
+        <form method="post"
+              action="{% url 'studio_content_sources_import' %}"
+              enctype="multipart/form-data"
+              class="flex flex-wrap items-center gap-2"
+              id="content-sources-import-form">
+          {% csrf_token %}
+          <label class="{% studio_action_class 'secondary' %} cursor-pointer">
+            <span>Choose file</span>
+            <input type="file"
+                   name="content_sources_file"
+                   accept="application/json,.json"
+                   class="sr-only"
+                   required
+                   onchange="this.form.querySelector('[data-content-sources-upload-filename]').textContent = this.files[0] ? this.files[0].name : 'No file chosen'; this.form.querySelector('[data-content-sources-upload-submit]').disabled = !this.files[0];">
+          </label>
+          <span class="text-xs text-muted-foreground" data-content-sources-upload-filename>No file chosen</span>
+          <button type="submit"
+                  disabled
+                  data-content-sources-upload-submit
+                  data-testid="content-sources-upload"
+                  class="{% studio_action_class 'secondary' %} disabled:opacity-50 disabled:cursor-not-allowed">
+            Upload content sources
+          </button>
+        </form>
+      </div>
+      <p class="text-xs text-muted-foreground"
+         data-testid="content-sources-sensitivity-caption">
+        Includes webhook secrets — treat the file as sensitive.
+      </p>
+    </div>
   </div>
 </div>
 

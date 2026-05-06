@@ -131,6 +131,40 @@ class InterviewNoteDetailTest(InterviewNotesTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["visibility"], "internal")
 
+    def test_member_notes_detail_alias_returns_same_payload(self):
+        response = self.client.get(
+            f"/api/member-notes/{self.external_note.id}",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], self.external_note.id)
+
+    def test_member_notes_detail_alias_patch_and_delete(self):
+        note = InterviewNote.objects.create(
+            plan=None,
+            member=self.member,
+            visibility="external",
+            kind="general",
+            body="before",
+            created_by=self.staff,
+        )
+        response = self.client.patch(
+            f"/api/member-notes/{note.id}",
+            data=json.dumps({"body": "after"}),
+            content_type="application/json",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        note.refresh_from_db()
+        self.assertEqual(note.body, "after")
+
+        response = self.client.delete(
+            f"/api/member-notes/{note.id}",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(InterviewNote.objects.filter(pk=note.pk).exists())
+
 
 class InterviewNoteCreateTest(InterviewNotesTestBase):
     def _post(self, payload, *, token):
@@ -185,6 +219,23 @@ class InterviewNoteCreateTest(InterviewNotesTestBase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(InterviewNote.objects.count(), before + 1)
 
+    def test_member_notes_create_alias_creates_note(self):
+        before = InterviewNote.objects.count()
+        response = self.client.post(
+            "/api/member-notes",
+            data=json.dumps({
+                "user_email": "member@test.com",
+                "visibility": "internal",
+                "kind": "intake",
+                "body": "alias note",
+            }),
+            content_type="application/json",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(InterviewNote.objects.count(), before + 1)
+        self.assertEqual(response.json()["body"], "alias note")
+
 
 class UserInterviewNotesInboxTest(InterviewNotesTestBase):
     @classmethod
@@ -198,7 +249,7 @@ class UserInterviewNotesInboxTest(InterviewNotesTestBase):
             created_by=cls.staff,
         )
 
-    def test_staff_user_inbox_returns_unattached_notes(self):
+    def test_staff_user_notes_returns_all_member_notes(self):
         response = self.client.get(
             "/api/users/member@test.com/interview-notes",
             **self._auth(self.staff_token),
@@ -206,13 +257,59 @@ class UserInterviewNotesInboxTest(InterviewNotesTestBase):
         self.assertEqual(response.status_code, 200)
         ids = {n["id"] for n in response.json()["interview_notes"]}
         self.assertIn(self.inbox_note.id, ids)
-        # The plan-attached internal note should NOT appear -- inbox is
-        # ``plan IS NULL``.
-        self.assertNotIn(self.internal_note.id, ids)
+        self.assertIn(self.internal_note.id, ids)
+        self.assertIn(self.external_note.id, ids)
+
+    def test_staff_user_notes_plan_null_preserves_inbox_filter(self):
+        response = self.client.get(
+            "/api/users/member@test.com/interview-notes?plan=null",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {n["id"] for n in response.json()["interview_notes"]}
+        self.assertEqual(ids, {self.inbox_note.id})
+
+    def test_staff_user_notes_plan_id_filters_to_that_plan(self):
+        other_sprint = Sprint.objects.create(
+            name="other",
+            slug="other",
+            start_date=datetime.date(2026, 6, 1),
+        )
+        other_plan = Plan.objects.create(
+            member=self.member,
+            sprint=other_sprint,
+        )
+        other_note = InterviewNote.objects.create(
+            plan=other_plan,
+            member=self.member,
+            visibility="internal",
+            kind="meeting",
+            body="other plan note",
+            created_by=self.staff,
+        )
+        response = self.client.get(
+            f"/api/users/member@test.com/interview-notes?plan={other_plan.pk}",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {n["id"] for n in response.json()["interview_notes"]}
+        self.assertEqual(ids, {other_note.id})
+
+    def test_user_member_notes_alias_matches_legacy_payload(self):
+        legacy = self.client.get(
+            "/api/users/member@test.com/interview-notes",
+            **self._auth(self.staff_token),
+        )
+        alias = self.client.get(
+            "/api/users/member@test.com/notes",
+            **self._auth(self.staff_token),
+        )
+        self.assertEqual(alias.status_code, 200)
+        self.assertEqual(alias.json(), legacy.json())
 
     def test_non_staff_inbox_other_email_returns_403(self):
         response = self.client.get(
-            "/api/users/other@test.com/interview-notes",
+            "/api/users/other@test.com/notes",
             **self._auth(self.member_token),
         )
         self.assertEqual(response.status_code, 403)
@@ -220,8 +317,7 @@ class UserInterviewNotesInboxTest(InterviewNotesTestBase):
             response.json()["code"], "forbidden_other_user_plan",
         )
 
-    def test_non_staff_inbox_own_email_returns_filtered_to_external(self):
-        # Add an external inbox note for the member.
+    def test_non_staff_own_email_returns_filtered_to_external(self):
         external_inbox = InterviewNote.objects.create(
             plan=None, member=self.member,
             visibility="external", kind="general",
@@ -229,14 +325,27 @@ class UserInterviewNotesInboxTest(InterviewNotesTestBase):
             created_by=self.staff,
         )
         response = self.client.get(
-            "/api/users/member@test.com/interview-notes",
+            "/api/users/member@test.com/notes",
             **self._auth(self.member_token),
         )
         self.assertEqual(response.status_code, 200)
         ids = {n["id"] for n in response.json()["interview_notes"]}
         self.assertIn(external_inbox.id, ids)
-        # Internal inbox note must NOT leak.
+        self.assertIn(self.external_note.id, ids)
         self.assertNotIn(self.inbox_note.id, ids)
+        self.assertNotIn(self.internal_note.id, ids)
+
+    def test_non_staff_own_email_plan_null_returns_only_unattached_external(self):
+        response = self.client.get(
+            "/api/users/member@test.com/notes?plan=null",
+            **self._auth(self.member_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["interview_notes"], [])
+
+    def test_notes_alias_without_authorization_returns_401(self):
+        response = self.client.get("/api/users/member@test.com/notes")
+        self.assertEqual(response.status_code, 401)
 
 
 class VisibilityGateInQuerysetTest(TestCase):

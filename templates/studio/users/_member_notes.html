@@ -1,0 +1,74 @@
+<section id="member-notes" class="mb-8">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold text-foreground">Member notes</h2>
+    <a href="{% if current_plan %}{% url 'studio_member_note_create' user_id=detail_user.pk %}?plan_id={{ current_plan.pk }}{% else %}{% url 'studio_member_note_create' user_id=detail_user.pk %}{% endif %}"
+       data-testid="member-notes-add"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Add member note
+    </a>
+  </div>
+
+  {% if not internal_notes and not external_notes %}
+  <div class="bg-card border border-border rounded-lg p-6 mb-6">
+    <p class="text-sm text-muted-foreground">No member notes yet. Add one to capture intake answers, persona observations, or staff comments.</p>
+  </div>
+  {% endif %}
+
+  <section data-testid="internal-notes" class="bg-card border border-border rounded-lg p-6 mb-6">
+    <h3 data-testid="internal-notes-heading" class="text-md font-semibold text-foreground mb-3">Internal notes (staff only)</h3>
+    {% if internal_notes %}
+    <ul class="space-y-3">
+      {% for note in internal_notes %}
+      <li class="border border-border rounded-lg p-3">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between text-xs text-muted-foreground mb-2">
+          <div>
+            <span>{{ note.get_kind_display }} · {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} · {{ note.created_by.email }}{% endif %}</span>
+            {% include "studio/users/_member_note_plan_badge.html" %}
+          </div>
+          <span class="space-x-2 whitespace-nowrap">
+            <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
+            <form method="post" action="{% url 'studio_member_note_delete' user_id=detail_user.pk note_id=note.pk %}" class="inline"
+                  onsubmit="return confirm('Delete this internal note?');">
+              {% csrf_token %}
+              <button type="submit" class="text-destructive hover:underline">Delete</button>
+            </form>
+          </span>
+        </div>
+        <p class="text-sm text-foreground whitespace-pre-line">{{ note.body }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-muted-foreground">No internal notes yet.</p>
+    {% endif %}
+  </section>
+
+  <section data-testid="external-notes" class="bg-card border border-border rounded-lg p-6 mb-6">
+    <h3 data-testid="external-notes-heading" class="text-md font-semibold text-foreground mb-3">External notes (shareable with member)</h3>
+    {% if external_notes %}
+    <ul class="space-y-3">
+      {% for note in external_notes %}
+      <li class="border border-border rounded-lg p-3">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between text-xs text-muted-foreground mb-2">
+          <div>
+            <span>{{ note.get_kind_display }} · {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} · {{ note.created_by.email }}{% endif %}</span>
+            {% include "studio/users/_member_note_plan_badge.html" %}
+          </div>
+          <span class="space-x-2 whitespace-nowrap">
+            <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
+            <form method="post" action="{% url 'studio_member_note_delete' user_id=detail_user.pk note_id=note.pk %}" class="inline"
+                  onsubmit="return confirm('Delete this external note?');">
+              {% csrf_token %}
+              <button type="submit" class="text-destructive hover:underline">Delete</button>
+            </form>
+          </span>
+        </div>
+        <p class="text-sm text-foreground whitespace-pre-line">{{ note.body }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-muted-foreground">No external notes yet.</p>
+    {% endif %}
+  </section>
+</section>

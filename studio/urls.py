@@ -56,6 +56,11 @@ from studio.views.enrollments_redirects import (
 )
 from studio.views.events import event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
+from studio.views.member_notes import (
+    member_note_create,
+    member_note_delete,
+    member_note_edit,
+)
 from studio.views.notifications import (
     article_announce_slack,
     article_notify,
@@ -358,6 +363,21 @@ urlpatterns = [
     # ``created/``, ``export``, and ``tier-override/`` prefixes are
     # registered above so the ``<int:user_id>`` route does not swallow them.
     path('users/<int:user_id>/', user_detail, name='studio_user_detail'),
+    path(
+        'users/<int:user_id>/notes/new',
+        member_note_create,
+        name='studio_member_note_create',
+    ),
+    path(
+        'users/<int:user_id>/notes/<int:note_id>/edit',
+        member_note_edit,
+        name='studio_member_note_edit',
+    ),
+    path(
+        'users/<int:user_id>/notes/<int:note_id>/delete',
+        member_note_delete,
+        name='studio_member_note_delete',
+    ),
     path('users/<int:user_id>/tags/add', user_tag_add, name='studio_user_tag_add'),
     path('users/<int:user_id>/tags/remove', user_tag_remove, name='studio_user_tag_remove'),
 

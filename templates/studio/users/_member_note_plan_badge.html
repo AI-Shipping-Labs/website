@@ -1,0 +1,13 @@
+{% if note.plan_id %}
+  {% if current_plan %}
+    {% if note.plan_id == current_plan.pk %}
+    <span class="inline-flex items-center rounded-full bg-secondary text-foreground px-2 py-0.5 ml-2">This sprint</span>
+    {% else %}
+    <a href="{% url 'studio_plan_detail' plan_id=note.plan_id %}"
+       class="inline-flex items-center rounded-full bg-secondary text-accent px-2 py-0.5 ml-2 hover:underline">{{ note.plan.sprint.name }}</a>
+    {% endif %}
+  {% else %}
+  <a href="{% url 'studio_plan_detail' plan_id=note.plan_id %}"
+     class="inline-flex items-center rounded-full bg-secondary text-accent px-2 py-0.5 ml-2 hover:underline">From sprint: {{ note.plan.sprint.name }}</a>
+  {% endif %}
+{% endif %}

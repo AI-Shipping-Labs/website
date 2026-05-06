@@ -217,14 +217,41 @@ urlpatterns = [
         name="api_user_interview_notes",
     ),
     path(
+        "users/<path:email>/notes",
+        user_interview_notes,
+        name="api_user_member_notes",
+    ),
+    path(
+        "users/<path:email>/notes/",
+        user_interview_notes,
+    ),
+    path(
         "interview-notes",
         interview_notes_create,
         name="api_interview_notes_create",
     ),
     path(
+        "member-notes",
+        interview_notes_create,
+        name="api_member_notes_create",
+    ),
+    path(
+        "member-notes/",
+        interview_notes_create,
+    ),
+    path(
         "interview-notes/<int:note_id>",
         interview_note_detail,
         name="api_interview_note_detail",
+    ),
+    path(
+        "member-notes/<int:note_id>",
+        interview_note_detail,
+        name="api_member_note_detail",
+    ),
+    path(
+        "member-notes/<int:note_id>/",
+        interview_note_detail,
     ),
     # ---- SES bounce / complaint webhook (issue #453) ------------------
     # SNS POSTs notifications here. Auth is the SNS signature, not a

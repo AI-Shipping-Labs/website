@@ -9,7 +9,7 @@ scenarios are deliberately narrow:
    the new "Members" section wiring works in a real browser and that
    navigating between the two list pages plus a successful create cycle
    actually lands on the right detail page.
-2. Staff captures an internal interview note and then an external one,
+2. Staff captures an internal member note and then an external one,
    then confirms the page renders them in their separate visibility
    sections (the security-critical UI separation tested live).
 3. Non-staff cannot reach the studio plans / sprints pages.
@@ -131,7 +131,7 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffCapturesInterviewNotes:
-    """Add internal then external notes; confirm UI separation."""
+    """Add internal then external member notes; confirm UI separation."""
 
     def test_internal_then_external_note_render_in_separate_sections(
         self, django_server, browser,
@@ -164,10 +164,11 @@ class TestStaffCapturesInterviewNotes:
             wait_until="domcontentloaded",
         )
 
-        # Click "Add interview note".
-        page.locator('a[href="/studio/plans/{}/notes/new"]'.format(plan.pk)).click()
+        # Click "Add member note"; the plan pre-fills sprint context on
+        # the member-scoped form.
+        page.get_by_test_id("member-notes-add").click()
         page.wait_for_url(
-            f"{django_server}/studio/plans/{plan.pk}/notes/new",
+            f"{django_server}/studio/users/{member.pk}/notes/new?plan_id={plan.pk}",
         )
 
         # The visibility selector defaults to internal. The select's
@@ -181,7 +182,7 @@ class TestStaffCapturesInterviewNotes:
             "Member is changing jobs in 6 weeks - keep plan light",
         )
         page.locator('button[type="submit"]').click()
-        page.wait_for_url(f"{django_server}/studio/plans/{plan.pk}/")
+        page.wait_for_url(f"{django_server}/studio/users/{member.pk}/#member-notes")
 
         # Internal section now has the note; external is still empty.
         page.locator(
@@ -193,16 +194,17 @@ class TestStaffCapturesInterviewNotes:
         ).wait_for(state="visible")
 
         # Add an external note.
-        page.locator('a[href="/studio/plans/{}/notes/new"]'.format(plan.pk)).click()
+        page.get_by_test_id("member-notes-add").click()
         page.wait_for_url(
-            f"{django_server}/studio/plans/{plan.pk}/notes/new",
+            f"{django_server}/studio/users/{member.pk}/notes/new",
         )
         page.locator('select[name="visibility"]').select_option("external")
+        page.locator('select[name="plan_id"]').select_option(str(plan.pk))
         page.locator('textarea[name="body"]').fill(
             "Aim for one shipped prototype by week 3",
         )
         page.locator('button[type="submit"]').click()
-        page.wait_for_url(f"{django_server}/studio/plans/{plan.pk}/")
+        page.wait_for_url(f"{django_server}/studio/users/{member.pk}/#member-notes")
 
         # External now has the new note; internal still has the
         # original. The two sections render independently.

@@ -283,10 +283,12 @@ class PlanDetailRenderTest(TestCase):
         self.assertContains(response, 'INTERNAL_BODY')
         self.assertContains(response, 'EXTERNAL_BODY')
 
-        # Regression: a multi-line {# ... #} above the internal block
-        # used to leak as visible body text because Django's {# #}
-        # comments do not span lines. Guard against any such leak.
-        self.assertNotContains(response, '{# Internal')
+        # Regression: multi-line {# ... #} comments render their middle
+        # lines as body text. Guard against Django comment markers and
+        # the previously leaked prose on the plan detail page.
+        self.assertNotContains(response, '{#')
+        self.assertNotContains(response, '#}')
+        self.assertNotContains(response, 'Internal block:')
         self.assertNotContains(response, 'staff only" so a glance')
 
         # The view passes scoped querysets to the template; verify they
@@ -361,7 +363,7 @@ class InterviewNoteCreateTest(TestCase):
     def test_interview_note_create_defaults_to_internal(self):
         # GET: visibility selector pre-selects ``internal``.
         response = self.client.get(
-            f'/studio/plans/{self.plan.pk}/notes/new',
+            f'/studio/users/{self.member.pk}/notes/new',
         )
         self.assertEqual(response.status_code, 200)
         # Form context drives the selected option; assert on context to
@@ -371,22 +373,24 @@ class InterviewNoteCreateTest(TestCase):
         # POST without specifying ``visibility`` (e.g. JS-disabled
         # client) creates a row with internal visibility.
         response = self.client.post(
-            f'/studio/plans/{self.plan.pk}/notes/new',
+            f'/studio/users/{self.member.pk}/notes/new',
             {
-                'kind': 'general',
+                'kind': 'intake',
                 'body': 'note body',
             },
         )
         self.assertEqual(response.status_code, 302)
-        note = InterviewNote.objects.filter(plan=self.plan).get()
+        note = InterviewNote.objects.filter(member=self.member).get()
         self.assertEqual(note.visibility, 'internal')
+        self.assertIsNone(note.plan)
 
     def test_interview_note_create_external_creates_external_row(self):
         response = self.client.post(
-            f'/studio/plans/{self.plan.pk}/notes/new',
+            f'/studio/users/{self.member.pk}/notes/new',
             {
                 'kind': 'general',
                 'visibility': 'external',
+                'plan_id': str(self.plan.pk),
                 'body': 'shareable note',
             },
         )

@@ -46,6 +46,7 @@ from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
 from integrations.config import get_config
+from plans.models import InterviewNote
 from studio.decorators import staff_required, superuser_required
 
 User = get_user_model()
@@ -649,7 +650,7 @@ def _active_override_for_user(user):
 
 @staff_required
 def user_detail(request, user_id):
-    """Staff-only user detail page with the contact-tags editor.
+    """Staff-only user detail page with contact tags and member notes.
 
     Reads from the same effective-tier helpers as the list view so the
     displayed tier matches what operators see in the table (including any
@@ -657,6 +658,12 @@ def user_detail(request, user_id):
     """
     user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
     override = _active_override_for_user(user)
+    note_queryset = (
+        InterviewNote.objects
+        .filter(member=user)
+        .select_related('plan__sprint', 'created_by')
+        .order_by('-created_at')
+    )
 
     context = {
         'detail_user': user,
@@ -666,6 +673,9 @@ def user_detail(request, user_id):
         'tags': list(user.tags or []),
         'known_tags': _all_known_contact_tags(),
         'status': _user_status(user),
+        'internal_notes': note_queryset.internal(),
+        'external_notes': note_queryset.external(),
+        'current_plan': None,
     }
     return render(request, 'studio/users/detail.html', context)
 

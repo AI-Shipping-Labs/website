@@ -12,10 +12,13 @@ Endpoints:
 
 - ``GET /api/plans/<id>/interview-notes/``
 - ``GET /api/users/<email>/interview-notes/``
+- ``GET /api/users/<email>/notes/``
 - ``GET /api/interview-notes/<id>/``
 - ``POST /api/interview-notes/``
+- ``POST /api/member-notes/``
 - ``PATCH /api/interview-notes/<id>/``
 - ``DELETE /api/interview-notes/<id>/``
+- ``GET / PATCH / DELETE /api/member-notes/<id>/``
 """
 
 from django.contrib.auth import get_user_model
@@ -90,9 +93,10 @@ def plan_interview_notes(request, plan_id):
 def user_interview_notes(request, email):
     """``GET /api/users/<email>/interview-notes/``.
 
-    Staff: every note for this user (including the ``plan IS NULL``
-    inbox). Non-staff: only when ``email`` matches their own and the
-    result is filtered to ``external``.
+    Staff: every note for this user. Non-staff: only when ``email`` matches
+    their own and the result is filtered to ``external``. ``?plan=null``
+    preserves the old inbox-only behaviour; ``?plan=<id>`` narrows to one
+    plan.
     """
     user = User.objects.filter(email__iexact=email).first()
     if user is None:
@@ -114,9 +118,20 @@ def user_interview_notes(request, email):
                 status=403,
             )
 
-    qs = visible_interview_notes_for(request.user).filter(
-        member=user, plan__isnull=True,
-    ).select_related("member", "created_by").order_by("-created_at")
+    qs = visible_interview_notes_for(request.user).filter(member=user)
+    plan_filter = request.GET.get("plan")
+    if plan_filter == "null":
+        qs = qs.filter(plan__isnull=True)
+    elif plan_filter is not None:
+        if not plan_filter.isdigit():
+            return error_response(
+                "plan must be a plan id or null",
+                "validation_error",
+                status=422,
+                details={"plan": "Expected integer id or null"},
+            )
+        qs = qs.filter(plan_id=int(plan_filter))
+    qs = qs.select_related("member", "created_by").order_by("-created_at")
 
     return JsonResponse(
         {"interview_notes": [serialize_interview_note(n) for n in qs]},

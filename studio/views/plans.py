@@ -17,21 +17,20 @@ in the member view) is the only difference.
 Interview-note visibility is enforced at the queryset layer
 (:meth:`plans.models.InterviewNoteQuerySet.visible_to`). The plan detail
 page splits the page into an "Internal notes (staff only)" section and an
-"External notes (shareable with member)" section, each scoped to that
-plan, so a staff member glancing at the page understands the visibility
-before reading.
+"External notes (shareable with member)" section scoped to the member, so
+a staff member glancing at the page understands the visibility before
+reading.
 """
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_POST
+from django.urls import reverse
 
 from plans.models import (
-    KIND_CHOICES,
     PLAN_STATUS_CHOICES,
-    VISIBILITY_CHOICES,
     InterviewNote,
     Plan,
     Sprint,
@@ -56,18 +55,10 @@ def _normalize_plan_status(raw):
     return 'draft'
 
 
-def _normalize_visibility(raw):
-    valid = {choice[0] for choice in VISIBILITY_CHOICES}
-    if raw in valid:
-        return raw
-    return 'internal'
+class HttpResponseTemporaryRedirect(HttpResponseRedirect):
+    """RFC 7231 section 6.4.7: 307 preserves method and body."""
 
-
-def _normalize_kind(raw):
-    valid = {choice[0] for choice in KIND_CHOICES}
-    if raw in valid:
-        return raw
-    return 'general'
+    status_code = 307
 
 
 @staff_required
@@ -187,9 +178,9 @@ def plan_create(request):
 
 @staff_required
 def plan_detail(request, plan_id):
-    """Read-mostly detail with internal/external notes split.
+    """Read-mostly detail with member-level internal/external notes split.
 
-    Both note sections are scoped to the plan. The "Internal" heading
+    Both note sections are scoped to the member. The "Internal" heading
     contains the words "staff only" so the visibility is unmistakable.
     """
     plan = get_object_or_404(
@@ -205,24 +196,22 @@ def plan_detail(request, plan_id):
     deliverables = plan.deliverables.order_by('position', 'id')
     next_steps = plan.next_steps.order_by('position', 'id')
 
-    # Visibility-aware queryset, scoped to this plan. Staff see both
+    # Visibility-aware queryset, scoped to this member. Staff see both
     # blocks, but the template renders them as separate sections so
     # operators can tell at a glance which notes are shareable.
-    internal_notes = (
+    note_queryset = (
         InterviewNote.objects
-        .internal()
-        .filter(plan=plan)
+        .filter(member=plan.member)
+        .select_related('plan__sprint', 'created_by')
         .order_by('-created_at')
     )
-    external_notes = (
-        InterviewNote.objects
-        .external()
-        .filter(plan=plan)
-        .order_by('-created_at')
-    )
+    internal_notes = note_queryset.internal()
+    external_notes = note_queryset.external()
 
     return render(request, 'studio/plans/detail.html', {
         'plan': plan,
+        'detail_user': plan.member,
+        'current_plan': plan,
         'weeks': weeks,
         'resources': resources,
         'deliverables': deliverables,
@@ -271,106 +260,32 @@ def plan_edit(request, plan_id):
 
 @staff_required
 def interview_note_create(request, plan_id):
-    """Form: pick kind, visibility, write body. Default visibility=internal."""
-    plan = get_object_or_404(Plan, pk=plan_id)
-
-    if request.method != 'POST':
-        return render(request, 'studio/plans/note_form.html', {
-            'plan': plan,
-            'note': None,
-            'form_action': 'create',
-            'form_data': {
-                'kind': 'general',
-                # Defaults to internal -- safer fallback for staff capture.
-                'visibility': 'internal',
-                'body': '',
-            },
-            'kind_choices': KIND_CHOICES,
-            'visibility_choices': VISIBILITY_CHOICES,
-            'error': '',
-        })
-
-    form_data = {
-        'kind': _normalize_kind(request.POST.get('kind', '')),
-        'visibility': _normalize_visibility(request.POST.get('visibility', '')),
-        'body': (request.POST.get('body') or '').strip(),
-    }
-
-    if not form_data['body']:
-        return render(request, 'studio/plans/note_form.html', {
-            'plan': plan,
-            'note': None,
-            'form_action': 'create',
-            'form_data': form_data,
-            'kind_choices': KIND_CHOICES,
-            'visibility_choices': VISIBILITY_CHOICES,
-            'error': 'Note body is required.',
-        }, status=400)
-
-    InterviewNote.objects.create(
-        plan=plan,
-        member=plan.member,
-        kind=form_data['kind'],
-        visibility=form_data['visibility'],
-        body=form_data['body'],
-        created_by=request.user if request.user.is_authenticated else None,
+    """Legacy plan-scoped note form -> member-scoped note form."""
+    plan = get_object_or_404(Plan.objects.select_related('member'), pk=plan_id)
+    target = (
+        reverse('studio_member_note_create', kwargs={'user_id': plan.member_id})
+        + f'?plan_id={plan.pk}'
     )
-    messages.success(request, 'Interview note added.')
-    return redirect('studio_plan_detail', plan_id=plan.pk)
+    return HttpResponsePermanentRedirect(target)
 
 
 @staff_required
 def interview_note_edit(request, plan_id, note_id):
-    """Edit existing note."""
-    plan = get_object_or_404(Plan, pk=plan_id)
-    note = get_object_or_404(InterviewNote, pk=note_id, plan=plan)
-
-    if request.method != 'POST':
-        return render(request, 'studio/plans/note_form.html', {
-            'plan': plan,
-            'note': note,
-            'form_action': 'edit',
-            'form_data': {
-                'kind': note.kind,
-                'visibility': note.visibility,
-                'body': note.body,
-            },
-            'kind_choices': KIND_CHOICES,
-            'visibility_choices': VISIBILITY_CHOICES,
-            'error': '',
-        })
-
-    form_data = {
-        'kind': _normalize_kind(request.POST.get('kind', '')),
-        'visibility': _normalize_visibility(request.POST.get('visibility', '')),
-        'body': (request.POST.get('body') or '').strip(),
-    }
-
-    if not form_data['body']:
-        return render(request, 'studio/plans/note_form.html', {
-            'plan': plan,
-            'note': note,
-            'form_action': 'edit',
-            'form_data': form_data,
-            'kind_choices': KIND_CHOICES,
-            'visibility_choices': VISIBILITY_CHOICES,
-            'error': 'Note body is required.',
-        }, status=400)
-
-    note.kind = form_data['kind']
-    note.visibility = form_data['visibility']
-    note.body = form_data['body']
-    note.save()
-    messages.success(request, 'Interview note updated.')
-    return redirect('studio_plan_detail', plan_id=plan.pk)
+    """Legacy plan-scoped note edit -> member-scoped note edit."""
+    note = get_object_or_404(InterviewNote, pk=note_id)
+    target = reverse(
+        'studio_member_note_edit',
+        kwargs={'user_id': note.member_id, 'note_id': note.pk},
+    )
+    return HttpResponsePermanentRedirect(target)
 
 
 @staff_required
-@require_POST
 def interview_note_delete(request, plan_id, note_id):
-    """POST-only delete with confirmation (confirmation handled in template)."""
-    plan = get_object_or_404(Plan, pk=plan_id)
-    note = get_object_or_404(InterviewNote, pk=note_id, plan=plan)
-    note.delete()
-    messages.success(request, 'Interview note deleted.')
-    return redirect('studio_plan_detail', plan_id=plan.pk)
+    """Legacy plan-scoped note delete -> member-scoped note delete."""
+    note = get_object_or_404(InterviewNote, pk=note_id)
+    target = reverse(
+        'studio_member_note_delete',
+        kwargs={'user_id': note.member_id, 'note_id': note.pk},
+    )
+    return HttpResponseTemporaryRedirect(target)

@@ -1,9 +1,11 @@
-"""Studio views for managing personal sprint plans (issue #432).
+"""Studio views for managing personal sprint plans (issues #432, #434).
 
-This issue intentionally does NOT scaffold separate CRUD pages for the
-``Week``, ``Checkpoint``, ``Resource``, ``Deliverable``, or ``NextStep``
-child rows. Those rows are managed by the drag-and-drop editor in #434.
-Plan detail in this issue renders them read-only.
+The form-based CRUD pages from #432 (list / new / detail / note) live
+unchanged here. ``plan_edit`` was replaced in #434 with a thin
+client-side shell that renders the drag-and-drop authoring UI; all
+writes from that page go through the JSON API in #433. The view is
+intentionally GET-only -- there is no ``request.POST`` handling, no
+``Save`` button, and no parallel reorder endpoint inside Studio.
 
 Interview-note visibility is enforced at the queryset layer
 (:meth:`plans.models.InterviewNoteQuerySet.visible_to`). The plan detail
@@ -13,14 +15,16 @@ plan, so a staff member glancing at the page understands the visibility
 before reading.
 """
 
+import json
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.models import Token
 from plans.models import (
     KIND_CHOICES,
     PLAN_STATUS_CHOICES,
@@ -30,8 +34,31 @@ from plans.models import (
     Sprint,
 )
 from studio.decorators import staff_required
+from studio.services.plan_editor import serialize_plan_detail
 
 User = get_user_model()
+
+# Stable name attached to the API token issued to a staff user when they
+# open the drag-and-drop plan editor. Re-using the same name across
+# sessions means we get-or-create at most one token per staff user for
+# this UI -- never accumulate one per page load.
+EDITOR_TOKEN_NAME = 'studio-plan-editor'
+
+
+def _get_or_create_editor_token(user):
+    """Return a Token bound to ``user`` for the drag-drop editor.
+
+    Tokens minted by the Studio token UI (#431) live under operator-
+    chosen names. The editor mints its own token under a reserved name
+    so revoking it from the API-tokens page does not also kill ad-hoc
+    operator tokens. ``Token.save()`` populates ``key`` on first save
+    when blank, so a single ``get_or_create`` is enough.
+    """
+    token, _ = Token.objects.get_or_create(
+        user=user,
+        name=EDITOR_TOKEN_NAME,
+    )
+    return token
 
 
 def _normalize_plan_status(raw):
@@ -219,56 +246,73 @@ def plan_detail(request, plan_id):
 
 @staff_required
 def plan_edit(request, plan_id):
-    """Edit form for the Summary fields, focus, accountability, status,
-    persona, and the ``shared_at`` toggle.
+    """Drag-and-drop plan editor (issue #434).
+
+    Thin server-rendered shell. The page bootstraps the plan as JSON
+    matching the ``GET /api/plans/<id>/`` detail shape from #433 so the
+    editor hydrates without a second round trip; every subsequent write
+    (text edits, drags, toggles, add/delete) goes through the JSON API.
+    There is no ``request.POST`` handling here -- if you find yourself
+    wanting to add one, route through the API instead.
     """
-    plan = get_object_or_404(Plan, pk=plan_id)
+    plan = get_object_or_404(
+        Plan.objects
+        .select_related('member', 'sprint')
+        .prefetch_related(
+            'weeks__checkpoints',
+            'resources',
+            'deliverables',
+            'next_steps',
+            'interview_notes',
+        ),
+        pk=plan_id,
+    )
 
-    if request.method != 'POST':
-        return render(request, 'studio/plans/edit.html', {
-            'plan': plan,
-            'plan_status_choices': PLAN_STATUS_CHOICES,
-            'form_data': {
-                'summary_current_situation': plan.summary_current_situation,
-                'summary_goal': plan.summary_goal,
-                'summary_main_gap': plan.summary_main_gap,
-                'summary_weekly_hours': plan.summary_weekly_hours,
-                'summary_why_this_plan': plan.summary_why_this_plan,
-                'focus_main': plan.focus_main,
-                'focus_supporting': '\n'.join(plan.focus_supporting or []),
-                'accountability': plan.accountability,
-                'assigned_persona': plan.assigned_persona,
-                'status': plan.status,
-                'shared': bool(plan.shared_at),
-            },
-            'error': '',
-        })
+    plan_payload = serialize_plan_detail(plan)
+    token = _get_or_create_editor_token(request.user)
 
-    plan.summary_current_situation = request.POST.get('summary_current_situation', '').strip()
-    plan.summary_goal = request.POST.get('summary_goal', '').strip()
-    plan.summary_main_gap = request.POST.get('summary_main_gap', '').strip()
-    plan.summary_weekly_hours = request.POST.get('summary_weekly_hours', '').strip()
-    plan.summary_why_this_plan = request.POST.get('summary_why_this_plan', '').strip()
-    plan.focus_main = request.POST.get('focus_main', '').strip()
-    raw_supporting = request.POST.get('focus_supporting', '')
-    plan.focus_supporting = [
-        line.strip() for line in raw_supporting.splitlines() if line.strip()
+    # Internal/external interview notes are split into two lists in the
+    # bootstrap payload so the editor can render the two visibility tabs
+    # without additional filtering. The visibility filter MUST be
+    # applied here so a non-staff token used against the same shape
+    # could not see internal notes -- mirrors #433's queryset gate.
+    notes = list(plan.interview_notes.all().order_by('-created_at'))
+    internal_notes = [
+        _serialize_interview_note(n) for n in notes if n.visibility == 'internal'
     ]
-    plan.accountability = request.POST.get('accountability', '').strip()
-    plan.assigned_persona = request.POST.get('assigned_persona', '').strip()
-    plan.status = _normalize_plan_status(request.POST.get('status', ''))
+    external_notes = [
+        _serialize_interview_note(n) for n in notes if n.visibility == 'external'
+    ]
+    plan_payload['interview_notes'] = {
+        'internal': internal_notes,
+        'external': external_notes,
+    }
 
-    # ``shared_at`` is a real timestamp distinct from the ``shared``
-    # status. Only flip it when the operator toggles the checkbox.
-    is_shared = request.POST.get('shared') == 'on'
-    if is_shared and plan.shared_at is None:
-        plan.shared_at = timezone.now()
-    elif not is_shared and plan.shared_at is not None:
-        plan.shared_at = None
+    # Activity counts -- "X checkpoints across Y weeks" line below the grid.
+    weeks_count = len(plan_payload['weeks'])
+    checkpoints_count = sum(len(w['checkpoints']) for w in plan_payload['weeks'])
 
-    plan.save()
-    messages.success(request, 'Plan updated.')
-    return redirect('studio_plan_detail', plan_id=plan.pk)
+    return render(request, 'studio/plans/edit.html', {
+        'plan': plan,
+        'plan_json': json.dumps(plan_payload),
+        'api_token': token.key,
+        'api_base': '/api/',
+        'plan_status_choices': PLAN_STATUS_CHOICES,
+        'weeks_count': weeks_count,
+        'checkpoints_count': checkpoints_count,
+    })
+
+
+def _serialize_interview_note(note):
+    """Match the API note shape; used by the editor bootstrap payload."""
+    return {
+        'id': note.pk,
+        'visibility': note.visibility,
+        'kind': note.kind,
+        'body': note.body,
+        'created_at': note.created_at.isoformat() if note.created_at else None,
+        'updated_at': note.updated_at.isoformat() if note.updated_at else None,
+    }
 
 
 @staff_required

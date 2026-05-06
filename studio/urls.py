@@ -356,11 +356,16 @@ urlpatterns = [
     path('sprints/<int:sprint_id>/', sprint_detail, name='studio_sprint_detail'),
     path('sprints/<int:sprint_id>/edit', sprint_edit, name='studio_sprint_edit'),
 
-    # Plans (issue #432). Members section.
+    # Plans (issue #432, drag-drop editor #434). Members section.
+    # The ``/edit/`` route is the drag-drop authoring shell (#434); the
+    # trailing slash is part of the contract documented in that issue.
+    # Studio's other plan/sprint edit URLs do NOT have a trailing slash
+    # (they are still server-rendered POST forms); only this one is the
+    # thin client-side editor.
     path('plans/', plan_list, name='studio_plan_list'),
     path('plans/new', plan_create, name='studio_plan_create'),
     path('plans/<int:plan_id>/', plan_detail, name='studio_plan_detail'),
-    path('plans/<int:plan_id>/edit', plan_edit, name='studio_plan_edit'),
+    path('plans/<int:plan_id>/edit/', plan_edit, name='studio_plan_edit'),
     path(
         'plans/<int:plan_id>/notes/new',
         interview_note_create,

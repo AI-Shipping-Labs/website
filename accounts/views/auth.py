@@ -174,6 +174,31 @@ def _send_verification_email(user):
         return None
 
 
+def _render_verify_email_result(request, *, success, message, status=200):
+    if success:
+        cta_url = "/account/" if request.user.is_authenticated else "/accounts/login/"
+        cta_label = (
+            "Continue to Account"
+            if request.user.is_authenticated
+            else "Sign In"
+        )
+    else:
+        cta_url = "/accounts/login/"
+        cta_label = "Sign In"
+
+    return render(
+        request,
+        "email_app/verify_result.html",
+        {
+            "success": success,
+            "message": message,
+            "cta_url": cta_url,
+            "cta_label": cta_label,
+        },
+        status=status,
+    )
+
+
 def _probe_slack_membership_on_signup(user):
     """Synchronously probe Slack workspace membership during signup.
 
@@ -321,23 +346,48 @@ def verify_email_api(request):
     """
     token = request.GET.get("token", "")
     if not token:
-        return JsonResponse({"error": "Token is required"}, status=400)
+        return _render_verify_email_result(
+            request,
+            success=False,
+            message="This verification link is incomplete. Please sign in to request a new verification email.",
+            status=400,
+        )
 
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
-        return JsonResponse({"error": "Token has expired"}, status=400)
+        return _render_verify_email_result(
+            request,
+            success=False,
+            message="This verification link has expired. Please sign in to request a new verification email.",
+            status=400,
+        )
     except jwt.InvalidTokenError:
-        return JsonResponse({"error": "Invalid token"}, status=400)
+        return _render_verify_email_result(
+            request,
+            success=False,
+            message="This verification link is invalid. Please sign in to request a new verification email.",
+            status=400,
+        )
 
     if payload.get("action") != "verify_email":
-        return JsonResponse({"error": "Invalid token action"}, status=400)
+        return _render_verify_email_result(
+            request,
+            success=False,
+            message="This verification link is invalid. Please sign in to request a new verification email.",
+            status=400,
+        )
 
     user_id = payload.get("user_id")
     try:
         user = User.objects.get(pk=user_id)
     except User.DoesNotExist:
-        return JsonResponse({"error": "User not found"}, status=404)
+        return _render_verify_email_result(
+            request,
+            success=False,
+            message="We could not find an account for this verification link. Please sign in or create a new account.",
+            status=404,
+        )
 
     if not user.email_verified:
         user.email_verified = True
@@ -359,8 +409,10 @@ def verify_email_api(request):
     if redirect_to:
         return redirect(redirect_to)
 
-    return JsonResponse(
-        {"status": "ok", "message": "Email verified successfully."}
+    return _render_verify_email_result(
+        request,
+        success=True,
+        message="Your email address is verified. You can continue to your account.",
     )
 
 

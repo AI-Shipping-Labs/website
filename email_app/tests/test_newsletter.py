@@ -212,6 +212,25 @@ class SubscribeLeadMagnetTest(TestCase):
 class VerifyEmailAPITest(TestCase):
     """Test GET /api/verify-email?token= endpoint."""
 
+    def assert_html_result(self, response, *, heading, text=None):
+        self.assertTemplateUsed(response, "email_app/verify_result.html")
+        self.assertIn("text/html", response.headers["Content-Type"])
+        self.assertContains(response, heading, status_code=response.status_code)
+        if text:
+            self.assertContains(response, text, status_code=response.status_code)
+        self.assertNotContains(
+            response,
+            '{"status"',
+            status_code=response.status_code,
+            html=False,
+        )
+        self.assertNotContains(
+            response,
+            '{"error"',
+            status_code=response.status_code,
+            html=False,
+        )
+
     def _make_token(self, user_id, redirect_to=None, expired=False):
         """Helper to generate a test JWT token."""
         import datetime
@@ -238,6 +257,7 @@ class VerifyEmailAPITest(TestCase):
         token = self._make_token(user.pk)
         response = self.client.get(f"/api/verify-email?token={token}")
         self.assertEqual(response.status_code, 200)
+        self.assert_html_result(response, heading="Email Verified")
 
         user.refresh_from_db()
         self.assertTrue(user.email_verified)
@@ -250,6 +270,7 @@ class VerifyEmailAPITest(TestCase):
         token = self._make_token(user.pk)
         response = self.client.get(f"/api/verify-email?token={token}")
         self.assertEqual(response.status_code, 200)
+        self.assert_html_result(response, heading="Email Verified")
 
         user.refresh_from_db()
         self.assertTrue(user.email_verified)
@@ -259,14 +280,29 @@ class VerifyEmailAPITest(TestCase):
         token = self._make_token(user.pk, expired=True)
         response = self.client.get(f"/api/verify-email?token={token}")
         self.assertEqual(response.status_code, 400)
+        self.assert_html_result(
+            response,
+            heading="Verification Failed",
+            text="expired",
+        )
 
     def test_verify_email_invalid_token(self):
         response = self.client.get("/api/verify-email?token=invalid-token")
         self.assertEqual(response.status_code, 400)
+        self.assert_html_result(
+            response,
+            heading="Verification Failed",
+            text="invalid",
+        )
 
     def test_verify_email_missing_token(self):
         response = self.client.get("/api/verify-email")
         self.assertEqual(response.status_code, 400)
+        self.assert_html_result(
+            response,
+            heading="Verification Failed",
+            text="incomplete",
+        )
 
     def test_verify_email_wrong_action(self):
         import datetime
@@ -282,11 +318,21 @@ class VerifyEmailAPITest(TestCase):
         token = jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
         response = self.client.get(f"/api/verify-email?token={token}")
         self.assertEqual(response.status_code, 400)
+        self.assert_html_result(
+            response,
+            heading="Verification Failed",
+            text="invalid",
+        )
 
     def test_verify_email_user_not_found(self):
         token = self._make_token(99999)
         response = self.client.get(f"/api/verify-email?token={token}")
         self.assertEqual(response.status_code, 404)
+        self.assert_html_result(
+            response,
+            heading="Verification Failed",
+            text="could not find an account",
+        )
 
     def test_verify_email_with_redirect_to(self):
         """Lead magnet flow: verify email then redirect to download."""

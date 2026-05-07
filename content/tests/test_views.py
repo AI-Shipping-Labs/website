@@ -127,7 +127,8 @@ class ActivitiesViewTest(TestCase):
     def test_activities_contains_content(self):
         response = self.client.get('/activities')
         content = response.content.decode()
-        self.assertIn('Activities and access by tier', content)
+        self.assertIn('Participate in sprints, cohorts, workshops', content)
+        self.assertIn('Community Sprints', content)
         self.assertIn('Quick comparison', content)
 
 

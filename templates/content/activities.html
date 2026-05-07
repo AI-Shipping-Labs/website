@@ -1,29 +1,133 @@
 {% extends "base.html" %}
 
-{% block title %}Activities and Access by Tier | AI Shipping Labs{% endblock %}
-{% block meta_description %}Explore all activities and access levels by tier. Each tier gives you more structure, accountability, and support to ship your AI projects.{% endblock %}
+{% block title %}Activities and Community Sprints | AI Shipping Labs{% endblock %}
+{% block meta_description %}Join active community sprints, workshops, cohorts, and tier-based participation opportunities at AI Shipping Labs.{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
   {% include "includes/header.html" %}
 
-  <section class="border-t border-border bg-background py-16 sm:py-24 lg:py-32 pt-32">
+  <section class="border-t border-border bg-background pt-32 pb-16 sm:pb-20 lg:pb-24">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl text-center">
-        <p class="text-sm font-medium uppercase tracking-widest text-accent">What You Get</p>
-        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
-          Activities and access by tier
-        </h2>
+      <div class="max-w-3xl">
+        <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
+          <i data-lucide="calendar-check" class="h-4 w-4"></i>
+          Activities
+        </p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Participate in sprints, cohorts, workshops, and member support
+        </h1>
         <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
-          Each tier gives you more structure, accountability, and support to ship your AI projects.
-          From self-paced content to guided projects and peer collaboration. Filter by tier to see what's included.
+          Activities are the hands-on side of AI Shipping Labs: time-bound sprints, live sessions,
+          peer accountability, and tier-based ways to get your work shipped.
         </p>
       </div>
 
-      <!-- Tier Filter -->
+      <div class="mt-12 grid gap-4 md:grid-cols-3">
+        <a href="#community-sprints" class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+          <div class="flex items-center gap-3">
+            <i data-lucide="timer" class="h-5 w-5 text-accent"></i>
+            <h2 class="font-semibold text-foreground">Community Sprints</h2>
+          </div>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">Current cohort windows with dates, duration, and participation requirements.</p>
+        </a>
+        <a href="/events" class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+          <div class="flex items-center gap-3">
+            <i data-lucide="calendar-days" class="h-5 w-5 text-accent"></i>
+            <h2 class="font-semibold text-foreground">Events</h2>
+          </div>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">Upcoming live sessions and community moments.</p>
+        </a>
+        <a href="/workshops" class="rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+          <div class="flex items-center gap-3">
+            <i data-lucide="presentation" class="h-5 w-5 text-accent"></i>
+            <h2 class="font-semibold text-foreground">Workshops</h2>
+          </div>
+          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">Guided sessions and practical walkthroughs for builders.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section id="community-sprints" class="border-t border-border bg-secondary/20 py-16 sm:py-20" data-testid="activities-sprints-section">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="text-sm font-medium uppercase tracking-widest text-accent">Community Sprints</p>
+          <h2 class="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Active ways to join in</h2>
+        </div>
+        <a href="/resources" class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          Looking for reference material? Browse Resources
+        </a>
+      </div>
+
+      {% if activity_sprints %}
+      <div class="grid gap-5 lg:grid-cols-2">
+        {% for item in activity_sprints %}
+        <article class="rounded-lg border border-border bg-card p-5 sm:p-6" data-testid="activities-sprint-card">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center rounded-full border border-border px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="activities-sprint-status">
+                  {{ item.sprint.get_status_display }}
+                </span>
+                <span class="inline-flex items-center rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent" data-testid="activities-sprint-tier">
+                  {{ item.required_tier_name }} tier required
+                </span>
+              </div>
+              <h3 class="mt-4 text-xl font-semibold text-foreground" data-testid="activities-sprint-name">{{ item.sprint.name }}</h3>
+              <dl class="mt-4 grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+                <div>
+                  <dt class="font-medium text-foreground">Start date</dt>
+                  <dd data-testid="activities-sprint-start">{{ item.sprint.start_date|date:"F j, Y" }}</dd>
+                </div>
+                <div>
+                  <dt class="font-medium text-foreground">Duration</dt>
+                  <dd data-testid="activities-sprint-duration">{{ item.sprint.duration_weeks }} weeks</dd>
+                </div>
+              </dl>
+            </div>
+            <a href="{{ item.cta_url }}"
+               class="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+               data-testid="activities-sprint-cta">
+              {{ item.cta_label }}
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="rounded-lg border border-border bg-card p-8 text-center" data-testid="activities-sprints-empty">
+        <i data-lucide="timer-off" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+        <h3 class="mt-4 text-lg font-semibold text-foreground">No active community sprints right now</h3>
+        <p class="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          Check the events and workshops calendars for current live activity, or come back when the next sprint opens.
+        </p>
+        <div class="mt-5 flex flex-wrap justify-center gap-3">
+          <a href="/events" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">Events</a>
+          <a href="/workshops" class="inline-flex min-h-[44px] items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80">Workshops</a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="border-t border-border bg-background py-16 sm:py-20">
+    <div class="mx-auto max-w-7xl px-6 lg:px-8">
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Access by Tier</p>
+        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          Member activities and support
+        </h2>
+        <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
+          Filter by tier to see which recurring activities, support options, and accountability surfaces are included.
+        </p>
+      </div>
+
       <div class="mx-auto mt-10 flex flex-wrap items-center justify-center gap-3">
         <button type="button" onclick="filterActivities('all')" class="tier-filter-btn active rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground" data-tier="all">
-          All Activities
+          All
         </button>
         <button type="button" onclick="filterActivities('basic')" class="tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground" data-tier="basic">
           Basic
@@ -36,19 +140,17 @@
         </button>
       </div>
 
-      <!-- Activities Grid -->
       <div class="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2" id="activities-grid">
         {% for activity in activities %}
-        <div class="activity-card group rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50"
+        <div class="activity-card group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
              data-tiers="{{ activity.tiers|join:',' }}">
           <div class="flex items-start gap-4">
             <div class="shrink-0 rounded-lg bg-secondary p-3">
               <i data-lucide="{{ activity.icon }}" class="h-5 w-5 text-accent"></i>
             </div>
-            <div class="flex-1">
+            <div class="min-w-0 flex-1">
               <h3 class="font-semibold text-foreground">{{ activity.title }}</h3>
               <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ activity.description }}</p>
-              <!-- Tier badges -->
               <div class="mt-4 flex flex-wrap gap-2">
                 {% if 'basic' in activity.tiers %}
                 <span class="inline-flex items-center gap-1 rounded-full border border-transparent bg-muted-foreground/20 text-muted-foreground px-2.5 py-0.5 text-xs font-medium">
@@ -78,12 +180,10 @@
         {% endfor %}
       </div>
 
-      <!-- Quick comparison -->
       <div class="mx-auto mt-20 max-w-6xl">
         <h3 class="mb-8 text-center text-xl font-semibold text-foreground">Quick comparison</h3>
         <div class="grid gap-6 md:grid-cols-3">
-          <!-- Basic -->
-          <div class="rounded-xl border border-border bg-card p-6">
+          <div class="rounded-lg border border-border bg-card p-6">
             <div class="mb-4 flex items-center gap-3">
               <div class="rounded-full bg-muted-foreground/20 p-2">
                 <i data-lucide="book-open" class="h-4 w-4 text-muted-foreground"></i>
@@ -105,8 +205,8 @@
               <p class="text-xs text-muted-foreground">{{ basic_count }} activities</p>
             </div>
           </div>
-          <!-- Main -->
-          <div class="rounded-xl border border-accent bg-card p-6">
+
+          <div class="rounded-lg border border-accent bg-card p-6">
             <div class="mb-4 flex items-center gap-3">
               <div class="rounded-full bg-accent p-2">
                 <i data-lucide="users" class="h-4 w-4 text-accent-foreground"></i>
@@ -128,8 +228,8 @@
               <p class="text-xs text-muted-foreground">{{ main_count }} activities</p>
             </div>
           </div>
-          <!-- Premium -->
-          <div class="rounded-xl border border-foreground bg-card p-6">
+
+          <div class="rounded-lg border border-foreground bg-card p-6">
             <div class="mb-4 flex items-center gap-3">
               <div class="rounded-full bg-foreground p-2">
                 <i data-lucide="star" class="h-4 w-4 text-background"></i>
@@ -161,7 +261,6 @@
 
 <script>
 function filterActivities(tier) {
-  // Update buttons
   document.querySelectorAll('.tier-filter-btn').forEach(function(btn) {
     if (btn.dataset.tier === tier) {
       btn.className = 'tier-filter-btn active rounded-full px-4 py-2 text-sm font-medium bg-accent text-accent-foreground';
@@ -169,7 +268,6 @@ function filterActivities(tier) {
       btn.className = 'tier-filter-btn rounded-full px-4 py-2 text-sm font-medium bg-secondary text-muted-foreground hover:text-foreground';
     }
   });
-  // Filter cards
   document.querySelectorAll('.activity-card').forEach(function(card) {
     if (tier === 'all' || card.dataset.tiers.split(',').indexOf(tier) !== -1) {
       card.style.display = '';

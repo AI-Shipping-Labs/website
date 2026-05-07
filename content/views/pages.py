@@ -1,14 +1,18 @@
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import (
+    LEVEL_TO_TIER_NAME,
     build_gating_context,
     can_access,
     get_gated_reason,
     get_required_tier_name,
+    get_user_level,
 )
 from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
 from content.tier_config import get_activities
+from plans.models import Plan, Sprint, SprintEnrollment
 
 
 def _get_selected_tags(request):
@@ -68,6 +72,62 @@ def _get_tag_rules_for_tags(tags):
     return result
 
 
+def _get_activity_sprints(user):
+    """Return public activity-hub sprint summaries for the current viewer."""
+    statuses = ['active']
+    if user.is_authenticated and user.is_staff:
+        statuses.append('draft')
+
+    sprints = Sprint.objects.filter(status__in=statuses).order_by(
+        'start_date', 'name',
+    )
+    user_level = get_user_level(user) if user.is_authenticated else 0
+
+    summaries = []
+    for sprint in sprints:
+        required_tier_name = LEVEL_TO_TIER_NAME.get(
+            sprint.min_tier_level, 'Premium',
+        )
+        detail_url = reverse(
+            'sprint_detail', kwargs={'sprint_slug': sprint.slug},
+        )
+        cta_url = detail_url
+        cta_label = 'View sprint'
+
+        if not user.is_authenticated:
+            cta_url = f'{reverse("account_login")}?next={detail_url}'
+            cta_label = 'Log in to join'
+        else:
+            viewer_plan = Plan.objects.filter(sprint=sprint, member=user).first()
+            enrolled = SprintEnrollment.objects.filter(
+                sprint=sprint, user=user,
+            ).exists()
+            eligible = user_level >= sprint.min_tier_level
+
+            if enrolled and viewer_plan:
+                cta_url = reverse(
+                    'my_plan_detail', kwargs={'plan_id': viewer_plan.pk},
+                )
+                cta_label = 'Open my plan'
+            elif enrolled:
+                cta_url = reverse(
+                    'cohort_board', kwargs={'sprint_slug': sprint.slug},
+                )
+                cta_label = 'Open cohort board'
+            elif not eligible:
+                cta_url = reverse('pricing')
+                cta_label = f'Upgrade to {required_tier_name}'
+            else:
+                cta_label = 'View sprint'
+
+        summaries.append({
+            'sprint': sprint,
+            'required_tier_name': required_tier_name,
+            'cta_url': cta_url,
+            'cta_label': cta_label,
+        })
+
+    return summaries
 
 
 def about(request):
@@ -78,6 +138,7 @@ def about(request):
 def activities(request):
     """Activities page."""
     all_activities = get_activities()
+    activity_sprints = _get_activity_sprints(request.user)
 
     # Count activities per tier
     basic_activities = [a for a in all_activities if 'basic' in a['tiers']]
@@ -92,6 +153,7 @@ def activities(request):
         'basic_count': len(basic_activities),
         'main_count': len(main_activities),
         'premium_count': len(premium_activities),
+        'activity_sprints': activity_sprints,
     }
     return render(request, 'content/activities.html', context)
 

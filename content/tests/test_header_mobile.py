@@ -94,6 +94,14 @@ class HeaderMobileMenuTest(TestCase):
         tag_name = content[tag_start:tag_start + 10]
         self.assertTrue(tag_name.startswith("<button"))
 
+    def test_activities_and_resources_links_remain_distinct(self):
+        """Activities is top-level; Resources curated links use the /resources URL."""
+        response = self.client.get("/")
+        content = response.content.decode()
+        self.assertIn('href="/activities"', content)
+        self.assertIn('id="resources-dropdown-btn"', content)
+        self.assertIn('href="/resources"', content)
+
     def test_close_on_outside_click_script_present(self):
         """The script should include close-on-outside-click logic for the mobile menu."""
         response = self.client.get("/")

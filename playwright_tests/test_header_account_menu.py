@@ -76,6 +76,63 @@ def test_desktop_account_menu_opens_and_closes_by_keyboard(
     context.close()
 
 
+def test_desktop_header_dropdowns_are_mutually_exclusive(
+    django_server, browser, django_db_blocker
+):
+    email = _email("header-exclusive")
+    _seed_user(django_db_blocker, email, first_name="Ada")
+    context = auth_context(browser, email)
+    page = context.new_page()
+    page.goto(f"{django_server}/", wait_until="domcontentloaded")
+
+    account_trigger = page.locator("#account-menu-trigger")
+    account_menu = page.locator("#account-menu-dropdown")
+    notification_button = page.locator("#notification-bell-btn")
+    notification_dropdown = page.locator("#notification-dropdown")
+
+    account_trigger.click()
+    assert account_menu.is_visible()
+    assert account_trigger.get_attribute("aria-expanded") == "true"
+
+    notification_button.click()
+    notification_dropdown.wait_for(state="visible", timeout=5000)
+    assert not account_menu.is_visible()
+    assert account_trigger.get_attribute("aria-expanded") == "false"
+    assert notification_button.get_attribute("aria-expanded") == "true"
+
+    notification_box = notification_dropdown.bounding_box()
+    assert notification_box is not None
+    top_element_id = page.evaluate(
+        """([x, y]) => {
+            var element = document.elementFromPoint(x, y);
+            return element ? element.closest('#account-menu-dropdown, #notification-dropdown').id : null;
+        }""",
+        [
+            notification_box["x"] + notification_box["width"] / 2,
+            notification_box["y"] + 24,
+        ],
+    )
+    assert top_element_id == "notification-dropdown"
+
+    account_trigger.click()
+    assert account_menu.is_visible()
+    assert account_trigger.get_attribute("aria-expanded") == "true"
+    assert not notification_dropdown.is_visible()
+    assert notification_button.get_attribute("aria-expanded") == "false"
+
+    page.mouse.click(640, 500)
+    assert not account_menu.is_visible()
+    assert account_trigger.get_attribute("aria-expanded") == "false"
+
+    notification_button.click()
+    assert notification_dropdown.is_visible()
+    page.mouse.click(640, 500)
+    assert not notification_dropdown.is_visible()
+    assert notification_button.get_attribute("aria-expanded") == "false"
+
+    context.close()
+
+
 def test_staff_desktop_account_menu_includes_studio_link(
     django_server, browser, django_db_blocker
 ):

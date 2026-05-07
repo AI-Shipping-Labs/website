@@ -10,6 +10,7 @@ from django.views.decorators.http import require_POST
 
 from content.access import (
     LEVEL_MAIN,
+    LEVEL_OPEN,
     build_gating_context,
     can_access,
     get_required_tier_name,
@@ -459,19 +460,63 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     course, module, unit = _get_unit_or_404(course_slug, module_slug, unit_slug)
     user = request.user
 
-    # Access check: preview units are open to all; otherwise must be
-    # signed in and meet the tier requirement
+    # Access check (issue #465): preview units are open to all; otherwise
+    # ``can_access`` resolves the unit's effective_required_level (unit
+    # override > course default > course required_level). Routing through
+    # the unit also lets ``can_access`` honour ``CourseAccess`` for paid
+    # individual purchases of the parent course.
+    #
+    # Backwards-compat: course units have always required sign-in for
+    # anonymous visitors even when ``Course.required_level == 0`` (the
+    # legacy nudge for completion tracking). We preserve that here by
+    # treating an anonymous visitor on a non-preview unit with no per-unit
+    # ``required_level`` override as denied — the registered-wall path
+    # still kicks in for units where the author explicitly chose
+    # ``access: open``.
+    effective_level = unit.effective_required_level
     if unit.is_preview:
         has_access = True
-    elif not user.is_authenticated:
+    elif (
+        not user.is_authenticated
+        and effective_level == LEVEL_OPEN
+        and unit.required_level is None
+        and course.default_unit_required_level is None
+    ):
+        # Pre-#465 free-course-with-anonymous-visitor path: legacy
+        # sign-in nudge. The unit has no explicit ``access:`` override
+        # and the course has no ``default_unit_access`` set, so the
+        # historical "anonymous always signs in for course units" rule
+        # still applies.
         has_access = False
     else:
-        has_access = can_access(user, course)
+        has_access = can_access(user, unit)
 
     if not has_access:
-        gating = build_gating_context(user, course, 'course')
+        # Gating context is built against the unit so the registered
+        # wall (LEVEL_REGISTERED) emits ``authentication_required`` for
+        # anonymous visitors instead of ``insufficient_tier``.
+        gating = build_gating_context(user, unit, 'unit')
         is_unverified_gate = gating.get('gated_reason') == 'unverified_email'
-        if not user.is_authenticated:
+        is_auth_required_gate = (
+            gating.get('gated_reason') == 'authentication_required'
+        )
+        if is_auth_required_gate:
+            # Anonymous visitor on a registered-only unit. Send them to
+            # /accounts/login/?next=<unit URL> so they land back on the
+            # lesson once they sign in. The "Create a free account"
+            # secondary link below stays visible too.
+            from urllib.parse import urlencode
+            unit_url = unit.get_absolute_url()
+            login_qs = urlencode({'next': unit_url})
+            tier_name = None
+            cta_message = 'Sign in to read this lesson'
+            pricing_url = f'/accounts/login/?{login_qs}'
+            cta_label = 'Sign In'
+            cta_description = (
+                'This lesson is free with a sign-in. Create a free '
+                'account in seconds to keep reading.'
+            )
+        elif not user.is_authenticated:
             if course.required_level == 0:
                 cta_message = 'Sign in to access this lesson'
                 tier_name = None
@@ -516,11 +561,23 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         # Anonymous users on a paid course get a second CTA inviting them
         # to sign in / sign up — the upgrade CTA still wins, but we don't
         # want to send them back to /pricing without an account.
+        # Issue #465: anonymous users on a registered-walled lesson also
+        # get a "create a free account" link as a secondary CTA so the
+        # primary "Sign in" button has a sign-up companion.
         signup_cta_url = ''
         signup_cta_label = ''
-        if not user.is_authenticated and course.required_level > 0:
-            signup_cta_url = '/accounts/signup/'
-            signup_cta_label = 'Sign in or create a free account'
+        if not user.is_authenticated and (
+            course.required_level > 0 or is_auth_required_gate
+        ):
+            from urllib.parse import urlencode
+            unit_url = unit.get_absolute_url()
+            signup_qs = urlencode({'next': unit_url})
+            signup_cta_url = f'/accounts/signup/?{signup_qs}'
+            signup_cta_label = (
+                'Create a free account'
+                if is_auth_required_gate
+                else 'Sign in or create a free account'
+            )
 
         context = {
             'course': course,
@@ -656,18 +713,19 @@ def api_course_unit_detail(request, slug, unit_id):
     unit = get_object_or_404(Unit, pk=unit_id, module__course=course)
     user = request.user
 
-    # Access check: preview units open to all; otherwise must be signed in
+    # Access check (issue #465): preview units open to all; otherwise
+    # delegate to ``can_access(user, unit)`` which resolves the unit's
+    # effective_required_level (unit override > course default > course
+    # required_level) and honours CourseAccess on the parent course.
     if unit.is_preview:
         has_access = True
-    elif not user.is_authenticated:
-        has_access = False
     else:
-        has_access = can_access(user, course)
+        has_access = can_access(user, unit)
 
     if not has_access:
         if not user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
-        tier_name = get_required_tier_name(course.required_level)
+        tier_name = get_required_tier_name(unit.effective_required_level)
         return JsonResponse(
             {'error': 'Access denied', 'required_tier_name': tier_name},
             status=403,
@@ -719,8 +777,10 @@ def api_course_unit_complete(request, slug, unit_id):
     unit = get_object_or_404(Unit, pk=unit_id, module__course=course)
     user = request.user
 
-    # Must have access to mark complete
-    has_access = unit.is_preview or can_access(user, course)
+    # Must have access to mark complete (issue #465: delegate to the
+    # unit so the effective level / per-unit access wins; mirrors the
+    # detail-view check).
+    has_access = unit.is_preview or can_access(user, unit)
     if not has_access:
         return JsonResponse({'error': 'Access denied'}, status=403)
 

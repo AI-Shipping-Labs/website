@@ -46,7 +46,8 @@ title: 'AI Hero: 7-Day AI Agents Crash-Course'
 description: ...
 instructor_name: Alexey Grigorev
 instructor_bio: ...
-required_level: 0          # 0=open, 10=basic, 20=main, 30=premium
+required_level: 0                # 0=open, 10=basic, 20=main, 30=premium
+default_unit_access: registered  # optional; default access for every unit
 discussion_url: ...
 tags: [ai-agents, rag]
 testimonials:
@@ -70,12 +71,32 @@ content_id: <UUID>
 sort_order: 2
 title: Logging
 video_url: https://www.youtube.com/embed/...   # optional
-is_preview: true                                # optional, free even when course is gated
+access: open                                   # optional, per-unit override
+is_preview: true                               # legacy alias for `access: open`
 ---
 markdown body
 ```
 
 Course directory naming convention: numeric prefix (e.g. `01-intro`) determines `sort_order` if `module.yaml` doesn't override it.
+
+#### Default unit access
+
+`required_level` controls course-wide gating: the course catalog tier badge, the course detail page CTA, the individual-purchase button, and the discussion link visibility. Use it to mark a course as a paid perk.
+
+`default_unit_access` controls per-lesson gating: the access wall the visitor hits when they click into a unit. When unset, units inherit `required_level` (legacy behavior). Use it to decouple "what tier markets this course" from "who can read the lessons".
+
+Accepted values for `default_unit_access` and unit-level `access:` (case-insensitive): `open`, `registered`, `basic`, `main`, `premium`. Raw integers (`0`, `5`, `10`, `20`, `30`) are also accepted.
+
+| Use case                                                                | `required_level` | `default_unit_access` | Per-unit `access:` |
+|-------------------------------------------------------------------------|------------------|-----------------------|--------------------|
+| Fully open course (everything readable, no sign-in required)            | `0`              | (omit)                | (omit)             |
+| Free with sign-in (any logged-in user reads lessons)                    | `0`              | `registered`          | (omit)             |
+| Sign-in walled with one anonymous teaser (e.g. unit 1)                  | `0`              | `registered`          | `open` on unit 1   |
+| Paid course, no anonymous access                                        | `10` / `20` / `30` | (omit)              | (omit)             |
+| Paid course with one free intro lesson                                  | `10` / `20` / `30` | (omit)              | `open` on unit 1   |
+| Paid course (catalog) with sign-in-walled lessons (members-only access) | `10` / `20` / `30` | `registered`        | (omit)             |
+
+`is_preview: true` on a unit stays supported as a legacy alias for `access: open`. When both are set, `access:` wins and the sync log records an info-level note suggesting authors drop the redundant key.
 
 ### Article / Blog post
 
@@ -214,13 +235,16 @@ Single uniform check across all content types: `user.tier.level >= content.requi
 | `required_level` | Meaning |
 |------------------|---------|
 | `0` | Open (everyone, including anonymous) |
+| `5` | Registered users (any tier; anonymous denied) — courses only |
 | `10` | Basic and above |
 | `20` | Main and above |
 | `30` | Premium only |
 
-Constants in `content/access.py` (`LEVEL_OPEN`, `LEVEL_BASIC`, `LEVEL_MAIN`, `LEVEL_PREMIUM`).
+Constants in `content/access.py` (`LEVEL_OPEN`, `LEVEL_REGISTERED`, `LEVEL_BASIC`, `LEVEL_MAIN`, `LEVEL_PREMIUM`).
 
-Per-unit override on courses: `is_preview: true` in unit frontmatter makes that unit visible to everyone regardless of the course's `required_level`. Use sparingly for free teasers in paid courses.
+`LEVEL_REGISTERED` (level `5`) is a content-side sentinel introduced in #465. It is not a real Tier row — Tier rows stay at 0/10/20/30 — and is only valid on per-unit course gating (`default_unit_access` and unit `access:`). It draws a sign-in wall: anonymous visitors are denied, every authenticated tier is allowed (free users still need email verification, same rule as level 0).
+
+Per-unit override on courses: `is_preview: true` in unit frontmatter makes that unit visible to everyone regardless of the course's gating. Use sparingly for free teasers in paid courses. The new `access:` key accepts any of the level names above; `is_preview: true` is the legacy alias for `access: open`.
 
 ## Adding a new content repo
 

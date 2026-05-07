@@ -31,6 +31,68 @@ from integrations.services.github_sync.repo import derive_slug, extract_sort_ord
 
 from integrations.services.github_sync.dispatchers.instructors import _attach_instructors_to_course, _resolve_instructors_for_yaml
 
+# Issue #465: maps the operator-facing string keys in YAML (the verb-aligned
+# ``access:`` / ``default_unit_access:`` vocabulary) to the integer levels
+# stored in ``Course.default_unit_required_level`` and ``Unit.required_level``.
+# Raw integers are accepted too (see _parse_access_value) so existing repos
+# can pass numbers if they prefer the old shape.
+_ACCESS_NAME_TO_LEVEL = {
+    'open': 0,
+    'registered': 5,
+    'basic': 10,
+    'main': 20,
+    'premium': 30,
+}
+_VALID_ACCESS_LEVELS = frozenset(_ACCESS_NAME_TO_LEVEL.values())
+
+
+def _parse_access_value(raw, *, field_name, rel_path):
+    """Resolve a YAML ``access:`` / ``default_unit_access:`` value to an int.
+
+    Accepts named values (``open``, ``registered``, ``basic``, ``main``,
+    ``premium``, case-insensitive) and the matching raw integers
+    (0, 5, 10, 20, 30). Returns the integer level or raises
+    :class:`GitHubSyncError` with a message that identifies the file and
+    the offending value so the SyncLog entry tells the operator exactly
+    which YAML to fix.
+
+    Booleans are rejected up front because YAML parses ``true`` /
+    ``false`` as ``bool`` (a subclass of ``int``); silently letting a
+    boolean through would map ``true`` to level 1 — gibberish.
+
+    ``None`` is the responsibility of the caller (an absent key keeps
+    the database column NULL); this helper assumes a real value.
+    """
+    if isinstance(raw, bool):
+        raise GitHubSyncError(
+            f'Invalid {field_name} in {rel_path}: {raw!r} '
+            f'(expected one of {sorted(_ACCESS_NAME_TO_LEVEL)} or '
+            f'{sorted(_VALID_ACCESS_LEVELS)})'
+        )
+    if isinstance(raw, int):
+        if raw in _VALID_ACCESS_LEVELS:
+            return raw
+        raise GitHubSyncError(
+            f'Invalid {field_name} in {rel_path}: {raw!r} '
+            f'(expected one of {sorted(_ACCESS_NAME_TO_LEVEL)} or '
+            f'{sorted(_VALID_ACCESS_LEVELS)})'
+        )
+    if isinstance(raw, str):
+        key = raw.strip().lower()
+        if key in _ACCESS_NAME_TO_LEVEL:
+            return _ACCESS_NAME_TO_LEVEL[key]
+        raise GitHubSyncError(
+            f'Invalid {field_name} in {rel_path}: {raw!r} '
+            f'(expected one of {sorted(_ACCESS_NAME_TO_LEVEL)} or '
+            f'{sorted(_VALID_ACCESS_LEVELS)})'
+        )
+    raise GitHubSyncError(
+        f'Invalid {field_name} in {rel_path}: {raw!r} '
+        f'(expected one of {sorted(_ACCESS_NAME_TO_LEVEL)} or '
+        f'{sorted(_VALID_ACCESS_LEVELS)})'
+    )
+
+
 def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
                       known_images=None):
     """Walker dispatch handler: process course directories.
@@ -278,6 +340,21 @@ def _sync_single_course(
                         readme_path, e,
                     )
 
+        # Issue #465: ``default_unit_access`` is the YAML-facing key
+        # (verb-aligned), ``default_unit_required_level`` is the DB column
+        # (noun-aligned with ``required_level``). Absent key = leave NULL,
+        # which preserves the legacy behavior where units inherit
+        # ``Course.required_level``.
+        default_unit_access_raw = course_data.get('default_unit_access')
+        if default_unit_access_raw is not None:
+            default_unit_required_level = _parse_access_value(
+                default_unit_access_raw,
+                field_name='default_unit_access',
+                rel_path=os.path.join(rel_path, 'course.yaml'),
+            )
+        else:
+            default_unit_required_level = None
+
         course_defaults = {
             'title': course_data.get('title', slug),
             'description': description,
@@ -288,6 +365,7 @@ def _sync_single_course(
                 source, os.path.join(rel_path, 'course.yaml'),
             ),
             'required_level': course_data.get('required_level', 0),
+            'default_unit_required_level': default_unit_required_level,
             'discussion_url': course_data.get('discussion_url', ''),
             'tags': course_data.get('tags', []),
             'testimonials': course_data.get('testimonials', []),
@@ -1132,13 +1210,44 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             )
             slug = metadata.get('slug', derive_slug(filename))
 
+            # Issue #465: per-unit ``access:`` override. Absent = NULL
+            # column = inherit course default / course required level.
+            unit_access_raw = metadata.get('access')
+            if unit_access_raw is not None:
+                unit_required_level = _parse_access_value(
+                    unit_access_raw,
+                    field_name='access',
+                    rel_path=rel_path,
+                )
+            else:
+                unit_required_level = None
+
+            unit_is_preview = bool(metadata.get('is_preview', False))
+
+            # When both ``access:`` and ``is_preview:`` are set we keep
+            # both flags (templates branch on ``is_preview`` for the
+            # sidebar Preview badge) but record an info-level note so
+            # authors notice the redundant key. ``access:`` is treated
+            # as the canonical signal for access logic; ``is_preview``
+            # remains the legacy alias.
+            if unit_access_raw is not None and unit_is_preview:
+                stats['errors'].append({
+                    'file': rel_path,
+                    'severity': 'info',
+                    'error': (
+                        'Both access: and is_preview: set on unit; '
+                        'access: wins. Drop is_preview to keep YAML clean.'
+                    ),
+                })
+
             defaults = {
                 'title': metadata.get('title', os.path.splitext(filename)[0]),
                 'slug': slug,
                 'sort_order': sort_order,
                 'video_url': metadata.get('video_url', ''),
                 'timestamps': metadata.get('timestamps', []),
-                'is_preview': metadata.get('is_preview', False),
+                'is_preview': unit_is_preview,
+                'required_level': unit_required_level,
                 'content_hash': content_hash,
                 'source_repo': repo_name,
                 'source_commit': commit_sha,

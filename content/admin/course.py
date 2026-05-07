@@ -114,12 +114,12 @@ class CourseAdmin(admin.ModelAdmin):
     module inline editor."""
 
     list_display = [
-        'title', 'slug', 'status', 'instructor_name',
+        'title', 'slug', 'status', 'primary_instructor_name',
         'required_level', 'created_at', 'updated_at',
     ]
     list_display_links = ['title']
     list_filter = ['status', 'required_level']
-    search_fields = ['title', 'description', 'instructor_name']
+    search_fields = ['title', 'description', 'instructors__name']
     prepopulated_fields = {'slug': ('title',)}
     actions = [publish_courses, unpublish_courses]
     inlines = [CourseInstructorInline, ModuleInline, CohortInline]
@@ -131,7 +131,6 @@ class CourseAdmin(admin.ModelAdmin):
         (None, {
             'fields': (
                 'title', 'slug', 'description', 'cover_image_url',
-                'instructor_name', 'instructor_bio',
             ),
         }),
         ('Tags & Visibility', {
@@ -156,6 +155,17 @@ class CourseAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    def primary_instructor_name(self, obj):
+        """Display the first instructor's name on the changelist.
+
+        Reads from the through-table-ordered M2M; returns an em dash when
+        the course has no instructors attached.
+        """
+        primary = obj.primary_instructor
+        return primary.name if primary else '—'
+
+    primary_instructor_name.short_description = 'Instructor'
 
 
 @admin.register(Module)

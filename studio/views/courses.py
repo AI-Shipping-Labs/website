@@ -57,8 +57,6 @@ def course_edit(request, course_id):
         course.slug = request.POST.get('slug', '').strip() or slugify(course.title)
         course.description = request.POST.get('description', '')
         course.cover_image_url = request.POST.get('cover_image_url', '')
-        course.instructor_name = request.POST.get('instructor_name', '')
-        course.instructor_bio = request.POST.get('instructor_bio', '')
         course.status = request.POST.get('status', 'draft')
         course.required_level = int(request.POST.get('required_level', 0))
         course.discussion_url = request.POST.get('discussion_url', '')

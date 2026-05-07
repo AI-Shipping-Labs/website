@@ -79,8 +79,6 @@ class CourseAdminCRUDTest(TestCase):
             'slug': 'new-course',
             'description': 'A new course description.',
             'cover_image_url': 'https://example.com/cover.jpg',
-            'instructor_name': 'Test Author',
-            'instructor_bio': 'An expert.',
             'tags': '["python", "django"]',
             'required_level': 0,
             'status': 'draft',
@@ -111,7 +109,6 @@ class CourseAdminCRUDTest(TestCase):
         self.assertTrue(Course.objects.filter(slug='new-course').exists())
         course = Course.objects.get(slug='new-course')
         self.assertEqual(course.title, 'New Course')
-        self.assertEqual(course.instructor_name, 'Test Author')
         self.assertEqual(course.required_level, 0)
 
     def test_admin_status_change_draft_to_published(self):

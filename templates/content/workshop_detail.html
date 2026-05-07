@@ -18,11 +18,12 @@
         Back to Workshops
       </a>
 
+      {% with workshop_primary_instructor=workshop.primary_instructor %}
       <div class="mb-8 overflow-hidden rounded-lg">
         {% if workshop.pages_required_level > 0 %}
-          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
         {% else %}
-          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label="Free" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
         {% endif %}
       </div>
 
@@ -49,12 +50,12 @@
             <i data-lucide="calendar" class="h-4 w-4"></i>
             {{ workshop.date|date:"F j, Y" }}
           </span>
-          {% if workshop.instructor_name %}
-          <span class="flex items-center gap-1.5">
+          {% for instructor in workshop.ordered_instructors %}
+          <span class="flex items-center gap-1.5" data-testid="workshop-instructor">
             <i data-lucide="user" class="h-4 w-4"></i>
-            {{ workshop.instructor_name }}
+            {{ instructor.name }}
           </span>
-          {% endif %}
+          {% endfor %}
         </div>
 
         {% if workshop.tags %}
@@ -209,6 +210,7 @@
       {% endif %}
 
       {% endif %}
+      {% endwith %}
     </div>
   </article>
 </main>

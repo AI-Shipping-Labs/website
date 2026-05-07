@@ -32,7 +32,6 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
             pages_required_level=0,
             recording_required_level=0,
             description='desc',
-            instructor_name='Author',
         )
         cls.page_with_id = WorkshopPage.objects.create(
             workshop=cls.workshop_open,
@@ -61,7 +60,6 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
             pages_required_level=10,
             recording_required_level=20,
             description='desc',
-            instructor_name='Author',
         )
         cls.paid_page = WorkshopPage.objects.create(
             workshop=cls.workshop_paid,

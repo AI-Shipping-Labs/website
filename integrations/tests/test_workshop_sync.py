@@ -30,7 +30,7 @@ from datetime import timezone as dt_timezone
 
 from django.test import TestCase
 
-from content.models import Workshop, WorkshopPage
+from content.models import Instructor, Workshop, WorkshopPage
 from events.models import Event
 from integrations.models import ContentSource
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
@@ -49,6 +49,17 @@ class _WorkshopSyncFixtureBase(TestCase):
             prefix='workshop-sync-',
         )
         self.temp_dir = str(self.repo.path)
+        # Pre-create the instructor referenced by ``_write_workshop_yaml``
+        # so the M2M attach succeeds. Prior to issue #423 the legacy
+        # ``instructor_name:`` yaml field was a string, no Instructor row
+        # was needed.
+        Instructor.objects.get_or_create(
+            instructor_id='alexey-grigorev',
+            defaults={
+                'name': 'Alexey Grigorev',
+                'status': 'published',
+            },
+        )
 
     def _write(self, rel_path, text):
         return self.repo.write_text(rel_path, text)
@@ -67,7 +78,9 @@ class _WorkshopSyncFixtureBase(TestCase):
         }
         if landing_required_level is not None:
             data['landing_required_level'] = landing_required_level
-        data['instructor_name'] = 'Alexey Grigorev'
+        # Issue #423 removed legacy instructor_name yaml field; the
+        # canonical input is now ``instructors: [<id>]``.
+        data['instructors'] = ['alexey-grigorev']
         path = self.repo.write_yaml(f'{folder}/workshop.yaml', data)
         if extra_yaml:
             with path.open('a', encoding='utf-8') as f:
@@ -121,7 +134,7 @@ class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
         self.assertEqual(workshop.title, 'Demo Workshop')
         self.assertEqual(workshop.pages_required_level, 10)
         self.assertEqual(workshop.recording_required_level, 20)
-        self.assertEqual(workshop.instructor_name, 'Alexey Grigorev')
+        self.assertEqual(workshop.primary_instructor.name, 'Alexey Grigorev')
 
         pages = list(WorkshopPage.objects.filter(workshop=workshop).order_by('sort_order'))
         self.assertEqual(len(pages), 2)
@@ -147,7 +160,6 @@ class WorkshopSyncHappyPathTest(_WorkshopSyncFixtureBase):
             'https://www.youtube.com/embed/h84rcRezNM4',
         )
         self.assertEqual(event.required_level, 20)
-        self.assertEqual(event.speaker_name, 'Alexey Grigorev')
         self.assertEqual(len(event.timestamps), 1)
         self.assertEqual(len(event.materials), 1)
         self.assertTrue(event.published)

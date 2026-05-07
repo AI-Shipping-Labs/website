@@ -266,7 +266,6 @@ def _sync_single_workshop(
             'title': title,
             'description': landing_description,
             'date': workshop_date,
-            'instructor_name': data.get('instructor_name', '') or '',
             'tags': data.get('tags', []) or [],
             'cover_image_url': cover_image_url,
             'status': 'published',
@@ -395,7 +394,6 @@ def _link_or_create_workshop_event(
         timestamps=recording.get('timestamps', []) or [],
         materials=recording.get('materials', []) or [],
         required_level=recording_required_level,
-        speaker_name=workshop.instructor_name,
         kind='workshop',
     )
 

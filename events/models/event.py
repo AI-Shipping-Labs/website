@@ -158,14 +158,6 @@ class Event(
         null=True, blank=True,
         help_text='Datetime of first publish.',
     )
-    speaker_name = models.CharField(
-        max_length=300, blank=True, default='',
-        help_text='Speaker name from content repo frontmatter.',
-    )
-    speaker_bio = models.TextField(
-        blank=True, default='',
-        help_text='Speaker bio from content repo frontmatter.',
-    )
     instructors = models.ManyToManyField(
         'content.Instructor',
         through='events.EventInstructor',
@@ -173,9 +165,8 @@ class Event(
         blank=True,
         help_text=(
             'Instructors / speakers for this event. Order is controlled via '
-            'the EventInstructor.position field. The first instructor is '
-            'mirrored into the legacy speaker_name/speaker_bio fields by the '
-            'sync pipeline.'
+            'the EventInstructor.position field; the first instructor is the '
+            'primary speaker shown on listings and cards.'
         ),
     )
     cover_image_url = models.URLField(
@@ -234,6 +225,18 @@ class Event(
             self.published_at = None
 
         super().save(*args, **kwargs)
+
+    @property
+    def ordered_instructors(self):
+        """Return ``Instructor`` rows in ``EventInstructor.position`` order."""
+        return list(self.instructors.order_by('eventinstructor__position'))
+
+    @property
+    def primary_instructor(self):
+        """First instructor (speaker) by position, or ``None`` when unset."""
+        return self.instructors.order_by(
+            'eventinstructor__position',
+        ).first()
 
     @property
     def video_url(self):

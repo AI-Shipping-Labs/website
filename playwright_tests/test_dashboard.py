@@ -57,10 +57,14 @@ def _clear_dashboard_data():
         Enrollment,
         Module,
         Unit,
+        UserContentCompletion,
         UserCourseProgress,
+        Workshop,
+        WorkshopPage,
     )
     from events.models import Event, EventRegistration
     from notifications.models import Notification
+    from plans.models import Plan, Sprint, SprintEnrollment
     from voting.models import Poll, PollOption, PollVote
 
     Notification.objects.all().delete()
@@ -71,9 +75,15 @@ def _clear_dashboard_data():
     Event.objects.all().delete()
     Enrollment.objects.all().delete()
     UserCourseProgress.objects.all().delete()
+    UserContentCompletion.objects.all().delete()
     Unit.objects.all().delete()
     Module.objects.all().delete()
     Course.objects.all().delete()
+    WorkshopPage.objects.all().delete()
+    Workshop.objects.all().delete()
+    Plan.objects.all().delete()
+    SprintEnrollment.objects.all().delete()
+    Sprint.objects.all().delete()
     Article.objects.all().delete()
     Event.objects.all().delete()
     connection.close()
@@ -474,8 +484,9 @@ class TestScenario3EmptyStatesGuideNextSteps:
         has no course progress, no event registrations, and no
         unread notifications.
         1. Navigate to /
-        Then: The 'Continue Learning' section shows 'No courses in
-              progress yet' with a 'Browse Courses' link.
+        Then: The 'Continue Learning' section shows no courses or
+              workshops in progress with Browse Courses and Browse
+              Workshops links.
         Then: The 'Upcoming Events' section shows 'No upcoming events'
               with a 'Browse Events' link.
         Then: The 'Notifications' section shows 'No new notifications'.
@@ -495,7 +506,7 @@ class TestScenario3EmptyStatesGuideNextSteps:
         body = page.content()
 
         # Then: Empty state messages
-        assert "No courses in progress yet" in body
+        assert "No courses or workshops in progress yet" in body
         assert "No upcoming events" in body
         assert "No new notifications" in body
 
@@ -504,6 +515,10 @@ class TestScenario3EmptyStatesGuideNextSteps:
             'a:has-text("Browse Courses")'
         )
         assert browse_courses_link.count() >= 1
+        browse_workshops_link = page.locator(
+            'a:has-text("Browse Workshops")'
+        )
+        assert browse_workshops_link.count() >= 1
 
         browse_events_link = page.locator(
             'a:has-text("Browse Events")'
@@ -683,28 +698,25 @@ class TestScenario5MainMemberSeesUpcomingEvents:
         event_body = page.content()
         assert "AI Workshop: Prompt Engineering" in event_body
 # -------------------------------------------------------------------
-# Scenario 6: Main member sees the Community quick action that Free
-#              members do not
+# Scenario 6: Members see valid high-value quick actions
 # -------------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario6CommunityQuickActionTierGated:
-    """Main member sees the Community quick action that Free members
-    do not."""
+class TestScenario6DashboardQuickActions:
+    """Members see valid dashboard quick actions."""
 
-    def test_community_action_for_main_not_for_free(
+    def test_quick_actions_use_current_member_destinations(
         self, django_server
     , browser):
         """Given: A user logged in as main@test.com (Main tier).
         1. Navigate to /
-        Then: The 'Quick Actions' section includes 'Browse Courses',
-              'View Recordings', 'Community', and 'Submit Project'.
+        Then: The 'Quick Actions' section includes current member
+              destinations for courses, workshops, resources, events,
+              projects, and activities.
         2. Log out and log in as free@test.com (Free tier).
         3. Navigate to /
-        Then: The 'Quick Actions' section includes 'Browse Courses',
-              'View Recordings', and 'Submit Project'.
-        Then: The 'Community' quick action is not present for the
-              Free member."""
+        Then: The same valid destinations are present and no
+              nonexistent Community link is shown."""
         _clear_dashboard_data()
         _create_user("main@test.com", tier_slug="main")
         _create_user("free@test.com", tier_slug="free")
@@ -719,11 +731,32 @@ class TestScenario6CommunityQuickActionTierGated:
         )
         body = page.content()
 
-        # Then: All 4 quick actions present
+        # Then: Current quick actions are present and route-backed.
         assert "Browse Courses" in body
-        assert "View Recordings" in body
-        assert "Community" in body
-        assert "Submit Project" in body
+        assert "Browse Workshops" in body
+        assert "Resources" in body
+        assert "Events &amp; Recordings" in body
+        assert "Projects" in body
+        assert "Activities" in body
+        assert 'href="/community"' not in body
+
+        context.close()
+
+        context = _auth_context(browser, "free@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
+
+        assert "Browse Courses" in body
+        assert "Browse Workshops" in body
+        assert "Resources" in body
+        assert "Events &amp; Recordings" in body
+        assert "Projects" in body
+        assert "Activities" in body
+        assert 'href="/community"' not in body
 # -------------------------------------------------------------------
 # Scenario 7: Free member discovers gated content in recent content
 #              and finds the upgrade path

@@ -14,9 +14,11 @@ Covers:
 """
 
 from datetime import date, timedelta
+from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.urls import Resolver404, resolve
 from django.utils import timezone
 
 from content.access import LEVEL_PREMIUM
@@ -27,8 +29,12 @@ from content.models import (
     Enrollment,
     Module,
     Unit,
+    UserContentCompletion,
     UserCourseProgress,
+    Workshop,
+    WorkshopPage,
 )
+from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from events.models import Event, EventRegistration
 from notifications.models import Notification
 from tests.fixtures import TierSetupMixin
@@ -202,8 +208,9 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
     def test_empty_state_when_no_courses_in_progress(self):
         response = self.client.get('/')
         content = response.content.decode()
-        self.assertIn('No courses in progress yet', content)
+        self.assertIn('No courses or workshops in progress yet', content)
         self.assertIn('Browse Courses', content)
+        self.assertIn('Browse Workshops', content)
 
     def test_shows_in_progress_course(self):
         # Enroll + complete 2 of 4 units
@@ -262,7 +269,7 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         content = response.content.decode()
         self.assertNotIn('AI Basics', content)
-        self.assertIn('No courses in progress yet', content)
+        self.assertIn('No courses or workshops in progress yet', content)
 
     def test_continue_button_links_to_next_unfinished_unit(self):
         # Complete units 1-3 of 4 → Continue should link to unit 4.
@@ -427,6 +434,88 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         pos_ml = content.index('ML Advanced')
         pos_ai = content.index('AI Basics')
         self.assertLess(pos_ml, pos_ai)
+
+    def test_continue_learning_limited_to_three_most_recent_items(self):
+        now = timezone.now()
+        for i in range(5):
+            course = Course.objects.create(
+                title=f'Recent Course {i}', slug=f'recent-course-{i}',
+                status='published',
+            )
+            module = Module.objects.create(
+                course=course, title=f'Module {i}', slug=f'module-{i}',
+                sort_order=1,
+            )
+            completed_unit = Unit.objects.create(
+                module=module, title=f'Done {i}', slug=f'done-{i}',
+                sort_order=1,
+            )
+            Unit.objects.create(
+                module=module, title=f'Next {i}', slug=f'next-{i}',
+                sort_order=2,
+            )
+            self._enroll(self.user, course)
+            UserCourseProgress.objects.create(
+                user=self.user,
+                unit=completed_unit,
+                completed_at=now - timedelta(hours=i),
+            )
+
+        response = self.client.get('/')
+        content = response.content.decode()
+
+        self.assertEqual(len(response.context['in_progress_learning']), 3)
+        self.assertEqual(response.context['hidden_learning_count'], 2)
+        self.assertIn('Recent Course 0', content)
+        self.assertIn('Recent Course 2', content)
+        self.assertNotIn('Recent Course 3', content)
+        self.assertContains(
+            response,
+            '2 more started items hidden here',
+        )
+        self.assertContains(
+            response,
+            'data-testid="continue-learning-more"',
+        )
+
+    def test_continue_learning_mixes_courses_and_workshops_by_recent_activity(self):
+        self._enroll(self.user, self.course)
+        UserCourseProgress.objects.create(
+            user=self.user,
+            unit=self.units[0],
+            completed_at=timezone.now() - timedelta(days=1),
+        )
+        workshop = Workshop.objects.create(
+            title='Prompt Workshop',
+            slug='prompt-workshop',
+            status='published',
+            date=date.today(),
+            pages_required_level=0,
+            recording_required_level=0,
+        )
+        page_1 = WorkshopPage.objects.create(
+            workshop=workshop, title='Setup', slug='setup', sort_order=1,
+        )
+        WorkshopPage.objects.create(
+            workshop=workshop, title='Build', slug='build', sort_order=2,
+        )
+        UserContentCompletion.objects.create(
+            user=self.user,
+            content_type=CONTENT_TYPE_WORKSHOP_PAGE,
+            object_id=page_1.id,
+            completed_at=timezone.now(),
+        )
+
+        response = self.client.get('/')
+        content = response.content.decode()
+
+        self.assertContains(response, 'Prompt Workshop')
+        self.assertContains(response, '1/2 pages completed')
+        self.assertLess(
+            content.index('Prompt Workshop'),
+            content.index('AI Basics'),
+        )
+        self.assertNotContains(response, 'View all courses')
 
 
 class ContinueLearningCourseAccessTest(TierSetupMixin, TestCase):
@@ -743,8 +832,11 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         self.client.login(email='free@example.com', password='testpass')
         response = self.client.get('/')
         self.assertContains(response, 'Browse Courses')
-        self.assertContains(response, 'View Recordings')
-        self.assertContains(response, 'Submit Project')
+        self.assertContains(response, 'Browse Workshops')
+        self.assertContains(response, 'Resources')
+        self.assertContains(response, 'Events &amp; Recordings')
+        self.assertContains(response, 'Projects')
+        self.assertContains(response, 'Activities')
 
     def test_free_user_does_not_see_community(self):
         User.objects.create_user(
@@ -757,7 +849,7 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         # Check for the specific quick action Community card
         self.assertNotIn('Connect with other builders', content)
 
-    def test_main_user_sees_community(self):
+    def test_main_user_sees_activity_discovery(self):
         user = User.objects.create_user(
             email='main@example.com', password='testpass',
         )
@@ -765,7 +857,31 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main@example.com', password='testpass')
         response = self.client.get('/')
-        self.assertContains(response, 'Connect with other builders')
+        self.assertContains(response, 'Discover sprints and community activities')
+
+    def test_quick_action_urls_resolve_to_existing_routes(self):
+        User.objects.create_user(
+            email='routes@example.com', password='testpass',
+        )
+        self.client.login(email='routes@example.com', password='testpass')
+        response = self.client.get('/')
+
+        for action in response.context['quick_actions']:
+            path = urlparse(action['url']).path
+            try:
+                resolve(path)
+            except Resolver404 as exc:
+                self.fail(f"{action['title']} links to missing route {path}: {exc}")
+
+    def test_quick_actions_stay_scannable(self):
+        user = User.objects.create_user(
+            email='actions-main@example.com', password='testpass',
+        )
+        user.tier = self.main_tier
+        user.save()
+        self.client.login(email='actions-main@example.com', password='testpass')
+        response = self.client.get('/')
+        self.assertLessEqual(len(response.context['quick_actions']), 6)
 
 
 # ============================================================

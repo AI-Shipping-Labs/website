@@ -352,7 +352,7 @@ class DashboardProgressCancellationTest(
         response = self.client.get('/')
         content = response.content.decode()
         self.assertNotIn('Premium ML Course', content)
-        self.assertIn('No courses in progress yet', content)
+        self.assertIn('No courses or workshops in progress yet.', content)
 
     def test_cancelled_user_progress_records_still_in_db(self):
         handle_subscription_deleted({

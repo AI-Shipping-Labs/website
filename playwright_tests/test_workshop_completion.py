@@ -236,7 +236,7 @@ class TestFinishingLastPageRemovesFromContinueLearning:
         assert 'data-testid="continue-learning-workshop"' not in body
         # The empty-state copy renders since this user has no other
         # in-progress items.
-        assert 'No courses in progress yet' in body
+        assert 'No courses or workshops in progress yet.' in body
 
         ctx.close()
 

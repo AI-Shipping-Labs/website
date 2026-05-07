@@ -21,7 +21,10 @@ from content.models import (
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.tier_config import get_tiers_with_features
 from events.models import Event
-from plans.dashboard import build_sprint_plan_card_context
+from plans.dashboard import (
+    build_active_sprint_opportunities_context,
+    build_sprint_plan_card_context,
+)
 
 TESTIMONIALS = [
     {
@@ -222,7 +225,11 @@ def _dashboard(request):
     # discriminator. Course-only users get the same ordering as before;
     # the merged list short-circuits the workshop branch when the user has
     # no workshop completions.
-    in_progress_learning = _get_in_progress_learning(user, user_level)
+    all_in_progress_learning = _get_in_progress_learning(user, user_level)
+    in_progress_learning = all_in_progress_learning[:3]
+    hidden_learning_count = max(
+        0, len(all_in_progress_learning) - len(in_progress_learning),
+    )
     # Backward-compatible alias used by existing course-only tests
     # (test_dashboard.py, test_dashboard_performance.py): the unified
     # list filtered down to ``kind='course'`` items so the in-template
@@ -265,6 +272,8 @@ def _dashboard(request):
         'override_tier_name': override_tier_name,
         'in_progress_courses': in_progress_courses,
         'in_progress_learning': in_progress_learning,
+        'hidden_learning_count': hidden_learning_count,
+        'in_progress_learning_total_count': len(all_in_progress_learning),
         'upcoming_events': upcoming_events,
         'recent_content': recent_content,
         'active_polls': active_polls,
@@ -276,7 +285,15 @@ def _dashboard(request):
     }
     # Sprint plan card (issue #442). Same context keys as the Account
     # page so the duplicated card markup reads identically.
-    context.update(build_sprint_plan_card_context(user))
+    sprint_plan_context = build_sprint_plan_card_context(user)
+    context.update(sprint_plan_context)
+    context.update(
+        build_active_sprint_opportunities_context(
+            user,
+            user_level,
+            plan=sprint_plan_context['plan'],
+        )
+    )
     return render(request, 'content/dashboard.html', context)
 
 
@@ -659,7 +676,6 @@ def _get_active_polls(user_level):
 
 def _get_quick_actions(user_level):
     """Build quick action cards based on user's tier level."""
-    from content.access import LEVEL_MAIN
     actions = [
         {
             'title': 'Browse Courses',
@@ -668,25 +684,36 @@ def _get_quick_actions(user_level):
             'icon': 'book-open',
         },
         {
-            'title': 'View Recordings',
-            'description': 'Watch event recordings and workshops',
-            'url': '/events?filter=past',
+            'title': 'Browse Workshops',
+            'description': 'Practice with focused workshop material',
+            'url': '/workshops',
+            'icon': 'monitor-play',
+        },
+        {
+            'title': 'Resources',
+            'description': 'Use curated links, tools, and references',
+            'url': '/resources',
+            'icon': 'link',
+        },
+        {
+            'title': 'Events & Recordings',
+            'description': 'Register live or catch up on recordings',
+            'url': '/events',
             'icon': 'video',
         },
-    ]
-    if user_level >= LEVEL_MAIN:
-        actions.append({
-            'title': 'Community',
-            'description': 'Connect with other builders',
-            'url': '/community',
+        {
+            'title': 'Projects',
+            'description': 'Find ideas or submit your shipped work',
+            'url': '/projects',
+            'icon': 'rocket',
+        },
+        {
+            'title': 'Activities',
+            'description': 'Discover sprints and community activities',
+            'url': '/activities',
             'icon': 'users',
-        })
-    actions.append({
-        'title': 'Submit Project',
-        'description': 'Share your work with the community',
-        'url': '/projects',
-        'icon': 'rocket',
-    })
+        },
+    ]
     return actions
 
 

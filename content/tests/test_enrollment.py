@@ -495,7 +495,7 @@ class DashboardEnrollmentSourceTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         self.assertContains(
             response,
-            'No courses in progress yet — browse the catalog to enroll.',
+            'No courses or workshops in progress yet.',
         )
 
 

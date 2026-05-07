@@ -153,7 +153,10 @@
               <i data-lucide="book-open" class="h-5 w-5 shrink-0 text-accent"></i>
               Continue Learning
             </h2>
-            <a href="/courses" class="shrink-0 text-sm text-accent hover:underline">View all courses</a>
+            <div class="flex shrink-0 items-center gap-3 text-sm">
+              <a href="/courses" class="text-accent hover:underline">Courses</a>
+              <a href="/workshops" class="text-accent hover:underline">Workshops</a>
+            </div>
           </div>
           {% if in_progress_learning %}
           <div class="space-y-4" data-testid="continue-learning-list">
@@ -229,14 +232,37 @@
             {% endif %}
             {% endfor %}
           </div>
+          {% if hidden_learning_count %}
+          <div class="mt-4 flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="continue-learning-more">
+            <p class="text-sm text-muted-foreground">
+              {{ hidden_learning_count }} more started item{{ hidden_learning_count|pluralize }} hidden here.
+            </p>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <a href="/courses" class="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+                Courses
+                <i data-lucide="arrow-right" class="h-4 w-4"></i>
+              </a>
+              <a href="/workshops" class="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+                Workshops
+                <i data-lucide="arrow-right" class="h-4 w-4"></i>
+              </a>
+            </div>
+          </div>
+          {% endif %}
           {% else %}
           <div class="rounded-lg border border-border bg-card p-8 text-center">
             <i data-lucide="book-open" class="mx-auto h-10 w-10 text-muted-foreground"></i>
-            <p class="mt-3 text-muted-foreground">No courses in progress yet — browse the catalog to enroll.</p>
-            <a href="/courses" class="mt-4 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-              Browse Courses
-              <i data-lucide="arrow-right" class="h-4 w-4"></i>
-            </a>
+            <p class="mt-3 text-muted-foreground">No courses or workshops in progress yet.</p>
+            <div class="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
+              <a href="/courses" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                Browse Courses
+                <i data-lucide="arrow-right" class="h-4 w-4"></i>
+              </a>
+              <a href="/workshops" class="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+                Browse Workshops
+                <i data-lucide="arrow-right" class="h-4 w-4"></i>
+              </a>
+            </div>
           </div>
           {% endif %}
         </section>
@@ -323,6 +349,53 @@
 
       <!-- Sidebar: 1 column -->
       <div class="space-y-8">
+
+        <!-- Active Sprints -->
+        <section>
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
+              <i data-lucide="users" class="h-5 w-5 shrink-0 text-accent"></i>
+              Sprints & Cohorts
+            </h2>
+            <a href="{{ active_sprint_discovery_url }}" class="shrink-0 text-sm text-accent hover:underline">Activities</a>
+          </div>
+          {% if active_sprint_opportunities %}
+          <div class="space-y-3" data-testid="dashboard-active-sprints">
+            {% for item in active_sprint_opportunities %}
+            <a href="{{ item.url }}" class="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50" data-testid="dashboard-active-sprint">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-foreground">{{ item.sprint.name }}</p>
+                  <p class="mt-1 text-xs text-muted-foreground">
+                    {{ item.sprint.start_date|date:"M j" }} · {{ item.sprint.duration_weeks }} week{{ item.sprint.duration_weeks|pluralize }}
+                  </p>
+                </div>
+                <span class="shrink-0 text-xs text-accent">{{ item.cta_label }}</span>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+          {% elif plan %}
+          <div class="rounded-lg border border-border bg-card p-5">
+            <p class="text-sm font-medium text-foreground">Current cohort</p>
+            <p class="mt-1 text-sm text-muted-foreground">{{ plan.sprint.name }}</p>
+            {% if cohort_has_other_members %}
+            <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}" class="mt-3 inline-flex items-center gap-2 text-sm text-accent hover:underline">
+              View cohort
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="rounded-lg border border-border bg-card p-5">
+            <p class="text-sm text-muted-foreground">No active sprint openings for your tier right now.</p>
+            <a href="{{ active_sprint_discovery_url }}" class="mt-3 inline-flex items-center gap-2 text-sm text-accent hover:underline">
+              Browse activities
+              <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+          </div>
+          {% endif %}
+        </section>
 
         <!-- Active Polls -->
         <section>

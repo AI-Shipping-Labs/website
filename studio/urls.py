@@ -137,6 +137,7 @@ from studio.views.users import (
     user_detail,
     user_export_csv,
     user_list,
+    user_sync_from_stripe,
     user_tag_add,
     user_tag_remove,
 )
@@ -363,6 +364,11 @@ urlpatterns = [
     # ``created/``, ``export``, and ``tier-override/`` prefixes are
     # registered above so the ``<int:user_id>`` route does not swallow them.
     path('users/<int:user_id>/', user_detail, name='studio_user_detail'),
+    path(
+        'users/<int:user_id>/sync-from-stripe/',
+        user_sync_from_stripe,
+        name='studio_user_sync_from_stripe',
+    ),
     path(
         'users/<int:user_id>/notes/new',
         member_note_create,

@@ -46,6 +46,7 @@ from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
 from integrations.config import get_config
+from payments.services.backfill_tiers import backfill_user_from_stripe
 from plans.models import InterviewNote
 from studio.decorators import staff_required, superuser_required
 
@@ -678,6 +679,21 @@ def user_detail(request, user_id):
         'current_plan': None,
     }
     return render(request, 'studio/users/detail.html', context)
+
+
+@staff_required
+@require_POST
+def user_sync_from_stripe(request, user_id):
+    """POST handler: backfill one user's direct tier from Stripe."""
+    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    record = backfill_user_from_stripe(user)
+    if record.status == 'warning':
+        messages.warning(request, record.message)
+    elif record.status == 'changed':
+        messages.success(request, record.message)
+    else:
+        messages.info(request, record.message)
+    return redirect('studio_user_detail', user_id=user.pk)
 
 
 @staff_required

@@ -48,7 +48,23 @@
         <dt class="text-muted-foreground">Status</dt>
         <dd class="text-foreground">{{ status }}</dd>
       </div>
+      {% if detail_user.stripe_customer_id %}
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Stripe</dt>
+        <dd class="text-foreground font-mono break-all">{{ detail_user.stripe_customer_id }}</dd>
+      </div>
+      {% endif %}
     </dl>
+    {% if detail_user.stripe_customer_id %}
+    <form method="post" action="{% url 'studio_user_sync_from_stripe' detail_user.pk %}" class="mt-5">
+      {% csrf_token %}
+      <button type="submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+              data-testid="sync-from-stripe">
+        Sync from Stripe
+      </button>
+    </form>
+    {% endif %}
   </div>
 
   <!-- Tags -->

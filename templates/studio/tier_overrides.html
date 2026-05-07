@@ -21,10 +21,11 @@
 <!-- Search Form -->
 <div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">Search User</h2>
-  <form method="get" action="{% url 'studio_tier_override' %}" class="flex items-end space-x-4">
+  <form method="get" action="{% url 'studio_tier_override' %}" autocomplete="off" class="flex items-end space-x-4">
     <div class="flex-1">
       <label class="block text-sm font-medium text-foreground mb-1">User Email (exact match)</label>
       <input type="email" name="email" value="{{ search_email }}" required placeholder="user@example.com"
+             autocomplete="off"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
     <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">

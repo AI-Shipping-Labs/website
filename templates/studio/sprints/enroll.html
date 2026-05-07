@@ -19,13 +19,14 @@
 </div>
 
 <div class="bg-card border border-border rounded-lg p-6 max-w-3xl">
-  <form method="post" action="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}">
+  <form method="post" action="{% url 'studio_sprint_bulk_enroll' sprint_id=sprint.pk %}" autocomplete="off">
     {% csrf_token %}
     <div class="mb-4">
       <label class="block text-sm font-medium text-foreground mb-1" for="emails">Member emails (one per line, or comma-separated)</label>
       <textarea name="emails" id="emails" rows="8"
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono"
                 data-testid="bulk-enroll-emails"
+                autocomplete="off"
                 placeholder="alice@example.com, bob@example.com">{{ raw_emails }}</textarea>
     </div>
     <button type="submit"

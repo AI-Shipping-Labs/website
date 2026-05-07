@@ -20,11 +20,12 @@
 <!-- Grant Access Form -->
 <div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">Grant Access</h2>
-  <form method="post" action="{% url 'studio_course_access_grant' course_id=course.pk %}" class="flex items-end space-x-4">
+  <form method="post" action="{% url 'studio_course_access_grant' course_id=course.pk %}" autocomplete="off" class="flex items-end space-x-4">
     {% csrf_token %}
     <div class="flex-1">
       <label class="block text-sm font-medium text-foreground mb-1">User Email</label>
       <input type="email" name="email" required placeholder="user@example.com"
+             autocomplete="off"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
     <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">

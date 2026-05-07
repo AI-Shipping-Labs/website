@@ -46,6 +46,7 @@ class TokenCreateForm(forms.Form):
                     "focus:ring-1 focus:ring-accent"
                 ),
                 "data-testid": "token-user-select",
+                "autocomplete": "off",
             }
         ),
     )

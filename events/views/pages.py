@@ -11,7 +11,6 @@ from content.access import (
     can_access,
     get_required_tier_name,
 )
-from content.models import TagRule
 from events.models import Event, EventJoinClick, EventRegistration
 from events.services.display_time import (
     build_event_time_display,
@@ -39,20 +38,6 @@ def _filter_by_tags(queryset, selected_tags):
         if all(tag in obj_tags for tag in selected_tags):
             matching_ids.append(obj.pk)
     return queryset.filter(pk__in=matching_ids)
-
-
-def _get_tag_rules_for_tags(tags):
-    """Return TagRule objects that match any of the given tags.
-
-    Returns dict with 'after_content' and 'sidebar' lists.
-    """
-    if not tags:
-        return {'after_content': [], 'sidebar': []}
-    rules = TagRule.objects.filter(tag__in=tags)
-    result = {'after_content': [], 'sidebar': []}
-    for rule in rules:
-        result[rule.position].append(rule)
-    return result
 
 
 def events_calendar(request, year=None, month=None):
@@ -287,14 +272,11 @@ def event_detail(request, slug):
             event=event, user=user,
         ).exists()
 
-    # Build gating context. For completed events with a recording, use
-    # 'recording' so the CTA reads "watch this recording" instead of
-    # "join this event".
-    is_completed_recording = (
-        event.status == 'completed' and event.has_recording
-    )
-    gating_content_type = 'recording' if is_completed_recording else 'event'
-    gating = build_gating_context(user, event, gating_content_type)
+    # Build gating context for the upcoming-event registration CTA. The
+    # event detail page is announcement-only (issue #426) — recording
+    # playback and its paywall live on the linked Workshop, so we always
+    # use the 'event' gating copy here.
+    gating = build_gating_context(user, event, 'event')
 
     # Determine if we should show the join link.
     show_join_link = (
@@ -306,9 +288,6 @@ def event_detail(request, slug):
     # Determine required tier name for CTA
     required_tier_name = get_required_tier_name(event.required_level)
 
-    # Tag-rule components rendered after recording content.
-    tag_rules = _get_tag_rules_for_tags(event.tags)
-
     context = {
         'event': event,
         'event_time_display': build_event_time_display(event, user),
@@ -317,7 +296,6 @@ def event_detail(request, slug):
         'show_event_location': should_display_event_location(event),
         'show_zoom_link': show_join_link,
         'required_tier_name': required_tier_name,
-        'tag_rules': tag_rules,
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)

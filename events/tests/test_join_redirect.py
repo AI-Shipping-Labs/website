@@ -1,11 +1,13 @@
 """Tests for event join redirect with click tracking - issue #186."""
 
+import datetime
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from content.models import Workshop
 from events.models import Event, EventJoinClick, EventRegistration
 from tests.fixtures import TierSetupMixin
 
@@ -54,6 +56,26 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
             status='completed',
             recording_url='https://youtube.com/watch?v=abc',
         )
+        # Issue #426: the "Watch the recording" CTA on the join-unavailable
+        # page only appears when the event has a linked Workshop, since
+        # recording playback lives on the workshop video page.
+        cls.workshop_for_recording = Workshop.objects.create(
+            slug='past-workshop',
+            title='Past Workshop',
+            date=datetime.date(2025, 1, 1),
+            status='published',
+            landing_required_level=0,
+            pages_required_level=0,
+            recording_required_level=0,
+            event=cls.completed_event_with_recording,
+        )
+        cls.completed_event_no_workshop = Event.objects.create(
+            title='Past Event No Workshop',
+            slug='past-event-no-workshop',
+            start_datetime=timezone.now() - timedelta(days=7),
+            status='completed',
+            recording_url='https://youtube.com/watch?v=orphan',
+        )
         cls.draft_event = Event.objects.create(
             title='Draft Event',
             slug='draft-event',
@@ -67,6 +89,7 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
             cls.no_url_event,
             cls.completed_event,
             cls.completed_event_with_recording,
+            cls.completed_event_no_workshop,
         ]:
             EventRegistration.objects.create(event=event, user=cls.user)
 
@@ -110,15 +133,33 @@ class EventJoinRedirectTest(TierSetupMixin, TestCase):
         # No click should be recorded
         self.assertEqual(EventJoinClick.objects.count(), 0)
 
-    def test_join_redirect_past_event_with_recording_shows_link(self):
-        """Completed event with recording links to the event detail page."""
+    def test_join_redirect_past_event_with_workshop_links_to_workshop(self):
+        """Completed event with linked Workshop sends users to the workshop.
+
+        Issue #426: recording playback lives on the workshop video page,
+        so the "Watch the recording" CTA on the join-unavailable page
+        points at ``/workshops/<slug>``.
+        """
         self.client.login(email='member@example.com', password='testpass123')
         response = self.client.get('/events/past-event-recording/join')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Watch the recording')
-        # Link now points to the unified event detail page.
-        self.assertContains(response, '/events/past-event-recording')
+        self.assertContains(response, 'href="/workshops/past-workshop"')
+        # Must not point at the announcement-only event page or the
+        # retired standalone recording surface.
         self.assertNotContains(response, '/event-recordings/')
+
+    def test_join_redirect_past_event_without_workshop_omits_recording_cta(self):
+        """Completed event with recording_url but no linked Workshop has no CTA.
+
+        Issue #426: there is no canonical recording surface to point at
+        when no Workshop has been linked, so the CTA is suppressed.
+        """
+        self.client.login(email='member@example.com', password='testpass123')
+        response = self.client.get('/events/past-event-no-workshop/join')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This event has ended')
+        self.assertNotContains(response, 'Watch the recording')
 
     def test_join_redirect_draft_event_404(self):
         """Draft event returns 404 for non-staff user."""

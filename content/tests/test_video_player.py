@@ -564,12 +564,20 @@ class EventAdminFormTest(TestCase):
 # --- Recording Detail View Integration Tests ---
 
 class RecordingDetailVideoPlayerTest(TestCase):
-    """Test that the recording detail view renders the VideoPlayer component."""
+    """Issue #426: event detail page does not render an inline VideoPlayer.
+
+    Recording playback markup (``data-source``, ``data-video-id``, the
+    chapters disclosure, the timestamp buttons, and embed iframes) is
+    rendered on the linked Workshop's video page now. The video-player
+    template tag itself is exercised on
+    ``content.tests.test_workshops_public.WorkshopVideoTest`` and
+    ``content.tests.test_workshop_timestamps``.
+    """
 
     def setUp(self):
         self.client = Client()
 
-    def test_youtube_video_player_in_recording_detail(self):
+    def test_event_detail_omits_youtube_player(self):
         Event.objects.create(
             title='YT Recording',
             slug='yt-recording',
@@ -585,14 +593,13 @@ class RecordingDetailVideoPlayerTest(TestCase):
         response = self.client.get('/events/yt-recording')
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
-        # VideoPlayer should be rendered
-        self.assertIn('data-source="youtube"', content)
-        self.assertIn('data-video-id="testVidId"', content)
-        # Timestamps should be rendered
-        self.assertIn('[00:00]', content)
-        self.assertIn('Intro', content)
-        self.assertIn('[05:00]', content)
-        self.assertIn('Main Content', content)
+        # No inline video player or timestamp UI on event detail.
+        self.assertNotIn('data-source="youtube"', content)
+        self.assertNotIn('data-video-id="testVidId"', content)
+        self.assertNotIn('[00:00]', content)
+        self.assertNotIn('class="video-timestamp', content)
+        # Announcement copy still renders.
+        self.assertIn('A recording with YouTube', content)
 
     def test_recording_without_youtube_no_player(self):
         Event.objects.create(
@@ -608,8 +615,8 @@ class RecordingDetailVideoPlayerTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('data-source=', content)
 
-    def test_recording_with_google_embed_fallback(self):
-        """Google embed URLs should still use basic iframe (not video player)."""
+    def test_event_detail_omits_google_embed_iframe(self):
+        """The fallback drive.google.com iframe must not render on event detail either."""
         Event.objects.create(
             title='Google Recording',
             slug='google-recording',
@@ -621,9 +628,10 @@ class RecordingDetailVideoPlayerTest(TestCase):
         response = self.client.get('/events/google-recording')
         content = response.content.decode()
         self.assertEqual(response.status_code, 200)
-        self.assertIn('drive.google.com', content)
+        # The fallback iframe URL must not appear on the announcement page.
+        self.assertNotIn('drive.google.com/file/d/abc/preview', content)
 
-    def test_recording_youtube_with_hour_long_timestamps(self):
+    def test_event_detail_omits_hour_long_timestamps(self):
         Event.objects.create(
             title='Long Recording',
             slug='long-recording',
@@ -639,9 +647,10 @@ class RecordingDetailVideoPlayerTest(TestCase):
         )
         response = self.client.get('/events/long-recording')
         content = response.content.decode()
-        self.assertIn('[00:00]', content)
-        self.assertIn('[1:00:00]', content)
-        self.assertIn('[1:13:00]', content)
+        # Timestamp labels must not appear on the announcement page.
+        self.assertNotIn('[00:00]', content)
+        self.assertNotIn('[1:00:00]', content)
+        self.assertNotIn('[1:13:00]', content)
 
 
 # --- Content Pipeline Integration Tests ---

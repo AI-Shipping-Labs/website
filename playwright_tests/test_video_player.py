@@ -38,8 +38,11 @@ from django.db import connection
 
 def _clear_recordings():
     """Delete all recordings to ensure a clean state."""
+    from content.models import Workshop, WorkshopPage
     from events.models import Event
 
+    WorkshopPage.objects.all().delete()
+    Workshop.objects.all().delete()
     Event.objects.all().delete()
     connection.close()
 
@@ -74,19 +77,25 @@ def _create_recording(
     core_tools=None,
     learning_objectives=None,
     outcome="",
+    materials=None,
 ):
-    """Create a completed event with a recording via ORM.
+    """Create a completed event with a linked Workshop carrying the recording.
 
-    The events/recordings unification merged Recording into Event. This
-    helper keeps the legacy external kwargs (`youtube_url`,
-    `google_embed_url`, `date`) so call sites do not change, and
-    translates them to the new field names:
-      youtube_url       -> recording_url
-      google_embed_url  -> recording_embed_url
-      date              -> start_datetime (timezone-aware)
-    The event is created with status='completed' so it appears on
-    /events?filter=past.
+    Issue #426 retired the inline recording UI on the event detail page;
+    recording playback lives on the workshop video page now. The legacy
+    helper signature is preserved (call sites use ``youtube_url``,
+    ``google_embed_url``, ``date``) and translated to:
+      youtube_url       -> Event.recording_url
+      google_embed_url  -> Event.recording_embed_url
+      date              -> Event.start_datetime (timezone-aware)
+
+    A Workshop with the same slug is linked to the event so the canonical
+    ``/workshops/<slug>/video`` surface is available to the test. The
+    recording gate matches ``required_level`` so the same gating semantics
+    that used to live on the event detail page apply on the workshop video
+    page.
     """
+    from content.models import Workshop, WorkshopPage
     from events.models import Event
 
     if timestamps is None:
@@ -99,6 +108,8 @@ def _create_recording(
         core_tools = []
     if learning_objectives is None:
         learning_objectives = []
+    if materials is None:
+        materials = []
 
     start_dt = timezone.make_aware(
         datetime.datetime.combine(date, datetime.time(12, 0))
@@ -119,8 +130,29 @@ def _create_recording(
         core_tools=core_tools,
         learning_objectives=learning_objectives,
         outcome=outcome,
+        materials=materials,
     )
     recording.save()
+
+    # Link a Workshop with the same slug so /workshops/<slug>/video is the
+    # canonical recording surface. The three gates default to ``required_level``
+    # so the per-tier matrix that used to live on event detail still applies.
+    workshop = Workshop.objects.create(
+        slug=slug,
+        title=title,
+        description=description,
+        date=date,
+        status="published",
+        landing_required_level=0,
+        pages_required_level=0,
+        recording_required_level=required_level,
+        event=recording,
+    )
+    WorkshopPage.objects.create(
+        workshop=workshop, slug='intro', title='Intro',
+        sort_order=1, body='# Intro\n\nWorkshop intro.',
+    )
+
     connection.close()
     return recording
 
@@ -268,19 +300,25 @@ class TestScenario1YouTubeRecordingTimestamps:
             required_level=0,
         )
 
-        # Navigate to recordings listing
+        # Navigate to past recordings listing — past events always link to
+        # the linked Workshop (issue #426).
         page.goto(
             f"{django_server}/events?filter=past",
             wait_until="domcontentloaded",
         )
         assert "AI Workshop" in page.content()
 
-        # Click on the recording
-        page.locator('a:has-text("AI Workshop")').first.click()
+        # The past-card links to /workshops/<slug>; from the workshop
+        # landing the visitor follows "Watch the recording" to /video.
+        page.locator(
+            'a[data-testid="past-card-workshop-link"]'
+        ).first.click()
         page.wait_for_load_state("domcontentloaded")
+        assert "/workshops/ai-workshop" in page.url
 
-        # Verify we are on the detail page
-        assert "/events/ai-workshop" in page.url
+        page.locator('a:has-text("Watch the recording")').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/workshops/ai-workshop/video" in page.url
 
         # Verify YouTube embed is present
         body = page.content()
@@ -348,8 +386,9 @@ class TestScenario2LoomRecordingTimestamps:
 
         context = _auth_context(browser, "free-loom@test.com")
         page = context.new_page()
+        # Recording lives on the workshop video page (issue #426).
         page.goto(
-            f"{django_server}/events/product-demo",
+            f"{django_server}/workshops/product-demo/video",
             wait_until="domcontentloaded",
         )
 
@@ -536,14 +575,9 @@ class TestScenario6RecordingWithoutVideoURL:
     """Recording without a video URL still displays its content."""
 
     def test_no_video_url_shows_content_without_player(self, django_server, page):
-        """Given a recording with no youtube_url and no google_embed_url,
-        verify the page loads with title and description, no video player,
-        and a working back link.
-
-        Note: after the events/recordings unification, core_tools /
-        learning_objectives only render alongside the inline recording
-        block (i.e. when has_recording is True). This test verifies the
-        no-recording fallback: title + description visible, no video.
+        """Given a workshop with no recording URL on its linked event, the
+        workshop video page shows the "Recording not available yet" fallback
+        without an embedded player.
         """
         _clear_recordings()
         _create_recording(
@@ -561,23 +595,17 @@ class TestScenario6RecordingWithoutVideoURL:
             required_level=0,
         )
 
+        # Workshop video page is the canonical recording surface.
         response = page.goto(
-            f"{django_server}/events/community-qa",
+            f"{django_server}/workshops/community-qa/video",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
 
         body = page.content()
 
-        # Title and description are visible
+        # Title is visible.
         assert "Community Q&A" in body
-        assert "Open Q&A session for the community" in body
-
-        # No inline recording block (event has no recording_url).
-        recording_block = page.locator(
-            '[data-testid="event-recording-block"]'
-        )
-        assert recording_block.count() == 0
 
         # No video player or broken embed
         assert 'data-source="youtube"' not in body
@@ -590,15 +618,9 @@ class TestScenario6RecordingWithoutVideoURL:
         )
         assert video_iframes.count() == 0
 
-        # Navigation back works (post-unification: 'Back to Events' to
-        # /events).
-        back_link = page.locator(
-            'a:has-text("Back to Events")'
-        )
-        assert back_link.count() >= 1
-        back_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "/events" in page.url
+        # The workshop video page renders the "missing recording" fallback.
+        missing = page.locator('[data-testid="video-missing"]')
+        assert missing.count() == 1
 # ---------------------------------------------------------------
 # Scenario 7: Hour-long timestamps formatted correctly
 # ---------------------------------------------------------------
@@ -625,7 +647,7 @@ class TestScenario7HourLongTimestamps:
         )
 
         page.goto(
-            f"{django_server}/events/full-day-workshop",
+            f"{django_server}/workshops/full-day-workshop/video",
             wait_until="domcontentloaded",
         )
 
@@ -785,9 +807,9 @@ class TestScenario10AdminTimestampEditor:
         page.click('input[name="_save"]')
         page.wait_for_load_state("domcontentloaded")
 
-        # Navigate to the public page
+        # Navigate to the public recording page (workshop video, issue #426)
         page.goto(
-            f"{django_server}/events/workshop-demo",
+            f"{django_server}/workshops/workshop-demo/video",
             wait_until="domcontentloaded",
         )
 
@@ -846,8 +868,9 @@ class TestChaptersDisclosureExpandSeekCollapse:
             required_level=0,
         )
 
+        # Workshop video page is the canonical recording surface (issue #426).
         page.goto(
-            f"{django_server}/events/chapters-disclosure-demo",
+            f"{django_server}/workshops/chapters-disclosure-demo/video",
             wait_until="domcontentloaded",
         )
 
@@ -939,8 +962,9 @@ class TestNoChaptersWhenTimestampsEmpty:
             required_level=0,
         )
 
+        # Workshop video page is the canonical recording surface (issue #426).
         page.goto(
-            f"{django_server}/events/no-chapters-recording",
+            f"{django_server}/workshops/no-chapters-recording/video",
             wait_until="domcontentloaded",
         )
 

@@ -46,16 +46,20 @@ def _create_recording(
     published=True,
     date=None,
 ):
-    """Create a completed event with a recording via ORM.
+    """Create a completed event with a linked Workshop carrying the recording.
 
-    The events/recordings unification merged Recording into Event. This
-    helper keeps the legacy external kwargs (`youtube_url`, `date`) so call
-    sites do not change, and translates them to the new field names:
-      youtube_url -> recording_url
-      date        -> start_datetime (timezone-aware)
-    The event is created with status='completed' so it shows up on
-    /events?filter=past.
+    Issue #426 retired the inline event-detail recording UI. The canonical
+    recording surface is now the linked Workshop's video page. The legacy
+    helper signature is preserved (call sites use ``youtube_url``, ``date``)
+    and translated to:
+      youtube_url -> Event.recording_url
+      date        -> Event.start_datetime (timezone-aware)
+
+    A Workshop is linked with the same slug so ``/workshops/<slug>/video``
+    is the canonical recording URL. The recording gate matches
+    ``required_level`` so per-tier matrix tests behave equivalently.
     """
+    from content.models import Workshop, WorkshopPage
     from events.models import Event
 
     if timestamps is None:
@@ -85,14 +89,33 @@ def _create_recording(
         status="completed",
     )
     recording.save()
+
+    workshop = Workshop.objects.create(
+        slug=slug,
+        title=title,
+        description=description,
+        date=date,
+        status="published",
+        landing_required_level=0,
+        pages_required_level=0,
+        recording_required_level=required_level,
+        event=recording,
+    )
+    WorkshopPage.objects.create(
+        workshop=workshop, slug='intro', title='Intro',
+        sort_order=1, body='# Intro\n\nWorkshop intro.',
+    )
     connection.close()
     return recording
 
 
 def _clear_recordings():
     """Delete all recordings to ensure a clean state."""
+    from content.models import Workshop, WorkshopPage
     from events.models import Event
 
+    WorkshopPage.objects.all().delete()
+    Workshop.objects.all().delete()
     Event.objects.all().delete()
     connection.close()
 
@@ -153,14 +176,19 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
         rag_pos = body.index("Advanced RAG Pipelines")
         assert agents_pos < rag_pos
 
-        # Step 2: Click the "Building AI Agents" card link
+        # Step 2: Click the past-recording card link — past events with a
+        # linked Workshop send users straight to the workshop landing
+        # (issue #426).
         page.locator(
-            'a:has-text("Building AI Agents")'
+            'a[data-testid="past-card-workshop-link"]:has-text("Building AI Agents")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
+        assert "/workshops/building-ai-agents" in page.url
 
-        # The recording detail page loads
-        assert "/events/building-ai-agents" in page.url
+        # Step 3: Follow "Watch the recording" to the canonical video page.
+        page.locator('a:has-text("Watch the recording")').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/workshops/building-ai-agents/video" in page.url
 
         body = page.content()
 
@@ -319,43 +347,47 @@ class TestScenario3FreeUserSeesUpgradePath:
         )
         body = page.content()
 
-        # Recording appears in the listing with a lock icon
+        # Recording appears in the listing with a lock icon next to the
+        # gated title.
         assert "Premium Workshop on Fine-Tuning" in body
-        # The lock icon is rendered via data-lucide="lock"
-        # next to gated recording titles
         recording_card = page.locator(
             'article:has-text("Premium Workshop on Fine-Tuning")'
         )
         lock_icon = recording_card.locator('[data-lucide="lock"]')
         assert lock_icon.count() >= 1
 
-        # Step 2: Click on "Premium Workshop on Fine-Tuning"
+        # Step 2: Click the past-card link — issue #426 routes past
+        # recordings through the workshop video page where the paywall
+        # lives.
         page.locator(
-            'a:has-text("Premium Workshop on Fine-Tuning")'
+            'a[data-testid="past-card-workshop-link"]:has-text('
+            '"Premium Workshop on Fine-Tuning")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
+        # Workshop landing -> follow to video page, which is gated.
+        page.locator('a:has-text("Watch the recording")').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/workshops/premium-workshop-fine-tuning/video" in page.url
 
         body = page.content()
 
         # Title visible
         assert "Premium Workshop on Fine-Tuning" in body
 
-        # Description visible
-        assert "in-depth workshop covering fine-tuning" in body
-
         # No video player or YouTube iframe shown
         main_element = page.locator("main")
         main_html = main_element.inner_html()
         assert 'data-source="youtube"' not in main_html
-        # Ensure no iframe embed in main content
-        assert "<iframe" not in main_html.lower() or "ft999" not in main_html
+        # No iframe embed for the gated recording.
+        assert "ft999" not in main_html
 
-        # Blurred placeholder and upgrade CTA visible
-        assert "blur" in body
-        assert "Upgrade to Basic to watch this recording" in body
+        # Workshop video paywall card and CTA visible.
+        paywall = page.locator('[data-testid="video-paywall"]')
+        assert paywall.count() == 1
+        assert "Upgrade to Basic to watch the recording" in body
 
-        # Step 3: Click "View Pricing" link
-        pricing_link = page.locator('a:has-text("View Pricing")')
+        # Step 3: Click the upgrade CTA, which goes to /pricing.
+        pricing_link = page.locator('[data-testid="video-upgrade-cta"]')
         assert pricing_link.count() >= 1
         pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
@@ -399,9 +431,9 @@ class TestScenario4BasicMemberWatchesBasicRecording:
 
         context = _auth_context(browser, "basic-rec@test.com")
         page = context.new_page()
-        # Navigate directly to the recording detail page
+        # Recording lives on the workshop video page (issue #426).
         page.goto(
-            f"{django_server}/events/ai-tool-breakdown-cursor",
+            f"{django_server}/workshops/ai-tool-breakdown-cursor/video",
             wait_until="domcontentloaded",
         )
 
@@ -413,11 +445,14 @@ class TestScenario4BasicMemberWatchesBasicRecording:
         # No upgrade message or blurred overlay
         assert "Upgrade to" not in body
 
+        # Expand the collapsed Chapters disclosure so timestamps show.
+        page.evaluate(
+            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        )
+
         # Timestamps are listed
         assert "[00:00]" in body
         assert "Overview" in body
-        assert "[05:00]" in body
-        assert "Live demo" in body
 
         # Verify timestamps are clickable elements
         timestamps = page.locator(".video-timestamp")
@@ -498,25 +533,20 @@ class TestScenario5NavigateFromDetailToFilteredListing:
         )
         assert "Deploy with Docker" not in cards_text
 
-        # Step 3: Click the "Building Chatbots" card to return
+        # Step 3: Click the "Building Chatbots" past-card. After issue
+        # #426, past-cards link to the linked Workshop landing.
         page.locator(
-            'a:has-text("Building Chatbots")'
+            'a[data-testid="past-card-workshop-link"]:has-text("Building Chatbots")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/events/building-chatbots" in page.url
+        assert "/workshops/building-chatbots" in page.url
 
-        # Step 4: Click the "Back to Events" link (post-unification text;
-        # the recording detail page now lives under /events).
-        back_link = page.locator(
-            'a:has-text("Back to Events")'
+        # Step 4: Navigate back to /events — both recordings are still
+        # discoverable under the past-events section.
+        page.goto(
+            f"{django_server}/events",
+            wait_until="domcontentloaded",
         )
-        assert back_link.count() >= 1
-        back_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # User returns to /events with no filters; both recordings are
-        # visible (in the past-events section of the unified page).
-        assert "/events" in page.url
         body = page.content()
         assert "Building Chatbots" in body
         assert "Deploy with Docker" in body

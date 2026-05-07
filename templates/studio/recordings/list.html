@@ -45,7 +45,9 @@
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground">{{ recording.date|date:"M d, Y" }}</td>
         <td class="px-6 py-4 text-right space-x-3">
-          <a href="{{ recording.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
+          {% if recording.workshop %}
+          <a href="{{ recording.workshop.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View workshop</a>
+          {% endif %}
           <a href="{% url 'studio_recording_edit' recording_id=recording.pk %}" class="text-sm text-accent hover:underline">{% if recording.source_repo %}View{% else %}Edit{% endif %}</a>
         </td>
       </tr>

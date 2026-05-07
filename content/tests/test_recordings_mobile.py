@@ -3,9 +3,11 @@
 Covers:
 - Recording list: arrow icon hidden on mobile (has `hidden sm:block` classes)
 - Recording list: cards use min-w-0 to prevent overflow
-- Recording detail: material links have adequate tap targets (min-h-[44px])
-- Recording detail: material trailing icon hidden on mobile
 - Pagination controls have min-h-[44px] for tap targets and flex-wrap
+
+Issue #426 retired the inline event-detail recording UI, so the
+materials-list mobile coverage that lived here moved to the workshop
+video page (see ``content/tests/test_workshops_public.py``).
 """
 
 from datetime import timedelta
@@ -70,7 +72,12 @@ class RecordingListMinWidth0Test(TestCase):
 
 
 class RecordingDetailMaterialTapTargetTest(TestCase):
-    """Material links should have adequate tap targets on mobile."""
+    """Issue #426: event detail page does not render the materials list.
+
+    Materials live on the linked Workshop's video page now; mobile
+    tap-target coverage for the materials list is in
+    ``content/tests/test_workshops_public.py``.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -82,26 +89,13 @@ class RecordingDetailMaterialTapTargetTest(TestCase):
             ],
         )
 
-    def test_material_links_have_min_height(self):
+    def test_event_detail_omits_materials_list(self):
         response = self.client.get('/events/material-tap-test')
         content = response.content.decode()
-        # Material links should have min-h-[44px]
-        self.assertIn('min-h-[44px]', content)
-
-    def test_material_trailing_icon_hidden_on_mobile(self):
-        response = self.client.get('/events/material-tap-test')
-        content = response.content.decode()
-        # The trailing external-link icon in materials should be hidden on mobile
-        # Find material section
-        materials_start = content.index('Materials')
-        materials_section = content[materials_start:materials_start + 2000]
-        self.assertIn('hidden sm:block', materials_section)
-
-    def test_material_title_has_truncate(self):
-        response = self.client.get('/events/material-tap-test')
-        content = response.content.decode()
-        # Material title should have truncate class to prevent overflow
-        self.assertIn('truncate', content)
+        # No Materials heading or material URLs on the announcement page.
+        self.assertNotIn('Materials</h2>', content)
+        self.assertNotIn('https://github.com/test', content)
+        self.assertNotIn('https://example.com/slides', content)
 
 
 class RecordingPaginationMobileTest(TestCase):

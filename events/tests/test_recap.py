@@ -24,7 +24,11 @@ class EventRecapModelTest(TestCase):
 
 
 class EventRecapViewTest(TestCase):
-    def test_event_detail_renders_normal_event_header_then_recording_then_recap(self):
+    def test_event_detail_renders_recap_html_in_place_of_description(self):
+        # Issue #426 retired the inline recording block. The recap HTML
+        # supplied via content sync replaces the description on completed
+        # events, so the recording embed (when present) is now part of the
+        # recap markup itself rather than a templated inline block.
         Event.objects.create(
             title='Launch',
             slug='launch',
@@ -39,15 +43,16 @@ class EventRecapViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'events/event_detail.html')
         self.assertContains(response, 'Launch')
-        self.assertContains(response, 'data-testid="event-recording-block"')
         self.assertContains(response, 'Watch the recording')
-        self.assertContains(response, 'Chapters (1)')
+        # Inline recording UI is gone — recordings live on the workshop
+        # video page now.
+        self.assertNotContains(response, 'data-testid="event-recording-block"')
         content = response.content.decode()
-        self.assertLess(
-            content.index('data-testid="event-recording-block"'),
-            content.index('Watch the recording'),
+        # The original description is suppressed when recap_html is present.
+        self.assertNotIn(
+            '<p class="text-muted-foreground">Original launch description</p>',
+            content,
         )
-        self.assertNotIn('<p class="text-muted-foreground">Original launch description</p>', content)
 
     def test_event_detail_omits_recap_html_when_absent(self):
         Event.objects.create(

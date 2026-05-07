@@ -1,18 +1,21 @@
-"""Playwright E2E tests for issue #363: events hand recording UI off to workshops.
+"""Playwright E2E tests for issues #363 and #426: event detail is announcement-only.
 
-When an Event has a linked Workshop (`event.workshop` is set via the
-``Workshop.event`` reverse OneToOne accessor), the event detail page must
-suppress the inline recording UI and rely on the "Full workshop writeup"
-CTA to send members over to the Workshop landing/video pages where the
-canonical recording lives.
+The event detail page (``/events/<slug>``) is the announcement / handoff page
+for an event; the canonical recording playback lives on the linked Workshop's
+landing/video pages.
 
-Three scenarios from the groomed spec:
-1. Workshop-linked completed event hands off to the workshop;
-   recording UI is suppressed.
-2. Legacy completed event with no linked workshop keeps the
-   inline recording on the event page.
-3. Upcoming workshop-linked event suppresses recording UI but keeps
-   the Register flow.
+Issue #363 introduced the "Full workshop writeup" CTA on workshop-linked
+events. Issue #426 retired the inline recording fallback entirely, so even
+completed events without a linked workshop now render announcement-only — no
+inline player, materials, transcript, chapters, or recording paywall.
+
+Three scenarios:
+1. Workshop-linked completed event hands off to the workshop and renders no
+   recording UI.
+2. Completed event with no linked workshop also renders no recording UI
+   (announcement-only) and has no workshop CTA.
+3. Upcoming workshop-linked event suppresses recording UI but keeps the
+   Register flow.
 
 Usage:
     uv run pytest playwright_tests/test_event_workshop_handoff.py -v
@@ -222,27 +225,31 @@ class TestWorkshopLinkedEventHandsOff:
 
 
 # ----------------------------------------------------------------------
-# Scenario 2: legacy completed event with no linked workshop keeps the
-# inline recording UI exactly as before.
+# Scenario 2: completed event with no linked workshop is announcement-only
+# (issue #426 retired the inline recording fallback).
 # ----------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestLegacyEventKeepsInlineRecording:
-    """Anonymous visitor opens a legacy past event; the inline recording
-    block still renders because there is no linked Workshop."""
+class TestOrphanEventIsAnnouncementOnly:
+    """Anonymous visitor opens a completed event with no linked Workshop.
 
-    def test_legacy_event_renders_inline_recording(
+    The event page is announcement-only: title, description, and tags
+    render, but no inline recording UI. There is also no workshop writeup
+    CTA, since no Workshop is linked.
+    """
+
+    def test_orphan_event_omits_inline_recording_ui(
         self, django_server, page,
     ):
         _clear_events_and_workshops()
         _create_event(
-            slug='legacy-event',
-            title='Legacy Past Event',
-            description='An older recording never promoted to a workshop.',
+            slug='orphan-event',
+            title='Orphan Past Event',
+            description='An older session never promoted to a workshop.',
             status='completed',
             kind='standard',
-            recording_url='https://www.youtube.com/watch?v=LEGACY',
+            recording_url='https://www.youtube.com/watch?v=ORPHAN',
             timestamps=[{'time_seconds': 0, 'label': 'Intro'}],
             core_tools=['ChatGPT'],
             learning_objectives=['Understand RAG'],
@@ -254,31 +261,31 @@ class TestLegacyEventKeepsInlineRecording:
         )
 
         page.goto(
-            f'{django_server}/events/legacy-event',
+            f'{django_server}/events/orphan-event',
             wait_until='domcontentloaded',
         )
         body = page.content()
 
-        # The inline recording block renders.
+        # Announcement copy renders.
+        assert 'Orphan Past Event' in body
+        assert 'An older session never promoted to a workshop.' in body
+
+        # No inline recording block, no video player, no recording-only
+        # sections, no transcript, no materials.
         recording_block = page.locator(
             '[data-testid="event-recording-block"]'
         )
-        assert recording_block.count() == 1
+        assert recording_block.count() == 0
 
-        # Video player and timestamps are present.
         main_html = page.locator('main').inner_html()
-        assert (
-            'data-source="youtube"' in main_html
-            or '<iframe' in main_html.lower()
-        )
-
-        # Core Tools / What You'll Learn / Materials are populated.
-        assert 'Core Tools' in body
-        assert 'ChatGPT' in body
-        assert "What You'll Learn" in body
-        assert 'Understand RAG' in body
-        assert 'Notes' in body
-        assert 'https://example.com/notes.pdf' in body
+        assert 'data-source="youtube"' not in main_html
+        assert '<iframe' not in main_html.lower()
+        assert 'Core Tools' not in body
+        assert 'ChatGPT' not in body
+        assert "What You'll Learn" not in body
+        assert 'Understand RAG' not in body
+        assert 'Materials</h2>' not in main_html
+        assert 'https://example.com/notes.pdf' not in body
 
         # No workshop writeup CTA — there is no workshop to link to.
         assert (

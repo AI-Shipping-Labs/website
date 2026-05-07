@@ -490,10 +490,16 @@ class EventDetailPageTest(TestCase):
         self.assertContains(response, 'Sign in to register')
 
 
-class EventDetailRecordingLinkTest(TestCase):
-    """Test completed event shows the recording inline on detail page."""
+class EventDetailRecordingRemovedTest(TestCase):
+    """Issue #426: event detail no longer renders inline recording UI.
 
-    def test_completed_with_recording_shows_inline_block(self):
+    Completed events with recording fields populated must not embed a
+    video player, materials list, transcript, or chapters on the event
+    detail page. Recording playback lives on the linked Workshop's
+    landing/video pages.
+    """
+
+    def test_completed_with_recording_omits_inline_block(self):
         Event.objects.create(
             title='Completed Event',
             slug='completed-event',
@@ -507,21 +513,20 @@ class EventDetailRecordingLinkTest(TestCase):
             transcript_text='Event transcript text.',
         )
         response = self.client.get('/events/completed-event')
-        # Recording block is rendered inline, identified by data-testid.
-        self.assertContains(response, 'data-testid="event-recording-block"')
-        self.assertTemplateUsed(response, 'events/_recording_embed.html')
-        self.assertTemplateUsed(response, 'events/_recording_materials.html')
-        self.assertTemplateUsed(response, 'events/_recording_transcript.html')
-        self.assertContains(response, 'data-testid="video-chapters"')
-        self.assertContains(response, 'class="video-timestamp')
-        self.assertContains(response, 'data-time-seconds="0"')
-        self.assertContains(response, 'data-source="youtube"')
-        self.assertNotContains(response, 'Tutorial:')
-        self.assertContains(response, 'data-testid="recording-materials"')
-        self.assertContains(response, 'https://example.com/slides.pdf')
-        self.assertContains(response, 'data-testid="recording-transcript"')
-        self.assertContains(response, 'Event transcript text.')
-        # No link out to a separate recording surface.
+        # No inline recording block markers anywhere on the page.
+        self.assertNotContains(response, 'data-testid="event-recording-block"')
+        self.assertNotContains(response, 'data-testid="video-chapters"')
+        self.assertNotContains(response, 'class="video-timestamp')
+        self.assertNotContains(response, 'data-source="youtube"')
+        self.assertNotContains(
+            response, 'data-testid="recording-materials"',
+        )
+        self.assertNotContains(response, 'https://example.com/slides.pdf')
+        self.assertNotContains(
+            response, 'data-testid="recording-transcript"',
+        )
+        self.assertNotContains(response, 'Event transcript text.')
+        # No link out to the retired standalone recording surface either.
         self.assertNotContains(response, '/event-recordings/')
 
     def test_completed_without_recording_no_block(self):

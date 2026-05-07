@@ -22,6 +22,7 @@ behaviors (visual stacking, viewport row count, mobile reflow).
 
 import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -45,6 +46,7 @@ from django.utils import timezone  # noqa: E402
 DESKTOP_VIEWPORT = {"width": 1280, "height": 900}
 MOBILE_VIEWPORT = {"width": 390, "height": 900}
 SCREENSHOT_DIR = Path("/tmp/aisl-issue-451-screenshots")
+TEST_USER_LIST_PAGE_SIZE = 10
 
 
 def _clear_users_except_staff(staff_email):
@@ -132,15 +134,18 @@ def _seed_dense_paid_users(count):
     from payments.models import Tier
 
     paid = Tier.objects.get(slug='main')
-    for idx in range(count):
-        email = f'dense-{idx:03d}@example.com'
-        user, _ = User.objects.get_or_create(email=email)
-        user.first_name = f'First{idx:03d}'
-        user.last_name = f'Last{idx:03d}'
-        user.tier = paid
-        user.email_verified = True
-        user.set_password('TestPass123!')
-        user.save()
+    users = [
+        User(
+            email=f'dense-{idx:03d}@example.com',
+            first_name=f'First{idx:03d}',
+            last_name=f'Last{idx:03d}',
+            tier=paid,
+            email_verified=True,
+            password='!',
+        )
+        for idx in range(count)
+    ]
+    User.objects.bulk_create(users)
     connection.close()
 
 
@@ -418,34 +423,38 @@ class TestStudioUsersNameLayout:
         staff_email = 'name-layout-pager-admin@test.com'
         _create_staff_user(staff_email)
         _clear_users_except_staff(staff_email)
-        _seed_dense_paid_users(60)
+        _seed_dense_paid_users(12)
 
         context = _auth_context(browser, staff_email)
         page = context.new_page()
         page.set_viewport_size(DESKTOP_VIEWPORT)
-        page.goto(
-            f"{django_server}/studio/users/?filter=paid&page=2",
-            wait_until="domcontentloaded",
-        )
+        with mock.patch(
+            'studio.views.users.USER_LIST_PAGE_SIZE',
+            TEST_USER_LIST_PAGE_SIZE,
+        ):
+            page.goto(
+                f"{django_server}/studio/users/?filter=paid&page=2",
+                wait_until="domcontentloaded",
+            )
 
-        # Page 2 has rows 51-60 of the 60 paid users.
-        assert 'Showing 51-60 of 60' in page.content()
-        # At least one row on page 2 has a visible user-name cell —
-        # exercising the new headline layout on a non-first page.
-        named_rows_on_page_two = page.locator('[data-testid="user-name"]').count()
-        assert named_rows_on_page_two >= 1
+            # Page 2 has rows 11-12 of the 12 paid users.
+            assert 'Showing 11-12 of 12' in page.content()
+            # At least one row on page 2 has a visible user-name cell —
+            # exercising the new headline layout on a non-first page.
+            named_rows_on_page_two = page.locator('[data-testid="user-name"]').count()
+            assert named_rows_on_page_two >= 1
 
-        # The "first" pager link drops back to page=1 and keeps filter=paid.
-        first_link = page.locator(
-            '[data-testid="user-list-pager-first"]'
-        ).first
-        first_link.click()
-        page.wait_for_load_state('domcontentloaded')
-        assert 'page=1' in page.url
-        assert 'filter=paid' in page.url
+            # The "first" pager link drops back to page=1 and keeps filter=paid.
+            first_link = page.locator(
+                '[data-testid="user-list-pager-first"]'
+            ).first
+            first_link.click()
+            page.wait_for_load_state('domcontentloaded')
+            assert 'page=1' in page.url
+            assert 'filter=paid' in page.url
 
-        # Page 1 also has named rows.
-        assert page.locator('[data-testid="user-name"]').count() >= 1
+            # Page 1 also has named rows.
+            assert page.locator('[data-testid="user-name"]').count() >= 1
 
         context.close()
 
@@ -458,7 +467,7 @@ class TestStudioUsersNameLayout:
         _clear_users_except_staff(staff_email)
         # Seed enough users that at least 18 fit in the viewport even
         # with the stats cards + filter chips at the top of the page.
-        _seed_dense_paid_users(30)
+        _seed_dense_paid_users(18)
 
         context = _auth_context(browser, staff_email)
         page = context.new_page()

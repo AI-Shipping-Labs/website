@@ -3,134 +3,20 @@
 {% block studio_title %}Dashboard{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
+<div class="mb-6">
   <h1 class="text-2xl font-semibold text-foreground">Dashboard</h1>
-  <p class="text-muted-foreground mt-1">Overview of your content and community.</p>
+  <p class="text-muted-foreground mt-1">Operational view for Studio work.</p>
 </div>
 
-<!-- Stats Grid -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Total Courses</p>
-        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.total_courses }}</p>
-      </div>
-      <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-        <i data-lucide="book-open" class="w-5 h-5 text-blue-400"></i>
-      </div>
-    </div>
-    <p class="text-xs text-muted-foreground mt-2">{{ stats.published_courses }} published</p>
-  </div>
-
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Published Articles</p>
-        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.published_articles }}</p>
-      </div>
-      <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-        <i data-lucide="file-text" class="w-5 h-5 text-green-400"></i>
-      </div>
-    </div>
-    <p class="text-xs text-muted-foreground mt-2">{{ stats.total_articles }} total</p>
-  </div>
-
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Active Subscribers</p>
-        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.active_subscribers }}</p>
-      </div>
-      <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
-        <i data-lucide="users" class="w-5 h-5 text-purple-400"></i>
-      </div>
-    </div>
-    <p class="text-xs text-muted-foreground mt-2">{{ stats.total_subscribers }} total</p>
-  </div>
-
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Upcoming Events</p>
-        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.upcoming_events }}</p>
-      </div>
-      <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
-        <i data-lucide="calendar" class="w-5 h-5 text-orange-400"></i>
-      </div>
-    </div>
-    <p class="text-xs text-muted-foreground mt-2">{{ stats.total_events }} total</p>
-  </div>
-</div>
-
-<!-- Second stats row -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Recordings</p>
-        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.total_recordings }}</p>
-      </div>
-      <i data-lucide="video" class="w-5 h-5 text-muted-foreground"></i>
-    </div>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Downloads</p>
-        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.total_downloads }}</p>
-      </div>
-      <i data-lucide="download" class="w-5 h-5 text-muted-foreground"></i>
-    </div>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Pending Projects</p>
-        <p class="text-2xl font-semibold text-foreground mt-1">{{ stats.pending_projects }}</p>
-      </div>
-      <i data-lucide="folder-kanban" class="w-5 h-5 text-muted-foreground"></i>
-    </div>
-  </div>
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm text-muted-foreground">Active Sprints</p>
-        <p class="text-2xl font-semibold text-foreground mt-1" data-testid="studio-dashboard-active-sprints">{{ stats.active_sprints }}</p>
-      </div>
-      <a href="{% url 'studio_sprint_list' %}" class="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center hover:bg-indigo-500/30 transition-colors" data-testid="studio-dashboard-sprints-link" aria-label="Sprints">
-        <i data-lucide="calendar-days" class="w-5 h-5 text-indigo-400"></i>
-      </a>
-    </div>
-    <p class="text-xs text-muted-foreground mt-2" data-testid="studio-dashboard-plans-subline">{{ stats.total_plans }} plan{{ stats.total_plans|pluralize }}</p>
-  </div>
-</div>
-
-<!-- Content Sync -->
-<div class="mb-8">
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-lg font-semibold text-foreground">Content Sync</h2>
-        <p class="text-sm text-muted-foreground mt-1">Content is synced from GitHub. Manage sync sources and trigger syncs.</p>
-      </div>
-      <a href="{% url 'studio_sync_dashboard' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Sync Dashboard
-      </a>
-    </div>
-  </div>
-</div>
-
-<!-- Worker status -->
 {% if worker_info.expect_worker %}
-<div class="mb-8" data-testid="dashboard-worker-panel">
-  <div class="bg-card border {% if worker_info.alive %}border-border{% else %}border-red-500/40{% endif %} rounded-lg p-6">
+<section class="mb-6" data-testid="dashboard-worker-panel" aria-labelledby="worker-status-heading">
+  <div class="border {% if worker_info.alive %}border-border bg-card{% else %}border-red-500/50 bg-red-500/10{% endif %} rounded-lg p-4">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <div class="flex items-start gap-3">
+      <div class="flex items-start gap-3 min-w-0">
         {% if worker_info.alive %}
           <span class="w-3 h-3 mt-1.5 rounded-full bg-green-500 flex-shrink-0" aria-hidden="true"></span>
-          <div>
-            <h2 class="text-lg font-semibold text-foreground">
+          <div class="min-w-0">
+            <h2 id="worker-status-heading" class="text-base font-semibold text-foreground">
               Worker running
               {% if worker_info.idle %}<span class="text-muted-foreground font-normal text-sm">(idle)</span>{% endif %}
             </h2>
@@ -143,8 +29,8 @@
           </div>
         {% else %}
           <span class="w-3 h-3 mt-1.5 rounded-full bg-red-500 flex-shrink-0" aria-hidden="true"></span>
-          <div>
-            <h2 class="text-lg font-semibold text-foreground">Worker not running</h2>
+          <div class="min-w-0">
+            <h2 id="worker-status-heading" class="text-base font-semibold text-foreground">Worker not running</h2>
             <p class="text-sm text-muted-foreground mt-1">
               Async tasks (sync, attribution, notifications) will queue but not execute.
               Run <code class="bg-secondary px-1.5 py-0.5 rounded text-xs">manage.py qcluster</code> to start it.
@@ -152,62 +38,171 @@
           </div>
         {% endif %}
       </div>
-      <a href="{% url 'studio_worker' %}" class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors shrink-0">
+      <a href="{% url 'studio_worker' %}" class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors shrink-0">
+        <i data-lucide="server" class="w-4 h-4"></i>
         Worker dashboard
       </a>
     </div>
   </div>
-</div>
+</section>
 {% endif %}
 
-<!-- Recent Activity -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-  <!-- Recent Articles -->
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-foreground">Recent Articles</h2>
-      <a href="{% url 'studio_article_list' %}" class="text-sm text-accent hover:underline">View all</a>
+<div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)] gap-6 mb-6">
+  <section class="bg-card border border-border rounded-lg p-5" data-testid="studio-dashboard-attention" aria-labelledby="attention-heading">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h2 id="attention-heading" class="text-lg font-semibold text-foreground">Attention</h2>
+        <p class="text-sm text-muted-foreground mt-1">Items that may need operator follow-up.</p>
+      </div>
+      <a href="{% url 'studio_project_list' %}?status=pending_review" class="text-sm text-accent hover:underline whitespace-nowrap">Project reviews</a>
     </div>
-    {% if recent_articles %}
-    <ul class="space-y-3">
-      {% for article in recent_articles %}
-      <li class="flex items-center justify-between py-2 border-b border-border last:border-0">
-        <div>
-          <a href="{% url 'studio_article_edit' article_id=article.pk %}" class="text-sm text-foreground hover:text-accent">{{ article.title }}</a>
-          <p class="text-xs text-muted-foreground mt-1">{{ article.date }}</p>
-        </div>
-        <span class="text-xs px-2 py-1 rounded-full {% if article.published %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-          {% if article.published %}Published{% else %}Draft{% endif %}
-        </span>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="text-sm text-muted-foreground">No articles yet.</p>
-    {% endif %}
-  </div>
 
-  <!-- Pending Projects -->
-  <div class="bg-card border border-border rounded-lg p-6">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-foreground">Pending Projects</h2>
-      <a href="{% url 'studio_project_list' %}?status=pending_review" class="text-sm text-accent hover:underline">View all</a>
-    </div>
-    {% if pending_projects %}
-    <ul class="space-y-3">
-      {% for project in pending_projects %}
-      <li class="flex items-center justify-between py-2 border-b border-border last:border-0">
-        <div>
-          <a href="{% url 'studio_project_review' project_id=project.pk %}" class="text-sm text-foreground hover:text-accent">{{ project.title }}</a>
-          <p class="text-xs text-muted-foreground mt-1">by {{ project.author }}</p>
-        </div>
-        <span class="text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-400">Pending</span>
-      </li>
-      {% endfor %}
-    </ul>
+    {% if attention_items %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% for item in attention_items %}
+          <a href="{{ item.url }}" class="flex items-start gap-3 rounded-lg border {% if item.tone == 'critical' %}border-red-500/40 bg-red-500/10{% else %}border-border bg-secondary/30{% endif %} p-3 hover:border-accent/60 transition-colors" data-testid="studio-dashboard-attention-item">
+            <span class="w-9 h-9 rounded-lg {% if item.tone == 'critical' %}bg-red-500/20 text-red-300{% else %}bg-accent/15 text-accent{% endif %} flex items-center justify-center shrink-0">
+              <i data-lucide="{{ item.icon }}" class="w-4 h-4"></i>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-baseline gap-2">
+                <span class="text-lg font-semibold text-foreground">{{ item.count }}</span>
+                <span class="text-sm font-medium text-foreground">{{ item.label }}</span>
+              </span>
+              <span class="block text-xs text-muted-foreground mt-1">{{ item.description }}</span>
+            </span>
+          </a>
+        {% endfor %}
+      </div>
     {% else %}
-    <p class="text-sm text-muted-foreground">No pending projects.</p>
+      <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-4" data-testid="studio-dashboard-attention-empty">
+        Nothing needs immediate attention.
+      </p>
     {% endif %}
+  </section>
+
+  <section class="bg-card border border-border rounded-lg p-5" data-testid="studio-dashboard-quick-actions" aria-labelledby="quick-actions-heading">
+    <h2 id="quick-actions-heading" class="text-lg font-semibold text-foreground mb-4">Quick actions</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
+      {% for action in quick_actions %}
+        <a href="{{ action.url }}" class="flex items-center gap-3 rounded-lg border border-border px-3 py-3 hover:bg-secondary hover:text-foreground transition-colors" data-testid="studio-dashboard-quick-action">
+          <span class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+            <i data-lucide="{{ action.icon }}" class="w-4 h-4 text-muted-foreground"></i>
+          </span>
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-foreground">{{ action.label }}</span>
+            <span class="block text-xs text-muted-foreground truncate">{{ action.description }}</span>
+          </span>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="mb-6" aria-labelledby="summary-heading">
+  <div class="flex items-center justify-between gap-3 mb-3">
+    <h2 id="summary-heading" class="text-lg font-semibold text-foreground">Summary</h2>
+    <a href="{% url 'studio_sprint_list' %}" class="text-sm text-accent hover:underline" data-testid="studio-dashboard-sprints-link">Sprints</a>
   </div>
+  <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+    {% for metric in summary_metrics %}
+      <div class="bg-card border border-border rounded-lg p-3">
+        <p class="text-xs text-muted-foreground">{{ metric.label }}</p>
+        {% if metric.label == 'Sprints' %}
+          <p class="text-xl font-semibold text-foreground mt-1" data-testid="studio-dashboard-active-sprints">{{ metric.value }}</p>
+          <p class="text-xs text-muted-foreground mt-1" data-testid="studio-dashboard-plans-subline">{{ metric.detail }}</p>
+        {% else %}
+          <p class="text-xl font-semibold text-foreground mt-1">{{ metric.value }}</p>
+          <p class="text-xs text-muted-foreground mt-1">{{ metric.detail }}</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <section class="bg-card border border-border rounded-lg p-5" data-testid="studio-dashboard-recent-activity" aria-labelledby="recent-activity-heading">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h2 id="recent-activity-heading" class="text-lg font-semibold text-foreground">Recent activity</h2>
+      <a href="{% url 'studio_user_list' %}" class="text-sm text-accent hover:underline">Users</a>
+    </div>
+
+    <div class="space-y-5">
+      <div>
+        <h3 class="text-sm font-medium text-foreground mb-2">Recently joined</h3>
+        {% if recent_users %}
+          <ul class="divide-y divide-border">
+            {% for user in recent_users %}
+              <li class="py-2 flex items-center justify-between gap-3">
+                <a href="{% url 'studio_user_detail' user_id=user.pk %}" class="text-sm text-foreground hover:text-accent min-w-0 truncate">{{ user.email }}</a>
+                <span class="text-xs text-muted-foreground shrink-0">{{ user.date_joined|date:"M j" }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-recent-users-empty">No users yet.</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <h3 class="text-sm font-medium text-foreground mb-2">Recently changed content</h3>
+        {% if recent_content %}
+          <ul class="divide-y divide-border">
+            {% for item in recent_content %}
+              <li class="py-2 flex items-center justify-between gap-3">
+                <span class="min-w-0">
+                  <a href="{{ item.url }}" class="block text-sm text-foreground hover:text-accent truncate">{{ item.title }}</a>
+                  <span class="block text-xs text-muted-foreground">{{ item.kind }} &middot; {{ item.status }}</span>
+                </span>
+                <span class="text-xs text-muted-foreground shrink-0">{{ item.updated_at|date:"M j" }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-recent-content-empty">No content changes yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-card border border-border rounded-lg p-5" aria-labelledby="upcoming-heading">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h2 id="upcoming-heading" class="text-lg font-semibold text-foreground">Next up</h2>
+      <a href="{% url 'studio_event_list' %}" class="text-sm text-accent hover:underline">Events</a>
+    </div>
+
+    {% if pending_projects %}
+      <div class="mb-5">
+        <h3 class="text-sm font-medium text-foreground mb-2">Pending projects</h3>
+        <ul class="divide-y divide-border">
+          {% for project in pending_projects %}
+            <li class="py-2 flex items-center justify-between gap-3">
+              <span class="min-w-0">
+                <a href="{% url 'studio_project_review' project_id=project.pk %}" class="block text-sm text-foreground hover:text-accent truncate">{{ project.title }}</a>
+                <span class="block text-xs text-muted-foreground">by {{ project.author|default:"Unknown" }}</span>
+              </span>
+              <span class="text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-300 shrink-0">Pending</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div>
+      <h3 class="text-sm font-medium text-foreground mb-2">Upcoming events</h3>
+      {% if upcoming_events %}
+        <ul class="divide-y divide-border">
+          {% for event in upcoming_events %}
+            <li class="py-2 flex items-center justify-between gap-3">
+              <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm text-foreground hover:text-accent min-w-0 truncate">{{ event.title }}</a>
+              <span class="text-xs text-muted-foreground shrink-0">{{ event.start_datetime|date:"M j" }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/20 p-3" data-testid="studio-dashboard-upcoming-events-empty">No upcoming events.</p>
+      {% endif %}
+    </div>
+  </section>
 </div>
 {% endblock %}

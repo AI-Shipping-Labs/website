@@ -16,7 +16,6 @@ from content.views.courses import (
     courses_list,
     enroll_course,
     module_overview,
-    module_readme_redirect,
     unenroll_course,
 )
 from content.views.faq import faq
@@ -115,8 +114,6 @@ urlpatterns = [
     # Module overview page (issue #222) — must come before the catch-all unit URL.
     # No trailing slash: RemoveTrailingSlashMiddleware would redirect away from it.
     path('courses/<slug:course_slug>/<slug:module_slug>', module_overview, name='module_overview'),
-    # Old README URL — permanently redirects to the module overview (issue #222).
-    path('courses/<slug:course_slug>/<slug:module_slug>/readme', module_readme_redirect, name='module_readme_redirect'),
     # Course unit detail (three slug segments - must be after more specific patterns)
     path('courses/<slug:course_slug>/<slug:module_slug>/<slug:unit_slug>', course_unit_detail, name='course_unit_detail'),
     # Certificates

@@ -40,9 +40,6 @@ jobs:
       - name: Collect static files
         run: uv run python manage.py collectstatic --noinput
 
-      - name: Run migrations
-        run: uv run python manage.py migrate
-
       - name: Run unit and integration tests
         # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342
         run: uv run python manage.py test --parallel 4

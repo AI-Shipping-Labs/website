@@ -56,11 +56,13 @@ def _create_workshop(
     instructor='Alexey',
     status='published',
     cover_image_url='',
+    tags=None,
 ):
     """Create a workshop with optional linked event + pages."""
     from django.utils import timezone
+    from django.utils.text import slugify
 
-    from content.models import Workshop, WorkshopPage
+    from content.models import Instructor, Workshop, WorkshopInstructor, WorkshopPage
     from events.models import Event
 
     event = None
@@ -85,11 +87,24 @@ def _create_workshop(
         pages_required_level=pages,
         recording_required_level=recording,
         description=description,
-        instructor_name=instructor,
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
+        tags=tags or [],
         event=event,
     )
+    if instructor:
+        instructor_obj, _ = Instructor.objects.get_or_create(
+            instructor_id=slugify(instructor)[:200] or 'test-instructor',
+            defaults={
+                'name': instructor,
+                'status': 'published',
+            },
+        )
+        WorkshopInstructor.objects.get_or_create(
+            workshop=workshop,
+            instructor=instructor_obj,
+            defaults={'position': 0},
+        )
 
     pages_data = pages_data or [
         ('intro', 'Introduction', '# Welcome\n\nThis is the intro.'),
@@ -144,9 +159,9 @@ class TestVisitorBrowsesCatalog:
             '[data-testid="workshop-card-preview-fallback"]',
         )
         assert production_fallback.count() == 1
-        assert 'Production Agents' in production_fallback.inner_text()
-        assert 'Alexey' in production_fallback.inner_text()
-        assert 'Apr 21, 2026' in production_fallback.inner_text()
+        assert 'Production Agents' not in production_fallback.inner_text()
+        assert 'Alexey' not in production_fallback.inner_text()
+        assert 'Apr 21, 2026' not in production_fallback.inner_text()
         assert production_card.locator('.h-12.w-12').count() == 0
 
         visual_image = page.locator(
@@ -173,14 +188,69 @@ class TestVisitorBrowsesCatalog:
             '[data-testid="workshop-detail-preview-fallback"]',
         )
         assert detail_fallback.count() == 1
-        assert 'Production Agents' in detail_fallback.inner_text()
-        assert 'Apr 21, 2026' in detail_fallback.inner_text()
+        assert 'Production Agents' not in detail_fallback.inner_text()
+        assert 'Apr 21, 2026' not in detail_fallback.inner_text()
 
         # Pricing CTA goes to /pricing
         upgrade_cta = page.locator(
             '[data-testid="workshop-pages-upgrade-cta"]',
         )
         assert upgrade_cta.get_attribute('href') == '/pricing'
+
+    def test_mobile_catalog_cards_do_not_duplicate_metadata_or_overflow(
+        self, django_server, page, tmp_path,
+    ):
+        _clear_workshops()
+        title = (
+            'Building Reliable AI Agent Workshops with Retrieval, '
+            'Evaluation, and Deployment'
+        )
+        _create_workshop(
+            slug='mobile-workshop',
+            title=title,
+            instructor='Alexey Grigorev with a Long Instructor Label',
+            tags=[
+                'ai-agents',
+                'retrieval-augmented-generation',
+                'python',
+                'deployment',
+            ],
+            with_event=True,
+        )
+
+        page.set_viewport_size({'width': 320, 'height': 844})
+        page.goto(f'{django_server}/workshops', wait_until='domcontentloaded')
+
+        assert page.evaluate(
+            '() => document.documentElement.scrollWidth <= '
+            'document.documentElement.clientWidth',
+        )
+        card = page.locator('article:has(a[href="/workshops/mobile-workshop"])')
+        fallback = card.locator('[data-testid="workshop-card-preview-fallback"]')
+        assert fallback.count() == 1
+        assert title not in fallback.inner_text()
+        assert 'Alexey Grigorev' not in fallback.inner_text()
+        assert 'retrieval-augmented-generation' not in fallback.inner_text()
+
+        card.locator('a').first.screenshot(
+            path=str(tmp_path / 'issue-480-workshops-mobile-card.png'),
+        )
+        card.locator('a').first.click()
+        page.wait_for_load_state('domcontentloaded')
+        assert '/workshops/mobile-workshop' in page.url
+
+        detail_fallback = page.locator(
+            '[data-testid="workshop-detail-preview-fallback"]',
+        )
+        assert detail_fallback.count() == 1
+        assert title not in detail_fallback.inner_text()
+        assert page.evaluate(
+            '() => document.documentElement.scrollWidth <= '
+            'document.documentElement.clientWidth',
+        )
+        page.locator('main').screenshot(
+            path=str(tmp_path / 'issue-480-workshops-mobile-detail.png'),
+        )
 
 
 # ----------------------------------------------------------------------

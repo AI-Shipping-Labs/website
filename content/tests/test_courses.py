@@ -479,12 +479,17 @@ class CoursesListViewTest(TestCase):
         self.assertContains(response, 'data-testid="course-card-preview-image"')
         self.assertNotContains(response, 'data-testid="course-card-preview-fallback"')
 
-    def test_missing_cover_uses_metadata_fallback_preview(self):
+    def test_missing_cover_uses_decorative_fallback_preview(self):
         response = self.client.get('/courses')
+        body = response.content.decode()
+        fallback = body.split(
+            'data-testid="course-card-preview-fallback"', 1,
+        )[1].split('<div class="min-w-0 p-5', 1)[0]
         self.assertContains(response, 'data-testid="course-card-preview-fallback"')
-        self.assertContains(response, 'Course')
-        self.assertContains(response, 'Test Instructor')
-        self.assertContains(response, 'python')
+        self.assertNotIn('Published Course', fallback)
+        self.assertNotIn('Test Instructor', fallback)
+        self.assertNotIn('python', fallback)
+        self.assertContains(response, 'block h-full focus-visible:outline-none')
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
 
@@ -596,11 +601,15 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         self.assertIn('Setup', content)
         self.assertIn('Deep Dive', content)
 
-    def test_missing_cover_uses_metadata_preview(self):
+    def test_missing_cover_uses_decorative_preview(self):
         response = self.client.get('/courses/detail-course')
         self.assertContains(response, 'data-testid="course-detail-preview-fallback"')
-        self.assertContains(response, 'Main+')
-        self.assertContains(response, 'Jane Doe')
+        self.assertNotContains(
+            response,
+            '<h3 class="line-clamp-2 break-words text-base font-semibold '
+            'leading-snug text-foreground sm:text-lg">Detail Course</h3>',
+            html=True,
+        )
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
     def test_cover_image_uses_preview_with_alt_text(self):

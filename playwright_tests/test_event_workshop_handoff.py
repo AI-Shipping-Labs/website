@@ -103,7 +103,10 @@ def _create_workshop_linked_to(
     status='published',
 ):
     """Create a Workshop row linked to ``event`` via the OneToOneField."""
-    from content.models import Workshop, WorkshopPage
+    from django.utils.text import slugify
+
+    from content.models import Instructor, Workshop, WorkshopInstructor, WorkshopPage
+
     workshop = Workshop.objects.create(
         slug=slug,
         title=title,
@@ -113,9 +116,20 @@ def _create_workshop_linked_to(
         pages_required_level=pages,
         recording_required_level=recording,
         description=description,
-        instructor_name='Alexey',
         code_repo_url=code_repo_url,
         event=event,
+    )
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify('Alexey')[:200],
+        defaults={
+            'name': 'Alexey',
+            'status': 'published',
+        },
+    )
+    WorkshopInstructor.objects.get_or_create(
+        workshop=workshop,
+        instructor=instructor,
+        defaults={'position': 0},
     )
     WorkshopPage.objects.create(
         workshop=workshop, slug='intro', title='Introduction',
@@ -136,7 +150,7 @@ class TestWorkshopLinkedEventHandsOff:
     suppressed and the writeup CTA carries the page."""
 
     def test_completed_workshop_linked_event_hands_off_to_workshop(
-        self, django_server, browser,
+        self, django_server, browser, tmp_path,
     ):
         _clear_events_and_workshops()
         _create_user('main@test.com', tier_slug='main')
@@ -165,6 +179,7 @@ class TestWorkshopLinkedEventHandsOff:
 
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
+        page.set_viewport_size({'width': 390, 'height': 844})
 
         # Step 1: Land on the event detail page.
         page.goto(
@@ -180,6 +195,14 @@ class TestWorkshopLinkedEventHandsOff:
         # The "Full workshop writeup" CTA is the canonical hand-off.
         cta_panel = page.locator('[data-testid="event-workshop-writeup"]')
         assert cta_panel.count() == 1
+        assert 'Continue with the workshop writeup' in cta_panel.inner_text()
+        assert page.evaluate(
+            '() => document.documentElement.scrollWidth <= '
+            'document.documentElement.clientWidth',
+        )
+        cta_panel.screenshot(
+            path=str(tmp_path / 'issue-480-event-workshop-handoff-mobile.png'),
+        )
         cta_link = page.locator(
             '[data-testid="event-workshop-writeup-link"]'
         )

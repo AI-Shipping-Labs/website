@@ -21,9 +21,9 @@
       {% with workshop_primary_instructor=workshop.primary_instructor %}
       <div class="mb-8 overflow-hidden rounded-lg">
         {% if workshop.pages_required_level > 0 %}
-          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" preview_decorative_fallback=True %}
         {% else %}
-          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" preview_decorative_fallback=True %}
         {% endif %}
       </div>
 
@@ -46,14 +46,14 @@
         </h1>
 
         <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-          <span class="flex items-center gap-1.5">
+          <span class="flex min-w-0 max-w-full items-center gap-1.5">
             <i data-lucide="calendar" class="h-4 w-4"></i>
             {{ workshop.date|date:"F j, Y" }}
           </span>
           {% for instructor in workshop.ordered_instructors %}
-          <span class="flex items-center gap-1.5" data-testid="workshop-instructor">
+          <span class="flex min-w-0 max-w-full items-center gap-1.5" data-testid="workshop-instructor">
             <i data-lucide="user" class="h-4 w-4"></i>
-            {{ instructor.name }}
+            <span class="min-w-0 truncate">{{ instructor.name }}</span>
           </span>
           {% endfor %}
         </div>
@@ -61,7 +61,7 @@
         {% if workshop.tags %}
         <div class="mt-4 flex flex-wrap gap-2">
           {% for tag in workshop.tags %}
-          <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          <span class="max-w-full truncate rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
           {% endfor %}
         </div>
         {% endif %}
@@ -168,14 +168,14 @@
       {% if pages %}
       <div class="mb-12" data-testid="workshop-pages-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Tutorial pages</h2>
-        <ol class="space-y-1">
+        <ol class="rounded-lg border border-border bg-card p-1">
           {% for page in pages %}
           <li>
             <a href="{{ page.get_absolute_url }}"
-               class="group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-accent/50 hover:bg-card/80"
+               class="group flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                data-testid="workshop-page-row">
               <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">{{ forloop.counter }}</span>
-              <span class="flex-1 truncate text-sm text-foreground group-hover:text-accent transition-colors">{{ page.title }}</span>
+              <span class="min-w-0 flex-1 truncate text-sm text-foreground transition-colors group-hover:text-accent">{{ page.title }}</span>
               {% if not can_access_pages %}
               <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0" data-testid="workshop-page-lock-icon"></i>
               {% else %}

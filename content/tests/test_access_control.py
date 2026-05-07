@@ -13,8 +13,10 @@ from content.access import (
     LEVEL_MAIN,
     LEVEL_OPEN,
     LEVEL_PREMIUM,
+    LEVEL_REGISTERED,
     build_gating_context,
     can_access,
+    get_required_tier_label,
     get_required_tier_name,
     get_teaser_text,
     get_user_level,
@@ -325,6 +327,47 @@ class GetRequiredTierNameTest(TestCase):
 
     def test_unknown_defaults_to_premium(self):
         self.assertEqual(get_required_tier_name(99), 'Premium')
+
+
+@tag('core')
+class GetRequiredTierLabelTest(TestCase):
+    """Issue #481: public-facing access labels.
+
+    The bare ``required_tier_name`` form returns ``Basic`` / ``Main`` /
+    ``Premium``. ``get_required_tier_label`` augments it with the
+    user-facing copy that templates render on cards, paywall pills, and
+    event badges. Premium is the highest public tier so it intentionally
+    has NO ``or above`` suffix.
+    """
+
+    def test_open_returns_free(self):
+        self.assertEqual(get_required_tier_label(LEVEL_OPEN), 'Free')
+
+    def test_registered_calls_out_signin(self):
+        # Free-with-registration content needs an explicit cue that a
+        # free account is required.
+        self.assertEqual(
+            get_required_tier_label(LEVEL_REGISTERED),
+            'Free with sign-in',
+        )
+
+    def test_basic_uses_or_above(self):
+        self.assertEqual(
+            get_required_tier_label(LEVEL_BASIC), 'Basic or above',
+        )
+
+    def test_main_uses_or_above(self):
+        self.assertEqual(
+            get_required_tier_label(LEVEL_MAIN), 'Main or above',
+        )
+
+    def test_premium_has_no_or_above_suffix(self):
+        # AC: Premium-only CTAs do not say "Premium or above" — there is
+        # no higher public tier to upgrade to.
+        self.assertEqual(get_required_tier_label(LEVEL_PREMIUM), 'Premium')
+
+    def test_unknown_level_defaults_to_premium(self):
+        self.assertEqual(get_required_tier_label(99), 'Premium')
 
 
 class GetTeaserTextTest(TestCase):
@@ -849,3 +892,13 @@ class AccessTemplateTagsTest(TierSetupMixin, TestCase):
         self.assertEqual(required_tier_name(10), 'Basic')
         self.assertEqual(required_tier_name(20), 'Main')
         self.assertEqual(required_tier_name(30), 'Premium')
+
+    def test_required_tier_label_filter(self):
+        # Issue #481: public-facing label used on cards / paywalls.
+        from content.templatetags.access_tags import required_tier_label
+        self.assertEqual(required_tier_label(0), 'Free')
+        self.assertEqual(required_tier_label(5), 'Free with sign-in')
+        self.assertEqual(required_tier_label(10), 'Basic or above')
+        self.assertEqual(required_tier_label(20), 'Main or above')
+        # Premium is the highest public tier — no "or above" suffix.
+        self.assertEqual(required_tier_label(30), 'Premium')

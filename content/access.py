@@ -51,6 +51,21 @@ LEVEL_TO_TIER_NAME = {
     LEVEL_PREMIUM: 'Premium',
 }
 
+# Issue #481: public-facing badge / sentence labels. Replaces the
+# previous ``Basic+`` / ``Main+`` / ``Premium+`` shorthand on public
+# surfaces (course/workshop/event cards and detail pages, paywall
+# cards). Premium is the highest tier so it does NOT take a
+# ``+``/``or above`` suffix — there is no higher public tier to upgrade
+# to. ``LEVEL_OPEN`` keeps the existing "Free" label; ``LEVEL_REGISTERED``
+# makes it explicit that a free account is required.
+LEVEL_TO_PUBLIC_LABEL = {
+    LEVEL_OPEN: 'Free',
+    LEVEL_REGISTERED: 'Free with sign-in',
+    LEVEL_BASIC: 'Basic or above',
+    LEVEL_MAIN: 'Main or above',
+    LEVEL_PREMIUM: 'Premium',
+}
+
 # Sentinel to distinguish "caller didn't pass active_override" from "caller passed None"
 _SENTINEL = object()
 
@@ -260,6 +275,22 @@ def _is_unit(content):
 def get_required_tier_name(required_level):
     """Return the human-readable tier name for a required_level value."""
     return LEVEL_TO_TIER_NAME.get(required_level, 'Premium')
+
+
+def get_required_tier_label(required_level):
+    """Return the public-facing access label for a ``required_level``.
+
+    Issue #481: replaces ``Basic+`` / ``Main+`` / ``Premium+`` shorthand
+    with copy that reads naturally in the UI ("Basic or above", "Main or
+    above", "Premium"). Use this on every public-facing surface (cards,
+    detail headers, gated paywall pills, event badges).
+
+    The bare tier name (``Basic``, ``Main``, ``Premium``) is still
+    available via :func:`get_required_tier_name` and remains the right
+    choice when a sentence already provides the "or above" context (e.g.
+    ``Upgrade to Basic to access this workshop``).
+    """
+    return LEVEL_TO_PUBLIC_LABEL.get(required_level, 'Premium')
 
 
 def get_teaser_text(content, max_chars=200):

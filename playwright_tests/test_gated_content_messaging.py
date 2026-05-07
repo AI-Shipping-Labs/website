@@ -124,7 +124,9 @@ class TestGatedContentMessaging:
         body = page.content()
         assert "Lesson With Preview" in body
         assert "This visible preview explains the lesson value" in body
-        assert "Main+ required" in body
+        # Issue #481: paywall pill reads "Main or above required".
+        assert "Main or above required" in body
+        assert "Main+ required" not in body
         assert "Current access: Free member" in body
         assert body.count('data-testid="teaser-upgrade-cta"') == 1
         assert page.locator('[data-testid="teaser-upgrade-cta"]').get_attribute("href") == "/pricing"
@@ -158,7 +160,9 @@ class TestGatedContentMessaging:
         )
         body = page.content()
         assert "Workshop Tutorial Intro" in body
-        assert "Basic+ required" in body
+        # Issue #481: paywall pill reads "Basic or above required".
+        assert "Basic or above required" in body
+        assert "Basic+ required" not in body
         assert "Current access: Free member" in body
         assert "recording access" not in body.lower()
         assert body.count('data-testid="page-upgrade-cta"') == 1
@@ -180,7 +184,9 @@ class TestGatedContentMessaging:
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert "Main+ required" in body
+        # Issue #481: paywall pill reads "Main or above required".
+        assert "Main or above required" in body
+        assert "Main+ required" not in body
         assert "Current access: Basic member" in body
         assert body.count('data-testid="video-upgrade-cta"') == 1
         _capture_responsive(page, "workshop_recording_gate")

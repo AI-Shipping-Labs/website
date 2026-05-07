@@ -36,7 +36,7 @@
                 <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                   {% if article.required_level > 0 %}<i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground mr-1.5"></i>{% endif %}{{ article.title }}
                   {% if article.required_level > 0 %}
-                  <span class="ml-2 inline-block rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground align-middle">{{ article.required_level|required_tier_name }}+</span>
+                  <span class="ml-2 inline-block rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground align-middle">{{ article.required_level|required_tier_label }}</span>
                   {% endif %}
                 </h2>
                 <p class="mt-2 text-sm sm:text-base text-muted-foreground line-clamp-2">{{ article.description }}</p>

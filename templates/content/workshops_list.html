@@ -27,7 +27,7 @@
         <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50" data-testid="workshop-card">
           <a href="{{ workshop.get_absolute_url }}" class="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
             {% if workshop.pages_required_level > 0 %}
-              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
+              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% else %}
               {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% endif %}
@@ -40,7 +40,7 @@
                 {% if workshop.pages_required_level > 0 %}
                 <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
                   <i data-lucide="lock" class="h-3 w-3"></i>
-                  {{ workshop.pages_required_level|required_tier_name }}+
+                  {{ workshop.pages_required_level|required_tier_label }}
                 </span>
                 {% endif %}
               </div>

@@ -22,7 +22,7 @@
         {% if course.is_free %}
           {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label="Free" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" preview_decorative_fallback=True %}
         {% elif course.required_level > 0 %}
-          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label=course.required_level|required_tier_name|add:"+" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" preview_decorative_fallback=True %}
+          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label=course.required_level|required_tier_label preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" preview_decorative_fallback=True %}
         {% else %}
           {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" preview_decorative_fallback=True %}
         {% endif %}

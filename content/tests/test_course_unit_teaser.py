@@ -137,7 +137,9 @@ class NonEligibleUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
     def test_renders_upgrade_cta(self):
         response = self.client.get(self.unit_url)
         self.assertContains(response, 'Upgrade to Main to access this lesson', status_code=403)
-        self.assertContains(response, 'Main+ required', status_code=403)
+        # Issue #481: paywall pill reads "Main or above required".
+        self.assertContains(response, 'Main or above required', status_code=403)
+        self.assertNotContains(response, 'Main+ required', status_code=403)
         self.assertContains(response, 'Current access: Basic member', status_code=403)
         self.assertContains(
             response, 'data-testid="teaser-upgrade-cta"', status_code=403,
@@ -203,7 +205,9 @@ class AnonymousUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
             response, 'data-testid="teaser-upgrade-cta"', status_code=403,
             count=1,
         )
-        self.assertContains(response, 'Main+ required', status_code=403)
+        # Issue #481: paywall pill reads "Main or above required".
+        self.assertContains(response, 'Main or above required', status_code=403)
+        self.assertNotContains(response, 'Main+ required', status_code=403)
         self.assertContains(response, 'View Pricing', status_code=403)
         self.assertContains(
             response, 'data-testid="teaser-signup-cta"', status_code=403,

@@ -107,7 +107,7 @@
                 {% if event.required_level > 0 %}
                 <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
                   <i data-lucide="lock" class="h-3 w-3"></i>
-                  {{ event.required_level|required_tier_name }}
+                  {{ event.required_level|required_tier_label }}
                 </span>
                 {% endif %}
               </div>
@@ -144,7 +144,7 @@
                   {% if event.required_level > 0 %}
                   <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
                     <i data-lucide="lock" class="h-3 w-3"></i>
-                    {{ event.required_level|required_tier_name }}
+                    {{ event.required_level|required_tier_label }}
                   </span>
                   {% endif %}
                 </div>

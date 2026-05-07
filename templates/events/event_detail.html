@@ -32,7 +32,7 @@
           {% if event.required_level > 0 %}
           <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
             <i data-lucide="lock" class="h-3 w-3"></i>
-            {{ event.required_level|required_tier_name }}
+            {{ event.required_level|required_tier_label }}
           </span>
           {% endif %}
         </div>
@@ -111,13 +111,21 @@
         {% elif not has_access and gated_reason == "unverified_email" %}
           {% include "content/_verify_email_required.html" %}
         {% elif not has_access %}
-          <!-- User doesn't have access - show upgrade CTA -->
+          <!-- User doesn't have access - show upgrade CTA. Issue #481:
+               drop the misleading "or above" suffix when the requirement
+               is the highest public tier (Premium). -->
           <div class="text-center">
             <div class="mb-4">
               <i data-lucide="lock" class="mx-auto h-10 w-10 text-accent"></i>
             </div>
             <p class="text-lg font-semibold text-foreground">Upgrade to {{ required_tier_name }} to attend</p>
-            <p class="mt-2 text-sm text-muted-foreground">This event requires a {{ required_tier_name }} membership or above.</p>
+            <p class="mt-2 text-sm text-muted-foreground" data-testid="event-required-tier-label">
+              {% if required_tier_name == "Premium" %}
+              This event requires a Premium membership.
+              {% else %}
+              This event requires a {{ required_tier_name }} membership or above.
+              {% endif %}
+            </p>
             <a href="/pricing"
                class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
               <i data-lucide="arrow-up-right" class="h-4 w-4"></i>

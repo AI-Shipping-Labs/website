@@ -128,7 +128,9 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
     def test_catalog_shows_tier_badge_when_pages_gated(self):
         response = self.client.get('/workshops')
         self.assertContains(response, 'data-testid="workshop-tier-badge"')
-        self.assertContains(response, 'Basic+')
+        # Issue #481: badges read "Basic or above" not "Basic+".
+        self.assertContains(response, 'Basic or above')
+        self.assertNotContains(response, 'Basic+')
 
     def test_catalog_links_to_landing(self):
         response = self.client.get('/workshops')
@@ -264,7 +266,9 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'data-testid="workshop-pages-paywall"')
         self.assertContains(response, 'Upgrade to Basic to access this workshop')
-        self.assertContains(response, 'Basic+ required')
+        # Issue #481: paywall pill reads "Basic or above required".
+        self.assertContains(response, 'Basic or above required')
+        self.assertNotContains(response, 'Basic+ required')
         self.assertNotContains(response, 'data-testid="gated-current-state"')
 
     def test_landing_basic_user_does_not_see_pages_paywall(self):
@@ -324,11 +328,31 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get(f'/workshops/{ws.slug}')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="workshop-landing-paywall"')
-        self.assertContains(response, 'Basic+ required')
+        # Issue #481: paywall pill uses "Basic or above required".
+        self.assertContains(response, 'Basic or above required')
         # Description body is hidden
         self.assertNotContains(response, 'data-testid="workshop-description"')
         # Pages list is hidden
         self.assertNotContains(response, 'data-testid="workshop-pages-list"')
+
+    def test_landing_premium_pages_paywall_drops_or_above(self):
+        """Issue #481 AC: Premium-only paywall says "Premium required".
+
+        Premium is the highest public tier so the paywall pill must NOT
+        say "Premium or above required" — there is no higher public tier
+        to upgrade to.
+        """
+        ws = _make_workshop(
+            slug='premium-ws', title='Premium Only',
+            landing=0, pages=30, recording=30,
+        )
+        _make_page(ws, 'one', 'One', 1)
+        response = self.client.get(f'/workshops/{ws.slug}')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertContains(response, 'Premium required')
+        self.assertNotContains(response, 'Premium or above required')
+        self.assertNotContains(response, 'Premium+')
 
     def test_landing_emits_workshop_jsonld(self):
         response = self.client.get('/workshops/ws')
@@ -390,7 +414,9 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/ws/video')
         self.assertContains(response, 'data-testid="video-paywall"')
-        self.assertContains(response, 'Main+ required')
+        # Issue #481: pill reads "Main or above required".
+        self.assertContains(response, 'Main or above required')
+        self.assertNotContains(response, 'Main+ required')
         self.assertContains(response, 'Current access: Basic member')
 
     def test_video_main_renders_player(self):
@@ -476,7 +502,9 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         self.assertContains(
             response, 'Upgrade to Basic to access this workshop',
         )
-        self.assertContains(response, 'Basic+ required')
+        # Issue #481: paywall pill reads "Basic or above required".
+        self.assertContains(response, 'Basic or above required')
+        self.assertNotContains(response, 'Basic+ required')
         self.assertNotContains(response, 'data-testid="gated-current-state"')
         # Body must NOT render
         self.assertNotContains(response, 'data-testid="page-body"')

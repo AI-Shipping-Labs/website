@@ -19,7 +19,11 @@ Usage in templates:
 
 from django import template
 
-from content.access import can_access, get_required_tier_name
+from content.access import (
+    can_access,
+    get_required_tier_label,
+    get_required_tier_name,
+)
 
 register = template.Library()
 
@@ -52,6 +56,21 @@ def required_tier_name(required_level):
         {{ article.required_level|required_tier_name }}
     """
     return get_required_tier_name(required_level)
+
+
+@register.filter
+def required_tier_label(required_level):
+    """Return the public-facing access label for a required_level integer.
+
+    Issue #481: prefer this over ``required_tier_name`` on public surfaces
+    (badges, paywall headings) so the copy reads "Basic or above" instead
+    of the legacy "Basic+" shorthand and "Premium" without a misleading
+    "or above" suffix.
+
+    Usage:
+        {{ event.required_level|required_tier_label }}
+    """
+    return get_required_tier_label(required_level)
 
 
 @register.filter

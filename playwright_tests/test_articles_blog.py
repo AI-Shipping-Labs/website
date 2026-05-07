@@ -335,8 +335,9 @@ class TestScenario3FreeUserPaywall:
         lock_icon = article_card.locator('[data-lucide="lock"]')
         assert lock_icon.count() >= 1
 
-        # Tier badge visible (e.g. "Basic+")
-        assert "Basic+" in article_card.inner_text()
+        # Tier badge visible. Issue #481: badge reads "Basic or above" not "Basic+".
+        assert "Basic or above" in article_card.inner_text()
+        assert "Basic+" not in article_card.inner_text()
 
         # Click on the article (use h2 title text inside card)
         page.locator(

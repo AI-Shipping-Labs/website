@@ -193,10 +193,12 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
             stripe_price_id='price_test_123',
         )
 
-    def test_anonymous_user_does_not_see_buy_button(self):
-        """Anonymous users should not see the buy button (they need to log in first)."""
+    def test_anonymous_user_sees_buy_button_that_can_resume_after_login(self):
+        """Anonymous users can start a course purchase and get sent through login."""
         response = self.client.get('/courses/buyable-course')
-        self.assertNotContains(response, 'buy-course-btn')
+        self.assertContains(response, 'buy-course-btn')
+        self.assertContains(response, 'Buy this course for EUR 49.99')
+        self.assertContains(response, 'data.login_url')
 
     def test_free_user_sees_buy_button(self):
         """A free user who lacks tier access sees the buy button."""
@@ -272,6 +274,26 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
     def test_anonymous_returns_401(self):
         response = self.client.post('/api/courses/buy-me/purchase')
         self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.json()['login_url'],
+            '/accounts/login/?next=%2Fcourses%2Fbuy-me',
+        )
+
+    def test_anonymous_purchase_post_with_course_page_csrf_returns_login_url(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        page_response = csrf_client.get('/courses/buy-me')
+        csrf_token = page_response.cookies['csrftoken'].value
+
+        response = csrf_client.post(
+            '/api/courses/buy-me/purchase',
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.json()['login_url'],
+            '/accounts/login/?next=%2Fcourses%2Fbuy-me',
+        )
 
     def test_already_has_access_returns_400(self):
         self.user.tier = self.main_tier

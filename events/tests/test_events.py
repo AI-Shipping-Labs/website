@@ -488,6 +488,8 @@ class EventDetailPageTest(TestCase):
     def test_anonymous_sees_sign_in_cta(self):
         response = self.client.get('/events/detail-event')
         self.assertContains(response, 'Sign in to register')
+        self.assertContains(response, '/accounts/login/?next=/events/detail-event')
+        self.assertContains(response, '/accounts/signup/?next=/events/detail-event')
 
 
 class EventDetailRecordingRemovedTest(TestCase):

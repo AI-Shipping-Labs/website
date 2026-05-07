@@ -8,8 +8,10 @@
 
 {% block extra_scripts %}
 <script src="/static/js/accounts/auth-helpers.js"></script>
+{{ next_url|json_script:"auth-next-url" }}
 <script>
 var loginPending = false;
+var authNextUrl = JSON.parse(document.getElementById('auth-next-url').textContent || '""');
 
 function setLoginPending(isPending) {
   window.authHelpers.setPendingState({
@@ -41,7 +43,7 @@ function handleLogin(event) {
       'Content-Type': 'application/json',
       'X-CSRFToken': window.authHelpers.getCsrfToken(),
     },
-    body: JSON.stringify({ email: email, password: password }),
+    body: JSON.stringify({ email: email, password: password, next: authNextUrl }),
   })
   .then(window.authHelpers.parseJsonResponse)
   .then(function(result) {
@@ -49,7 +51,7 @@ function handleLogin(event) {
       if (result.data.theme_preference) {
         localStorage.setItem('theme', result.data.theme_preference);
       }
-      window.location.href = '/';
+      window.location.href = result.data.redirect_url || '/';
     } else {
       loginPending = false;
       setLoginPending(false);

@@ -228,7 +228,9 @@ document.querySelectorAll('.tier-cta-link').forEach(function(el) {
     })
     .then(function(r) {
       if (r.redirected || r.url.indexOf('/accounts/') !== -1) {
-        window.location.href = '/accounts/login/?next=/pricing';
+        var billingPeriod = isAnnual ? 'yearly' : 'monthly';
+        var nextPath = '/pricing?tier=' + encodeURIComponent(tierSlug) + '&billing=' + encodeURIComponent(billingPeriod);
+        window.location.href = '/accounts/login/?next=' + encodeURIComponent(nextPath);
         return;
       }
       return r.json();

@@ -397,6 +397,8 @@
     .then(function(data) {
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
+      } else if (data.login_url) {
+        window.location.href = data.login_url;
       } else if (data.error) {
         alert(data.error);
         if (btn) {

@@ -99,9 +99,13 @@
           <div class="text-center">
             <p class="text-lg font-semibold text-foreground">Sign in to register for this event</p>
             <p class="mt-2 text-sm text-muted-foreground">Create an account or sign in to register.</p>
-            <a href="/accounts/login/?next=/events/{{ event.slug }}"
+            <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
                class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
               Sign In
+            </a>
+            <a href="/accounts/signup/?next={{ event.get_absolute_url|urlencode }}"
+               class="mt-4 ml-3 inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              Create Account
             </a>
           </div>
         {% elif not has_access and gated_reason == "unverified_email" %}

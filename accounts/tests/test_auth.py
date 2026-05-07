@@ -61,6 +61,20 @@ class LoginViewTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/")
 
+    def test_login_page_redirects_authenticated_user_to_safe_next(self):
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/accounts/login/?next=/events/demo")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/events/demo")
+
+    def test_login_page_ignores_external_next_for_authenticated_user(self):
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/accounts/login/?next=https://evil.example")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
 
 @tag('core')
 class SharedAuthTemplateTest(TestCase):
@@ -108,6 +122,24 @@ class SharedAuthTemplateTest(TestCase):
         self.assertContains(response, "Sign in with Google")
         self.assertNotContains(response, "Sign in with GitHub")
         self.assertNotContains(response, "Sign in with Slack")
+
+    def test_oauth_links_preserve_safe_next(self):
+        _configure_provider('google', 'Google')
+
+        response = self.client.get("/accounts/login/?next=/courses/demo")
+
+        self.assertContains(
+            response,
+            'href="/accounts/google/login/?next=/courses/demo"',
+        )
+
+    def test_oauth_links_drop_unsafe_next(self):
+        _configure_provider('github', 'GitHub')
+
+        response = self.client.get("/accounts/login/?next=//evil.example/path")
+
+        self.assertContains(response, 'href="/accounts/github/login/"')
+        self.assertNotContains(response, 'next=//evil.example')
 
     def test_register_renders_only_enabled_provider_buttons(self):
         _configure_provider('slack', 'Slack')

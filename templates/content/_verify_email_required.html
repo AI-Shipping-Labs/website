@@ -14,13 +14,14 @@ Expected context:
     <p class="mt-2 text-sm text-muted-foreground">
       We sent a verification link to {{ verify_email_address }}. Click the link to unlock free content. Didn't get it?
     </p>
-    <form method="post" action="{{ verify_resend_url }}" class="mt-6">
+    <form method="post" action="{{ verify_resend_url }}" class="mt-6" data-verification-resend-form>
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <button type="submit"
+              data-verification-resend-button
               class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
         <i data-lucide="mail" class="h-4 w-4"></i>
-        {{ verify_resend_label|default:"Resend verification email" }}
+        <span data-verification-resend-label>{{ verify_resend_label|default:"Resend verification email" }}</span>
       </button>
     </form>
     <p class="mt-4 text-sm text-muted-foreground">Already verified? Refresh the page.</p>

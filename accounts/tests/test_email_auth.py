@@ -1127,6 +1127,47 @@ class ResendVerificationApiTest(TestCase):
             self.assertContains(response, "minute")
             self.assertContains(response, 'data-message-tag="warning"')
 
+    def test_failed_send_shows_error_and_does_not_throttle(self):
+        from django.core.cache import cache as _cache
+
+        with patch(
+            "accounts.views.auth._send_verification_email",
+            return_value=None,
+        ) as patched_send:
+            user = self._make_unverified_user("send-fails@example.com")
+            self.client.force_login(user)
+
+            response = self.client.post(self.URL, follow=True)
+
+            self.assertEqual(response.redirect_chain, [("/account/", 302)])
+            patched_send.assert_called_once()
+            self.assertContains(response, "verification email")
+            self.assertContains(response, 'data-message-tag="error"')
+            self.assertIsNone(_cache.get(f"verify-email-resend:{user.id}"))
+
+    def test_raised_send_exception_shows_error_logs_and_does_not_throttle(self):
+        from django.core.cache import cache as _cache
+
+        with patch(
+            "accounts.views.auth._send_verification_email",
+            side_effect=RuntimeError("mail backend unavailable"),
+        ) as patched_send:
+            user = self._make_unverified_user("send-raises@example.com")
+            self.client.force_login(user)
+
+            with self.assertLogs("accounts.views.account", level="ERROR") as logs:
+                response = self.client.post(self.URL, follow=True)
+
+            self.assertEqual(response.redirect_chain, [("/account/", 302)])
+            patched_send.assert_called_once()
+            self.assertContains(response, "verification email")
+            self.assertContains(response, 'data-message-tag="error"')
+            self.assertIsNone(_cache.get(f"verify-email-resend:{user.id}"))
+            self.assertIn(
+                f"Verification email resend failed for user_id={user.id}",
+                "\n".join(logs.output),
+            )
+
     def test_clearing_throttle_key_allows_resend(self):
         from django.core.cache import cache as _cache
 

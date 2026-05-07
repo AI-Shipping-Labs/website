@@ -549,6 +549,40 @@
     })();
   </script>
 
+  <script>
+    (function() {
+      function bindVerificationResendForms(root) {
+        var forms = (root || document).querySelectorAll('[data-verification-resend-form]');
+        for (var i = 0; i < forms.length; i++) {
+          var form = forms[i];
+          if (form.dataset.resendBound === '1') {
+            continue;
+          }
+          form.dataset.resendBound = '1';
+          form.addEventListener('submit', function() {
+            var button = this.querySelector('[data-verification-resend-button]');
+            var label = this.querySelector('[data-verification-resend-label]');
+            if (!button) return;
+            button.disabled = true;
+            button.classList.add('opacity-60', 'cursor-not-allowed');
+            if (label) {
+              label.textContent = 'Sending...';
+            }
+          });
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          bindVerificationResendForms();
+        });
+      } else {
+        bindVerificationResendForms();
+      }
+      window.bindVerificationResendForms = bindVerificationResendForms;
+    })();
+  </script>
+
   {% comment %}
     Mermaid diagram renderer (issue #300) is lazy-loaded per page via
     ``templates/_partials/mermaid_script.html`` — included only from

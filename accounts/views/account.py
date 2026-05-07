@@ -1,6 +1,7 @@
 """Account page view and email preferences API."""
 
 import json
+import logging
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
@@ -23,12 +24,15 @@ RESEND_VERIFICATION_CACHE_KEY_TEMPLATE = "verify-email-resend:{user_id}"
 # implicit in the column type, so we keep one named constant in the view.
 _NAME_MAX_LENGTH = 150
 
+logger = logging.getLogger(__name__)
+
 from accounts.services.timezones import (
     build_timezone_options,
     get_timezone_label,
     is_valid_timezone,
 )
 from content.access import get_active_override
+from email_app.models import EmailLog
 from integrations.config import get_config, is_enabled
 from payments.models import Tier
 from payments.tier_state import build_tier_state
@@ -92,6 +96,14 @@ def _render_account_page(
 
     # Get current tier's feature list for the cancel confirmation modal
     tier_features = tier.features if tier and tier.features else []
+    latest_verification_email = None
+    if not user.email_verified:
+        latest_verification_email = (
+            EmailLog.objects
+            .filter(user=user, email_type="email_verification")
+            .order_by("-sent_at")
+            .first()
+        )
 
     state_tier = tier or free_tier
     account_plan_state = (
@@ -161,6 +173,7 @@ def _render_account_page(
         "show_cancel_action": show_cancel_action,
         "stripe_checkout_enabled": stripe_checkout_enabled,
         "stripe_customer_portal_url": stripe_customer_portal_url,
+        "latest_verification_email": latest_verification_email,
         # Profile name form (consolidated onto /account/, issue #447). The
         # form posts to ``account_profile``; this view renders it inline.
         "profile_error": profile_error,
@@ -472,6 +485,26 @@ def resend_verification_view(request):
 
     from accounts.views.auth import _send_verification_email
 
-    _send_verification_email(user)
+    try:
+        email_log = _send_verification_email(user)
+    except Exception:
+        cache.delete(cache_key)
+        logger.exception(
+            "Verification email resend failed for user_id=%s", user.id
+        )
+        messages.error(
+            request,
+            "We couldn't send the verification email. Please try again.",
+        )
+        return redirect(next_url)
+
+    if email_log is None:
+        cache.delete(cache_key)
+        messages.error(
+            request,
+            "We couldn't send the verification email. Please try again.",
+        )
+        return redirect(next_url)
+
     messages.success(request, "Verification email sent. Check your inbox.")
     return redirect(next_url)

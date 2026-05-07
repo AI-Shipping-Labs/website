@@ -10,6 +10,7 @@ from django.utils import timezone
 from accounts.models import TierOverride, User
 from accounts.services import timezones
 from accounts.services.timezones import build_timezone_options
+from email_app.models import EmailLog
 from payments.models import Tier
 
 
@@ -91,6 +92,71 @@ class AccountPageFreeUserTest(TestCase):
         """Context has has_subscription=False for free users."""
         response = self.client.get("/account/")
         self.assertFalse(response.context["has_subscription"])
+
+    def test_unverified_account_shows_latest_verification_send_time(self):
+        EmailLog.objects.create(
+            user=self.user,
+            email_type="email_verification",
+            ses_message_id="ses-test-id",
+        )
+
+        response = self.client.get("/account/")
+
+        self.assertEqual(
+            response.context["latest_verification_email"].ses_message_id,
+            "ses-test-id",
+        )
+        self.assertContains(response, 'data-testid="latest-verification-email"')
+        self.assertContains(response, "Last sent")
+
+    def test_verification_resend_button_disables_on_submit(self):
+        response = self.client.get("/account/")
+
+        self.assertContains(response, "data-verification-resend-form")
+        self.assertContains(response, "data-verification-resend-button")
+        self.assertContains(response, "data-verification-resend-label")
+
+
+class AccountPageAdminRoleTest(TestCase):
+    """Tests for staff/superuser role display on account/header UI."""
+
+    def test_staff_user_shows_admin_role_without_replacing_billing_tier(self):
+        user = User.objects.create_user(
+            email="staff@example.com",
+            is_staff=True,
+            email_verified=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'data-testid="account-admin-role-badge"')
+        self.assertContains(response, 'data-testid="header-admin-role-badge"')
+        self.assertContains(response, 'data-testid="mobile-header-admin-role-badge"')
+        self.assertContains(response, "Admin")
+        self.assertContains(response, 'id="tier-name"')
+        self.assertContains(response, "Free")
+        self.assertContains(response, 'id="tier-badge"')
+        self.assertContains(response, "Level 0")
+
+    def test_superuser_shows_admin_role_without_replacing_paid_tier(self):
+        main_tier = Tier.objects.get(slug="main")
+        user = User.objects.create_user(
+            email="superuser@example.com",
+            is_superuser=True,
+            email_verified=True,
+        )
+        user.tier = main_tier
+        user.save(update_fields=["tier"])
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'data-testid="account-admin-role-badge"')
+        self.assertContains(response, 'data-testid="header-admin-role-badge"')
+        self.assertContains(response, "Admin")
+        self.assertContains(response, "Main")
+        self.assertContains(response, "Level 20")
 
 
 class AccountPagePaidUserTest(TestCase):

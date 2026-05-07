@@ -21,13 +21,19 @@
           <div class="flex-1">
             <p class="text-sm text-amber-200 font-medium">Verify your email</p>
             <p class="text-sm text-amber-200/80 mt-1">Your email isn't verified yet. Verify it to keep your account active and receive notifications.</p>
-            <form method="post" action="{% url 'account_resend_verification' %}" class="mt-3">
+            {% if latest_verification_email %}
+            <p class="mt-3 text-xs text-amber-200/80" data-testid="latest-verification-email">
+              Last sent {{ latest_verification_email.sent_at|date:"M j, H:i" }}.
+            </p>
+            {% endif %}
+            <form method="post" action="{% url 'account_resend_verification' %}" class="mt-3" data-verification-resend-form>
               {% csrf_token %}
               <button type="submit"
                       id="resend-verification-btn"
+                      data-verification-resend-button
                       class="inline-flex items-center gap-2 rounded-md border border-amber-500/40 bg-transparent px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/20">
                 <i data-lucide="mail" class="h-4 w-4"></i>
-                Resend verification email
+                <span data-verification-resend-label>Resend verification email</span>
               </button>
             </form>
           </div>
@@ -41,6 +47,16 @@
           <i data-lucide="user" class="h-5 w-5 text-accent"></i>
           Profile
         </h2>
+        {% if user.is_staff or user.is_superuser %}
+        <div class="mb-4">
+          <span class="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent"
+                id="account-admin-role-badge"
+                data-testid="account-admin-role-badge">
+            <i data-lucide="shield" class="h-3.5 w-3.5"></i>
+            Admin
+          </span>
+        </div>
+        {% endif %}
         {% if user.first_name or user.last_name %}
         <p class="text-foreground mb-4" id="profile-current-name">{{ user.first_name }} {{ user.last_name }}</p>
         {% else %}

@@ -88,6 +88,13 @@
             {% else %}
             <p class="truncate text-sm font-medium text-popover-foreground">{{ user.email }}</p>
             {% endif %}
+            {% if user.is_staff or user.is_superuser %}
+            <span class="mt-2 inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent"
+                  data-testid="header-admin-role-badge">
+              <i data-lucide="shield" class="h-3 w-3"></i>
+              Admin
+            </span>
+            {% endif %}
           </div>
           <div class="py-1">
             <a href="{% url 'account' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Account</a>
@@ -173,6 +180,13 @@
           <p class="truncate text-xs text-muted-foreground">{{ user.email }}</p>
           {% else %}
           <p class="mt-2 truncate text-sm font-medium text-foreground">{{ user.email }}</p>
+          {% endif %}
+          {% if user.is_staff or user.is_superuser %}
+          <span class="mt-2 inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent"
+                data-testid="mobile-header-admin-role-badge">
+            <i data-lucide="shield" class="h-3 w-3"></i>
+            Admin
+          </span>
           {% endif %}
         </div>
         <a href="/notifications" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">

@@ -156,6 +156,9 @@ def _send_verification_email(user):
 
     Args:
         user: User model instance.
+
+    Returns:
+        EmailLog instance when SES accepted the send; ``None`` on failure.
     """
     token = _generate_verification_token(user.pk)
     site_url = site_base_url()
@@ -165,9 +168,10 @@ def _send_verification_email(user):
         from email_app.services.email_service import EmailService
 
         service = EmailService()
-        service.send(user, "email_verification", {"verify_url": verify_url})
+        return service.send(user, "email_verification", {"verify_url": verify_url})
     except Exception:
         logger.exception("Failed to send verification email to %s", user.email)
+        return None
 
 
 def _probe_slack_membership_on_signup(user):

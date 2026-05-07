@@ -120,6 +120,26 @@ def _clear_audit_logs():
     connection.close()
 
 
+def _dashboard_quick_actions(page):
+    return page.locator('section:has(h2:has-text("Quick Actions"))')
+
+
+def _assert_slack_join_panel(page, expected_href):
+    slack_panel = page.locator(
+        'section:has(h2:has-text("Join our Slack community"))'
+    )
+    assert slack_panel.count() == 1
+    assert "private Slack workspace" in slack_panel.inner_text()
+
+    join_link = slack_panel.get_by_role("link", name="Join Slack")
+    assert join_link.count() == 1
+    assert join_link.first.get_attribute("href") == expected_href
+    assert join_link.first.get_attribute("target") == "_blank"
+    assert join_link.first.get_attribute("rel") == "noopener"
+
+    assert page.locator('a[href="/community"]').count() == 0
+
+
 # ---------------------------------------------------------------
 # Scenario 1: Main member sees the Community quick action on
 #              their dashboard
@@ -127,15 +147,19 @@ def _clear_audit_logs():
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario1MainMemberSeesCommunityQuickAction:
-    """Main member sees the Community quick action on their dashboard."""
+    """Main member discovers Slack access on their dashboard."""
 
-    def test_main_member_sees_community_action_card(self, django_server, browser):
+    def test_main_member_sees_community_action_card(
+        self, django_server, browser, settings,
+    ):
         """Given a user logged in as main@test.com (Main tier, level 20).
-        Navigate to / (authenticated dashboard), scroll to Quick Actions.
-        A 'Community' action card appears with a link to /community.
-        Click it and verify navigation."""
+        Navigate to / (authenticated dashboard). The current dashboard
+        surfaces Slack access through the join panel, not a stale
+        /community quick action."""
         _ensure_tiers()
         _create_user("main@test.com", tier_slug="main")
+        slack_invite_url = "https://join.slack.com/test-main-dashboard"
+        settings.SLACK_INVITE_URL = slack_invite_url
 
         context = _auth_context(browser, "main@test.com")
         page = context.new_page()
@@ -144,26 +168,8 @@ class TestScenario1MainMemberSeesCommunityQuickAction:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-
-        # The dashboard should show the Quick Actions section
-        assert "Quick Actions" in body
-
-        # Step 2: Verify the Community action card is present
-        community_card = page.locator(
-            'a[href="/community"]'
-        )
-        assert community_card.count() >= 1
-
-        community_text = community_card.first.inner_text()
-        assert "Community" in community_text
-
-        # Step 3: Click the Community action card
-        community_card.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: User navigates to /community
-        assert "/community" in page.url
+        assert _dashboard_quick_actions(page).is_visible()
+        _assert_slack_join_panel(page, slack_invite_url)
 # ---------------------------------------------------------------
 # Scenario 2: Basic member does not see the Community quick action
 # ---------------------------------------------------------------
@@ -187,21 +193,29 @@ class TestScenario2BasicMemberNoCommunityAction:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
+        quick_actions = _dashboard_quick_actions(page)
+        assert quick_actions.is_visible()
 
-        # The dashboard should show Quick Actions
-        assert "Quick Actions" in body
-
-        # Step 2: Verify standard quick actions are present
-        assert "Browse Courses" in body
-        assert "View Recordings" in body
-        assert "Submit Project" in body
+        # Step 2: Verify current learning/content quick actions are present.
+        expected_actions = {
+            "Browse Courses": "/courses",
+            "Browse Workshops": "/workshops",
+            "Resources": "/resources",
+            "Events & Recordings": "/events",
+            "Projects": "/projects",
+            "Activities": "/activities",
+        }
+        for label, href in expected_actions.items():
+            action = quick_actions.get_by_role("link", name=label)
+            assert action.count() == 1
+            assert action.first.get_attribute("href") == href
 
         # Then: No Community action card is shown
-        community_link = page.locator(
-            'a[href="/community"]'
-        )
-        assert community_link.count() == 0
+        assert page.locator('a[href="/community"]').count() == 0
+        assert page.locator(
+            'section:has(h2:has-text("Join our Slack community"))'
+        ).count() == 0
+        assert page.get_by_role("link", name="Join Slack").count() == 0
 # ---------------------------------------------------------------
 # Scenario 3: Free member discovers community access is a Main
 #              tier benefit on the activities page
@@ -348,17 +362,18 @@ class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario5PremiumMemberSeesCommunityAction:
-    """Premium member also sees the Community quick action."""
+    """Premium member also discovers Slack access on their dashboard."""
 
     def test_premium_member_sees_community_action_card(
-        self, django_server
-    , browser):
+        self, django_server, browser, settings,
+    ):
         """Given a user logged in as premium@test.com (Premium tier,
-        level 30). Navigate to / (authenticated dashboard), scroll to
-        Quick Actions. A 'Community' action card appears -- Premium
-        includes everything Main has. Click it and verify navigation."""
+        level 30). Navigate to / (authenticated dashboard). Premium
+        includes Main benefits, so the current Slack join panel appears."""
         _ensure_tiers()
         _create_user("premium@test.com", tier_slug="premium")
+        slack_invite_url = "https://join.slack.com/test-premium-dashboard"
+        settings.SLACK_INVITE_URL = slack_invite_url
 
         context = _auth_context(browser, "premium@test.com")
         page = context.new_page()
@@ -367,26 +382,8 @@ class TestScenario5PremiumMemberSeesCommunityAction:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-
-        # The dashboard should show Quick Actions
-        assert "Quick Actions" in body
-
-        # Step 2: Verify the Community action card is present
-        community_card = page.locator(
-            'a[href="/community"]'
-        )
-        assert community_card.count() >= 1
-
-        community_text = community_card.first.inner_text()
-        assert "Community" in community_text
-
-        # Step 3: Click the Community action card
-        community_card.first.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: User navigates to /community
-        assert "/community" in page.url
+        assert _dashboard_quick_actions(page).is_visible()
+        _assert_slack_join_panel(page, slack_invite_url)
 # ---------------------------------------------------------------
 # Scenario 10: Admin reviews community audit log in Django admin
 # ---------------------------------------------------------------

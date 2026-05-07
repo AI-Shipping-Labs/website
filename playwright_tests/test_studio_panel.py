@@ -161,6 +161,11 @@ def _create_newsletter_user(email, is_active=True):
     return user
 
 
+def _studio_summary_metric(page, label):
+    summary = page.locator('section:has(h2:has-text("Summary"))')
+    return summary.locator("div.bg-card").filter(has_text=label).first
+
+
 # ---------------------------------------------------------------
 # Scenario 1: Non-staff member is denied access to the Studio
 # ---------------------------------------------------------------
@@ -266,12 +271,13 @@ class TestScenario3StaffReviewsDashboard:
         has at least 2 published articles, 1 draft article, 1 upcoming event, and
         3 active subscribers.
         1. Navigate to /studio/
-        Then: Dashboard displays quick stats including total courses, published articles
-        count, active subscribers count, and upcoming events count.
-        2. Click the 'View all' link next to Recent Articles
+        Then: Dashboard displays current summary metrics for courses, articles,
+        subscribers, and events.
+        2. Use the Studio article navigation link
         Then: User navigates to /studio/articles/ and sees the full article list."""
         _clear_articles()
         _clear_events()
+        _clear_courses()
         _clear_subscribers()
         _ensure_tiers()
         admin = _create_staff_user("admin@test.com")
@@ -304,43 +310,30 @@ class TestScenario3StaffReviewsDashboard:
             f"{django_server}/studio/",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-
         # Dashboard displays quick stats
-        assert "Dashboard" in body
-        assert "Total Courses" in body
-        assert "Published Articles" in body
-        assert "Active Subscribers" in body
-        assert "Upcoming Events" in body
+        page.get_by_role("heading", name="Dashboard").wait_for()
+        summary = page.locator('section:has(h2:has-text("Summary"))')
+        assert summary.is_visible()
 
-        # Published articles count matches (2)
-        # The stat card shows "2" for published articles
-        published_stat = page.locator(
-            "text=Published Articles"
-        ).locator("xpath=ancestor::div[contains(@class,'bg-card')]")
-        published_text = published_stat.inner_text()
-        assert "2" in published_text
+        courses_stat = _studio_summary_metric(page, "Courses")
+        assert "0" in courses_stat.inner_text()
+        assert "0 published" in courses_stat.inner_text()
 
-        # Active subscribers count (3)
-        subscriber_stat = page.locator(
-            "text=Active Subscribers"
-        ).locator("xpath=ancestor::div[contains(@class,'bg-card')]")
-        subscriber_text = subscriber_stat.inner_text()
-        assert "3" in subscriber_text
+        articles_stat = _studio_summary_metric(page, "Articles")
+        assert "2" in articles_stat.inner_text()
+        assert "3 total" in articles_stat.inner_text()
 
-        # Upcoming events count (1)
-        events_stat = page.locator(
-            "text=Upcoming Events"
-        ).locator("xpath=ancestor::div[contains(@class,'bg-card')]")
-        events_text = events_stat.inner_text()
-        assert "1" in events_text
+        subscriber_stat = _studio_summary_metric(page, "Subscribers")
+        assert "3" in subscriber_stat.inner_text()
 
-        # Step 2: Click "View all" next to Recent Articles
-        view_all_link = page.locator(
-            'a[href="/studio/articles/"]:has-text("View all")'
-        )
-        assert view_all_link.count() >= 1
-        view_all_link.first.click()
+        events_stat = _studio_summary_metric(page, "Events")
+        assert "1" in events_stat.inner_text()
+        assert "1 total" in events_stat.inner_text()
+
+        # Step 2: Click the current Studio article-management link.
+        articles_link = page.locator('a[href="/studio/articles/"]').first
+        assert articles_link.count() == 1
+        articles_link.click()
         page.wait_for_load_state("domcontentloaded")
 
         # Then: User navigates to /studio/articles/

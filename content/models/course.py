@@ -2,7 +2,11 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Prefetch
 
-from content.access import VISIBILITY_CHOICES, get_required_tier_name
+from content.access import (
+    UNIT_VISIBILITY_CHOICES,
+    VISIBILITY_CHOICES,
+    get_required_tier_name,
+)
 from content.models.mixins import (
     SourceMetadataMixin,
     SyncedContentIdentityMixin,
@@ -54,6 +58,15 @@ class Course(
         default=0,
         choices=VISIBILITY_CHOICES,
         help_text="Minimum tier level required to access course units.",
+    )
+    default_unit_required_level = models.IntegerField(
+        null=True, blank=True,
+        choices=UNIT_VISIBILITY_CHOICES,
+        help_text=(
+            "Default access level applied to every unit in this course "
+            "unless the unit's frontmatter overrides it. When null, units "
+            "inherit Course.required_level (legacy behaviour). Issue #465."
+        ),
     )
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default='draft',
@@ -310,6 +323,15 @@ class Unit(SyncedContentIdentityMixin, SourceMetadataMixin, models.Model):
         default=False,
         help_text="If true, visible to everyone regardless of course access.",
     )
+    required_level = models.IntegerField(
+        null=True, blank=True,
+        choices=UNIT_VISIBILITY_CHOICES,
+        help_text=(
+            "Per-unit override of the course default. When null, the unit "
+            "inherits Course.default_unit_required_level (or, when that is "
+            "also null, Course.required_level). Issue #465."
+        ),
+    )
     available_after_days = models.IntegerField(
         null=True, blank=True,
         help_text="For cohort drip schedule: unit becomes available this many days after cohort start_date. Null = available immediately.",
@@ -352,6 +374,29 @@ class Unit(SyncedContentIdentityMixin, SourceMetadataMixin, models.Model):
         """Return URL for this unit's page."""
         course = self.module.course
         return f'/courses/{course.slug}/{self.module.slug}/{self.slug}'
+
+    @property
+    def effective_required_level(self):
+        """Resolve the access level for this unit (issue #465).
+
+        Resolution order:
+        1. ``Unit.required_level`` (per-unit YAML override) when set.
+        2. ``Course.default_unit_required_level`` (course YAML default).
+        3. ``Course.required_level`` (legacy fallback — pre-#465 behavior).
+
+        ``is_preview`` is intentionally NOT collapsed into this property:
+        callers (the unit detail view, the API endpoint, and ``can_access``
+        for unit-shaped content) check ``is_preview`` first because the
+        flag still drives template branches like the sidebar Preview
+        badge. Treating it as a separate gate keeps that UI signal
+        intact.
+        """
+        if self.required_level is not None:
+            return self.required_level
+        course = self.module.course
+        if course.default_unit_required_level is not None:
+            return course.default_unit_required_level
+        return course.required_level
 
 
 class UserCourseProgress(models.Model):

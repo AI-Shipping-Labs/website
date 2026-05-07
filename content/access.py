@@ -7,6 +7,13 @@ Anonymous users are treated as level 0 (free tier).
 
 # Visibility level constants matching tier levels in payments.Tier
 LEVEL_OPEN = 0
+# LEVEL_REGISTERED is a content-side sentinel (issue #465). It does NOT
+# correspond to a real Tier row — Tier rows stay at 0/10/20/30. It means
+# "any authenticated user, regardless of tier" and is used on per-unit
+# course gating to draw a sign-in wall (anonymous denied, free verified
+# allowed). The constant sits between LEVEL_OPEN and LEVEL_BASIC so
+# numeric ``>=`` comparisons keep working for paid tiers.
+LEVEL_REGISTERED = 5
 LEVEL_BASIC = 10
 LEVEL_MAIN = 20
 LEVEL_PREMIUM = 30
@@ -19,9 +26,26 @@ VISIBILITY_CHOICES = [
     (LEVEL_PREMIUM, 'Premium only'),
 ]
 
-# Map from required_level to the tier name shown in CTAs
+# Choices for unit-level access fields (issue #465). Adds the
+# LEVEL_REGISTERED option so course authors can default a course to
+# "free with sign-in" without paywalling the catalog. Course.required_level
+# stays on VISIBILITY_CHOICES because the catalog/course detail tier copy
+# still distinguishes Free / Basic / Main / Premium only.
+UNIT_VISIBILITY_CHOICES = [
+    (LEVEL_OPEN, 'Open (everyone)'),
+    (LEVEL_REGISTERED, 'Registered users (any tier)'),
+    (LEVEL_BASIC, 'Basic and above'),
+    (LEVEL_MAIN, 'Main and above'),
+    (LEVEL_PREMIUM, 'Premium only'),
+]
+
+# Map from required_level to the tier name shown in CTAs.
+# LEVEL_REGISTERED maps to 'Free' so the CTA copy reuses the existing
+# "Free" tier label; the call site distinguishes the registered-wall
+# CTA ("Sign in to read") from the upgrade CTA via gated_reason.
 LEVEL_TO_TIER_NAME = {
     LEVEL_OPEN: 'Free',
+    LEVEL_REGISTERED: 'Free',
     LEVEL_BASIC: 'Basic',
     LEVEL_MAIN: 'Main',
     LEVEL_PREMIUM: 'Premium',
@@ -112,29 +136,73 @@ def get_active_override(user):
     )
 
 
+def _resolve_required_level(content):
+    """Return the access level to gate ``content`` against.
+
+    Issue #465: ``Unit`` exposes ``effective_required_level`` so per-unit
+    overrides and course-level defaults can override ``required_level``.
+    Falling back to ``content.required_level`` keeps every other content
+    type untouched. ``effective_required_level`` may be ``None`` when both
+    the unit override and the course default are unset — treat that as
+    "use the underlying ``required_level`` field" so courses without the
+    new fields keep working.
+    """
+    effective = getattr(content, 'effective_required_level', None)
+    if effective is not None:
+        return effective
+    return getattr(content, 'required_level', LEVEL_OPEN)
+
+
 def can_access(user, content):
     """Check whether a user can access a content object.
 
     Args:
         user: The request user (may be AnonymousUser).
         content: Any model instance with a ``required_level`` attribute.
+            ``Unit`` instances additionally expose
+            ``effective_required_level`` which resolves the unit override
+            and course default introduced in issue #465.
 
     Returns:
-        True if the user's tier level is >= the content's required_level,
-        or if the user has individual CourseAccess for a Course.
+        True if the user's tier level is >= the content's required level,
+        or if the user has individual CourseAccess for a Course (or a
+        unit belonging to a course they have CourseAccess for).
     """
-    if content.required_level == 0:
+    required = _resolve_required_level(content)
+
+    if required == LEVEL_OPEN:
         if user is None or not user.is_authenticated:
             return True
         if get_user_level(user) >= LEVEL_BASIC:
             return True
         return bool(user.email_verified)
-    if get_user_level(user) >= content.required_level:
+
+    if required == LEVEL_REGISTERED:
+        # Issue #465: registration wall. Anonymous denied, any tier
+        # allowed when their email is verified (Basic+ tier rows are
+        # treated as already verified — same rule LEVEL_OPEN uses).
+        if user is None or not user.is_authenticated:
+            return False
+        if get_user_level(user) >= LEVEL_BASIC:
+            return True
+        return bool(user.email_verified)
+
+    if get_user_level(user) >= required:
         return True
-    # Check individual course access (CourseAccess model)
-    if user is not None and user.is_authenticated and _is_course(content):
-        from content.models import CourseAccess
-        return CourseAccess.objects.filter(user=user, course=content).exists()
+    # Check individual course access (CourseAccess model). Both the
+    # course itself and any unit belonging to that course should bypass
+    # the per-unit / course-level gating once a user holds CourseAccess.
+    if user is not None and user.is_authenticated:
+        if _is_course(content):
+            from content.models import CourseAccess
+            return CourseAccess.objects.filter(
+                user=user, course=content,
+            ).exists()
+        if _is_unit(content):
+            from content.models import CourseAccess
+            return CourseAccess.objects.filter(
+                user=user, course=content.module.course,
+            ).exists()
     return False
 
 
@@ -142,14 +210,22 @@ def get_gated_reason(user, content):
     """Return why access is denied, or an empty string when access is allowed."""
     if can_access(user, content):
         return ''
+    required = _resolve_required_level(content)
+    # Free authenticated users on free content (LEVEL_OPEN or
+    # LEVEL_REGISTERED) are blocked by email verification, not by tier.
     if (
-        content.required_level == LEVEL_OPEN
+        required in (LEVEL_OPEN, LEVEL_REGISTERED)
         and user is not None
         and user.is_authenticated
         and get_user_level(user) < LEVEL_BASIC
         and not user.email_verified
     ):
         return 'unverified_email'
+    if (
+        required == LEVEL_REGISTERED
+        and (user is None or not user.is_authenticated)
+    ):
+        return 'authentication_required'
     return 'insufficient_tier'
 
 
@@ -174,6 +250,11 @@ def build_verify_email_context(user):
 def _is_course(content):
     """Check if a content object is a Course instance without importing at module level."""
     return content.__class__.__name__ == 'Course'
+
+
+def _is_unit(content):
+    """Check if a content object is a Unit instance without importing at module level."""
+    return content.__class__.__name__ == 'Unit'
 
 
 def get_required_tier_name(required_level):
@@ -229,7 +310,35 @@ def build_gating_context(user, content, content_type='article'):
             **build_verify_email_context(user),
         }
 
-    tier_name = get_required_tier_name(content.required_level)
+    if gated_reason == 'authentication_required':
+        # Issue #465: registered-only content for an anonymous visitor
+        # uses a sign-in CTA, not the upgrade-to-paid CTA. The view
+        # builds the actual ``next=`` URL; this context just supplies
+        # the human-facing copy and the auth URLs.
+        action_verbs = {
+            'article': 'read this article',
+            'recording': 'watch this recording',
+            'project': 'view this project',
+            'tutorial': 'read this tutorial',
+            'curated_link': 'access this resource',
+            'download': 'download this resource',
+            'event': 'join this event',
+            'unit': 'read this lesson',
+            'course': 'access this course',
+        }
+        action = action_verbs.get(content_type, 'access this content')
+        return {
+            'is_gated': True,
+            'gated_reason': 'authentication_required',
+            'teaser': get_teaser_text(content),
+            'cta_message': f'Sign in to {action}',
+            'required_tier_name': 'Free',
+            'login_url': '/accounts/login/',
+            'signup_url': '/accounts/signup/',
+            'pricing_url': '/pricing',
+        }
+
+    tier_name = get_required_tier_name(_resolve_required_level(content))
     teaser = get_teaser_text(content)
 
     # Build CTA message based on content type

@@ -249,6 +249,144 @@ class StudioCourseEditTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'Local / manual', count=3)
 
 
+class StudioCourseSourceManagedCleanupTest(StaffUserMixin, TestCase):
+    """Tests for the source-managed course edit cleanup (issue #490).
+
+    Verifies that source-managed courses:
+    - render a compact source action row (sticky bar) containing all three
+      source actions: View on site, Edit on GitHub, Re-sync source
+    - link to the course YAML operator guide from the sticky bar
+    - do not duplicate the View on site link in the page header
+    - render absent Stripe/price metadata as `Not configured`, not as empty
+      input fields that look configured
+    - do not duplicate `Individual purchase` rows between the form and the
+      side-panel state block
+    - preserve the existing local/non-synced edit flow untouched
+    """
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+        self.synced = Course.objects.create(
+            title='Synced',
+            slug='synced',
+            status='published',
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/synced/course.yaml',
+        )
+
+    def test_source_managed_compact_action_row_contains_three_source_actions(self):
+        response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
+
+        self.assertContains(response, 'data-testid="sticky-action-row"')
+        self.assertContains(response, 'data-testid="sticky-github-source-link"')
+        self.assertContains(response, 'data-testid="sticky-view-on-site"')
+        self.assertContains(response, 'data-testid="sticky-resync-source-button"')
+
+    def test_source_managed_links_to_course_yaml_guide(self):
+        response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
+
+        self.assertContains(response, 'data-testid="sticky-docs-link"')
+        self.assertContains(response, '_docs/course_yaml.md')
+        self.assertContains(response, 'Course YAML guide')
+
+    def test_source_managed_header_omits_duplicate_view_on_site_link(self):
+        response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
+
+        # Sticky bar version remains the single canonical "View on site"
+        # link in the action area; the page-header repeat is suppressed
+        # for source-managed courses.
+        self.assertNotContains(response, 'data-testid="view-on-site"')
+
+    def test_source_managed_stripe_fields_render_as_not_configured(self):
+        # No price, no product, no price ID set on the course.
+        response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
+
+        self.assertContains(response, 'data-testid="individual-purchase-readonly"')
+        # Disabled empty <input> fields are not rendered for synced courses
+        # — they used to look like editable empty fields.
+        self.assertNotContains(response, 'name="individual_price_eur"')
+
+        body = response.content.decode()
+        price_dd_start = body.find('data-testid="readonly-individual-price"')
+        product_dd_start = body.find('data-testid="readonly-stripe-product"')
+        price_id_dd_start = body.find('data-testid="readonly-stripe-price"')
+        self.assertGreater(price_dd_start, 0)
+        self.assertGreater(product_dd_start, 0)
+        self.assertGreater(price_id_dd_start, 0)
+        for start in (price_dd_start, product_dd_start, price_id_dd_start):
+            chunk = body[start:start + 400]
+            self.assertIn('Not configured', chunk)
+
+    def test_source_managed_stripe_fields_show_real_values_when_present(self):
+        Course.objects.filter(pk=self.synced.pk).update(
+            individual_price_eur='49.00',
+            stripe_product_id='prod_TEST123',
+            stripe_price_id='price_TEST456',
+        )
+
+        response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
+
+        body = response.content.decode()
+        price_chunk = body[body.find('data-testid="readonly-individual-price"'):]
+        product_chunk = body[body.find('data-testid="readonly-stripe-product"'):]
+        price_id_chunk = body[body.find('data-testid="readonly-stripe-price"'):]
+        self.assertIn('EUR 49.00', price_chunk[:200])
+        self.assertIn('prod_TEST123', product_chunk[:300])
+        self.assertIn('price_TEST456', price_id_chunk[:300])
+        self.assertNotIn('Not configured', price_chunk[:200])
+
+    def test_source_managed_state_panel_omits_duplicate_individual_purchase(self):
+        response = self.client.get(f'/studio/courses/{self.synced.pk}/edit')
+
+        body = response.content.decode()
+        state_panel_start = body.find('data-testid="course-state-panel"')
+        # Slice the state panel block (until end of containing div) and
+        # confirm "Individual purchase" only appears in the main form's
+        # section, not duplicated here.
+        self.assertGreater(state_panel_start, 0)
+        state_panel_end = body.find('</div>', body.find('</dl>', state_panel_start))
+        state_panel_block = body[state_panel_start:state_panel_end]
+        self.assertNotIn('Individual purchase', state_panel_block)
+
+    def test_local_course_individual_purchase_input_remains_editable(self):
+        local = Course.objects.create(
+            title='Local', slug='local', status='draft',
+        )
+
+        response = self.client.get(f'/studio/courses/{local.pk}/edit')
+
+        # Local courses keep the editable input — only synced ones lose it.
+        self.assertContains(response, 'name="individual_price_eur"')
+        self.assertContains(response, 'data-testid="individual-purchase-section"')
+        # State panel still shows Individual purchase row for local courses,
+        # but absent value reads as "Not configured" (not "Disabled").
+        self.assertContains(response, 'data-testid="course-state-panel"')
+        body = response.content.decode()
+        state_panel_start = body.find('data-testid="course-state-panel"')
+        state_panel_end = body.find('</div>', body.find('</dl>', state_panel_start))
+        state_panel_block = body[state_panel_start:state_panel_end]
+        self.assertIn('Individual purchase', state_panel_block)
+        self.assertIn('Not configured', state_panel_block)
+        self.assertNotIn('Disabled', state_panel_block)
+
+    def test_local_course_save_post_still_works(self):
+        local = Course.objects.create(
+            title='Local Editable', slug='local-editable', status='draft',
+        )
+
+        response = self.client.post(f'/studio/courses/{local.pk}/edit', {
+            'title': 'Local Editable Updated',
+            'slug': 'local-editable',
+            'status': 'published',
+            'required_level': '0',
+            'individual_price_eur': '19.00',
+        })
+        self.assertEqual(response.status_code, 302)
+        local.refresh_from_db()
+        self.assertEqual(local.title, 'Local Editable Updated')
+        self.assertEqual(str(local.individual_price_eur), '19.00')
+
+
 class StudioModuleCreateTest(StaffUserMixin, TestCase):
     """Test module creation within a course."""
 

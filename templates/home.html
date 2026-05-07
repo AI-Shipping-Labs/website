@@ -124,11 +124,16 @@
         </div>
       </div>
 
-      <div class="mx-auto mt-10 grid max-w-7xl gap-6 sm:mt-16 lg:grid-cols-3">
+      <div class="mx-auto mt-10 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-3"
+           data-tier-carousel
+           data-testid="home-tier-carousel">
         {% for tier in tiers %}
-        <div class="relative flex flex-col rounded-xl border p-8 transition-all {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 lg:scale-105{% else %}border-border bg-background{% endif %}" style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">
+        <div class="relative flex min-h-full flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:w-[min(82vw,22rem)] max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 lg:scale-105{% else %}border-border bg-background{% endif %}"
+             data-tier-card="{{ tier.stripe_key }}"
+             data-testid="home-tier-card"
+             style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">
           {% if tier.highlighted %}
-          <div class="absolute -top-3 left-1/2 -translate-x-1/2">
+          <div class="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
             <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
               <i data-lucide="star" class="h-3 w-3"></i>
               Most Popular
@@ -167,11 +172,11 @@
           <div class="mt-auto space-y-4">
             <p class="text-xs text-muted-foreground">{{ tier.positioning }}</p>
             <a href="{{ tier.payment_link_annual }}"
-               class="tier-cta-link block w-full rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors cursor-pointer {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
+               class="tier-cta-link flex min-h-[44px] w-full items-center justify-center rounded-md px-4 py-3 text-center text-sm font-medium transition-colors cursor-pointer sm:py-2.5 {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-tier="{{ tier.stripe_key }}"
                data-link-annual="{{ tier.payment_link_annual }}" data-link-monthly="{{ tier.payment_link_monthly }}"
                style="{% if tier.highlighted %}box-shadow: 0 10px 25px -5px hsl(75 100% 50% / 0.2);{% endif %}">
-              {% if tier.highlighted %}Get Started{% else %}Choose {{ tier.name }}{% endif %}
+              Join
             </a>
           </div>
         </div>
@@ -502,6 +507,21 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
     el.href = isAnnual ? el.dataset.linkAnnual : el.dataset.linkMonthly;
   });
 });
+
+// Center the recommended tier in mobile scroll-snap carousels.
+(function() {
+  function centerRecommendedTier() {
+    if (!window.matchMedia('(max-width: 1023px)').matches) return;
+    document.querySelectorAll('[data-tier-carousel]').forEach(function(carousel) {
+      var recommended = carousel.querySelector('[data-tier-card="main"]');
+      if (!recommended) return;
+      var targetLeft = recommended.offsetLeft - ((carousel.clientWidth - recommended.clientWidth) / 2);
+      carousel.scrollLeft = Math.max(0, targetLeft);
+    });
+  }
+  window.addEventListener('load', centerRecommendedTier);
+  window.addEventListener('resize', centerRecommendedTier);
+})();
 
 // Get CSRF token from cookie
 function getCookie(name) {

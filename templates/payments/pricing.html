@@ -22,7 +22,7 @@
     </div>
   </div>
 
-  <section class="pt-32 pb-16 sm:pb-24 lg:pb-32" id="pricing-section">
+  <section class="overflow-x-hidden pt-32 pb-16 sm:pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="mx-auto max-w-2xl text-center">
@@ -47,10 +47,15 @@
         </div>
       </div>
 
-      <!-- Tier Grid: 4 columns on desktop, stack on mobile -->
-      <div class="mx-auto mt-16 grid max-w-7xl gap-8 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <!-- Tier Grid: 4 columns on desktop, scroll-snap carousel on mobile -->
+      <div class="mx-auto mt-16 grid max-w-7xl gap-8 sm:gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:[scrollbar-width:none] sm:grid-cols-2 lg:grid-cols-4"
+           data-tier-carousel
+           data-testid="pricing-tier-carousel">
         {% for item in tiers_data %}
-        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0{% else %}border-border bg-background{% endif %}" {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
+        <div class="relative overflow-visible flex min-h-full flex-col rounded-xl border p-5 sm:p-8 transition-all max-lg:w-[min(82vw,22rem)] max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0{% else %}border-border bg-background{% endif %}"
+             data-tier-card="{{ item.tier.slug }}"
+             data-testid="pricing-tier-card"
+             {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
           {% if item.tier.slug == 'main' %}
           <div class="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
             <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground whitespace-nowrap">
@@ -86,6 +91,7 @@
               <span class="text-4xl font-semibold text-foreground">&euro;0</span>
               <span class="ml-2 text-muted-foreground">/forever</span>
             </div>
+            <p class="mt-2 text-sm text-accent">Newsletter and open resources</p>
             {% endif %}
           </div>
 
@@ -291,6 +297,21 @@ document.querySelectorAll('.tier-cta-link').forEach(function(el) {
       history.replaceState(null, '', url.pathname + url.search + url.hash);
     });
   }
+})();
+
+// Center the recommended tier in mobile scroll-snap carousels.
+(function() {
+  function centerRecommendedTier() {
+    if (!window.matchMedia('(max-width: 1023px)').matches) return;
+    document.querySelectorAll('[data-tier-carousel]').forEach(function(carousel) {
+      var recommended = carousel.querySelector('[data-tier-card="main"]');
+      if (!recommended) return;
+      var targetLeft = recommended.offsetLeft - ((carousel.clientWidth - recommended.clientWidth) / 2);
+      carousel.scrollLeft = Math.max(0, targetLeft);
+    });
+  }
+  window.addEventListener('load', centerRecommendedTier);
+  window.addEventListener('resize', centerRecommendedTier);
 })();
 </script>
 {% endblock %}

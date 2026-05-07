@@ -41,8 +41,15 @@ def _ensure_aihero_course():
     so the server thread can read the newly created data.
     """
     from django.db import connection
+    from django.utils.text import slugify
 
-    from content.models import Course, Module, Unit
+    from content.models import (
+        Course,
+        CourseInstructor,
+        Instructor,
+        Module,
+        Unit,
+    )
 
     if Course.objects.filter(slug="aihero").exists():
         connection.close()
@@ -58,8 +65,20 @@ def _ensure_aihero_course():
         ),
         status="published",
         required_level=0,
-        instructor_name="Alexey Grigorev",
-        instructor_bio="Principal Data Scientist",
+    )
+    instructor_name = "Alexey Grigorev"
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(instructor_name)[:200] or "test-instructor",
+        defaults={
+            "name": instructor_name,
+            "bio": "Principal Data Scientist",
+            "status": "published",
+        },
+    )
+    CourseInstructor.objects.get_or_create(
+        course=course,
+        instructor=instructor,
+        defaults={"position": 0},
     )
     module = Module.objects.create(
         course=course,

@@ -44,8 +44,9 @@ def _clear_workshops_and_articles():
 def _create_workshop_with_links(slug='architecture-walk-through'):
     """Create a workshop with the mixed-link tutorial body from the spec."""
     from django.utils import timezone
+    from django.utils.text import slugify
 
-    from content.models import Workshop, WorkshopPage
+    from content.models import Instructor, Workshop, WorkshopInstructor, WorkshopPage
     from events.models import Event
 
     event = Event.objects.create(
@@ -65,8 +66,20 @@ def _create_workshop_with_links(slug='architecture-walk-through'):
         pages_required_level=0,
         recording_required_level=0,
         description='A workshop about agent architecture.',
-        instructor_name='Alexey',
         event=event,
+    )
+    instructor_name = 'Alexey'
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(instructor_name)[:200] or 'test-instructor',
+        defaults={
+            'name': instructor_name,
+            'status': 'published',
+        },
+    )
+    WorkshopInstructor.objects.get_or_create(
+        workshop=workshop,
+        instructor=instructor,
+        defaults={'position': 0},
     )
     # An "intro" page so the relative link "01-intro" resolves to a
     # real workshop page. We don't actually click that link, so the

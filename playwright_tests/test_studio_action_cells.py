@@ -39,7 +39,9 @@ def _reset_state():
 
 
 def _create_content_rows():
-    from content.models import Article, Course
+    from django.utils.text import slugify
+
+    from content.models import Article, Course, CourseInstructor, Instructor
     from events.models import Event
 
     article = Article.objects.create(
@@ -53,7 +55,19 @@ def _create_content_rows():
         title="Action Cell Course",
         slug="action-cell-course",
         status="draft",
-        instructor_name="Studio",
+    )
+    instructor_name = "Studio"
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(instructor_name)[:200] or "test-instructor",
+        defaults={
+            "name": instructor_name,
+            "status": "published",
+        },
+    )
+    CourseInstructor.objects.get_or_create(
+        course=course,
+        instructor=instructor,
+        defaults={"position": 0},
     )
     event = Event.objects.create(
         title="Action Cell Event",

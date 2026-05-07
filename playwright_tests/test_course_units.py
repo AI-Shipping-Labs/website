@@ -57,7 +57,9 @@ def _create_course(
     instructor_name="",
 ):
     """Create a Course via ORM."""
-    from content.models import Course
+    from django.utils.text import slugify
+
+    from content.models import Course, CourseInstructor, Instructor
 
     course = Course(
         title=title,
@@ -65,9 +67,21 @@ def _create_course(
         description=description,
         required_level=required_level,
         status=status,
-        instructor_name=instructor_name,
     )
     course.save()
+    if instructor_name:
+        instructor, _ = Instructor.objects.get_or_create(
+            instructor_id=slugify(instructor_name)[:200] or "test-instructor",
+            defaults={
+                "name": instructor_name,
+                "status": "published",
+            },
+        )
+        CourseInstructor.objects.get_or_create(
+            course=course,
+            instructor=instructor,
+            defaults={"position": 0},
+        )
     connection.close()
     return course
 

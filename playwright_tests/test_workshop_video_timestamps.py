@@ -50,8 +50,9 @@ def _create_workshop_with_timestamps():
     assert that the unmatched 8:30 row has no tutorial sub-link.
     """
     from django.utils import timezone
+    from django.utils.text import slugify
 
-    from content.models import Workshop, WorkshopPage
+    from content.models import Instructor, Workshop, WorkshopInstructor, WorkshopPage
     from events.models import Event
 
     event = Event.objects.create(
@@ -78,8 +79,20 @@ def _create_workshop_with_timestamps():
         pages_required_level=10,
         recording_required_level=20,
         description='Workshop body.',
-        instructor_name='Alexey',
         event=event,
+    )
+    instructor_name = 'Alexey'
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(instructor_name)[:200] or 'test-instructor',
+        defaults={
+            'name': instructor_name,
+            'status': 'published',
+        },
+    )
+    WorkshopInstructor.objects.get_or_create(
+        workshop=workshop,
+        instructor=instructor,
+        defaults={'position': 0},
     )
     WorkshopPage.objects.create(
         workshop=workshop, slug='page-a', title='Page A',

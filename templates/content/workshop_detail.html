@@ -119,8 +119,14 @@
             </div>
             <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">Follow the tutorial</h2>
           </div>
+          {% comment %}
+            Issue #483: avoid the "0 pages" string when no pages exist
+            yet (the empty-state branch above handles that case but the
+            defensive check keeps the copy grammatical if a workshop
+            has the tutorial card forced on without pages).
+          {% endcomment %}
           <p class="text-sm text-muted-foreground flex-1">
-            {{ pages|length }} page{{ pages|length|pluralize }} of step-by-step instructions you can work through at your own pace.
+            {% if pages|length %}{{ pages|length }} page{{ pages|length|pluralize }} of step-by-step instructions you can work through at your own pace.{% else %}Step-by-step instructions you can work through at your own pace.{% endif %}
           </p>
           {% if not can_access_pages %}
           <span class="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="workshop-tutorial-locked">

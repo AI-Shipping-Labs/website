@@ -68,16 +68,21 @@
         </details>
         {% endfor %}
       {% elif reader_nav_kind == "workshop" %}
+        {% comment %}
+          Issue #483: workshop sidebar row spacing matches the course
+          sidebar (px-2 py-1.5) and uses the same icon size + completion
+          glyph so the two readers feel structurally identical.
+        {% endcomment %}
         <ul class="space-y-0.5">
           {% for nav_page in pages %}
           <li>
             <a href="{{ nav_page.get_absolute_url }}"
-               class="flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors {% if nav_page.pk == page.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}"
+               class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors {% if nav_page.pk == page.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}"
                {% if nav_page.pk == page.pk %}data-testid="sidebar-current-page" aria-current="page"{% endif %}>
               {% if nav_page.pk in completed_page_ids %}
               <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0" data-testid="sidebar-completed-page"></i>
               {% else %}
-              <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-[10px] font-semibold text-accent">{{ forloop.counter }}</span>
+              <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 opacity-40"></i>
               {% endif %}
               <span class="truncate">{{ nav_page.title }}</span>
             </a>

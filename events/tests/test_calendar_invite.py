@@ -281,7 +281,9 @@ class SendRegistrationConfirmationTest(TestCase):
         raw_data = call_kwargs['Content']['Raw']['Data']
         msg = self._parse_raw_email(raw_data)
 
-        self.assertEqual(msg['Subject'], 'Event: Test Event')
+        # Issue #484: confirmation subject was rewritten to confirm
+        # registration up-front rather than just naming the event.
+        self.assertEqual(msg['Subject'], "You're registered: Test Event")
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_body_contains_join_link(self, mock_boto3):

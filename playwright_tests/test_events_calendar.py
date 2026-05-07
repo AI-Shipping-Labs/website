@@ -260,8 +260,10 @@ class TestScenario2AnonymousDirectedToSignIn:
         assert "/events/open-workshop" in page.url
         body = page.content()
 
-        # Shows "Sign in to register for this event" message
-        assert "Sign in to register for this event" in body
+        # Issue #484: anonymous CTA was rewritten to lead with the
+        # account requirement and explain the newsletter implications.
+        assert "A free account is required to register" in body
+        assert "Sign in to register" in body
 
         # Sign In link is present (within the registration card,
         # not the header nav). Target the link with ?next= param.
@@ -340,7 +342,8 @@ class TestScenario3EligibleMemberRegisters:
         # The "Register" button is replaced by "Cancel Registration"
         cancel_btn = page.locator("#unregister-btn")
         assert cancel_btn.count() >= 1
-        assert "Cancel Registration" in cancel_btn.inner_text()
+        # Issue #484: button copy was lower-cased ("Cancel registration").
+        assert "Cancel registration" in cancel_btn.inner_text()
 
         # Spots count updates (9 remaining or 1/10 spots taken)
         assert "1/10 spots taken" in body
@@ -385,7 +388,8 @@ class TestScenario4RegisteredMemberCancels:
         assert "You're registered!" in body
         cancel_btn = page.locator("#unregister-btn")
         assert cancel_btn.count() >= 1
-        assert "Cancel Registration" in cancel_btn.inner_text()
+        # Issue #484: button copy was lower-cased ("Cancel registration").
+        assert "Cancel registration" in cancel_btn.inner_text()
 
         # Step 2: Click "Cancel Registration"
         # The JS shows confirm() dialog. Accept it.

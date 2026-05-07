@@ -69,7 +69,8 @@ class TestRecapPage:
 
         page.goto(f"{django_server}/events/launch", wait_until="domcontentloaded")
         body = page.content()
-        assert 'Sign in to register for this event' in body
+        # Issue #484: anonymous CTA copy was rewritten.
+        assert 'A free account is required to register' in body
         assert 'Watch the recording' not in body
         assert 'Ship real projects.' not in body
         assert 'View event recap' not in body

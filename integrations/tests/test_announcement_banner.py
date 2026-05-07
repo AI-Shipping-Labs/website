@@ -140,12 +140,23 @@ class AnnouncementBannerCrossProcessCacheTest(TestCase):
 
         with CaptureQueriesContext(connection) as ctx:
             self.assertIsNone(get_announcement_banner())
-            queries_after_first = len(ctx.captured_queries)
+            banner_queries_after_first = len([
+                query
+                for query in ctx.captured_queries
+                if 'integrations_announcementbanner' in query['sql']
+            ])
             self.assertIsNone(get_announcement_banner())
-            queries_after_second = len(ctx.captured_queries)
+            banner_queries_after_second = len([
+                query
+                for query in ctx.captured_queries
+                if 'integrations_announcementbanner' in query['sql']
+            ])
 
         # The second call must add zero AnnouncementBanner queries.
-        self.assertEqual(queries_after_first, queries_after_second)
+        self.assertEqual(
+            banner_queries_after_first,
+            banner_queries_after_second,
+        )
 
 
 class AnnouncementBannerContextProcessorTest(TestCase):
@@ -201,3 +212,17 @@ class AnnouncementBannerContextProcessorTest(TestCase):
         self._enable_banner()
         ctx = announcement_banner_context(self.factory.get('/blog/some-article'))
         self.assertIsNotNone(ctx['announcement_banner'])
+
+    def test_banner_without_link_renders_plain_text_without_link_label(self):
+        banner = self._enable_banner(message='Plain text only')
+        banner.link_url = ''
+        banner.link_label = 'Read more'
+        banner.save()
+        clear_announcement_banner_cache()
+
+        response = self.client.get('/')
+        self.assertContains(response, 'data-testid="announcement-banner"')
+        self.assertContains(response, '<div class="announcement-banner', html=False)
+        self.assertContains(response, 'Plain text only')
+        self.assertNotContains(response, 'Read more')
+        self.assertNotContains(response, '<a href=""', html=False)

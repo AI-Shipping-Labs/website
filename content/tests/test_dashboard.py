@@ -326,6 +326,71 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         self.assertEqual(response.context['in_progress_courses'], [])
         self.assertNotContains(response, 'AI Basics')
 
+    def test_completed_course_excluded_while_partial_course_is_shown(self):
+        completed_course = Course.objects.create(
+            title='AI Agents Buildcamp',
+            slug='ai-agents-buildcamp',
+            status='published',
+        )
+        completed_module = Module.objects.create(
+            course=completed_course,
+            title='Buildcamp Module',
+            slug='buildcamp-module',
+            sort_order=1,
+        )
+        completed_units = [
+            Unit.objects.create(
+                module=completed_module,
+                title=f'Buildcamp Unit {i + 1}',
+                slug=f'buildcamp-unit-{i + 1}',
+                sort_order=i,
+            )
+            for i in range(10)
+        ]
+        self._enroll(self.user, completed_course)
+
+        partial_course = Course.objects.create(
+            title='Python Fundamentals',
+            slug='python-fundamentals',
+            status='published',
+        )
+        partial_module = Module.objects.create(
+            course=partial_course,
+            title='Python Module',
+            slug='python-module',
+            sort_order=1,
+        )
+        partial_units = [
+            Unit.objects.create(
+                module=partial_module,
+                title=f'Python Unit {i + 1}',
+                slug=f'python-unit-{i + 1}',
+                sort_order=i,
+            )
+            for i in range(5)
+        ]
+        self._enroll(self.user, partial_course)
+
+        now = timezone.now()
+        for i, unit in enumerate(completed_units):
+            UserCourseProgress.objects.create(
+                user=self.user,
+                unit=unit,
+                completed_at=now - timedelta(days=1, hours=10 - i),
+            )
+        for i, unit in enumerate(partial_units[:2]):
+            UserCourseProgress.objects.create(
+                user=self.user,
+                unit=unit,
+                completed_at=now - timedelta(hours=2 - i),
+            )
+
+        response = self.client.get('/')
+        self.assertNotContains(response, 'AI Agents Buildcamp')
+        self.assertContains(response, 'Python Fundamentals')
+        self.assertContains(response, '2/5 units completed')
+        self.assertContains(response, 'style="width: 40%"')
+
     def test_most_recently_accessed_first(self):
         # Create a second course
         course2 = Course.objects.create(

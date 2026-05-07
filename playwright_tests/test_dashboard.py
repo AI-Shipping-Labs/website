@@ -1,7 +1,7 @@
 """
 Playwright E2E tests for the Logged-in User Home Dashboard (Issue #104).
 
-Tests cover all 11 BDD scenarios from the issue:
+Tests cover browser-valued BDD scenarios from the issue:
 - Anonymous visitor still sees the public marketing homepage
 - Free member sees personalized dashboard with tier badge after login
 - Free member with no activity sees helpful empty states that guide next steps
@@ -11,7 +11,6 @@ Tests cover all 11 BDD scenarios from the issue:
 - Free member discovers gated content in recent content and finds the upgrade path
 - Premium member sees active polls and navigates to vote
 - Member reads an unread notification from the dashboard and follows it
-- Member with a completed course does not see it in continue learning
 - Free member uses the Upgrade link in the welcome banner to explore paid tiers
 
 Usage:
@@ -1016,108 +1015,6 @@ class TestScenario9MemberReadsNotificationFromDashboard:
 
         # Then: Navigates to /notifications
         assert "/notifications" in page.url
-# -------------------------------------------------------------------
-# Scenario 10: Member with a completed course does not see it in
-#               continue learning
-# -------------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario10CompletedCourseNotInContinueLearning:
-    """Member with a completed course does not see it in continue
-    learning."""
-
-    def test_completed_course_excluded_in_progress_shown(
-        self, django_server
-    , browser):
-        """Given: A user logged in as basic@test.com (Basic tier) who
-        has completed all 10 of 10 units in 'AI Agents Buildcamp' and
-        completed 2 of 5 units in 'Python Fundamentals'.
-        1. Navigate to /
-        Then: The 'Continue Learning' section shows only
-              'Python Fundamentals' with a progress bar at 40% and
-              '2/5 units completed'.
-        Then: The fully completed 'AI Agents Buildcamp' course does
-              not appear in the continue learning section."""
-        _clear_dashboard_data()
-        user = _create_user(
-            "basic@test.com", tier_slug="basic"
-        )
-
-        # Course 1: AI Agents Buildcamp - fully completed (10/10)
-        course1 = _create_course(
-            title="AI Agents Buildcamp",
-            slug="ai-agents-buildcamp",
-            required_level=0,
-        )
-        module1 = _create_module(course1, "Module A", sort_order=0)
-        units1 = []
-        for i in range(10):
-            unit = _create_unit(
-                module1, f"Buildcamp Unit {i + 1}", sort_order=i
-            )
-            units1.append(unit)
-
-        base_time = timezone.now() - datetime.timedelta(days=5)
-        for i, unit in enumerate(units1):
-            _mark_unit_completed(
-                user,
-                unit,
-                completed_at=base_time + datetime.timedelta(hours=i),
-            )
-        _enroll_user(user, course1)
-
-        # Course 2: Python Fundamentals - partially completed (2/5)
-        course2 = _create_course(
-            title="Python Fundamentals",
-            slug="python-fundamentals",
-            required_level=0,
-        )
-        module2 = _create_module(course2, "Module B", sort_order=0)
-        units2 = []
-        for i in range(5):
-            unit = _create_unit(
-                module2, f"Python Unit {i + 1}", sort_order=i
-            )
-            units2.append(unit)
-
-        recent_time = timezone.now() - datetime.timedelta(hours=2)
-        for i in range(2):
-            _mark_unit_completed(
-                user,
-                units2[i],
-                completed_at=recent_time + datetime.timedelta(
-                    minutes=i * 30
-                ),
-            )
-        _enroll_user(user, course2)
-
-        context = _auth_context(browser, "basic@test.com")
-        page = context.new_page()
-        # Step 1: Navigate to /
-        page.goto(
-            f"{django_server}/",
-            wait_until="domcontentloaded",
-        )
-        page.content()
-
-        # Then: Continue Learning shows Python Fundamentals
-        learning_section = page.locator(
-            'section:has(h2:has-text("Continue Learning"))'
-        )
-        learning_text = learning_section.inner_text()
-        assert "Python Fundamentals" in learning_text
-        assert "2/5 units completed" in learning_text
-
-        # Progress bar at 40%
-        progress_bar = page.locator(
-            'div[style*="width: 40%"]'
-        )
-        assert progress_bar.count() >= 1
-
-        # Then: Completed course NOT shown
-        assert "AI Agents Buildcamp" not in learning_text
-
-
 @pytest.mark.django_db(transaction=True)
 class TestScenario10CompletedUnitsWithoutEnrollment:
     """Completed units alone do not populate Continue Learning."""

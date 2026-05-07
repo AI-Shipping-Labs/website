@@ -300,6 +300,14 @@ class BlogListTagFilteringTest(TestCase):
         self.assertNotContains(response, 'Python Tutorial')
         self.assertNotContains(response, 'AI Engineering')
 
+    def test_filter_by_nonexistent_tag_shows_empty_state_and_reset_link(self):
+        response = self.client.get('/blog?tag=rust')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No articles found with the selected tags')
+        self.assertContains(response, 'href="/blog"')
+        self.assertContains(response, 'View all articles')
+        self.assertNotContains(response, 'Python Tutorial')
+
     def test_tag_links_in_listing(self):
         response = self.client.get('/blog')
         content = response.content.decode()
@@ -460,6 +468,16 @@ class BlogListDisplayTest(TestCase):
         response = self.client.get('/blog')
         self.assertContains(response, 'https://example.com/cover.jpg')
 
+    def test_empty_blog_shows_archive_empty_state_without_inline_newsletter_cta(self):
+        Article.objects.all().delete()
+        response = self.client.get('/blog')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No articles match this filter yet')
+        self.assertContains(response, 'Browse all articles as the archive grows.')
+        self.assertNotContains(response, 'Get articles in the Friday newsletter')
+        main_html = response.content.decode().split('<main', 1)[1].split('</main>', 1)[0]
+        self.assertNotIn('href="/#newsletter"', main_html)
+
     # Listing-page lock icon and tier-name badge tests removed in #261:
     # `playwright_tests/test_articles_blog.py` exercises the lock icon
     # rendering, and `BlogDetailAccessControlTest` keeps the gating
@@ -584,12 +602,15 @@ class ArticleAdminTest(TestCase):
         self.assertTrue(article.published)
         self.assertEqual(article.status, 'published')
         self.assertIsNotNone(article.published_at)
+        self.assertContains(self.client.get('/blog'), 'Draft')
+        self.assertEqual(self.client.get('/blog/draft-action').status_code, 200)
 
     def test_admin_unpublish_action(self):
         article = Article.objects.create(
             title='Published', slug='published-action', date=date(2025, 6, 15),
             published=True,
         )
+        self.assertContains(self.client.get('/blog'), 'Published')
         self.client.post('/admin/content/article/', {
             'action': 'unpublish_articles',
             '_selected_action': [article.pk],
@@ -597,6 +618,8 @@ class ArticleAdminTest(TestCase):
         article.refresh_from_db()
         self.assertFalse(article.published)
         self.assertEqual(article.status, 'draft')
+        self.assertNotContains(self.client.get('/blog'), 'Published')
+        self.assertEqual(self.client.get('/blog/published-action').status_code, 404)
 
     def test_admin_list_filter_by_status(self):
         Article.objects.create(

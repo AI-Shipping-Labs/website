@@ -595,6 +595,7 @@ class TestSidebarNavOrder:
             "Worker",
             "Redirects",
             "Announcement",
+            "Email templates",
             "Settings",
             "API tokens",
             "Back to site",

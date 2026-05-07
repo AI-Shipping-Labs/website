@@ -1,13 +1,12 @@
 """Playwright E2E tests for the site-wide announcement banner (Issue #190).
 
-Covers all 11 scenarios from the issue spec:
+Covers browser-valued scenarios from the issue spec:
 1. Visitor sees a launch announcement above the header
 2. Banner appears across all public pages
 3. Disabled banner is invisible to visitors
 4. Visitor dismisses the banner and it stays gone on reload
 5. Edited banner re-shows to a user who previously dismissed it
 6. Non-dismissible banner has no close button
-7. Banner without a link is shown as plain text
 8. Banner does not appear in Studio
 9. Staff configures a new banner and sees it instantly on the public site
 10. Staff disables the banner and it disappears site-wide
@@ -251,28 +250,6 @@ class TestScenario6NoCloseWhenNotDismissible:
         banner = page.locator(BANNER_SELECTOR)
         banner.wait_for(state="visible", timeout=5000)
         assert page.locator("#announcement-banner-close").count() == 0
-
-
-# ---------------------------------------------------------------------------
-# Scenario 7: Banner without a link is shown as plain text
-# ---------------------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario7BannerWithoutLink:
-    def test_no_link_means_no_anchor_and_no_label(self, django_server, page):
-        _reset_banner()
-        _set_banner(message="Plain text only", link_url="", link_label="Read more")
-        page.goto(f"{django_server}/", wait_until="domcontentloaded")
-
-        banner = page.locator(BANNER_SELECTOR)
-        banner.wait_for(state="visible", timeout=5000)
-
-        # Banner element should be a div, not an anchor.
-        tag = banner.evaluate("el => el.tagName.toLowerCase()")
-        assert tag == "div", f"Expected <div> banner, got <{tag}>"
-
-        # The "Read more" suffix should not be present anywhere inside the banner.
-        assert banner.locator("text=Read more").count() == 0
 
 
 # ---------------------------------------------------------------------------

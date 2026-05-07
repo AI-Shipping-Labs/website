@@ -700,7 +700,13 @@ class TagRuleInjectionProjectTest(TestCase):
 
 
 class TagRuleInjectionRecordingTest(TestCase):
-    """Test that TagRules inject components on recording detail pages."""
+    """Issue #426: tag-rule injection no longer runs on event detail pages.
+
+    The event detail page is announcement-only and does not host the
+    after-content rule slot. Tag-rule injection on article detail pages
+    is still covered by
+    ``content/tests/test_seo.py::TagRuleInjectionTest``.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -720,11 +726,11 @@ class TagRuleInjectionRecordingTest(TestCase):
             position='after_content',
         )
 
-    def test_tag_rule_rendered_on_recording(self):
+    def test_tag_rule_not_rendered_on_event_detail(self):
         response = self.client.get('/events/ai-recording')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'tag-rule-component')
-        self.assertContains(response, 'AI Roadmap')
+        self.assertNotContains(response, 'tag-rule-component')
+        self.assertNotContains(response, 'AI Roadmap')
 
 
 # Tag filter chips were removed from listing pages (tag filtering

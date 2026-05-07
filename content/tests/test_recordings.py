@@ -5,11 +5,14 @@ Covers:
 - Published_at sync with published flag
 - Tag filtering on /events?filter=past via ?tag=X
 - Pagination (20 recordings per page)
-- Detail page: video player for authorized, gated CTA for unauthorized
-- Detail page: materials listed as links
-- Lock icon on listing for gated recordings
-- Clickable tags in listing and detail
+- Listing display fields (title, description, date, tags)
 - Title tag format on detail page
+
+Issue #426 retired the inline recording playback UI on the event detail page.
+Recording playback (video player, materials, transcript, chapters, gating CTA)
+lives on the linked Workshop's landing/video pages and is covered by
+``content/tests/test_workshops_public.py``. Detail-page tests here assert that
+the legacy inline UI is no longer rendered.
 """
 
 from datetime import timedelta
@@ -346,7 +349,14 @@ class RecordingsListDisplayTest(TestCase):
 
 
 class RecordingDetailDisplayTest(TestCase):
-    """Test recording detail page shows all required elements."""
+    """Test the announcement-style event detail page for completed events.
+
+    Issue #426 removed the inline recording UI. The page renders the title,
+    description, date, and clickable tags; recording-specific fields (video
+    player, materials, transcript, chapters, core tools, learning
+    objectives, expected outcome) live on the linked Workshop's
+    landing/video pages instead.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -401,34 +411,27 @@ class RecordingDetailDisplayTest(TestCase):
         self.assertIn('href="/events?filter=past&amp;tag=python"', content)
         self.assertIn('href="/events?filter=past&amp;tag=agents"', content)
 
-    def test_shows_materials(self):
+    def test_omits_inline_recording_block(self):
         response = self.client.get('/events/detail-workshop')
-        self.assertContains(response, 'Materials')
-        self.assertContains(response, 'Slides PDF')
-        self.assertContains(response, 'GitHub Repo')
-        self.assertContains(response, 'https://example.com/slides.pdf')
-        self.assertContains(response, 'https://github.com/example/repo')
-
-    def test_shows_core_tools(self):
-        response = self.client.get('/events/detail-workshop')
-        self.assertContains(response, 'Core Tools')
-        self.assertContains(response, 'Python')
-        self.assertContains(response, 'Django')
-
-    def test_shows_learning_objectives(self):
-        response = self.client.get('/events/detail-workshop')
-        self.assertContains(response, 'Build an API')
-        self.assertContains(response, 'Deploy to production')
-
-    def test_shows_outcome(self):
-        response = self.client.get('/events/detail-workshop')
-        self.assertContains(response, 'A working API deployment')
-
-    def test_shows_timestamps(self):
-        response = self.client.get('/events/detail-workshop')
-        content = response.content.decode()
-        self.assertIn('Introduction', content)
-        self.assertIn('Setting up', content)
+        # No inline recording UI: no embed wrapper, no chapters, no
+        # materials, no transcript, no core tools / learning objectives /
+        # outcome sections.
+        self.assertNotContains(
+            response, 'data-testid="event-recording-block"',
+        )
+        self.assertNotContains(response, 'data-testid="video-chapters"')
+        self.assertNotContains(response, 'class="video-timestamp')
+        self.assertNotContains(
+            response, 'data-testid="recording-materials"',
+        )
+        self.assertNotContains(response, 'Materials</h2>')
+        self.assertNotContains(response, 'https://example.com/slides.pdf')
+        self.assertNotContains(response, 'GitHub Repo')
+        self.assertNotContains(response, 'Core Tools')
+        self.assertNotContains(response, "What You'll Learn")
+        self.assertNotContains(response, 'Build an API')
+        self.assertNotContains(response, 'Expected Outcome')
+        self.assertNotContains(response, 'A working API deployment')
 
     def test_404_for_nonexistent_slug(self):
         response = self.client.get('/events/nonexistent')
@@ -449,14 +452,14 @@ class RecordingDetailDisplayTest(TestCase):
 
 
 class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Smoke tests for recording detail gating.
+    """Detail page no longer enforces a recording paywall (issue #426).
 
-    The full per-tier matrix (anonymous/free/basic/main/premium x
-    open/gated recording) is exercised end-to-end by
-    `playwright_tests/test_access_control.py::TestScenario7BasicMemberBlockedFromMainRecording`
-    and by the access-function unit tests in
-    `content/tests/test_access_control.py::CanAccessTest`. Only smoke
-    tests for the gated and ungated paths stay here (#261).
+    Recording playback gating (the per-tier matrix anonymous/free/basic/main
+    /premium x open/gated recording) lives on the linked Workshop's video
+    page. See ``content/tests/test_workshops.py::WorkshopSplitGatingTest``
+    and ``playwright_tests/test_access_control.py`` for the canonical
+    coverage. The event detail page is now an announcement page that does
+    not embed the recording or its paywall, regardless of tier.
     """
 
     @classmethod
@@ -478,28 +481,41 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
             required_level=LEVEL_MAIN,
         )
 
-    def test_anonymous_sees_open_recording_video(self):
+    def test_anonymous_open_recording_announcement_only(self):
         response = self.client.get('/events/open-recording')
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.context['is_gated'])
+        # Announcement copy is visible.
+        self.assertContains(response, 'Open description')
+        # No inline player or recording paywall.
+        self.assertNotContains(response, 'data-source="youtube"')
+        self.assertNotContains(response, 'youtube.com/embed')
+        self.assertNotContains(
+            response, 'data-testid="event-recording-block"',
+        )
 
-    def test_anonymous_blocked_on_gated_recording(self):
+    def test_anonymous_gated_recording_no_paywall_on_event_page(self):
         response = self.client.get('/events/gated-recording')
         self.assertEqual(response.status_code, 200)
-        # No video, no materials, gating CTA + pricing link rendered.
+        # No recording, no materials, no recording-specific paywall copy.
         self.assertNotContains(response, 'youtube.com/embed')
         self.assertNotContains(response, 'Secret Slides')
-        self.assertContains(response, 'Upgrade to Main to watch this recording')
-        self.assertContains(response, '/pricing')
+        self.assertNotContains(
+            response, 'Upgrade to Main to watch this recording',
+        )
 
-    def test_main_user_sees_full_recording(self):
+    def test_main_user_gated_recording_no_inline_player(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
         user.tier = self.main_tier
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/events/gated-recording')
-        self.assertNotContains(response, 'Upgrade to Main')
-        self.assertContains(response, 'Secret Slides')
+        # Even an authorized member sees no inline recording on the event
+        # detail page; they reach the recording via the workshop CTA.
+        self.assertNotContains(response, 'youtube.com/embed')
+        self.assertNotContains(response, 'Secret Slides')
+        self.assertNotContains(
+            response, 'data-testid="event-recording-block"',
+        )
 
 
 # --- Conversions from playwright_tests/test_seo_tags.py (issue #256) ---

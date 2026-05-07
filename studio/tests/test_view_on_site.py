@@ -9,7 +9,9 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from content.models import Article, Course, Download, Project
+import datetime
+
+from content.models import Article, Course, Download, Project, Workshop
 from events.models import Event
 
 User = get_user_model()
@@ -96,8 +98,13 @@ class EventViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
         self.assertContains(response, 'target="_blank"')
 
 
-class RecordingViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
-    """View on site links for recordings (Event model with recording_url)."""
+class RecordingLinkedWorkshopViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
+    """View on site links for recordings with a linked Workshop (issue #426).
+
+    The Studio recordings list/edit pages link to the canonical Workshop
+    surface (``/workshops/<slug>``) rather than the announcement-only event
+    detail page, since the event detail page no longer plays recordings.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -106,18 +113,65 @@ class RecordingViewOnSiteTest(ViewOnSiteTestMixin, TestCase):
             start_datetime=timezone.now(), status='completed',
             recording_url='https://youtube.com/watch?v=test',
         )
+        cls.workshop = Workshop.objects.create(
+            slug='my-workshop',
+            title='My Workshop',
+            date=datetime.date(2025, 4, 1),
+            status='published',
+            landing_required_level=0,
+            pages_required_level=0,
+            recording_required_level=0,
+            event=cls.recording,
+        )
 
     def test_list_has_view_on_site_link(self):
         response = self.client.get('/studio/recordings/')
-        self.assertContains(response, 'href="/events/my-recording"')
+        self.assertContains(response, 'href="/workshops/my-workshop"')
         self.assertContains(response, 'target="_blank"')
+        # Must NOT link out to the announcement-only event detail page.
+        self.assertNotContains(response, 'href="/events/my-recording"')
 
     def test_edit_has_view_on_site_link(self):
         response = self.client.get(
             f'/studio/recordings/{self.recording.pk}/edit',
         )
-        self.assertContains(response, 'href="/events/my-recording"')
+        self.assertContains(response, 'href="/workshops/my-workshop"')
         self.assertContains(response, 'target="_blank"')
+        self.assertNotContains(response, 'href="/events/my-recording"')
+
+
+class RecordingNoWorkshopNoViewOnSiteLinkTest(ViewOnSiteTestMixin, TestCase):
+    """A recording with no linked Workshop has no public view-on-site link.
+
+    Issue #426: the event detail page is announcement-only, so there is no
+    canonical public surface to point at when no Workshop has been
+    promoted from the event yet.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.recording = Event.objects.create(
+            title='Orphan Recording', slug='orphan-recording',
+            start_datetime=timezone.now(), status='completed',
+            recording_url='https://youtube.com/watch?v=orphan',
+        )
+
+    def test_list_has_no_view_on_site_link(self):
+        response = self.client.get('/studio/recordings/')
+        self.assertEqual(response.status_code, 200)
+        # The recording row still renders, but with no public link.
+        self.assertContains(response, 'Orphan Recording')
+        self.assertNotContains(response, 'href="/events/orphan-recording"')
+        self.assertNotContains(response, 'href="/workshops/')
+
+    def test_edit_has_no_view_on_site_link(self):
+        response = self.client.get(
+            f'/studio/recordings/{self.recording.pk}/edit',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Orphan Recording')
+        self.assertNotContains(response, 'href="/events/orphan-recording"')
+        self.assertNotContains(response, 'href="/workshops/')
 
 
 class ProjectViewOnSiteTest(ViewOnSiteTestMixin, TestCase):

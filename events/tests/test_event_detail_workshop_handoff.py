@@ -1,15 +1,13 @@
-"""Tests for the workshop hand-off on the event detail page (issue #363).
+"""Tests for the workshop hand-off on the event detail page (issues #363, #426).
 
-When an Event has a linked Workshop (`event.workshop` is set via the
-``Workshop.event = OneToOneField(...)`` reverse accessor), the event detail
-page must suppress the inline recording block. The recording UI — video
-player, timestamps, core tools, learning objectives, expected outcome,
-materials, and the recording paywall — lives on the workshop landing/video
-pages now. The existing "Full workshop writeup" CTA carries the page.
+When an Event has a linked Workshop (``Workshop.event = OneToOneField(...)``
+populates ``event.workshop``), the event detail page surfaces the
+"Full workshop writeup" CTA pointing at ``/workshops/<slug>``. The recording
+playback experience itself lives on the workshop landing/video pages.
 
-Legacy past events with no linked workshop are unchanged: the inline
-recording block still renders so content can be migrated to workshops one
-at a time without a code freeze.
+Issue #426 retired the inline recording branch entirely, so completed events
+without a linked workshop are announcement pages too — they no longer render
+inline embeds, timestamps, materials, transcript, or recording paywalls.
 """
 
 import datetime
@@ -24,15 +22,14 @@ from events.models import Event
 
 
 class EventDetailWorkshopHandoffTest(TestCase):
-    """Workshop-linked event suppresses inline recording UI; legacy unchanged."""
+    """Linked Workshop event surfaces the writeup CTA, no inline recording UI."""
 
     @classmethod
     def setUpTestData(cls):
-        # --- Workshop-linked completed event ---------------------------------
         # The Event row carries the recording fields (matching what the sync
         # pipeline produces in `_link_or_create_workshop_event`), but because
         # a Workshop points at it via OneToOneField, the event detail page
-        # must NOT render the inline recording UI.
+        # links out to the workshop instead of rendering recording UI.
         cls.linked_event = Event.objects.create(
             title='Linked Workshop Event',
             slug='linked-workshop-event',
@@ -62,34 +59,10 @@ class EventDetailWorkshopHandoffTest(TestCase):
             event=cls.linked_event,
         )
 
-        # --- Legacy completed event with NO linked workshop ------------------
-        # No Workshop row points at this Event, so `event.workshop` raises
-        # `DoesNotExist`; the template's `not event.workshop` check resolves
-        # truthy via Django's lazy reverse-accessor handling and the inline
-        # recording block renders as it did before #363.
-        cls.legacy_event = Event.objects.create(
-            title='Legacy Past Event',
-            slug='legacy-past-event',
-            description='An older recording that was never promoted.',
-            start_datetime=timezone.now() - timedelta(days=30),
-            status='completed',
-            kind='standard',
-            recording_url='https://www.youtube.com/watch?v=LEGACY',
-            timestamps=[{'time_seconds': 0, 'label': 'Intro'}],
-            core_tools=['ChatGPT'],
-            learning_objectives=['Understand RAG'],
-            outcome='You will know how RAG works.',
-            materials=[
-                {'title': 'Notes', 'url': 'https://example.com/notes.pdf'}
-            ],
-            required_level=LEVEL_OPEN,
-            published=True,
-        )
-
     def setUp(self):
         self.client = Client()
 
-    # --- Workshop-linked event: recording UI is suppressed -----------------
+    # --- Linked Workshop event: workshop CTA surfaces, no inline UI --------
 
     def test_linked_event_omits_recording_block_testid(self):
         response = self.client.get('/events/linked-workshop-event')
@@ -149,30 +122,77 @@ class EventDetailWorkshopHandoffTest(TestCase):
             response, 'Announcement copy for the live session.'
         )
 
-    # --- Legacy past event: inline recording block still renders -----------
 
-    def test_legacy_event_renders_recording_block(self):
-        response = self.client.get('/events/legacy-past-event')
+class EventDetailNoWorkshopRecordingRemovedTest(TestCase):
+    """Completed events without a linked workshop are announcement-only.
+
+    Issue #426 removed the inline recording fallback. A completed event with
+    recording fields populated and no linked Workshop must NOT render any
+    inline player, materials, transcript, timestamps, or recording paywall.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.orphan_event = Event.objects.create(
+            title='Orphan Past Event',
+            slug='orphan-past-event',
+            description='An older session that was never promoted to a workshop.',
+            start_datetime=timezone.now() - timedelta(days=30),
+            status='completed',
+            kind='standard',
+            recording_url='https://www.youtube.com/watch?v=ORPHAN',
+            timestamps=[{'time_seconds': 0, 'label': 'Intro'}],
+            core_tools=['ChatGPT'],
+            learning_objectives=['Understand RAG'],
+            outcome='You will know how RAG works.',
+            materials=[
+                {'title': 'Notes', 'url': 'https://example.com/notes.pdf'}
+            ],
+            transcript_text='Some transcript copy.',
+            required_level=LEVEL_OPEN,
+            published=True,
+        )
+
+    def test_orphan_event_omits_recording_block_testid(self):
+        response = self.client.get('/events/orphan-past-event')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="event-recording-block"')
+        self.assertNotContains(response, 'data-testid="event-recording-block"')
 
-    def test_legacy_event_renders_core_tools(self):
-        response = self.client.get('/events/legacy-past-event')
-        self.assertContains(response, 'Core Tools')
-        self.assertContains(response, 'ChatGPT')
+    def test_orphan_event_omits_video_player(self):
+        response = self.client.get('/events/orphan-past-event')
+        self.assertNotContains(response, 'data-source="youtube"')
+        self.assertNotContains(response, 'class="video-timestamp')
 
-    def test_legacy_event_renders_learning_objectives(self):
-        response = self.client.get('/events/legacy-past-event')
-        self.assertContains(response, "What You'll Learn")
-        self.assertContains(response, 'Understand RAG')
+    def test_orphan_event_omits_core_tools(self):
+        response = self.client.get('/events/orphan-past-event')
+        self.assertNotContains(response, 'Core Tools')
+        self.assertNotContains(response, 'ChatGPT')
 
-    def test_legacy_event_renders_materials(self):
-        response = self.client.get('/events/legacy-past-event')
-        self.assertContains(response, 'Materials</h2>')
-        self.assertContains(response, 'https://example.com/notes.pdf')
+    def test_orphan_event_omits_learning_objectives(self):
+        response = self.client.get('/events/orphan-past-event')
+        self.assertNotContains(response, "What You'll Learn")
+        self.assertNotContains(response, 'Understand RAG')
 
-    def test_legacy_event_has_no_workshop_writeup_cta(self):
-        response = self.client.get('/events/legacy-past-event')
+    def test_orphan_event_omits_materials(self):
+        response = self.client.get('/events/orphan-past-event')
+        self.assertNotContains(response, 'Materials</h2>')
+        self.assertNotContains(response, 'https://example.com/notes.pdf')
+
+    def test_orphan_event_omits_transcript(self):
+        response = self.client.get('/events/orphan-past-event')
+        self.assertNotContains(response, 'data-testid="recording-transcript"')
+        self.assertNotContains(response, 'Some transcript copy.')
+
+    def test_orphan_event_has_no_workshop_writeup_cta(self):
+        # No linked workshop -> no handoff CTA either.
+        response = self.client.get('/events/orphan-past-event')
         self.assertNotContains(
             response, 'data-testid="event-workshop-writeup"'
+        )
+
+    def test_orphan_event_still_shows_announcement_description(self):
+        response = self.client.get('/events/orphan-past-event')
+        self.assertContains(
+            response,
+            'An older session that was never promoted to a workshop.',
         )

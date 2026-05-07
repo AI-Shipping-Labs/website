@@ -7,7 +7,7 @@
 {% block meta_description %}{{ event.description|truncatechars:160 }}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ site_url }}{{ event.get_absolute_url }}">{% endblock %}
 {% block og_tags %}{% og_tags event %}{% endblock %}
-{% block structured_data %}{% if event.status == 'completed' and event.has_recording %}{% structured_data event "recording" %}{% else %}{% structured_data event %}{% endif %}{% endblock %}
+{% block structured_data %}{% structured_data event %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -54,7 +54,7 @@
         {% if event.tags %}
         <div class="mt-4 flex flex-wrap gap-2">
           {% for tag in event.tags %}
-          {% if event.status == 'completed' and event.has_recording %}
+          {% if event.status == 'completed' %}
           <a href="/events?filter=past&amp;tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
           {% else %}
           <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
@@ -182,76 +182,11 @@
       </div>
       {% endif %}
 
-      <!-- Completed event with recording: inline recording block.
-           Suppressed when a Workshop is linked (issue #363) — the workshop's
-           landing/video pages own the recording UI. The "Full workshop
-           writeup" CTA above is the canonical hand-off in that case. Legacy
-           past events that have not been promoted to a Workshop continue to
-           render this block as before. -->
-      {% if event.status == 'completed' and event.has_recording and not event.workshop %}
-      <div data-testid="event-recording-block">
-        {% if is_gated %}
-          {% include "includes/content_gated.html" %}
-        {% else %}
-        <!-- Video Player -->
-        <div class="mb-12">
-          {% include "events/_recording_embed.html" %}
-        </div>
-
-        <!-- Core Tools -->
-        {% if event.core_tools %}
-        <div class="mb-12">
-          <h2 class="mb-4 flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <i data-lucide="wrench" class="h-6 w-6 text-accent"></i>
-            Core Tools
-          </h2>
-          <div class="flex flex-wrap gap-2">
-            {% for tool in event.core_tools %}
-            <span class="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground">{{ tool }}</span>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-
-        <!-- Learning Objectives -->
-        {% if event.learning_objectives %}
-        <div class="mb-12">
-          <h2 class="mb-4 flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <i data-lucide="target" class="h-6 w-6 text-accent"></i>
-            What You'll Learn
-          </h2>
-          <ul class="space-y-2">
-            {% for objective in event.learning_objectives %}
-            <li class="flex items-start gap-3">
-              <i data-lucide="circle-check-big" class="mt-0.5 h-5 w-5 flex-shrink-0 text-accent"></i>
-              <span class="text-muted-foreground">{{ objective }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
-
-        <!-- Outcome -->
-        {% if event.outcome %}
-        <div class="mb-12 rounded-lg border border-accent/20 bg-accent/5 p-6">
-          <h2 class="mb-3 flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <i data-lucide="circle-check-big" class="h-5 w-5 text-accent"></i>
-            Expected Outcome
-          </h2>
-          <p class="text-muted-foreground leading-relaxed">{{ event.outcome }}</p>
-        </div>
-        {% endif %}
-
-        {% include "events/_recording_materials.html" with materials=event.materials section_class="mb-12" materials_testid="recording-materials" %}
-        {% include "events/_recording_transcript.html" with transcript_text=event.transcript_text section_class="mb-12" transcript_testid="recording-transcript" %}
-        {% if tag_rules.after_content %}
-        {% with rules=tag_rules.after_content %}
-        {% include "includes/tag_rule_components.html" %}
-        {% endwith %}
-        {% endif %}
-        {% endif %}
-      </div>
-      {% endif %}
+      <!-- Recording playback for completed events lives on the linked
+           Workshop's landing/video surface (issue #426). The "Full workshop
+           writeup" CTA above is the canonical hand-off. Event detail pages
+           are announcement / description pages only — no inline player,
+           timestamps, materials, transcript, or recording paywall. -->
 
       <!-- Description / Recap -->
       {% if event.has_recap and event.status == 'completed' %}

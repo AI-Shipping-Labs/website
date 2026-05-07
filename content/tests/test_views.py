@@ -267,16 +267,20 @@ class RecordingDetailViewTest(TestCase):
         self.assertTemplateUsed(response, 'events/event_detail.html')
 
     def test_recording_detail_contains_content(self):
+        # Issue #426: event detail is announcement-only. Title and
+        # description still render; recording-only fields (Core Tools,
+        # learning objectives, expected outcome, materials, timestamps)
+        # are not rendered here — they live on the linked Workshop's
+        # video page.
         response = self.client.get('/events/workshop-detail')
         content = response.content.decode()
         self.assertIn('Workshop Detail', content)
         self.assertIn('Workshop description', content)
-        self.assertIn('Core Tools', content)
-        self.assertIn('Python', content)
-        self.assertIn('Learn basics', content)
-        self.assertIn('Build something', content)
-        self.assertIn('Slides', content)
-        self.assertIn('00:00', content)
+        self.assertNotIn('Core Tools', content)
+        self.assertNotIn('Python', content)
+        self.assertNotIn('Learn basics', content)
+        self.assertNotIn('Build something', content)
+        self.assertNotIn('https://example.com/slides', content)
 
     def test_recording_detail_404(self):
         response = self.client.get('/events/nonexistent')

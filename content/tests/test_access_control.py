@@ -497,10 +497,13 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
 
 @tag('core')
 class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
-    """Smoke test: recording detail view renders gated CTA when user lacks access.
+    """Smoke test: completed event detail page is announcement-only (issue #426).
 
-    Per-tier matrix and "video URL never leaks" coverage lives in
-    playwright_tests/test_access_control.py::TestScenario7BasicMemberBlockedFromMainRecording.
+    The recording paywall lives on the linked Workshop's video page now;
+    see ``content.tests.test_workshops.WorkshopSplitGatingTest`` and
+    ``playwright_tests/test_access_control.py``. The event detail page no
+    longer leaks the video embed regardless of tier — there is no inline
+    player to gate.
     """
 
     @classmethod
@@ -518,7 +521,13 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/events/gated-recording')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'youtube.com/embed')
-        self.assertContains(response, 'Upgrade to Main to watch this recording')
+        # The recording paywall lives on the workshop video page; the
+        # event page must not render its own recording paywall copy.
+        self.assertNotContains(
+            response, 'Upgrade to Main to watch this recording',
+        )
+        # Announcement copy still renders.
+        self.assertContains(response, 'Recording description')
 
 
 @tag('core')
@@ -658,17 +667,11 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
         self.assert_verify_gate(response)
         self.assertNotContains(response, 'Free project body')
 
-    def test_recording_detail_renders_verify_gate(self):
-        Event.objects.create(
-            title='Free Recording Gate', slug='free-recording-gate',
-            description='Recording description',
-            recording_url='https://youtube.com/watch?v=free',
-            start_datetime=timezone.make_aware(timezone.datetime(2025, 7, 20, 12, 0)),
-            status='completed', published=True, required_level=LEVEL_OPEN,
-        )
-        response = self.client.get('/events/free-recording-gate')
-        self.assert_verify_gate(response)
-        self.assertNotContains(response, 'youtube.com/embed')
+    # Issue #426 retired the inline event recording UI, so the completed
+    # event detail page no longer renders any per-content verify gate for
+    # the recording. Recording playback (and its verify gate) lives on the
+    # workshop video page now; the upcoming-event verify gate is covered
+    # by ``test_event_detail_renders_verify_gate`` below.
 
     def test_event_detail_renders_verify_gate(self):
         Event.objects.create(

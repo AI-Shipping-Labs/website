@@ -615,16 +615,20 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
-class TestScenario9CompletedEventWithRecording:
-    """Visitor views a completed event and finds the recording."""
+class TestScenario9CompletedEventNoInlineRecording:
+    """Issue #426: completed event detail page does not embed the recording.
 
-    def test_completed_event_shows_inline_recording(
+    Recording playback lives on the linked Workshop's video page. The event
+    detail page is announcement-only — it shows the title and description
+    but no inline player.
+    """
+
+    def test_completed_event_omits_inline_recording_block(
         self, django_server
     , page):
-        """Given an anonymous visitor. A completed event with an inline
-        recording_url. The unified event detail page renders the recording
-        block with the video player inline (no separate Recording row, no
-        'Watch the recording' link)."""
+        """Given an anonymous visitor on a completed event with a
+        recording_url, the event detail page renders the title and
+        description without an inline player or recording block."""
         _clear_events()
         _ensure_tiers()
 
@@ -644,15 +648,18 @@ class TestScenario9CompletedEventWithRecording:
             wait_until="domcontentloaded",
         )
 
-        # Then: The page loads with the inline recording block
+        body = page.content()
+
+        # The announcement copy is visible.
+        assert "Past Workshop" in body
+        assert "A workshop that already happened." in body
+
+        # Then: No inline recording block, no video player.
         recording_block = page.locator(
             '[data-testid="event-recording-block"]'
         )
-        assert recording_block.count() == 1
-
-        # The video player is rendered inline (YouTube data-source)
-        body = page.content()
-        assert 'data-source="youtube"' in body
+        assert recording_block.count() == 0
+        assert 'data-source="youtube"' not in body
 # ---------------------------------------------------------------
 # Scenario 10: Visitor views a completed event that has no
 #               recording yet

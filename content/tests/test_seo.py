@@ -538,7 +538,13 @@ class CourseDetailSEOTest(TestCase):
 
 
 class RecordingDetailSEOTest(TestCase):
-    """Test SEO meta tags on recording detail page."""
+    """Test SEO meta tags on a completed event page that has a recording.
+
+    Issue #426 made the event detail page announcement-only. The page now
+    emits ``Event`` JSON-LD even when ``recording_url`` is populated; the
+    canonical recording surface is the linked Workshop's video page, which
+    has its own ``VideoObject`` JSON-LD covered in the workshop SEO tests.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -560,15 +566,18 @@ class RecordingDetailSEOTest(TestCase):
             content,
         )
 
-    def test_recording_detail_has_video_jsonld(self):
+    def test_recording_detail_emits_event_jsonld_not_video(self):
         response = self.client.get('/events/ai-agents-workshop')
         content = response.content.decode()
-        self.assertIn('"@type": "VideoObject"', content)
+        # The event detail page is announcement-only -> Event schema, not
+        # VideoObject. VideoObject lives on the workshop video page.
+        self.assertIn('"@type": "Event"', content)
+        self.assertNotIn('"@type": "VideoObject"', content)
 
-    def test_recording_detail_video_jsonld_url_uses_events(self):
+    def test_recording_detail_event_jsonld_url_points_to_events_path(self):
         response = self.client.get('/events/ai-agents-workshop')
         content = response.content.decode()
-        # VideoObject's url must point to /events/<slug>, never /event-recordings/<slug>.
+        # The Event JSON-LD url is the canonical event page URL.
         self.assertIn(
             '"url": "https://aishippinglabs.com/events/ai-agents-workshop"',
             content,

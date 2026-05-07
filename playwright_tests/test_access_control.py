@@ -87,16 +87,18 @@ def _create_recording(
     date=None,
     tags=None,
 ):
-    """Helper to create a completed event with a recording via the ORM.
+    """Helper to create a completed event with a linked Workshop carrying a recording.
 
-    The events/recordings unification merged Recording into Event. This
-    helper keeps the legacy external kwargs (`youtube_url`, `date`) so
-    call sites do not change, and translates them internally:
-      youtube_url -> recording_url
-      date        -> start_datetime (timezone-aware)
-    The event is created with status='completed' so it appears on
-    /events?filter=past.
+    Issue #426 retired the inline event-detail recording UI; recording
+    playback lives on the linked Workshop's video page. The legacy helper
+    signature (``youtube_url``, ``date``) is preserved and translated:
+      youtube_url -> Event.recording_url
+      date        -> Event.start_datetime (timezone-aware)
+
+    A Workshop is linked with the same slug so ``/workshops/<slug>/video``
+    is the canonical recording surface and per-tier gating still applies.
     """
+    from content.models import Workshop, WorkshopPage
     from events.models import Event
 
     if tags is None:
@@ -120,6 +122,22 @@ def _create_recording(
         tags=tags,
     )
     recording.save()
+
+    workshop = Workshop.objects.create(
+        slug=slug,
+        title=title,
+        description=description,
+        date=date,
+        status="published",
+        landing_required_level=0,
+        pages_required_level=0,
+        recording_required_level=required_level,
+        event=recording,
+    )
+    WorkshopPage.objects.create(
+        workshop=workshop, slug='intro', title='Intro',
+        sort_order=1, body='# Intro\n\nWorkshop intro.',
+    )
     connection.close()
     return recording
 
@@ -343,6 +361,8 @@ def _clear_all_content():
         Tutorial,
         Unit,
         UserCourseProgress,
+        Workshop,
+        WorkshopPage,
     )
     from events.models import Event, EventRegistration
 
@@ -352,11 +372,12 @@ def _clear_all_content():
     Module.objects.all().delete()
     Course.objects.all().delete()
     Article.objects.all().delete()
+    WorkshopPage.objects.all().delete()
+    Workshop.objects.all().delete()
     Event.objects.all().delete()
     Tutorial.objects.all().delete()
     Project.objects.all().delete()
     Download.objects.all().delete()
-    Event.objects.all().delete()
     connection.close()
 
 
@@ -876,13 +897,13 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
 
         context = _auth_context(browser, "premium@test.com")
         page = context.new_page()
+        # Recording lives on the workshop video page (issue #426).
         page.goto(
-            f"{django_server}/events/main-recording-prem",
+            f"{django_server}/workshops/main-recording-prem/video",
             wait_until="domcontentloaded",
         )
         body = page.content()
         assert "Main Recording" in body
-        assert "A Main-level recording" in body
         # Video should be present
         assert "youtube" in body.lower() or "iframe" in body.lower()
         assert "Upgrade to" not in body
@@ -978,7 +999,8 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
         self, django_server
     , browser):
         """Basic member sees title and description but NO video player
-        or YouTube URL in the main content area."""
+        or YouTube URL on the canonical workshop video page (issue #426).
+        """
         _clear_all_content()
         _create_user("basic@test.com", tier_slug="basic")
         _create_recording(
@@ -991,36 +1013,32 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
 
         context = _auth_context(browser, "basic@test.com")
         page = context.new_page()
+        # Workshop video page enforces the recording paywall.
         page.goto(
-            f"{django_server}/events/main-gated-recording",
+            f"{django_server}/workshops/main-gated-recording/video",
             wait_until="domcontentloaded",
         )
 
         body = page.content()
 
-        # Title and description visible
+        # Title visible
         assert "Main Gated Recording" in body
-        assert "A recording about advanced AI techniques" in body
 
         # No video player / iframe rendered in the main content.
-        # The gated template replaces the video section with the
-        # content_gated.html include. We verify no <iframe> embed
-        # exists in the <main> element (note: the youtube_url may
-        # still appear in the <head> structured data JSON-LD,
-        # which is a known limitation of the current SEO tags).
         main_element = page.locator("main")
         main_html = main_element.inner_html()
         assert "<iframe" not in main_html.lower()
 
-        # The video URL should not appear as a clickable or
-        # visible element in the main content
+        # The video URL should not appear in the main content.
         assert "secret123" not in main_html
 
-        # CTA present
-        assert "Upgrade to Main to watch this recording" in body
+        # Recording paywall CTA present.
+        paywall = page.locator('[data-testid="video-paywall"]')
+        assert paywall.count() == 1
+        assert "Upgrade to Main to watch the recording" in body
 
         # Pricing link
-        pricing_link = page.locator('a:has-text("View Pricing")')
+        pricing_link = page.locator('[data-testid="video-upgrade-cta"]')
         assert pricing_link.count() >= 1
 # ---------------------------------------------------------------
 # Scenario 8: Anonymous visitor evaluates gated course syllabus

@@ -66,22 +66,10 @@ urlpatterns = [
     path('faq', faq, name='faq'),
     path('blog', blog_list, name='blog_list'),
     path('blog/<slug:slug>', blog_detail, name='blog_detail'),
-    # Legacy recording URLs — 301 redirect to the unified /events surface.
-    path(
-        'event-recordings',
-        RedirectView.as_view(url='/events?filter=past', permanent=True),
-        name='recordings_list_redirect',
-    ),
-    path(
-        'event-recordings/<slug:slug>',
-        RedirectView.as_view(pattern_name='event_detail', permanent=True),
-        name='recording_detail_redirect',
-    ),
     path('projects', projects_list, name='projects_list'),
     path('projects/<slug:slug>', project_detail, name='project_detail'),
     path('resources', collection_list, name='collection_list'),
     path('resources/<int:link_id>/go', curated_link_go, name='curated_link_go'),
-    path('collection', collection_list),  # backward compat redirect
     path('tutorials', tutorials_list, name='tutorials_list'),
     path('tutorials/<slug:slug>', tutorial_detail, name='tutorial_detail'),
     path('downloads', downloads_list, name='downloads_list'),

@@ -8,7 +8,6 @@ Covers:
 - Open links: external link icon shown, URL present in HTML
 - Links sorted by sort_order within categories
 - Admin CRUD for curated links
-- /collection backward compat URL
 """
 
 from django.contrib.auth import get_user_model
@@ -417,29 +416,6 @@ class ResourcesGatingMainTierTest(TierSetupMixin, TestCase):
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/resources')
         self.assertContains(response, 'https://example.com/main-only')
-
-
-# --- Backward compatibility ---
-
-
-class CollectionBackwardCompatTest(TestCase):
-    """Test that /collection still works as a backward-compat URL."""
-
-    def setUp(self):
-        self.client = Client()
-        CuratedLink.objects.create(
-            item_id='compat-link', title='Compat Link',
-            url='https://example.com', category='tools',
-            published=True,
-        )
-
-    def test_collection_url_returns_200(self):
-        response = self.client.get('/collection')
-        self.assertEqual(response.status_code, 200)
-
-    def test_collection_url_shows_links(self):
-        response = self.client.get('/collection')
-        self.assertContains(response, 'Compat Link')
 
 
 # --- Admin tests ---

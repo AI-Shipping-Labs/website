@@ -69,8 +69,8 @@ Access control logic: a user can access any content object where `user.tier.leve
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Recordings listing | `/event-recordings` | Paginated list of published recordings with date, tags, tag filtering; gated recordings show lock icon | Everyone (listing visible) | Shipped |
-| Recording detail | `/event-recordings/<slug>` | Full recording with embedded video player, timestamps, description, tags, materials; SEO metadata | Open recordings: everyone; gated: tier-dependent | Shipped |
+| Recordings listing | `/events?filter=past` | Paginated list of published past events with recordings, date, tags, tag filtering; gated recordings show lock icon | Everyone (listing visible) | Shipped |
+| Recording detail | `/events/<slug>` | Full recording with embedded video player, timestamps, description, tags, materials; SEO metadata | Open recordings: everyone; gated: tier-dependent | Shipped |
 
 ### Content -- Tutorials
 
@@ -91,7 +91,7 @@ Access control logic: a user can access any content object where `user.tier.leve
 
 | Feature | URL | Description | Access | State |
 |---------|-----|-------------|--------|-------|
-| Curated links listing | `/resources` (canonical) or `/collection` (backward compat) | Links grouped by category (tools, models, courses) with icons, descriptions, source attribution, tags; gated links show lock icon and "View Plans" CTA on click | Everyone (listing visible; gated links hidden behind paywall) | Shipped |
+| Curated links listing | `/resources` | Links grouped by category (tools, models, courses) with icons, descriptions, source attribution, tags; gated links show lock icon and "View Plans" CTA on click | Everyone (listing visible; gated links hidden behind paywall) | Shipped |
 
 ### Content -- Downloads
 
@@ -219,10 +219,10 @@ Appears on every page:
 The homepage serves as the primary conversion funnel for anonymous visitors:
 1. Hero: "Subscribe for updates" (scrolls to newsletter section) and "View Membership Tiers" (scrolls to tiers section)
 2. Tiers section: Payment links for each tier (monthly/annual toggle)
-3. Recordings section: "View all recordings" links to `/event-recordings`
+3. Recordings section: "View all recordings" links to `/events?filter=past`
 4. Blog section: "View all posts" links to `/blog`
 5. Projects section: "View all project ideas" links to `/projects`
-6. Collection section: "View all curated links" links to `/collection`
+6. Collection section: "View all curated links" links to `/resources`
 7. Newsletter section: Email signup form
 8. Footer: Secondary newsletter signup
 
@@ -254,7 +254,7 @@ Free member logs in -> sees dashboard with limited content -> browses blog and e
 Member navigates to `/courses` -> browses course catalog with tag filters -> clicks into a course -> reads syllabus and description -> enrolls in a cohort (if available) -> starts first unit -> watches embedded video, reads lesson text, completes homework -> clicks "Mark as completed" -> proceeds to next unit via "Next" button -> progress bar updates on course detail page -> returns to dashboard and sees course in "Continue Learning" section -> eventually completes all units.
 
 ### 4. Member Registers for an Event
-Member navigates to `/events` -> sees upcoming events with spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after event, recording becomes available at `/event-recordings/<slug>`.
+Member navigates to `/events` -> sees upcoming events with spots remaining -> clicks into an event detail page -> reads description and schedule -> clicks "Register" button -> event appears in their dashboard under "Upcoming Events" -> receives notification before event -> attends via the join link near start time -> after event, recording becomes available at `/events/<slug>`.
 
 ### 5. Visitor to Paid Member via Pricing
 Visitor clicks "View Membership Tiers" on homepage or navigates to `/pricing` -> reviews all 4 tiers in the grid -> toggles between monthly and annual pricing (annual saves approximately 17%) -> clicks "Join" on their chosen tier -> redirected to Stripe Checkout -> creates account during checkout (or logs in) -> completes payment -> gains access at the purchased tier level.

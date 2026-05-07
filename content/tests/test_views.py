@@ -361,15 +361,15 @@ class CollectionListViewTest(TestCase):
         )
 
     def test_collection_list_status_code(self):
-        response = self.client.get('/collection')
+        response = self.client.get('/resources')
         self.assertEqual(response.status_code, 200)
 
     def test_collection_list_template(self):
-        response = self.client.get('/collection')
+        response = self.client.get('/resources')
         self.assertTemplateUsed(response, 'content/collection_list.html')
 
     def test_collection_list_contains_link(self):
-        response = self.client.get('/collection')
+        response = self.client.get('/resources')
         self.assertContains(response, 'Test Tool')
         self.assertContains(response, 'A tool')
         self.assertContains(response, 'GitHub')

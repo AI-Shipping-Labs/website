@@ -71,7 +71,7 @@ class HomepageMobileLayoutTest(TestCase):
     def test_view_all_curated_links_has_tap_target(self):
         """View all curated links should have py-2 and px-3 for adequate mobile tap target."""
         content = self._get_homepage_content()
-        match = re.search(r'<a[^>]*href="/collection"[^>]*>', content)
+        match = re.search(r'<a[^>]*href="/resources"[^>]*>', content)
         self.assertIsNotNone(match, "View all curated links link not found")
         self.assertIn("py-2", match.group(0))
         self.assertIn("px-3", match.group(0))

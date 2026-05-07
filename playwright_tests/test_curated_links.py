@@ -1,7 +1,7 @@
 """
 Playwright E2E tests for Curated Links (Issue #76).
 
-Tests cover all 10 BDD scenarios from the issue:
+Tests cover the canonical /resources scenarios from the issue:
 - Visitor browses curated links organized by category
 - Visitor clicks an open link and it opens in a new tab
 - Free user encounters a gated link and sees upgrade CTA on click
@@ -10,7 +10,6 @@ Tests cover all 10 BDD scenarios from the issue:
 - Visitor filters links by tag
 - Visitor clears tag filter to see all links
 - Empty state when tag filter matches nothing
-- Backward compatibility -- /collection URL works same as /resources
 - Visitor sees no content when no links are published
 
 Usage:
@@ -566,42 +565,6 @@ class TestScenario8EmptyStateNoMatchingTag:
         # Back to full listing
         body = page.content()
         assert "Python CLI" in body
-# ---------------------------------------------------------------
-# Scenario 9: Backward compatibility -- /collection URL works
-# ---------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario9BackwardCompatCollection:
-    """Backward compatibility -- /collection URL works same as /resources."""
-
-    def test_collection_url_serves_same_page(self, django_server, page):
-        """Navigating to /collection loads successfully and displays the
-        same curated links page as /resources."""
-        _clear_curated_links()
-        _create_curated_link(
-            title="Legacy Link",
-            description="A link for backward compatibility testing.",
-            url="https://example.com/legacy",
-            category="tools",
-            sort_order=1,
-        )
-
-        response = page.goto(
-            f"{django_server}/collection",
-            wait_until="domcontentloaded",
-        )
-
-        # HTTP 200
-        assert response.status == 200
-
-        body = page.content()
-
-        # Same heading as /resources (& is HTML-encoded as &amp;)
-        heading = page.locator("h1")
-        assert "Tools, Models & Courses" in heading.inner_text()
-
-        # Link is visible
-        assert "Legacy Link" in body
 # ---------------------------------------------------------------
 # Scenario 10: Visitor sees no content when no links are published
 # ---------------------------------------------------------------

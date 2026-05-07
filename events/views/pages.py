@@ -148,8 +148,7 @@ def events_list(request):
     """Events list page with Upcoming and Past sections.
 
     Accepts ``?filter=`` with values ``all`` (default), ``upcoming``, or
-    ``past``. The past surface is equivalent to the old
-    ``/event-recordings`` page: it filters to completed events that have a
+    ``past``. The past surface filters to completed events that have a
     recording URL, supports tag filtering via ``?tag=``, and paginates at
     20 per page.
     """
@@ -165,9 +164,8 @@ def events_list(request):
     upcoming_events = events.filter(status='upcoming').order_by('start_datetime')
 
     # For the "past" surface we only show completed events with a recording
-    # (and honor the ``published`` flag, matching the old /event-recordings
-    # list). The default "all" view also includes cancelled events and does
-    # not require a recording.
+    # (and honor the ``published`` flag). The default "all" view also
+    # includes cancelled events and does not require a recording.
     past_with_recording_qs = events.filter(
         status='completed',
         published=True,

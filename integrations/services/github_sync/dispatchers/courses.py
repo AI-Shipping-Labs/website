@@ -1142,14 +1142,6 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             'overview', 'overview_html', 'overview_source_path',
         ])
 
-    # Defensive cleanup: if a legacy README-as-unit row still exists for
-    # this module (e.g. running sync against a DB whose backfill migration
-    # already ran but the unit got recreated), drop it. Identified by the
-    # exact slug/sort_order pair the old sync wrote.
-    Unit.objects.filter(
-        module=module, slug='readme', sort_order=-1,
-    ).delete()
-
     for filename in sorted(os.listdir(module_dir)):
         if not filename.endswith('.md') or filename.upper() == 'README.MD':
             continue

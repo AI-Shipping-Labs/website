@@ -356,8 +356,7 @@ def module_overview(request, course_slug, module_slug):
     """Module overview page: renders ``Module.overview_html`` + lesson list.
 
     Issue #222: the module README is now the module overview rather than a
-    sibling Unit. This page replaces the old ``/<course>/<module>/readme``
-    URL (which now redirects here permanently).
+    sibling Unit.
 
     Access mirrors the course detail page: the page is always reachable for
     SEO; gated content shows the upgrade CTA. Unit links in the lesson
@@ -401,17 +400,6 @@ def module_overview(request, course_slug, module_slug):
         'cta_url': cta_url,
     }
     return render(request, 'content/module_overview.html', context)
-
-
-def module_readme_redirect(request, course_slug, module_slug):
-    """Permanently redirect old ``/<course>/<module>/readme`` URLs.
-
-    Issue #222: the README is now the module overview at the bare
-    ``/<course>/<module>/`` URL, not a sibling unit.
-    """
-    course = get_object_or_404(Course, slug=course_slug, status='published')
-    module = get_object_or_404(Module, course=course, slug=module_slug)
-    return redirect(module.get_absolute_url(), permanent=True)
 
 
 def _get_all_units_ordered(course):

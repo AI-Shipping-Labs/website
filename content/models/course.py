@@ -155,30 +155,18 @@ class Course(
         return get_required_tier_name(self.required_level)
 
     def total_units(self):
-        """Return the total number of units in this course.
-
-        Excludes legacy README-as-unit rows (slug='readme', sort_order=-1)
-        that may still exist in databases not yet migrated. After the
-        backfill migration these rows are gone, so the exclusion is a
-        no-op in normal operation.
-        """
-        return Unit.objects.filter(module__course=self).exclude(
-            slug='readme', sort_order=-1,
-        ).count()
+        """Return the total number of units in this course."""
+        return Unit.objects.filter(module__course=self).count()
 
     def completed_units(self, user):
-        """Return the number of units completed by the given user.
-
-        Excludes legacy README-as-unit rows so the count lines up with
-        ``total_units()`` for progress percentages.
-        """
+        """Return the number of units completed by the given user."""
         if user is None or not user.is_authenticated:
             return 0
         return UserCourseProgress.objects.filter(
             user=user,
             unit__module__course=self,
             completed_at__isnull=False,
-        ).exclude(unit__slug='readme', unit__sort_order=-1).count()
+        ).count()
 
     def get_syllabus(self):
         """Return modules with their units, ordered by sort_order.
@@ -214,7 +202,6 @@ class Course(
             return None
         units = list(
             Unit.objects.filter(module__course=self)
-            .exclude(slug='readme', sort_order=-1)
             .select_related('module')
             .order_by('module__sort_order', 'sort_order')
         )

@@ -11,20 +11,12 @@ Covers:
   title (via ``strip_leading_title_h1``)
 - ``/courses/<course>/<module>/`` renders the overview + lesson list
 - Module without an overview still renders the lesson list
-- Lesson list excludes legacy README-as-Unit rows (defensive)
-- ``/courses/<course>/<module>/readme`` permanently redirects to the
-  overview URL
-- ``Course.total_units()`` ignores legacy README-as-Unit rows
 - ``Module.get_absolute_url()``
 """
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from content.models import Course, Module, Unit, UserCourseProgress
-
-User = get_user_model()
-
+from content.models import Course, Module, Unit
 
 # ---------------------------------------------------------------------------
 # Module model
@@ -182,93 +174,3 @@ class ModuleOverviewViewTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-# ---------------------------------------------------------------------------
-# Old /readme URL redirect
-# ---------------------------------------------------------------------------
-
-
-class ModuleReadmeRedirectTest(TestCase):
-    """Old ``/<course>/<module>/readme`` URLs 301-redirect to the overview."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.course = Course.objects.create(
-            title='Python', slug='python', status='published',
-        )
-        cls.module = Module.objects.create(
-            course=cls.course, title='Intro', slug='intro', sort_order=1,
-        )
-
-    def test_readme_url_permanently_redirects_to_module_overview(self):
-        response = self.client.get(
-            '/courses/python/intro/readme', follow=False,
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/courses/python/intro')
-
-    def test_redirect_works_even_when_overview_is_empty(self):
-        # No overview content; the redirect still applies — readers will land
-        # on the lesson-list-only page.
-        response = self.client.get(
-            '/courses/python/intro/readme', follow=False,
-        )
-        self.assertEqual(response.status_code, 301)
-
-    def test_readme_url_404s_for_unknown_module(self):
-        response = self.client.get(
-            '/courses/python/no-such-module/readme', follow=False,
-        )
-        self.assertEqual(response.status_code, 404)
-
-
-# ---------------------------------------------------------------------------
-# Lesson counts ignore legacy README-as-Unit rows
-# ---------------------------------------------------------------------------
-
-
-class LessonCountIgnoresLegacyReadmeUnitTest(TestCase):
-    """``Course.total_units()`` excludes legacy ``slug='readme', sort_order=-1``
-    rows so progress percentages and "X lessons" labels don't drift after
-    the backfill migration runs.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_user(email='ml@example.com')
-        cls.course = Course.objects.create(
-            title='C', slug='c-readme-count', status='published',
-        )
-        cls.module = Module.objects.create(
-            course=cls.course, title='M', slug='m', sort_order=1,
-        )
-        # A real lesson...
-        cls.real_unit = Unit.objects.create(
-            module=cls.module, title='Real', slug='real', sort_order=1,
-        )
-        # ...and a legacy README-as-Unit row that snuck in (e.g. created
-        # by a sync that ran before this code rolled out, against a DB
-        # that hasn't been backfilled yet).
-        cls.legacy_readme = Unit.objects.create(
-            module=cls.module, title='M', slug='readme', sort_order=-1,
-        )
-
-    def test_total_units_excludes_legacy_readme_unit(self):
-        self.assertEqual(self.course.total_units(), 1)
-
-    def test_completed_units_excludes_legacy_readme_unit(self):
-        # Mark both as completed; only the real one should count.
-        UserCourseProgress.objects.create(
-            user=self.user, unit=self.real_unit,
-            completed_at=__import__('django.utils.timezone', fromlist=['']).now(),
-        )
-        UserCourseProgress.objects.create(
-            user=self.user, unit=self.legacy_readme,
-            completed_at=__import__('django.utils.timezone', fromlist=['']).now(),
-        )
-        self.assertEqual(self.course.completed_units(self.user), 1)
-
-    def test_get_next_unit_for_skips_legacy_readme_unit(self):
-        # With nothing completed, "next" must be the real unit, not the
-        # legacy README.
-        nxt = self.course.get_next_unit_for(self.user)
-        self.assertEqual(nxt.pk, self.real_unit.pk)

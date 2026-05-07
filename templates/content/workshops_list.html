@@ -23,12 +23,13 @@
       {% if workshops %}
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="workshops-grid">
         {% for workshop in workshops %}
+        {% with workshop_primary_instructor=workshop.primary_instructor %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="workshop-card">
           <a href="{{ workshop.get_absolute_url }}">
             {% if workshop.pages_required_level > 0 %}
-              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
+              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
             {% else %}
-              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label="Free" preview_instructor=workshop.instructor_name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
+              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
             {% endif %}
             <div class="p-6">
               <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -47,10 +48,10 @@
                 {{ workshop.title }}
               </h2>
               <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {% if workshop.instructor_name %}
-                <span class="flex items-center gap-1">
+                {% if workshop_primary_instructor %}
+                <span class="flex items-center gap-1" data-testid="workshop-card-instructor">
                   <i data-lucide="user" class="h-3 w-3"></i>
-                  {{ workshop.instructor_name }}
+                  {{ workshop_primary_instructor.name }}
                 </span>
                 {% endif %}
                 <span class="flex items-center gap-1">
@@ -71,6 +72,7 @@
             </div>
           </a>
         </article>
+        {% endwith %}
         {% endfor %}
       </div>
       {% else %}

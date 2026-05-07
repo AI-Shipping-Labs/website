@@ -24,13 +24,14 @@
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {% for course in courses %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50">
+          {% with course_primary_instructor=course.primary_instructor %}
           <a href="/courses/{{ course.slug }}">
             {% if course.is_free %}
-              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="lazy" %}
+              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" %}
             {% elif course.required_level > 0 %}
-              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label=course.required_level|required_tier_name|add:"+" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="lazy" %}
+              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label=course.required_level|required_tier_name|add:"+" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" %}
             {% else %}
-              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="lazy" %}
+              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" %}
             {% endif %}
             <div class="p-6">
               <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -49,8 +50,8 @@
               <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
                 {{ course.title }}
               </h2>
-              {% if course.instructor_name %}
-              <p class="mt-1 text-sm text-muted-foreground">by {{ course.instructor_name }}</p>
+              {% if course_primary_instructor %}
+              <p class="mt-1 text-sm text-muted-foreground">by {{ course_primary_instructor.name }}</p>
               {% endif %}
               {% if course.description %}
               <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ course.description|truncatechars:120 }}</p>
@@ -64,6 +65,7 @@
               {% endif %}
             </div>
           </a>
+          {% endwith %}
         </article>
         {% endfor %}
       </div>

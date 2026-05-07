@@ -245,21 +245,20 @@ def _resolve_instructors_for_yaml(data, rel_path, stats):
 
 
 def _attach_instructors_to_course(course, resolved, stats):
-    """Replace course.instructors M2M and mirror to legacy fields.
+    """Replace course.instructors M2M from the resolved instructor list.
 
     Idempotent: clears the through-table only when the resolved id list
     differs from what's currently attached, so re-running sync is a
-    no-op when nothing changed. Mirrors the FIRST resolved instructor's
-    name + bio into the legacy ``instructor_name`` / ``instructor_bio``
-    fields. If ``resolved`` is empty (every id was unknown), the legacy
-    fields are NOT blanked — leaves the existing values intact.
+    no-op when nothing changed. Issue #423 removed the legacy
+    ``instructor_name`` / ``instructor_bio`` mirror writes — the M2M
+    relationship is the canonical source of truth.
     """
     from content.models import CourseInstructor
 
     if resolved is None:
         return  # Field missing/empty -> leave M2M untouched.
     if not resolved:
-        return  # All ids unknown -> don't blank legacy fields.
+        return  # All ids unknown -> leave M2M untouched.
 
     new_ids = [i.pk for i in resolved]
     current_qs = CourseInstructor.objects.filter(course=course).order_by('position')
@@ -274,22 +273,12 @@ def _attach_instructors_to_course(course, resolved, stats):
             for i, inst in enumerate(resolved)
         ])
 
-    # Mirror first instructor into legacy fields. Only saves when the
-    # values actually changed so we don't bump updated_at on every sync.
-    primary = resolved[0]
-    changed_fields = []
-    if course.instructor_name != primary.name:
-        course.instructor_name = primary.name
-        changed_fields.append('instructor_name')
-    if course.instructor_bio != primary.bio:
-        course.instructor_bio = primary.bio
-        changed_fields.append('instructor_bio')
-    if changed_fields:
-        course.save(update_fields=changed_fields)
-
 
 def _attach_instructors_to_workshop(workshop, resolved, stats):
-    """Replace workshop.instructors M2M and mirror to legacy field."""
+    """Replace workshop.instructors M2M from the resolved instructor list.
+
+    Issue #423 removed the legacy ``instructor_name`` mirror write.
+    """
     from content.models import WorkshopInstructor
 
     if resolved is None:
@@ -312,14 +301,13 @@ def _attach_instructors_to_workshop(workshop, resolved, stats):
             for i, inst in enumerate(resolved)
         ])
 
-    primary = resolved[0]
-    if workshop.instructor_name != primary.name:
-        workshop.instructor_name = primary.name
-        workshop.save(update_fields=['instructor_name'])
-
 
 def _attach_instructors_to_event(event, resolved, stats):
-    """Replace event.instructors M2M and mirror to legacy speaker fields."""
+    """Replace event.instructors M2M from the resolved instructor list.
+
+    Issue #423 removed the legacy ``speaker_name`` / ``speaker_bio``
+    mirror writes.
+    """
     from events.models import EventInstructor
 
     if resolved is None:
@@ -339,16 +327,5 @@ def _attach_instructors_to_event(event, resolved, stats):
             )
             for i, inst in enumerate(resolved)
         ])
-
-    primary = resolved[0]
-    changed_fields = []
-    if event.speaker_name != primary.name:
-        event.speaker_name = primary.name
-        changed_fields.append('speaker_name')
-    if event.speaker_bio != primary.bio:
-        event.speaker_bio = primary.bio
-        changed_fields.append('speaker_bio')
-    if changed_fields:
-        event.save(update_fields=changed_fields)
 
 

@@ -49,7 +49,7 @@
       </div>
       <div>
         <dt class="text-muted-foreground">Instructor</dt>
-        <dd class="text-foreground mt-1">{{ workshop.instructor_name|default:"—" }}</dd>
+        <dd class="text-foreground mt-1" data-testid="studio-workshop-instructors">{% with workshop_instructors=workshop.ordered_instructors %}{% if workshop_instructors %}{% for instructor in workshop_instructors %}{{ instructor.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}{% endwith %}</dd>
       </div>
       <div>
         <dt class="text-muted-foreground">Tags</dt>

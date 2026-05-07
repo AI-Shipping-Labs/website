@@ -37,7 +37,7 @@
         <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge course.status course.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Instructor">{{ course.instructor_name|default:"-" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Instructor">{% with primary=course.primary_instructor %}{% if primary %}{{ primary.name }}{% else %}-{% endif %}{% endwith %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Access" data-testid="studio-course-access">{{ course.required_level|studio_access_label }}</td>
         <td class="px-6 py-4" data-label="Source" data-testid="studio-course-source">{% studio_origin_badge course True True %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Updated">{{ course.updated_at|date:"M d, Y" }}</td>

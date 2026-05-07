@@ -107,7 +107,6 @@ class StudioListComponentRenderTest(TestCase):
             title='Shared Course',
             slug='shared-course',
             status='draft',
-            instructor_name='Shared Instructor',
             source_repo='AI-Shipping-Labs/content',
         )
         Workshop.objects.create(

@@ -266,13 +266,18 @@ def api_courses_list(request):
     data = []
     for course in courses:
         is_locked = not can_access(user, course)
+        primary = course.primary_instructor
         data.append({
             'id': course.pk,
             'slug': course.slug,
             'title': course.title,
             'description': course.description[:200] if course.description else '',
             'cover_image_url': course.cover_image_url,
-            'instructor_name': course.instructor_name,
+            'instructor_name': primary.name if primary else '',
+            'instructors': [
+                {'id': i.instructor_id, 'name': i.name}
+                for i in course.ordered_instructors
+            ],
             'tags': course.tags,
             'is_free': course.is_free,
             'required_level': course.required_level,
@@ -315,14 +320,28 @@ def api_course_detail(request, slug):
             'units': units_data,
         })
 
+    # Single query: ordered_instructors fetches the full M2M; primary is
+    # the first row. Avoids the additional .first() query primary_instructor
+    # would issue on top of ordered_instructors. Issue #287 / #423.
+    ordered_instructors = course.ordered_instructors
+    primary = ordered_instructors[0] if ordered_instructors else None
     data = {
         'id': course.pk,
         'slug': course.slug,
         'title': course.title,
         'description': course.description,
         'cover_image_url': course.cover_image_url,
-        'instructor_name': course.instructor_name,
-        'instructor_bio': course.instructor_bio,
+        'instructor_name': primary.name if primary else '',
+        'instructor_bio': primary.bio if primary else '',
+        'instructors': [
+            {
+                'id': i.instructor_id,
+                'name': i.name,
+                'bio': i.bio,
+                'photo_url': i.photo_url,
+            }
+            for i in ordered_instructors
+        ],
         'tags': course.tags,
         'is_free': course.is_free,
         'required_level': course.required_level,

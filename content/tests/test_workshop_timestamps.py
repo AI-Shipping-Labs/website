@@ -57,7 +57,6 @@ def _make_workshop(slug='ws', title='Workshop', landing=0, pages=10,
         recording_required_level=recording,
         status='published',
         description='Workshop body',
-        instructor_name='Alice',
         event=event,
     )
 

@@ -59,7 +59,6 @@ def _make_workshop(**kwargs):
         'title': 'Demo Workshop',
         'date': datetime.date(2026, 4, 21),
         'description': 'Hands-on intro.',
-        'instructor_name': 'Alice',
         'tags': ['agents'],
         'status': 'published',
         'landing_required_level': 0,

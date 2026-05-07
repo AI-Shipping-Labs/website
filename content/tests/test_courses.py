@@ -20,10 +20,42 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN
-from content.models import Course, Module, Unit, UserCourseProgress
+from content.models import (
+    Course,
+    CourseInstructor,
+    Instructor,
+    Module,
+    Unit,
+    UserCourseProgress,
+)
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+
+def _attach_course_instructor(course, name, bio='', position=0):
+    """Attach an Instructor to a Course at the given through-table position.
+
+    Helper for tests written before the legacy ``instructor_name`` /
+    ``instructor_bio`` fields were dropped (issue #423). Creates the
+    ``Instructor`` row by exact name (or reuses an existing one) and
+    inserts the through row.
+    """
+    instructor, _ = Instructor.objects.get_or_create(
+        name=name,
+        defaults={
+            'instructor_id': name.lower().replace(' ', '-'),
+            'bio': bio,
+            'status': 'published',
+        },
+    )
+    if bio and not instructor.bio:
+        instructor.bio = bio
+        instructor.save()
+    CourseInstructor.objects.create(
+        course=course, instructor=instructor, position=position,
+    )
+    return instructor
 
 
 # ============================================================
@@ -386,9 +418,10 @@ class CoursesListViewTest(TestCase):
         self.client = Client()
         self.published = Course.objects.create(
             title='Published Course', slug='published-course',
-            status='published', instructor_name='Test Instructor',
+            status='published',
             tags=['python', 'ai'],
         )
+        _attach_course_instructor(self.published, 'Test Instructor')
         self.draft = Course.objects.create(
             title='Draft Course', slug='draft-course',
             status='draft',
@@ -469,11 +502,13 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
         self.course = Course.objects.create(
             title='Detail Course', slug='detail-course',
             description='# Course Description\nLearn **great things**.',
-            status='published', instructor_name='Jane Doe',
-            instructor_bio='Expert in AI.',
+            status='published',
             required_level=LEVEL_MAIN,
             tags=['python', 'ml'],
             discussion_url='https://slack.com/channel',
+        )
+        _attach_course_instructor(
+            self.course, 'Jane Doe', bio='Expert in AI.',
         )
         self.module1 = Module.objects.create(
             course=self.course, title='Getting Started', slug='getting-started', sort_order=1,
@@ -741,10 +776,11 @@ class ApiCoursesListTest(TierSetupMixin, TestCase):
         super().setUpTestData()
         cls.course = Course.objects.create(
             title='API Course', slug='api-course',
-            status='published', instructor_name='API Instructor',
+            status='published',
             tags=['test'],
             cover_image_url='https://example.com/cover.jpg',
         )
+        _attach_course_instructor(cls.course, 'API Instructor')
         Course.objects.create(
             title='Draft API', slug='draft-api', status='draft',
         )
@@ -808,11 +844,13 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
         cls.course = Course.objects.create(
             title='API Detail', slug='api-detail',
             description='A detailed course.',
-            status='published', instructor_name='Detail Instructor',
-            instructor_bio='Bio here.',
+            status='published',
             tags=['python'],
             required_level=LEVEL_MAIN,
             discussion_url='https://slack.com/test',
+        )
+        _attach_course_instructor(
+            cls.course, 'Detail Instructor', bio='Bio here.',
         )
         cls.module = Module.objects.create(
             course=cls.course, title='Mod 1', slug='mod-1', sort_order=1,
@@ -1415,20 +1453,25 @@ class ApiCourseDetailQueryGuardTest(TierSetupMixin, TestCase):
         small_count = self._measure(client, f'/api/courses/{self.small.slug}')
         large_count = self._measure(client, f'/api/courses/{self.large.slug}')
 
+        # Bound includes the M2M ordered_instructors fetch added by
+        # issue #423 (which dropped the legacy instructor_name / _bio
+        # mirror fields and now reads first-class Instructor rows).
         self.assertLessEqual(
-            small_count, 9,
+            small_count, 10,
             msg=(
                 f'Authenticated /api/courses/{self.small.slug} took '
-                f'{small_count} queries (expected ≤ 9 — was 12 before the '
-                f'fix). Issue #287.'
+                f'{small_count} queries (expected ≤ 10 — was 12 before '
+                f'fix #287; issue #423 added a single M2M fetch). '
+                f'Issue #287 / #423.'
             ),
         )
         self.assertLessEqual(
-            large_count, 9,
+            large_count, 10,
             msg=(
                 f'Authenticated /api/courses/{self.large.slug} took '
-                f'{large_count} queries (expected ≤ 9 — was 17 before the '
-                f'fix). Issue #287.'
+                f'{large_count} queries (expected ≤ 10 — was 17 before '
+                f'fix #287; issue #423 added a single M2M fetch). '
+                f'Issue #287 / #423.'
             ),
         )
         self.assertEqual(

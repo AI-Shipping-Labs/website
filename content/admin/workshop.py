@@ -48,7 +48,7 @@ class WorkshopAdmin(admin.ModelAdmin):
         (None, {
             'fields': (
                 'title', 'slug', 'description', 'cover_image_url',
-                'instructor_name', 'date', 'tags',
+                'date', 'tags',
             ),
         }),
         ('Access', {

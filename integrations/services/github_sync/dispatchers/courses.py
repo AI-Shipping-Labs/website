@@ -358,8 +358,6 @@ def _sync_single_course(
         course_defaults = {
             'title': course_data.get('title', slug),
             'description': description,
-            'instructor_name': course_data.get('instructor_name', ''),
-            'instructor_bio': course_data.get('instructor_bio', ''),
             'cover_image_url': rewrite_cover_image_url(
                 course_data.get('cover_image', '') or course_data.get('cover_image_url', ''),
                 source, os.path.join(rel_path, 'course.yaml'),

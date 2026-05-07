@@ -22,11 +22,30 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from content.models import Workshop, WorkshopPage
+from content.models import (
+    Instructor,
+    Workshop,
+    WorkshopInstructor,
+    WorkshopPage,
+)
 from events.models import Event
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
+
+
+def _attach_workshop_instructor(workshop, name, position=0):
+    instructor, _ = Instructor.objects.get_or_create(
+        name=name,
+        defaults={
+            'instructor_id': name.lower().replace(' ', '-'),
+            'status': 'published',
+        },
+    )
+    WorkshopInstructor.objects.create(
+        workshop=workshop, instructor=instructor, position=position,
+    )
+    return instructor
 
 
 def _make_event(**kwargs):
@@ -69,12 +88,13 @@ def _make_workshop(slug='ws', title='Workshop', status='published',
         pages_required_level=pages,
         recording_required_level=recording,
         description=description,
-        instructor_name=instructor,
         code_repo_url=code_repo_url,
         cover_image_url=cover_image_url,
         tags=tags or [],
         event=event,
     )
+    if instructor:
+        _attach_workshop_instructor(workshop, instructor)
     return workshop
 
 

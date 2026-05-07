@@ -72,7 +72,6 @@ class Workshop(
     date = models.DateField(
         help_text='Workshop date (used for ordering and the auto-created Event).',
     )
-    instructor_name = models.CharField(max_length=200, blank=True, default='')
     instructors = models.ManyToManyField(
         'content.Instructor',
         through='content.WorkshopInstructor',
@@ -80,9 +79,8 @@ class Workshop(
         blank=True,
         help_text=(
             'Instructors teaching this workshop. Order is controlled via the '
-            'WorkshopInstructor.position field. The first instructor is '
-            'mirrored into the legacy instructor_name field by the sync '
-            'pipeline.'
+            'WorkshopInstructor.position field; the first instructor is the '
+            'primary instructor shown on listings and cards.'
         ),
     )
     tags = models.JSONField(default=list, blank=True)
@@ -181,6 +179,18 @@ class Workshop(
             self.description_html = ''
 
         super().save(*args, **kwargs)
+
+    @property
+    def ordered_instructors(self):
+        """Return ``Instructor`` rows in ``WorkshopInstructor.position`` order."""
+        return list(self.instructors.order_by('workshopinstructor__position'))
+
+    @property
+    def primary_instructor(self):
+        """First instructor by position, or ``None`` when unset."""
+        return self.instructors.order_by(
+            'workshopinstructor__position',
+        ).first()
 
     def user_can_access_landing(self, user):
         """Return True when ``user``'s effective level >= landing gate."""

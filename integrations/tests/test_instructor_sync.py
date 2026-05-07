@@ -217,8 +217,9 @@ class WorkshopReferencesInstructorsTest(_SyncFixture):
         self.assertEqual(sync_log.errors, [], f'Errors: {sync_log.errors}')
 
         workshop = Workshop.objects.get(slug='demo')
-        # Legacy mirroring — first instructor's name on the string field.
-        self.assertEqual(workshop.instructor_name, 'Alexey Grigorev')
+        # Issue #423 removed the legacy ``instructor_name`` mirror field —
+        # the M2M is the only source of truth for instructor display now.
+        self.assertEqual(workshop.primary_instructor.name, 'Alexey Grigorev')
 
         # M2M attached in yaml order with positions 0, 1.
         through_rows = list(
@@ -259,13 +260,13 @@ class WorkshopReferencesInstructorsTest(_SyncFixture):
         self.assertEqual(through[0].instructor_id, self.alexey.pk)
         # Sync did not abort over the missing id — workshop was upserted.
         self.assertEqual(sync_log.status, 'success')
-        self.assertEqual(workshop.instructor_name, 'Alexey Grigorev')
+        self.assertEqual(workshop.primary_instructor.name, 'Alexey Grigorev')
 
-    def test_all_unknown_ids_keeps_legacy_field_from_yaml(self):
-        """When every ``instructors:`` id is unknown, the M2M attach
-        helper does not blank the legacy field. The yaml's literal
-        ``instructor_name:`` (the legacy string-only path) still wins —
-        which is the documented behavior for the transition period.
+    def test_all_unknown_ids_keeps_workshop_without_through_rows(self):
+        """When every ``instructors:`` id is unknown, no through rows are
+        created and the sync still upserts the workshop. Issue #423
+        removed the legacy string fields, so unknown ids no longer
+        risk overwriting them.
         """
         folder = '2026-04-21-demo'
         self._write(f'{folder}/workshop.yaml', (
@@ -274,10 +275,6 @@ class WorkshopReferencesInstructorsTest(_SyncFixture):
             'title: "Demo"\n'
             'date: 2026-04-21\n'
             'pages_required_level: 10\n'
-            # Legacy string-only field still authoritative — and our
-            # M2M attach must not blank it just because every id is
-            # unknown.
-            'instructor_name: "Legacy Name From Yaml"\n'
             'instructors:\n'
             '  - never-heard-of-them\n'
         ))
@@ -289,13 +286,12 @@ class WorkshopReferencesInstructorsTest(_SyncFixture):
         sync_content_source(source, repo_dir=self.temp_dir)
 
         ws = Workshop.objects.get(slug='demo')
-        # Legacy field intact — the M2M attach helper saw an empty
-        # resolved list and left the field alone.
-        self.assertEqual(ws.instructor_name, 'Legacy Name From Yaml')
-        # And no through-rows were created.
+        # No through-rows created.
         self.assertEqual(
             WorkshopInstructor.objects.filter(workshop=ws).count(), 0,
         )
+        # No primary instructor (empty M2M).
+        self.assertIsNone(ws.primary_instructor)
 
 
 class CourseReferencesInstructorsTest(_SyncFixture):
@@ -327,8 +323,9 @@ class CourseReferencesInstructorsTest(_SyncFixture):
         self.assertEqual(sync_log.errors, [], f'Errors: {sync_log.errors}')
 
         course = Course.objects.get(slug='ml-zoomcamp')
-        self.assertEqual(course.instructor_name, 'Alexey Grigorev')
-        self.assertEqual(course.instructor_bio, 'AI/ML engineer.')
+        # Issue #423 removed legacy mirror fields; M2M is canonical.
+        self.assertEqual(course.primary_instructor.name, 'Alexey Grigorev')
+        self.assertEqual(course.primary_instructor.bio, 'AI/ML engineer.')
         self.assertEqual(
             CourseInstructor.objects.filter(course=course).count(), 1,
         )
@@ -362,8 +359,10 @@ class EventReferencesInstructorsTest(_SyncFixture):
         sync_content_source(source, repo_dir=self.temp_dir)
 
         event = Event.objects.get(slug='demo-event')
-        self.assertEqual(event.speaker_name, 'Alexey Grigorev')
-        self.assertEqual(event.speaker_bio, 'AI/ML engineer.')
+        # Issue #423 removed legacy speaker_name/speaker_bio mirrors;
+        # M2M is canonical.
+        self.assertEqual(event.primary_instructor.name, 'Alexey Grigorev')
+        self.assertEqual(event.primary_instructor.bio, 'AI/ML engineer.')
         self.assertEqual(
             EventInstructor.objects.filter(event=event).count(), 1,
         )

@@ -33,7 +33,6 @@ def _make_workshop(slug='demo', title='Demo Workshop', **kwargs):
         'title': title,
         'date': datetime.date(2026, 4, 21),
         'description': 'Hands-on intro.',
-        'instructor_name': 'Alice',
         'tags': ['agents'],
         'status': 'published',
         'landing_required_level': 0,
@@ -365,11 +364,14 @@ class StudioWorkshopEditFormTest(TestCase):
         self.assertContains(response, 'name="recording_required_level"')
 
     def test_yaml_fields_are_not_editable_inputs(self):
-        # title/description/tags/date/instructor_name/code_repo_url appear on
-        # the page but as <dd>/<dt>, never in form <input>/<textarea>/<select>
+        # title/description/tags/date/code_repo_url appear on the page but
+        # as <dd>/<dt>, never in form <input>/<textarea>/<select>
         # elements scoped to the form. Search the form region only — the
         # full page also contains <meta name="description" ...> which is
-        # not a form input.
+        # not a form input. Issue #423 dropped the legacy
+        # ``instructor_name`` field from the model; the form never had
+        # such an input either, so the regression here is that we don't
+        # accidentally re-introduce one.
         response = self.client.get(
             f'/studio/workshops/{self.workshop.pk}/edit',
         )
@@ -381,8 +383,8 @@ class StudioWorkshopEditFormTest(TestCase):
         form_html = body[form_start:form_end]
         # No form input has any of these names.
         for fname in (
-            'title', 'description', 'tags', 'instructor_name',
-            'date', 'code_repo_url',
+            'title', 'description', 'tags',
+            'date', 'code_repo_url', 'instructor_name',
         ):
             self.assertNotIn(
                 f'name="{fname}"', form_html,

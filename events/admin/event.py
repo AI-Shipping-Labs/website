@@ -146,7 +146,7 @@ class EventAdmin(admin.ModelAdmin):
                 'transcript_url', 'transcript_text',
                 'timestamps', 'materials', 'core_tools',
                 'learning_objectives', 'outcome',
-                'speaker_name', 'speaker_bio', 'cover_image_url',
+                'cover_image_url',
                 'published', 'published_at',
             ),
             'classes': ('collapse',),

@@ -20,11 +20,11 @@
 
       <div class="mb-8 overflow-hidden rounded-lg">
         {% if course.is_free %}
-          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label="Free" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="eager" %}
+          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label="Free" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" %}
         {% elif course.required_level > 0 %}
-          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label=course.required_level|required_tier_name|add:"+" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="eager" %}
+          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_access_label=course.required_level|required_tier_name|add:"+" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" %}
         {% else %}
-          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_instructor=course.instructor_name preview_tags=course.tags preview_image_loading="eager" %}
+          {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-detail-preview" preview_instructor=course.primary_instructor.name preview_tags=course.tags preview_image_loading="eager" %}
         {% endif %}
       </div>
 
@@ -42,16 +42,22 @@
           {{ course.title }}
         </h1>
 
-        {% if course.instructor_name %}
-        <div class="mt-4 flex items-center gap-3">
-          <div>
-            <p class="font-medium text-foreground">{{ course.instructor_name }}</p>
-            {% if course.instructor_bio %}
-            <p class="text-sm text-muted-foreground">{{ course.instructor_bio }}</p>
-            {% endif %}
+        {% with instructors=course.ordered_instructors %}
+        {% if instructors %}
+        <div class="mt-4 space-y-3" data-testid="course-instructors">
+          {% for instructor in instructors %}
+          <div class="flex items-start gap-3">
+            <div>
+              <p class="font-medium text-foreground">{{ instructor.name }}</p>
+              {% if instructor.bio %}
+              <p class="text-sm text-muted-foreground">{{ instructor.bio }}</p>
+              {% endif %}
+            </div>
           </div>
+          {% endfor %}
         </div>
         {% endif %}
+        {% endwith %}
 
         {% if course.tags %}
         <div class="mt-4 flex flex-wrap gap-2">

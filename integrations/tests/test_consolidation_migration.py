@@ -189,7 +189,6 @@ class ContentSourceConsolidationMigrationTest(TransactionTestCase):
         # Course + Module from courses/ subdir of the monorepo.
         course = Course.objects.create(
             title='ML', slug='ml', status='published',
-            instructor_name='Alexey',
             source_repo=monorepo,
             source_path='ml/course.yaml',
         )
@@ -209,7 +208,6 @@ class ContentSourceConsolidationMigrationTest(TransactionTestCase):
         # Workshop in standalone workshops repo (content_path empty -> no rewrite).
         Workshop.objects.create(
             slug='ws-1', title='WS', date='2026-04-21',
-            instructor_name='Alexey',
             source_repo=workshops_repo,
             source_path='2026/ws-1/workshop.yaml',
         )

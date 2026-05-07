@@ -40,8 +40,6 @@ class Course(
         help_text="Auto-rendered HTML from description markdown.",
     )
     cover_image_url = models.URLField(max_length=500, blank=True, default='')
-    instructor_name = models.CharField(max_length=200, blank=True, default='')
-    instructor_bio = models.TextField(blank=True, default='')
     instructors = models.ManyToManyField(
         'content.Instructor',
         through='content.CourseInstructor',
@@ -49,9 +47,8 @@ class Course(
         blank=True,
         help_text=(
             'Instructors teaching this course. Order is controlled via the '
-            'CourseInstructor.position field. The first instructor is mirrored '
-            'into the legacy instructor_name/instructor_bio fields by the '
-            'sync pipeline.'
+            'CourseInstructor.position field; the first instructor is the '
+            'primary instructor shown on listings and cards.'
         ),
     )
     required_level = models.IntegerField(
@@ -144,6 +141,25 @@ class Course(
     @property
     def is_published(self):
         return self.status == 'published'
+
+    @property
+    def ordered_instructors(self):
+        """Return ``Instructor`` rows in ``CourseInstructor.position`` order.
+
+        Templates iterate this directly. Returns an empty list when no
+        instructors are attached so callers can ``{% if %}`` cleanly.
+        """
+        return list(self.instructors.order_by('courseinstructor__position'))
+
+    @property
+    def primary_instructor(self):
+        """First instructor by position, or ``None`` when unset.
+
+        Used by listings/cards that show a single "by <name>" line.
+        """
+        return self.instructors.order_by(
+            'courseinstructor__position',
+        ).first()
 
     @property
     def is_free(self) -> bool:

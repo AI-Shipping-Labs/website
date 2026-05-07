@@ -89,6 +89,8 @@ Orchestrator picks groomed issue
 
 ### Orchestrator Responsibilities
 
+- Stay in the orchestrator role. Do not personally perform active issue role work when a product-manager, software-engineer, tester, or on-call agent can own it. The orchestrator coordinates, unblocks, reviews handoffs, and launches the next role agent.
+- Treat new user feedback, links, recordings, screenshots, or raw requests as intake. Create raw issues when needed, then launch a product-manager agent to groom them instead of grooming them inline, unless the user explicitly asks the orchestrator to edit the issue text directly.
 - Groom any `needs grooming` issues first (launch product-manager in grooming mode)
 - Pick the next groomed issues (2 at a time, in parallel when independent)
 - Before launching any SWE agent in an isolated worktree, ensure `main` has no uncommitted changes. If there are, commit them (or stash with the user's approval) first. Worktrees are created from `HEAD`, so uncommitted main changes are invisible to the agent; when the agent's branch merges back, it will overwrite or conflict with that work. Run `git status` and resolve before invoking the agent.
@@ -99,7 +101,8 @@ Orchestrator picks groomed issue
 - If PM rejects: relay UX feedback to software engineer, fix, then re-launch PM
 - If PM accepts: tell software engineer to commit on the worktree branch (no push, no PR)
 - After SWE commits, the orchestrator merges the worktree branch into local `main` and pushes `main` to origin (see "Merging — local only, no PRs" below)
-- After pushing, run oncall-engineer to check CI/CD
+- After pushing, run oncall-engineer to check CI/CD. Do not watch CI manually as a blocking activity; let the on-call agent monitor and report failures while the orchestrator continues grooming or launching independent work.
+- When a role agent reports a failure, assign the fix to the right role agent. For code/test failures, send the concrete tester or on-call findings back to a software-engineer agent; for deployment/CI infrastructure failures, let the on-call agent fix when it can.
 - After committing, pick the next two issues (never stop until all issues are done)
 
 ### Merging — local only, no PRs
@@ -130,7 +133,7 @@ Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → t
 - SWE and tester must update acceptance criteria checkboxes in the issue body (`- [ ]` → `- [x]`)
 - Never commit directly without tester review, even for "simple" changes
 - Never use `gh pr create` or `gh pr merge` — see "Merging — local only, no PRs"
-- After push, always run oncall-engineer agent to monitor CI — do not just check manually
+- After push, always run oncall-engineer agent to monitor CI — do not just check manually or wait on CI as the orchestrator's main task
 
 ### How to Pick Issues
 
@@ -149,6 +152,8 @@ Always keep the pipeline full. When starting a batch, immediately add a "Pick ne
 Batch N: implement + test + accept → commit + push
     └── triggers: "Pick next two issues" → Batch N+1 → ...
 ```
+
+If the user interrupts with new information while role agents are working, keep those agents running. Convert the new information into intake issues or PM grooming work in parallel, then return to orchestrating active handoffs. The orchestrator should usually have at least two independent tracks in motion when the backlog allows it: one active implementation/review track and one intake/grooming or next-issue selection track.
 
 ### Human Verification
 

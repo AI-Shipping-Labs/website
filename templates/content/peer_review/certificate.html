@@ -3,7 +3,13 @@
 {% block title %}Certificate of Completion - {{ course.title }} | {{ site_name }}{% endblock %}
 
 {% block body %}
-<div class="max-w-2xl mx-auto px-4 py-12">
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-2xl px-6 py-16 lg:px-8 lg:py-24">
+
   <div class="bg-card border border-border rounded-lg p-12 text-center" id="certificate">
     <div class="mb-8">
       <h1 class="text-3xl font-semibold text-foreground mb-2">Certificate of Completion</h1>
@@ -37,7 +43,12 @@
     </div>
     {% endif %}
   </div>
-</div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
 
 <style>
 @media print {

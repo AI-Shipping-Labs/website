@@ -3,7 +3,13 @@
 {% block title %}Peer Reviews - {{ course.title }} | {{ site_name }}{% endblock %}
 
 {% block body %}
-<div class="max-w-3xl mx-auto px-4 py-12">
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="relative min-h-screen overflow-hidden pt-24">
+    <div class="absolute inset-0 hero-gradient"></div>
+    <div class="relative mx-auto max-w-3xl px-6 py-16 lg:px-8 lg:py-24">
+
   <div class="mb-6">
     <a href="{{ course.get_absolute_url }}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to {{ course.title }}</a>
   </div>
@@ -110,5 +116,10 @@
     <p class="text-sm text-muted-foreground">No reviews assigned yet.</p>
     {% endif %}
   </div>
-</div>
+
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
 {% endblock %}

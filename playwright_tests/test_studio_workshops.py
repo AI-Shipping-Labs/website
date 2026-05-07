@@ -64,7 +64,9 @@ def _create_workshop(
     page_titles=None,
 ):
     """Create a Workshop (and optionally a linked Event + pages) for a test."""
-    from content.models import Workshop, WorkshopPage
+    from django.utils.text import slugify
+
+    from content.models import Instructor, Workshop, WorkshopInstructor, WorkshopPage
     from events.models import Event
 
     event = None
@@ -83,7 +85,6 @@ def _create_workshop(
         title=title,
         date=date or datetime.date(2026, 4, 21),
         description='Hands-on intro.',
-        instructor_name='Alice',
         tags=['agents'],
         status=status,
         landing_required_level=landing,
@@ -93,6 +94,19 @@ def _create_workshop(
         source_path=f'2026/{slug}/workshop.yaml',
         source_commit='abc1234def5678901234567890123456789abcde',
         event=event,
+    )
+    instructor_name = 'Alice'
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(instructor_name)[:200] or 'test-instructor',
+        defaults={
+            'name': instructor_name,
+            'status': 'published',
+        },
+    )
+    WorkshopInstructor.objects.get_or_create(
+        workshop=workshop,
+        instructor=instructor,
+        defaults={'position': 0},
     )
 
     if page_titles:

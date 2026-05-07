@@ -30,14 +30,15 @@ def _reset_courses():
 
 
 def _seed_courses():
+    from django.utils.text import slugify
+
     from content.access import LEVEL_BASIC, LEVEL_PREMIUM
-    from content.models import Course
+    from content.models import Course, CourseInstructor, Instructor
 
     synced = Course.objects.create(
         title="Source Managed Premium Course With A Long Operator Facing Name",
         slug="source-managed-premium-course-with-a-long-operator-facing-name",
         status="published",
-        instructor_name="Alexey Grigorev",
         required_level=LEVEL_PREMIUM,
         source_repo="AI-Shipping-Labs/content",
         source_path="courses/source-managed-premium/course.yaml",
@@ -46,9 +47,24 @@ def _seed_courses():
         title="Local Basic Course",
         slug="local-basic-course",
         status="draft",
-        instructor_name="Studio Team",
         required_level=LEVEL_BASIC,
     )
+    for course, name in (
+        (synced, "Alexey Grigorev"),
+        (local, "Studio Team"),
+    ):
+        instructor, _ = Instructor.objects.get_or_create(
+            instructor_id=slugify(name)[:200] or "test-instructor",
+            defaults={
+                "name": name,
+                "status": "published",
+            },
+        )
+        CourseInstructor.objects.get_or_create(
+            course=course,
+            instructor=instructor,
+            defaults={"position": 0},
+        )
     connection.close()
     return synced, local
 

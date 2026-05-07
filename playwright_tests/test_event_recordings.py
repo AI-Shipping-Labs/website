@@ -87,6 +87,7 @@ def _create_recording(
         published=published,
         start_datetime=start_dt,
         status="completed",
+        kind="workshop",
     )
     recording.save()
 
@@ -807,7 +808,9 @@ class TestScenario10InsufficientTierSeesCTAWithCorrectName:
         lock_icon = recording_card.locator('[data-lucide="lock"]')
         assert lock_icon.count() >= 1
 
-        # Step 2: Click on "Main-Only Deep Dive"
+        # Step 2: Click on "Main-Only Deep Dive". Past cards link to the
+        # linked Workshop landing (issue #426); the recording paywall now
+        # lives on the workshop video page.
         page.locator(
             'a:has-text("Main-Only Deep Dive")'
         ).first.click()
@@ -815,21 +818,15 @@ class TestScenario10InsufficientTierSeesCTAWithCorrectName:
 
         body = page.content()
 
-        # Title and description are visible
+        # Title and description are visible on the landing
         assert "Main-Only Deep Dive" in body
         assert "exclusive deep dive" in body
 
-        # Video is hidden -- no YouTube iframe present
-        main_element = page.locator("main")
-        main_html = main_element.inner_html()
-        assert "<iframe" not in main_html.lower() or "maindd789" not in main_html
+        # The workshop landing surfaces the recording-tier requirement on
+        # the "Watch the recording" card -- it must mention Main, not Basic.
+        assert "Recording available with Main+" in body
+        assert "Recording available with Basic+" not in body
 
-        # CTA reads "Upgrade to Main" not "Upgrade to Basic"
-        assert "Upgrade to Main to watch this recording" in body
-        assert "Upgrade to Basic" not in body
-
-        # "View Pricing" link to /pricing is available
-        pricing_link = page.locator('a:has-text("View Pricing")')
-        assert pricing_link.count() >= 1
-        href = pricing_link.first.get_attribute("href")
-        assert "/pricing" in href
+        # The video locked badge is rendered on the recording card.
+        locked_badge = page.locator('[data-testid="workshop-video-locked"]')
+        assert locked_badge.count() >= 1

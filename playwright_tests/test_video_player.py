@@ -24,6 +24,7 @@ import os
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -127,6 +128,7 @@ def _create_recording(
         published=published,
         start_datetime=start_dt,
         status="completed",
+        kind="workshop",
         core_tools=core_tools,
         learning_objectives=learning_objectives,
         outcome=outcome,
@@ -325,15 +327,19 @@ class TestScenario1YouTubeRecordingTimestamps:
         assert 'data-source="youtube"' in body
         assert "video-player" in body
 
-        # Expand the collapsed Chapters disclosure (#361) so timestamps
-        # are visible/clickable.
+        # Wait for the chapters disclosure node before forcing it open;
+        # the inner buttons render once the disclosure is in the DOM, and
+        # waiting here avoids a render-timing flake under CI load.
+        chapters = page.locator('details[data-testid="video-chapters"]')
+        expect(chapters).to_be_visible()
         page.evaluate(
             "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
         )
 
-        # Verify three timestamps are listed
+        # Verify three timestamps are listed (auto-wait until the chapter
+        # buttons have populated rather than asserting immediately).
         timestamps = page.locator(".video-timestamp")
-        assert timestamps.count() == 3
+        expect(timestamps).to_have_count(3)
 
         # Verify timestamp labels
         ts_text = page.locator(

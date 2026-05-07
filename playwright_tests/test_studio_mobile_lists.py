@@ -49,10 +49,17 @@ def _reset_studio_mobile_data():
 
 
 def _seed_studio_mobile_data(staff_email):
+    from django.utils.text import slugify
     from django_q.models import Task
 
     from accounts.models import ImportBatch
-    from content.models import Article, Course, Workshop
+    from content.models import (
+        Article,
+        Course,
+        CourseInstructor,
+        Instructor,
+        Workshop,
+    )
     from events.models import Event
     from integrations.models import ContentSource, SyncLog
 
@@ -65,13 +72,25 @@ def _seed_studio_mobile_data(staff_email):
         published=True,
         source_repo="AI-Shipping-Labs/content",
     )
-    Course.objects.create(
+    course = Course.objects.create(
         title="Mobile Course Triage",
         slug="mobile-course-triage",
         status="published",
-        instructor_name="Alexey",
         required_level=10,
         source_repo="AI-Shipping-Labs/content",
+    )
+    course_instructor_name = "Alexey"
+    course_instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(course_instructor_name)[:200] or "test-instructor",
+        defaults={
+            "name": course_instructor_name,
+            "status": "published",
+        },
+    )
+    CourseInstructor.objects.get_or_create(
+        course=course,
+        instructor=course_instructor,
+        defaults={"position": 0},
     )
     Workshop.objects.create(
         slug="mobile-workshop",

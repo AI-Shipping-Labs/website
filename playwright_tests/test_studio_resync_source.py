@@ -104,14 +104,15 @@ def _create_course_with_unit(course_slug='course-x'):
 
 
 def _create_workshop():
-    from content.models import Workshop
+    from django.utils.text import slugify
+
+    from content.models import Instructor, Workshop, WorkshopInstructor
 
     ws = Workshop.objects.create(
         slug='ws-1',
         title='Workshop One',
         date=datetime.date(2026, 4, 21),
         description='Hands-on intro.',
-        instructor_name='Alice',
         tags=['agents'],
         status='published',
         landing_required_level=0,
@@ -120,6 +121,19 @@ def _create_workshop():
         source_repo='AI-Shipping-Labs/workshops-content',
         source_path='2026/ws-1/workshop.yaml',
         source_commit='ccc1234def5678901234567890123456789abcde',
+    )
+    instructor_name = 'Alice'
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(instructor_name)[:200] or 'test-instructor',
+        defaults={
+            'name': instructor_name,
+            'status': 'published',
+        },
+    )
+    WorkshopInstructor.objects.get_or_create(
+        workshop=ws,
+        instructor=instructor,
+        defaults={'position': 0},
     )
     connection.close()
     return ws

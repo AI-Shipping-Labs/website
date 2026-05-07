@@ -62,7 +62,9 @@ def _create_workshop_with_pages(
     The sync pipeline derives a UUIDv5 per page in production; in tests
     we set a random UUID so the Q&A section renders.
     """
-    from content.models import Workshop, WorkshopPage
+    from django.utils.text import slugify
+
+    from content.models import Instructor, Workshop, WorkshopInstructor, WorkshopPage
 
     workshop = Workshop.objects.create(
         slug=slug,
@@ -73,7 +75,19 @@ def _create_workshop_with_pages(
         pages_required_level=pages,
         recording_required_level=20,
         description='Workshop description.',
-        instructor_name='Alexey',
+    )
+    instructor_name = 'Alexey'
+    instructor, _ = Instructor.objects.get_or_create(
+        instructor_id=slugify(instructor_name)[:200] or 'test-instructor',
+        defaults={
+            'name': instructor_name,
+            'status': 'published',
+        },
+    )
+    WorkshopInstructor.objects.get_or_create(
+        workshop=workshop,
+        instructor=instructor,
+        defaults={'position': 0},
     )
 
     pages_data = pages_data or [

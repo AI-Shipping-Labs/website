@@ -1,6 +1,13 @@
 from django import template
 from django_q.models import OrmQ
 
+from content.access import (
+    LEVEL_BASIC,
+    LEVEL_MAIN,
+    LEVEL_OPEN,
+    LEVEL_PREMIUM,
+    LEVEL_REGISTERED,
+)
 from studio.utils import get_github_edit_url, is_synced
 from studio.worker_health import get_worker_status
 
@@ -125,12 +132,13 @@ def studio_status_badge(status, label=''):
 
 
 @register.inclusion_tag('studio/includes/origin_badge.html')
-def studio_origin_badge(obj, show_path=True):
+def studio_origin_badge(obj, show_path=True, show_repo=False):
     """Render compact source provenance for Studio table/nested rows."""
     return {
         'obj': obj,
         'is_synced': is_synced(obj),
         'show_path': show_path,
+        'show_repo': show_repo,
         'github_url': get_github_edit_url(obj),
     }
 
@@ -167,6 +175,24 @@ def studio_list_action(href, label, kind='secondary', new_tab=False, rel=''):
         'rel': rel,
         'testid': 'view-on-site' if label == 'View on site' else '',
     }
+
+
+@register.filter
+def studio_access_label(required_level):
+    """Return operator-facing access copy for Studio list rows."""
+    try:
+        level = int(required_level)
+    except (TypeError, ValueError):
+        return 'Custom access'
+
+    labels = {
+        LEVEL_OPEN: 'Free',
+        LEVEL_REGISTERED: 'Registered users',
+        LEVEL_BASIC: 'Basic (Level 10)',
+        LEVEL_MAIN: 'Main (Level 20)',
+        LEVEL_PREMIUM: 'Premium (Level 30)',
+    }
+    return labels.get(level, f'Custom (Level {level})')
 
 
 @register.filter

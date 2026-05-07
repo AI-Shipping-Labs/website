@@ -13,6 +13,13 @@ import uuid
 
 from django.test import TestCase
 
+from content.access import (
+    LEVEL_BASIC,
+    LEVEL_MAIN,
+    LEVEL_OPEN,
+    LEVEL_PREMIUM,
+    LEVEL_REGISTERED,
+)
 from content.models import Course, Module, Unit
 from tests.fixtures import StaffUserMixin
 
@@ -42,6 +49,13 @@ class StudioCourseListTest(StaffUserMixin, TestCase):
         response = self.client.get('/studio/courses/?status=draft')
         self.assertContains(response, 'DraftCourseXYZ')
         self.assertNotContains(response, 'PublishedCourseXYZ')
+        self.assertContains(response, 'data-testid="studio-status-filter"')
+        self.assertContains(response, '<span class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</span>', html=True)
+        self.assertContains(
+            response,
+            '<option value="draft" selected>Draft</option>',
+            html=True,
+        )
 
     def test_list_search(self):
         Course.objects.create(title='Python Course', slug='python')
@@ -64,7 +78,9 @@ class StudioCourseListTest(StaffUserMixin, TestCase):
 
         response = self.client.get('/studio/courses/')
 
+        self.assertContains(response, '<th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>', html=True)
         self.assertContains(response, 'Synced')
+        self.assertContains(response, 'AI-Shipping-Labs/content')
         self.assertContains(response, 'courses/synced/course.yaml')
         self.assertContains(response, 'Local / manual')
         self.assertContains(response, 'No GitHub source metadata')
@@ -73,6 +89,46 @@ class StudioCourseListTest(StaffUserMixin, TestCase):
         local_row = body[body.find('Local Course'):body.find('</tr>', body.find('Local Course'))]
         self.assertIn('>View</a>', synced_row)
         self.assertIn('>Edit</a>', local_row)
+
+    def test_list_displays_human_access_labels(self):
+        cases = [
+            (LEVEL_OPEN, 'Free'),
+            (LEVEL_REGISTERED, 'Registered users'),
+            (LEVEL_BASIC, 'Basic (Level 10)'),
+            (LEVEL_MAIN, 'Main (Level 20)'),
+            (LEVEL_PREMIUM, 'Premium (Level 30)'),
+            (42, 'Custom (Level 42)'),
+        ]
+        for level, label in cases:
+            Course.objects.create(
+                title=f'Access {level}',
+                slug=f'access-{level}',
+                required_level=level,
+            )
+
+        response = self.client.get('/studio/courses/')
+
+        for _level, label in cases:
+            with self.subTest(label=label):
+                self.assertContains(response, label)
+        self.assertNotContains(response, '>Level 30<')
+
+    def test_list_renders_mobile_card_hooks_and_actions(self):
+        Course.objects.create(
+            title='A Very Long Studio Course Title That Should Wrap Cleanly On Phones',
+            slug='long-mobile-course-title-that-should-wrap',
+            required_level=LEVEL_PREMIUM,
+        )
+
+        response = self.client.get('/studio/courses/')
+
+        self.assertContains(response, 'data-testid="studio-course-row"')
+        self.assertContains(response, 'data-testid="studio-course-title"')
+        self.assertContains(response, 'break-words')
+        self.assertContains(response, 'data-label="Source"')
+        self.assertContains(response, 'data-label="Actions"')
+        self.assertContains(response, '>Edit</a>')
+        self.assertContains(response, '>View on site</a>')
 
 
 class StudioCourseCreateRemovedTest(StaffUserMixin, TestCase):

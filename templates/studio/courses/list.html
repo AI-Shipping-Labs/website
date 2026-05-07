@@ -22,24 +22,24 @@
         <th class="{% studio_list_class 'th' %}">Status</th>
         <th class="{% studio_list_class 'th' %}">Instructor</th>
         <th class="{% studio_list_class 'th' %}">Access</th>
-        <th class="{% studio_list_class 'th' %}">Origin</th>
+        <th class="{% studio_list_class 'th' %}">Source</th>
         <th class="{% studio_list_class 'th' %}">Updated</th>
         <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
     <tbody class="{% studio_list_class 'tbody' %}">
       {% for course in courses %}
-      <tr class="{% studio_list_class 'row' %}">
-        <td class="px-6 py-4">
-          <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ course.title }}</a>
-          <p class="text-xs text-muted-foreground mt-1">{{ course.slug }}</p>
+      <tr class="{% studio_list_class 'row' %}" data-testid="studio-course-row">
+        <td class="px-6 py-4" data-testid="studio-course-title">
+          <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="block break-words text-sm font-medium text-foreground hover:text-accent">{{ course.title }}</a>
+          <p class="mt-1 break-all text-xs text-muted-foreground">{{ course.slug }}</p>
         </td>
         <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge course.status course.get_status_display %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Instructor">{{ course.instructor_name|default:"-" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Access">{% if course.is_free %}Free{% else %}Level {{ course.required_level }}{% endif %}</td>
-        <td class="px-6 py-4" data-label="Origin">{% studio_origin_badge course %}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Access" data-testid="studio-course-access">{{ course.required_level|studio_access_label }}</td>
+        <td class="px-6 py-4" data-label="Source" data-testid="studio-course-source">{% studio_origin_badge course True True %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Updated">{{ course.updated_at|date:"M d, Y" }}</td>
         <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
           {% url 'studio_course_edit' course_id=course.pk as course_edit_url %}

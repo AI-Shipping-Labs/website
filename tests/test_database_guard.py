@@ -4,6 +4,9 @@ from django.db import connection
 from website.test_database_guard import is_database_test_scoped
 
 
+pytest_plugins = ["playwright_tests.conftest"]
+
+
 @pytest.mark.django_db(transaction=True)
 def test_playwright_database_is_pytest_scoped():
     assert is_database_test_scoped(connection.settings_dict)

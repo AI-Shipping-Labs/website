@@ -203,20 +203,37 @@
           display: none;
         }
       </style>
+      {% comment %}
+        Syllabus accordion — issue #483 tightens mobile spacing.
+
+        - Module summary: padding tightens to px-3 py-2.5 on mobile and
+          relaxes to sm:px-4 sm:py-3 on >=sm. min-h-[44px] keeps the row
+          tappable. The numeric chip is h-7 w-7 on mobile so the row
+          target is comfortable; sm:h-6 sm:w-6 restores the desktop chip.
+        - Unit row: still min-h-[44px] but the outer padding tightens
+          (mobile px-2 py-1.5; sm restores px-3 py-2.5). The clickable
+          link itself remains py-2 (so the underlying tap target is
+          still >=44px).
+        - Lesson count: hidden on mobile (hidden sm:inline). When a
+          module has zero units we suppress the awkward "0 lessons"
+          string entirely (issue #483 zero-count requirement).
+      {% endcomment %}
       <div class="mb-12">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Syllabus</h2>
         <div class="space-y-1">
           {% for module in modules %}
           <details class="module-details rounded-lg border border-border bg-card">
-            <summary class="cursor-pointer list-none flex items-center gap-3 px-4 py-3 text-base font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset">
-              <span class="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent flex-shrink-0">{{ forloop.counter }}</span>
+            <summary class="cursor-pointer list-none flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-base font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset min-h-[44px]" data-testid="syllabus-module-summary">
+              <span class="flex h-7 w-7 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent flex-shrink-0">{{ forloop.counter }}</span>
               <span class="flex-1 min-w-0 truncate">{{ module.title }}</span>
               {% with module_total=module.units.count module_completed=completed_count_by_module|dict_get:module.id %}
+              {% if module_total %}
               <span class="hidden sm:inline text-xs text-muted-foreground mr-2 flex-shrink-0" data-testid="module-lesson-count">{% if module_completed %}{{ module_completed }}/{{ module_total }}{% else %}{{ module_total }}{% endif %} lessons</span>
+              {% endif %}
               {% endwith %}
               <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200 module-chevron flex-shrink-0"></i>
             </summary>
-            <div class="px-4 pb-3 space-y-1">
+            <div class="px-2 pb-2 sm:px-4 sm:pb-3 space-y-0.5 sm:space-y-1">
               {% for unit in module.units.all %}
               {% comment %}
                 Issue #248: locked unit rows are clickable. The unit detail
@@ -224,7 +241,7 @@
                 we let them click through, see what they'd be unlocking,
                 and then convert. The lock icon sets expectation up-front.
               {% endcomment %}
-              <div class="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted/50 transition-colors min-h-[44px]">
+              <div class="flex items-center gap-3 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2.5 hover:bg-muted/50 transition-colors min-h-[44px]" data-testid="syllabus-unit-row">
                 {% if unit.pk in completed_unit_ids %}
                 <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
                 {% elif unit.is_preview %}

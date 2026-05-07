@@ -90,6 +90,11 @@
       if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
+    // Issue #483: there are now two completion buttons in the DOM —
+    // the mobile-only stand-alone button and the desktop-inline button.
+    // Both share the same data-completion-url, so a click on either
+    // should re-render every matching button so the mobile and desktop
+    // copies stay visually in sync after a toggle.
     buttons.forEach(function(btn) {
       btn.addEventListener('click', function() {
         fetch(btn.dataset.completionUrl, {
@@ -101,7 +106,14 @@
           credentials: 'same-origin',
         })
         .then(function(response) { return response.json(); })
-        .then(function(data) { renderButton(btn, Boolean(data.completed)); });
+        .then(function(data) {
+          var completed = Boolean(data.completed);
+          var url = btn.dataset.completionUrl;
+          var siblings = document.querySelectorAll(
+            '[data-completion-toggle][data-completion-url="' + url + '"]'
+          );
+          siblings.forEach(function(sib) { renderButton(sib, completed); });
+        });
       });
     });
   })();

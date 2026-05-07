@@ -411,9 +411,17 @@
               {% if poll.description %}
               <p class="mt-1 text-sm text-muted-foreground line-clamp-2">{{ poll.description|truncatechars:100 }}</p>
               {% endif %}
-              <div class="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+              {% comment %}
+                Issue #483: suppress zero-count rows so we never render
+                awkward "0 votes" / "0 options" copy on the dashboard.
+              {% endcomment %}
+              <div class="mt-3 flex items-center gap-3 text-xs text-muted-foreground" data-testid="poll-counts">
+                {% if poll.total_votes %}
                 <span>{{ poll.total_votes }} vote{{ poll.total_votes|pluralize }}</span>
+                {% endif %}
+                {% if poll.options_count %}
                 <span>{{ poll.options_count }} option{{ poll.options_count|pluralize }}</span>
+                {% endif %}
               </div>
             </a>
             {% endfor %}

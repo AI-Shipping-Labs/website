@@ -1,23 +1,53 @@
+{% comment %}
+  Reader bottom navigation (issue #483).
+
+  Mobile (<sm): Mark-complete is rendered as a full-width primary action
+  on its own row, ABOVE the prev/next pair. This keeps the most
+  important "I'm done" action easy to find after reading the body and
+  prevents it from being stranded between the prev/next links.
+
+  Desktop (>=sm): the historical layout is preserved — prev on the
+  left, mark-complete inline, and next pushed right with `sm:ml-auto`.
+{% endcomment %}
 {% if prev_item_url or next_item_url or user_authenticated %}
-<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 border-t border-border pt-8 mt-8">
-  {% if prev_item_url %}
-  <a href="{{ prev_item_url }}"
-     class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted min-w-0"
-     data-testid="{{ bottom_prev_testid }}">
-    <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
-    <span class="truncate">{{ prev_item_title }}</span>
-  </a>
+<div class="border-t border-border pt-8 mt-8" data-testid="reader-bottom-nav">
+  {% if user_authenticated %}
+  {% comment %}
+    Mobile-only stand-alone mark-complete row. Hidden on sm+ where the
+    button is rendered inline below. The DOM contains both the mobile
+    and desktop placements; the completion-toggle JS attaches to every
+    [data-completion-toggle] so both stay in sync.
+  {% endcomment %}
+  <div class="sm:hidden mb-4" data-testid="reader-bottom-completion-mobile">
+    {% include "content/reader/_completion_button.html" with completion_button_id_suffix="-mobile" completion_button_full_width=True %}
+  </div>
   {% endif %}
 
-  {% include "content/reader/_completion_button.html" %}
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+    {% if prev_item_url %}
+    <a href="{{ prev_item_url }}"
+       class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted min-w-0 min-h-[44px]"
+       data-testid="{{ bottom_prev_testid }}">
+      <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
+      <span class="truncate">{{ prev_item_title }}</span>
+    </a>
+    {% endif %}
 
-  {% if next_item_url %}
-  <a href="{{ next_item_url }}"
-     class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0"
-     data-testid="{{ bottom_next_testid }}">
-    <span class="truncate">Next: {{ next_item_title }}</span>
-    <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
-  </a>
-  {% endif %}
+    {# Desktop-only inline placement of the mark-complete button. #}
+    {% if user_authenticated %}
+    <div class="hidden sm:block" data-testid="reader-bottom-completion-desktop">
+      {% include "content/reader/_completion_button.html" %}
+    </div>
+    {% endif %}
+
+    {% if next_item_url %}
+    <a href="{{ next_item_url }}"
+       class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0 min-h-[44px]"
+       data-testid="{{ bottom_next_testid }}">
+      <span class="truncate">Next: {{ next_item_title }}</span>
+      <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
+    </a>
+    {% endif %}
+  </div>
 </div>
 {% endif %}

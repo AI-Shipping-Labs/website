@@ -243,6 +243,57 @@ class GetActivitiesTest(TestCase):
         self.assertEqual(len(shared), 1)
         self.assertEqual(shared[0]['icon'], 'a')  # first occurrence wins
 
+    def test_duplicate_activity_does_not_skip_later_unique_activity_in_same_tier(self):
+        """Regression: a duplicate title must not stop scanning the rest of the tier's activities.
+
+        If the dedup branch in get_activities() were `break` instead of `continue`,
+        the distinct 'Unique After Dup' activity would be dropped. This test pins
+        that behavior so a mutation flipping `continue` -> `break` is detected.
+        """
+        SiteConfig.objects.update_or_create(
+            key='tiers',
+            defaults={'data': [
+                {
+                    'name': 'Basic',
+                    'stripe_key': 'basic',
+                    'tagline': 'T',
+                    'price_monthly': 20,
+                    'price_annual': 200,
+                    'hook': 'H',
+                    'description': 'D',
+                    'positioning': 'P',
+                    'highlighted': False,
+                    'activities': [
+                        {'title': 'Shared', 'icon': 'a', 'description': 'First.', 'features': []},
+                    ],
+                },
+                {
+                    'name': 'Main',
+                    'stripe_key': 'main',
+                    'tagline': 'T',
+                    'price_monthly': 50,
+                    'price_annual': 500,
+                    'hook': 'H',
+                    'description': 'D',
+                    'positioning': 'P',
+                    'highlighted': True,
+                    'activities': [
+                        # Duplicate of a Basic-tier title comes FIRST in this tier...
+                        {'title': 'Shared', 'icon': 'b', 'description': 'Duplicate.', 'features': []},
+                        # ...followed by a unique title that must still be included.
+                        {'title': 'Unique After Dup', 'icon': 'c', 'description': 'Unique.', 'features': []},
+                    ],
+                },
+            ]},
+        )
+        activities = get_activities()
+        titles = [a['title'] for a in activities]
+        # The unique activity that comes AFTER the duplicate must still be present.
+        self.assertIn('Unique After Dup', titles)
+        # And it should be tagged with the Main tier (and any higher tiers, none here).
+        unique = next(a for a in activities if a['title'] == 'Unique After Dup')
+        self.assertEqual(unique['tiers'], ['main'])
+
 
 class ProductionYamlTest(TestCase):
     """Tests that production tiers.yaml data (loaded into DB) matches expected structure."""

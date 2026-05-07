@@ -109,20 +109,44 @@ Local pytest `--durations` runs were grouped by app. Tables below merge the top-
 group and rank globally. "Phase" is pytest's classification: `setup` is `setUp`/`setUpTestData`,
 `call` is the test method.
 
-### 3a. Top 10 modules by sampled-duration sum
+### 3a. Top 30 modules by sampled-duration sum
 
-| Rank | Module | # tests in top-N | Sum of sampled durations (s) | Suspected cause |
-|---|---|---|---|---|
-| 1 | `studio/tests/test_user_list_pagination.py` | 7 | 84.19 | bulk creating 49–150 users in `setUpTestData` per pagination class |
-| 2 | `content/tests/test_course_admin.py` | 23 | 18.37 | `ReorderModulesApiTest` and `ReorderUnitsApiTest` each issue 13/10 PUTs through staff client |
-| 3 | `content/tests/test_dashboard.py` | 18 | 8.01 | dashboard fan-out: `ContinueLearningTest`, `WelcomeBannerTest`, `SlackJoinPromptTest` each render the full dashboard |
-| 4 | `studio/tests/test_notifications.py` | 8 | 7.21 | `StudioNotificationLogTest` paginates through batches |
-| 5 | `studio/tests/test_campaigns.py` | 7 | 6.41 | recipient-count rendering touches user/tag tables |
-| 6 | `studio/tests/test_enrollments.py` | 8 | 6.25 | course-scoped enrollment list per status filter |
-| 7 | `content/tests/test_courses.py` | 6 | 5.82 | course/module/unit setup chains |
-| 8 | `studio/tests/test_dashboard_sprints_tile.py` | 2 | 5.68 | `StudioDashboardSprintsTileQueryCountTest::test_dashboard_query_count_does_not_scale_with_sprint_or_plan_count` (call=4.33 s) seeds many sprints + plans |
-| 9 | `accounts/tests/test_email_auth.py` | 9 | 5.67 | each test hashes a real password via PBKDF2 |
-| 10 | `email_app/tests/test_newsletter_subscriber_migration.py` | 2 | 5.00 | applies a real migration in a clean DB to assert table state |
+The table uses the union of pytest `--durations=N` rows captured across app-level runs, so `# tests`
+means tests visible in the sampled top-N output, not the full module test count. The ranking is
+still useful because it identifies where the measurable slow tail is concentrated.
+
+| Rank | Module | # tests | Total time (s) | Mean per test (s) | Suspected cause |
+|---|---|---|---|---|---|
+| 1 | `studio/tests/test_user_list_pagination.py` | 7 | 84.19 | 12.03 | bulk creating 49–150 users in `setUpTestData` per pagination class |
+| 2 | `content/tests/test_course_admin.py` | 23 | 18.37 | 0.80 | `ReorderModulesApiTest` and `ReorderUnitsApiTest` each issue 13/10 PUTs through staff client |
+| 3 | `content/tests/test_dashboard.py` | 18 | 8.01 | 0.45 | dashboard fan-out: `ContinueLearningTest`, `WelcomeBannerTest`, `SlackJoinPromptTest` each render the full dashboard |
+| 4 | `studio/tests/test_notifications.py` | 8 | 7.21 | 0.90 | notification log and notification-create tests build batch data and render staff pages |
+| 5 | `studio/tests/test_campaigns.py` | 7 | 6.41 | 0.92 | recipient-count rendering touches user/tag tables |
+| 6 | `studio/tests/test_enrollments.py` | 8 | 6.25 | 0.78 | course-scoped enrollment list per status filter |
+| 7 | `content/tests/test_courses.py` | 6 | 5.82 | 0.97 | first-test warm-up plus course/module/unit setup chains |
+| 8 | `studio/tests/test_dashboard_sprints_tile.py` | 2 | 5.68 | 2.84 | query-count test intentionally seeds many sprints + plans |
+| 9 | `accounts/tests/test_email_auth.py` | 9 | 5.67 | 0.63 | each auth mutation hashes a real password via PBKDF2 |
+| 10 | `email_app/tests/test_newsletter_subscriber_migration.py` | 2 | 5.00 | 2.50 | applies a real migration in a clean DB to assert table state |
+| 11 | `integrations/tests/test_github_sync.py` | 8 | 4.59 | 0.57 | content sync round-trips create/update/delete several content types |
+| 12 | `studio/tests/test_access.py` | 1 | 3.85 | 3.85 | first-test warm-up plus staff/non-staff access matrix setup |
+| 13 | `integrations/tests/test_workshop_sync.py` | 7 | 3.80 | 0.54 | workshop sync idempotency and stale-cleanup round-trips |
+| 14 | `content/tests/test_access_registered.py` | 1 | 3.61 | 3.61 | first-test warm-up artifact |
+| 15 | `integrations/tests/test_announcement_banner.py` | 1 | 3.61 | 3.61 | first-test warm-up artifact |
+| 16 | `accounts/tests/test_account.py` | 1 | 3.55 | 3.55 | first-test warm-up artifact |
+| 17 | `events/tests/test_calendar_invite.py` | 1 | 3.54 | 3.54 | first-test warm-up artifact |
+| 18 | `content/tests/test_course_units.py` | 6 | 3.23 | 0.54 | course-unit API and detail-view access checks |
+| 19 | `integrations/tests/test_course_rename_orphan.py` | 4 | 3.22 | 0.81 | course sync rename/orphan rescue round-trips |
+| 20 | `plans/tests/test_views_cohort_board_progress.py` | 4 | 2.97 | 0.74 | cohort board progress rows seed multiple plans/users |
+| 21 | `content/tests/test_cohorts.py` | 6 | 2.87 | 0.48 | cohort display and enrollment setup |
+| 22 | `accounts/tests/test_tier_override.py` | 5 | 2.80 | 0.56 | tier override paths render dashboard/account/studio views |
+| 23 | `content/tests/test_course_purchase.py` | 5 | 2.72 | 0.54 | Stripe-product and purchase-button setup |
+| 24 | `studio/tests/test_utm_analytics.py` | 2 | 2.64 | 1.32 | UTM detail conversion rows and MRR aggregation |
+| 25 | `studio/tests/test_user_list_name_display.py` | 3 | 2.56 | 0.85 | user-list row-dict and search setup |
+| 26 | `notifications/tests/test_service.py` | 4 | 2.47 | 0.62 | notification fan-out across users and content levels |
+| 27 | `studio/tests/test_course_access.py` | 3 | 2.33 | 0.78 | course-access list and permission checks |
+| 28 | `studio/tests/test_subscribers.py` | 2 | 2.01 | 1.00 | user-list chip/export setup |
+| 29 | `notifications/tests/test_api.py` | 3 | 1.88 | 0.63 | notification API scope checks |
+| 30 | `plans/tests/test_visibility_queryset.py` | 2 | 1.87 | 0.94 | first-test warm-up plus visibility queryset fixtures |
 
 ### 3b. Top 15 slowest classes (sum of sampled durations)
 
@@ -307,11 +331,11 @@ one-sentence justification.
 
 | Proposal | Estimated savings | Risk | Effort | Follow-up issue |
 |---|---|---|---|---|
-| P1. Reduce seed sizes in `studio/tests/test_user_list_pagination.py` and `playwright_tests/test_studio_users_name_layout.py` to the minimum needed to assert pager arithmetic, push pager constants down | Django: ~70 s (Section 3c rows 1–6 sum to 83 s of `setUpTestData`; cutting from 49–150 to ~5 users via a smaller `paginate_by` for the test or via a parameterized helper saves ~85% of that). Playwright: ~12 s (Section 4 rows 1–2 sum to 18.7 s, ~65% reducible). Total CI savings: ~80–82 s of unit-test wall, ~12 s of Playwright wall. | low | medium | TBD (filed below) |
-| P2. Convert remaining `setUp` to `setUpTestData` for read-only fixtures across the high-impact `content/tests/` files (Step 6a of remediation plan, partly complete) | 30–50% of the remaining content-app non-warm-up time according to Step 6i of the 2026-03 plan; concrete items: `test_courses.py` (12 setUp), `test_seo.py` (12 setUp), `test_tags.py` (12 setUp), `test_access_control.py` (12 setUp). Each setUp → setUpTestData saves a write per test method. Estimate 30–60 s of unit-test wall in aggregate, hard to source more precisely without an instrumentation pass. Treat as 30 s lower bound. | low | medium | TBD (filed below) |
-| P3. Replace the seven Playwright tests in §5 that just do `page.goto` + DOM-text-assert with Django `assertContains` (`html=True`) tests | 5–8 s of Playwright wall (per §5 cumulative). Plus removes seven warm-up costs from the PW session. Keep PW for the user flows that genuinely need a browser. | low | small | TBD (filed below) |
-| P4. Move `playwright_tests/test_database_guard.py` to a regular Django test module (Rule 10 violation; never opens a browser) | ~0 s direct (the tests still run) but reduces PW collection footprint | low | small | TBD (filed below) |
-| P5. Drop the `Run migrations` step from `deploy-dev.yml` (test runner already migrates the test DB; the production DB is not touched here) | ~6 s per CI job (median, p90 7 s) | low (the test runner handles migrations) | small (one-line workflow change — but per Non-goals of issue #466, NOT to be done in this audit; file as separate issue) | TBD (filed below) |
+| P1. Reduce seed sizes in `studio/tests/test_user_list_pagination.py` and `playwright_tests/test_studio_users_name_layout.py` to the minimum needed to assert pager arithmetic, push pager constants down | Django: ~70 s (Section 3c rows 1–6 sum to 83 s of `setUpTestData`; cutting from 49–150 to ~5 users via a smaller `paginate_by` for the test or via a parameterized helper saves ~85% of that). Playwright: ~12 s (Section 4 rows 1–2 sum to 18.7 s, ~65% reducible). Total CI savings: ~80–82 s of unit-test wall, ~12 s of Playwright wall. | low | medium | [#467](https://github.com/AI-Shipping-Labs/website/issues/467) |
+| P2. Convert remaining `setUp` to `setUpTestData` for read-only fixtures across the high-impact `content/tests/` files (Step 6a of remediation plan, partly complete) | 30–50% of the remaining content-app non-warm-up time according to Step 6i of the 2026-03 plan; concrete items: `test_courses.py` (12 setUp), `test_seo.py` (12 setUp), `test_tags.py` (12 setUp), `test_access_control.py` (12 setUp). Each setUp → setUpTestData saves a write per test method. Estimate 30–60 s of unit-test wall in aggregate, hard to source more precisely without an instrumentation pass. Treat as 30 s lower bound. | low | medium | [#468](https://github.com/AI-Shipping-Labs/website/issues/468) |
+| P3. Replace the seven Playwright tests in §5 that just do `page.goto` + DOM-text-assert with Django `assertContains` (`html=True`) tests | 5–8 s of Playwright wall (per §5 cumulative). Plus removes seven warm-up costs from the PW session. Keep PW for the user flows that genuinely need a browser. | low | small | [#469](https://github.com/AI-Shipping-Labs/website/issues/469) |
+| P4. Move `playwright_tests/test_database_guard.py` to a regular Django test module (Rule 10 violation; never opens a browser) | ~0 s direct (the tests still run) but reduces PW collection footprint | low | small | [#470](https://github.com/AI-Shipping-Labs/website/issues/470) |
+| P5. Drop the `Run migrations` step from `deploy-dev.yml` (test runner already migrates the test DB; the production DB is not touched here) | ~6 s per CI job (median, p90 7 s) | low (the test runner handles migrations) | small (one-line workflow change — but per Non-goals of issue #466, NOT to be done in this audit; file as separate issue) | [#471](https://github.com/AI-Shipping-Labs/website/issues/471) |
 
 P1 alone is the highest-value single change in this report. It is concentrated in one file; the
 83 s figure is real and measurable today.
@@ -393,11 +417,11 @@ issue #466.
 
 | Proposal | Issue | Title |
 |---|---|---|
-| P1 (pagination fixture sizes) | #467 | Reduce fixture sizes in studio pagination tests (audit ci followup #466 P1) |
-| P2 (`setUp` → `setUpTestData` second pass) | #468 | Convert remaining setUp to setUpTestData in heavy content tests (audit ci followup #466 P2) |
-| P3 (drop PW tests duplicated by server-rendered Django) | #469 | Replace pure server-rendered Playwright tests with Django assertContains (audit ci followup #466 P3) |
-| P4 (move `test_database_guard.py` out of `playwright_tests/`) | #470 | Move test_database_guard.py out of playwright_tests/ (audit ci followup #466 P4) |
-| P5 (drop redundant `Run migrations` step in `deploy-dev.yml`) | #471 | Drop redundant 'Run migrations' step from deploy-dev.yml (audit ci followup #466 P5) |
-| Mutation testing pilot on `content/tier_config.py` | #472 | Mutation testing pilot on content/tier_config.py (audit ci followup #466) |
+| P1 (pagination fixture sizes) | [#467](https://github.com/AI-Shipping-Labs/website/issues/467) | Reduce fixture sizes in studio pagination tests (audit ci followup #466 P1) |
+| P2 (`setUp` → `setUpTestData` second pass) | [#468](https://github.com/AI-Shipping-Labs/website/issues/468) | Convert remaining setUp to setUpTestData in heavy content tests (audit ci followup #466 P2) |
+| P3 (drop PW tests duplicated by server-rendered Django) | [#469](https://github.com/AI-Shipping-Labs/website/issues/469) | Replace pure server-rendered Playwright tests with Django assertContains (audit ci followup #466 P3) |
+| P4 (move `test_database_guard.py` out of `playwright_tests/`) | [#470](https://github.com/AI-Shipping-Labs/website/issues/470) | Move test_database_guard.py out of playwright_tests/ (audit ci followup #466 P4) |
+| P5 (drop redundant `Run migrations` step in `deploy-dev.yml`) | [#471](https://github.com/AI-Shipping-Labs/website/issues/471) | Drop redundant 'Run migrations' step from deploy-dev.yml (audit ci followup #466 P5) |
+| Mutation testing pilot on `content/tier_config.py` | [#472](https://github.com/AI-Shipping-Labs/website/issues/472) | Mutation testing pilot on content/tier_config.py (audit ci followup #466) |
 
 All six issues are open with `needs grooming` and reference back to this audit (#466).

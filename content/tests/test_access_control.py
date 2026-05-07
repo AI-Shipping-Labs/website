@@ -352,8 +352,10 @@ class GetTeaserTextTest(TestCase):
 class BuildGatingContextTest(TierSetupMixin, TestCase):
     """Test build_gating_context."""
 
-    def setUp(self):
-        self.article = Article.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.article = Article.objects.create(
             title='Gated Article', slug='gated', date=date(2025, 1, 1),
             description='This is the description',
             required_level=LEVEL_BASIC,
@@ -475,9 +477,10 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
     playwright_tests/test_access_control.py.
     """
 
-    def setUp(self):
-        self.client = Client()
-        self.basic_article = Article.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.basic_article = Article.objects.create(
             title='Basic Article', slug='basic-article',
             description='Basic description',
             content_html='<p>Full basic content</p>',
@@ -500,9 +503,10 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
     playwright_tests/test_access_control.py::TestScenario7BasicMemberBlockedFromMainRecording.
     """
 
-    def setUp(self):
-        self.client = Client()
-        self.gated_recording = Event.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.gated_recording = Event.objects.create(
             title='Gated Recording', slug='gated-recording',
             description='Recording description',
             recording_url='https://youtube.com/watch?v=test',
@@ -525,9 +529,10 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
     playwright_tests/test_access_control.py.
     """
 
-    def setUp(self):
-        self.client = Client()
-        self.gated_project = Project.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.gated_project = Project.objects.create(
             title='Gated Project', slug='gated-project',
             description='Project description',
             content_html='<p>Secret project content</p>',
@@ -583,9 +588,10 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
     playwright_tests/test_access_control.py.
     """
 
-    def setUp(self):
-        self.client = Client()
-        self.gated_tutorial = Tutorial.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.gated_tutorial = Tutorial.objects.create(
             title='Gated Tutorial', slug='gated-tutorial',
             description='Tutorial description',
             content_html='<p>Secret tutorial content</p>',
@@ -801,12 +807,14 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
 class AccessTemplateTagsTest(TierSetupMixin, TestCase):
     """Test the access_tags template tags."""
 
-    def setUp(self):
-        self.open_article = Article.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.open_article = Article.objects.create(
             title='Open', slug='open-tt', date=date(2025, 1, 1),
             required_level=LEVEL_OPEN,
         )
-        self.basic_article = Article.objects.create(
+        cls.basic_article = Article.objects.create(
             title='Basic', slug='basic-tt', date=date(2025, 1, 1),
             required_level=LEVEL_BASIC,
         )

@@ -92,8 +92,9 @@ class CourseModelTest(TestCase):
 class ModuleModelTest(TestCase):
     """Test Module model fields."""
 
-    def setUp(self):
-        self.course = Course.objects.create(title='Course', slug='course')
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(title='Course', slug='course')
 
     def test_create_module(self):
         module = Module.objects.create(
@@ -115,10 +116,11 @@ class ModuleModelTest(TestCase):
 class UnitModelTest(TestCase):
     """Test Unit model fields and methods."""
 
-    def setUp(self):
-        self.course = Course.objects.create(title='Course', slug='course')
-        self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=1,
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(title='Course', slug='course')
+        cls.module = Module.objects.create(
+            course=cls.course, title='Module', slug='module', sort_order=1,
         )
 
     def test_create_unit(self):
@@ -173,14 +175,15 @@ class UnitModelTest(TestCase):
 class UserCourseProgressModelTest(TestCase):
     """Test UserCourseProgress model."""
 
-    def setUp(self):
-        self.user = User.objects.create_user(email='test@example.com')
-        self.course = Course.objects.create(title='Course', slug='course')
-        self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=1,
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(email='test@example.com')
+        cls.course = Course.objects.create(title='Course', slug='course')
+        cls.module = Module.objects.create(
+            course=cls.course, title='Module', slug='module', sort_order=1,
         )
-        self.unit = Unit.objects.create(
-            module=self.module, title='Unit', slug='unit', sort_order=1,
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Unit', slug='unit', sort_order=1,
         )
 
     def test_create_progress(self):
@@ -205,22 +208,23 @@ class UserCourseProgressModelTest(TestCase):
 class CourseTotalAndCompletedTest(TestCase):
     """Test Course.total_units() and Course.completed_units()."""
 
-    def setUp(self):
-        self.user = User.objects.create_user(email='progress@example.com')
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(email='progress@example.com')
+        cls.course = Course.objects.create(
             title='Progress Course', slug='progress',
         )
-        self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=1,
+        cls.module = Module.objects.create(
+            course=cls.course, title='Module', slug='module', sort_order=1,
         )
-        self.unit1 = Unit.objects.create(
-            module=self.module, title='Unit 1', slug='unit-1', sort_order=1,
+        cls.unit1 = Unit.objects.create(
+            module=cls.module, title='Unit 1', slug='unit-1', sort_order=1,
         )
-        self.unit2 = Unit.objects.create(
-            module=self.module, title='Unit 2', slug='unit-2', sort_order=2,
+        cls.unit2 = Unit.objects.create(
+            module=cls.module, title='Unit 2', slug='unit-2', sort_order=2,
         )
-        self.unit3 = Unit.objects.create(
-            module=self.module, title='Unit 3', slug='unit-3', sort_order=3,
+        cls.unit3 = Unit.objects.create(
+            module=cls.module, title='Unit 3', slug='unit-3', sort_order=3,
         )
 
     def test_total_units(self):
@@ -257,43 +261,44 @@ class CourseGetNextUnitForTest(TestCase):
     user. Returns None if all units are done.
     """
 
-    def setUp(self):
-        self.user = User.objects.create_user(email='nextunit@example.com')
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(email='nextunit@example.com')
+        cls.course = Course.objects.create(
             title='Next Unit Course', slug='next-unit-course',
         )
         # Two modules, three units each, deliberately created out of
         # sort_order to prove the method respects sort_order rather than
         # creation order.
-        self.module2 = Module.objects.create(
-            course=self.course, title='Module 2', slug='module-2', sort_order=2,
+        cls.module2 = Module.objects.create(
+            course=cls.course, title='Module 2', slug='module-2', sort_order=2,
         )
-        self.module1 = Module.objects.create(
-            course=self.course, title='Module 1', slug='module-1', sort_order=1,
+        cls.module1 = Module.objects.create(
+            course=cls.course, title='Module 1', slug='module-1', sort_order=1,
         )
         # Module 1 units (created out of order)
-        self.m1_u3 = Unit.objects.create(
-            module=self.module1, title='M1 U3', slug='m1-u3', sort_order=3,
+        cls.m1_u3 = Unit.objects.create(
+            module=cls.module1, title='M1 U3', slug='m1-u3', sort_order=3,
         )
-        self.m1_u1 = Unit.objects.create(
-            module=self.module1, title='M1 U1', slug='m1-u1', sort_order=1,
+        cls.m1_u1 = Unit.objects.create(
+            module=cls.module1, title='M1 U1', slug='m1-u1', sort_order=1,
         )
-        self.m1_u2 = Unit.objects.create(
-            module=self.module1, title='M1 U2', slug='m1-u2', sort_order=2,
+        cls.m1_u2 = Unit.objects.create(
+            module=cls.module1, title='M1 U2', slug='m1-u2', sort_order=2,
         )
         # Module 2 units
-        self.m2_u1 = Unit.objects.create(
-            module=self.module2, title='M2 U1', slug='m2-u1', sort_order=1,
+        cls.m2_u1 = Unit.objects.create(
+            module=cls.module2, title='M2 U1', slug='m2-u1', sort_order=1,
         )
-        self.m2_u2 = Unit.objects.create(
-            module=self.module2, title='M2 U2', slug='m2-u2', sort_order=2,
+        cls.m2_u2 = Unit.objects.create(
+            module=cls.module2, title='M2 U2', slug='m2-u2', sort_order=2,
         )
-        self.m2_u3 = Unit.objects.create(
-            module=self.module2, title='M2 U3', slug='m2-u3', sort_order=3,
+        cls.m2_u3 = Unit.objects.create(
+            module=cls.module2, title='M2 U3', slug='m2-u3', sort_order=3,
         )
-        self.canonical_order = [
-            self.m1_u1, self.m1_u2, self.m1_u3,
-            self.m2_u1, self.m2_u2, self.m2_u3,
+        cls.canonical_order = [
+            cls.m1_u1, cls.m1_u2, cls.m1_u3,
+            cls.m2_u1, cls.m2_u2, cls.m2_u3,
         ]
 
     def _complete(self, *units):
@@ -577,18 +582,19 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
 class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
     """Test access control on course detail page."""
 
-    def setUp(self):
-        self.client = Client()
-        self.paid_course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.paid_course = Course.objects.create(
             title='Paid Course', slug='paid-course',
             description='Paid course description.',
             status='published', required_level=LEVEL_MAIN,
         )
-        self.module = Module.objects.create(
-            course=self.paid_course, title='Module 1', slug='module-1', sort_order=1,
+        cls.module = Module.objects.create(
+            course=cls.paid_course, title='Module 1', slug='module-1', sort_order=1,
         )
-        self.unit = Unit.objects.create(
-            module=self.module, title='Lesson 1', slug='lesson-1', sort_order=1,
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Lesson 1', slug='lesson-1', sort_order=1,
         )
 
     def test_anonymous_sees_syllabus(self):
@@ -647,17 +653,18 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
 class FreeCourseAccessTest(TierSetupMixin, TestCase):
     """Test free course CTA behavior."""
 
-    def setUp(self):
-        self.client = Client()
-        self.free_course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.free_course = Course.objects.create(
             title='Free Course', slug='free-course',
             status='published', required_level=LEVEL_OPEN,
         )
-        self.module = Module.objects.create(
-            course=self.free_course, title='Module', slug='module', sort_order=1,
+        cls.module = Module.objects.create(
+            course=cls.free_course, title='Module', slug='module', sort_order=1,
         )
-        self.unit = Unit.objects.create(
-            module=self.module, title='Free Lesson', slug='free-lesson', sort_order=1,
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Free Lesson', slug='free-lesson', sort_order=1,
         )
 
     def test_anonymous_sees_signup_cta(self):
@@ -680,27 +687,28 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
 class CourseProgressDisplayTest(TierSetupMixin, TestCase):
     """Test progress bar display on course detail."""
 
-    def setUp(self):
-        self.client = Client()
-        self.user = User.objects.create_user(email='prog@test.com', password='testpass')
-        self.user.tier = self.premium_tier
-        self.user.save()
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.user = User.objects.create_user(email='prog@test.com', password='testpass')
+        cls.user.tier = cls.premium_tier
+        cls.user.save()
 
-        self.course = Course.objects.create(
+        cls.course = Course.objects.create(
             title='Progress Course', slug='progress-course',
             status='published', required_level=LEVEL_OPEN,
         )
-        self.module = Module.objects.create(
-            course=self.course, title='Module', slug='module', sort_order=1,
+        cls.module = Module.objects.create(
+            course=cls.course, title='Module', slug='module', sort_order=1,
         )
-        self.unit1 = Unit.objects.create(
-            module=self.module, title='Unit 1', slug='unit-1', sort_order=1,
+        cls.unit1 = Unit.objects.create(
+            module=cls.module, title='Unit 1', slug='unit-1', sort_order=1,
         )
-        self.unit2 = Unit.objects.create(
-            module=self.module, title='Unit 2', slug='unit-2', sort_order=2,
+        cls.unit2 = Unit.objects.create(
+            module=cls.module, title='Unit 2', slug='unit-2', sort_order=2,
         )
-        self.unit3 = Unit.objects.create(
-            module=self.module, title='Unit 3', slug='unit-3', sort_order=3,
+        cls.unit3 = Unit.objects.create(
+            module=cls.module, title='Unit 3', slug='unit-3', sort_order=3,
         )
 
     def test_shows_progress_count(self):
@@ -728,9 +736,10 @@ class CourseProgressDisplayTest(TierSetupMixin, TestCase):
 class ApiCoursesListTest(TierSetupMixin, TestCase):
     """Test GET /api/courses."""
 
-    def setUp(self):
-        self.client = Client()
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.course = Course.objects.create(
             title='API Course', slug='api-course',
             status='published', instructor_name='API Instructor',
             tags=['test'],
@@ -793,9 +802,10 @@ class ApiCoursesListTest(TierSetupMixin, TestCase):
 class ApiCourseDetailTest(TierSetupMixin, TestCase):
     """Test GET /api/courses/{slug}."""
 
-    def setUp(self):
-        self.client = Client()
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.course = Course.objects.create(
             title='API Detail', slug='api-detail',
             description='A detailed course.',
             status='published', instructor_name='Detail Instructor',
@@ -804,11 +814,11 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
             required_level=LEVEL_MAIN,
             discussion_url='https://slack.com/test',
         )
-        self.module = Module.objects.create(
-            course=self.course, title='Mod 1', slug='mod-1', sort_order=1,
+        cls.module = Module.objects.create(
+            course=cls.course, title='Mod 1', slug='mod-1', sort_order=1,
         )
-        self.unit = Unit.objects.create(
-            module=self.module, title='Unit 1', slug='unit-1', sort_order=1,
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Unit 1', slug='unit-1', sort_order=1,
             is_preview=True,
         )
 

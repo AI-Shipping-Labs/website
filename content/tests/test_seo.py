@@ -450,8 +450,9 @@ class OgTagsTest(TestCase):
 class MetaTagsInViewTest(TestCase):
     """Test that meta tags appear correctly in rendered pages."""
 
-    def setUp(self):
-        self.article = Article.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.article = Article.objects.create(
             title='SEO Test Article',
             slug='seo-test',
             description='This is a test article for SEO verification.',
@@ -507,8 +508,9 @@ class MetaTagsInViewTest(TestCase):
 class CourseDetailSEOTest(TestCase):
     """Test SEO meta tags on course detail page."""
 
-    def setUp(self):
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
             title='Python for AI',
             slug='python-for-ai',
             description='Learn Python for AI engineering.',
@@ -538,8 +540,9 @@ class CourseDetailSEOTest(TestCase):
 class RecordingDetailSEOTest(TestCase):
     """Test SEO meta tags on recording detail page."""
 
-    def setUp(self):
-        self.recording = Event.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.recording = Event.objects.create(
             title='AI Agents Workshop',
             slug='ai-agents-workshop',
             description='Building AI agents with tools.',
@@ -576,8 +579,9 @@ class RecordingDetailSEOTest(TestCase):
 class EventDetailSEOTest(TestCase):
     """Test SEO meta tags on event detail page."""
 
-    def setUp(self):
-        self.event = Event.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.event = Event.objects.create(
             title='Live Workshop',
             slug='live-workshop',
             description='A live coding workshop.',
@@ -657,9 +661,10 @@ class DescriptionTruncationTest(TestCase):
 class SitemapTest(TestCase):
     """Test sitemap generation at /sitemap.xml."""
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         # Open article (should be in sitemap)
-        self.open_article = Article.objects.create(
+        cls.open_article = Article.objects.create(
             title='Open Article',
             slug='open-article',
             description='An open article.',
@@ -669,7 +674,7 @@ class SitemapTest(TestCase):
             required_level=0,
         )
         # Gated article (should NOT be in sitemap)
-        self.gated_article = Article.objects.create(
+        cls.gated_article = Article.objects.create(
             title='Gated Article',
             slug='gated-article',
             description='A gated article.',
@@ -679,7 +684,7 @@ class SitemapTest(TestCase):
             required_level=1,
         )
         # Draft article (should NOT be in sitemap)
-        self.draft_article = Article.objects.create(
+        cls.draft_article = Article.objects.create(
             title='Draft Article',
             slug='draft-article',
             description='A draft article.',
@@ -688,33 +693,33 @@ class SitemapTest(TestCase):
             published=False,
         )
         # Published course (always in sitemap)
-        self.course = Course.objects.create(
+        cls.course = Course.objects.create(
             title='Test Course',
             slug='test-course',
             status='published',
         )
         # Draft course (should NOT be in sitemap)
-        self.draft_course = Course.objects.create(
+        cls.draft_course = Course.objects.create(
             title='Draft Course',
             slug='draft-course',
             status='draft',
         )
         # Event (non-draft)
-        self.event = Event.objects.create(
+        cls.event = Event.objects.create(
             title='Test Event',
             slug='test-event',
             start_datetime=timezone.now(),
             status='upcoming',
         )
         # Draft event (should NOT be in sitemap)
-        self.draft_event = Event.objects.create(
+        cls.draft_event = Event.objects.create(
             title='Draft Event',
             slug='draft-event',
             start_datetime=timezone.now(),
             status='draft',
         )
         # Open recording
-        self.recording = Event.objects.create(
+        cls.recording = Event.objects.create(
             title='Open Recording',
             slug='open-recording',
             start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 10, 12, 0)), status='completed',
@@ -723,7 +728,7 @@ class SitemapTest(TestCase):
             required_level=0,
         )
         # Gated recording
-        self.gated_recording = Event.objects.create(
+        cls.gated_recording = Event.objects.create(
             title='Gated Recording',
             slug='gated-recording',
             start_datetime=timezone.make_aware(timezone.datetime(2025, 5, 9, 12, 0)), status='completed',
@@ -732,7 +737,7 @@ class SitemapTest(TestCase):
             required_level=1,
         )
         # Project
-        self.project = Project.objects.create(
+        cls.project = Project.objects.create(
             title='Open Project',
             slug='open-project',
             date=date(2025, 6, 1),
@@ -740,7 +745,7 @@ class SitemapTest(TestCase):
             required_level=0,
         )
         # Tutorial
-        self.tutorial = Tutorial.objects.create(
+        cls.tutorial = Tutorial.objects.create(
             title='Open Tutorial',
             slug='open-tutorial',
             date=date(2025, 6, 1),

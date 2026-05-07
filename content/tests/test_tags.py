@@ -271,19 +271,19 @@ class TagsIndexViewTest(TestCase):
 class TagsDetailViewTest(TestCase):
     """Test GET /tags/{tag} shows all content with that tag."""
 
-    def setUp(self):
-        self.client = Client()
-        self.article = Article.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.article = Article.objects.create(
             title='Python Article', slug='python-art', date=date(2025, 6, 15),
             tags=['python', 'tutorial'], published=True,
             description='Python article description',
         )
-        self.recording = Event.objects.create(
+        cls.recording = Event.objects.create(
             title='Python Workshop', slug='python-ws', start_datetime=timezone.make_aware(timezone.datetime(2025, 6, 10, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['python', 'workshop'], published=True,
             description='Workshop description',
         )
-        self.project = Project.objects.create(
+        cls.project = Project.objects.create(
             title='AI Project', slug='ai-proj', date=date(2025, 6, 5),
             tags=['ai'], published=True,
             description='AI project description',
@@ -349,17 +349,17 @@ class TagsDetailViewTest(TestCase):
 class MultiTagFilteringBlogTest(TestCase):
     """Test multi-tag AND filtering on /blog."""
 
-    def setUp(self):
-        self.client = Client()
-        self.both = Article.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.both = Article.objects.create(
             title='Both Tags', slug='both-tags', date=date(2025, 6, 15),
             tags=['python', 'ai'], published=True,
         )
-        self.python_only = Article.objects.create(
+        cls.python_only = Article.objects.create(
             title='Python Only', slug='python-only', date=date(2025, 6, 14),
             tags=['python'], published=True,
         )
-        self.ai_only = Article.objects.create(
+        cls.ai_only = Article.objects.create(
             title='AI Only', slug='ai-only', date=date(2025, 6, 13),
             tags=['ai'], published=True,
         )
@@ -396,8 +396,8 @@ class MultiTagFilteringBlogTest(TestCase):
 class MultiTagFilteringRecordingsTest(TestCase):
     """Test multi-tag filtering on /events?filter=past."""
 
-    def setUp(self):
-        self.client = Client()
+    @classmethod
+    def setUpTestData(cls):
         Event.objects.create(
             title='Both R', slug='both-r', start_datetime=timezone.make_aware(timezone.datetime(2025, 1, 1, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['python', 'workshop'], published=True,
@@ -416,8 +416,8 @@ class MultiTagFilteringRecordingsTest(TestCase):
 class MultiTagFilteringProjectsTest(TestCase):
     """Test multi-tag filtering on /projects."""
 
-    def setUp(self):
-        self.client = Client()
+    @classmethod
+    def setUpTestData(cls):
         Project.objects.create(
             title='Both P', slug='both-p', date=date(2025, 1, 1),
             tags=['python', 'ai'], published=True,
@@ -436,8 +436,8 @@ class MultiTagFilteringProjectsTest(TestCase):
 class MultiTagFilteringCoursesTest(TestCase):
     """Test multi-tag filtering on /courses."""
 
-    def setUp(self):
-        self.client = Client()
+    @classmethod
+    def setUpTestData(cls):
         Course.objects.create(
             title='Both C', slug='both-c',
             tags=['python', 'ai'], status='published',
@@ -466,8 +466,8 @@ class MultiTagFilteringCoursesTest(TestCase):
 class MultiTagFilteringDownloadsTest(TestCase):
     """Test multi-tag filtering on /downloads."""
 
-    def setUp(self):
-        self.client = Client()
+    @classmethod
+    def setUpTestData(cls):
         Download.objects.create(
             title='Both D', slug='both-d',
             file_url='https://example.com/file.pdf',
@@ -488,8 +488,8 @@ class MultiTagFilteringDownloadsTest(TestCase):
 class MultiTagFilteringResourcesTest(TestCase):
     """Test multi-tag filtering on /resources."""
 
-    def setUp(self):
-        self.client = Client()
+    @classmethod
+    def setUpTestData(cls):
         CuratedLink.objects.create(
             item_id='both-l', title='Both L',
             url='https://example.com', category='tools',
@@ -607,16 +607,16 @@ class TagRuleAdminTest(TestCase):
 class TagRuleInjectionBlogTest(TestCase):
     """Test that TagRules inject components on blog detail pages."""
 
-    def setUp(self):
-        self.client = Client()
-        self.article = Article.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.article = Article.objects.create(
             title='AI Article', slug='ai-article',
             date=date(2025, 6, 15),
             content_markdown='Some content here.',
             tags=['ai-engineer', 'python'],
             published=True,
         )
-        self.rule = TagRule.objects.create(
+        cls.rule = TagRule.objects.create(
             tag='ai-engineer',
             component_type='course_promo',
             component_config={
@@ -673,9 +673,9 @@ class TagRuleInjectionBlogTest(TestCase):
 class TagRuleInjectionProjectTest(TestCase):
     """Test that TagRules inject components on project detail pages."""
 
-    def setUp(self):
-        self.client = Client()
-        self.project = Project.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.project = Project.objects.create(
             title='AI Project', slug='ai-project',
             date=date(2025, 6, 15),
             content_markdown='Project content.',
@@ -702,9 +702,9 @@ class TagRuleInjectionProjectTest(TestCase):
 class TagRuleInjectionRecordingTest(TestCase):
     """Test that TagRules inject components on recording detail pages."""
 
-    def setUp(self):
-        self.client = Client()
-        self.recording = Event.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.recording = Event.objects.create(
             title='AI Recording', slug='ai-recording',
             start_datetime=timezone.make_aware(timezone.datetime(2025, 6, 15, 12, 0)), status='completed', recording_url='https://youtube.com/watch?v=test',
             tags=['ai-engineer'],

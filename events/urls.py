@@ -2,6 +2,7 @@ from django.urls import path
 
 from events.views.api import register_for_event, unregister_from_event
 from events.views.pages import (
+    event_calendar_ics,
     event_detail,
     event_join_redirect,
     events_calendar,
@@ -17,6 +18,11 @@ urlpatterns = [
         name='events_calendar_month',
     ),
     path('events/<slug:slug>/join', event_join_redirect, name='event_join'),
+    path(
+        'events/<slug:slug>/calendar.ics',
+        event_calendar_ics,
+        name='event_calendar_ics',
+    ),
     path('events/<slug:slug>', event_detail, name='event_detail'),
     # API endpoints for registration
     path(

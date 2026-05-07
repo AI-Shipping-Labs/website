@@ -22,7 +22,8 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
-from events.models import Event, EventRegistration
+from content.models import Instructor
+from events.models import Event, EventInstructor, EventRegistration
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -487,7 +488,12 @@ class EventDetailPageTest(TestCase):
 
     def test_anonymous_sees_sign_in_cta(self):
         response = self.client.get('/events/detail-event')
+        # Issue #484: copy explains that an account is required and what
+        # account creation implies (newsletter / occasional updates).
+        self.assertContains(response, 'A free account is required to register')
         self.assertContains(response, 'Sign in to register')
+        self.assertContains(response, 'Create free account')
+        self.assertContains(response, 'newsletter')
         self.assertContains(response, '/accounts/login/?next=/events/detail-event')
         self.assertContains(response, '/accounts/signup/?next=/events/detail-event')
 
@@ -1072,3 +1078,204 @@ class EventsListRegisteredBadgeTest(TestCase):
         self.assertEqual(len(response.context['registered_event_ids']), 0)
         # The "Registered" badge text should not appear
         self.assertNotContains(response, 'Registered')
+
+
+# --- Issue #484: improved event detail / registration confirmation ---
+
+
+class EventDetailCoverImageTest(TestCase):
+    """Issue #484: event detail page renders cover image with fallback."""
+
+    def test_cover_image_renders_when_set(self):
+        Event.objects.create(
+            title='With Cover',
+            slug='with-cover',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            cover_image_url='https://cdn.example.com/cover.jpg',
+        )
+        response = self.client.get('/events/with-cover')
+        self.assertContains(response, 'data-testid="event-cover-image"')
+        self.assertContains(response, 'https://cdn.example.com/cover.jpg')
+        self.assertNotContains(response, 'data-testid="event-cover-fallback"')
+
+    def test_decorative_fallback_renders_when_no_cover(self):
+        Event.objects.create(
+            title='No Cover',
+            slug='no-cover',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+        )
+        response = self.client.get('/events/no-cover')
+        self.assertContains(response, 'data-testid="event-cover-fallback"')
+        self.assertNotContains(response, 'data-testid="event-cover-image"')
+
+
+class EventDetailInstructorTest(TestCase):
+    """Issue #484: event detail page shows speaker / instructor info."""
+
+    def test_instructor_rendered_when_linked(self):
+        instructor = Instructor.objects.create(
+            instructor_id='ada-lovelace',
+            name='Ada Lovelace',
+            status='published',
+        )
+        event = Event.objects.create(
+            title='Speaker Event',
+            slug='speaker-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+        )
+        EventInstructor.objects.create(
+            event=event, instructor=instructor, position=0,
+        )
+        response = self.client.get('/events/speaker-event')
+        self.assertContains(response, 'data-testid="event-instructors"')
+        self.assertContains(response, 'Ada Lovelace')
+
+    def test_no_instructor_block_when_unlinked(self):
+        Event.objects.create(
+            title='No Speaker',
+            slug='no-speaker',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+        )
+        response = self.client.get('/events/no-speaker')
+        self.assertNotContains(response, 'data-testid="event-instructors"')
+
+
+class EventDetailRegisteredConfirmationTest(TierSetupMixin, TestCase):
+    """Issue #484: post-registration confirmation surfaces email + ICS + next steps."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.event = Event.objects.create(
+            title='Confirmation Event',
+            slug='confirmation-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+        )
+        cls.user = User.objects.create_user(
+            email='conf@test.com',
+            password='pass',
+            email_verified=True,
+        )
+        EventRegistration.objects.create(event=cls.event, user=cls.user)
+
+    def setUp(self):
+        self.client.login(email='conf@test.com', password='pass')
+
+    def test_registered_confirmation_block_rendered(self):
+        response = self.client.get('/events/confirmation-event')
+        self.assertContains(
+            response, 'data-testid="event-registered-confirmation"',
+        )
+        self.assertContains(response, "You're registered!")
+
+    def test_next_steps_mention_email_and_calendar(self):
+        response = self.client.get('/events/confirmation-event')
+        self.assertContains(response, 'data-testid="event-next-steps"')
+        self.assertContains(response, 'confirmation to your email')
+        self.assertContains(response, 'spam folder')
+        self.assertContains(response, '15 minutes before')
+
+    def test_add_to_calendar_button_links_to_ics(self):
+        response = self.client.get('/events/confirmation-event')
+        self.assertContains(response, 'data-testid="event-add-to-calendar"')
+        self.assertContains(response, '/events/confirmation-event/calendar.ics')
+        self.assertContains(response, 'Add to calendar')
+
+    def test_cancel_registration_still_present(self):
+        response = self.client.get('/events/confirmation-event')
+        self.assertContains(response, 'id="unregister-btn"')
+        self.assertContains(response, 'Cancel registration')
+
+    def test_event_ics_url_in_context(self):
+        response = self.client.get('/events/confirmation-event')
+        self.assertEqual(
+            response.context['event_ics_url'],
+            '/events/confirmation-event/calendar.ics',
+        )
+
+
+class EventCalendarIcsViewTest(TestCase):
+    """Issue #484: GET /events/<slug>/calendar.ics returns the .ics file."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.event = Event.objects.create(
+            title='ICS Download Event',
+            slug='ics-download-event',
+            description='An event to download.',
+            start_datetime=timezone.now() + timedelta(days=7),
+            end_datetime=timezone.now() + timedelta(days=7, hours=2),
+            status='upcoming',
+        )
+
+    def test_returns_ics_content_type(self):
+        response = self.client.get('/events/ics-download-event/calendar.ics')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/calendar', response['Content-Type'])
+
+    def test_returns_attachment_disposition_with_slug_filename(self):
+        response = self.client.get('/events/ics-download-event/calendar.ics')
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertIn('ics-download-event.ics', response['Content-Disposition'])
+
+    def test_response_body_is_valid_vcalendar(self):
+        response = self.client.get('/events/ics-download-event/calendar.ics')
+        body = response.content.decode('utf-8')
+        self.assertIn('BEGIN:VCALENDAR', body)
+        self.assertIn('END:VCALENDAR', body)
+        self.assertIn('SUMMARY:ICS Download Event', body)
+
+    def test_anonymous_user_can_download_ics(self):
+        # Public download — registered users typically use this, but the
+        # detail page is also public so the .ics is too.
+        response = self.client.get('/events/ics-download-event/calendar.ics')
+        self.assertEqual(response.status_code, 200)
+
+    def test_draft_event_returns_404_for_anonymous(self):
+        Event.objects.create(
+            title='Draft ICS',
+            slug='draft-ics',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='draft',
+        )
+        response = self.client.get('/events/draft-ics/calendar.ics')
+        self.assertEqual(response.status_code, 404)
+
+    def test_nonexistent_event_returns_404(self):
+        response = self.client.get('/events/no-such-event/calendar.ics')
+        self.assertEqual(response.status_code, 404)
+
+
+class EventDetailAnonymousCopyTest(TestCase):
+    """Issue #484: anonymous registration copy explains account requirement."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.event = Event.objects.create(
+            title='Anon Event',
+            slug='anon-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+        )
+
+    def test_copy_mentions_account_requirement_and_newsletter(self):
+        response = self.client.get('/events/anon-event')
+        self.assertContains(
+            response, 'A free account is required to register',
+        )
+        self.assertContains(response, 'newsletter')
+        self.assertContains(response, 'unsubscribe')
+
+    def test_login_and_signup_links_preserve_event_path(self):
+        response = self.client.get('/events/anon-event')
+        self.assertContains(
+            response, '/accounts/login/?next=/events/anon-event',
+        )
+        self.assertContains(
+            response, '/accounts/signup/?next=/events/anon-event',
+        )

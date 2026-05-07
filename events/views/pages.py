@@ -3,7 +3,7 @@ from datetime import date
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from content.access import (
@@ -12,6 +12,7 @@ from content.access import (
     get_required_tier_name,
 )
 from events.models import Event, EventJoinClick, EventRegistration
+from events.services.calendar_invite import generate_ics
 from events.services.display_time import (
     build_event_time_display,
     should_display_event_location,
@@ -296,6 +297,38 @@ def event_detail(request, slug):
         'show_event_location': should_display_event_location(event),
         'show_zoom_link': show_join_link,
         'required_tier_name': required_tier_name,
+        # Issue #484: ordered list of speakers/instructors for the
+        # detail-page header. Pre-computed so the template can branch on
+        # presence without re-querying the through-model.
+        'event_instructors': event.ordered_instructors,
+        # Issue #484: surface a download URL for the .ics file so
+        # registered users can re-add the event to their calendar
+        # independent of email delivery.
+        'event_ics_url': f'/events/{event.slug}/calendar.ics',
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)
+
+
+def event_calendar_ics(request, slug):
+    """Return the ``.ics`` calendar invite for an event as a downloadable file.
+
+    Issue #484: registered users get a calendar invite by email, but email
+    delivery can fail or be filtered. Exposing a stable download URL on the
+    event detail page lets the user add the event to their calendar without
+    relying on email at all.
+
+    The endpoint is public for non-draft events. The .ics file contains the
+    title, start/end time, description, and the join URL — all the same
+    information that already shows on the public detail page.
+    """
+    event = get_object_or_404(Event, slug=slug)
+    if event.status == 'draft' and not request.user.is_staff:
+        raise Http404
+
+    ics_bytes = generate_ics(event)
+    response = HttpResponse(ics_bytes, content_type='text/calendar; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'attachment; filename="{event.slug}.ics"'
+    )
+    return response

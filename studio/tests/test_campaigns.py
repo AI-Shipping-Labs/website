@@ -8,6 +8,8 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from email_app.models import EmailCampaign
+from email_app.services.email_service import EmailService
+from email_app.tests.test_email_service import assert_no_internal_footer_text
 from payments.models import Tier
 
 User = get_user_model()
@@ -271,6 +273,27 @@ class StudioCampaignDetailTest(TestCase):
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.status, "draft")
         self.assertEqual(self.campaign.sent_count, 0)
+
+    @patch.object(EmailService, "_send_ses", return_value="test-ses-clean")
+    def test_test_send_uses_clean_footer_for_real_render(self, mock_ses):
+        recipient = User.objects.create_user(
+            email="recipient@example.com",
+            email_verified=True,
+            unsubscribed=False,
+        )
+
+        response = self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": recipient.email},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_ses.assert_called_once()
+        html = mock_ses.call_args[0][2]
+        self.assertIn("/api/unsubscribe?token=", html)
+        self.assertNotIn('<p class="verify-email-cta">', html)
+        assert_no_internal_footer_text(self, html)
 
     @patch("studio.views.campaigns.EmailService")
     def test_test_send_multiple_addresses_deduplicates(self, MockService):
@@ -738,6 +761,7 @@ class StudioCampaignDetailPreviewTest(TestCase):
         preview_html = response.context["preview_html"]
         self.assertIn("<h1>Hello</h1>", preview_html)
         self.assertIn("<strong>bold</strong>", preview_html)
+        assert_no_internal_footer_text(self, preview_html)
 
     def test_preview_uses_email_service_pipeline(self):
         """campaign_detail delegates preview rendering to
@@ -797,6 +821,7 @@ class StudioCampaignDetailPreviewTest(TestCase):
         self.assertIn("<h1>Heading</h1>", unescaped)
         self.assertIn("<strong>bold</strong>", unescaped)
         self.assertIn("</html>", unescaped)
+        assert_no_internal_footer_text(self, unescaped)
 
     def test_detail_shows_edit_and_delete_for_draft(self):
         """Draft campaigns render the Edit link and Delete form."""

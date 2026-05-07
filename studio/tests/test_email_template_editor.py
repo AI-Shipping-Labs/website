@@ -13,6 +13,7 @@ from django.test import Client, TestCase
 
 from email_app.models import EmailTemplateOverride
 from email_app.services.email_service import EmailService
+from email_app.tests.test_email_service import assert_no_internal_footer_text
 
 User = get_user_model()
 
@@ -362,6 +363,7 @@ class EmailTemplatePreviewTest(TestCase):
         # Chrome markers from base_email.html:
         self.assertIn('email-footer', body)
         self.assertIn('email-header', body)
+        assert_no_internal_footer_text(self, body)
 
     def test_preview_substitutes_placeholder_user_name(self):
         response = self.client.post(
@@ -390,6 +392,7 @@ class EmailTemplatePreviewTest(TestCase):
         body = response.content.decode()
         footer_idx = body.index('email-footer')
         self.assertIn('P.S. preview footer', body[footer_idx:])
+        assert_no_internal_footer_text(self, body)
 
     def test_preview_unknown_template_returns_404(self):
         response = self.client.post(
@@ -439,6 +442,7 @@ class EmailTemplateSendTestTest(TestCase):
         self.assertEqual(subject, 'OVR subject')
         self.assertIn('OVR test body', html_body)
         self.assertIn('Operator', html_body)
+        assert_no_internal_footer_text(self, html_body)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-test-2')
     def test_send_test_uses_file_when_no_override(self, mock_ses):
@@ -451,6 +455,7 @@ class EmailTemplateSendTestTest(TestCase):
         html_body = mock_ses.call_args[0][2]
         # Filesystem template body fragment.
         self.assertIn('Browse our', html_body)
+        assert_no_internal_footer_text(self, html_body)
 
     def test_send_test_unknown_template_returns_404(self):
         response = self.client.post(

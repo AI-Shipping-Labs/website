@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import User
+from email_app.tests.test_email_service import assert_no_internal_footer_text
 from events.models import Event, EventRegistration
 from events.services.calendar_invite import generate_ics
 from events.services.registration_email import send_registration_confirmation
@@ -243,6 +244,27 @@ class SendRegistrationConfirmationTest(TestCase):
 
         # Check filename in raw headers
         self.assertIn('event.ics', raw_data)
+
+    @patch('events.services.registration_email.boto3')
+    def test_send_email_html_footer_has_no_internal_text(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'msg-clean'}
+        mock_boto3.client.return_value = mock_client
+
+        registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+        send_registration_confirmation(registration)
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        raw_data = call_kwargs['Content']['Raw']['Data']
+        msg = self._parse_raw_email(raw_data)
+        parts = self._get_parts(msg)
+        html = parts['text/html']
+
+        self.assertIn('email-footer', html)
+        self.assertIn('/api/unsubscribe?token=', html)
+        assert_no_internal_footer_text(self, html)
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_subject_contains_event_title(self, mock_boto3):

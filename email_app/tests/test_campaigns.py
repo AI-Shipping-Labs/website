@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from email_app.models import EmailCampaign, EmailLog
+from email_app.tests.test_email_service import assert_no_internal_footer_text
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -1252,6 +1253,8 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
         self.assertIn('<p class="verify-email-cta">', html)
         self.assertIn('Verify your email', html)
         self.assertIn('/api/verify-email?token=', html)
+        self.assertIn('/api/unsubscribe?token=', html)
+        assert_no_internal_footer_text(self, html)
 
     @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c2')
     def test_campaign_recipient_verified_at_send_time_omits_cta(
@@ -1272,6 +1275,8 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
         html = mock_ses.call_args[0][2]
         self.assertNotIn('<p class="verify-email-cta">', html)
         self.assertNotIn('/api/verify-email?token=', html)
+        self.assertIn('/api/unsubscribe?token=', html)
+        assert_no_internal_footer_text(self, html)
 
     @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c3')
     def test_campaign_recipient_verified_after_enqueue_omits_cta(
@@ -1303,6 +1308,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
         html = mock_ses.call_args[0][2]
         self.assertNotIn('<p class="verify-email-cta">', html)
         self.assertNotIn('/api/verify-email?token=', html)
+        assert_no_internal_footer_text(self, html)
 
 
 @tag('core')

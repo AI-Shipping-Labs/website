@@ -25,6 +25,18 @@ from integrations.models import IntegrationSetting
 
 User = get_user_model()
 
+INTERNAL_FOOTER_LEAKS = (
+    'Issue #450',
+    'the verify CTA must render',
+    '{#',
+    '#}',
+)
+
+
+def assert_no_internal_footer_text(test_case, html):
+    for marker in INTERNAL_FOOTER_LEAKS:
+        test_case.assertNotIn(marker, html)
+
 
 @tag('core')
 class EmailServiceSendTest(TestCase):
@@ -513,6 +525,7 @@ class VerifyEmailFooterTest(TestCase):
         verify_url = _extract_verify_url_from_footer(html)
         self.assertIsNotNone(verify_url)
         self.assertIn('/api/verify-email?token=', verify_url)
+        assert_no_internal_footer_text(self, html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-450-2')
     def test_verified_recipient_email_omits_verify_cta(self, mock_ses):
@@ -527,6 +540,7 @@ class VerifyEmailFooterTest(TestCase):
         # page (would indicate the body template embedded one we did
         # not intend to render for a verified user).
         self.assertNotIn('/api/verify-email?token=', html)
+        assert_no_internal_footer_text(self, html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-450-3')
     def test_email_verification_template_does_not_carry_verify_footer(
@@ -544,6 +558,7 @@ class VerifyEmailFooterTest(TestCase):
         # Body's own verify link is fine; footer CTA paragraph must not exist.
         self.assertNotIn('<p class="verify-email-cta">', html)
         self.assertIsNone(_extract_verify_url_from_footer(html))
+        assert_no_internal_footer_text(self, html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-450-4')
     def test_password_reset_template_does_not_carry_verify_footer(
@@ -558,6 +573,7 @@ class VerifyEmailFooterTest(TestCase):
 
         self.assertNotIn('<p class="verify-email-cta">', html)
         self.assertIsNone(_extract_verify_url_from_footer(html))
+        assert_no_internal_footer_text(self, html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-450-5')
     def test_verify_cta_is_above_unsubscribe_in_rendered_html(self, mock_ses):
@@ -577,6 +593,7 @@ class VerifyEmailFooterTest(TestCase):
             unsub_idx,
             'verify CTA must appear before the unsubscribe link in DOM order',
         )
+        assert_no_internal_footer_text(self, html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-450-6')
     def test_verify_url_is_one_click_jwt_token(self, mock_ses):
@@ -660,6 +677,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertIn(
             'https://example.test/api/verify-email?token=v', html,
         )
+        assert_no_internal_footer_text(self, html)
 
     def test_render_html_email_omits_cta_when_url_none(self):
         html = self.service.render_html_email(
@@ -669,3 +687,4 @@ class VerifyEmailFooterTest(TestCase):
             verify_email_url=None,
         )
         self.assertNotIn('<p class="verify-email-cta">', html)
+        assert_no_internal_footer_text(self, html)

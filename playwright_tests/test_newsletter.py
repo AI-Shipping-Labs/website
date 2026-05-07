@@ -85,6 +85,12 @@ def _make_verification_token(user_id, redirect_to=None, expired=False):
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
+def _assert_not_raw_json(body):
+    stripped = body.strip()
+    assert not stripped.startswith('{"status"')
+    assert not stripped.startswith('{"error"')
+
+
 def _make_unsubscribe_token(user_id):
     """Generate a JWT unsubscribe token for testing (no expiry)."""
     payload = {
@@ -410,10 +416,13 @@ class TestScenario5DoubleOptInVerification:
             wait_until="domcontentloaded",
         )
 
-        # Then: Response confirms email verified (200 with JSON)
+        # Then: Response confirms email verified with a user-facing page
         assert response.status == 200
         body = page.content()
-        assert "verified" in body.lower()
+        assert "Email Verified" in body
+        assert "/accounts/login/" in body
+        assert "AI Shipping Labs" in body
+        _assert_not_raw_json(body)
 
         # Then: User is now email_verified in the database
         user.refresh_from_db()
@@ -441,6 +450,61 @@ class TestScenario5DoubleOptInVerification:
         # Then: User can access the authenticated dashboard
         body = page.content()
         assert "Quick Actions" in body or "Welcome" in body
+
+    def test_already_verified_user_gets_success_page(self, django_server, page):
+        """Already-verified users can click an old link idempotently."""
+        _ensure_tiers()
+        user = _create_user(
+            "already-verified-flow@test.com",
+            email_verified=True,
+        )
+
+        token = _make_verification_token(user.pk)
+        response = page.goto(
+            f"{django_server}/api/verify-email?token={token}",
+            wait_until="domcontentloaded",
+        )
+
+        assert response.status == 200
+        body = page.content()
+        assert "Email Verified" in body
+        _assert_not_raw_json(body)
+
+        user.refresh_from_db()
+        assert user.email_verified
+
+    def test_logged_in_verification_clears_account_banner(
+        self, django_server, page
+    ):
+        """Logged-in users see the success page and lose the account banner."""
+        _ensure_tiers()
+        user = _create_user(
+            "banner-verify@test.com",
+            email_verified=False,
+        )
+
+        page.goto(f"{django_server}/accounts/login/", wait_until="domcontentloaded")
+        page.fill('input[name="email"]', "banner-verify@test.com")
+        page.fill('input[name="password"]', DEFAULT_PASSWORD)
+        page.click('button[type="submit"]')
+        page.wait_for_url(f"{django_server}/")
+
+        page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+        assert page.locator("#email-verification-banner").is_visible()
+
+        token = _make_verification_token(user.pk)
+        response = page.goto(
+            f"{django_server}/api/verify-email?token={token}",
+            wait_until="domcontentloaded",
+        )
+        assert response.status == 200
+        body = page.content()
+        assert "Email Verified" in body
+        assert "/account/" in body
+        _assert_not_raw_json(body)
+
+        page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+        assert page.locator("#email-verification-banner").count() == 0
 # ---------------------------------------------------------------
 # Scenario 6: Subscriber tries to verify with an expired token
 #              and understands what to do
@@ -473,14 +537,54 @@ class TestScenario6ExpiredTokenError:
             wait_until="domcontentloaded",
         )
 
-        # Then: Error response indicates token expired
+        # Then: Error page indicates token expired
         assert response.status == 400
         body = page.content()
+        assert "Verification Failed" in body
         assert "expired" in body.lower()
+        assert "/accounts/login/" in body
+        _assert_not_raw_json(body)
 
         # Then: User is NOT verified
         user.refresh_from_db()
         assert not user.email_verified
+
+    def test_malformed_token_shows_failure_page(self, django_server, page):
+        response = page.goto(
+            f"{django_server}/api/verify-email?token=invalid-token",
+            wait_until="domcontentloaded",
+        )
+
+        assert response.status == 400
+        body = page.content()
+        assert "Verification Failed" in body
+        assert "invalid" in body.lower()
+        _assert_not_raw_json(body)
+
+    def test_missing_token_shows_failure_page(self, django_server, page):
+        response = page.goto(
+            f"{django_server}/api/verify-email",
+            wait_until="domcontentloaded",
+        )
+
+        assert response.status == 400
+        body = page.content()
+        assert "Verification Failed" in body
+        assert "incomplete" in body.lower()
+        _assert_not_raw_json(body)
+
+    def test_deleted_account_token_shows_failure_page(self, django_server, page):
+        token = _make_verification_token(999999)
+        response = page.goto(
+            f"{django_server}/api/verify-email?token={token}",
+            wait_until="domcontentloaded",
+        )
+
+        assert response.status == 404
+        body = page.content()
+        assert "Verification Failed" in body
+        assert "could not find an account" in body.lower()
+        _assert_not_raw_json(body)
 # ---------------------------------------------------------------
 # Scenario 7: Anonymous visitor downloads a lead magnet by
 #              subscribing with their email

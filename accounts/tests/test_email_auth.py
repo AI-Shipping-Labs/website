@@ -24,6 +24,7 @@ from django.db import connection
 from django.test import TestCase, override_settings, tag
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import User
 
@@ -172,28 +173,78 @@ class VerifyEmailAPITest(TestCase):
 
     url = "/api/verify-email"
 
+    def assert_html_result(self, resp, *, heading, message_text=None):
+        self.assertTemplateUsed(resp, "email_app/verify_result.html")
+        self.assertIn("text/html", resp.headers["Content-Type"])
+        self.assertContains(resp, heading, status_code=resp.status_code)
+        if message_text:
+            self.assertContains(resp, message_text, status_code=resp.status_code)
+        self.assertNotContains(
+            resp,
+            '{"status"',
+            status_code=resp.status_code,
+            html=False,
+        )
+        self.assertNotContains(
+            resp,
+            '{"error"',
+            status_code=resp.status_code,
+            html=False,
+        )
+
     def test_verify_sets_email_verified_true(self):
         """Valid token sets email_verified to True."""
-        user = User.objects.create_user(email="verify@example.com", password="test1234")
+        user = User.objects.create_user(
+            email="verify@example.com",
+            password="test1234",
+            verification_expires_at=timezone.now() + datetime.timedelta(days=1),
+        )
         self.assertFalse(user.email_verified)
 
         token = _make_verification_token(user.pk)
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["status"], "ok")
+        self.assert_html_result(resp, heading="Email Verified")
+        self.assertContains(resp, 'href="/accounts/login/"')
+        self.assertContains(resp, "Sign In")
 
         user.refresh_from_db()
         self.assertTrue(user.email_verified)
+        self.assertIsNone(user.verification_expires_at)
 
     def test_verify_already_verified_user_succeeds(self):
         """Verifying an already-verified user still returns success."""
-        user = User.objects.create_user(email="already@example.com", password="test1234")
+        user = User.objects.create_user(
+            email="already@example.com",
+            password="test1234",
+            first_name="Already",
+        )
         user.email_verified = True
         user.save(update_fields=["email_verified"])
 
         token = _make_verification_token(user.pk)
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 200)
+        self.assert_html_result(resp, heading="Email Verified")
+
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertEqual(user.first_name, "Already")
+
+    def test_verify_authenticated_success_links_to_account(self):
+        """Authenticated users get an account-oriented next action."""
+        user = User.objects.create_user(
+            email="signed-in@example.com",
+            password="test1234",
+        )
+        self.client.force_login(user)
+
+        token = _make_verification_token(user.pk)
+        resp = self.client.get(f"{self.url}?token={token}")
+        self.assertEqual(resp.status_code, 200)
+        self.assert_html_result(resp, heading="Email Verified")
+        self.assertContains(resp, 'href="/account/"')
+        self.assertContains(resp, "Continue to Account")
 
     def test_verify_expired_token_returns_400(self):
         """Expired token returns 400."""
@@ -201,17 +252,31 @@ class VerifyEmailAPITest(TestCase):
         token = _make_verification_token(user.pk, expired=True)
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("expired", resp.json()["error"].lower())
+        self.assert_html_result(
+            resp,
+            heading="Verification Failed",
+            message_text="expired",
+        )
 
     def test_verify_invalid_token_returns_400(self):
         """Garbage token returns 400."""
         resp = self.client.get(f"{self.url}?token=invalid_garbage")
         self.assertEqual(resp.status_code, 400)
+        self.assert_html_result(
+            resp,
+            heading="Verification Failed",
+            message_text="invalid",
+        )
 
     def test_verify_missing_token_returns_400(self):
         """No token parameter returns 400."""
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 400)
+        self.assert_html_result(
+            resp,
+            heading="Verification Failed",
+            message_text="incomplete",
+        )
 
     def test_verify_wrong_action_returns_400(self):
         """Token with wrong action type returns 400."""
@@ -225,12 +290,22 @@ class VerifyEmailAPITest(TestCase):
         token = jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 400)
+        self.assert_html_result(
+            resp,
+            heading="Verification Failed",
+            message_text="invalid",
+        )
 
     def test_verify_nonexistent_user_returns_404(self):
         """Token for non-existent user returns 404."""
         token = _make_verification_token(99999)
         resp = self.client.get(f"{self.url}?token={token}")
         self.assertEqual(resp.status_code, 404)
+        self.assert_html_result(
+            resp,
+            heading="Verification Failed",
+            message_text="could not find an account",
+        )
 
     def test_verify_url_name(self):
         url = reverse("api_verify_email")

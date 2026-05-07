@@ -10,7 +10,6 @@ from .projects import *
 from .recordings import *
 from .redirects import *
 from .settings import *
-from .subscribers import *
 from .sync import *
 from .tier_overrides import *
 from .worker import *

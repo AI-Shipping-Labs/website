@@ -49,11 +49,6 @@ from studio.views.enrollments import (
     enrollment_list,
     enrollment_unenroll,
 )
-from studio.views.enrollments_redirects import (
-    enrollment_create_redirect,
-    enrollment_list_redirect,
-    enrollment_unenroll_redirect,
-)
 from studio.views.events import event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.member_notes import (
@@ -107,10 +102,6 @@ from studio.views.sprints import (
     sprint_list,
 )
 from studio.views.sprints_enroll import sprint_bulk_enroll
-from studio.views.subscribers import (
-    subscriber_export_redirect,
-    subscriber_list_redirect,
-)
 from studio.views.sync import (
     content_sources_export,
     content_sources_import,
@@ -219,16 +210,6 @@ urlpatterns = [
         name='studio_course_enrollment_unenroll',
     ),
 
-    # Legacy enrollment URLs -- 301/307 redirect to the course-scoped pages
-    # (issue #293). The names are intentionally not exposed; nothing should
-    # reverse() these.
-    path('enrollments/', enrollment_list_redirect),
-    path('enrollments/create', enrollment_create_redirect),
-    path(
-        'enrollments/<int:enrollment_id>/unenroll',
-        enrollment_unenroll_redirect,
-    ),
-
     # Articles
     path('articles/', article_list, name='studio_article_list'),
     path('articles/<int:article_id>/edit', article_edit, name='studio_article_edit'),
@@ -311,10 +292,6 @@ urlpatterns = [
         utm_analytics_link_detail,
         name='studio_utm_link_analytics',
     ),
-
-    # Subscribers (legacy URLs, 301-redirect to /studio/users/ -- issue #271)
-    path('subscribers/', subscriber_list_redirect, name='studio_subscriber_list'),
-    path('subscribers/export', subscriber_export_redirect, name='studio_subscriber_export'),
 
     # Impersonate
     path('impersonate/<int:user_id>/', impersonate_user, name='studio_impersonate'),

@@ -286,144 +286,6 @@ class CourseScopedEnrollmentUnenrollTest(TierSetupMixin, TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Legacy redirect shims
-# ---------------------------------------------------------------------------
-
-class LegacyEnrollmentsRedirectTest(TierSetupMixin, TestCase):
-    """Old ``/studio/enrollments/...`` URLs are redirected to the new ones."""
-
-    def setUp(self):
-        self.staff = User.objects.create_user(
-            email='admin@example.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email='admin@example.com', password='testpass')
-        self.user = User.objects.create_user(email='target@example.com', password='x')
-        self.course = _make_course(slug='legacy-c')
-        self.enrollment = Enrollment.objects.create(
-            user=self.user, course=self.course,
-        )
-
-    # GET /studio/enrollments/
-
-    def test_list_with_course_redirects_301_to_scoped_page(self):
-        response = self.client.get(
-            f'/studio/enrollments/?course={self.course.pk}',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'/studio/courses/{self.course.pk}/enrollments/',
-        )
-
-    def test_list_with_course_and_status_preserves_status(self):
-        response = self.client.get(
-            f'/studio/enrollments/?course={self.course.pk}&status=all',
-        )
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            f'/studio/courses/{self.course.pk}/enrollments/?status=all',
-        )
-
-    def test_list_with_no_course_redirects_to_course_list(self):
-        response = self.client.get('/studio/enrollments/')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/courses/')
-
-    def test_list_with_invalid_course_redirects_to_course_list(self):
-        response = self.client.get('/studio/enrollments/?course=not-a-number')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/courses/')
-
-    def test_list_with_unknown_course_redirects_to_course_list(self):
-        response = self.client.get('/studio/enrollments/?course=999999')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/courses/')
-
-    def test_list_redirect_followed_lands_on_scoped_page(self):
-        response = self.client.get(
-            f'/studio/enrollments/?course={self.course.pk}', follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'studio/courses/enrollments_list.html')
-
-    def test_list_redirect_followed_with_no_course_lands_on_course_list(self):
-        response = self.client.get('/studio/enrollments/', follow=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'studio/courses/list.html')
-
-    # POST /studio/enrollments/create
-
-    def test_create_redirects_307_with_valid_course_id(self):
-        response = self.client.post(
-            '/studio/enrollments/create',
-            {'email': 'target@example.com', 'course_id': str(self.course.pk)},
-        )
-        self.assertEqual(response.status_code, 307)
-        self.assertEqual(
-            response['Location'],
-            f'/studio/courses/{self.course.pk}/enrollments/create',
-        )
-
-    def test_create_redirect_followed_actually_enrolls_user(self):
-        # 307 preserves method+body, so the POST should re-hit the new
-        # create endpoint with the original email and create the enrollment.
-        Enrollment.objects.filter(user=self.user, course=self.course).delete()
-        response = self.client.post(
-            '/studio/enrollments/create',
-            {'email': 'target@example.com', 'course_id': str(self.course.pk)},
-            follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(
-            Enrollment.objects.filter(
-                user=self.user, course=self.course, source=SOURCE_ADMIN,
-            ).exists(),
-        )
-
-    def test_create_without_course_id_falls_back_to_course_list(self):
-        response = self.client.post(
-            '/studio/enrollments/create',
-            {'email': 'target@example.com'},
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/courses/')
-
-    def test_create_with_unknown_course_id_falls_back_to_course_list(self):
-        response = self.client.post(
-            '/studio/enrollments/create',
-            {'email': 'target@example.com', 'course_id': '999999'},
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/courses/')
-
-    # POST /studio/enrollments/<id>/unenroll
-
-    def test_unenroll_redirects_307_to_scoped_unenroll(self):
-        response = self.client.post(
-            f'/studio/enrollments/{self.enrollment.pk}/unenroll',
-        )
-        self.assertEqual(response.status_code, 307)
-        self.assertEqual(
-            response['Location'],
-            f'/studio/courses/{self.course.pk}/enrollments/{self.enrollment.pk}/unenroll',
-        )
-
-    def test_unenroll_redirect_followed_actually_unenrolls(self):
-        response = self.client.post(
-            f'/studio/enrollments/{self.enrollment.pk}/unenroll', follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.enrollment.refresh_from_db()
-        self.assertIsNotNone(self.enrollment.unenrolled_at)
-
-    def test_unenroll_unknown_id_falls_back_to_course_list(self):
-        response = self.client.post('/studio/enrollments/999999/unenroll')
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/courses/')
-
-
-# ---------------------------------------------------------------------------
 # Sidebar + entry points
 # ---------------------------------------------------------------------------
 
@@ -475,3 +337,57 @@ class LegacyUrlNamesRemovedTest(TestCase):
         from django.urls import NoReverseMatch, reverse
         with self.assertRaises(NoReverseMatch):
             reverse('studio_enrollment_unenroll', args=[1])
+
+    def test_studio_subscriber_list_name_unregistered(self):
+        from django.urls import NoReverseMatch, reverse
+        with self.assertRaises(NoReverseMatch):
+            reverse('studio_subscriber_list')
+
+    def test_studio_subscriber_export_name_unregistered(self):
+        from django.urls import NoReverseMatch, reverse
+        with self.assertRaises(NoReverseMatch):
+            reverse('studio_subscriber_export')
+
+
+# ---------------------------------------------------------------------------
+# Cleanup checks — removed paths no longer resolve
+# ---------------------------------------------------------------------------
+
+class LegacyPathsNoLongerResolveTest(TierSetupMixin, TestCase):
+    """Removed Studio compatibility URLs return 404 for staff."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email='admin@example.com', password='testpass', is_staff=True,
+        )
+        self.client.login(email='admin@example.com', password='testpass')
+        self.user = User.objects.create_user(email='target@example.com', password='x')
+        self.course = _make_course(slug='gone-c')
+        self.enrollment = Enrollment.objects.create(
+            user=self.user, course=self.course,
+        )
+
+    def test_legacy_enrollments_list_returns_404(self):
+        response = self.client.get('/studio/enrollments/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_legacy_enrollments_create_returns_404(self):
+        response = self.client.post(
+            '/studio/enrollments/create',
+            {'email': 'target@example.com', 'course_id': str(self.course.pk)},
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_legacy_enrollments_unenroll_returns_404(self):
+        response = self.client.post(
+            f'/studio/enrollments/{self.enrollment.pk}/unenroll',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_legacy_subscribers_list_returns_404(self):
+        response = self.client.get('/studio/subscribers/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_legacy_subscribers_export_returns_404(self):
+        response = self.client.get('/studio/subscribers/export')
+        self.assertEqual(response.status_code, 404)

@@ -178,7 +178,7 @@ Access control logic: a user can access any content object where `user.tier.leve
 | Download management | `/studio/downloads/`, `/studio/downloads/new`, `/studio/downloads/<id>/edit` | List, create, edit downloadable resources | Staff only | Shipped |
 | Project review | `/studio/projects/`, `/studio/projects/<id>/review` | List submitted projects; approve/reject | Staff only | Shipped |
 | Campaign management | `/studio/campaigns/`, `/studio/campaigns/new`, `/studio/campaigns/<id>/` | List, create, view email campaigns | Staff only | Shipped |
-| Subscriber management | `/studio/subscribers/`, `/studio/subscribers/export` | List subscribers; export to CSV | Staff only | Shipped |
+| Subscriber management | `/studio/users/?filter=subscribers`, `/studio/users/export?filter=subscribers` | List subscribers; export to CSV | Staff only | Shipped |
 
 ### Integrations & Webhooks
 

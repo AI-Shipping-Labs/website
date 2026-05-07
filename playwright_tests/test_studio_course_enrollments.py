@@ -1,12 +1,11 @@
 """Playwright E2E tests for course-scoped Studio enrollments (issue #293).
 
-Covers the 8 acceptance scenarios in the spec:
+Covers the acceptance scenarios in the spec. Legacy ``/studio/enrollments/``
+redirect-shim scenarios were removed in #421 along with the shims themselves.
 
 1. Operator manages enrollments from within a course context.
 2. Operator enrolls a user from the course-scoped page.
 3. Operator unenrolls a user and the row reflects it.
-4. Bookmarked legacy URL with course filter still works (301).
-5. Bookmarked legacy URL with no filter sends operator to course list.
 6. Sidebar no longer advertises a top-level Enrollments tab.
 7. Cross-course safety on unenroll (404 on mismatched course id).
 8. Non-staff user cannot reach the course-scoped page (403 / login redirect).
@@ -239,86 +238,6 @@ class TestScenario3OperatorUnenrollsUser:
         # No Unenroll button when status filter shows the unenrolled row
         unenroll_btns = page.locator('[data-testid="unenroll-row-btn"]')
         assert unenroll_btns.count() == 0
-
-
-# ---------------------------------------------------------------------------
-# Scenario 4: Bookmarked legacy URL with course filter still works
-# ---------------------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario4LegacyUrlWithCourseFilter:
-    def test_legacy_course_url_redirects_and_renders(
-        self, django_server, browser,
-    ):
-        _clear_enrollment_state()
-        _ensure_tiers()
-        _create_staff_user("admin@test.com")
-        course = _create_course()
-
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-
-        # Capture the redirect chain to verify a 301 hop happened.
-        statuses = []
-        page.on(
-            "response",
-            lambda r: statuses.append(
-                (r.url, r.status)
-            ) if "/studio/enrollments" in r.url
-                or "/studio/courses/" in r.url else None,
-        )
-
-        page.goto(
-            f"{django_server}/studio/enrollments/?course={course.pk}",
-            wait_until="domcontentloaded",
-        )
-
-        # Final URL is the new course-scoped page
-        assert page.url.endswith(
-            f"/studio/courses/{course.pk}/enrollments/",
-        )
-
-        # At least one of the responses for the legacy path was a 301.
-        legacy_statuses = [
-            s for url, s in statuses
-            if url.endswith(f"/studio/enrollments/?course={course.pk}")
-        ]
-        assert 301 in legacy_statuses
-
-        body = page.content()
-        assert "Enrollments" in body
-        assert "Intro to AI" in body
-
-
-# ---------------------------------------------------------------------------
-# Scenario 5: Bookmarked legacy URL with no filter sends operator to course
-# list
-# ---------------------------------------------------------------------------
-
-@pytest.mark.django_db(transaction=True)
-class TestScenario5LegacyUrlWithoutFilter:
-    def test_legacy_root_url_lands_on_course_list(
-        self, django_server, browser,
-    ):
-        _clear_enrollment_state()
-        _ensure_tiers()
-        _create_staff_user("admin@test.com")
-        _create_course()
-
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-
-        page.goto(
-            f"{django_server}/studio/enrollments/",
-            wait_until="domcontentloaded",
-        )
-
-        assert page.url.rstrip("/").endswith("/studio/courses")
-        body = page.content()
-        # Course list renders normally
-        assert "Intro to AI" in body
-        # No leftover error or empty stub from the old enrollments page
-        assert "No enrollments" not in body
 
 
 # ---------------------------------------------------------------------------

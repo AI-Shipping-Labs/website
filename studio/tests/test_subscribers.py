@@ -519,37 +519,3 @@ class StudioUserExportTest(TestCase):
         self.client.login(email='regular@test.com', password='testpass')
         response = self.client.get('/studio/users/export')
         self.assertEqual(response.status_code, 403)
-
-
-class SubscriberRedirectShimTest(TestCase):
-    """The old /studio/subscribers/ URLs 301-redirect to the new ones."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com',
-            password='testpass',
-            is_staff=True,
-        )
-
-    def setUp(self):
-        self.client.login(email='staff@test.com', password='testpass')
-
-    def test_subscriber_list_redirects_permanently_to_subscribers_chip(self):
-        response = self.client.get('/studio/subscribers/')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/studio/users/?filter=subscribers')
-
-    def test_subscriber_export_redirects_permanently_to_subscribers_chip(self):
-        response = self.client.get('/studio/subscribers/export')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(
-            response['Location'],
-            '/studio/users/export?filter=subscribers',
-        )
-
-    def test_redirect_followed_lands_on_user_list(self):
-        response = self.client.get('/studio/subscribers/', follow=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'studio/users/list.html')
-        self.assertEqual(response.context['active_filter'], 'subscribers')

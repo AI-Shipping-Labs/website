@@ -76,6 +76,19 @@ def _read_local_storage_theme(page):
     return page.evaluate("() => localStorage.getItem('theme')")
 
 
+def _click_visible_theme_toggle(page):
+    """Click the theme toggle in the UI path visible for this viewport."""
+    account_trigger = page.locator("#account-menu-trigger")
+    if account_trigger.count() and account_trigger.is_visible():
+        account_trigger.click()
+        account_menu = page.locator("#account-menu-dropdown")
+        account_menu.wait_for(state="visible", timeout=2000)
+        account_menu.locator('[data-testid="theme-toggle"]').click()
+        return
+
+    page.locator('[data-testid="theme-toggle"]:visible').first.click()
+
+
 # ---------------------------------------------------------------------------
 # Scenario 1: anonymous user toggles theme and it survives navigation
 # ---------------------------------------------------------------------------
@@ -120,9 +133,7 @@ class TestAnonymousThemeToggle:
         # Both the desktop and mobile menus render a button with the
         # same data-testid. At our 1280px viewport only the desktop one
         # is visible, so .first targets it deterministically.
-        toggle = page.locator('[data-testid="theme-toggle"]').first
-        toggle.wait_for(state="visible", timeout=2000)
-        toggle.click()
+        _click_visible_theme_toggle(page)
 
         assert _html_has_dark_class(page) is True, (
             "clicking the toggle should add 'dark' to <html>"
@@ -231,9 +242,7 @@ class TestLoggedInThemePreference:
                 ),
                 timeout=3000,
             ) as resp_info:
-                page.locator(
-                    '[data-testid="theme-toggle"]'
-                ).first.click()
+                _click_visible_theme_toggle(page)
             resp = resp_info.value
             assert resp.status == 200, (
                 f"theme-preference POST should return 200, got "

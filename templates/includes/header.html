@@ -34,7 +34,7 @@
     </div>
 
     <div class="hidden md:flex md:items-center md:gap-4">
-      <!-- Theme Toggle (Desktop) -->
+      {% if not user.is_authenticated %}
       <button type="button"
               data-testid="theme-toggle"
               aria-label="Switch to light mode"
@@ -43,6 +43,7 @@
         <svg class="theme-icon-sun h-5 w-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
         <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
       </button>
+      {% endif %}
       {% if user.is_authenticated %}
       <!-- Notification Bell -->
       <div class="relative" id="notification-bell-container">
@@ -64,16 +65,57 @@
           </div>
         </div>
       </div>
-      {% if user.is_staff %}
-      <a href="{% url 'studio_dashboard' %}" class="text-sm text-accent transition-colors hover:text-foreground">Studio</a>
-      {% endif %}
-      {% if user_latest_plan %}
-      <a href="{% url 'my_plan_detail' plan_id=user_latest_plan.pk %}" class="text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="header-plan-link">Plan</a>
-      {% endif %}
-      <a href="{% url 'account' %}" class="text-sm text-muted-foreground transition-colors hover:text-foreground">{{ user.email }}</a>
-      <a href="{% url 'account_logout' %}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
-        Log out
-      </a>
+      <div class="relative" id="account-menu-container" data-testid="account-menu">
+        <button type="button"
+                id="account-menu-trigger"
+                data-testid="account-menu-trigger"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="account-menu-dropdown"
+                class="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-secondary text-sm font-semibold text-foreground transition-colors hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background">
+          <span class="sr-only">Open account menu</span>
+          {% if user.first_name %}{{ user.first_name|first|upper }}{% else %}{{ user.email|first|upper }}{% endif %}
+        </button>
+        <div id="account-menu-dropdown"
+             data-testid="account-menu-dropdown"
+             role="menu"
+             aria-labelledby="account-menu-trigger"
+             class="absolute right-0 top-full z-50 mt-2 hidden w-72 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-popover p-1 shadow-lg">
+          <div class="border-b border-border px-3 py-3">
+            {% if user.get_full_name %}
+            <p class="truncate text-sm font-medium text-popover-foreground">{{ user.get_full_name }}</p>
+            <p class="truncate text-xs text-muted-foreground">{{ user.email }}</p>
+            {% else %}
+            <p class="truncate text-sm font-medium text-popover-foreground">{{ user.email }}</p>
+            {% endif %}
+          </div>
+          <div class="py-1">
+            <a href="{% url 'account' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Account</a>
+            <a href="/account/#profile" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Profile</a>
+            {% if user_latest_plan %}
+            <a href="{% url 'my_plan_detail' plan_id=user_latest_plan.pk %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none" data-testid="header-plan-link">Plan</a>
+            {% endif %}
+            {% if user.is_staff %}
+            <a href="{% url 'studio_dashboard' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-accent hover:bg-secondary focus:bg-secondary focus:outline-none">Studio</a>
+            {% endif %}
+            <button type="button"
+                    role="menuitem"
+                    data-testid="theme-toggle"
+                    aria-label="Switch to light mode"
+                    onclick="window.themeToggle.toggle()"
+                    class="flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">
+              <span>Theme</span>
+              <span class="inline-flex text-muted-foreground">
+                <svg class="theme-icon-sun h-5 w-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+              </span>
+            </button>
+          </div>
+          <div class="border-t border-border py-1">
+            <a href="{% url 'account_logout' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Log out</a>
+          </div>
+        </div>
+      </div>
       {% else %}
       <a href="{% url 'account_login' %}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
@@ -81,7 +123,7 @@
       {% endif %}
     </div>
 
-    <button type="button" class="relative z-10 md:hidden flex-shrink-0 p-2 -mr-2 min-h-[44px] min-w-[44px] flex items-center justify-center" id="mobile-menu-btn" aria-label="Toggle menu">
+    <button type="button" class="relative z-10 md:hidden flex-shrink-0 p-2 -mr-2 min-h-[44px] min-w-[44px] flex items-center justify-center" id="mobile-menu-btn" aria-label="Toggle menu" aria-expanded="false" aria-controls="mobile-menu">
       <svg class="h-6 w-6" id="mobile-menu-icon-open" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
       <svg class="h-6 w-6 hidden" id="mobile-menu-icon-close" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
     </button>
@@ -89,7 +131,7 @@
 
   <div class="border-t border-border bg-background md:hidden hidden max-h-[calc(100vh-4rem)] overflow-y-auto" id="mobile-menu">
     <div class="space-y-1 px-6 py-4">
-      <!-- Theme Toggle (Mobile) -->
+      {% if not user.is_authenticated %}
       <div class="flex items-center justify-between py-2 mb-2 border-b border-border pb-3">
         <span class="text-sm text-muted-foreground">Theme</span>
         <button type="button"
@@ -101,6 +143,7 @@
           <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
         </button>
       </div>
+      {% endif %}
       <a href="/about" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">About</a>
       <a href="/activities" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">Activities</a>
       <a href="{% url 'pricing' %}" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">Membership</a>
@@ -123,26 +166,45 @@
       <a href="{% url 'faq' %}" class="block py-3 text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
       {% if user.is_authenticated %}
       <div class="mt-4 border-t border-border pt-4">
-        <a href="{% url 'account' %}" class="text-sm text-muted-foreground hover:text-foreground mb-2 block">{{ user.email }}</a>
+        <div class="mb-3" data-testid="mobile-account-section">
+          <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Account</p>
+          {% if user.get_full_name %}
+          <p class="mt-2 truncate text-sm font-medium text-foreground">{{ user.get_full_name }}</p>
+          <p class="truncate text-xs text-muted-foreground">{{ user.email }}</p>
+          {% else %}
+          <p class="mt-2 truncate text-sm font-medium text-foreground">{{ user.email }}</p>
+          {% endif %}
+        </div>
         <a href="/notifications" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Notifications <span id="mobile-notification-badge" class="hidden ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
         </a>
-        {% if user.is_staff %}
-        <a href="{% url 'studio_dashboard' %}" class="block w-full rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
-          Studio
-        </a>
-        {% endif %}
-        {% if user_latest_plan %}
-        <a href="{% url 'my_plan_detail' plan_id=user_latest_plan.pk %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
-          Plan
-        </a>
-        {% endif %}
         <a href="{% url 'account' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
         </a>
         <a href="/account/#profile" id="mobile-profile-link" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Profile
         </a>
+        {% if user_latest_plan %}
+        <a href="{% url 'my_plan_detail' plan_id=user_latest_plan.pk %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
+          Plan
+        </a>
+        {% endif %}
+        {% if user.is_staff %}
+        <a href="{% url 'studio_dashboard' %}" class="block w-full rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
+          Studio
+        </a>
+        {% endif %}
+        <div class="mb-2 flex items-center justify-between rounded-md border border-border bg-transparent px-4 py-2">
+          <span class="text-sm font-medium text-foreground">Theme</span>
+          <button type="button"
+                  data-testid="theme-toggle"
+                  aria-label="Switch to light mode"
+                  onclick="window.themeToggle.toggle()"
+                  class="p-2 text-muted-foreground transition-colors hover:text-foreground">
+            <svg class="theme-icon-sun h-5 w-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+        </div>
         <a href="{% url 'account_logout' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
           Log out
         </a>
@@ -173,6 +235,7 @@
       iconOpen.classList.remove('hidden');
       iconClose.classList.add('hidden');
       menuBtn.setAttribute('aria-label', 'Open menu');
+      menuBtn.setAttribute('aria-expanded', 'false');
     }
 
     function openMenu() {
@@ -180,6 +243,7 @@
       iconOpen.classList.add('hidden');
       iconClose.classList.remove('hidden');
       menuBtn.setAttribute('aria-label', 'Close menu');
+      menuBtn.setAttribute('aria-expanded', 'true');
     }
 
     menuBtn.addEventListener('click', function(e) {
@@ -215,6 +279,51 @@
         resourcesChevron.classList.toggle('rotate-180');
       });
     }
+  })();
+
+  // Account menu
+  (function() {
+    var trigger = document.getElementById('account-menu-trigger');
+    var menu = document.getElementById('account-menu-dropdown');
+    var container = document.getElementById('account-menu-container');
+
+    if (!trigger || !menu || !container) return;
+
+    function isOpen() {
+      return !menu.classList.contains('hidden');
+    }
+
+    function closeMenu() {
+      menu.classList.add('hidden');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function openMenu() {
+      menu.classList.remove('hidden');
+      trigger.setAttribute('aria-expanded', 'true');
+    }
+
+    trigger.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (isOpen()) {
+        closeMenu();
+      } else {
+        openMenu();
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (isOpen() && !container.contains(e.target)) {
+        closeMenu();
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && isOpen()) {
+        closeMenu();
+        trigger.focus();
+      }
+    });
   })();
 
   // --- Notification Bell ---

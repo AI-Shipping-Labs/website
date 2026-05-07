@@ -3,7 +3,7 @@
 Covers:
 - Footer padding reduced on mobile (py-10 sm:py-16 lg:py-24)
 - Newsletter form stacks vertically on mobile with adequate spacing
-- Footer community links have minimum 44px tap target height
+- Footer community links keep mobile tap targets and tighten at sm+
 - Subscribe form success/error messages visible on mobile
 - No horizontal overflow risk (no fixed-width elements)
 - Both light and dark themes work
@@ -72,10 +72,10 @@ class FooterNewsletterFormMobileTest(TestCase):
 
 
 class FooterTapTargetsTest(TestCase):
-    """Footer community links meet 44px minimum tap target height."""
+    """Footer community links balance mobile tap targets with compact desktop rows."""
 
-    def test_footer_about_link_has_min_height_44px(self):
-        """The About link in the footer should have min-h-[44px] for adequate tap target."""
+    def test_footer_about_link_preserves_mobile_tap_target(self):
+        """The About link keeps a 44px minimum tap target below sm."""
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
         about_match = re.search(
@@ -84,6 +84,7 @@ class FooterTapTargetsTest(TestCase):
         self.assertIsNotNone(about_match, "About link not found in footer")
         classes = about_match.group(1)
         self.assertIn("min-h-[44px]", classes)
+        self.assertIn("py-2", classes)
 
     def test_footer_about_link_uses_inline_flex(self):
         """About link should use inline-flex items-center for vertical centering."""
@@ -97,15 +98,25 @@ class FooterTapTargetsTest(TestCase):
         self.assertIn("inline-flex", classes)
         self.assertIn("items-center", classes)
 
-    def test_footer_faq_link_has_min_height_44px(self):
-        """The FAQ link should have min-h-[44px] for adequate tap target."""
+    def test_footer_faq_link_compacts_at_sm_and_above(self):
+        """The FAQ link removes the 44px row height on wider layouts."""
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
         faq_match = re.search(
             r'<a[^>]*href="/faq"[^>]*class="([^"]*)"', footer
         )
         self.assertIsNotNone(faq_match, "FAQ link not found in footer")
-        self.assertIn("min-h-[44px]", faq_match.group(1))
+        classes = faq_match.group(1)
+        self.assertIn("min-h-[44px]", classes)
+        self.assertIn("sm:min-h-0", classes)
+        self.assertIn("sm:py-1", classes)
+
+    def test_footer_link_lists_remove_extra_row_gaps(self):
+        """Community and Legal link lists should not add gaps between tap rows."""
+        response = self.client.get("/")
+        footer = _extract_footer(response.content.decode())
+        self.assertIn('class="mt-3 space-y-0 sm:mt-4"', footer)
+        self.assertNotIn('class="mt-4 space-y-1"', footer)
 
 
 class FooterNoHorizontalOverflowTest(TestCase):

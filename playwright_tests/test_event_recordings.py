@@ -824,8 +824,8 @@ class TestScenario10InsufficientTierSeesCTAWithCorrectName:
 
         # The workshop landing surfaces the recording-tier requirement on
         # the "Watch the recording" card -- it must mention Main, not Basic.
-        assert "Recording available with Main+" in body
-        assert "Recording available with Basic+" not in body
+        assert "Recording available with Main or above" in body
+        assert "Recording available with Basic or above" not in body
 
         # The video locked badge is rendered on the recording card.
         locked_badge = page.locator('[data-testid="workshop-video-locked"]')

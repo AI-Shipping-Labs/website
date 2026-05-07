@@ -58,7 +58,9 @@ def _create_course(
     tags=None,
 ):
     """Create a Course via ORM."""
-    from content.models import Course
+    from django.utils.text import slugify
+
+    from content.models import Course, CourseInstructor, Instructor
 
     if tags is None:
         tags = []
@@ -68,14 +70,26 @@ def _create_course(
         slug=slug,
         description=description,
         cover_image_url=cover_image_url,
-        instructor_name=instructor_name,
-        instructor_bio=instructor_bio,
         required_level=required_level,
         status=status,
         discussion_url=discussion_url,
         tags=tags,
     )
     course.save()
+    if instructor_name:
+        instructor, _ = Instructor.objects.get_or_create(
+            instructor_id=slugify(instructor_name)[:200] or 'test-instructor',
+            defaults={
+                'name': instructor_name,
+                'bio': instructor_bio,
+                'status': 'published',
+            },
+        )
+        CourseInstructor.objects.get_or_create(
+            course=course,
+            instructor=instructor,
+            defaults={'position': 0},
+        )
     connection.close()
     return course
 
@@ -225,8 +239,9 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert cover_img.first.get_attribute("alt") == "Cover image for Intro to ML"
         assert cover_img.first.get_attribute("loading") == "lazy"
 
-        # Missing artwork uses the shared metadata fallback instead of the
-        # old icon-only placeholder panel.
+        # Missing artwork uses a decorative fallback. The card body owns the
+        # readable title/tier/instructor/tags so mobile cards do not repeat
+        # the same metadata stack twice.
         advanced_card = page.locator(
             'article:has(a[href="/courses/advanced-mlops"])'
         )
@@ -236,7 +251,7 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
             ).count()
             == 1
         )
-        assert "Advanced MLOps" in advanced_card.locator(
+        assert "Advanced MLOps" not in advanced_card.locator(
             '[data-testid="course-card-preview-fallback"]'
         ).inner_text()
         assert advanced_card.locator(".h-12.w-12").count() == 0
@@ -293,8 +308,8 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
             '[data-testid="course-detail-preview-fallback"]'
         )
         assert detail_fallback.count() == 1
-        assert "Advanced MLOps" in detail_fallback.inner_text()
-        assert "Main+" in detail_fallback.inner_text()
+        assert "Advanced MLOps" not in detail_fallback.inner_text()
+        assert "Main+" not in detail_fallback.inner_text()
 
         # "Join the discussion" link removed (see #151)
         discussion_link = page.locator(
@@ -309,6 +324,65 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert back_link.count() >= 1
         href = back_link.first.get_attribute("href")
         assert href == "/courses"
+
+
+@pytest.mark.django_db(transaction=True)
+class TestIssue480MobileCourseCards:
+    def test_mobile_catalog_cards_do_not_duplicate_metadata_or_overflow(
+        self, django_server, page, tmp_path,
+    ):
+        _clear_courses()
+        _ensure_tiers()
+        title = (
+            "Python for AI Engineering with Long Production Workflows "
+            "and Deployment Practice"
+        )
+        _create_course(
+            title=title,
+            slug="python-ai-engineering",
+            description=(
+                "Python fundamentals, data workflows, agent tooling, and "
+                "deployment practice for AI engineers."
+            ),
+            instructor_name="Alexey Grigorev with a Long Instructor Label",
+            required_level=30,
+            tags=[
+                "python-fundamentals",
+                "data-engineering",
+                "ai-agents",
+                "production",
+            ],
+        )
+
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(f"{django_server}/courses", wait_until="domcontentloaded")
+
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth <= "
+            "document.documentElement.clientWidth"
+        )
+        card = page.locator('article:has(a[href="/courses/python-ai-engineering"])')
+        fallback = card.locator('[data-testid="course-card-preview-fallback"]')
+        assert fallback.count() == 1
+        assert title not in fallback.inner_text()
+        assert "Premium+" not in fallback.inner_text()
+        assert "Alexey Grigorev" not in fallback.inner_text()
+
+        card.locator("a").first.screenshot(
+            path=str(tmp_path / "issue-480-courses-mobile-card.png"),
+        )
+        card.locator("a").first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/courses/python-ai-engineering" in page.url
+
+        detail_fallback = page.locator(
+            '[data-testid="course-detail-preview-fallback"]',
+        )
+        assert detail_fallback.count() == 1
+        assert title not in detail_fallback.inner_text()
+        page.locator("main").screenshot(
+            path=str(tmp_path / "issue-480-courses-mobile-detail.png"),
+        )
 # ---------------------------------------------------------------
 # Scenario 2: Removed -- duplicate of gating tests in
 #   content/tests/test_access_control.py (unit) and

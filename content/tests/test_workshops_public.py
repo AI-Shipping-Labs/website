@@ -150,13 +150,18 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops?tag=does-not-exist')
         self.assertContains(response, 'No workshops found')
 
-    def test_catalog_missing_cover_uses_metadata_fallback_preview(self):
+    def test_catalog_missing_cover_uses_decorative_fallback_preview(self):
         response = self.client.get('/workshops')
+        body = response.content.decode()
+        fallback = body.split(
+            'data-testid="workshop-card-preview-fallback"', 1,
+        )[1].split('<div class="min-w-0 p-5', 1)[0]
         self.assertContains(response, 'data-testid="workshop-card-preview-fallback"')
-        self.assertContains(response, 'Workshop')
-        self.assertContains(response, 'Alice')
-        self.assertContains(response, 'Apr 21, 2026')
-        self.assertContains(response, 'agents')
+        self.assertNotIn('Visible Workshop', fallback)
+        self.assertNotIn('Alice', fallback)
+        self.assertNotIn('Apr 21, 2026', fallback)
+        self.assertNotIn('agents', fallback)
+        self.assertContains(response, 'block h-full focus-visible:outline-none')
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
     def test_catalog_cover_image_has_alt_text_and_lazy_loading(self):
@@ -223,7 +228,7 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="workshop-detail-preview-image"')
         self.assertNotContains(response, 'data-testid="workshop-detail-preview-fallback"')
 
-    def test_landing_missing_cover_uses_metadata_preview(self):
+    def test_landing_missing_cover_uses_decorative_preview(self):
         ws = _make_workshop(
             slug='no-cover',
             title='No Cover Workshop',
@@ -232,10 +237,12 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         )
         response = self.client.get(f'/workshops/{ws.slug}')
         self.assertContains(response, 'data-testid="workshop-detail-preview-fallback"')
-        self.assertContains(response, 'No Cover Workshop')
-        self.assertContains(response, 'Workshop')
-        self.assertContains(response, 'Alice')
-        self.assertContains(response, 'Apr 21, 2026')
+        self.assertNotContains(
+            response,
+            '<h3 class="line-clamp-2 break-words text-base font-semibold '
+            'leading-snug text-foreground sm:text-lg">No Cover Workshop</h3>',
+            html=True,
+        )
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
     def test_landing_shows_instructor_and_date(self):
@@ -284,6 +291,8 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, '/workshops/ws/tutorial/intro')
         self.assertContains(response, '/workshops/ws/tutorial/setup')
+        self.assertContains(response, 'min-h-[44px]')
+        self.assertContains(response, 'focus-visible:ring-2')
 
     def test_landing_video_card_shows_recording_tier_when_gated(self):
         # Basic user passes pages but not recording (level 20)

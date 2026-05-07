@@ -24,14 +24,14 @@
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="workshops-grid">
         {% for workshop in workshops %}
         {% with workshop_primary_instructor=workshop.primary_instructor %}
-        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="workshop-card">
-          <a href="{{ workshop.get_absolute_url }}">
+        <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50" data-testid="workshop-card">
+          <a href="{{ workshop.get_absolute_url }}" class="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
             {% if workshop.pages_required_level > 0 %}
-              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
+              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_name|add:"+" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% else %}
-              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" %}
+              {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% endif %}
-            <div class="p-6">
+            <div class="min-w-0 p-5 sm:p-6">
               <div class="flex flex-wrap items-center gap-2 mb-3">
                 <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
                   <i data-lucide="graduation-cap" class="h-3 w-3"></i>
@@ -44,14 +44,14 @@
                 </span>
                 {% endif %}
               </div>
-              <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+              <h2 class="line-clamp-3 break-words text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
                 {{ workshop.title }}
               </h2>
               <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {% if workshop_primary_instructor %}
-                <span class="flex items-center gap-1" data-testid="workshop-card-instructor">
+                <span class="flex min-w-0 max-w-full items-center gap-1" data-testid="workshop-card-instructor">
                   <i data-lucide="user" class="h-3 w-3"></i>
-                  {{ workshop_primary_instructor.name }}
+                  <span class="truncate">{{ workshop_primary_instructor.name }}</span>
                 </span>
                 {% endif %}
                 <span class="flex items-center gap-1">
@@ -65,7 +65,7 @@
               {% if workshop.tags %}
               <div class="mt-3 flex flex-wrap gap-1.5">
                 {% for tag in workshop.tags %}
-                <span class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+                <span class="max-w-full truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
                 {% endfor %}
               </div>
               {% endif %}

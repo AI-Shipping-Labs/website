@@ -47,7 +47,12 @@
       {% if user.is_authenticated %}
       <!-- Notification Bell -->
       <div class="relative" id="notification-bell-container">
-        <button type="button" class="relative p-2.5 text-muted-foreground transition-colors hover:text-foreground" id="notification-bell-btn" aria-label="Notifications">
+        <button type="button"
+                class="relative p-2.5 text-muted-foreground transition-colors hover:text-foreground"
+                id="notification-bell-btn"
+                aria-label="Notifications"
+                aria-expanded="false"
+                aria-controls="notification-dropdown">
           <i data-lucide="bell" class="h-5 w-5"></i>
           <span id="notification-badge" class="absolute -right-1 -top-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
         </button>
@@ -313,6 +318,9 @@
     }
 
     function openMenu() {
+      document.dispatchEvent(new CustomEvent('header:dropdown-opened', {
+        detail: { dropdown: 'account' }
+      }));
       menu.classList.remove('hidden');
       trigger.setAttribute('aria-expanded', 'true');
     }
@@ -336,6 +344,12 @@
       if (e.key === 'Escape' && isOpen()) {
         closeMenu();
         trigger.focus();
+      }
+    });
+
+    document.addEventListener('header:dropdown-opened', function(e) {
+      if (e.detail && e.detail.dropdown !== 'account') {
+        closeMenu();
       }
     });
   })();
@@ -419,20 +433,44 @@
         });
     }
 
+    function isDropdownOpen() {
+      return !dropdown.classList.contains('hidden');
+    }
+
+    function closeDropdown() {
+      dropdown.classList.add('hidden');
+      bellBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function openDropdown() {
+      document.dispatchEvent(new CustomEvent('header:dropdown-opened', {
+        detail: { dropdown: 'notifications' }
+      }));
+      dropdown.classList.remove('hidden');
+      bellBtn.setAttribute('aria-expanded', 'true');
+      loadNotifications();
+    }
+
     // Toggle dropdown
     bellBtn.addEventListener('click', function(e) {
       e.stopPropagation();
-      var isHidden = dropdown.classList.contains('hidden');
-      dropdown.classList.toggle('hidden');
-      if (isHidden) {
-        loadNotifications();
+      if (isDropdownOpen()) {
+        closeDropdown();
+      } else {
+        openDropdown();
       }
     });
 
     // Close dropdown when clicking outside
     document.addEventListener('click', function(e) {
       if (!dropdown.contains(e.target) && !bellBtn.contains(e.target)) {
-        dropdown.classList.add('hidden');
+        closeDropdown();
+      }
+    });
+
+    document.addEventListener('header:dropdown-opened', function(e) {
+      if (e.detail && e.detail.dropdown !== 'notifications') {
+        closeDropdown();
       }
     });
 

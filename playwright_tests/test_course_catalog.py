@@ -256,12 +256,14 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         ).inner_text()
         assert advanced_card.locator(".h-12.w-12").count() == 0
 
-        # "Advanced MLOps" card with "Main+" tier badge
+        # "Advanced MLOps" card with "Main or above" tier badge.
+        # Issue #481: replaced legacy "Main+" shorthand.
         assert "Advanced MLOps" in body
         tier_badge = page.locator(
-            'span:has-text("Main+")'
+            'span:has-text("Main or above")'
         )
         assert tier_badge.count() >= 1
+        assert "Main+" not in body
 
         # "WIP Course" does NOT appear (draft)
         assert "WIP Course" not in body
@@ -309,7 +311,10 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         )
         assert detail_fallback.count() == 1
         assert "Advanced MLOps" not in detail_fallback.inner_text()
+        # Decorative fallback omits the access label entirely on detail pages.
+        # Issue #481: legacy "Main+" shorthand is gone everywhere.
         assert "Main+" not in detail_fallback.inner_text()
+        assert "Main or above" not in detail_fallback.inner_text()
 
         # "Join the discussion" link removed (see #151)
         discussion_link = page.locator(
@@ -365,7 +370,10 @@ class TestIssue480MobileCourseCards:
         fallback = card.locator('[data-testid="course-card-preview-fallback"]')
         assert fallback.count() == 1
         assert title not in fallback.inner_text()
+        # Issue #481: Premium content shows "Premium" with no "+"/"or above"
+        # suffix because there is no higher public tier.
         assert "Premium+" not in fallback.inner_text()
+        assert "Premium or above" not in fallback.inner_text()
         assert "Alexey Grigorev" not in fallback.inner_text()
 
         card.locator("a").first.screenshot(

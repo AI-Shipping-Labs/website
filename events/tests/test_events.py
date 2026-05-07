@@ -612,6 +612,42 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
         self.client.login(email='basic@test.com', password='pass')
         response = self.client.get('/events/gated-event')
         self.assertContains(response, 'Upgrade to Main to attend')
+        # Issue #481: Main event copy still uses "or above" because Main
+        # is not the highest tier.
+        self.assertContains(
+            response, 'This event requires a Main membership or above.',
+        )
+
+    def test_premium_event_drops_or_above_suffix(self):
+        """Issue #481 AC: Premium-only CTAs do not say "or above".
+
+        Premium is the highest public tier so "Premium membership or
+        above" is misleading — there is no higher tier to upgrade to.
+        """
+        Event.objects.create(
+            title='Premium Event',
+            slug='premium-event',
+            description='Premium-only event.',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_PREMIUM,
+        )
+        user = User.objects.create_user(
+            email='basic-premium@test.com',
+            password='pass',
+            email_verified=True,
+        )
+        user.tier = self.basic_tier
+        user.save()
+        self.client.login(email='basic-premium@test.com', password='pass')
+        response = self.client.get('/events/premium-event')
+        self.assertContains(response, 'Upgrade to Premium to attend')
+        self.assertContains(
+            response, 'This event requires a Premium membership.',
+        )
+        self.assertNotContains(response, 'Premium membership or above')
+        # And the lock badge in the header is "Premium" (no "+").
+        self.assertNotContains(response, 'Premium+')
 
     def test_full_event_shows_full_message(self):
         event = Event.objects.create(

@@ -19,7 +19,7 @@ from django.test import Client, TestCase, tag
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from content.access import LEVEL_MAIN, LEVEL_OPEN
+from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import (
     Course,
     CourseInstructor,
@@ -462,7 +462,27 @@ class CoursesListViewTest(TestCase):
             status='published', required_level=LEVEL_MAIN,
         )
         response = self.client.get('/courses')
-        self.assertContains(response, 'Main+')
+        # Issue #481: badge reads "Main or above" (not the legacy "Main+").
+        self.assertContains(response, 'Main or above')
+        self.assertNotContains(response, 'Main+')
+
+    def test_premium_course_badge_drops_or_above_suffix(self):
+        """Issue #481 AC: Premium-only course CTAs show "Premium" alone.
+
+        There is no higher public tier above Premium, so the catalog and
+        detail badges show "Premium" — not "Premium+" or "Premium or
+        above".
+        """
+        # Wipe the existing fixture courses to keep the assertion specific.
+        Course.objects.all().delete()
+        Course.objects.create(
+            title='Premium Course', slug='premium-course',
+            status='published', required_level=LEVEL_PREMIUM,
+        )
+        response = self.client.get('/courses')
+        self.assertContains(response, 'Premium')
+        self.assertNotContains(response, 'Premium+')
+        self.assertNotContains(response, 'Premium or above')
 
     def test_empty_catalog_message(self):
         Course.objects.all().delete()

@@ -29,7 +29,7 @@
             {% if course.is_free %}
               {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% elif course.required_level > 0 %}
-              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label=course.required_level|required_tier_name|add:"+" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
+              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label=course.required_level|required_tier_label preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% else %}
               {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% endif %}
@@ -38,7 +38,7 @@
                 {% if course.is_free %}
                 <span class="rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">Free</span>
                 {% elif course.required_level > 0 %}
-                <span class="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent">{{ course.required_level|required_tier_name }}+</span>
+                <span class="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent">{{ course.required_level|required_tier_label }}</span>
                 {% endif %}
                 {% if course.pk in enrolled_course_ids %}
                 <span class="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-medium text-green-400" data-testid="enrolled-badge">

@@ -147,10 +147,11 @@ class TestVisitorBrowsesCatalog:
         body = page.content()
 
         # Catalog renders the workshop card with title, instructor, date,
-        # tier badge.
+        # tier badge. Issue #481: badge reads "Basic or above" not "Basic+".
         assert 'Production Agents' in body
         assert 'data-testid="workshop-tier-badge"' in body
-        assert 'Basic+' in body
+        assert 'Basic or above' in body
+        assert 'Basic+' not in body
 
         production_card = page.locator(
             'article:has(a[href="/workshops/ws"])',

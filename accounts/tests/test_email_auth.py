@@ -162,6 +162,25 @@ class RegisterAPITest(TestCase):
         data = resp.json()
         self.assertIn("message", data)
         self.assertIn("verify", data["message"].lower())
+        self.assertEqual(data["return_url"], "")
+
+    def test_register_returns_safe_return_url(self):
+        resp = self._post({
+            "email": "next@example.com",
+            "password": "secure1234",
+            "next": "/courses/free-course/m/l",
+        })
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["return_url"], "/courses/free-course/m/l")
+
+    def test_register_ignores_unsafe_return_url(self):
+        resp = self._post({
+            "email": "unsafe-next@example.com",
+            "password": "secure1234",
+            "next": "https://evil.example",
+        })
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["return_url"], "")
 
 
 # ── Email Verification API ────────────────────────────────────────────
@@ -338,6 +357,34 @@ class LoginAPITest(TestCase):
         resp = self._post({"email": "login@example.com", "password": "correct1234"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["status"], "ok")
+        self.assertEqual(resp.json()["redirect_url"], "/")
+
+    def test_login_returns_safe_next_redirect_url(self):
+        resp = self._post({
+            "email": "login@example.com",
+            "password": "correct1234",
+            "next": "/events/demo?register=1",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["redirect_url"], "/events/demo?register=1")
+
+    def test_login_ignores_unsafe_next_redirect_url(self):
+        unsafe_values = [
+            "https://example.com/phish",
+            "//example.com/phish",
+            "javascript:alert(1)",
+            "/\\example.com",
+        ]
+        for value in unsafe_values:
+            with self.subTest(value=value):
+                self.client.logout()
+                resp = self._post({
+                    "email": "login@example.com",
+                    "password": "correct1234",
+                    "next": value,
+                })
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp.json()["redirect_url"], "/")
 
     def test_login_authenticates_session(self):
         """After login, user is authenticated in the session."""
@@ -791,6 +838,21 @@ class RegisterPageTest(TestCase):
     def test_register_shortcut_redirects(self):
         """GET /register redirects to /accounts/register/."""
         resp = self.client.get("/register")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/accounts/register/")
+
+    def test_register_shortcut_preserves_safe_next(self):
+        resp = self.client.get("/register?next=/events/demo")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/accounts/register/?next=%2Fevents%2Fdemo")
+
+    def test_signup_shortcut_preserves_safe_next(self):
+        resp = self.client.get("/accounts/signup/?next=/courses/demo")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, "/accounts/register/?next=%2Fcourses%2Fdemo")
+
+    def test_signup_shortcut_drops_unsafe_next(self):
+        resp = self.client.get("/accounts/signup/?next=https://evil.example")
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, "/accounts/register/")
 

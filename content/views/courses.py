@@ -1,11 +1,13 @@
 import datetime
 from collections import Counter
+from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.html import strip_tags
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from content.access import (
@@ -79,6 +81,7 @@ def courses_list(request):
     return render(request, 'content/courses_list.html', context)
 
 
+@ensure_csrf_cookie
 def course_detail(request, slug):
     """Course detail page: always visible for SEO.
 
@@ -125,6 +128,7 @@ def course_detail(request, slug):
     cta_url = ''
     buy_individual = False
     buy_individual_price = None
+    course_url = course.get_absolute_url()
     if not has_access:
         if gating.get('gated_reason') == 'unverified_email':
             cta_message = ''
@@ -143,12 +147,12 @@ def course_detail(request, slug):
                 cta_message = f'Unlock with {tier_name}'
             cta_url = '/pricing'
             # Show individual purchase button if price is set
-            if course.individual_price_eur is not None and user.is_authenticated:
+            if course.individual_price_eur is not None:
                 buy_individual = True
                 buy_individual_price = course.individual_price_eur
     elif course.is_free and not user.is_authenticated:
         cta_message = 'Sign up free to start this course'
-        cta_url = '/accounts/signup'
+        cta_url = f'/accounts/signup/?{urlencode({"next": course_url})}'
 
     # Progress percentage
     progress_pct = 0
@@ -512,7 +516,6 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
             # /accounts/login/?next=<unit URL> so they land back on the
             # lesson once they sign in. The "Create a free account"
             # secondary link below stays visible too.
-            from urllib.parse import urlencode
             unit_url = unit.get_absolute_url()
             login_qs = urlencode({'next': unit_url})
             tier_name = None
@@ -527,13 +530,19 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
             if course.required_level == 0:
                 cta_message = 'Sign in to access this lesson'
                 tier_name = None
-                pricing_url = '/accounts/signup/'
+                pricing_url = (
+                    f'/accounts/signup/?'
+                    f'{urlencode({"next": unit.get_absolute_url()})}'
+                )
                 cta_label = 'Sign Up'
                 cta_description = 'Create a free account to access this course.'
             else:
                 cta_message = 'Sign in to access this lesson'
                 tier_name = get_required_tier_name(course.required_level)
-                pricing_url = '/accounts/login/'
+                pricing_url = (
+                    f'/accounts/login/?'
+                    f'{urlencode({"next": unit.get_absolute_url()})}'
+                )
                 cta_label = 'View Pricing'
                 cta_description = 'Get full access to this course and more with a membership.'
         else:
@@ -576,7 +585,6 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         if not user.is_authenticated and (
             course.required_level > 0 or is_auth_required_gate
         ):
-            from urllib.parse import urlencode
             unit_url = unit.get_absolute_url()
             signup_qs = urlencode({'next': unit_url})
             signup_cta_url = f'/accounts/signup/?{signup_qs}'
@@ -874,7 +882,12 @@ def api_course_purchase(request, slug):
         }, status=410)
 
     if not request.user.is_authenticated:
-        return JsonResponse({'error': 'Authentication required'}, status=401)
+        course = get_object_or_404(Course, slug=slug, status='published')
+        next_url = course.get_absolute_url()
+        return JsonResponse({
+            'error': 'Authentication required',
+            'login_url': f'/accounts/login/?{urlencode({"next": next_url})}',
+        }, status=401)
 
     course = get_object_or_404(Course, slug=slug, status='published')
 

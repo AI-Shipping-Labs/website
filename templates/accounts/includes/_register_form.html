@@ -30,5 +30,5 @@
 
 <div class="text-center mb-4">
   <span class="text-sm text-muted-foreground">Already have an account?</span>
-  <a href="/accounts/login/" class="text-sm text-accent hover:underline ml-1" id="login-link">Sign in</a>
+  <a href="/accounts/login/{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" class="text-sm text-accent hover:underline ml-1" id="login-link">Sign in</a>
 </div>

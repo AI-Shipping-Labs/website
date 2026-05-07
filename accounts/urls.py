@@ -1,5 +1,4 @@
 from django.urls import include, path
-from django.views.generic import RedirectView
 
 from accounts.views.account import (
     account_profile_post_view,
@@ -20,6 +19,7 @@ from accounts.views.auth import (
     password_reset_request_api,
     register_api,
     register_view,
+    signup_redirect_view,
     verify_email_api,
 )
 
@@ -27,7 +27,7 @@ urlpatterns = [
     path('login/', login_view, name='account_login'),
     path('logout/', logout_view, name='account_logout'),
     path('register/', register_view, name='account_register'),
-    path('signup/', RedirectView.as_view(url='/accounts/register/', permanent=False), name='account_signup'),
+    path('signup/', signup_redirect_view, name='account_signup'),
     path('', include('allauth.urls')),
 ]
 

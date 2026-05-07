@@ -18,6 +18,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.models import User
+from accounts.return_context import append_next, get_next_url, sanitize_next_url
 from integrations.config import get_config, site_base_url
 
 # Default grace period before an unverified email-signup account is
@@ -69,18 +70,29 @@ def login_view(request):
     inside allauth. Studio settings clears credentials to disable a
     provider, so this gate is the operator's off switch (see issue #322).
     """
+    next_url = get_next_url(request, default="/")
     if request.user.is_authenticated:
-        return redirect("/")
+        return redirect(next_url)
 
-    return render(request, "accounts/login.html", _oauth_provider_context())
+    context = _oauth_provider_context()
+    context["next_url"] = next_url if next_url != "/" else ""
+    return render(request, "accounts/login.html", context)
 
 
 @ensure_csrf_cookie
 def register_view(request):
     """Render the registration page."""
+    next_url = get_next_url(request, default="/")
     if request.user.is_authenticated:
-        return redirect("/")
-    return render(request, "accounts/register.html", _oauth_provider_context())
+        return redirect(next_url)
+    context = _oauth_provider_context()
+    context["next_url"] = next_url if next_url != "/" else ""
+    return render(request, "accounts/register.html", context)
+
+
+def signup_redirect_view(request):
+    """Redirect legacy signup/register shortcuts while preserving ``next``."""
+    return redirect(append_next("/accounts/register/", get_next_url(request, default="")))
 
 
 def logout_view(request):
@@ -286,6 +298,7 @@ def register_api(request):
 
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+    next_url = sanitize_next_url(data.get("next", ""), default="")
 
     if not email:
         return JsonResponse({"error": "Email is required"}, status=400)
@@ -331,6 +344,7 @@ def register_api(request):
         {
             "status": "ok",
             "message": "Account created. Check your email to verify your address.",
+            "return_url": next_url,
         },
         status=201,
     )
@@ -461,7 +475,10 @@ def login_api(request):
 
         login(request, user, backend=EMAIL_PASSWORD_AUTH_BACKEND)
         outcome = "success"
-        response_data = {"status": "ok"}
+        response_data = {
+            "status": "ok",
+            "redirect_url": sanitize_next_url(data.get("next", ""), default="/"),
+        }
         # Push server-side theme preference to client on login
         if user.theme_preference:
             response_data["theme_preference"] = user.theme_preference

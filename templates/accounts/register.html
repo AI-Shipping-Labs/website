@@ -8,8 +8,10 @@
 
 {% block extra_scripts %}
 <script src="/static/js/accounts/auth-helpers.js"></script>
+{{ next_url|json_script:"auth-next-url" }}
 <script>
 var registerPending = false;
+var authNextUrl = JSON.parse(document.getElementById('auth-next-url').textContent || '""');
 
 function setRegisterPending(isPending) {
   window.authHelpers.setPendingState({
@@ -46,7 +48,7 @@ function handleRegister(event) {
       'Content-Type': 'application/json',
       'X-CSRFToken': window.authHelpers.getCsrfToken(),
     },
-    body: JSON.stringify({ email: email, password: password }),
+    body: JSON.stringify({ email: email, password: password, next: authNextUrl }),
   })
   .then(window.authHelpers.parseJsonResponse)
   .then(function(result) {
@@ -57,6 +59,14 @@ function handleRegister(event) {
         'register-success',
         result.data.message || 'Account created successfully!'
       );
+      if (result.data.return_url) {
+        var successBox = document.getElementById('register-success');
+        var returnLink = document.createElement('a');
+        returnLink.href = result.data.return_url;
+        returnLink.className = 'ml-1 text-accent hover:underline';
+        returnLink.textContent = 'Return to where you left off.';
+        successBox.appendChild(returnLink);
+      }
       document.getElementById('register-form').reset();
     } else {
       window.authHelpers.showMessage(

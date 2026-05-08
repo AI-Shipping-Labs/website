@@ -20,6 +20,8 @@ PREVIEW_CONTEXTS = {
     'email_verification': {
         'user_name': 'Ada',
         'verify_url': 'https://aishippinglabs.com/verify?token=demo',
+        'site_url': 'https://aishippinglabs.com',
+        'ttl_days': 7,
     },
     'email_verification_reminder': {
         'user_name': 'Ada',

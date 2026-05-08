@@ -1,5 +1,6 @@
 """Newsletter subscribe, unsubscribe, and subscribe page views."""
 
+import datetime
 import json
 import logging
 
@@ -8,9 +9,11 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from accounts.services.verification import resolve_unverified_ttl_days
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -73,6 +76,7 @@ def _send_subscribe_verification_email(user, redirect_to=None):
     token = _generate_verification_token(user.pk, redirect_to=redirect_to)
     site_url = site_base_url()
     verify_url = f"{site_url}/api/verify-email?token={token}"
+    ttl_days = resolve_unverified_ttl_days()
 
     try:
         from email_app.services.email_service import EmailService
@@ -89,14 +93,23 @@ def _send_subscribe_verification_email(user, redirect_to=None):
                     "verify_url": verify_url,
                     "download_url": verify_url,
                     "resource_title": "your resource",
+                    "site_url": site_url,
+                    "ttl_days": ttl_days,
                 },
             )
         else:
-            # Standard newsletter signup
+            # Standard newsletter signup. Issue #513: pass ``ttl_days`` and
+            # ``site_url`` so the verification template can disclose the
+            # auto-deletion window for unverified accounts and link the
+            # user to ``/accounts/login/``.
             service.send(
                 user,
                 "email_verification",
-                {"verify_url": verify_url},
+                {
+                    "verify_url": verify_url,
+                    "site_url": site_url,
+                    "ttl_days": ttl_days,
+                },
             )
     except Exception:
         logger.exception(
@@ -132,15 +145,29 @@ def subscribe_api(request):
     # Check if user already exists
     try:
         existing_user = User.objects.get(email__iexact=email)
-        # Idempotent: if the user exists but is not verified, re-send verification
+        # Idempotent: if the user exists but is not verified, re-send verification.
+        # Do NOT extend ``verification_expires_at`` on every re-subscribe — that
+        # would let a typo-squatter keep an unclaimed account alive forever by
+        # re-submitting the form daily. The original purge window stands.
         if not existing_user.email_verified:
             _send_subscribe_verification_email(
                 existing_user, redirect_to=redirect_to or None
             )
         # Return same success message regardless (no information leak)
     except User.DoesNotExist:
-        # Create new user with free tier
-        user = User.objects.create_user(email=email)
+        # Issue #513: parity with ``register_api``. Set
+        # ``verification_expires_at`` so the daily purge job (#452)
+        # cleans up newsletter signups that never verify, just like it
+        # already does for email+password signups. Without this the
+        # subscribe endpoint silently creates immortal unverified rows.
+        ttl_days = resolve_unverified_ttl_days()
+        verification_expires_at = (
+            timezone.now() + datetime.timedelta(days=ttl_days)
+        )
+        user = User.objects.create_user(
+            email=email,
+            verification_expires_at=verification_expires_at,
+        )
         _send_subscribe_verification_email(
             user, redirect_to=redirect_to or None
         )
@@ -148,7 +175,14 @@ def subscribe_api(request):
     return JsonResponse(
         {
             "status": "ok",
-            "message": "Check your email to confirm your subscription.",
+            # Issue #513: the on-site message must mention "account" so
+            # the user is not surprised when the verification email also
+            # tells them an account was created.
+            "message": (
+                "Thanks! We've created a free account and emailed a "
+                "verification link. Click it to confirm your subscription "
+                "and activate your account."
+            ),
         }
     )
 

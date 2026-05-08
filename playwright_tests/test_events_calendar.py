@@ -232,13 +232,14 @@ class TestScenario2AnonymousDirectedToSignIn:
     """Anonymous visitor wants to register for an event but is directed
     to sign in."""
 
-    def test_anonymous_sees_sign_in_cta_on_open_event(
+    def test_anonymous_sees_email_only_form_on_open_event(
         self, django_server
     , page):
-        """Given an anonymous visitor (not logged in). An upcoming open
-        event exists. The detail page loads (HTTP 200, no redirect) and
-        shows 'Sign in to register' with a Sign In link that includes
-        a next parameter back to the event."""
+        """Issue #513: anonymous visitors on a free upcoming event see an
+        inline email-only registration form. The 'Already have an account?
+        Sign in' link below the form preserves the event-detail return URL
+        for returning users.
+        """
         _clear_events()
         _ensure_tiers()
 
@@ -258,15 +259,14 @@ class TestScenario2AnonymousDirectedToSignIn:
         # Then: Event detail page loads (HTTP 200, no redirect)
         assert response.status == 200
         assert "/events/open-workshop" in page.url
-        body = page.content()
 
-        # Issue #484: anonymous CTA was rewritten to lead with the
-        # account requirement and explain the newsletter implications.
-        assert "A free account is required to register" in body
-        assert "Sign in to register" in body
+        # The email-only registration form is the entry point.
+        form = page.locator('[data-testid="event-anonymous-email-form"]')
+        assert form.count() == 1
+        assert page.locator('#event-anon-email').count() == 1
+        assert page.locator('#event-anon-submit-btn').count() == 1
 
-        # Sign In link is present (within the registration card,
-        # not the header nav). Target the link with ?next= param.
+        # Returning users still get a sign-in link with `next=` preserved.
         sign_in_link = page.locator(
             'a[href*="/accounts/login/?next="]'
         )
@@ -275,7 +275,7 @@ class TestScenario2AnonymousDirectedToSignIn:
         assert "next" in href
         assert "open-workshop" in href
 
-        # Step 2: Click the "Sign In" link
+        # Step 2: Click the "Sign In" link to verify it routes correctly.
         sign_in_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 

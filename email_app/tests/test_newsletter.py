@@ -10,15 +10,19 @@ Covers:
 - Admin subscriber list, filter, CSV export
 - JWT token generation and validation
 - Edge cases: invalid email, missing fields, expired/invalid tokens
+- Issue #513: subscribe sets verification_expires_at, response/email
+  copy disclose account creation, ttl_days flows into the template.
 """
 
+import datetime
 import json
 from unittest.mock import patch
 
 import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -39,7 +43,10 @@ class SubscribeAPITest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "ok")
-        self.assertIn("Check your email", data["message"])
+        # Issue #513: success copy mentions "account" so the on-site
+        # message matches the verification email's "we created an
+        # account for you" disclosure.
+        self.assertIn("account", data["message"].lower())
 
         # User should be created
         user = User.objects.get(email="new@example.com")
@@ -64,7 +71,9 @@ class SubscribeAPITest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "ok")
-        self.assertIn("Check your email", data["message"])
+        # Issue #513: same success copy regardless of whether the user
+        # already existed (no information leak).
+        self.assertIn("account", data["message"].lower())
 
     @patch("email_app.views.newsletter._send_subscribe_verification_email")
     def test_subscribe_existing_verified_email_no_resend(self, mock_send):
@@ -685,3 +694,174 @@ class TokenGenerationTest(TestCase):
         )
         self.assertNotIn("exp", payload)
         self.assertEqual(payload["action"], "unsubscribe")
+
+
+# Issue #513 ----------------------------------------------------------------
+# Subscriber/user reconciliation: subscribe path matches register path.
+
+
+class SubscribeVerificationExpiresTest(TestCase):
+    """Issue #513: ``subscribe_api`` sets ``verification_expires_at`` so the
+    daily purge job (#452) cleans up newsletter signups that never verify.
+    """
+
+    @patch("email_app.views.newsletter._send_subscribe_verification_email")
+    def test_new_subscriber_gets_verification_expires_at(self, _send):
+        before = timezone.now()
+        resp = self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "subscriber@example.com"}),
+            content_type="application/json",
+        )
+        after = timezone.now()
+        self.assertEqual(resp.status_code, 200)
+
+        user = User.objects.get(email="subscriber@example.com")
+        self.assertFalse(user.email_verified)
+        self.assertIsNotNone(user.verification_expires_at)
+        # Default TTL is 7 days; allow a small wallclock spread.
+        lower = before + datetime.timedelta(days=7) - datetime.timedelta(seconds=5)
+        upper = after + datetime.timedelta(days=7) + datetime.timedelta(seconds=5)
+        self.assertGreaterEqual(user.verification_expires_at, lower)
+        self.assertLessEqual(user.verification_expires_at, upper)
+
+    @patch("email_app.views.newsletter._send_subscribe_verification_email")
+    def test_existing_unverified_subscriber_keeps_original_expiry(self, _send):
+        """Re-subscribing must NOT extend ``verification_expires_at`` —
+        otherwise a typo-squatter could keep an unclaimed account alive
+        forever by re-submitting the form daily.
+        """
+        original_expiry = timezone.now() + datetime.timedelta(days=2)
+        User.objects.create_user(
+            email="dup@example.com",
+            verification_expires_at=original_expiry,
+        )
+
+        resp = self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "dup@example.com"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        user = User.objects.get(email="dup@example.com")
+        # Same row, same expiry — no extension on every re-subscribe.
+        self.assertEqual(user.verification_expires_at, original_expiry)
+        # And only one row exists for that email.
+        self.assertEqual(
+            User.objects.filter(email__iexact="dup@example.com").count(), 1,
+        )
+
+    @patch("email_app.views.newsletter._send_subscribe_verification_email")
+    @override_settings(UNVERIFIED_USER_TTL_DAYS="14")
+    def test_subscribe_respects_ttl_config(self, _send):
+        """Operator-set TTL flows through to the User row, same as
+        ``register_api``.
+        """
+        from integrations.config import clear_config_cache
+        clear_config_cache()
+
+        before = timezone.now()
+        resp = self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "ttl14@example.com"}),
+            content_type="application/json",
+        )
+        after = timezone.now()
+        self.assertEqual(resp.status_code, 200)
+
+        user = User.objects.get(email="ttl14@example.com")
+        lower = before + datetime.timedelta(days=14) - datetime.timedelta(seconds=5)
+        upper = after + datetime.timedelta(days=14) + datetime.timedelta(seconds=5)
+        self.assertGreaterEqual(user.verification_expires_at, lower)
+        self.assertLessEqual(user.verification_expires_at, upper)
+
+
+class SubscribeSharedTtlHelperTest(TestCase):
+    """Issue #513: ``_resolve_unverified_ttl_days`` lives in
+    ``accounts.services.verification`` and is imported by both
+    ``accounts.views.auth`` and ``email_app.views.newsletter``.
+    """
+
+    def test_helper_lives_in_shared_location(self):
+        from accounts.services.verification import resolve_unverified_ttl_days
+
+        self.assertGreater(resolve_unverified_ttl_days(), 0)
+
+    def test_auth_view_reuses_shared_helper(self):
+        """The auth view's local name resolves to the shared helper."""
+        from accounts.services.verification import resolve_unverified_ttl_days
+        from accounts.views import auth as auth_view
+
+        self.assertIs(
+            auth_view._resolve_unverified_ttl_days,
+            resolve_unverified_ttl_days,
+        )
+
+    def test_newsletter_view_imports_shared_helper(self):
+        """The newsletter view module imports the shared helper, not a
+        re-implementation.
+        """
+        from accounts.services.verification import resolve_unverified_ttl_days
+        from email_app.views import newsletter as newsletter_view
+
+        self.assertIs(
+            newsletter_view.resolve_unverified_ttl_days,
+            resolve_unverified_ttl_days,
+        )
+
+
+class EmailVerificationTemplateCopyTest(TestCase):
+    """Issue #513: the verification email body discloses that we created
+    a free account, what the account is for, and the auto-deletion
+    window. Both the auth-side and subscribe-side render paths get
+    ``ttl_days`` and ``site_url`` in the context.
+    """
+
+    @patch(
+        "email_app.services.email_service.EmailService._send_ses",
+        return_value="ses-513-1",
+    )
+    def test_subscribe_render_includes_account_disclosure(self, mock_ses):
+        resp = self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "render-sub@example.com"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        mock_ses.assert_called_once()
+        html = mock_ses.call_args[0][2]
+        # Account creation is disclosed verbatim per the spec.
+        self.assertIn("we've created a free account for you", html.lower())
+        # Sign-in path is surfaced (uses ``site_url`` from the context).
+        self.assertIn("/accounts/login/", html)
+        # Auto-deletion window is named so the user can ignore the email
+        # safely. Default TTL is 7 days.
+        self.assertIn("7 days", html)
+
+    @patch("accounts.views.auth._probe_slack_membership_on_signup")
+    @patch(
+        "email_app.services.email_service.EmailService._send_ses",
+        return_value="ses-513-2",
+    )
+    def test_register_render_includes_account_disclosure(
+        self, mock_ses, _probe,
+    ):
+        resp = self.client.post(
+            "/api/register",
+            data=json.dumps({
+                "email": "render-reg@example.com",
+                "password": "secure1234",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201)
+
+        mock_ses.assert_called_once()
+        html = mock_ses.call_args[0][2]
+        # Same body / context as the subscribe path — both call paths
+        # render the same template with the same disclosures.
+        self.assertIn("we've created a free account for you", html.lower())
+        self.assertIn("/accounts/login/", html)
+        self.assertIn("7 days", html)

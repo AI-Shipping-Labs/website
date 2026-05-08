@@ -133,32 +133,109 @@
       <!-- Registration / Action Section -->
       {% if event.status == 'upcoming' %}
       <div class="mb-12 rounded-lg border border-border bg-card p-6" data-testid="event-registration-card">
-        {% if not user.is_authenticated %}
+        {% if anon_registered_email %}
           {% comment %}
-            Issue #484: anonymous registration copy explicitly tells the
-            visitor that creating a free account is required to register,
-            and what creating that account implies (newsletter / community
-            updates). Keep the wording aligned with the verbatim copy
-            asserted by tests so updates don't silently regress.
+            Issue #513: anonymous post-registration confirmation. Rendered
+            when the visitor just submitted the email-only registration
+            form for a free event. We do NOT auto-log them in (email is
+            unverified) — instead we surface the calendar download, an
+            explanation that a verification email is on the way, and a
+            "Sign in to manage your registration" link.
           {% endcomment %}
-          <div class="text-center" data-testid="event-anonymous-cta">
-            <p class="text-lg font-semibold text-foreground">A free account is required to register</p>
-            <p class="mt-2 text-sm text-muted-foreground">
-              Sign in or create a free account to save your spot. We'll send your
-              calendar invite and confirmation by email, and add you to occasional
-              newsletter updates about new events. You can unsubscribe at any time.
-            </p>
-            <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
-              <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
-                 class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
-                Sign in to register
+          <div data-testid="event-anonymous-registered-confirmation">
+            <div class="flex items-center gap-3">
+              <div class="rounded-full bg-green-500/20 p-2">
+                <i data-lucide="check" class="h-5 w-5 text-green-400"></i>
+              </div>
+              <div>
+                <p class="font-semibold text-foreground">You're registered for {{ event.title }}</p>
+                <p class="text-sm text-muted-foreground">
+                  We've sent a confirmation with a calendar invite to
+                  <span class="text-foreground" data-testid="event-anonymous-registered-email">{{ anon_registered_email }}</span>{% if anon_registered_account_created %},
+                  plus a verification link to activate your free account{% endif %}.
+                </p>
+              </div>
+            </div>
+            <div class="mt-5 flex flex-wrap items-center gap-3">
+              <a href="{{ event_ics_url }}"
+                 class="inline-flex items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
+                 data-testid="event-anonymous-add-to-calendar"
+                 download>
+                <i data-lucide="calendar-plus" class="h-4 w-4"></i>
+                Add to calendar
               </a>
-              <a href="/accounts/signup/?next={{ event.get_absolute_url|urlencode }}"
-                 class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
-                Create free account
+              <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
+                 class="text-sm text-muted-foreground hover:text-foreground"
+                 data-testid="event-anonymous-manage-link">
+                Sign in to manage your registration
               </a>
             </div>
           </div>
+        {% elif not user.is_authenticated %}
+          {% if event.required_level == 0 %}
+            {% comment %}
+              Issue #513: free events expose an inline email-only
+              registration form for anonymous visitors. Submitting it
+              creates a free unverified User and registers them — no
+              detour through /accounts/signup/. The "already have an
+              account?" link below preserves the sign-in path for
+              returning users.
+            {% endcomment %}
+            <div data-testid="event-anonymous-email-form">
+              <p class="text-lg font-semibold text-foreground">Register for this event</p>
+              <p class="mt-2 text-sm text-muted-foreground">
+                Enter your email to save your spot. We'll create a free account for you
+                so you can manage your registration, and we'll send a calendar invite and
+                a verification link to activate the account. You can unsubscribe at any time.
+              </p>
+              <form id="event-anon-register-form" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch" novalidate>
+                <label class="sr-only" for="event-anon-email">Email address</label>
+                <input id="event-anon-email"
+                       name="email"
+                       type="email"
+                       required
+                       autocomplete="email"
+                       placeholder="you@example.com"
+                       class="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                <button type="submit"
+                        id="event-anon-submit-btn"
+                        class="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  Register for this event
+                </button>
+              </form>
+              <p id="event-anon-error" class="mt-3 hidden text-sm text-red-400" data-testid="event-anonymous-error"></p>
+              <p class="mt-4 text-sm text-muted-foreground">
+                Already have an account?
+                <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}" class="text-accent hover:underline">Sign in</a>
+                to register.
+              </p>
+            </div>
+          {% else %}
+            {% comment %}
+              Issue #484/#513: gated events keep the existing
+              "Sign in / Create free account" CTA pair. Anonymous
+              email-only registration is NOT offered when the event has
+              a tier requirement — the upgrade gate shows after sign-in.
+            {% endcomment %}
+            <div class="text-center" data-testid="event-anonymous-cta">
+              <p class="text-lg font-semibold text-foreground">A free account is required to register</p>
+              <p class="mt-2 text-sm text-muted-foreground">
+                Sign in or create a free account to save your spot. We'll send your
+                calendar invite and confirmation by email, and add you to occasional
+                newsletter updates about new events. You can unsubscribe at any time.
+              </p>
+              <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+                <a href="/accounts/login/?next={{ event.get_absolute_url|urlencode }}"
+                   class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  Sign in to register
+                </a>
+                <a href="/accounts/signup/?next={{ event.get_absolute_url|urlencode }}"
+                   class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+                  Create free account
+                </a>
+              </div>
+            </div>
+          {% endif %}
         {% elif not has_access and gated_reason == "unverified_email" %}
           {% include "content/_verify_email_required.html" %}
         {% elif not has_access %}
@@ -354,6 +431,76 @@ function registerForEvent(slug) {
     btn.textContent = 'Register';
   });
 }
+
+(function() {
+  // Issue #513: anonymous email-only event registration. Submitting the
+  // form posts the email to the same /api/events/<slug>/register
+  // endpoint as the authenticated path; the server distinguishes the
+  // two by request.user.is_authenticated and presence of an email body.
+  // On success we redirect with ?registered=<email> so the page reloads
+  // to the confirmation block (avoids needing client-side state).
+  const form = document.getElementById('event-anon-register-form');
+  if (!form) return;
+  const slug = "{{ event.slug|escapejs }}";
+  const btn = document.getElementById('event-anon-submit-btn');
+  const errEl = document.getElementById('event-anon-error');
+  const emailInput = document.getElementById('event-anon-email');
+
+  function showError(message) {
+    if (!errEl) { alert(message); return; }
+    errEl.textContent = message;
+    errEl.classList.remove('hidden');
+  }
+  function clearError() {
+    if (!errEl) return;
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearError();
+    const email = (emailInput.value || '').trim();
+    if (!email) { showError('Please enter your email address.'); return; }
+
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    btn.textContent = 'Registering...';
+
+    fetch('/api/events/' + slug + '/register', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken'),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: email }),
+    })
+    .then(function (response) {
+      return response.json().then(function (data) {
+        return { ok: response.ok, data: data };
+      });
+    })
+    .then(function (result) {
+      if (result.ok) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('registered', email);
+        if (result.data && result.data.account_created) {
+          url.searchParams.set('account_created', '1');
+        }
+        window.location.href = url.toString();
+      } else {
+        showError((result.data && result.data.error) || 'Registration failed.');
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    })
+    .catch(function () {
+      showError('Network error. Please try again.');
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    });
+  });
+})();
 
 function unregisterFromEvent(slug) {
   if (!confirm('Are you sure you want to cancel your registration?')) return;

@@ -72,9 +72,15 @@ def _create_event(
 
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousRegistrationCopy:
-    """Issue #484: anonymous CTA explains the account/newsletter implication."""
+    """Issue #513: anonymous CTA on a free upcoming event is the inline
+    email-only registration form. The form copy discloses that a free
+    account will be created and that the user can unsubscribe at any
+    time. The legacy "Sign in / Create free account" button pair is
+    replaced; the "Already have an account? Sign in" link below the form
+    preserves the return URL for returning users.
+    """
 
-    def test_anonymous_sees_rewritten_cta(self, django_server, page):
+    def test_anonymous_sees_email_only_form(self, django_server, page):
         _clear_events()
         _ensure_tiers()
         _create_event(slug="anon-evt", title="Anon Event")
@@ -85,22 +91,26 @@ class TestAnonymousRegistrationCopy:
         )
         assert response.status == 200
 
-        card = page.locator('[data-testid="event-anonymous-cta"]')
-        assert card.count() == 1
-        text = card.inner_text()
-        assert "A free account is required to register" in text
-        assert "newsletter" in text
+        form_card = page.locator('[data-testid="event-anonymous-email-form"]')
+        assert form_card.count() == 1
+        text = form_card.inner_text()
+        assert "Register for this event" in text
+        assert "free account" in text
         assert "unsubscribe" in text
 
-        # Login + signup links must preserve the event slug.
+        # Email input + submit button are both present.
+        assert page.locator('#event-anon-email').count() == 1
+        assert page.locator('#event-anon-submit-btn').count() == 1
+
+        # Returning-user sign-in link preserves the event slug.
         login = page.locator(
             'a[href="/accounts/login/?next=/events/anon-evt"]'
         )
-        signup = page.locator(
-            'a[href="/accounts/signup/?next=/events/anon-evt"]'
-        )
         assert login.count() == 1
-        assert signup.count() == 1
+        # The legacy "Create free account" button is gone for free events.
+        assert page.locator(
+            'a[href="/accounts/signup/?next=/events/anon-evt"]'
+        ).count() == 0
 
 
 @pytest.mark.django_db(transaction=True)

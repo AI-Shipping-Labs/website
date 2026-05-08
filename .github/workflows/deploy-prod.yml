@@ -40,10 +40,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run Django system checks
+        # Issue #529: verify the source tree being deployed passes its own
+        # `manage.py check --fail-level ERROR`. SES_ENABLED=true here is a
+        # wiring check on the source tree; the prod-env enforcement is
+        # provided by entrypoint.sh running inside the new ECS task.
+        # SECRET_KEY is a synthetic CI value — settings.py rejects an
+        # unset SECRET_KEY when DEBUG=False so the check would never get
+        # to run without one; the value is not used to sign anything real.
+        env:
+          DEBUG: "False"
+          SES_ENABLED: "true"
+          SECRET_KEY: "ci-system-check-only-not-a-real-secret"
+        run: uv run python manage.py check --fail-level ERROR
 
       - name: Deploy to Production
         run: bash deploy/deploy_prod.sh ${{ github.event.inputs.deployTag }}

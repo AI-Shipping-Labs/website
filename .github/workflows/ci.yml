@@ -74,26 +74,27 @@ jobs:
         # canonical tiers are absent, discard the stale cache so Django builds
         # a fresh test database from migrations.
         run: |
-          if [ ! -f test_db.sqlite3 ]; then
+          if ! compgen -G 'test_db*.sqlite3' > /dev/null; then
             exit 0
           fi
           if uv run python - <<'PY'
+          import glob
           import sqlite3
           import sys
 
           required = {"free", "basic", "main", "premium"}
-          try:
-              with sqlite3.connect("test_db.sqlite3") as conn:
-                  rows = conn.execute(
-                      "select slug from payments_tier where slug in (?, ?, ?, ?)",
-                      tuple(sorted(required)),
-                  ).fetchall()
-          except sqlite3.DatabaseError:
-              sys.exit(1)
-          except sqlite3.OperationalError:
-              sys.exit(1)
-          slugs = {row[0] for row in rows}
-          sys.exit(0 if slugs == required else 1)
+          for path in glob.glob("test_db*.sqlite3"):
+              try:
+                  with sqlite3.connect(path) as conn:
+                      rows = conn.execute(
+                          "select slug from payments_tier where slug in (?, ?, ?, ?)",
+                          tuple(sorted(required)),
+                      ).fetchall()
+              except sqlite3.DatabaseError:
+                  sys.exit(1)
+              slugs = {row[0] for row in rows}
+              if slugs != required:
+                  sys.exit(1)
           PY
           then
             exit 0

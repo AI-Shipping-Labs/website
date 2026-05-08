@@ -131,11 +131,13 @@ Provider consoles:
 
 Production deploys MUST set the env var `SES_ENABLED=true` to actually send mail. The flag defaults to `false` everywhere — local dev, CI, Playwright, `manage.py test` — so transactional and campaign mail short-circuits with a synthetic `ses-disabled-noop` message id and no boto3 call is made. Without `SES_ENABLED=true` in prod, no user-facing email leaves the host (issue #509).
 
+Deploy-time guard: a Django system check (`email_app.E001`) makes `manage.py check` exit non-zero whenever `DEBUG=False` and `SES_ENABLED` is not `true`, so a production deploy that runs `manage.py check` as a pre-flight step blocks before the new container is promoted. The check is silent in local dev (`DEBUG=True`) and under `manage.py test` (the test runner sets the `TESTING` flag). To intentionally run a production-like environment without SES (for example a staging box that should not send real mail), silence the check with `SILENCED_SYSTEM_CHECKS = ['email_app.E001']` in settings. Issue #521.
+
 Keys to set in Studio:
 
 | Key | Source | Notes |
 |-----|--------|-------|
-| `SES_ENABLED` | env var | Set to `true` in prod. Defaults `false` so dev/CI never sends real mail. Forced `false` under `manage.py test`. Issue #509. |
+| `SES_ENABLED` | env var | Set to `true` in prod. Defaults `false` so dev/CI never sends real mail. Forced `false` under `manage.py test`. `manage.py check` fails with `email_app.E001` if `DEBUG=False` and this is not `true`. Issues #509, #521. |
 | `AWS_ACCESS_KEY_ID` | secret | IAM user with `ses:SendEmail` and `ses:SendRawEmail`. Force-blanked when `SES_ENABLED=false` so any code path that slips past the gate cannot authenticate. |
 | `AWS_SECRET_ACCESS_KEY` | secret | Paired with the access key ID. Same force-blank as above. |
 | `AWS_SES_REGION` | non-secret | e.g. `us-east-1`, `eu-west-1`. |

@@ -57,6 +57,12 @@ def _start_django_server():
     settings.AWS_ACCESS_KEY_ID = ''
     settings.AWS_SECRET_ACCESS_KEY = ''
 
+    # Silence the SES-disabled-in-prod system check (email_app.E001) during
+    # Playwright runs — we deliberately disable SES here for E2E (see above),
+    # and pytest-django defaults DEBUG=False, so without this the runserver
+    # thread would raise SystemCheckError at startup and kill every E2E test.
+    settings.SILENCED_SYSTEM_CHECKS = ['email_app.E001']
+
     # Enable Stripe Checkout so that upgrade/downgrade/cancel buttons and
     # the JS-based checkout flow are rendered in templates.  The setting
     # defaults to False (payment-links mode) but E2E tests for the account

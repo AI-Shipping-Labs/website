@@ -146,7 +146,7 @@ SES bounce / complaint webhook setup (issue #453):
 
 1. Create an SNS topic, e.g. `ses-bounces-prod` (region must match `AWS_SES_REGION`).
 2. SES console -> Configuration -> Configuration sets (or Email destinations) -> enable Bounce and Complaint notifications and point them at the SNS topic. Delivery notifications are optional; the webhook accepts and logs them but takes no action.
-3. SNS console -> Subscriptions -> Create subscription -> Protocol `HTTPS`, Endpoint `https://prod.aishippinglabs.com/api/ses-events`.
+3. SNS console -> Subscriptions -> Create subscription -> Protocol `HTTPS`, Endpoint `https://aishippinglabs.com/api/ses-events`.
 4. AWS posts a `SubscriptionConfirmation` to that endpoint; our webhook auto-confirms by fetching the `SubscribeURL`. The subscription state in SNS will flip from `PendingConfirmation` to `Confirmed` once that succeeds.
 5. Verify by sending an email to the SES `mailbox-simulator` address `bounce@simulator.amazonses.com`; the recipient User row should flip to `unsubscribed=True` and pick up the `bounced` tag, and a row should appear in the `email_app.SesEvent` audit table.
 

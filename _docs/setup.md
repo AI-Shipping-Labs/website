@@ -13,7 +13,7 @@ The app runs on AWS ECS Fargate behind an ALB, with Docker images stored in ECR.
 | RDS | `ai-shipping-labs` (PostgreSQL, private VPC) |
 | ALB | `aisl-alb` |
 | Dev URL | https://dev.aishippinglabs.com |
-| Prod URL | https://prod.aishippinglabs.com / https://aishippinglabs.com |
+| Prod URL | https://aishippinglabs.com (canonical) — `prod.aishippinglabs.com` is a legacy alias that still resolves to the same ECS service |
 | Region | `eu-west-1` |
 
 The ECS task runs two containers from the same Docker image:
@@ -322,8 +322,9 @@ GitHub only allows one callback URL per OAuth app, so create a separate app for 
 |-------------|-------------|
 | Local | `http://localhost:8000/accounts/github/login/callback/` |
 | Dev | `https://dev.aishippinglabs.com/accounts/github/login/callback/` |
-| Prod (staging) | `https://prod.aishippinglabs.com/accounts/github/login/callback/` |
 | Prod | `https://aishippinglabs.com/accounts/github/login/callback/` |
+
+`prod.aishippinglabs.com` is a legacy alias of the same ECS service. If you want logins to keep working from that hostname, also register a callback for it; otherwise users are expected to land on the canonical `aishippinglabs.com`.
 
 ### Getting Slack OAuth credentials
 
@@ -377,21 +378,14 @@ For `https://dev.aishippinglabs.com/`:
 3. Add Google with your client ID and secret, assign to the site, save
 4. Repeat for GitHub (use the dev-specific GitHub OAuth app) and Slack
 
-For `https://prod.aishippinglabs.com/`:
-
-1. Log in at https://prod.aishippinglabs.com/admin/
-2. Go to https://prod.aishippinglabs.com/admin/socialaccount/socialapp/add/
-3. Add Google with your client ID and secret, assign to the site, save
-4. Repeat for GitHub (use the prod-specific GitHub OAuth app) and Slack
-
-For `https://aishippinglabs.com/` (production, custom domain):
+For `https://aishippinglabs.com/` (production):
 
 1. Log in at https://aishippinglabs.com/admin/
 2. Go to https://aishippinglabs.com/admin/socialaccount/socialapp/add/
 3. Add Google with your client ID and secret, assign to the site, save
 4. Repeat for GitHub (use the prod GitHub OAuth app) and Slack
 
-If `prod.aishippinglabs.com` and `aishippinglabs.com` point to the same ECS service and database, you only need to configure the social apps once — they share the same DB.
+`prod.aishippinglabs.com` is a legacy alias that points to the same ECS service and database, so the social apps configured for `aishippinglabs.com` already cover it — no separate setup needed.
 
 The same Google/Slack OAuth client can be reused across environments as long as all redirect URIs are registered. GitHub requires a separate OAuth app per environment since it only allows one callback URL per app.
 

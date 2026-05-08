@@ -1,9 +1,12 @@
-<section id="member-notes" class="mb-8">
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-lg font-semibold text-foreground">Member notes</h2>
+<section id="member-notes" class="mb-8 max-w-4xl" data-testid="member-notes-section">
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+    <div>
+      <h2 class="text-lg font-semibold text-foreground">Member notes</h2>
+      <p class="text-xs text-muted-foreground mt-1">Internal notes stay staff-only. External notes are shareable with the member; staff edit them here.</p>
+    </div>
     <a href="{% if current_plan %}{% url 'studio_member_note_create' user_id=detail_user.pk %}?plan_id={{ current_plan.pk }}{% else %}{% url 'studio_member_note_create' user_id=detail_user.pk %}{% endif %}"
        data-testid="member-notes-add"
-       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+       class="inline-flex items-center justify-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity self-start sm:self-auto">
       Add member note
     </a>
   </div>
@@ -14,18 +17,21 @@
   </div>
   {% endif %}
 
-  <section data-testid="internal-notes" class="bg-card border border-border rounded-lg p-6 mb-6">
-    <h3 data-testid="internal-notes-heading" class="text-md font-semibold text-foreground mb-3">Internal notes (staff only)</h3>
+  <section data-testid="internal-notes" class="bg-card border-l-4 border-l-purple-400/60 border border-border rounded-lg p-6 mb-6">
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center rounded-full bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium text-purple-300">Internal</span>
+      <h3 data-testid="internal-notes-heading" class="text-md font-semibold text-foreground mb-3">Internal notes (staff only)</h3>
+    </div>
     {% if internal_notes %}
     <ul class="space-y-3">
       {% for note in internal_notes %}
-      <li class="border border-border rounded-lg p-3">
+      <li class="border border-border rounded-lg p-4">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between text-xs text-muted-foreground mb-2">
-          <div>
-            <span>{{ note.get_kind_display }} · {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} · {{ note.created_by.email }}{% endif %}</span>
+          <div class="min-w-0">
+            <span>{{ note.get_kind_display }} &middot; {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} &middot; {{ note.created_by.email }}{% endif %}</span>
             {% include "studio/users/_member_note_plan_badge.html" %}
           </div>
-          <span class="space-x-2 whitespace-nowrap">
+          <span class="flex items-center gap-3 whitespace-nowrap">
             <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
             <form method="post" action="{% url 'studio_member_note_delete' user_id=detail_user.pk note_id=note.pk %}" class="inline"
                   onsubmit="return confirm('Delete this internal note?');">
@@ -34,7 +40,7 @@
             </form>
           </span>
         </div>
-        <p class="text-sm text-foreground whitespace-pre-line">{{ note.body }}</p>
+        <p class="text-sm text-foreground whitespace-pre-line mt-2">{{ note.body }}</p>
       </li>
       {% endfor %}
     </ul>
@@ -43,18 +49,22 @@
     {% endif %}
   </section>
 
-  <section data-testid="external-notes" class="bg-card border border-border rounded-lg p-6 mb-6">
-    <h3 data-testid="external-notes-heading" class="text-md font-semibold text-foreground mb-3">External notes (shareable with member)</h3>
+  <section data-testid="external-notes" class="bg-card border-l-4 border-l-green-400/60 border border-border rounded-lg p-6 mb-6">
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] font-medium text-green-300">External</span>
+      <h3 data-testid="external-notes-heading" class="text-md font-semibold text-foreground mb-3">External notes (shareable with member)</h3>
+    </div>
+    <p class="text-xs text-muted-foreground mb-3">Staff edit external notes here; members do not edit them from their account.</p>
     {% if external_notes %}
     <ul class="space-y-3">
       {% for note in external_notes %}
-      <li class="border border-border rounded-lg p-3">
+      <li class="border border-border rounded-lg p-4">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between text-xs text-muted-foreground mb-2">
-          <div>
-            <span>{{ note.get_kind_display }} · {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} · {{ note.created_by.email }}{% endif %}</span>
+          <div class="min-w-0">
+            <span>{{ note.get_kind_display }} &middot; {{ note.created_at|date:"Y-m-d H:i" }}{% if note.created_by %} &middot; {{ note.created_by.email }}{% endif %}</span>
             {% include "studio/users/_member_note_plan_badge.html" %}
           </div>
-          <span class="space-x-2 whitespace-nowrap">
+          <span class="flex items-center gap-3 whitespace-nowrap">
             <a href="{% url 'studio_member_note_edit' user_id=detail_user.pk note_id=note.pk %}" class="text-accent hover:underline">Edit</a>
             <form method="post" action="{% url 'studio_member_note_delete' user_id=detail_user.pk note_id=note.pk %}" class="inline"
                   onsubmit="return confirm('Delete this external note?');">
@@ -63,7 +73,7 @@
             </form>
           </span>
         </div>
-        <p class="text-sm text-foreground whitespace-pre-line">{{ note.body }}</p>
+        <p class="text-sm text-foreground whitespace-pre-line mt-2">{{ note.body }}</p>
       </li>
       {% endfor %}
     </ul>

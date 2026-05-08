@@ -30,6 +30,7 @@ from studio.views.courses import (
     course_create_stripe_product,
     course_edit,
     course_list,
+    course_user_search,
     module_create,
     module_reorder,
     unit_create,
@@ -192,6 +193,7 @@ urlpatterns = [
     path('courses/<int:course_id>/access/', course_access_list, name='studio_course_access_list'),
     path('courses/<int:course_id>/access/grant/', course_access_grant, name='studio_course_access_grant'),
     path('courses/<int:course_id>/access/<int:access_id>/revoke/', course_access_revoke, name='studio_course_access_revoke'),
+    path('courses/<int:course_id>/access/users/search/', course_user_search, name='studio_course_user_search'),
 
     # Enrollments scoped to a course (issue #293; superseding #236)
     path(

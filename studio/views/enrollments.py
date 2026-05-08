@@ -52,32 +52,42 @@ def enrollment_list(request, course_id):
 def enrollment_create(request, course_id):
     """Manually enroll a user in this course (source='admin').
 
-    The course is taken from the URL path. Email comes from POST. Idempotent:
-    if an active enrollment already exists, surface an info message and
-    don't create a duplicate.
+    The course is taken from the URL path. Either ``user_id`` (autocomplete
+    selection) or ``email`` (keyboard-fast path) comes from POST.
+    ``user_id`` wins when both are present. Idempotent: if an active
+    enrollment already exists, surface an info message and don't create a
+    duplicate.
     """
     course = get_object_or_404(Course, pk=course_id)
+    user_id_raw = request.POST.get('user_id', '').strip()
     email = request.POST.get('email', '').strip()
 
-    if not email:
+    user = None
+    if user_id_raw:
+        try:
+            user = User.objects.get(pk=int(user_id_raw))
+        except (ValueError, User.DoesNotExist):
+            messages.error(request, 'Selected user no longer exists.')
+            return redirect('studio_course_enrollment_list', course_id=course.pk)
+    elif email:
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            messages.error(request, f'No user found with email "{email}".')
+            return redirect('studio_course_enrollment_list', course_id=course.pk)
+    else:
         messages.error(request, 'Email is required.')
-        return redirect('studio_course_enrollment_list', course_id=course.pk)
-
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        messages.error(request, f'No user found with email "{email}".')
         return redirect('studio_course_enrollment_list', course_id=course.pk)
 
     existing = Enrollment.objects.filter(
         user=user, course=course, unenrolled_at__isnull=True,
     ).first()
     if existing:
-        messages.info(request, f'{email} is already enrolled in "{course.title}".')
+        messages.info(request, f'{user.email} is already enrolled in "{course.title}".')
         return redirect('studio_course_enrollment_list', course_id=course.pk)
 
     Enrollment.objects.create(user=user, course=course, source=SOURCE_ADMIN)
-    messages.success(request, f'Enrolled {email} in "{course.title}".')
+    messages.success(request, f'Enrolled {user.email} in "{course.title}".')
     return redirect('studio_course_enrollment_list', course_id=course.pk)
 
 

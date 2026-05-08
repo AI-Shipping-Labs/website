@@ -70,6 +70,38 @@ jobs:
             test_db*.sqlite3-shm
           key: test-db-v2-${{ runner.os }}-py3.13-${{ hashFiles('**/migrations/*.py') }}
 
+      - name: Validate cached test database
+        # Issue #533: a restored --keepdb SQLite file can have migrations
+        # marked applied while data-migration seed rows are missing. If the
+        # canonical tiers are absent, discard the stale cache so Django builds
+        # a fresh test database from migrations.
+        run: |
+          if [ ! -f test_db.sqlite3 ]; then
+            exit 0
+          fi
+          if uv run python - <<'PY'
+          import sqlite3
+          import sys
+
+          required = {"free", "basic", "main", "premium"}
+          try:
+              with sqlite3.connect("test_db.sqlite3") as conn:
+                  rows = conn.execute(
+                      "select slug from payments_tier where slug in (?, ?, ?, ?)",
+                      tuple(sorted(required)),
+                  ).fetchall()
+          except sqlite3.DatabaseError:
+              sys.exit(1)
+          except sqlite3.OperationalError:
+              sys.exit(1)
+          slugs = {row[0] for row in rows}
+          sys.exit(0 if slugs == required else 1)
+          PY
+          then
+            exit 0
+          fi
+          rm -f test_db.sqlite3 test_db*.sqlite3 test_db*.sqlite3-wal test_db*.sqlite3-shm
+
       - name: Run unit and integration tests
         # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342.
         # Issue #532: DJANGO_TEST_DB_NAME makes SQLite tests file-backed so

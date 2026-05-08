@@ -30,5 +30,20 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Issue #529: defence-in-depth gate against a misconfigured deploy. Runs
+# against the actual platform env vars (real DEBUG, real SES_ENABLED). If
+# a registered system check fires at Error level (e.g. email_app.E001
+# when SES_ENABLED is missing from the prod task definition), the
+# container exits non-zero, ECS marks it unhealthy, and the rollout halts.
+# Order: migrate -> createcachetable -> check -> exec, so a fresh DB is
+# migrated before any future check that hits the ORM runs.
+echo "Run Django system checks (fail on Error level)"
+uv run python manage.py check --fail-level ERROR
+
+if [ $? -ne 0 ]; then
+    echo "Django system checks failed. Refusing to start the container."
+    exit 1
+fi
+
 echo "Starting server"
 exec "$@"

@@ -40,6 +40,20 @@ jobs:
       - name: Run migrations
         run: uv run python manage.py migrate
 
+      - name: Run Django system checks
+        # Issue #529: catches PR-time regressions where someone breaks the
+        # check itself (e.g. by removing the TESTING short-circuit in
+        # email_app/checks.py). SES_ENABLED=true here is a wiring check on
+        # the source tree, not a platform-env check. SECRET_KEY is a
+        # synthetic CI value — settings.py rejects an unset SECRET_KEY
+        # when DEBUG=False so the check would never get to run without
+        # one; the value is not used to sign anything real.
+        env:
+          DEBUG: "False"
+          SES_ENABLED: "true"
+          SECRET_KEY: "ci-system-check-only-not-a-real-secret"
+        run: uv run python manage.py check --fail-level ERROR
+
       - name: Run unit and integration tests
         # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342
         run: uv run python manage.py test --parallel 4

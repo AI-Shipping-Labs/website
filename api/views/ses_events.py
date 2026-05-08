@@ -1,8 +1,26 @@
-"""SES bounce / complaint webhook (issue #453).
+"""SES bounce / complaint webhook (issues #453, #495).
 
 Receives SNS notifications for bounce, complaint, delivery, open, and click
 events from Amazon SES. The signature on the SNS message is the auth layer;
 there is intentionally no token requirement and the endpoint is CSRF-exempt.
+
+Payload shapes supported:
+
+- Identity-notification SNS payloads use ``notificationType``: ``Bounce``,
+  ``Complaint``, ``Delivery``, ``Open``, ``Click``. This is what SES emits
+  when bounce/complaint notifications are configured directly on the
+  verified identity.
+- Configuration-set event-publishing payloads use ``eventType``: ``Bounce``,
+  ``Complaint``, ``Delivery``, ``Open``, ``Click``, ``Reject``,
+  ``Send``, ``DeliveryDelay``, ``RenderingFailure``,
+  ``Subscription``. These come through when SES is configured to publish
+  events via a configuration-set destination, which is the production
+  setup driven by ``SES_CONFIGURATION_SET_NAME``.
+
+In both shapes the inner JSON includes the same ``mail`` block with
+``messageId`` and ``destination``, plus the per-event detail block under
+its lower-cased name. Bounce/complaint detail keys are identical between
+the two shapes.
 
 Branching:
 
@@ -10,7 +28,7 @@ Branching:
   confirm the topic, log the event, return 200.
 - ``Type=UnsubscribeConfirmation``   -> log only, return 200.
 - ``Type=Notification``              -> parse the inner ``Message`` JSON, then
-  branch on ``notificationType``:
+  branch on ``notificationType`` / ``eventType``:
     * ``Bounce`` with ``bounceType=Permanent``  -> for each recipient, set
       ``User.unsubscribed=True`` and append the ``bounced`` tag.
     * ``Bounce`` with ``bounceType=Transient``  -> increment
@@ -22,9 +40,17 @@ Branching:
     * ``Click``      -> set first-click timestamp and increment click count;
       also sets first-open timestamp when no open was received.
 
+Correlation (issue #495): bounce and complaint events look up the
+matching ``EmailLog`` by inner SES ``mail.messageId`` (when present) and
+attach the ``EmailLog`` FK plus normalized bounce diagnostics on both
+``SesEvent`` and ``EmailLog`` so staff can trace any bounce back to the
+campaign / verification / lead-magnet email that produced it. Events
+that do not match an ``EmailLog`` are still audited (no spam-trap loops).
+
 Idempotency: dedup on the SNS ``MessageId``. The ``SesEvent.message_id`` field
-has a unique constraint; the view uses ``get_or_create`` so a retried delivery
-of the same notification skips all side-effects.
+has a unique constraint; the view checks for an existing row and bails before
+running any side-effects, so a retried delivery of the same notification skips
+user mutations and EmailLog updates.
 
 Failure handling: any 4xx/5xx from us causes SNS to retry. Returning 200 on
 unmatched recipients is intentional -- a missing user is not a webhook
@@ -192,17 +218,25 @@ def _handle_notification(payload, message_id):
         # 200 so SNS doesn't keep retrying a payload that will never parse.
         return JsonResponse({"status": "ignored"}, status=200)
 
-    notification_type = inner.get("notificationType", "")
+    # SES event publishing (configuration-set destinations) sends ``eventType``;
+    # SES identity notifications send ``notificationType``. The two payloads
+    # are otherwise identical for the event types we care about, so we
+    # normalize to a single ``event_kind`` string and dispatch on it.
+    event_kind = (
+        inner.get("eventType")
+        or inner.get("notificationType")
+        or ""
+    )
 
-    if notification_type == "Bounce":
+    if event_kind == "Bounce":
         return _handle_bounce(payload, inner, message_id)
-    if notification_type == "Complaint":
+    if event_kind == "Complaint":
         return _handle_complaint(payload, inner, message_id)
-    if notification_type == "Delivery":
+    if event_kind == "Delivery":
         return _handle_delivery(payload, inner, message_id)
-    if notification_type == "Open":
+    if event_kind == "Open":
         return _handle_open(payload, inner, message_id)
-    if notification_type == "Click":
+    if event_kind == "Click":
         return _handle_click(payload, inner, message_id)
 
     _record_event(
@@ -211,7 +245,7 @@ def _handle_notification(payload, message_id):
         raw_payload=payload,
         recipient_email="",
         user=None,
-        action_taken=f"unknown notificationType={notification_type!r}; ignored",
+        action_taken=f"unknown event kind={event_kind!r}; ignored",
     )
     return JsonResponse({"status": "ignored"}, status=200)
 
@@ -223,8 +257,10 @@ def _handle_notification(payload, message_id):
 
 def _handle_bounce(payload, inner, message_id):
     bounce = inner.get("bounce", {}) or {}
-    bounce_type = bounce.get("bounceType", "")
+    bounce_type = bounce.get("bounceType", "") or ""
+    bounce_subtype = bounce.get("bounceSubType", "") or ""
     recipients = bounce.get("bouncedRecipients", []) or []
+    diagnostic = _first_recipient_diagnostic(recipients)
     addresses = [
         (r.get("emailAddress") or "").strip()
         for r in recipients
@@ -244,6 +280,13 @@ def _handle_bounce(payload, inner, message_id):
     if existing is not None:
         return JsonResponse({"status": "duplicate"}, status=200)
 
+    # Issue #495: correlate to the originating EmailLog by the inner SES
+    # mail.messageId. This lets staff trace a bounce back to the specific
+    # campaign / verification / lead-magnet send that produced it.
+    ses_mail_id = ((inner.get("mail") or {}).get("messageId") or "").strip()
+    matched_log = _find_email_log(ses_mail_id)
+    bounce_timestamp = _parse_event_timestamp(inner, "bounce")
+
     if not addresses:
         _record_event(
             message_id=message_id,
@@ -252,7 +295,19 @@ def _handle_bounce(payload, inner, message_id):
             recipient_email="",
             user=None,
             action_taken="no recipients in payload; logged only",
+            email_log=matched_log,
+            bounce_type=bounce_type,
+            bounce_subtype=bounce_subtype,
+            diagnostic_code=diagnostic,
         )
+        if matched_log is not None:
+            _stamp_email_log_bounce(
+                matched_log,
+                bounce_type=bounce_type,
+                bounce_subtype=bounce_subtype,
+                diagnostic=diagnostic,
+                event_timestamp=bounce_timestamp,
+            )
         return JsonResponse({"status": "ok"}, status=200)
 
     # Single audit row -- captures the first (or only) recipient. With multiple
@@ -284,6 +339,13 @@ def _handle_bounce(payload, inner, message_id):
         else:
             actions.append(f"{address}: bounce type {bounce_type!r}; logged only")
 
+    # Prefer the EmailLog's user when correlation succeeded, since the log
+    # is the authoritative record of who we sent to. Fall back to the
+    # email-address lookup otherwise.
+    correlated_user = (
+        matched_log.user if matched_log is not None else matched_user
+    )
+
     try:
         with transaction.atomic():
             SesEvent.objects.create(
@@ -291,9 +353,21 @@ def _handle_bounce(payload, inner, message_id):
                 event_type=event_type,
                 raw_payload=payload,
                 recipient_email=first_address,
-                user=matched_user,
+                user=correlated_user,
                 action_taken="; ".join(actions)[:255],
+                email_log=matched_log,
+                bounce_type=bounce_type,
+                bounce_subtype=bounce_subtype,
+                diagnostic_code=diagnostic,
             )
+            if matched_log is not None:
+                _stamp_email_log_bounce(
+                    matched_log,
+                    bounce_type=bounce_type,
+                    bounce_subtype=bounce_subtype,
+                    diagnostic=diagnostic,
+                    event_timestamp=bounce_timestamp,
+                )
     except IntegrityError:
         # Another worker just wrote the audit row for the same MessageId.
         # Side-effects above are idempotent on retry: ``add_tag`` dedupes,
@@ -314,6 +388,11 @@ def _handle_bounce(payload, inner, message_id):
 def _handle_complaint(payload, inner, message_id):
     complaint = inner.get("complaint", {}) or {}
     recipients = complaint.get("complainedRecipients", []) or []
+    diagnostic = (
+        complaint.get("complaintFeedbackType")
+        or complaint.get("complaintSubType")
+        or ""
+    )
     addresses = [
         (r.get("emailAddress") or "").strip()
         for r in recipients
@@ -325,6 +404,10 @@ def _handle_complaint(payload, inner, message_id):
     if existing is not None:
         return JsonResponse({"status": "duplicate"}, status=200)
 
+    ses_mail_id = ((inner.get("mail") or {}).get("messageId") or "").strip()
+    matched_log = _find_email_log(ses_mail_id)
+    complaint_timestamp = _parse_event_timestamp(inner, "complaint")
+
     if not addresses:
         _record_event(
             message_id=message_id,
@@ -333,7 +416,11 @@ def _handle_complaint(payload, inner, message_id):
             recipient_email="",
             user=None,
             action_taken="no recipients in payload; logged only",
+            email_log=matched_log,
+            diagnostic_code=diagnostic,
         )
+        if matched_log is not None:
+            _stamp_email_log_complaint(matched_log, complaint_timestamp)
         return JsonResponse({"status": "ok"}, status=200)
 
     first_address = addresses[0]
@@ -349,6 +436,10 @@ def _handle_complaint(payload, inner, message_id):
         _mark_complaint(user)
         actions.append(f"{address}: unsubscribed and tagged {TAG_COMPLAINED}")
 
+    correlated_user = (
+        matched_log.user if matched_log is not None else matched_user
+    )
+
     try:
         with transaction.atomic():
             SesEvent.objects.create(
@@ -356,9 +447,13 @@ def _handle_complaint(payload, inner, message_id):
                 event_type=SesEvent.EVENT_TYPE_COMPLAINT,
                 raw_payload=payload,
                 recipient_email=first_address,
-                user=matched_user,
+                user=correlated_user,
                 action_taken="; ".join(actions)[:255],
+                email_log=matched_log,
+                diagnostic_code=diagnostic,
             )
+            if matched_log is not None:
+                _stamp_email_log_complaint(matched_log, complaint_timestamp)
     except IntegrityError:
         logger.warning(
             "Duplicate SesEvent insert for MessageId=%s on complaint",
@@ -421,14 +516,7 @@ def _handle_engagement(*, payload, inner, message_id, notification_type):
     if existing is not None:
         return JsonResponse({"status": "duplicate"}, status=200)
 
-    email_log = None
-    if ses_message_id:
-        email_log = (
-            EmailLog.objects
-            .select_related("user")
-            .filter(ses_message_id=ses_message_id)
-            .first()
-        )
+    email_log = _find_email_log(ses_message_id)
 
     if email_log is None:
         logger.warning(
@@ -458,6 +546,7 @@ def _handle_engagement(*, payload, inner, message_id, notification_type):
                 recipient_email=recipient_email or email_log.user.email,
                 user=email_log.user,
                 action_taken=f"{notification_type.lower()} recorded",
+                email_log=email_log,
             )
             locked_log = EmailLog.objects.select_for_update().get(pk=email_log.pk)
             if notification_type == "Open":
@@ -492,9 +581,35 @@ def _find_user(email):
     return User.objects.filter(email__iexact=email).first()
 
 
+def _find_email_log(ses_message_id):
+    """Look up the EmailLog that produced this SES message, or None.
+
+    Used by bounce / complaint / engagement handlers to correlate inbound
+    events back to the specific transactional or campaign send that
+    triggered them.
+    """
+    if not ses_message_id:
+        return None
+    return (
+        EmailLog.objects
+        .select_related("user", "campaign")
+        .filter(ses_message_id=ses_message_id)
+        .first()
+    )
+
+
 def _parse_engagement_timestamp(inner, notification_type):
     """Return the SES event timestamp as an aware datetime."""
-    detail_key = notification_type.lower()
+    return _parse_event_timestamp(inner, notification_type.lower())
+
+
+def _parse_event_timestamp(inner, detail_key):
+    """Return the timestamp for an SES event detail block as aware datetime.
+
+    ``detail_key`` is the lower-cased event name, e.g. ``"bounce"``,
+    ``"complaint"``, ``"open"``. Falls back to the ``mail.timestamp`` and
+    finally to ``timezone.now()`` if neither is parseable.
+    """
     raw_timestamp = (
         (inner.get(detail_key) or {}).get("timestamp")
         or (inner.get("mail") or {}).get("timestamp")
@@ -514,6 +629,64 @@ def _first_mail_destination(inner):
         if isinstance(address, str) and address.strip():
             return address.strip()
     return ""
+
+
+def _first_recipient_diagnostic(recipients):
+    """Return the diagnostic / status / reason string from the first
+    bounced recipient that has any of those fields, or empty string.
+
+    SES bounce recipients optionally carry ``diagnosticCode`` (the SMTP
+    response from the receiving server), ``status`` (RFC 3463 enhanced
+    status code), and ``action`` (e.g. ``"failed"``). For ops triage we
+    prefer ``diagnosticCode`` since it carries the human-readable
+    failure reason; we fall back to a status/action combination if the
+    diagnostic is missing.
+    """
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        diagnostic = (recipient.get("diagnosticCode") or "").strip()
+        if diagnostic:
+            return diagnostic
+        status = (recipient.get("status") or "").strip()
+        action = (recipient.get("action") or "").strip()
+        if status or action:
+            return f"status={status} action={action}".strip()
+    return ""
+
+
+def _stamp_email_log_bounce(
+    email_log, *, bounce_type, bounce_subtype, diagnostic, event_timestamp,
+):
+    """Persist bounce correlation fields on the matched EmailLog.
+
+    Idempotent: ``bounced_at`` is only written the first time, so SNS
+    retries cannot move the timestamp forward. Subsequent bounce events
+    for the same EmailLog (rare in practice) update the type / subtype /
+    diagnostic so the latest reason wins.
+    """
+    update_fields = []
+    if email_log.bounced_at is None:
+        email_log.bounced_at = event_timestamp
+        update_fields.append("bounced_at")
+    if email_log.bounce_type != bounce_type:
+        email_log.bounce_type = bounce_type
+        update_fields.append("bounce_type")
+    if email_log.bounce_subtype != bounce_subtype:
+        email_log.bounce_subtype = bounce_subtype
+        update_fields.append("bounce_subtype")
+    if diagnostic and email_log.bounce_diagnostic != diagnostic:
+        email_log.bounce_diagnostic = diagnostic
+        update_fields.append("bounce_diagnostic")
+    if update_fields:
+        email_log.save(update_fields=update_fields)
+
+
+def _stamp_email_log_complaint(email_log, event_timestamp):
+    """Persist complaint timestamp on the matched EmailLog. Idempotent."""
+    if email_log.complained_at is None:
+        email_log.complained_at = event_timestamp
+        email_log.save(update_fields=["complained_at"])
 
 
 def _mark_permanent_bounce(user):
@@ -551,8 +724,26 @@ def _record_soft_bounce(user):
     return user.soft_bounce_count, False
 
 
-def _record_event(*, message_id, event_type, raw_payload, recipient_email, user, action_taken):
-    """Insert a SesEvent row, swallowing duplicate-MessageId races."""
+def _record_event(
+    *,
+    message_id,
+    event_type,
+    raw_payload,
+    recipient_email,
+    user,
+    action_taken,
+    email_log=None,
+    bounce_type="",
+    bounce_subtype="",
+    diagnostic_code="",
+):
+    """Insert a SesEvent row, swallowing duplicate-MessageId races.
+
+    Accepts optional correlation fields (``email_log``, ``bounce_type``,
+    ``bounce_subtype``, ``diagnostic_code``) introduced in #495. They
+    default to empty so the helper is still safe to call from
+    non-bounce/complaint handlers.
+    """
     try:
         SesEvent.objects.create(
             message_id=message_id,
@@ -561,6 +752,10 @@ def _record_event(*, message_id, event_type, raw_payload, recipient_email, user,
             recipient_email=recipient_email or "",
             user=user,
             action_taken=action_taken[:255],
+            email_log=email_log,
+            bounce_type=bounce_type or "",
+            bounce_subtype=bounce_subtype or "",
+            diagnostic_code=diagnostic_code or "",
         )
     except IntegrityError:
         logger.info(

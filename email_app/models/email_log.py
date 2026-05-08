@@ -61,6 +61,44 @@ class EmailLog(models.Model):
         default=0,
         help_text='Count of SES click events received for this email.',
     )
+    # Bounce / complaint correlation (issue #495). These columns let staff
+    # answer "did this bounce come from a campaign, signup verification,
+    # verification reminder, or lead-magnet email?" by reading EmailLog
+    # alone, without joining through SesEvent. Populated by the
+    # /api/ses-events webhook when an SES bounce or complaint payload's
+    # inner mail.messageId matches this row's ses_message_id.
+    bounced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp of the first SES bounce event for this email.',
+    )
+    bounce_type = models.CharField(
+        max_length=32,
+        blank=True,
+        default='',
+        help_text='SES bounceType: "Permanent", "Transient", or "Undetermined".',
+    )
+    bounce_subtype = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        help_text='SES bounceSubType, e.g. "General", "NoEmail", "Suppressed".',
+    )
+    bounce_diagnostic = models.TextField(
+        blank=True,
+        default='',
+        help_text=(
+            'Diagnostic / status / reason text from the bounced recipient '
+            'entry (e.g. "smtp; 550 5.1.1 user unknown").'
+        ),
+    )
+    complained_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp of the first SES complaint event for this email.',
+    )
 
     class Meta:
         ordering = ['-sent_at']

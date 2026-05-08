@@ -21,12 +21,17 @@ sets ``RUN_MIGRATIONS=true``; the worker container (cloned from web with
 ``command`` overridden in ``deploy/update_task_def.py``) does not. We use
 that env var as the dispatch flag:
 
-* web (RUN_MIGRATIONS=true)  -> migrate, createcachetable, check, gunicorn
-* worker (RUN_MIGRATIONS!=true) -> createcachetable, check, qcluster
+* web (RUN_MIGRATIONS=true)  -> migrate, check, gunicorn
+* worker (RUN_MIGRATIONS!=true) -> check, qcluster
 
 The worker still benefits from the single-process boot: only one settings
 import, no Secrets Manager / RDS round trips before django-q starts
 polling.
+
+The ``django_q_cache`` table (used by the worker-heartbeat
+``DatabaseCache`` backend) is created by an ``email_app`` migration, so
+it lands during ``migrate`` on the web container rather than on every
+boot.
 """
 
 import os
@@ -59,21 +64,15 @@ def main():
             flush=True,
         )
 
-    # Create the django-q cache table. The /studio/worker/ dashboard reads
-    # cluster heartbeats from CACHES['django_q'] (DatabaseCache), and that
-    # backend requires a table created via createcachetable. The command
-    # is idempotent, so it's safe to run on every container start.
-    print("Ensure django-q cache table exists", flush=True)
-    call_command("createcachetable", "django_q_cache", verbosity=1)
-
     # Issue #529: defence-in-depth gate against a misconfigured deploy.
     # Runs against the actual platform env vars (real DEBUG, real
     # SES_ENABLED). If a registered system check fires at Error level
     # (e.g. email_app.E001 when SES_ENABLED is missing from the prod task
     # definition), the container exits non-zero, ECS marks it unhealthy,
-    # and the rollout halts. Order: migrate -> createcachetable -> check
-    # -> serve, so a fresh DB is migrated before any future check that
-    # hits the ORM runs.
+    # and the rollout halts. Order: migrate -> check -> serve, so a fresh
+    # DB is migrated (including the email_app migration that creates the
+    # ``django_q_cache`` table) before any future check that hits the ORM
+    # runs.
     print("Run Django system checks (fail on Error level)", flush=True)
     call_command("check", "--fail-level", "ERROR")
 

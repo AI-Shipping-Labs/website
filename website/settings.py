@@ -529,10 +529,11 @@ if not SES_ENABLED:
 #   web and worker are separate tasks sharing only the database. No
 #   shared filesystem required, no extra infra (Redis, EFS) needed.
 #
-# The cache table must exist before django-q can write to it — run
-# `python manage.py createcachetable django_q_cache` after `migrate`.
-# It is idempotent and wired into both `scripts/setup.sh` (local) and
-# `entrypoint.sh` (every container start in deploy).
+# The cache table must exist before django-q can write to it. The
+# `email_app` migration `0013_create_django_q_cache_table` runs
+# `createcachetable django_q_cache` as a `RunPython` step, so the table
+# is created on a fresh `manage.py migrate` everywhere (local dev, CI
+# test DB, ECS deploy) without a separate one-shot command.
 #
 # `Q_CLUSTER['cache'] = 'django_q'` (below) tells django-q to use this
 # named cache rather than `default`, so the application's own cache usage

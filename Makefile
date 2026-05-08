@@ -7,30 +7,32 @@
 SITE_BASE_URL ?= http://localhost:8000
 
 # Start dev server
-run: qcache
+run: migrate
 	SITE_BASE_URL=$(SITE_BASE_URL) uv run python manage.py runserver
 
 # Start dev server on port 8001
-run2: qcache
+run2: migrate
 	SITE_BASE_URL=http://localhost:8001 uv run python manage.py runserver 8001
 
 # Start django-q worker
-worker: qcache
+worker: migrate
 	SITE_BASE_URL=$(SITE_BASE_URL) uv run python manage.py qcluster
 
 # Start dev server + django-q worker together (Ctrl-C kills both).
 # Procfile.dev sets SITE_BASE_URL=http://localhost:8000 on each line.
-dev: qcache
+dev: migrate
 	uv run honcho -f Procfile.dev start
 
-# Run migrations
+# Run migrations. The ``email_app`` ``0013_create_django_q_cache_table``
+# migration creates the django-q DatabaseCache table used by the local
+# worker heartbeat, so no separate ``createcachetable`` step is needed.
 migrate:
 	uv run python manage.py makemigrations
 	uv run python manage.py migrate
 
-# Create the django-q cache table used by the local worker heartbeat cache
+# Backwards-compat alias for older muscle-memory: ``make qcache`` used to
+# run ``migrate`` then ``createcachetable``. Now it's just ``migrate``.
 qcache: migrate
-	uv run python manage.py createcachetable django_q_cache
 
 # Sync content from local content repo clone
 # Override repo path: make sync CONTENT_REPO=~/other/path

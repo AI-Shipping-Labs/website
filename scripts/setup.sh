@@ -24,10 +24,10 @@ else
 fi
 
 echo "==> Running migrations"
+# email_app/migrations/0013_create_django_q_cache_table creates the
+# django-q DatabaseCache table as part of migrate, so no separate
+# createcachetable step is needed.
 uv run python manage.py migrate
-
-echo "==> Creating django-q cache table (idempotent)"
-uv run python manage.py createcachetable django_q_cache
 
 echo "==> Seeding database"
 uv run python manage.py seed_data

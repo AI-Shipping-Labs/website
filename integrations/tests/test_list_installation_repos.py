@@ -165,7 +165,12 @@ class ListInstallationRepositoriesTest(TestCase):
         GITHUB_APP_PRIVATE_KEY='',
         GITHUB_APP_INSTALLATION_ID='',
     )
-    def test_missing_credentials_propagates_error(self):
+    @patch(
+        'integrations.services.github_sync.client'
+        '._fetch_github_app_private_key_from_secrets_manager',
+        return_value='',
+    )
+    def test_missing_credentials_propagates_error(self, _mock_secrets):
         with self.assertRaises(GitHubSyncError):
             list_installation_repositories()
 

@@ -1879,7 +1879,12 @@ class GitHubAppAuthTest(TestCase):
         GITHUB_APP_PRIVATE_KEY='',
         GITHUB_APP_INSTALLATION_ID='',
     )
-    def test_missing_credentials_raises_error(self):
+    @patch(
+        'integrations.services.github_sync.client'
+        '._fetch_github_app_private_key_from_secrets_manager',
+        return_value='',
+    )
+    def test_missing_credentials_raises_error(self, _mock_secrets):
         from integrations.services.github import generate_github_app_token
         with self.assertRaises(GitHubSyncError) as ctx:
             generate_github_app_token()

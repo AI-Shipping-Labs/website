@@ -18,6 +18,64 @@ from integrations.services.github_sync.common import (
     logger,
 )
 
+# Cached AWS Secrets Manager lookup. ``website/settings.py`` previously
+# resolved the GitHub App PEM at module-import time, which paid a
+# Secrets Manager API round-trip (~1-2s) for every Django boot --
+# multiplied across the four settings imports the old entrypoint did.
+# We now resolve it lazily on the first call to
+# ``generate_github_app_token``. The result is cached at module level
+# for the lifetime of the process; if the secret rotates, restart the
+# task.
+_GITHUB_APP_PRIVATE_KEY_SECRET_ID = 'ai-shipping-labs/github-app-private-key'
+_GITHUB_APP_PRIVATE_KEY_SECRET_REGION = 'eu-west-1'
+_secrets_manager_pem_cache = None
+
+
+def _fetch_github_app_private_key_from_secrets_manager():
+    """Fetch the GitHub App PEM from AWS Secrets Manager (cached).
+
+    Returns an empty string if boto3 is unavailable, the secret is
+    missing, or the call fails for any reason -- never raises. Callers
+    treat an empty string as "no key configured".
+    """
+    global _secrets_manager_pem_cache
+    if _secrets_manager_pem_cache is not None:
+        return _secrets_manager_pem_cache
+    try:
+        import boto3  # noqa: PLC0415
+        client = boto3.client(
+            'secretsmanager',
+            region_name=_GITHUB_APP_PRIVATE_KEY_SECRET_REGION,
+        )
+        value = client.get_secret_value(
+            SecretId=_GITHUB_APP_PRIVATE_KEY_SECRET_ID,
+        )['SecretString']
+    except Exception as e:
+        logger.warning(
+            'Failed to fetch secret %s: %s',
+            _GITHUB_APP_PRIVATE_KEY_SECRET_ID, e,
+        )
+        value = ''
+    _secrets_manager_pem_cache = value
+    return value
+
+
+def _resolve_github_app_private_key():
+    """Resolve the GitHub App private key.
+
+    Lookup order:
+      1. ``IntegrationSetting`` DB row (via ``get_config``), which also
+         falls through to Django settings (``GITHUB_APP_PRIVATE_KEY``,
+         which is itself resolved from a PEM file or env var at
+         settings-import time).
+      2. AWS Secrets Manager (production fallback), cached after the
+         first call.
+    """
+    private_key = get_config('GITHUB_APP_PRIVATE_KEY')
+    if private_key:
+        return private_key
+    return _fetch_github_app_private_key_from_secrets_manager()
+
 
 def validate_webhook_signature(request, secret):
     """Validate a GitHub webhook request using X-Hub-Signature-256.
@@ -71,7 +129,7 @@ def generate_github_app_token():
         GitHubSyncError: If credentials are missing or token generation fails.
     """
     app_id = get_config('GITHUB_APP_ID')
-    private_key = get_config('GITHUB_APP_PRIVATE_KEY')
+    private_key = _resolve_github_app_private_key()
     installation_id = get_config('GITHUB_APP_INSTALLATION_ID')
 
     if not all([app_id, private_key, installation_id]):

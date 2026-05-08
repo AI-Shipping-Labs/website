@@ -8,7 +8,19 @@
 <main class="min-h-screen pt-24">
   <section class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-2xl px-6 lg:px-8">
+      {% if user.is_authenticated %}
+      <div class="rounded-2xl border border-border bg-background p-8 sm:p-10 text-center" data-testid="subscribe-already-subscribed">
+        <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">You're already on the list</h1>
+        <p class="mt-4 text-muted-foreground">
+          You'll receive community updates at <span class="font-medium text-foreground">{{ user.email }}</span>.
+        </p>
+        <a href="/account" class="mt-6 inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary">
+          Manage email preferences
+        </a>
+      </div>
+      {% else %}
       {% include "includes/subscribe_form.html" only %}
+      {% endif %}
     </div>
   </section>
 </main>

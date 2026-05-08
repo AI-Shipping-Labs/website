@@ -62,13 +62,15 @@ class HomePostLaunchCopyTest(TierSetupMixin, TestCase):
         self.assertContains(response, "Build AI in public, with a group.")
         self.assertContains(
             response,
-            "Free Friday newsletter -- concept explainers, tool "
-            "breakdowns, and what the community is shipping this week.",
+            "Subscribe to stay on top of what's happening in the community "
+            "and receive updates.",
         )
         # Pre-launch strings must be gone.
         self.assertNotContains(response, "Want to know when we launch?")
         self.assertNotContains(response, "first ping")
         self.assertNotContains(response, "when the community opens")
+        # Old post-launch copy must be gone too.
+        self.assertNotContains(response, "Free Friday newsletter")
 
     def test_home_uses_footer_as_single_newsletter_form(self):
         response = self.client.get("/")
@@ -177,13 +179,13 @@ class SubscribeFormDefaultsTest(TierSetupMixin, TestCase):
     """The /subscribe page renders the partial with no overrides, so it
     surfaces the default heading / description verbatim."""
 
-    def test_subscribe_page_uses_friday_newsletter_defaults(self):
+    def test_subscribe_page_uses_community_defaults(self):
         response = self.client.get("/subscribe")
-        self.assertContains(response, "Get the Friday newsletter")
+        self.assertContains(response, "Stay on top of the community")
         self.assertContains(
             response,
-            "Weekly digest of new articles, projects, and what the "
-            "community is shipping. No spam.",
+            "Subscribe to stay on top of what's happening in the community "
+            "and receive updates. No spam.",
         )
         # Defaults must NOT be the old generic strings.
         self.assertNotContains(

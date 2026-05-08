@@ -39,7 +39,7 @@ class SubscribeAPITest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "ok")
-        self.assertIn("Check your email", data["message"])
+        self.assertIn("check your email to confirm", data["message"].lower())
 
         # User should be created
         user = User.objects.get(email="new@example.com")
@@ -64,7 +64,7 @@ class SubscribeAPITest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "ok")
-        self.assertIn("Check your email", data["message"])
+        self.assertIn("check your email to confirm", data["message"].lower())
 
     @patch("email_app.views.newsletter._send_subscribe_verification_email")
     def test_subscribe_existing_verified_email_no_resend(self, mock_send):

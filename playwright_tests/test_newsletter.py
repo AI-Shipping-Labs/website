@@ -189,7 +189,7 @@ class TestScenario1SubscribeFromDedicatedPage:
 
         # Then: Confirmation message appears
         message_text = message_el.first.inner_text()
-        assert "Check your email to confirm your subscription" in message_text
+        assert "check your email to confirm" in message_text.lower()
 
         # Then: The email input is cleared
         assert email_input.first.input_value() == ""
@@ -370,7 +370,7 @@ class TestScenario4NoInformationLeak:
 
         # Then: Same success message appears
         message_text = message_el.first.inner_text()
-        assert "Check your email to confirm your subscription" in message_text
+        assert "check your email to confirm" in message_text.lower()
 
         # Then: No error is shown
         error_el = page.locator(".subscribe-error")

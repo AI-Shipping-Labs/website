@@ -30,7 +30,7 @@ class FooterNewsletterTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'name="email"')
         # Post-launch footer copy (issue #319).
         self.assertContains(response, "Build AI in public, with a group.")
-        self.assertContains(response, "Free Friday newsletter")
+        self.assertContains(response, "Subscribe to stay on top of what's happening in the community")
 
     def test_authenticated_user_does_not_see_newsletter_form_in_footer(self):
         self.client.login(email="member@test.com", password="testpass123")

@@ -148,7 +148,7 @@ def subscribe_api(request):
     return JsonResponse(
         {
             "status": "ok",
-            "message": "Check your email to confirm your subscription.",
+            "message": "If you're not already subscribed, check your email to confirm.",
         }
     )
 

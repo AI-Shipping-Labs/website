@@ -290,60 +290,89 @@ function createStripeProduct(courseId) {
 {% endif %}
 
 {% if course %}
-<!-- Modules & Units Section -->
-<div class="mt-12 max-w-3xl">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-lg font-semibold text-foreground">Modules &amp; Units</h2>
+{% with module_count=modules|length %}
+<!-- Modules & Units Section (compact, collapsed by default per #491) -->
+<section class="mt-12 max-w-3xl" data-testid="course-modules-section">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div class="flex items-baseline gap-3 min-w-0">
+      <h2 class="text-lg font-semibold text-foreground">Modules &amp; Units</h2>
+      <span class="text-xs text-muted-foreground" data-testid="modules-summary-counts">
+        {{ module_count }} module{{ module_count|pluralize }}
+        &middot;
+        {{ total_unit_count|default:0 }} unit{{ total_unit_count|default:0|pluralize }}
+      </span>
+    </div>
     {% if not is_synced %}
-    <form method="post" action="{% url 'studio_module_create' course_id=course.pk %}" class="flex items-center space-x-2">
+    <form method="post" action="{% url 'studio_module_create' course_id=course.pk %}" class="flex items-center gap-2" data-testid="add-module-form">
       {% csrf_token %}
       <input type="text" name="title" placeholder="New module title..." required
-             class="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <button type="submit" class="bg-secondary border border-border px-3 py-1.5 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
+             class="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent w-40 sm:w-56">
+      <button type="submit" class="bg-secondary border border-border px-3 py-1.5 rounded-lg text-sm text-foreground hover:bg-muted transition-colors whitespace-nowrap">
         Add Module
       </button>
     </form>
     {% endif %}
   </div>
 
-  {% for module in modules %}
-  <div class="bg-card border border-border rounded-lg mb-4 overflow-hidden" data-module-id="{{ module.pk }}">
-    <div class="flex items-center justify-between px-6 py-4 bg-secondary/50">
-      <div class="flex items-center space-x-3">
-        <i data-lucide="grip-vertical" class="w-4 h-4 text-muted-foreground cursor-grab"></i>
-        <span class="text-sm font-medium text-foreground">{{ module.title }}</span>
-        <span class="text-xs text-muted-foreground">(Order: {{ module.sort_order }})</span>
-        {% studio_origin_badge module %}
-      </div>
-      {% if not is_synced %}
-      <form method="post" action="{% url 'studio_unit_create' module_id=module.pk %}" class="flex items-center space-x-2">
-        {% csrf_token %}
-        <input type="text" name="title" placeholder="New unit..." required
-               class="bg-secondary border border-border rounded px-2 py-1 text-xs text-foreground w-40 focus:outline-none focus:ring-1 focus:ring-accent">
-        <button type="submit" class="text-xs text-accent hover:underline">Add Unit</button>
-      </form>
-      {% endif %}
-    </div>
-    {% if module.units.all %}
-    <ul class="divide-y divide-border">
-      {% for unit in module.units.all %}
-      <li class="flex items-center justify-between px-6 py-3 hover:bg-secondary/30 transition-colors">
-        <div class="flex items-center space-x-3">
-          <span class="text-xs text-muted-foreground w-8">{{ unit.sort_order }}</span>
-          <span class="text-sm text-foreground">{{ unit.title }}</span>
-          {% if unit.is_preview %}<span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Preview</span>{% endif %}
-          {% if unit.video_url %}<i data-lucide="play-circle" class="w-3 h-3 text-muted-foreground"></i>{% endif %}
-          {% studio_origin_badge unit %}
+  <div class="space-y-2" data-testid="modules-list">
+    {% for module in modules %}
+    {% with unit_count=module.units.all|length %}
+    <details class="group bg-card border border-border rounded-lg overflow-hidden"
+             data-module-id="{{ module.pk }}"
+             data-testid="module-disclosure">
+      <summary class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 cursor-pointer list-none bg-secondary/40 hover:bg-secondary/60 transition-colors"
+               data-testid="module-summary">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <i data-lucide="chevron-right" class="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-90 shrink-0"></i>
+          <span class="text-xs text-muted-foreground tabular-nums w-6 shrink-0">#{{ module.sort_order }}</span>
+          <span class="text-sm font-medium text-foreground truncate" data-testid="module-title">{{ module.title }}</span>
+          <span class="text-xs text-muted-foreground whitespace-nowrap" data-testid="module-unit-count">
+            {{ unit_count }} unit{{ unit_count|pluralize }}
+          </span>
+          <span class="inline-flex">{% studio_origin_badge module %}</span>
         </div>
-        <a href="{% url 'studio_unit_edit' unit_id=unit.pk %}" class="text-xs text-accent hover:underline">{% if is_synced %}View{% else %}Edit{% endif %}</a>
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
+      </summary>
+
+      <div class="px-4 py-3 border-t border-border space-y-3" data-testid="module-body">
+        {% if module.units.all %}
+        <ul class="divide-y divide-border rounded border border-border overflow-hidden" data-testid="module-units">
+          {% for unit in module.units.all %}
+          <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 hover:bg-secondary/30 transition-colors" data-testid="unit-row">
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+              <span class="text-xs text-muted-foreground tabular-nums w-6 shrink-0">{{ unit.sort_order }}</span>
+              <span class="text-sm text-foreground truncate">{{ unit.title }}</span>
+              {% if unit.is_preview %}<span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 whitespace-nowrap">Preview</span>{% endif %}
+              {% if unit.video_url %}<i data-lucide="play-circle" class="w-3 h-3 text-muted-foreground shrink-0" title="Has video"></i>{% endif %}
+              {% studio_origin_badge unit %}
+            </div>
+            <a href="{% url 'studio_unit_edit' unit_id=unit.pk %}"
+               class="text-xs text-accent hover:underline whitespace-nowrap"
+               data-testid="unit-edit-link">{% if is_synced %}View{% else %}Edit{% endif %}</a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-xs text-muted-foreground">No units in this module yet.</p>
+        {% endif %}
+
+        {% if not is_synced %}
+        <form method="post" action="{% url 'studio_unit_create' module_id=module.pk %}"
+              class="flex items-center gap-2 pt-2 border-t border-border"
+              data-testid="add-unit-form">
+          {% csrf_token %}
+          <input type="text" name="title" placeholder="New unit title..." required
+                 class="bg-secondary border border-border rounded px-2 py-1 text-xs text-foreground flex-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-accent">
+          <button type="submit" class="text-xs text-accent hover:underline whitespace-nowrap">Add Unit</button>
+        </form>
+        {% endif %}
+      </div>
+    </details>
+    {% endwith %}
+    {% empty %}
+    <p class="text-sm text-muted-foreground">No modules yet.{% if not is_synced %} Add one above.{% endif %}</p>
+    {% endfor %}
   </div>
-  {% empty %}
-  <p class="text-sm text-muted-foreground">No modules yet.{% if not is_synced %} Add one above.{% endif %}</p>
-  {% endfor %}
-</div>
+</section>
+{% endwith %}
 {% endif %}
 {% endblock %}

@@ -86,11 +86,13 @@ def course_edit(request, course_id):
         course.save()
         return redirect('studio_course_edit', course_id=course.pk)
 
-    modules = course.modules.prefetch_related('units').order_by('sort_order')
+    modules = list(course.modules.prefetch_related('units').order_by('sort_order'))
+    total_unit_count = sum(len(module.units.all()) for module in modules)
 
     return render(request, 'studio/courses/form.html', {
         'course': course,
         'modules': modules,
+        'total_unit_count': total_unit_count,
         'form_action': 'edit',
         'is_synced': synced,
         'github_edit_url': get_github_edit_url(course),

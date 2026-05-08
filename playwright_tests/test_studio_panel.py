@@ -516,7 +516,9 @@ class TestScenario6StaffCreatesCourse:
         body = page.content()
         assert "Getting Started" in body
 
-        # Step 4: Add a unit titled "Welcome Video" to the module
+        # Step 4: Expand the module disclosure (compact UI #491) and add
+        # a unit titled "Welcome Video" to the module.
+        page.locator('[data-testid="module-summary"]').first.click()
         unit_input = page.locator(
             'form[action*="/units/add"] input[name="title"]'
         )

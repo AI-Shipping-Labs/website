@@ -54,9 +54,27 @@ jobs:
           SECRET_KEY: "ci-system-check-only-not-a-real-secret"
         run: uv run python manage.py check --fail-level ERROR
 
+      - name: Cache test database
+        # Issue #532: DJANGO_TEST_DB_NAME below moves Django's SQLite test
+        # database off the default in-memory URI so --keepdb has files to
+        # preserve between runs. The cache key hashes every migration file in
+        # the tree so migration edits trigger a fresh rebuild.
+        uses: actions/cache@v4
+        with:
+          path: |
+            test_db.sqlite3
+            test_db*.sqlite3
+            test_db*.sqlite3-wal
+            test_db*.sqlite3-shm
+          key: test-db-v2-${{ runner.os }}-py3.13-${{ hashFiles('**/migrations/*.py') }}
+
       - name: Run unit and integration tests
-        # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342
-        run: uv run python manage.py test --parallel 4
+        # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342.
+        # Issue #532: DJANGO_TEST_DB_NAME makes SQLite tests file-backed so
+        # --keepdb can reuse the cached test_db*.sqlite3 files.
+        env:
+          DJANGO_TEST_DB_NAME: test_db.sqlite3
+        run: uv run python manage.py test --parallel 4 --keepdb
 
   playwright-tests:
     name: Playwright E2E Tests

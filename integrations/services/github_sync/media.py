@@ -6,6 +6,7 @@ import os
 import re
 
 import boto3
+from django.conf import settings
 
 from integrations.config import get_config
 from integrations.services.github_sync.common import IMAGE_EXTENSIONS, logger
@@ -108,6 +109,19 @@ def upload_images_to_s3(content_dir, source):
     Returns:
         dict: {'uploaded': int, 'skipped': int, 'errors': list}
     """
+    # Issue #532: kill-switch for tests / local dev. When S3_ENABLED is False
+    # (the default everywhere except production), short-circuit before
+    # constructing any boto3 client so we never make a real ``list_objects_v2``
+    # round-trip against AWS. Each round-trip is ~300ms-1s with the
+    # "non-empty Access Key" warning that the legacy code path emitted, and
+    # integration tests exercise this function many times per file.
+    if not getattr(settings, 'S3_ENABLED', False):
+        logger.info(
+            'S3_ENABLED is false - skipping image upload for %s',
+            source.repo_name,
+        )
+        return {'uploaded': 0, 'skipped': 0, 'errors': []}
+
     bucket = get_config('AWS_S3_CONTENT_BUCKET')
     region = get_config('AWS_S3_CONTENT_REGION', 'eu-central-1')
 

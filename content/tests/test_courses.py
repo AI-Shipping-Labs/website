@@ -414,15 +414,18 @@ class CourseGetNextUnitForTest(TestCase):
 class CoursesListViewTest(TestCase):
     """Test the /courses catalog page."""
 
-    def setUp(self):
-        self.client = Client()
-        self.published = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        # Issue #532: course fixtures are read-only in most tests; the
+        # mutating cases (cover_image change, all-delete) rely on Django's
+        # per-test transaction rollback to restore state for the next test.
+        cls.published = Course.objects.create(
             title='Published Course', slug='published-course',
             status='published',
             tags=['python', 'ai'],
         )
-        _attach_course_instructor(self.published, 'Test Instructor')
-        self.draft = Course.objects.create(
+        _attach_course_instructor(cls.published, 'Test Instructor')
+        cls.draft = Course.objects.create(
             title='Draft Course', slug='draft-course',
             status='draft',
         )
@@ -522,9 +525,11 @@ class CoursesListViewTest(TestCase):
 class CourseDetailViewTest(TierSetupMixin, TestCase):
     """Test the /courses/{slug} detail page."""
 
-    def setUp(self):
-        self.client = Client()
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Issue #532: read-only course/module/unit fixtures.
+        cls.course = Course.objects.create(
             title='Detail Course', slug='detail-course',
             description='# Course Description\nLearn **great things**.',
             status='published',
@@ -533,22 +538,22 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
             discussion_url='https://slack.com/channel',
         )
         _attach_course_instructor(
-            self.course, 'Jane Doe', bio='Expert in AI.',
+            cls.course, 'Jane Doe', bio='Expert in AI.',
         )
-        self.module1 = Module.objects.create(
-            course=self.course, title='Getting Started', slug='getting-started', sort_order=1,
+        cls.module1 = Module.objects.create(
+            course=cls.course, title='Getting Started', slug='getting-started', sort_order=1,
         )
-        self.module2 = Module.objects.create(
-            course=self.course, title='Advanced Topics', slug='advanced-topics', sort_order=2,
+        cls.module2 = Module.objects.create(
+            course=cls.course, title='Advanced Topics', slug='advanced-topics', sort_order=2,
         )
-        self.unit1 = Unit.objects.create(
-            module=self.module1, title='Introduction', slug='introduction', sort_order=1,
+        cls.unit1 = Unit.objects.create(
+            module=cls.module1, title='Introduction', slug='introduction', sort_order=1,
         )
-        self.unit2 = Unit.objects.create(
-            module=self.module1, title='Setup', slug='setup', sort_order=2,
+        cls.unit2 = Unit.objects.create(
+            module=cls.module1, title='Setup', slug='setup', sort_order=2,
         )
-        self.unit3 = Unit.objects.create(
-            module=self.module2, title='Deep Dive', slug='deep-dive', sort_order=1,
+        cls.unit3 = Unit.objects.create(
+            module=cls.module2, title='Deep Dive', slug='deep-dive', sort_order=1,
         )
 
     def test_returns_200(self):

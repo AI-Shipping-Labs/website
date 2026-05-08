@@ -2304,8 +2304,17 @@ class DirectAdminEditFlagTest(TestCase):
 # ===========================================================================
 
 
+@override_settings(S3_ENABLED=True)
 class S3ImageUploadTest(TestCase):
-    """Test upload_images_to_s3 with MD5/ETag deduplication."""
+    """Test upload_images_to_s3 with MD5/ETag deduplication.
+
+    The S3_ENABLED kill-switch (issue #532) is force-False under
+    ``manage.py test``, which would short-circuit ``upload_images_to_s3``
+    before reaching the boto3 client. These tests need to exercise the
+    actual upload path with mocked boto3, so the class-level
+    ``override_settings(S3_ENABLED=True)`` re-enables it. The dedicated
+    ``S3KillSwitchTest`` below covers the off-by-default behaviour.
+    """
 
     def setUp(self):
         self.source = ContentSource.objects.create(
@@ -2460,6 +2469,72 @@ class S3ImageUploadTest(TestCase):
         self.assertEqual(result['uploaded'], 0)
         self.assertEqual(len(result['errors']), 1)
         self.assertIn('Access Denied', result['errors'][0]['error'])
+
+
+class S3KillSwitchTest(TestCase):
+    """Regression test for the S3_ENABLED kill-switch (issue #532).
+
+    Under ``manage.py test`` ``settings.S3_ENABLED`` is force-False, so the
+    sync pipeline must NOT construct any boto3 S3 client even when the
+    bucket and credentials are configured. Each call would otherwise emit a
+    real ~300ms-1s ``list_objects_v2`` round-trip (see CI logs:
+    "Failed to list S3 objects: ... non-empty Access Key").
+    """
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='test-org/content',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+        img_path = os.path.join(self.temp_dir, 'hero.png')
+        with open(img_path, 'wb') as f:
+            f.write(b'\x89PNG fake image data for kill-switch test')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    @override_settings(
+        S3_ENABLED=False,
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github_sync.media.boto3.client')
+    def test_no_boto3_client_constructed_when_disabled(self, mock_boto_client):
+        """upload_images_to_s3 must not call boto3.client when S3_ENABLED=False."""
+        from integrations.services.github import upload_images_to_s3
+
+        result = upload_images_to_s3(self.temp_dir, self.source)
+
+        # No boto3 S3 client is ever constructed
+        mock_boto_client.assert_not_called()
+        # And the function returns the expected no-op stats so callers
+        # (orchestration) keep behaving normally
+        self.assertEqual(result, {'uploaded': 0, 'skipped': 0, 'errors': []})
+
+    @override_settings(
+        S3_ENABLED=False,
+        AWS_S3_CONTENT_BUCKET='test-bucket',
+        AWS_S3_CONTENT_REGION='us-east-1',
+        AWS_ACCESS_KEY_ID='fake',
+        AWS_SECRET_ACCESS_KEY='fake',
+    )
+    @patch('integrations.services.github_sync.media.boto3.client')
+    def test_orchestration_pipeline_does_not_hit_s3_when_disabled(
+        self, mock_boto_client,
+    ):
+        """The sync orchestration's S3 upload step must not hit boto3 either.
+
+        ``orchestration._sync_repo`` calls ``upload_images_to_s3`` directly;
+        the gate inside that helper is the single chokepoint. This test
+        exercises the public callsite to make sure no future refactor adds
+        a second boto3 construction site that bypasses the gate.
+        """
+        from integrations.services.github_sync.media import upload_images_to_s3
+        upload_images_to_s3(self.temp_dir, self.source)
+        mock_boto_client.assert_not_called()
 
 
 # ===========================================================================

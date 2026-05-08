@@ -24,7 +24,6 @@ class StudioSyncDashboardTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_dashboard_returns_200(self):
@@ -278,7 +277,6 @@ class StudioSyncDashboardUnchangedTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_per_type_row_renders_unchanged_count(self):
@@ -398,7 +396,6 @@ class StudioSyncDashboardCourseBreakdownTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def _build_course_items_detail(self, n_courses=1, n_modules=3, n_units=12):
@@ -686,7 +683,6 @@ class StudioSyncDashboardCourseTreeTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def _make_course_source(self, repo='AI-Shipping-Labs/python-course'):
@@ -1062,7 +1058,6 @@ class StudioSyncDashboardFragmentTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_fragment_returns_200(self):
@@ -1207,7 +1202,6 @@ class StudioSyncDashboardLiveIndicatorTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_dashboard_renders_live_indicator_element(self):
@@ -1249,7 +1243,6 @@ class StudioSyncHistoryTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_history_returns_200(self):
@@ -1365,7 +1358,6 @@ class StudioSyncTriggerTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
@@ -1478,7 +1470,6 @@ class StudioSyncRepoTriggerTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
@@ -1619,7 +1610,6 @@ class StudioSyncAllTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
@@ -1712,7 +1702,6 @@ class StudioSyncStatusTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_status_returns_json(self):
@@ -1754,7 +1743,6 @@ class StudioSidebarSyncLinkTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_sidebar_has_content_sync_link(self):
@@ -1825,7 +1813,6 @@ class StudioSyncDashboardSeeInWorkersLinkTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_link_visible_when_running(self):

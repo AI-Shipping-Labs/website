@@ -279,13 +279,17 @@ class SyncObjectTriggerSuccessTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
+        # Issue #532: article + source are read-only fixtures (only the
+        # source's status changes, and that's exercised via DB refresh).
+        # setUpTestData is wrapped in TestData so per-test attribute
+        # mutations don't leak across tests.
+        cls.article = _make_article()
+        cls.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+        )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
-        self.article = _make_article()
-        self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-        )
 
     @patch('django_q.tasks.async_task')
     def test_post_enqueues_async_task_for_resolved_source(self, mock_async):
@@ -366,13 +370,14 @@ class SyncObjectTriggerWorkshopTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
+        # Issue #532: workshop + source are read-only fixtures.
+        cls.workshop = _make_workshop()
+        cls.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/workshops-content',
+        )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
-        self.workshop = _make_workshop()
-        self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/workshops-content',
-        )
 
     @patch('django_q.tasks.async_task')
     def test_workshop_resync_uses_workshop_repo(self, mock_async):
@@ -399,22 +404,23 @@ class SyncObjectTriggerCourseUnitInheritsCourseTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        self.course = _make_course(slug='cwu')
-        self.module = Module.objects.create(
-            course=self.course, title='Mod 1', slug='mod-1', sort_order=1,
+        # Issue #532: course/module/unit/source are read-only fixtures.
+        cls.course = _make_course(slug='cwu')
+        cls.module = Module.objects.create(
+            course=cls.course, title='Mod 1', slug='mod-1', sort_order=1,
         )
-        self.unit = Unit.objects.create(
-            module=self.module,
+        cls.unit = Unit.objects.create(
+            module=cls.module,
             title='Lesson 1', slug='lesson-1', sort_order=1,
             source_repo='AI-Shipping-Labs/content',
             source_path='courses/cwu/mod-1/lesson-1.md',
         )
-        self.source = ContentSource.objects.create(
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
     def test_course_target_uses_course_repo(self, mock_async):
@@ -440,16 +446,16 @@ class SyncObjectTriggerMissingSourceRepoTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        # Manually-created article: source_repo is empty.
-        self.article = Article.objects.create(
+        # Issue #532: manually-created article fixture is read-only.
+        cls.article = Article.objects.create(
             title='Manual', slug='manual',
             date=datetime.date(2026, 1, 1),
             published=True,
             source_repo='',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
     def test_no_async_task_enqueued(self, mock_async):
@@ -481,13 +487,14 @@ class SyncObjectTriggerMissingContentSourceTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
+        # Issue #532: orphan-source article is a read-only fixture.
+        # Note: NO ContentSource for ('Old-Org/old-repo', 'article').
+        cls.article = _make_article(
+            source_repo='Old-Org/old-repo',
+        )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
-        self.article = _make_article(
-            source_repo='Old-Org/old-repo',
-        )
-        # Note: NO ContentSource for ('Old-Org/old-repo', 'article').
 
     @patch('django_q.tasks.async_task')
     def test_no_async_task_enqueued(self, mock_async):
@@ -526,13 +533,14 @@ class SyncObjectTriggerWorkerWarningTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
+        # Issue #532: article + source are read-only fixtures.
+        cls.article = _make_article()
+        cls.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+        )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
-        self.article = _make_article()
-        self.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-        )
 
     @patch('django_q.tasks.async_task')
     def test_worker_down_flash_includes_warning_suffix(self, mock_async):
@@ -562,13 +570,14 @@ class SyncObjectTriggerRedirectTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        self.article = _make_article()
+        # Issue #532: article + source are read-only fixtures.
+        cls.article = _make_article()
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
     def test_redirects_to_same_host_referer(self, mock_async):

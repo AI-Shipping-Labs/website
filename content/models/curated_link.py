@@ -7,23 +7,29 @@ from content.models.mixins import SourceMetadataMixin, TimestampedModelMixin
 class CuratedLink(SourceMetadataMixin, TimestampedModelMixin, models.Model):
     """Curated link in the collection."""
     CATEGORY_CHOICES = [
+        ('workshops', 'Workshops'),
+        ('courses', 'Courses'),
+        ('articles', 'Articles'),
         ('tools', 'Tools'),
         ('models', 'Models'),
-        ('courses', 'Courses'),
         ('other', 'Other'),
     ]
 
     CATEGORY_LABELS = {
+        'workshops': 'Workshops',
+        'courses': 'Courses',
+        'articles': 'Articles',
         'tools': 'Tools',
         'models': 'Models',
-        'courses': 'Courses',
         'other': 'Other',
     }
 
     CATEGORY_DESCRIPTIONS = {
+        'workshops': 'Hands-on workshop materials and tutorials',
+        'courses': 'Courses and learning tracks',
+        'articles': 'Long-form posts and writeups',
         'tools': 'GitHub repos, CLIs, and dev tools',
         'models': 'Model hubs, runtimes, and inference',
-        'courses': 'Courses and learning tracks',
         'other': 'Datasets, APIs, and more',
     }
 
@@ -68,9 +74,11 @@ class CuratedLink(SourceMetadataMixin, TimestampedModelMixin, models.Model):
     @property
     def category_icon_name(self):
         icons = {
+            'workshops': 'graduation-cap',
+            'courses': 'book-open',
+            'articles': 'file-text',
             'tools': 'wrench',
             'models': 'cpu',
-            'courses': 'graduation-cap',
             'other': 'folder-open',
         }
         return icons.get(self.category, 'folder-open')

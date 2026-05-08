@@ -123,10 +123,21 @@ class ResourcesPageBasicTest(TestCase):
         self.assertContains(response, 'A great CLI tool')
         self.assertContains(response, 'Browse AI models')
 
-    def test_shows_category_headers(self):
+    def test_legacy_tools_and_models_fold_into_other(self):
+        """Issue #524: legacy tools/models rows render under the Other
+        section without a Tools or Models heading appearing on the page.
+        """
         response = self.client.get('/resources')
-        self.assertContains(response, 'Tools')
-        self.assertContains(response, 'Models')
+        content = response.content.decode()
+        # Both legacy links visible on the page
+        self.assertContains(response, 'Cool CLI Tool')
+        self.assertContains(response, 'Model Hub')
+        # Other section heading is rendered (match exact <h2>)
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        self.assertIn(f'<h2 {h2_class}>Other</h2>', content)
+        # No Tools or Models <h2> section heading is rendered
+        self.assertNotIn(f'<h2 {h2_class}>Tools</h2>', content)
+        self.assertNotIn(f'<h2 {h2_class}>Models</h2>', content)
 
     def test_open_link_has_external_link_icon(self):
         response = self.client.get('/resources')
@@ -170,13 +181,22 @@ class ResourcesCategoryGroupingTest(TestCase):
             sort_order=1, published=True,
         )
 
-    def test_tools_category_header_shown(self):
+    def test_legacy_tools_link_renders_under_other(self):
+        """Issue #524: legacy `tools` rows show up in the Other section,
+        not under a Tools heading."""
         response = self.client.get('/resources')
-        self.assertContains(response, 'Tools')
+        content = response.content.decode()
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        self.assertIn(f'<h2 {h2_class}>Other</h2>', content)
+        self.assertNotIn(f'<h2 {h2_class}>Tools</h2>', content)
+        # The tool link is still visible to the user
+        self.assertContains(response, 'Tool Link')
 
     def test_courses_category_header_shown(self):
         response = self.client.get('/resources')
-        self.assertContains(response, 'Courses')
+        content = response.content.decode()
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        self.assertIn(f'<h2 {h2_class}>Courses</h2>', content)
 
     def test_empty_category_not_shown(self):
         """If no links in 'models' category, its header should not appear."""
@@ -188,11 +208,15 @@ class ResourcesCategoryGroupingTest(TestCase):
         self.assertNotIn('Model Hub', content)
 
     def test_grouped_categories_in_context(self):
+        """Issue #524: legacy `tools` rows are grouped under the `other`
+        section key. `courses` keeps its own section."""
         response = self.client.get('/resources')
         grouped = response.context['grouped_categories']
         keys = [g['key'] for g in grouped]
-        self.assertIn('tools', keys)
+        self.assertIn('other', keys)
         self.assertIn('courses', keys)
+        self.assertNotIn('tools', keys)
+        self.assertNotIn('models', keys)
 
 
 # --- View: sort order within categories ---
@@ -549,3 +573,234 @@ class CuratedLinksTagFilterTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Python CLI')
         self.assertNotContains(response, 'Go Toolkit')
+
+
+# --- Issue #524: reorder + workshops/articles + tools/models -> other ---
+
+
+class CuratedLinkCategoryChoicesIssue524Test(TestCase):
+    """Model exposes `workshops` and `articles` choices with their
+    labels, descriptions, and icons."""
+
+    def test_workshops_choice_present(self):
+        keys = [c[0] for c in CuratedLink.CATEGORY_CHOICES]
+        self.assertIn('workshops', keys)
+
+    def test_articles_choice_present(self):
+        keys = [c[0] for c in CuratedLink.CATEGORY_CHOICES]
+        self.assertIn('articles', keys)
+
+    def test_legacy_tools_and_models_choices_still_valid(self):
+        keys = [c[0] for c in CuratedLink.CATEGORY_CHOICES]
+        self.assertIn('tools', keys)
+        self.assertIn('models', keys)
+
+    def test_workshops_label_and_description(self):
+        self.assertEqual(
+            CuratedLink.CATEGORY_LABELS['workshops'], 'Workshops'
+        )
+        self.assertEqual(
+            CuratedLink.CATEGORY_DESCRIPTIONS['workshops'],
+            'Hands-on workshop materials and tutorials',
+        )
+
+    def test_articles_label_and_description(self):
+        self.assertEqual(
+            CuratedLink.CATEGORY_LABELS['articles'], 'Articles'
+        )
+        self.assertEqual(
+            CuratedLink.CATEGORY_DESCRIPTIONS['articles'],
+            'Long-form posts and writeups',
+        )
+
+    def test_workshops_icon_is_graduation_cap(self):
+        link = CuratedLink(category='workshops')
+        self.assertEqual(link.category_icon_name, 'graduation-cap')
+
+    def test_articles_icon_is_file_text(self):
+        link = CuratedLink(category='articles')
+        self.assertEqual(link.category_icon_name, 'file-text')
+
+    def test_courses_icon_changed_to_book_open(self):
+        """Issue #524: `courses` icon changes so it does not collide with
+        the new `workshops` icon (`graduation-cap`)."""
+        link = CuratedLink(category='courses')
+        self.assertEqual(link.category_icon_name, 'book-open')
+
+
+class ResourcesSectionOrderIssue524Test(TestCase):
+    """`/resources` renders sections in the order
+    Workshops, Courses, Articles, Other."""
+
+    def setUp(self):
+        self.client = Client()
+        CuratedLink.objects.create(
+            item_id='ws-1', title='WS Card',
+            url='https://example.com/ws', category='workshops',
+            sort_order=1, published=True,
+        )
+        CuratedLink.objects.create(
+            item_id='co-1', title='CO Card',
+            url='https://example.com/co', category='courses',
+            sort_order=1, published=True,
+        )
+        CuratedLink.objects.create(
+            item_id='ar-1', title='AR Card',
+            url='https://example.com/ar', category='articles',
+            sort_order=1, published=True,
+        )
+        CuratedLink.objects.create(
+            item_id='ot-1', title='OT Card',
+            url='https://example.com/ot', category='other',
+            sort_order=1, published=True,
+        )
+
+    def test_section_keys_in_canonical_order(self):
+        response = self.client.get('/resources')
+        keys = [g['key'] for g in response.context['grouped_categories']]
+        self.assertEqual(keys, ['workshops', 'courses', 'articles', 'other'])
+
+    def test_section_headings_render_in_order(self):
+        response = self.client.get('/resources')
+        content = response.content.decode()
+        # Match the rendered section <h2> exactly to avoid colliding
+        # with header/footer nav links to /workshops, etc.
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        ws_pos = content.index(f'<h2 {h2_class}>Workshops</h2>')
+        co_pos = content.index(f'<h2 {h2_class}>Courses</h2>')
+        ar_pos = content.index(f'<h2 {h2_class}>Articles</h2>')
+        ot_pos = content.index(f'<h2 {h2_class}>Other</h2>')
+        self.assertLess(ws_pos, co_pos)
+        self.assertLess(co_pos, ar_pos)
+        self.assertLess(ar_pos, ot_pos)
+
+    def test_no_tools_or_models_heading_rendered(self):
+        response = self.client.get('/resources')
+        content = response.content.decode()
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        self.assertNotIn(f'<h2 {h2_class}>Tools</h2>', content)
+        self.assertNotIn(f'<h2 {h2_class}>Models</h2>', content)
+
+
+class ResourcesLegacyFoldIntoOtherIssue524Test(TestCase):
+    """Existing `tools` and `models` rows render in the Other section."""
+
+    def setUp(self):
+        self.client = Client()
+        CuratedLink.objects.create(
+            item_id='lg-tool', title='ripgrep',
+            url='https://example.com/rg', category='tools',
+            sort_order=1, published=True,
+        )
+        CuratedLink.objects.create(
+            item_id='lg-model', title='Llama 3',
+            url='https://example.com/llama', category='models',
+            sort_order=2, published=True,
+        )
+        CuratedLink.objects.create(
+            item_id='lg-other', title='Common Crawl',
+            url='https://example.com/cc', category='other',
+            sort_order=3, published=True,
+        )
+
+    def test_other_section_contains_all_three_links(self):
+        response = self.client.get('/resources')
+        grouped = response.context['grouped_categories']
+        other_section = next(g for g in grouped if g['key'] == 'other')
+        titles = [a['link'].title for a in other_section['links']]
+        self.assertIn('ripgrep', titles)
+        self.assertIn('Llama 3', titles)
+        self.assertIn('Common Crawl', titles)
+
+    def test_only_other_section_present(self):
+        response = self.client.get('/resources')
+        keys = [g['key'] for g in response.context['grouped_categories']]
+        self.assertEqual(keys, ['other'])
+
+    def test_legacy_links_not_outside_other(self):
+        """Issue #524: the legacy rows must not slip into other sections."""
+        response = self.client.get('/resources')
+        grouped = response.context['grouped_categories']
+        # No section other than `other` should contain these titles.
+        for section in grouped:
+            if section['key'] == 'other':
+                continue
+            titles = [a['link'].title for a in section['links']]
+            self.assertNotIn('ripgrep', titles)
+            self.assertNotIn('Llama 3', titles)
+
+
+class ResourcesEmptySectionsHiddenIssue524Test(TestCase):
+    """Empty categories do not render a section heading."""
+
+    def test_only_courses_renders_when_only_courses_exist(self):
+        CuratedLink.objects.create(
+            item_id='solo-course', title='Solo Course',
+            url='https://example.com/solo', category='courses',
+            sort_order=1, published=True,
+        )
+        response = self.client.get('/resources')
+        keys = [g['key'] for g in response.context['grouped_categories']]
+        self.assertEqual(keys, ['courses'])
+        content = response.content.decode()
+        h2_class = 'class="text-xl font-semibold text-foreground"'
+        self.assertIn(f'<h2 {h2_class}>Courses</h2>', content)
+        self.assertNotIn(f'<h2 {h2_class}>Workshops</h2>', content)
+        self.assertNotIn(f'<h2 {h2_class}>Articles</h2>', content)
+        self.assertNotIn(f'<h2 {h2_class}>Other</h2>', content)
+
+
+class ResourcesHeadingCopyIssue524Test(TestCase):
+    """Page header copy reflects the new grouping."""
+
+    def setUp(self):
+        self.client = Client()
+        CuratedLink.objects.create(
+            item_id='copy-link', title='Copy Link',
+            url='https://example.com/copy', category='workshops',
+            sort_order=1, published=True,
+        )
+
+    def test_h1_no_longer_says_tools_models_and_courses(self):
+        response = self.client.get('/resources')
+        self.assertNotContains(response, 'Tools, Models & Courses')
+
+    def test_h1_uses_new_copy(self):
+        response = self.client.get('/resources')
+        self.assertContains(response, 'Workshops, Courses & More')
+
+    def test_intro_mentions_workshops_and_articles(self):
+        response = self.client.get('/resources')
+        self.assertContains(response, 'workshops')
+        self.assertContains(response, 'articles')
+
+
+class ResourcesWorkshopBadgeIconIssue524Test(TestCase):
+    """A `category='workshops'` card shows the `Workshops` badge with
+    the `graduation-cap` icon. Same for `articles`/`file-text`."""
+
+    def test_workshop_card_renders_with_graduation_cap_icon(self):
+        CuratedLink.objects.create(
+            item_id='ws-badge', title='Agent Eval Workshop',
+            description='Hands-on agent evaluation.',
+            url='https://example.com/agent-eval',
+            category='workshops', sort_order=1, published=True,
+        )
+        response = self.client.get('/resources')
+        grouped = response.context['grouped_categories']
+        ws_section = next(g for g in grouped if g['key'] == 'workshops')
+        self.assertEqual(ws_section['icon'], 'graduation-cap')
+        self.assertEqual(ws_section['label'], 'Workshops')
+
+    def test_article_card_renders_with_file_text_icon(self):
+        CuratedLink.objects.create(
+            item_id='ar-badge', title='RAG Lessons',
+            description='Why RAG pipelines lie.',
+            url='https://example.com/rag',
+            category='articles', sort_order=1, published=True,
+        )
+        response = self.client.get('/resources')
+        grouped = response.context['grouped_categories']
+        ar_section = next(g for g in grouped if g['key'] == 'articles')
+        self.assertEqual(ar_section['icon'], 'file-text')
+        self.assertEqual(ar_section['label'], 'Articles')

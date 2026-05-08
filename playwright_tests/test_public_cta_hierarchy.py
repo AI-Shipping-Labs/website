@@ -52,7 +52,7 @@ def test_resources_courses_and_workshops_start_with_browse_content(
     ensure_tiers()
 
     for path, heading in (
-        ("/resources", "Tools, Models & Courses"),
+        ("/resources", "Workshops, Courses & More"),
         ("/courses", "Structured Learning Paths"),
         ("/workshops", "Hands-on Workshops"),
     ):

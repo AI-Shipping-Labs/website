@@ -133,3 +133,23 @@ class HomepageMobileLayoutTest(TestCase):
         cols1_pos = grid_tag.index("grid-cols-1")
         cols3_pos = grid_tag.index("sm:grid-cols-3")
         self.assertLess(cols1_pos, cols3_pos, "grid-cols-1 should come before sm:grid-cols-3")
+
+    # -- Issue #510: Django comments must NOT leak to rendered HTML --
+
+    def test_no_django_comment_text_leaks_into_rendered_page(self):
+        """Issue #510 added `{% comment %} ... {% endcomment %}` blocks above the
+        tier carousel. Multi-line `{# ... #}` is a Django pitfall — it leaks the
+        body as literal text. Assert the comment marker text is NEVER visible
+        in the rendered HTML output of `/`.
+        """
+        content = self._get_homepage_content()
+        for needle in (
+            "Issue #510:",
+            "max-lg:pt-6` gives the badge room",
+            "perpendicular axis as `auto",
+        ):
+            self.assertNotIn(
+                needle,
+                content,
+                f"Internal comment text leaked to rendered page: {needle!r}",
+            )

@@ -99,19 +99,20 @@
   </section>
 
   <!-- Pricing / Tiers Section -->
-  <section id="tiers" class="border-t border-border bg-card py-12 sm:py-20 lg:py-28 overflow-x-hidden">
+  {# Issue #510: tighten mobile vertical spacing on the tier section to reduce total mobile section height #}
+  <section id="tiers" class="border-t border-border bg-card max-lg:pb-4 max-lg:pt-6 sm:py-20 lg:py-28 overflow-x-hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
-        <h2 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+        <h2 class="mt-2 text-3xl font-semibold tracking-tight sm:mt-4 sm:text-4xl" style="text-wrap: balance;">
           Choose your level of engagement
         </h2>
-        <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
+        <p class="mt-3 text-base leading-relaxed text-muted-foreground sm:mt-6 sm:text-lg">
           Each tier is designed for a different type of builder. More investment means more structure, accountability,
           and support to help you ship your AI projects consistently.
         </p>
 
-        <div class="mt-8 flex items-center justify-center gap-4">
+        <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
           <span class="text-sm text-muted-foreground" id="monthly-label">Monthly</span>
           <div class="touch-target-toggle">
             <button type="button" id="billing-toggle"
@@ -124,11 +125,24 @@
         </div>
       </div>
 
-      <div class="mx-auto mt-10 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-3"
+      {% comment %}
+        Issue #510: On mobile (max-lg) the carousel is `overflow-x-auto`. CSS computes
+        the perpendicular axis as `auto` too, which clips the absolutely-positioned
+        `Most Popular` badge that sits at `-top-3`. `max-lg:pt-6` gives the badge room
+        inside the scroll viewport so it is not clipped. Do NOT remove this padding
+        without converting the badge to an in-flow element first.
+
+        Also: on mobile, Main (highlighted) is the dominant card — wider, full
+        feature list, larger padding. Basic / Premium are compact peers — narrower,
+        condensed feature list (first 3 only), no positioning paragraph. Desktop
+        layout (lg:grid-cols-3, lg:scale-105, full features) is unchanged.
+      {% endcomment %}
+      <div class="mx-auto mt-4 grid max-w-7xl gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:mt-16 lg:grid-cols-3"
            data-tier-carousel
            data-testid="home-tier-carousel">
         {% for tier in tiers %}
-        <div class="relative flex min-h-full flex-col overflow-visible rounded-xl border p-5 transition-all max-lg:w-[min(82vw,22rem)] max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 lg:scale-105{% else %}border-border bg-background{% endif %}"
+        {# Issue #510: drop `min-h-full` on mobile so peer cards size to content #}
+        <div class="relative flex flex-col overflow-visible rounded-xl border p-5 transition-all lg:min-h-full max-lg:flex-none max-lg:snap-center sm:p-8 {% if tier.highlighted %}border-accent bg-background shadow-xl ring-2 ring-accent/20 max-lg:w-[min(82vw,22rem)] lg:scale-105{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
              data-tier-card="{{ tier.stripe_key }}"
              data-testid="home-tier-card"
              style="{% if tier.highlighted %}box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);{% endif %}">
@@ -141,12 +155,12 @@
           </div>
           {% endif %}
 
-          <div class="mb-6">
+          <div class="mb-6 max-lg:mb-3">
             <h3 class="text-lg font-semibold text-foreground">{{ tier.name }}</h3>
             <p class="mt-1 text-sm text-accent">{{ tier.tagline }}</p>
           </div>
 
-          <div class="mb-6">
+          <div class="mb-6 max-lg:mb-3">
             <div class="flex items-baseline">
               <span class="text-4xl font-semibold text-foreground tier-price" data-annual="{{ tier.price_annual }}" data-monthly="{{ tier.price_monthly }}">&euro;{{ tier.price_annual }}</span>
               <span class="ml-2 text-muted-foreground tier-period">/year</span>
@@ -154,11 +168,12 @@
             <p class="mt-2 text-sm text-muted-foreground">{{ tier.hook }}</p>
           </div>
 
-          <p class="mb-6 text-sm text-muted-foreground">{{ tier.description }}</p>
+          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4 {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.description }}</p>
 
-          <ul class="mb-8 flex-1 space-y-3">
+          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
             {% for feature in tier.features %}
-            <li class="flex items-start gap-3">
+            {# Issue #510: hide features beyond top 3 on non-highlighted cards on mobile only. #}
+            <li class="flex items-start gap-3 {% if not tier.highlighted and forloop.counter > 3 %}max-lg:hidden{% endif %}">
               {% if feature.included %}
               <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
               {% else %}
@@ -169,8 +184,8 @@
             {% endfor %}
           </ul>
 
-          <div class="mt-auto space-y-4">
-            <p class="text-xs text-muted-foreground">{{ tier.positioning }}</p>
+          <div class="mt-auto space-y-4 max-lg:space-y-3">
+            <p class="text-xs text-muted-foreground {% if not tier.highlighted %}max-lg:hidden{% endif %}">{{ tier.positioning }}</p>
             <a href="{{ tier.payment_link_annual }}"
                class="tier-cta-link flex min-h-[44px] w-full items-center justify-center rounded-md px-4 py-3 text-center text-sm font-medium transition-colors cursor-pointer sm:py-2.5 {% if tier.highlighted %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-tier="{{ tier.stripe_key }}"

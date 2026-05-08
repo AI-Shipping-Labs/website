@@ -22,21 +22,22 @@
     </div>
   </div>
 
-  <section class="overflow-x-hidden pt-32 pb-16 sm:pb-24 lg:pb-32" id="pricing-section">
+  {# Issue #510: tighten mobile vertical spacing on the pricing tier section #}
+  <section class="overflow-x-hidden max-lg:pb-6 pt-32 sm:pb-24 lg:pb-32" id="pricing-section">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <!-- Header -->
       <div class="mx-auto max-w-2xl text-center">
         <p class="text-sm font-medium uppercase tracking-widest text-accent">Membership</p>
-        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:mt-4 sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
           Choose your level of engagement
         </h1>
-        <p class="mt-6 text-lg leading-relaxed text-muted-foreground">
+        <p class="mt-3 text-base leading-relaxed text-muted-foreground sm:mt-6 sm:text-lg">
           Each tier is designed for a different type of builder. More investment means more structure,
           accountability, and support to help you ship your AI projects consistently.
         </p>
 
         <!-- Monthly / Yearly Toggle -->
-        <div class="mt-8 flex items-center justify-center gap-4">
+        <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
           <span class="text-sm text-foreground" id="monthly-label">Monthly</span>
           <button type="button" id="billing-toggle"
                   class="relative inline-flex h-8 w-14 sm:h-6 sm:w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors min-w-[44px] min-h-[44px] items-center"
@@ -48,11 +49,23 @@
       </div>
 
       <!-- Tier Grid: 4 columns on desktop, scroll-snap carousel on mobile -->
-      <div class="mx-auto mt-16 grid max-w-7xl gap-8 sm:gap-6 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:[scrollbar-width:none] sm:grid-cols-2 lg:grid-cols-4"
+      {% comment %}
+        Issue #510: On mobile (max-lg) the carousel is `overflow-x-auto`. CSS computes
+        the perpendicular axis as `auto` too, which clips the absolutely-positioned
+        `Most Popular` badge that sits at `-top-3`. `max-lg:pt-6` gives the badge room
+        inside the scroll viewport so it is not clipped. Do NOT remove this padding
+        without converting the badge to an in-flow element first.
+
+        Also: on mobile, Main is the dominant card — wider, full feature list,
+        larger padding. Free / Basic / Premium are compact peers — narrower, top 3
+        features only. Desktop layout (lg:grid-cols-4) is unchanged.
+      {% endcomment %}
+      <div class="mx-auto mt-6 grid max-w-7xl gap-8 sm:gap-6 sm:mt-16 max-lg:-mx-4 max-lg:flex max-lg:snap-x max-lg:snap-mandatory max-lg:items-start max-lg:overflow-x-auto max-lg:scroll-smooth max-lg:px-4 max-lg:pb-4 max-lg:pt-6 max-lg:[scrollbar-width:none] sm:grid-cols-2 lg:grid-cols-4"
            data-tier-carousel
            data-testid="pricing-tier-carousel">
         {% for item in tiers_data %}
-        <div class="relative overflow-visible flex min-h-full flex-col rounded-xl border p-5 sm:p-8 transition-all max-lg:w-[min(82vw,22rem)] max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0{% else %}border-border bg-background{% endif %}"
+        {# Issue #510: drop `min-h-full` on mobile so peer cards size to content #}
+        <div class="relative overflow-visible flex flex-col rounded-xl border p-5 sm:p-8 transition-all lg:min-h-full max-lg:flex-none max-lg:snap-center {% if item.tier.slug == 'main' %}border-accent bg-background shadow-xl ring-2 ring-accent/20 mt-4 sm:mt-0 max-lg:w-[min(82vw,22rem)]{% else %}border-border bg-background max-lg:w-[min(70vw,18rem)] max-lg:p-4{% endif %}"
              data-tier-card="{{ item.tier.slug }}"
              data-testid="pricing-tier-card"
              {% if item.tier.slug == 'main' %}style="box-shadow: 0 25px 50px -12px hsl(75 100% 50% / 0.1);"{% endif %}>
@@ -66,7 +79,7 @@
           {% endif %}
 
           <!-- Tier Name -->
-          <div class="mb-6">
+          <div class="mb-6 max-lg:mb-3">
             <div class="flex min-h-[28px] items-start justify-between gap-3">
               <h2 class="text-lg font-semibold text-foreground">{{ item.tier.name }}</h2>
               {% if item.state.badge %}
@@ -78,7 +91,7 @@
           </div>
 
           <!-- Price -->
-          <div class="mb-6">
+          <div class="mb-6 max-lg:mb-3">
             {% if item.tier.price_eur_month %}
             <div class="flex items-baseline">
               <span class="text-4xl font-semibold text-foreground tier-price"
@@ -96,7 +109,7 @@
           </div>
 
           <!-- Description -->
-          <p class="mb-6 text-sm text-muted-foreground">{{ item.tier.description }}</p>
+          <p class="mb-6 text-sm text-muted-foreground max-lg:mb-4 {% if item.tier.slug != 'main' %}max-lg:hidden{% endif %}">{{ item.tier.description }}</p>
           {% if item.state.note %}
           <p class="-mt-3 mb-6 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
             {{ item.state.note }}
@@ -104,9 +117,10 @@
           {% endif %}
 
           <!-- Features -->
-          <ul class="mb-8 flex-1 space-y-3">
+          <ul class="mb-8 flex-1 space-y-3 max-lg:mb-4 max-lg:space-y-2">
             {% for feature in item.tier.features %}
-            <li class="flex items-start gap-3">
+            {# Issue #510: hide features beyond top 3 on non-highlighted cards on mobile only. #}
+            <li class="flex items-start gap-3 {% if item.tier.slug != 'main' and forloop.counter > 3 %}max-lg:hidden{% endif %}">
               <i data-lucide="check" class="mt-0.5 h-4 w-4 shrink-0 text-accent"></i>
               <span class="text-sm text-foreground">{{ feature }}</span>
             </li>

@@ -12,6 +12,7 @@ body that supports Django template variables.
 """
 
 import logging
+import re
 from pathlib import Path
 
 import boto3
@@ -399,6 +400,20 @@ class EmailService:
                 to_email,
                 subject,
             )
+            # Local dev affordance: when DEBUG is on, print the email's
+            # action URLs to stdout so the developer can click through the
+            # verification / password-reset / event-registration flow
+            # without setting up real SES delivery.
+            if getattr(settings, "DEBUG", False):
+                urls = re.findall(r'href="(https?://[^"]+)"', html_body)
+                print(
+                    f"\n[email_app] SES disabled (local dev). "
+                    f"To: {to_email} | Subject: {subject}",
+                    flush=True,
+                )
+                for url in urls:
+                    print(f"  - {url}", flush=True)
+                print("", flush=True)
             return "ses-disabled-noop"
 
         from_email = get_config(

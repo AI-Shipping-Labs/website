@@ -158,6 +158,7 @@ class LogoutViewTest(TestCase):
     """Tests for the logout flow."""
 
     def test_logout_redirects_to_homepage(self):
+        """Without a ``next`` parameter, sign-out lands on ``/``."""
         user = User.objects.create_user(email="test@example.com")
         self.client.force_login(user)
         response = self.client.get("/accounts/logout/")
@@ -175,6 +176,162 @@ class LogoutViewTest(TestCase):
     def test_logout_url_name(self):
         url = reverse("account_logout")
         self.assertEqual(url, "/accounts/logout/")
+
+    def test_logout_honours_safe_next_for_public_path(self):
+        """``?next=/events/<slug>`` keeps the user on the event page."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=/events/return-ctx-event"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/events/return-ctx-event")
+
+    def test_logout_honours_safe_next_for_course_unit(self):
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=/courses/return-ctx-course/intro/lesson"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url, "/courses/return-ctx-course/intro/lesson"
+        )
+
+    def test_logout_honours_safe_next_for_workshop_path(self):
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=/workshops/sample-workshop"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/workshops/sample-workshop")
+
+    def test_logout_rejects_external_next(self):
+        """An off-site ``next`` is sanitized and falls back to ``/``."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=https://evil.example.com/phish"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_logout_rejects_protocol_relative_next(self):
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=//evil.example.com/phish"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_logout_rejects_account_next(self):
+        """``/account`` is a member-only surface — sign-out goes home."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/accounts/logout/?next=/account/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_logout_rejects_studio_next(self):
+        user = User.objects.create_user(
+            email="staff@example.com", is_staff=True
+        )
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=/studio/articles/"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_logout_rejects_admin_next(self):
+        user = User.objects.create_user(
+            email="staff@example.com", is_staff=True
+        )
+        self.client.force_login(user)
+        response = self.client.get("/accounts/logout/?next=/admin/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_logout_rejects_accounts_login_next(self):
+        """``/accounts/login`` would create a redirect loop."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=/accounts/login/"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_logout_rejects_notifications_next(self):
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get(
+            "/accounts/logout/?next=/notifications"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_logout_ends_session_even_with_next(self):
+        """Session must be destroyed regardless of redirect target."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        self.client.get("/accounts/logout/?next=/events/some-event")
+        # After logout, the user is anonymous on subsequent requests.
+        response = self.client.get("/")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+
+@tag('core')
+class HeaderLogoutLinkTest(TestCase):
+    """The Log out link in the header propagates the current path as ``next``."""
+
+    def test_logout_link_includes_next_on_public_detail_page(self):
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/about")
+        self.assertEqual(response.status_code, 200)
+        # Header is rendered on every page; logout link must carry the
+        # current path so the user stays on /about after sign-out.
+        self.assertContains(
+            response,
+            'href="/accounts/logout/?next=%2Fabout"',
+        )
+
+    def test_logout_link_omits_next_on_homepage(self):
+        """Sign-out from ``/`` is already homepage — no ``next`` needed."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        # The logout link still appears, but without a ``next`` query
+        # parameter — there is nothing to preserve.
+        self.assertContains(response, 'href="/accounts/logout/"')
+        self.assertNotContains(response, 'logout/?next=%2F"')
+
+    def test_logout_link_omits_next_on_account_page(self):
+        """``/account`` is on the exclusion list — keep the URL clean."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/account/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/accounts/logout/"')
+        self.assertNotContains(response, "logout/?next=%2Faccount")
+
+    def test_logout_link_preserves_query_string(self):
+        """``?next=`` should encode the full current path including the query."""
+        user = User.objects.create_user(email="test@example.com")
+        self.client.force_login(user)
+        response = self.client.get("/pricing?tier=main")
+        self.assertEqual(response.status_code, 200)
+        # The pricing path with its query string is round-tripped through
+        # urlencode, so the query separator becomes ``%3F`` and ``=``
+        # becomes ``%3D``.
+        self.assertContains(
+            response,
+            'href="/accounts/logout/?next=%2Fpricing%3Ftier%3Dmain"',
+        )
 
 
 @tag('core')

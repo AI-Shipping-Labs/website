@@ -387,6 +387,186 @@ class StudioCourseSourceManagedCleanupTest(StaffUserMixin, TestCase):
         self.assertEqual(str(local.individual_price_eur), '19.00')
 
 
+class StudioCourseCompactModulesTest(StaffUserMixin, TestCase):
+    """Tests for the compact modules/units display on course edit (issue #491).
+
+    Verifies that the modules/units section:
+    - shows summary counts (modules, units) at the top
+    - renders each module as a `<details>` element collapsed by default
+    - displays unit count and origin badge in the module summary
+    - keeps unit View/Edit actions and add-unit forms inside the details body
+    - keeps the add-module form for local courses
+    - keeps source-managed read-only behavior (no add forms)
+    """
+
+    def setUp(self):
+        self.client.login(**self.staff_credentials)
+        self.course = Course.objects.create(
+            title='Compact Course', slug='compact-course', status='draft',
+        )
+        self.module1 = Module.objects.create(
+            course=self.course, slug='m1', title='Module One', sort_order=1,
+        )
+        self.module2 = Module.objects.create(
+            course=self.course, slug='m2', title='Module Two', sort_order=2,
+        )
+        Unit.objects.create(
+            module=self.module1, slug='u1', title='Unit A', sort_order=1,
+        )
+        Unit.objects.create(
+            module=self.module1, slug='u2', title='Unit B', sort_order=2,
+        )
+        Unit.objects.create(
+            module=self.module2, slug='u3', title='Unit C', sort_order=1,
+        )
+
+    def test_summary_counts_render_module_and_unit_totals(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        self.assertContains(response, 'data-testid="modules-summary-counts"')
+        body = response.content.decode()
+        summary_start = body.find('data-testid="modules-summary-counts"')
+        self.assertGreater(summary_start, 0)
+        chunk = body[summary_start:summary_start + 200]
+        self.assertIn('2 modules', chunk)
+        self.assertIn('3 units', chunk)
+
+    def test_modules_render_as_collapsed_details_by_default(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        # Each module is a <details> element. None should have the `open`
+        # attribute — collapsed-by-default is the contract.
+        body = response.content.decode()
+        details_count = body.count('data-testid="module-disclosure"')
+        self.assertEqual(details_count, 2)
+        # Ensure no module disclosure has the `open` attribute. Scan each
+        # `<details ... data-testid="module-disclosure"` opening tag.
+        idx = 0
+        while True:
+            tag_start = body.find('<details', idx)
+            if tag_start < 0:
+                break
+            tag_end = body.find('>', tag_start)
+            tag = body[tag_start:tag_end]
+            if 'data-testid="module-disclosure"' in tag:
+                self.assertNotIn(
+                    ' open',
+                    tag,
+                    f'<details> element should NOT be open by default: {tag}',
+                )
+            idx = tag_end + 1
+
+    def test_module_summary_shows_title_order_and_unit_count(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        body = response.content.decode()
+        # Locate the first module's summary block.
+        summary_start = body.find('data-testid="module-summary"')
+        self.assertGreater(summary_start, 0)
+        summary_end = body.find('</summary>', summary_start)
+        summary_block = body[summary_start:summary_end]
+        self.assertIn('Module One', summary_block)
+        self.assertIn('#1', summary_block)
+        self.assertIn('2 units', summary_block)
+
+    def test_second_module_summary_shows_correct_unit_count(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        body = response.content.decode()
+        # Find the second module's summary.
+        first = body.find('data-testid="module-summary"')
+        second = body.find('data-testid="module-summary"', first + 1)
+        self.assertGreater(second, first)
+        end = body.find('</summary>', second)
+        chunk = body[second:end]
+        self.assertIn('Module Two', chunk)
+        self.assertIn('1 unit', chunk)
+        # Singular form, not "1 units".
+        self.assertNotIn('1 units', chunk)
+
+    def test_unit_edit_links_present_inside_module_body(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        # Even though collapsed by default, the unit edit links exist in DOM.
+        self.assertContains(response, 'data-testid="unit-edit-link"', count=3)
+        self.assertContains(response, 'Unit A')
+        self.assertContains(response, 'Unit B')
+        self.assertContains(response, 'Unit C')
+
+    def test_add_module_form_remains_for_local_course(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        self.assertContains(response, 'data-testid="add-module-form"')
+        self.assertContains(response, 'New module title...')
+
+    def test_add_unit_form_remains_inside_each_module_for_local_course(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        # One add-unit form per module on a local course.
+        self.assertContains(response, 'data-testid="add-unit-form"', count=2)
+
+    def test_synced_course_omits_add_module_and_add_unit_forms(self):
+        synced = Course.objects.create(
+            title='Synced',
+            slug='synced-compact',
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/synced-compact/course.yaml',
+        )
+        synced_module = Module.objects.create(
+            course=synced, slug='sm', title='Synced Module', sort_order=1,
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/synced-compact/sm/README.md',
+        )
+        Unit.objects.create(
+            module=synced_module, slug='su', title='Synced Unit', sort_order=1,
+        )
+
+        response = self.client.get(f'/studio/courses/{synced.pk}/edit')
+
+        self.assertNotContains(response, 'data-testid="add-module-form"')
+        self.assertNotContains(response, 'data-testid="add-unit-form"')
+        # View link still present (label switches View/Edit based on synced).
+        self.assertContains(response, 'data-testid="unit-edit-link"')
+        body = response.content.decode()
+        link_start = body.find('data-testid="unit-edit-link"')
+        link_end = body.find('</a>', link_start)
+        self.assertIn('View', body[link_start:link_end])
+
+    def test_modules_section_uses_compact_testid_marker(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        self.assertContains(response, 'data-testid="course-modules-section"')
+        self.assertContains(response, 'data-testid="modules-list"')
+
+    def test_workflow_panel_appears_before_modules_section_in_dom(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/edit')
+
+        body = response.content.decode()
+        workflow_pos = body.find('data-testid="course-workflow-panel"')
+        modules_pos = body.find('data-testid="course-modules-section"')
+        self.assertGreater(workflow_pos, 0)
+        self.assertGreater(modules_pos, 0)
+        self.assertLess(
+            workflow_pos, modules_pos,
+            'Workflows panel must precede modules section in DOM order so '
+            'mobile users see Manage Access/Enrollments before the modules '
+            'tree.',
+        )
+
+    def test_empty_course_renders_empty_state_and_zero_counts(self):
+        empty = Course.objects.create(
+            title='Empty', slug='empty-compact', status='draft',
+        )
+        response = self.client.get(f'/studio/courses/{empty.pk}/edit')
+
+        self.assertContains(response, 'No modules yet')
+        body = response.content.decode()
+        summary_start = body.find('data-testid="modules-summary-counts"')
+        chunk = body[summary_start:summary_start + 200]
+        self.assertIn('0 modules', chunk)
+        self.assertIn('0 units', chunk)
+
+
 class StudioModuleCreateTest(StaffUserMixin, TestCase):
     """Test module creation within a course."""
 

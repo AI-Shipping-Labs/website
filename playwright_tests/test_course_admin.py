@@ -335,8 +335,10 @@ class TestScenario3StaffBuildsModulesAndUnits:
         body = page.content()
         assert "Getting Started" in body
 
-        # Step 3: Within the "Getting Started" module, add a unit
-        # Find the unit form inside the Getting Started module
+        # Step 3: Within the "Getting Started" module, add a unit.
+        # Modules are collapsed by default (#491) — expand the first one so
+        # the add-unit form is visible.
+        page.locator('[data-testid="module-summary"]').first.click()
         unit_input = page.locator(
             'input[name="title"][placeholder*="New unit"]'
         ).first
@@ -361,7 +363,8 @@ class TestScenario3StaffBuildsModulesAndUnits:
 
         # Step 5: Add a unit "Lists and Dictionaries" to the
         # "Data Structures" module. It will be the second module
-        # card, so get the last unit form.
+        # card, so expand it then use the last unit form.
+        page.locator('[data-testid="module-summary"]').last.click()
         unit_inputs = page.locator(
             'input[name="title"][placeholder*="New unit"]'
         )
@@ -414,7 +417,9 @@ class TestScenario4StaffEditsUnitWithContent:
         body = page.content()
         assert "Setup Lesson" in body
 
-        # Step 2: Click "Edit" next to the "Setup Lesson" unit
+        # Step 2: Expand the module (compact disclosure UI #491) then click
+        # "Edit" next to the "Setup Lesson" unit.
+        page.locator('[data-testid="module-summary"]').first.click()
         edit_link = page.locator(
             f'a[href*="/studio/units/{unit.pk}/edit"]'
         )
@@ -541,11 +546,10 @@ class TestScenario5StaffReordersModules:
         )
         body = page.content()
 
-        # Verify order by checking the module cards in sequence
-        # The modules should appear as: Advanced, Basics, Intermediate
-        module_cards = page.locator(
-            'div[data-module-id]'
-        )
+        # Verify order by checking the module cards in sequence.
+        # The modules should appear as: Advanced, Basics, Intermediate.
+        # Modules are now `<details>` elements with `data-module-id` (#491).
+        module_cards = page.locator('[data-module-id]')
         assert module_cards.count() == 3
 
         first_module_text = module_cards.nth(0).inner_text()

@@ -80,6 +80,18 @@
         {% include "plans/_plan_body.html" %}
       </div>
 
+      {% comment %}
+      Plan comments thread (issue #499). Reuses the existing
+      ``comments/_qa_section.html`` partial. The composer textarea is
+      hidden on private plans for non-staff owners; a "open the plan
+      to your cohort to discuss" notice replaces it. Existing
+      comments still render so a private-plan owner can read staff
+      comments left on their plan.
+      {% endcomment %}
+      <div data-testid="plan-comments-section">
+        {% include "comments/_qa_section.html" with content_id=plan.comment_content_id user_authenticated=user.is_authenticated section_heading="Comments" composer_placeholder="Write a comment about this plan..." composer_button_label="Post comment" composer_signin_prompt="to comment on this plan" composer_disabled=comments_composer_disabled composer_disabled_reason=comments_disabled_reason %}
+      </div>
+
     </div>
   </section>
 
@@ -89,4 +101,6 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/plans/member_plan.js' %}" defer></script>
+{% include "plans/_week_notes_script.html" %}
+{% include "comments/_qa_script.html" %}
 {% endblock %}

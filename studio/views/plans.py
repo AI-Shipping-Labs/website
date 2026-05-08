@@ -189,7 +189,7 @@ def plan_detail(request, plan_id):
     )
     weeks = (
         plan.weeks
-        .prefetch_related('checkpoints')
+        .prefetch_related('checkpoints', 'notes__author')
         .order_by('position', 'week_number')
     )
     resources = plan.resources.order_by('position', 'id')

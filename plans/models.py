@@ -13,6 +13,8 @@ MUST be queried via :meth:`InterviewNoteQuerySet.visible_to` so a future
 view that forgets to filter them cannot leak staff-only context.
 """
 
+import uuid
+
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -330,6 +332,21 @@ class Plan(TimestampedModelMixin, models.Model):
     # When the plan was actually sent to the member. Distinct from the
     # ``shared`` status value so we keep a real timestamp.
     shared_at = models.DateTimeField(null=True, blank=True)
+
+    # Stable UUID bridge to the existing ``comments`` app (issue #499).
+    # Plan comments are stored with ``Comment.content_id =
+    # plan.comment_content_id``; this is the ONLY bridge from plans to
+    # comments. Do NOT add ``PlanComment`` / ``PlanCommentReply`` /
+    # plan-specific vote tables -- the comments app already covers all
+    # of that surface. ``editable=False`` keeps the field out of
+    # ModelForms by default; the value is generated on insert and
+    # never changes.
+    comment_content_id = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+        editable=False,
+    )
 
     objects = PlanQuerySet.as_manager()
 

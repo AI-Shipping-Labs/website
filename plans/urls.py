@@ -13,6 +13,11 @@ from plans.views.cohort import (
     my_plan_detail,
     update_plan_visibility,
 )
+from plans.views.notes import (
+    week_note_create,
+    week_note_delete,
+    week_note_update,
+)
 from plans.views.sprints import sprint_detail, sprint_join, sprint_leave
 
 urlpatterns = [
@@ -59,5 +64,24 @@ urlpatterns = [
         'account/plan/<int:plan_id>/visibility',
         update_plan_visibility,
         name='update_plan_visibility',
+    ),
+    # Participant week notes (issue #499). Owner-only CRUD that maps
+    # to the existing ``WeekNote`` model -- no parallel comment-style
+    # table. Trailing slashes are intentionally absent to match the
+    # ``/account/...`` style already used above.
+    path(
+        'account/plan/<int:plan_id>/weeks/<int:week_id>/notes',
+        week_note_create,
+        name='week_note_create',
+    ),
+    path(
+        'account/plan/<int:plan_id>/week-notes/<int:note_id>',
+        week_note_update,
+        name='week_note_update',
+    ),
+    path(
+        'account/plan/<int:plan_id>/week-notes/<int:note_id>/delete',
+        week_note_delete,
+        name='week_note_delete',
     ),
 ]

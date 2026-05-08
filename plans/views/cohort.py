@@ -24,6 +24,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.models import Token
 from plans.cohort_rows import build_progress_rows
+from plans.comments_permissions import composer_state_for_owner_view
 from plans.models import PLAN_VISIBILITY_CHOICES, Plan, Sprint, SprintEnrollment
 
 # Tuple of valid visibility values posted by the toggle form. We accept
@@ -148,18 +149,32 @@ def member_plan_detail(request, sprint_slug, plan_id):
         )
         .filter(sprint=sprint)
         .select_related('member', 'sprint')
-        .prefetch_related('weeks__checkpoints', 'resources', 'deliverables', 'next_steps'),
+        .prefetch_related(
+            'weeks__checkpoints',
+            'weeks__notes__author',
+            'resources',
+            'deliverables',
+            'next_steps',
+        ),
     )
 
     if plan.member_id == request.user.id:
         return redirect('my_plan_detail', plan_id=plan.pk)
 
+    # Comments composer is enabled for any authenticated viewer who
+    # can already see the plan -- which is exactly the predicate the
+    # ``visible_to_member`` queryset has already enforced. Private
+    # plans never reach this branch (the owner is redirected above
+    # and non-owners get 404), so a teammate viewer is always allowed
+    # to write on a cohort plan.
     return render(
         request,
         'plans/member_plan_detail.html',
         {
             'sprint': sprint,
             'plan': plan,
+            'comments_composer_disabled': False,
+            'comments_disabled_reason': '',
         },
     )
 
@@ -174,7 +189,13 @@ def my_plan_detail(request, plan_id):
     plan = get_object_or_404(
         Plan.objects.filter(pk=plan_id, member=request.user)
         .select_related('member', 'sprint')
-        .prefetch_related('weeks__checkpoints', 'resources', 'deliverables', 'next_steps'),
+        .prefetch_related(
+            'weeks__checkpoints',
+            'weeks__notes__author',
+            'resources',
+            'deliverables',
+            'next_steps',
+        ),
     )
     progress = plan.weeks.aggregate(
         total=Count('checkpoints'),
@@ -183,6 +204,16 @@ def my_plan_detail(request, plan_id):
     token, _created = Token.objects.get_or_create(
         user=request.user,
         name='member-plan-editor',
+    )
+
+    # Comments composer rules live in plans.comments_permissions so
+    # this view body stays free of inlined visibility / staff
+    # branching (the regression test in
+    # ``plans/tests/test_view_layer_no_visibility_literals.py``
+    # forbids both). Private plans hide the composer for non-staff
+    # owners; cohort plans always allow the owner to comment.
+    comments_composer_disabled, comments_disabled_reason = (
+        composer_state_for_owner_view(plan, request.user)
     )
 
     return render(
@@ -197,6 +228,8 @@ def my_plan_detail(request, plan_id):
             'plan_progress_done': progress['done'],
             'plan_progress_total': progress['total'],
             'visibility_choices': PLAN_VISIBILITY_CHOICES,
+            'comments_composer_disabled': comments_composer_disabled,
+            'comments_disabled_reason': comments_disabled_reason,
         },
     )
 

@@ -167,7 +167,7 @@
     <h2 class="text-lg font-semibold text-foreground mb-3">Code repo</h2>
     <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
        class="text-sm text-accent hover:underline break-all flex items-center gap-2">
-      <i data-lucide="github" class="w-4 h-4 flex-shrink-0"></i>
+      {% include 'includes/_icon_github.html' with css='w-4 h-4 flex-shrink-0' %}
       <span>{{ workshop.code_repo_url }}</span>
     </a>
   </div>

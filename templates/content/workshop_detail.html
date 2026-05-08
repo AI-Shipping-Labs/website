@@ -157,7 +157,7 @@
         <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
            class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent"
            data-testid="workshop-code-repo-link">
-          <i data-lucide="github" class="h-4 w-4"></i>
+          {% include 'includes/_icon_github.html' with css='h-4 w-4' %}
           View code on GitHub
           <i data-lucide="external-link" class="h-3 w-3"></i>
         </a>

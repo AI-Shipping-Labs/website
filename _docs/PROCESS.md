@@ -90,6 +90,7 @@ Orchestrator picks groomed issue
 ### Orchestrator Responsibilities
 
 - Stay in the orchestrator role. Do not personally perform active issue role work when a product-manager, software-engineer, tester, or on-call agent can own it. The orchestrator coordinates, unblocks, reviews handoffs, and launches the next role agent.
+- Launch role agents asynchronously/non-blocking by default. Do not wait on a subagent unless its result is the immediate blocker for the next orchestrator action; keep grooming, triaging, or advancing independent issues while agents work, so one stuck agent does not stall the pipeline.
 - Treat new user feedback, links, recordings, screenshots, or raw requests as intake. Create raw issues when needed, then launch a product-manager agent to groom them instead of grooming them inline, unless the user explicitly asks the orchestrator to edit the issue text directly.
 - Groom any `needs grooming` issues first (launch product-manager in grooming mode)
 - Pick the next groomed issues (2 at a time, in parallel when independent)

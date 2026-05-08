@@ -2,6 +2,10 @@ version = 1
 revision = 3
 requires-python = ">=3.13"
 
+[options]
+exclude-newer = "2026-05-01T02:50:01.352527106Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "ai-shipping-labs"
 version = "0.1.0"

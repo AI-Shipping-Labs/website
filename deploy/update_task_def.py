@@ -72,7 +72,15 @@ def _site_base_url_for_env(deploy_env):
 def _ensure_worker_container(containers):
     # Source-of-truth for the qcluster sidecar. Cloning from the web
     # container keeps image, secrets, and log config in sync — only the
-    # name, command, port mappings, and essential flag differ.
+    # name, port mappings, and essential flag differ.
+    #
+    # Note: ``command`` is set here for ECS console readability only.
+    # The Dockerfile sets ENTRYPOINT to ``scripts/entrypoint_init.py``
+    # without consuming ``$@``, so the actual web/worker dispatch is
+    # driven by the ``RUN_MIGRATIONS`` env var (set on the web container
+    # only). If you need to change worker behaviour, edit
+    # ``scripts/entrypoint_init.py`` -- editing this command field has
+    # no runtime effect.
     if any(c["name"].endswith("-worker") for c in containers):
         return
 

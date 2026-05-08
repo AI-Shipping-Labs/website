@@ -305,34 +305,25 @@ SITE_NAME = 'AI Shipping Labs'
 # Canonical base URL used by every URL-generating call site
 # (unsubscribe links, calendar invites, password resets, OAuth redirect
 # URIs, share URLs, OG / canonical meta tags, Slack announcement links,
-# UTM campaign destinations). Resolution order: IntegrationSetting row
-# in the DB (Studio > Settings > Site) > SITE_BASE_URL env var > literal
-# default. The literal default is a safety net so settings always
-# exposes the attribute; production deploys MUST override it. The
-# Studio host-mismatch banner (see
-# website.context_processors.studio_env_mismatch_context) warns when
-# the configured value disagrees with the request host.
+# UTM campaign destinations). Resolution order at runtime (via
+# ``integrations.config.site_base_url()``): IntegrationSetting row in
+# the DB (Studio > Settings > Site) > ``settings.SITE_BASE_URL`` (the
+# env var snapshot) > literal default.
 #
-# get_config() guards against the chicken-and-egg of being called while
-# settings.py is still loading (settings.configured == False at this
-# point, so the django-conf branch is skipped and we fall through to
-# env / default — DB rows are picked up on the next access after Django
-# finishes booting).
-from integrations.config import get_config  # noqa: E402
-
-# IMPORTANT: this assignment runs ONCE at module load. At this point
-# `settings.configured == False`, so `get_config()` skips the django-conf
-# branch and falls through to the env var or the literal default. The
-# resulting `settings.SITE_BASE_URL` is therefore a frozen boot-time
-# snapshot of the env var, not a live view of the DB. It is only used as
-# the last-resort fallback inside `integrations.config.site_base_url()`
-# when no `IntegrationSetting` row exists. Runtime callers MUST go
-# through `site_base_url()` (not `settings.SITE_BASE_URL`) so that
-# Studio overrides take effect without a process restart.
-SITE_BASE_URL = get_config(
-    'SITE_BASE_URL',
-    os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com'),
-)
+# IMPORTANT: this assignment intentionally does NOT call ``get_config``.
+# In production, ``get_config`` triggers a DatabaseCache GET + an
+# ``IntegrationSetting.objects.values_list`` query against RDS at
+# settings-import time. That cost (~1-3s per process) was paid four
+# times during a cold start — once for each ``manage.py`` subprocess in
+# the old entrypoint plus the gunicorn parent. We now resolve this from
+# the env var only; the DB-override path is exercised lazily by every
+# runtime caller through ``integrations.config.site_base_url()``.
+#
+# Code that reads ``settings.SITE_BASE_URL`` directly (a small set of
+# tests and a few module-level constants) gets the env-default. Code
+# that needs the freshest DB-overridden value already calls
+# ``site_base_url()``.
+SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com')
 SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who want to turn AI ideas into real projects.'
 
 # Stripe payment links
@@ -395,30 +386,19 @@ EMAIL_BATCH_SIZE = int(os.environ.get('EMAIL_BATCH_SIZE', 200))
 GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
 GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')
 
-# Private key: local file → env var → Secrets Manager
+# Private key resolution order at IMPORT TIME: PEM file (env-pointed) >
+# env var. The AWS Secrets Manager fallback (production path) is NOT
+# performed here -- it is resolved lazily on first use inside
+# ``integrations.services.github_sync.client._resolve_github_app_private_key``
+# so that container start does not pay a Secrets Manager round-trip
+# (~1-2s) on every settings import. See issue / commit history on the
+# entrypoint single-process refactor.
 _github_key_path = os.environ.get('GITHUB_APP_PRIVATE_KEY_FILE', '')
 if _github_key_path and os.path.isfile(_github_key_path):
     with open(_github_key_path) as f:
         GITHUB_APP_PRIVATE_KEY = f.read()
 else:
     GITHUB_APP_PRIVATE_KEY = os.environ.get('GITHUB_APP_PRIVATE_KEY', '')
-
-
-def _fetch_secret(secret_id, region='eu-west-1'):
-    """Fetch a secret from AWS Secrets Manager."""
-    import logging
-    logger = logging.getLogger(__name__)
-    try:
-        import boto3
-        client = boto3.client('secretsmanager', region_name=region)
-        return client.get_secret_value(SecretId=secret_id)['SecretString']
-    except Exception as e:
-        logger.warning('Failed to fetch secret %s: %s', secret_id, e)
-        return ''
-
-
-if not GITHUB_APP_PRIVATE_KEY:
-    GITHUB_APP_PRIVATE_KEY = _fetch_secret('ai-shipping-labs/github-app-private-key')
 
 # CDN base URL for content images uploaded during sync
 CONTENT_CDN_BASE = os.environ.get('CONTENT_CDN_BASE', '/static/content-images')

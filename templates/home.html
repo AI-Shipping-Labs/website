@@ -15,7 +15,7 @@
         <button onclick="document.getElementById('{{ section.id }}').scrollIntoView({behavior:'smooth'})"
                 class="group flex items-center gap-3 text-sm transition-all text-muted-foreground hover:text-foreground"
                 data-section="{{ section.id }}">
-          <span>{{ section.label }}</span>
+          <span class="opacity-0 transition-opacity group-hover:opacity-100">{{ section.label }}</span>
           <span class="h-2 w-2 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60 transition-all"></span>
         </button>
       </li>

@@ -19,7 +19,7 @@ import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from integrations.models import ContentSource, SyncLog
@@ -48,13 +48,16 @@ class SyncTriggerSetsQueuedStateTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
+        # Issue #532: source is the "system under test" but Django wraps
+        # setUpTestData rows in TestData (per-test deepcopy) so attribute
+        # mutations and the surrounding transaction rollback prevent
+        # cross-test leaks.
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
     def test_trigger_sets_source_status_to_queued(self, mock_async):
@@ -108,7 +111,6 @@ class SyncRepoTriggerSetsQueuedStateTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
@@ -153,7 +155,6 @@ class SyncAllSetsQueuedStateTest(TestCase):
         )
 
     def setUp(self):
-        self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
@@ -198,8 +199,11 @@ class WorkerQueuedToRunningTransitionTest(TestCase):
     'running' rather than create a duplicate.
     """
 
-    def setUp(self):
-        self.source = ContentSource.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        # Issue #532: read-only source fixture; tests create their own
+        # SyncLog rows and assert the worker updates / creates them.
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
         )
 
@@ -282,14 +286,16 @@ class WatchdogQueuedTimeoutTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
+        # Issue #532: read-only source fixture (status changes via DB
+        # refresh, never via direct attribute mutation that needs to
+        # persist across tests).
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             last_sync_status='queued',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     def _make_old_queued_log(self, age_minutes):
         log = SyncLog.objects.create(source=self.source, status='queued')
@@ -349,14 +355,14 @@ class WatchdogRunningTimeoutTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
+        # Issue #532: read-only source fixture for the running watchdog tests.
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             last_sync_status='running',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     def _make_old_running_log(self, age_minutes):
         log = SyncLog.objects.create(source=self.source, status='running')
@@ -408,14 +414,14 @@ class WatchdogStatusEndpointTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
+        # Issue #532: read-only source fixture.
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             last_sync_status='queued',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     def test_status_endpoint_runs_watchdog_on_old_queued(self):
         log = SyncLog.objects.create(source=self.source, status='queued')
@@ -449,14 +455,16 @@ class WatchdogConfigurableThresholdsTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
+        # Issue #532: read-only source fixture (last_sync_status mutates
+        # in test_custom_running_threshold_respected via DB save, which
+        # rolls back per-test).
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             last_sync_status='queued',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     @override_settings(SYNC_QUEUED_THRESHOLD_MINUTES=5)
     def test_custom_queued_threshold_respected(self):
@@ -512,19 +520,19 @@ class DashboardRendersQueuedPillTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
+        # Issue #532: read-only source + queued SyncLog fixture.
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
             last_sync_status='queued',
         )
         # Fresh (1 minute old) so the watchdog doesn't auto-fail it.
-        log = SyncLog.objects.create(source=self.source, status='queued')
+        log = SyncLog.objects.create(source=cls.source, status='queued')
         SyncLog.objects.filter(pk=log.pk).update(
             started_at=timezone.now() - datetime.timedelta(minutes=1),
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     def test_dashboard_renders_queued_label(self):
         response = self.client.get('/studio/sync/')
@@ -597,13 +605,13 @@ class QueuedToRunningToSuccessFlowTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-
-    def setUp(self):
-        self.client = Client()
-        self.client.login(email='staff@test.com', password='testpass')
-        self.source = ContentSource.objects.create(
+        # Issue #532: read-only source fixture.
+        cls.source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
         )
+
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='testpass')
 
     @patch('django_q.tasks.async_task')
     def test_full_state_machine_no_duplicate_synclog(self, mock_async):

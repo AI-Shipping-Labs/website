@@ -5,6 +5,8 @@ Django-Q2's sync mode executes tasks inline (no worker needed),
 which is ideal for testing that the full pipeline works.
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 from django_q.models import Task
 from django_q.tasks import async_task as q_async_task
@@ -18,6 +20,7 @@ Q_CLUSTER_SYNC = {
 
 
 @override_settings(Q_CLUSTER=Q_CLUSTER_SYNC)
+@patch('django_q.conf.Conf.SYNC', True)
 class SyncTaskExecutionTest(TestCase):
     """Tests that tasks execute end-to-end in sync mode."""
 

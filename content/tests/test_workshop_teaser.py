@@ -299,12 +299,13 @@ class FreeUserOnPaidTierTutorialTest(TierSetupMixin, TestCase):
             sort_order=1, body=_LONG_BODY,
         )
         cls.url = '/workshops/paid-tut/tutorial/lesson'
+        # Issue #532: the test user is read-only — no test mutates it.
+        cls.user = User.objects.create_user(
+            email='free-paid@x.com', password='pw',
+            tier=cls.free_tier, email_verified=True,
+        )
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='free-paid@x.com', password='pw',
-            tier=self.free_tier, email_verified=True,
-        )
         self.client.login(email='free-paid@x.com', password='pw')
 
     def test_returns_403(self):
@@ -360,12 +361,13 @@ class EligibleUserTutorialTest(TierSetupMixin, TestCase):
             sort_order=1, body=_LONG_BODY,
         )
         cls.url = '/workshops/eligible-tut/tutorial/lesson'
+        # Issue #532: read-only test user.
+        cls.user = User.objects.create_user(
+            email='main-eligible@x.com', password='pw',
+            tier=cls.main_tier, email_verified=True,
+        )
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='main-eligible@x.com', password='pw',
-            tier=self.main_tier, email_verified=True,
-        )
         self.client.login(email='main-eligible@x.com', password='pw')
 
     def test_returns_200(self):
@@ -397,12 +399,13 @@ class EmptyBodyTutorialFallbackTest(TierSetupMixin, TestCase):
             sort_order=1, body='',
         )
         cls.url = '/workshops/empty-body/tutorial/empty'
+        # Issue #532: read-only test user.
+        cls.user = User.objects.create_user(
+            email='empty-body-free@x.com', password='pw',
+            tier=cls.free_tier, email_verified=True,
+        )
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='empty-body-free@x.com', password='pw',
-            tier=self.free_tier, email_verified=True,
-        )
         self.client.login(email='empty-body-free@x.com', password='pw')
 
     def test_returns_403(self):
@@ -588,12 +591,13 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
             pages=LEVEL_BASIC, recording=LEVEL_MAIN,
             description=_LONG_DESCRIPTION,
         )
+        # Issue #532: read-only test user.
+        cls.user = User.objects.create_user(
+            email='free-vid@x.com', password='pw',
+            tier=cls.free_tier, email_verified=True,
+        )
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='free-vid@x.com', password='pw',
-            tier=self.free_tier, email_verified=True,
-        )
         self.client.login(email='free-vid@x.com', password='pw')
 
     def test_returns_403(self):
@@ -630,12 +634,13 @@ class EligibleVideoTest(TierSetupMixin, TestCase):
             pages=LEVEL_BASIC, recording=LEVEL_MAIN,
             description=_LONG_DESCRIPTION,
         )
+        # Issue #532: read-only test user.
+        cls.user = User.objects.create_user(
+            email='premium@x.com', password='pw',
+            tier=cls.premium_tier, email_verified=True,
+        )
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='premium@x.com', password='pw',
-            tier=self.premium_tier, email_verified=True,
-        )
         self.client.login(email='premium@x.com', password='pw')
 
     def test_returns_200(self):

@@ -231,15 +231,18 @@ Studio path: `Studio > Settings > S3 Content Images`.
 
 Provider console: AWS S3 + CloudFront. Bucket policy, CORS, and Origin Access Control details are in `_docs/content-images-s3.md` — follow that document for the bucket and CloudFront setup before filling in the keys here.
 
+Production deploys MUST set the env var `S3_ENABLED=true` to actually upload images to S3 during content sync. The flag defaults to `false` everywhere — local dev, CI, Playwright, `manage.py test` — so `upload_images_to_s3` short-circuits before constructing any boto3 client and returns a no-op stats dict. Without `S3_ENABLED=true` in prod, content sync still runs but image uploads are skipped (the markdown still resolves to the configured `CONTENT_CDN_BASE`, so existing CDN images keep working). Issue #532.
+
 Keys to set in Studio:
 
 | Key | Source | Notes |
 |-----|--------|-------|
+| `S3_ENABLED` | env var | Set to `true` in prod. Defaults `false` so dev/CI never makes real boto3 round-trips to S3. Forced `false` under `manage.py test`. Issue #532. |
 | `AWS_S3_CONTENT_BUCKET` | non-secret | Bucket name (e.g. `aishippinglabs-content`). |
 | `AWS_S3_CONTENT_REGION` | non-secret | Region of the bucket (e.g. `eu-west-1`). |
 | `CONTENT_CDN_BASE` | non-secret | Public base URL — typically the CloudFront distribution (e.g. `https://cdn.aishippinglabs.com`). Default `/static/content-images` (local dev only). |
 
-Note: S3 credentials are shared with SES — the same `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from section 5 must have `s3:PutObject` on this bucket.
+Note: S3 credentials are shared with SES — the same `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from section 5 must have `s3:PutObject` on this bucket. Both `SES_ENABLED=false` and `S3_ENABLED=false` blank these credentials at startup as a belt-and-suspenders guard against any code path that slips past the gate.
 
 Test: in `Studio > Sync`, sync a content source that has images; confirm an image URL on `{SITE_BASE_URL}/blog/<article>` resolves to a `cdn.aishippinglabs.com` (or your CloudFront) URL and returns 200.
 

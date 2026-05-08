@@ -8,8 +8,12 @@ them dies with ``OperationalError: database is locked``.
 
 The fix lives in ``website/settings.py``: when ``ENGINE`` is sqlite3 we
 populate ``OPTIONS`` with WAL + busy_timeout + synchronous=NORMAL via
-``init_command`` and set ``transaction_mode='IMMEDIATE'``. Postgres
-deployments are untouched (the branch only fires for sqlite3).
+``init_command`` and set ``transaction_mode='IMMEDIATE'``. During Django
+test runs, journal mode is downgraded to DELETE because Django's parallel
+SQLite clone step copies only the main ``.sqlite3`` file; WAL can leave
+schema changes in a sidecar and create incomplete ``--parallel --keepdb``
+clones. Postgres deployments are untouched (the branch only fires for
+sqlite3).
 
 Three test classes:
 
@@ -61,13 +65,24 @@ class SqliteOptionsWiringTest(SimpleTestCase):
             self.skipTest('Sqlite-only wiring; Postgres deployments use MVCC.')
         self.options = settings.DATABASES['default'].get('OPTIONS', {})
 
-    def test_init_command_enables_wal_journal_mode(self):
+    def test_init_command_sets_expected_journal_mode(self):
         init = self.options.get('init_command', '')
-        self.assertIn(
-            'journal_mode=WAL', init,
-            'init_command must enable WAL so concurrent readers + one writer '
-            'can coexist without raising "database is locked".',
-        )
+        if settings.TESTING:
+            self.assertIn(
+                'journal_mode=DELETE', init,
+                'Django test runs must avoid WAL so file-backed SQLite '
+                '--parallel --keepdb clones include the fully migrated schema.',
+            )
+            self.assertNotIn(
+                'journal_mode=WAL', init,
+                'WAL sidecars are unsafe with Django SQLite test DB cloning.',
+            )
+        else:
+            self.assertIn(
+                'journal_mode=WAL', init,
+                'init_command must enable WAL so concurrent readers + one '
+                'writer can coexist without raising "database is locked".',
+            )
 
     def test_init_command_sets_busy_timeout(self):
         init = self.options.get('init_command', '')
@@ -107,7 +122,7 @@ class SqlitePragmasAppliedTest(SimpleTestCase):
         if connection.vendor != 'sqlite':
             self.skipTest('Sqlite-only PRAGMA check.')
 
-    def test_journal_mode_is_wal(self):
+    def test_journal_mode_is_expected_for_runtime(self):
         with connection.cursor() as cursor:
             cursor.execute('PRAGMA journal_mode;')
             mode = cursor.fetchone()[0].lower()
@@ -115,11 +130,12 @@ class SqlitePragmasAppliedTest(SimpleTestCase):
             # Django's default test DB is ``:memory:`` (or memorydb shared
             # cache), and SQLite reports ``journal_mode=memory`` for those
             # — WAL is meaningless without an on-disk file. Skip rather
-            # than weaken the assertion: production / dev / CI all run
-            # against the on-disk db.sqlite3 where this PRAGMA matters.
+            # than weaken the assertion: on-disk SQLite is where this
+            # PRAGMA matters.
             self.skipTest('Test DB is in-memory; WAL only applies to on-disk SQLite.')
+        expected = 'delete' if settings.TESTING else 'wal'
         self.assertEqual(
-            mode, 'wal',
+            mode, expected,
             f'PRAGMA journal_mode reports {mode!r}; init_command did not run.',
         )
 

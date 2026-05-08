@@ -1,0 +1,53 @@
+{% comment %}
+  Issue #517: Mobile-only reader progress + drawer trigger. Renders above
+  the breadcrumb on `<lg` viewports so the user can see position
+  ("Page N of M" / "Lesson N of M") and open the navigation drawer
+  without scrolling past the body. The drawer it controls is the same
+  shared `#sidebar-nav` rendered by `content/reader/_sidebar.html` —
+  the toggle keeps `id="sidebar-toggle-btn"` and
+  `aria-controls="sidebar-nav"` so the existing JS in `_scripts.html`
+  works unchanged.
+
+  Hidden on `lg+` viewports (desktop keeps the persistent left sidebar).
+  Callers must NOT include this partial on gated pages — the bar implies
+  navigable progress, which is misleading when the body is paywalled.
+
+  Required context:
+    reader_progress_current   1-indexed position of the current item.
+    reader_progress_total     Total number of items in the reader.
+    reader_progress_completed Number of items the user has completed
+                              (0 for anonymous visitors).
+    reader_progress_kind      "page" (workshop) or "lesson" (course).
+    reader_mobile_label       Drawer button text, e.g. "Workshop Navigation".
+    user_authenticated        Truthy when the visitor is logged in;
+                              gates the green completion fill.
+{% endcomment %}
+<div class="lg:hidden mb-4" data-testid="reader-mobile-progress-bar">
+  <button
+    type="button"
+    id="sidebar-toggle-btn"
+    class="w-full flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+    aria-expanded="false"
+    aria-controls="sidebar-nav"
+    data-testid="reader-mobile-drawer-toggle"
+  >
+    <span class="flex items-center gap-2">
+      <i data-lucide="list" class="h-4 w-4"></i>
+      {{ reader_mobile_label }}
+    </span>
+    <span class="flex items-center gap-2 text-xs text-muted-foreground">
+      <span data-testid="reader-mobile-progress-text">{% if reader_progress_kind == "lesson" %}Lesson{% else %}Page{% endif %} {{ reader_progress_current }} of {{ reader_progress_total }}</span>
+      <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200" id="sidebar-toggle-chevron"></i>
+    </span>
+  </button>
+
+  {% if user_authenticated and reader_progress_total %}
+  <div class="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+    <div
+      class="h-full bg-green-500 transition-all duration-200"
+      style="width: {% widthratio reader_progress_completed reader_progress_total 100 %}%"
+      data-testid="reader-mobile-progress-fill"
+    ></div>
+  </div>
+  {% endif %}
+</div>

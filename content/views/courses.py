@@ -692,6 +692,24 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         and get_user_level(user) >= LEVEL_MAIN
     )
 
+    # Issue #517 — flatten the module-ordered unit list so the mobile
+    # progress bar can show "Lesson N of M" relative to the whole
+    # course. ``modules`` is the prefetched syllabus from
+    # ``Course.get_syllabus`` so iterating ``module.units.all()``
+    # reuses the cached units list (no extra query per module).
+    flat_units = []
+    for nav_module in modules:
+        for nav_unit in nav_module.units.all():
+            flat_units.append(nav_unit.pk)
+    reader_progress_total = len(flat_units)
+    try:
+        reader_progress_current = flat_units.index(unit.pk) + 1
+    except ValueError:
+        # Defensive: the unit is in the URL path but not in the
+        # syllabus prefetch (shouldn't happen). Fall back to 1 of N
+        # so the bar still renders sensibly.
+        reader_progress_current = 1
+
     context = {
         'course': course,
         'module': module,
@@ -715,6 +733,14 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         'completion_url': f'/api/courses/{course.slug}/units/{unit.pk}/complete',
         'bottom_prev_testid': 'bottom-prev-btn',
         'bottom_next_testid': 'bottom-next-btn',
+        # Issue #517 — mobile progress bar context. Mirrors the
+        # workshop reader so the two surfaces feel structurally
+        # identical on mobile (Pixel 7 393x851).
+        'reader_mobile_label': 'Course Navigation',
+        'reader_progress_kind': 'lesson',
+        'reader_progress_current': reader_progress_current,
+        'reader_progress_total': reader_progress_total,
+        'reader_progress_completed': len(completed_unit_ids),
     }
     return render(request, 'content/course_unit_detail.html', context)
 

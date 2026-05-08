@@ -196,8 +196,16 @@ class CourseUnitSidebarMobileTest(CourseMobileSetupMixin, TestCase):
     def test_sidebar_toggle_is_hidden_on_desktop(self):
         self._login_main_user()
         response = self.client.get("/courses/long-course/module-1/unit-1")
-        # The toggle button has lg:hidden class
-        self.assertContains(response, 'lg:hidden mt-4 w-full flex items-center')
+        # Issue #517: the mobile toggle moved into a new wrapper above
+        # the breadcrumb (`reader-mobile-progress-bar`), but the
+        # ``lg:hidden`` contract is preserved so the bar disappears on
+        # desktop. Assert the wrapper carries lg:hidden adjacent to its
+        # testid.
+        body = response.content.decode()
+        wrapper_idx = body.find('data-testid="reader-mobile-progress-bar"')
+        self.assertGreater(wrapper_idx, -1)
+        snippet = body[max(0, wrapper_idx - 80):wrapper_idx]
+        self.assertIn('lg:hidden', snippet)
 
     def test_sidebar_nav_hidden_on_mobile_by_default(self):
         self._login_main_user()

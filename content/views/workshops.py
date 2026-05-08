@@ -543,6 +543,15 @@ def workshop_page_detail(request, slug, page_slug):
         ),
         'bottom_prev_testid': 'page-prev-btn',
         'bottom_next_testid': 'page-next-btn',
+        # Issue #517 — mobile progress bar context. The bar is rendered
+        # only on the non-gated branch; we still provide values on the
+        # gated branch so any test that inspects the context after a
+        # gated render gets stable defaults instead of KeyError.
+        'reader_mobile_label': 'Workshop Navigation',
+        'reader_progress_kind': 'page',
+        'reader_progress_current': idx + 1,
+        'reader_progress_total': len(pages),
+        'reader_progress_completed': len(completed_page_ids),
     })
 
     status = 200

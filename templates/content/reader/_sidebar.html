@@ -21,19 +21,15 @@
       </button>
     </div>
 
-    <button
-      type="button"
-      id="sidebar-toggle-btn"
-      class="lg:hidden mt-4 w-full flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-      aria-expanded="false"
-      aria-controls="sidebar-nav"
-    >
-      <span class="flex items-center gap-2">
-        <i data-lucide="list" class="h-4 w-4"></i>
-        {{ reader_mobile_label }}
-      </span>
-      <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200" id="sidebar-toggle-chevron"></i>
-    </button>
+    {% comment %}
+      Issue #517: the mobile drawer toggle has moved to
+      `templates/content/reader/_mobile_progress_bar.html` so it sits at
+      the top of the page, above the breadcrumb, instead of below the
+      body (the sidebar `<aside>` is `order-2` on mobile). The toggle
+      there preserves the `id="sidebar-toggle-btn"` /
+      `aria-controls="sidebar-nav"` contract so the existing
+      `_scripts.html` toggle handler works without changes.
+    {% endcomment %}
 
     <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block"
          aria-label="{{ reader_nav_aria_label }}"

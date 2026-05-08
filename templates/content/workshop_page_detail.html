@@ -25,6 +25,10 @@
 
         <!-- Main content -->
         <div class="flex-1 min-w-0 order-1 lg:order-2" {% if not is_gated %}id="content-sidebar-main"{% endif %}>
+          {% if not is_gated %}
+          {% include "content/reader/_mobile_progress_bar.html" %}
+          {% endif %}
+
           <!-- Breadcrumb -->
           <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden" data-testid="page-breadcrumb">
             <a href="/workshops" class="hover:text-foreground transition-colors flex-shrink-0">Workshops</a>

@@ -255,6 +255,15 @@
     .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
     .accordion-content.open { max-height: 500px; }
 
+    /* Shared <details> accordion (issue #516).
+       Used by templates/includes/_accordion.html and any consumer that
+       follows the same pattern. The chevron rotates 180° when the
+       parent <details> is open, and the default disclosure marker is
+       hidden so the lucide chevron is the only affordance. */
+    details[open] > summary .accordion-chevron { transform: rotate(180deg); }
+    details > summary.list-none::-webkit-details-marker,
+    details > summary.list-none::marker { display: none; }
+
     /* Smooth scroll */
     html { scroll-behavior: smooth; }
 

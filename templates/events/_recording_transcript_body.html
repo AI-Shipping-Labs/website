@@ -1,0 +1,5 @@
+{% comment %}
+Body partial for the workshop/event recording transcript accordion.
+Rendered inside `templates/includes/_accordion.html` via `body_template`.
+Expects `transcript_text` in the parent context (propagated by `{% include %}`).
+{% endcomment %}<div class="max-h-96 overflow-y-auto whitespace-pre-wrap text-sm text-muted-foreground">{{ transcript_text }}</div>

@@ -21,7 +21,7 @@ The ECS task runs two containers from the same Docker image:
 - `ai-shipping-labs` — gunicorn web server (essential)
 - `ai-shipping-labs-worker` — Django-Q2 `qcluster` background worker (non-essential)
 
-On startup, the `entrypoint.sh` script runs `manage.py migrate` followed by `manage.py createcachetable django_q_cache` before starting the main process. This means database migrations and the django-q cache table are applied automatically on every deployment. `createcachetable` is idempotent, so it is safe to run on every container start.
+On startup, the entrypoint (`scripts/entrypoint_init.py`) runs `manage.py migrate` before starting the main process. The `email_app` migration `0013_create_django_q_cache_table` creates the `django_q_cache` `DatabaseCache` table as part of `migrate`, so it is applied automatically on every deployment without a separate `createcachetable` step on every container boot.
 
 The deployed version tag is set via the `VERSION` environment variable and displayed in the page footer.
 
@@ -98,11 +98,13 @@ The project ships a dedicated `django_q` cache for this. It is `LocMemCache` dur
 | `CACHES['django_q']['LOCATION']` | `django-q-test` | `django_q_cache` (a DB table) |
 | `Q_CLUSTER['cache']` | `django_q` | `django_q` |
 
-`DatabaseCache` requires a one-time table creation. It is idempotent and wired into both `scripts/setup.sh` (local) and `entrypoint.sh` (every container start). To create it manually:
+`DatabaseCache` requires a one-time table creation. The `email_app` migration `0013_create_django_q_cache_table` runs `createcachetable django_q_cache` as a `RunPython` step so the table is created on a fresh `manage.py migrate` everywhere — local dev, CI test DB, dev/prod ECS — without a separate one-shot command. To recreate it manually if the table is dropped:
 
 ```bash
 uv run python manage.py createcachetable django_q_cache
 ```
+
+The command is idempotent.
 
 ### Recurring schedules
 

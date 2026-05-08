@@ -26,7 +26,8 @@ RUN chmod +x entrypoint.sh
 EXPOSE 8000
 
 # entrypoint.sh delegates to scripts/entrypoint_init.py, which imports
-# Django settings ONCE, runs migrate / createcachetable / check, then
-# spawns gunicorn (web) or qcluster (worker) in the same Python process.
-# No CMD — the entrypoint does not consume "$@".
+# Django settings ONCE, runs migrate / check, then spawns gunicorn (web)
+# or qcluster (worker) in the same Python process. The django_q_cache
+# table is created by an email_app migration during migrate, not as a
+# separate boot step. No CMD — the entrypoint does not consume "$@".
 ENTRYPOINT ["/app/entrypoint.sh"]

@@ -69,8 +69,7 @@ Follow [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) when writing
 
 ```bash
 uv sync                                    # install dependencies
-uv run python manage.py migrate            # creates DB, seeds tiers
-uv run python manage.py createcachetable django_q_cache  # worker-heartbeat cache (idempotent)
+uv run python manage.py migrate            # creates DB, seeds tiers, creates django_q_cache table
 uv run python manage.py seed_content_sources  # register content sources
 ```
 

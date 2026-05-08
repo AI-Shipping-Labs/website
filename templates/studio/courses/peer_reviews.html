@@ -3,113 +3,262 @@
 {% block studio_title %}Peer Reviews - {{ course.title }}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
-  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+{% comment %}
+Breadcrumbs above the course-context header so operators can step back to
+the course edit page in one click.
+{% endcomment %}
+<div class="mb-4">
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground mb-3">
     <a href="{% url 'studio_course_list' %}" class="hover:text-foreground">Courses</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="hover:text-foreground">{{ course.title }}</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">Peer Reviews</span>
   </div>
-  <h1 class="text-2xl font-semibold text-foreground">Peer Reviews</h1>
 </div>
 
-<!-- Actions -->
-<div class="flex items-center space-x-3 mb-6">
+{# ---------------------------------------------------------------------- #}
+{# Course-context header                                                   #}
+{# ---------------------------------------------------------------------- #}
+<section data-testid="peer-review-course-header"
+         class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="min-w-0">
+      <h1 class="text-xl sm:text-2xl font-semibold text-foreground break-words">
+        Peer reviews for {{ course.title }}
+      </h1>
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        {% if course.peer_review_enabled %}
+        <span data-testid="peer-review-status"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/15 text-green-400">
+          <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+          Peer review enabled
+        </span>
+        {% else %}
+        <span data-testid="peer-review-status"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-500/15 text-yellow-400">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+          Peer review disabled
+        </span>
+        {% endif %}
+        <span class="text-muted-foreground">
+          Each student reviews
+          <span class="text-foreground" data-testid="peer-review-count">{{ course.peer_review_count }}</span>
+          peer(s)
+        </span>
+        <span class="text-muted-foreground">
+          Review deadline:
+          <span class="text-foreground" data-testid="peer-review-deadline-days">
+            {{ course.peer_review_deadline_days }} day{{ course.peer_review_deadline_days|pluralize }}
+          </span>
+          after assignment
+        </span>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="{% url 'studio_course_edit' course_id=course.pk %}"
+         data-testid="back-to-course-edit"
+         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-secondary text-sm text-foreground hover:bg-muted transition-colors">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        Back to course edit
+      </a>
+    </div>
+  </div>
+</section>
+
+{# ---------------------------------------------------------------------- #}
+{# Empty state when peer review is disabled                                 #}
+{# ---------------------------------------------------------------------- #}
+{% if not course.peer_review_enabled %}
+<div data-testid="peer-review-disabled-empty"
+     class="bg-card border border-border rounded-lg p-6 mb-6">
+  <p class="text-sm text-foreground mb-1 font-medium">Peer review is turned off for this course.</p>
+  <p class="text-sm text-muted-foreground">
+    Enable peer review in the course settings to let students submit projects and review each other.
+    <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="text-accent hover:underline">
+      Open course settings
+    </a>
+  </p>
+</div>
+{% endif %}
+
+{# ---------------------------------------------------------------------- #}
+{# Action bar with task-oriented copy                                       #}
+{# ---------------------------------------------------------------------- #}
+<div class="flex flex-wrap items-center gap-2 sm:gap-3 mb-6">
   <form method="post" action="{% url 'studio_peer_review_form_batch' course_id=course.pk %}">
     {% csrf_token %}
-    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-      Form Batch
+    <button type="submit"
+            data-testid="action-create-assignments"
+            class="inline-flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      <i data-lucide="users" class="w-4 h-4"></i>
+      Create review assignments
     </button>
   </form>
   <form method="post" action="{% url 'studio_peer_review_issue_certificates' course_id=course.pk %}">
     {% csrf_token %}
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
-      Issue Certificates
+    <button type="submit"
+            data-testid="action-issue-certificates"
+            class="inline-flex items-center gap-2 bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
+      <i data-lucide="award" class="w-4 h-4"></i>
+      Issue certificates for eligible completions
     </button>
   </form>
-  <form method="post" action="{% url 'studio_peer_review_extend_deadline' course_id=course.pk %}" class="flex items-center space-x-2">
+  <form method="post" action="{% url 'studio_peer_review_extend_deadline' course_id=course.pk %}"
+        class="flex items-center gap-2">
     {% csrf_token %}
-    <input type="number" name="days" value="7" min="1" class="w-16 bg-secondary border border-border rounded-lg px-2 py-2 text-sm text-foreground">
-    <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
-      Extend Deadline (days)
+    <label for="extend-days" class="text-sm text-muted-foreground">Extend by</label>
+    <input id="extend-days" type="number" name="days" value="7" min="1"
+           class="w-16 bg-secondary border border-border rounded-lg px-2 py-2 text-sm text-foreground">
+    <button type="submit"
+            data-testid="action-extend-deadline"
+            class="inline-flex items-center gap-2 bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
+      <i data-lucide="calendar-plus" class="w-4 h-4"></i>
+      Extend review deadline (days)
     </button>
   </form>
 </div>
 
-{# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
+{% comment %}
+Messages render once at the top of the studio main content area via
+studio/base.html (issue #347), so we deliberately do not render them here.
+{% endcomment %}
 
-<!-- Status filter -->
-<div class="flex items-center space-x-2 mb-6 text-sm">
-  <span class="text-muted-foreground">Filter:</span>
+{# ---------------------------------------------------------------------- #}
+{# Status filter chips with friendly labels + counts                        #}
+{# ---------------------------------------------------------------------- #}
+<div data-testid="status-filters"
+     class="flex flex-wrap items-center gap-2 mb-6 text-sm">
+  <span class="text-muted-foreground">Filter by status:</span>
   <a href="{% url 'studio_peer_review_management' course_id=course.pk %}"
+     data-testid="status-filter-all"
      class="px-3 py-1 rounded-lg {% if not status_filter %}bg-accent text-accent-foreground{% else %}bg-secondary text-foreground hover:bg-muted{% endif %} transition-colors">
     All
+    <span class="ml-1 text-xs opacity-75">({{ total_submissions }})</span>
   </a>
-  {% for status_val in "submitted,in_review,review_complete,certified" %}
-  {% with status_val=status_val %}
-  <a href="{% url 'studio_peer_review_management' course_id=course.pk %}?status={{ status_val }}"
-     class="px-3 py-1 rounded-lg {% if status_filter == status_val %}bg-accent text-accent-foreground{% else %}bg-secondary text-foreground hover:bg-muted{% endif %} transition-colors">
-    {{ status_val }}
+  {% for f in status_filters %}
+  <a href="{% url 'studio_peer_review_management' course_id=course.pk %}?status={{ f.value }}"
+     data-testid="status-filter-{{ f.value }}"
+     class="px-3 py-1 rounded-lg {% if f.active %}bg-accent text-accent-foreground{% else %}bg-secondary text-foreground hover:bg-muted{% endif %} transition-colors">
+    {{ f.label }}
+    <span class="ml-1 text-xs opacity-75">({{ f.count }})</span>
   </a>
-  {% endwith %}
   {% endfor %}
 </div>
 
-<!-- Info -->
-<p class="text-sm text-muted-foreground mb-4">{{ waiting_count }} submission(s) waiting for batch formation.</p>
-
-<!-- Submissions list -->
-<div class="space-y-4">
-  {% for item in submission_data %}
-  <details class="bg-card border border-border rounded-lg overflow-hidden">
-    <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-secondary/30 transition-colors">
-      <div class="flex items-center space-x-4">
-        <span class="text-sm text-foreground">{{ item.submission.user.email }}</span>
-        <span class="inline-block px-2 py-0.5 text-xs rounded
-          {% if item.submission.status == 'submitted' %}bg-yellow-500/20 text-yellow-400
-          {% elif item.submission.status == 'in_review' %}bg-blue-500/20 text-blue-400
-          {% elif item.submission.status == 'review_complete' %}bg-green-500/20 text-green-400
-          {% elif item.submission.status == 'certified' %}bg-purple-500/20 text-purple-400
-          {% endif %}">
-          {{ item.submission.get_status_display }}
-        </span>
-        <span class="text-xs text-muted-foreground">
-          Reviews: {{ item.completed_reviews }}/{{ item.total_reviews }}
-        </span>
-      </div>
-      <span class="text-xs text-muted-foreground">{{ item.submission.submitted_at|date:"M d, Y" }}</span>
-    </summary>
-    <div class="px-6 py-4 border-t border-border">
-      <div class="mb-3">
-        <span class="text-sm text-muted-foreground">Project URL:</span>
-        <a href="{{ item.submission.project_url }}" target="_blank" rel="noopener" class="text-accent hover:underline text-sm ml-2">{{ item.submission.project_url }}</a>
-      </div>
-      {% if item.submission.description %}
-      <div class="mb-3">
-        <span class="text-sm text-muted-foreground">Description:</span>
-        <p class="text-sm text-foreground">{{ item.submission.description }}</p>
-      </div>
-      {% endif %}
-      {% if item.reviews %}
-      <div class="mt-3">
-        <h4 class="text-sm font-medium text-foreground mb-2">Assigned Reviewers</h4>
-        <ul class="space-y-1">
-          {% for review in item.reviews %}
-          <li class="flex items-center justify-between text-sm">
-            <span class="text-foreground">{{ review.reviewer.email }}</span>
-            <span class="{% if review.is_complete %}text-green-400{% else %}text-yellow-400{% endif %}">
-              {% if review.is_complete %}Completed{% else %}Pending{% endif %}
+{# ---------------------------------------------------------------------- #}
+{# Cohort groups                                                           #}
+{# ---------------------------------------------------------------------- #}
+<div class="space-y-6">
+  {% for group in cohort_groups %}
+  <section data-testid="cohort-group"
+           data-cohort-id="{% if group.cohort %}{{ group.cohort.pk }}{% else %}self-paced{% endif %}"
+           class="bg-card border border-border rounded-lg overflow-hidden">
+    <header class="px-4 sm:px-6 py-4 border-b border-border bg-secondary/30">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
+          <h2 class="text-base sm:text-lg font-semibold text-foreground break-words"
+              data-testid="cohort-group-name">
+            {{ group.name }}
+          </h2>
+          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-muted-foreground">
+            {% if group.is_self_paced %}
+            <span data-testid="cohort-self-paced-tag">No fixed schedule</span>
+            {% else %}
+            <span data-testid="cohort-window">
+              {{ group.start_date|date:"M d, Y" }}
+              {% if group.end_date %}- {{ group.end_date|date:"M d, Y" }}{% endif %}
             </span>
-          </li>
-          {% endfor %}
-        </ul>
+            {% if group.is_active %}
+            <span data-testid="cohort-active-state"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/15 text-green-400">Active</span>
+            {% else %}
+            <span data-testid="cohort-active-state"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-muted-foreground">Inactive</span>
+            {% endif %}
+            <span data-testid="cohort-enrollment-count">
+              {{ group.enrollment_count }} enrolled
+            </span>
+            {% endif %}
+            <span data-testid="cohort-submission-count">
+              {{ group.items|length }} submission{{ group.items|length|pluralize }}
+            </span>
+          </div>
+        </div>
       </div>
-      {% endif %}
+    </header>
+
+    <div class="divide-y divide-border">
+      {% for item in group.items %}
+      <details class="group" data-testid="submission-row">
+        <summary class="flex flex-col gap-2 px-4 sm:px-6 py-4 cursor-pointer hover:bg-secondary/30 transition-colors sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4 min-w-0">
+            <span class="text-sm text-foreground break-all" data-testid="submission-user">{{ item.submission.user.email }}</span>
+            <span data-testid="submission-status-label"
+                  class="inline-block px-2 py-0.5 text-xs rounded
+              {% if item.submission.status == 'submitted' %}bg-yellow-500/20 text-yellow-400
+              {% elif item.submission.status == 'in_review' %}bg-blue-500/20 text-blue-400
+              {% elif item.submission.status == 'review_complete' %}bg-green-500/20 text-green-400
+              {% elif item.submission.status == 'certified' %}bg-purple-500/20 text-purple-400
+              {% endif %}">
+              {{ item.status_label }}
+            </span>
+            <span class="text-xs text-muted-foreground">
+              Reviews: {{ item.completed_reviews }}/{{ item.total_reviews }}
+            </span>
+          </div>
+          <span class="text-xs text-muted-foreground">{{ item.submission.submitted_at|date:"M d, Y" }}</span>
+        </summary>
+        <div class="px-4 sm:px-6 pb-4 sm:pb-5 border-t border-border bg-background/40">
+          <div class="mt-3 mb-2">
+            <span class="text-sm text-muted-foreground">Project URL:</span>
+            <a href="{{ item.submission.project_url }}" target="_blank" rel="noopener"
+               class="text-accent hover:underline text-sm ml-2 break-all">{{ item.submission.project_url }}</a>
+          </div>
+          {% if item.submission.description %}
+          <div class="mb-2">
+            <span class="text-sm text-muted-foreground">Description:</span>
+            <p class="text-sm text-foreground whitespace-pre-line">{{ item.submission.description }}</p>
+          </div>
+          {% endif %}
+          {% if item.reviews %}
+          <div class="mt-3">
+            <h4 class="text-sm font-medium text-foreground mb-2">Assigned reviewers</h4>
+            <ul class="space-y-1">
+              {% for review in item.reviews %}
+              <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span class="text-foreground break-all">{{ review.reviewer.email }}</span>
+                <span class="{% if review.is_complete %}text-green-400{% else %}text-yellow-400{% endif %}">
+                  {% if review.is_complete %}Completed{% else %}Pending{% endif %}
+                </span>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </details>
+      {% empty %}
+      <div class="px-4 sm:px-6 py-6 text-sm text-muted-foreground"
+           data-testid="cohort-group-empty">
+        {% if group.is_self_paced %}
+        No self-paced submissions yet.
+        Students enrolled outside any cohort will appear here when they submit.
+        {% else %}
+        No submissions yet for this cohort.
+        Submissions appear here once enrolled students post their projects.
+        {% endif %}
+      </div>
+      {% endfor %}
     </div>
-  </details>
+  </section>
   {% empty %}
-  <p class="text-sm text-muted-foreground">No submissions yet.</p>
+  <div data-testid="no-submissions-empty"
+       class="bg-card border border-border rounded-lg p-6 text-sm text-muted-foreground">
+    No submissions yet for this course.
+    Once students post projects you can group them by cohort, create review
+    assignments, and issue certificates from this page.
+  </div>
   {% endfor %}
 </div>
 {% endblock %}

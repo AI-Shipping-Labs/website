@@ -1,10 +1,4 @@
-"""Issue #238: header/footer Membership and FAQ links must lead to a real
-page even for logged-in users.
-
-Symptom before the fix: clicking footer FAQ on the dashboard sent the user
-to `/#faq`, an anchor that only exists on the marketing homepage. The
-authenticated user landed on the dashboard with nothing to scroll to.
-"""
+"""Header/footer Membership and FAQ navigation."""
 
 import os
 
@@ -58,9 +52,9 @@ class TestLoggedInUserMembershipNavigation:
 
 @pytest.mark.django_db(transaction=True)
 class TestLoggedInUserFaqNavigation:
-    """A logged-in user can reach the FAQ page from the footer FAQ link."""
+    """A logged-in user can reach the About FAQ section from the footer."""
 
-    def test_footer_faq_link_lands_on_standalone_faq_page(
+    def test_footer_faq_link_lands_on_about_faq_section(
         self, django_server, browser, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -77,15 +71,14 @@ class TestLoggedInUserFaqNavigation:
         footer_faq.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # We must land on /faq (not /#faq on the dashboard).
-        assert page.url.rstrip("/").endswith("/faq"), (
-            f"Expected to land on /faq, got {page.url}"
+        assert page.url.endswith("/about#faq"), (
+            f"Expected to land on /about#faq, got {page.url}"
         )
 
-        # At least one of the FAQ questions must be visible on the page.
+        page.locator("#faq").scroll_into_view_if_needed()
         body_text = page.locator("body").inner_text()
         assert "Who is this community for?" in body_text, (
-            "Expected FAQ questions to render on /faq"
+            "Expected FAQ questions to render on /about#faq"
         )
 
         ctx.close()

@@ -354,11 +354,11 @@ def test_faq_and_workshop_chapters_share_color_and_weight(
     anon_page.wait_for_timeout(150)
     faq_style = anon_page.evaluate(
         """() => {
-            const btn = document.querySelector(
-                '#faq .faq-item button'
+            const summary = document.querySelector(
+                '#faq .faq-item summary'
             );
-            if (!btn) return null;
-            const cs = getComputedStyle(btn);
+            if (!summary) return null;
+            const cs = getComputedStyle(summary);
             return {
                 fontWeight: cs.fontWeight,
                 color: cs.color,
@@ -386,12 +386,8 @@ def test_faq_and_workshop_chapters_share_color_and_weight(
         'recording paywall'
     )
 
-    # FAQ button uses default <button> font-weight (400) plus the global
-    # foreground color, while the accordion summary explicitly sets
-    # font-medium (500). The cross-check is that both share the same
-    # foreground COLOR, sentence case, and the Inter font family — the
-    # accordion is a section header (a step heavier) but still the same
-    # design system, not muted-uppercase.
+    # Both use the shared section-header accordion summary, so they should
+    # agree on the design-system essentials: color, sentence case, and font.
     assert chapters_style['color'] == faq_style['color'], (
         f'Chapters color {chapters_style["color"]} differs from '
         f'FAQ color {faq_style["color"]}'

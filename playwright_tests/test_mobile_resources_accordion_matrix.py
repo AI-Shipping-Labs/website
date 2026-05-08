@@ -20,9 +20,9 @@ Test 1: ``test_mobile_resources_accordion_present_on_each_url`` --
 
 Test 2: ``test_desktop_header_renders_on_peer_review_pages`` -- At
   1024x768 (desktop), the four peer-review URLs must render the desktop
-  nav (about/activities/membership/resources-dropdown/faq) and must NOT
-  show the mobile hamburger. This covers the desktop side of the same
-  template fix.
+  nav (about/activities/membership/resources-dropdown) and must NOT show
+  the mobile hamburger. This covers the desktop side of the same template
+  fix.
 
 Test 3: ``test_back_to_course_link_still_renders`` -- Asserts the
   page-body chrome (the "Back to <course>" link the spec calls out)
@@ -286,7 +286,7 @@ class TestMobileResourcesAccordionAcrossPages:
 class TestDesktopHeaderOnPeerReviewPages:
     """At desktop width the same four peer-review URLs must render the
     desktop nav (About / Activities / Membership / Resources dropdown
-    trigger / FAQ) and must NOT show the mobile hamburger."""
+    trigger) and must NOT show the mobile hamburger."""
 
     def test_desktop_header_renders_on_peer_review_pages(
         self, django_server, browser

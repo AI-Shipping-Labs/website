@@ -15,7 +15,9 @@ Covers:
 - Admin CRUD with status transitions
 """
 
+import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -486,16 +488,26 @@ class EventDetailPageTest(TestCase):
         content = response.content.decode()
         self.assertIn('href="/events"', content)
 
-    def test_anonymous_sees_sign_in_cta(self):
+    def test_anonymous_sees_email_only_registration_form(self):
+        """Issue #513: anonymous visitors on a free upcoming event see an
+        inline email-only registration form, not the legacy "Sign in /
+        Create free account" button pair. The "Already have an account?
+        Sign in" link below the form preserves the sign-in path for
+        returning users.
+        """
         response = self.client.get('/events/detail-event')
-        # Issue #484: copy explains that an account is required and what
-        # account creation implies (newsletter / occasional updates).
-        self.assertContains(response, 'A free account is required to register')
-        self.assertContains(response, 'Sign in to register')
-        self.assertContains(response, 'Create free account')
-        self.assertContains(response, 'newsletter')
-        self.assertContains(response, '/accounts/login/?next=/events/detail-event')
-        self.assertContains(response, '/accounts/signup/?next=/events/detail-event')
+        # The new email-only form replaces the old sign-in CTA on free
+        # events (required_level == 0).
+        self.assertContains(response, 'event-anonymous-email-form')
+        self.assertContains(response, 'id="event-anon-email"')
+        self.assertContains(response, 'Register for this event')
+        # The "Already have an account?" sign-in link still preserves
+        # the next URL for returning users.
+        self.assertContains(
+            response, '/accounts/login/?next=/events/detail-event',
+        )
+        # The legacy "Create free account" CTA is gone for free events.
+        self.assertNotContains(response, 'Create free account')
 
 
 class EventDetailRecordingRemovedTest(TestCase):
@@ -1288,7 +1300,13 @@ class EventCalendarIcsViewTest(TestCase):
 
 
 class EventDetailAnonymousCopyTest(TestCase):
-    """Issue #484: anonymous registration copy explains account requirement."""
+    """Issue #513: anonymous email-only form copy on free events.
+
+    Replaces the legacy issue #484 copy assertions: anonymous visitors
+    on a free upcoming event now see an inline email-only registration
+    form. The form copy must explain that an account will be created
+    and that the user can unsubscribe at any time.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -1299,19 +1317,249 @@ class EventDetailAnonymousCopyTest(TestCase):
             status='upcoming',
         )
 
-    def test_copy_mentions_account_requirement_and_newsletter(self):
+    def test_form_copy_discloses_account_creation_and_unsubscribe(self):
         response = self.client.get('/events/anon-event')
-        self.assertContains(
-            response, 'A free account is required to register',
-        )
-        self.assertContains(response, 'newsletter')
+        # The form is the new entry point for anonymous registration.
+        self.assertContains(response, 'event-anonymous-email-form')
+        # Disclose that submitting the form creates an account.
+        self.assertContains(response, 'free account')
+        # Disclose unsubscribe.
         self.assertContains(response, 'unsubscribe')
 
-    def test_login_and_signup_links_preserve_event_path(self):
+    def test_signin_link_preserves_event_path(self):
         response = self.client.get('/events/anon-event')
+        # Returning users keep the sign-in path, with `next` preserved.
         self.assertContains(
             response, '/accounts/login/?next=/events/anon-event',
         )
-        self.assertContains(
-            response, '/accounts/signup/?next=/events/anon-event',
+
+
+# Issue #513 ----------------------------------------------------------------
+# Anonymous email-only event registration on free events.
+
+
+class AnonymousEventRegistrationAPITest(TierSetupMixin, TestCase):
+    """Issue #513: ``register_for_event`` accepts anonymous POST with an
+    email body on free events. The view auto-creates a free unverified
+    User, registers them, and sends both the registration confirmation
+    (with ``.ics``) and the standard verification email so the user can
+    claim the account.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.event = Event.objects.create(
+            title='Open Community Call',
+            slug='open-call',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_OPEN,
         )
+        cls.gated_event = Event.objects.create(
+            title='Main Workshop',
+            slug='main-workshop',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_MAIN,
+        )
+
+    def _post(self, slug, body):
+        return self.client.post(
+            f'/api/events/{slug}/register',
+            data=json.dumps(body),
+            content_type='application/json',
+        )
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_creates_user_and_registers(self, mock_reg_email, mock_verify):
+        before = timezone.now()
+        resp = self._post('open-call', {'email': 'anon@test.com'})
+        after = timezone.now()
+        self.assertEqual(resp.status_code, 201)
+
+        body = resp.json()
+        self.assertEqual(body['status'], 'registered')
+        self.assertEqual(body['event_slug'], 'open-call')
+        self.assertTrue(body['account_created'])
+
+        user = User.objects.get(email='anon@test.com')
+        self.assertFalse(user.email_verified)
+        # Free tier (default) and a populated verification_expires_at so
+        # the daily purge job can clean abandoned anonymous-registration
+        # rows just like newsletter / signup ones.
+        self.assertIsNotNone(user.verification_expires_at)
+        lower = before + timedelta(days=7) - timedelta(seconds=5)
+        upper = after + timedelta(days=7) + timedelta(seconds=5)
+        self.assertGreaterEqual(user.verification_expires_at, lower)
+        self.assertLessEqual(user.verification_expires_at, upper)
+
+        # Registration row exists.
+        registration = EventRegistration.objects.get(
+            event=self.event, user=user,
+        )
+        self.assertIsNotNone(registration.registered_at)
+
+        # Both the registration confirmation and the verification email
+        # are sent. They serve different jobs.
+        mock_reg_email.assert_called_once()
+        mock_verify.assert_called_once()
+        self.assertEqual(mock_verify.call_args[0][0].email, 'anon@test.com')
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_with_existing_user_registers_without_resetting(
+        self, mock_reg_email, mock_verify,
+    ):
+        existing = User.objects.create_user(
+            email='member@test.com',
+            password='realpassword12',
+            email_verified=True,
+        )
+        original_expires = existing.verification_expires_at
+        original_password = existing.password
+        original_tier = existing.tier_id
+
+        resp = self._post('open-call', {'email': 'member@test.com'})
+        self.assertEqual(resp.status_code, 201)
+
+        body = resp.json()
+        self.assertFalse(body['account_created'])
+
+        existing.refresh_from_db()
+        # Verified state, password, tier all preserved.
+        self.assertTrue(existing.email_verified)
+        self.assertEqual(existing.password, original_password)
+        self.assertEqual(existing.tier_id, original_tier)
+        self.assertEqual(existing.verification_expires_at, original_expires)
+
+        # Registration row exists for THIS user — no duplicate created.
+        self.assertEqual(
+            User.objects.filter(email__iexact='member@test.com').count(), 1,
+        )
+        self.assertTrue(
+            EventRegistration.objects.filter(
+                event=self.event, user=existing,
+            ).exists()
+        )
+
+        # Verification email is NOT sent — the user is already verified.
+        mock_verify.assert_not_called()
+        # Registration confirmation IS sent.
+        mock_reg_email.assert_called_once()
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_on_gated_event_returns_403_and_creates_no_user(
+        self, mock_reg_email, mock_verify,
+    ):
+        resp = self._post('main-workshop', {'email': 'gate@test.com'})
+        self.assertEqual(resp.status_code, 403)
+
+        # Crucially, no User row is created — anonymous email submission
+        # must NOT bypass tier gates.
+        self.assertFalse(
+            User.objects.filter(email__iexact='gate@test.com').exists()
+        )
+        self.assertFalse(
+            EventRegistration.objects.filter(event=self.gated_event).exists()
+        )
+        mock_reg_email.assert_not_called()
+        mock_verify.assert_not_called()
+
+    def test_anonymous_invalid_email_returns_400(self):
+        resp = self._post('open-call', {'email': 'not-an-email'})
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(
+            User.objects.filter(email__iexact='not-an-email').exists()
+        )
+
+    def test_anonymous_without_email_keeps_legacy_401(self):
+        """A no-email anonymous POST keeps the historical 401 contract so
+        clients that expected a login gate are not silently broken.
+        """
+        resp = self.client.post('/api/events/open-call/register')
+        self.assertEqual(resp.status_code, 401)
+
+    @patch('events.views.api._send_event_verification_email')
+    @patch('events.services.registration_email.send_registration_confirmation')
+    def test_anonymous_full_event_returns_410_no_user_created(
+        self, mock_reg_email, mock_verify,
+    ):
+        self.event.max_participants = 1
+        self.event.save()
+        # Saturate the event with another user.
+        other = User.objects.create_user(email='other@test.com')
+        EventRegistration.objects.create(event=self.event, user=other)
+
+        resp = self._post('open-call', {'email': 'late@test.com'})
+        self.assertEqual(resp.status_code, 410)
+
+        # Don't leak orphan unverified accounts when registration would
+        # have failed anyway.
+        self.assertFalse(
+            User.objects.filter(email__iexact='late@test.com').exists()
+        )
+        mock_verify.assert_not_called()
+
+
+class EventDetailAnonymousFlowTest(TestCase):
+    """Issue #513: event detail page surfaces the email-only form for
+    free events and the post-registration confirmation block when the
+    page is loaded with ``?registered=<email>``.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.event = Event.objects.create(
+            title='Open Community Call',
+            slug='open-call-detail',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_OPEN,
+        )
+
+    def test_form_visible_to_anonymous_on_free_event(self):
+        resp = self.client.get('/events/open-call-detail')
+        self.assertContains(resp, 'event-anonymous-email-form')
+        self.assertContains(resp, 'id="event-anon-email"')
+        self.assertContains(resp, 'Register for this event')
+
+    def test_form_hidden_for_gated_event(self):
+        Event.objects.create(
+            title='Gated',
+            slug='gated-detail',
+            start_datetime=timezone.now() + timedelta(days=7),
+            status='upcoming',
+            required_level=LEVEL_MAIN,
+        )
+        resp = self.client.get('/events/gated-detail')
+        self.assertNotContains(resp, 'event-anonymous-email-form')
+        # Falls back to the existing tier-upgrade CTA.
+        self.assertContains(resp, 'event-anonymous-cta')
+        self.assertContains(resp, 'Sign in to register')
+
+    def test_confirmation_block_renders_for_registered_query_param(self):
+        resp = self.client.get(
+            '/events/open-call-detail?registered=anon%40test.com&account_created=1',
+        )
+        self.assertContains(resp, 'event-anonymous-registered-confirmation')
+        # Email used is surfaced in the confirmation block.
+        self.assertContains(response=resp, text='anon@test.com')
+        # Calendar download is offered — independent of email delivery.
+        self.assertContains(resp, 'event-anonymous-add-to-calendar')
+        self.assertContains(resp, '/events/open-call-detail/calendar.ics')
+        # "Sign in to manage your registration" link is visible.
+        self.assertContains(resp, 'event-anonymous-manage-link')
+        self.assertContains(resp, 'Sign in to manage your registration')
+        # Account-created copy is shown when account_created=1.
+        self.assertContains(resp, 'verification link')
+
+    def test_confirmation_block_skipped_for_junk_query_param(self):
+        resp = self.client.get('/events/open-call-detail?registered=1')
+        # ``?registered=1`` is junk (not an email); template should fall
+        # back to the regular form, not the confirmation block.
+        self.assertNotContains(
+            resp, 'event-anonymous-registered-confirmation',
+        )
+        self.assertContains(resp, 'event-anonymous-email-form')

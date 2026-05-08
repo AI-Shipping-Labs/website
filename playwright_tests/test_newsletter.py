@@ -187,9 +187,10 @@ class TestScenario1SubscribeFromDedicatedPage:
         message_el = page.locator(".subscribe-message")
         message_el.first.wait_for(state="visible", timeout=10000)
 
-        # Then: Confirmation message appears
+        # Then: Confirmation message appears (issue #513 copy mentions
+        # the auto-created free account)
         message_text = message_el.first.inner_text()
-        assert "check your email to confirm" in message_text.lower()
+        assert "created a free account" in message_text.lower()
 
         # Then: The email input is cleared
         assert email_input.first.input_value() == ""
@@ -261,9 +262,10 @@ class TestScenario2SubscribeFromHomepageNewsletter:
         )
         message_el.wait_for(state="visible", timeout=10000)
 
-        # Then: Confirmation message appears
+        # Then: Confirmation message appears (issue #513 copy mentions
+        # the auto-created free account)
         message_text = message_el.inner_text()
-        assert "Check your email" in message_text
+        assert "created a free account" in message_text.lower()
 
         # Then: Visitor remains on the homepage
         assert page.url.rstrip("/") == django_server.rstrip("/") or page.url.endswith("/")
@@ -315,9 +317,10 @@ class TestScenario3SubscribeFromFooter:
         )
         message_el.wait_for(state="visible", timeout=10000)
 
-        # Then: Confirmation message appears
+        # Then: Confirmation message appears (issue #513 copy mentions
+        # the auto-created free account)
         message_text = message_el.inner_text()
-        assert "Check your email" in message_text
+        assert "created a free account" in message_text.lower()
 
         # Then: Visitor remains on /blog
         assert "/blog" in page.url
@@ -368,9 +371,11 @@ class TestScenario4NoInformationLeak:
         message_el = page.locator(".subscribe-message")
         message_el.first.wait_for(state="visible", timeout=10000)
 
-        # Then: Same success message appears
+        # Then: Same success message appears (issue #513 copy mentions
+        # the auto-created free account; no information leak between
+        # new and already-registered emails)
         message_text = message_el.first.inner_text()
-        assert "check your email to confirm" in message_text.lower()
+        assert "created a free account" in message_text.lower()
 
         # Then: No error is shown
         error_el = page.locator(".subscribe-error")

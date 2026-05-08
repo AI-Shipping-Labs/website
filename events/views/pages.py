@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import (
     build_gating_context,
@@ -253,8 +254,16 @@ def event_join_redirect(request, slug):
     return redirect(event.zoom_join_url)
 
 
+@ensure_csrf_cookie
 def event_detail(request, slug):
-    """Event detail page - always visible to everyone."""
+    """Event detail page - always visible to everyone.
+
+    Issue #513: this view sets the ``csrftoken`` cookie for fresh
+    anonymous visitors so the email-only registration form rendered in
+    ``templates/events/event_detail.html`` can read it via
+    ``getCookie('csrftoken')`` and POST successfully. Without this
+    decorator the first POST from an anonymous session would return 403.
+    """
     event = get_object_or_404(Event, slug=slug)
     # Draft events should not be publicly visible
     if event.status == 'draft' and not request.user.is_staff:
@@ -289,6 +298,24 @@ def event_detail(request, slug):
     # Determine required tier name for CTA
     required_tier_name = get_required_tier_name(event.required_level)
 
+    # Issue #513: anonymous email-only registration flow. After a
+    # successful POST the JS reloads the page with ``?registered=<email>``
+    # so the template can render a confirmation block instead of the
+    # signup form. We do NOT trust this query param to mean a row was
+    # actually created — only that the JS thinks the registration
+    # succeeded. The block is confirmation copy, not access control.
+    anon_registered_email = ''
+    anon_registered_account_created = False
+    if not user.is_authenticated and event.status == 'upcoming':
+        raw_email = (request.GET.get('registered') or '').strip()
+        # Only render the confirmation when the email looks like an
+        # email; ignores junk like ``?registered=1``.
+        if raw_email and '@' in raw_email and '.' in raw_email.split('@', 1)[-1]:
+            anon_registered_email = raw_email
+            anon_registered_account_created = (
+                request.GET.get('account_created') == '1'
+            )
+
     context = {
         'event': event,
         'event_time_display': build_event_time_display(event, user),
@@ -305,6 +332,10 @@ def event_detail(request, slug):
         # registered users can re-add the event to their calendar
         # independent of email delivery.
         'event_ics_url': f'/events/{event.slug}/calendar.ics',
+        # Issue #513: post-registration confirmation copy for the
+        # anonymous email-only flow.
+        'anon_registered_email': anon_registered_email,
+        'anon_registered_account_created': anon_registered_account_created,
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)

@@ -69,8 +69,9 @@ class TestRecapPage:
 
         page.goto(f"{django_server}/events/launch", wait_until="domcontentloaded")
         body = page.content()
-        # Issue #484: anonymous CTA copy was rewritten.
-        assert 'A free account is required to register' in body
+        # Issue #513: anonymous CTA on free events was replaced by the
+        # inline email-only registration form.
+        assert 'event-anonymous-email-form' in body
         assert 'Watch the recording' not in body
         assert 'Ship real projects.' not in body
         assert 'View event recap' not in body

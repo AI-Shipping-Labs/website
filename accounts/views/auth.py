@@ -19,12 +19,21 @@ from django.views.decorators.http import require_POST
 
 from accounts.models import User
 from accounts.return_context import append_next, get_next_url, sanitize_next_url
-from integrations.config import get_config, site_base_url
+from accounts.services.verification import (
+    DEFAULT_UNVERIFIED_USER_TTL_DAYS,
+    resolve_unverified_ttl_days,
+)
+from integrations.config import site_base_url
 
-# Default grace period before an unverified email-signup account is
-# hard-deleted by the daily purge task. Operators override per
-# environment via the ``UNVERIFIED_USER_TTL_DAYS`` integration setting.
-DEFAULT_UNVERIFIED_USER_TTL_DAYS = 7
+# Re-export the helper under the historical private name so existing
+# callers (and tests that patch ``accounts.views.auth._resolve_unverified_ttl_days``)
+# keep working. New code should call
+# ``accounts.services.verification.resolve_unverified_ttl_days`` directly.
+_resolve_unverified_ttl_days = resolve_unverified_ttl_days
+
+# ``DEFAULT_UNVERIFIED_USER_TTL_DAYS`` is re-exported here for backwards
+# compat with anything that reads it from this module.
+__all__ = ["DEFAULT_UNVERIFIED_USER_TTL_DAYS"]
 
 logger = logging.getLogger(__name__)
 
@@ -143,26 +152,6 @@ def _generate_password_reset_token(user_id, expiry_hours=1):
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def _resolve_unverified_ttl_days():
-    """Resolve the unverified-account grace period from operator config.
-
-    Reads ``UNVERIFIED_USER_TTL_DAYS`` (Studio > Settings > Auth) with
-    a 7-day fallback. Non-positive or non-numeric values fall back to
-    the default so a typo cannot disable the feature accidentally.
-    """
-    raw = get_config(
-        "UNVERIFIED_USER_TTL_DAYS",
-        str(DEFAULT_UNVERIFIED_USER_TTL_DAYS),
-    )
-    try:
-        days = int(str(raw).strip())
-    except (TypeError, ValueError):
-        return DEFAULT_UNVERIFIED_USER_TTL_DAYS
-    if days <= 0:
-        return DEFAULT_UNVERIFIED_USER_TTL_DAYS
-    return days
-
-
 def _send_verification_email(user):
     """Send a verification email to the user using EmailService.
 
@@ -175,12 +164,21 @@ def _send_verification_email(user):
     token = _generate_verification_token(user.pk)
     site_url = site_base_url()
     verify_url = f"{site_url}/api/verify-email?token={token}"
+    ttl_days = resolve_unverified_ttl_days()
 
     try:
         from email_app.services.email_service import EmailService
 
         service = EmailService()
-        return service.send(user, "email_verification", {"verify_url": verify_url})
+        return service.send(
+            user,
+            "email_verification",
+            {
+                "verify_url": verify_url,
+                "site_url": site_url,
+                "ttl_days": ttl_days,
+            },
+        )
     except Exception:
         logger.exception("Failed to send verification email to %s", user.email)
         return None
@@ -320,7 +318,7 @@ def register_api(request):
     # up email-only signups that never verify. Social signups go
     # through allauth and never hit this path, so the field stays NULL
     # for them — see ``accounts/signals.py``.
-    ttl_days = _resolve_unverified_ttl_days()
+    ttl_days = resolve_unverified_ttl_days()
     verification_expires_at = timezone.now() + datetime.timedelta(days=ttl_days)
     user = User.objects.create_user(
         email=email,

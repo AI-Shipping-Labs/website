@@ -89,9 +89,9 @@ class EventDetailRecapLinkTest(TestCase):
         response = self.client.get('/events/has-recap')
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        # Issue #484: anonymous CTA was rewritten to lead with the
-        # account requirement and explain the newsletter/email implications.
-        self.assertIn('A free account is required to register', content)
+        # Issue #513: anonymous CTA on free events was replaced with the
+        # inline email-only registration form.
+        self.assertIn('event-anonymous-email-form', content)
         self.assertNotIn('<h2>Summary</h2>', content)
         self.assertNotIn('View event recap', content)
         self.assertNotIn('/events/has-recap/recap', content)

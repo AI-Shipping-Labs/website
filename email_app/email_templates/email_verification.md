@@ -4,12 +4,14 @@ subject: "Verify your email address"
 
 Hi {{ user_name }},
 
-Please verify your email address by clicking the link below:
+Thanks for subscribing to the AI Shipping Labs newsletter! We've created a free account for you so you can manage your subscription and access free content on the site.
+
+Click the link below to verify your email and activate your account:
 
 [Verify Email]({{ verify_url }})
 
-This link will expire in 24 hours.
+Once verified, you can sign in at {{ site_url }}/accounts/login/ -- we'll send a separate email if you ever need to set a password.
 
-If you did not create an account on AI Shipping Labs, you can safely ignore this email.
+This link expires in 24 hours. If you didn't sign up, you can safely ignore this email and your account will be deleted automatically in {{ ttl_days }} days.
 
 The AI Shipping Labs Team

@@ -12,6 +12,7 @@ from content.access import (
 )
 from content.models import Article, CuratedLink, Download, Project, TagRule, Tutorial
 from content.tier_config import get_activities
+from content.views.home import FAQ_ITEMS
 from plans.models import Plan, Sprint, SprintEnrollment
 
 
@@ -132,7 +133,7 @@ def _get_activity_sprints(user):
 
 def about(request):
     """About page."""
-    return render(request, 'content/about.html')
+    return render(request, 'content/about.html', {'faq_items': FAQ_ITEMS})
 
 
 def activities(request):

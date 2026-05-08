@@ -104,7 +104,7 @@ def _primary_nav_labels(page):
           const labels = [];
           for (const el of nav.querySelectorAll('a, button')) {
             const text = el.textContent.trim();
-            if (['About', 'Membership', 'Activities', 'Resources', 'FAQ'].includes(text)) {
+            if (['About', 'Membership', 'Activities', 'Resources'].includes(text)) {
               labels.push(text);
             }
           }
@@ -124,12 +124,11 @@ class TestActivitiesSprintFirstLayout:
         page.set_viewport_size({"width": 1280, "height": 900})
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
-        assert _primary_nav_labels(page)[:5] == [
+        assert _primary_nav_labels(page)[:4] == [
             "About",
             "Membership",
             "Activities",
             "Resources",
-            "FAQ",
         ]
         page.get_by_role("heading", name="Active community sprints").wait_for()
         card = page.locator('[data-testid="activities-sprint-card"]').first

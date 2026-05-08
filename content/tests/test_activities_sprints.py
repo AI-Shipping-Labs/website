@@ -20,12 +20,14 @@ class ActivitiesSprintHubTest(TestCase):
         membership_index = content.index('href="/pricing"')
         activities_index = content.index('href="/activities"')
         resources_index = content.index('id="resources-dropdown-btn"')
-        faq_index = content.index('href="/faq"')
 
         self.assertLess(about_index, membership_index)
         self.assertLess(membership_index, activities_index)
         self.assertLess(activities_index, resources_index)
-        self.assertLess(resources_index, faq_index)
+        header_end = content.index('</header>')
+        header = content[:header_end]
+        self.assertNotIn('href="/faq"', header)
+        self.assertNotIn('>FAQ</a>', header)
 
     def test_active_sprint_details_render_for_anonymous_users(self):
         sprint = Sprint.objects.create(

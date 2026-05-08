@@ -1,7 +1,4 @@
-"""Issue #238: header/footer/about Membership and FAQ links must point at
-real URLs, not marketing-homepage anchors that disappear when a
-logged-in user lands on the dashboard.
-"""
+"""Header/footer/about Membership and FAQ links."""
 
 import re
 
@@ -48,19 +45,13 @@ class HeaderLinksAnonymousTest(TestCase):
         for href in membership_links:
             self.assertEqual(href, "/pricing")
 
-    def test_desktop_faq_link_points_to_faq_page(self):
+    def test_faq_is_not_a_primary_header_link(self):
         response = self.client.get("/")
         header = _extract_header(response.content.decode())
         faq_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', header
         )
-        self.assertEqual(
-            len(faq_links),
-            2,
-            f"Expected 2 FAQ links in header, got {faq_links}",
-        )
-        for href in faq_links:
-            self.assertEqual(href, "/faq")
+        self.assertEqual(faq_links, [])
 
 
 class HeaderLinksAuthenticatedTest(TestCase):
@@ -89,15 +80,13 @@ class HeaderLinksAuthenticatedTest(TestCase):
         for href in membership_links:
             self.assertEqual(href, "/pricing")
 
-    def test_authenticated_header_faq_link_is_faq(self):
+    def test_authenticated_header_has_no_primary_faq_link(self):
         response = self.client.get("/about")
         header = _extract_header(response.content.decode())
         faq_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', header
         )
-        self.assertTrue(faq_links)
-        for href in faq_links:
-            self.assertEqual(href, "/faq")
+        self.assertEqual(faq_links, [])
 
 
 class FooterLinksTest(TestCase):
@@ -112,14 +101,14 @@ class FooterLinksTest(TestCase):
         self.assertIsNotNone(match, "Membership Tiers link missing in footer")
         self.assertEqual(match.group(1), "/pricing")
 
-    def test_faq_link_points_to_faq_page(self):
+    def test_faq_link_points_to_about_faq_anchor(self):
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
         match = re.search(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', footer
         )
         self.assertIsNotNone(match, "FAQ link missing in footer")
-        self.assertEqual(match.group(1), "/faq")
+        self.assertEqual(match.group(1), "/about#faq")
 
 
 class AboutPageMembershipCtaTest(TestCase):

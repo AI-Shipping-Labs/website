@@ -3,7 +3,7 @@
 Covers:
 - Resources accordion is collapsed by default (chevron pointing down).
 - Tapping Resources expands the list and rotates the chevron 180 degrees.
-- Even when Resources is expanded, items below it (FAQ, Sign in / Account /
+- Even when Resources is expanded, items below it (Sign in / Account /
   Studio / Logout) remain reachable because the menu container itself
   scrolls (max-h + overflow-y-auto), not the page.
 - Behavior holds at both Pixel 7 (412px) and iPhone SE (375px) widths.
@@ -78,7 +78,6 @@ class TestMobileMenuHitTarget:
             "Activities",
             "Membership",
             "Resources",
-            "FAQ",
             "Sign in",
         ]
         for label in public_links:
@@ -190,7 +189,7 @@ class TestMobileMenuResourcesAccordion:
     ):
         """When Resources is expanded the menu may exceed the viewport.
         The mobile-menu container itself must scroll (max-h + overflow-y-auto)
-        so FAQ (anonymous user) is still reachable by scrolling within the
+        so Sign in (anonymous user) is still reachable by scrolling within the
         menu, not by scrolling the page."""
         context = browser.new_context(viewport=viewport)
         page = context.new_page()
@@ -216,16 +215,14 @@ class TestMobileMenuResourcesAccordion:
             f"mobile-menu must have a max-height, got {max_height!r}"
         )
 
-        # FAQ link must be present in the DOM and reachable by scrolling
-        # within the menu container.
-        faq = page.locator('#mobile-menu a[href="/faq"]')
-        assert faq.count() == 1, "FAQ link must be inside the mobile menu"
+        sign_in = page.locator('#mobile-menu a[href="/accounts/login/"]')
+        assert sign_in.count() == 1, "Sign in link must be inside the mobile menu"
 
-        # Scroll the menu (not the page) into view of FAQ and assert it
+        # Scroll the menu (not the page) into view of Sign in and assert it
         # becomes visible.
-        faq.scroll_into_view_if_needed()
-        assert faq.is_visible(), (
-            "FAQ must be reachable via scrolling the mobile menu container"
+        sign_in.scroll_into_view_if_needed()
+        assert sign_in.is_visible(), (
+            "Sign in must be reachable via scrolling the mobile menu container"
         )
 
         context.close()

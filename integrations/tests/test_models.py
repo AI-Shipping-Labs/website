@@ -1,19 +1,9 @@
-from django.test import TestCase
+"""Tests for ``WebhookLog``.
 
-from integrations.models import WebhookLog
-
-
-class WebhookLogModelTest(TestCase):
-    def setUp(self):
-        self.log = WebhookLog.objects.create(
-            service='stripe',
-            event_type='payment.succeeded',
-            payload={'amount': 500},
-            processed=False,
-        )
-
-    def test_ordering(self):
-        WebhookLog.objects.create(service='zoom')
-        logs = list(WebhookLog.objects.all())
-        # Most recent first
-        self.assertEqual(logs[0].service, 'zoom')
+Previously contained a ``test_ordering`` that exercised
+``Meta.ordering`` — Django framework behaviour, removed per
+``_docs/testing-guidelines.md`` Rule 3. ``WebhookLog`` ships
+without custom behaviour worth covering at the model layer
+today; webhook handlers exercise it via integration tests in
+``payments/`` and ``integrations/``.
+"""

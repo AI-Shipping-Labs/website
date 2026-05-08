@@ -1387,22 +1387,6 @@ class StaffOverrideTest(TierOverrideTestBase):
 class TierOverrideModelTest(TierOverrideTestBase):
     """Additional model tests for TierOverride."""
 
-    def test_str_representation(self):
-        user = self._make_user()
-        override = self._make_override(user, self.premium_tier)
-        result = str(override)
-        self.assertIn("TierOverride", result)
-        self.assertIn("active", result)
-
-    def test_str_inactive(self):
-        user = self._make_user()
-        override = self._make_override(user, self.premium_tier)
-        override.is_active = False
-        override.save(update_fields=["is_active"])
-        result = str(override)
-        self.assertIn("inactive", result)
-
-
     def test_get_active_override_returns_object(self):
         user = self._make_user()
         expected = self._make_override(user, self.premium_tier)

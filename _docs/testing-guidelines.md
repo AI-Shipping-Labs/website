@@ -82,6 +82,21 @@ expect(page.locator('[data-testid="progress"]')).to_contain_text("2 of 3")
 Django's ORM, CASCADE deletes, field defaults, and admin class attributes are tested
 by the Django project itself. Do not write tests for them.
 
+Concretely, do not write tests for any of these:
+
+- `Meta.ordering` round-trips (create two rows, list, assert order).
+- `unique=True` constraints (create two rows with the same value, expect IntegrityError).
+- `null=True` / `blank=True` field nullability.
+- Field defaults (`BooleanField(default=False)`, `CharField(default='')`, etc.).
+- `BaseUserManager.create_user` / `create_superuser` / email normalisation
+  semantics — Django ships its own tests for those.
+- `JSONField` storage round-trips (write a list, read it back).
+- `date.strftime` formatting via `formatted_date` / `short_date` style helpers.
+- `f'/blog/{slug}'`-style `get_absolute_url` formatters whose body is a single
+  f-string with no logic.
+- ORM `CASCADE` delete behaviour. The `on_delete` keyword is Django's; only
+  `PROTECT` and `SET_NULL` (non-default) are worth covering.
+
 Bad -- tests that a `BooleanField(default=False)` returns `False`:
 ```python
 def test_email_verified_default_false(self):
@@ -417,6 +432,166 @@ redundant Django tests, in both directions:
 Use these issues as the reference when you are unsure which layer a new test
 belongs in. If your test would have been deleted or moved by one of those
 sub-issues, write it on the other layer to begin with.
+
+---
+
+## Rule 16: Don't test framework defaults
+
+Restating Rule 3 in checklist form because the audit under issue #533 found
+~80 tests still slipping through. Skip:
+
+- `Meta.ordering` round-trips.
+- `unique=True` IntegrityError checks.
+- `null=True` / `blank=True` field nullability.
+- `BaseUserManager` semantics (`create_user`, `create_superuser`,
+  `normalize_email`).
+- `JSONField` storage round-trips.
+- `date.strftime` formatting wrappers (`formatted_date`, `short_date`).
+- `f'{slug}'` / `f'/blog/{slug}'` URL-only `get_absolute_url` formats.
+- ORM `CASCADE` delete propagation.
+
+The framework owns these. If a future Django release breaks any of them, our
+tests aren't going to be the canary.
+
+---
+
+## Rule 17: Don't test trivial `__str__`
+
+A `__str__` that's a single f-string (`f'{self.title}'`,
+`f'{self.subject} ({self.status})'`) is just attribute formatting. Skip the
+test.
+
+The exception is branching / conditional `__str__` formats. Those are worth
+exactly one ``subTest``-parameterized test that exercises every branch:
+
+```python
+def test_str_branches_on_completed_at(self):
+    cases = [
+        ('completed', timezone.now()),
+        ('in progress', None),
+    ]
+    for expected_marker, completed_at in cases:
+        with self.subTest(expected_marker=expected_marker):
+            progress = UserCourseProgress(
+                user=self.user, unit=self.unit, completed_at=completed_at,
+            )
+            self.assertIn(expected_marker, str(progress))
+```
+
+---
+
+## Rule 18: Parameterize per-enum tests
+
+If you find yourself writing one test per branch of a `match` / dict lookup
+(`test_difficulty_color_beginner`, `test_difficulty_color_intermediate`,
+`test_difficulty_color_advanced`, …), collapse them into a single
+``subTest``-parameterized table:
+
+Bad:
+```python
+def test_difficulty_color_beginner(self):
+    self.project.difficulty = 'beginner'
+    self.assertEqual(self.project.difficulty_color(), 'bg-green-500/20 text-green-400')
+
+def test_difficulty_color_intermediate(self):
+    self.project.difficulty = 'intermediate'
+    self.assertEqual(self.project.difficulty_color(), 'bg-yellow-500/20 text-yellow-400')
+
+# … one method per row …
+```
+
+Good:
+```python
+def test_difficulty_color_table(self):
+    cases = [
+        ('beginner', 'bg-green-500/20 text-green-400'),
+        ('intermediate', 'bg-yellow-500/20 text-yellow-400'),
+        ('advanced', 'bg-red-500/20 text-red-400'),
+        ('', 'bg-secondary text-muted-foreground'),
+    ]
+    project = Project(slug='difficulty-test')
+    for difficulty, expected_class in cases:
+        with self.subTest(difficulty=difficulty):
+            project.difficulty = difficulty
+            self.assertEqual(project.difficulty_color(), expected_class)
+```
+
+Adding a new branch is one row in the table, not one new test method. Each
+row still fails on its own (the `subTest` context manager prints the failing
+key). Truth tables (`is_closed_truth_table` for `Poll.is_closed`) follow the
+same pattern.
+
+---
+
+## Rule 19: Bare `status_code == 200` is not a test
+
+A smoke test that only asserts `self.assertEqual(response.status_code, 200)`
+verifies the URL routes — nothing else. The view could return a blank
+template, the wrong template, or a server error rendered as 200, and the
+test still passes.
+
+Bad:
+```python
+def test_dashboard_loads(self):
+    response = self.client.get('/dashboard/')
+    self.assertEqual(response.status_code, 200)
+```
+
+Good — follow the status check with at least one content/structural assertion:
+
+```python
+def test_dashboard_loads(self):
+    response = self.client.get('/dashboard/')
+    self.assertEqual(response.status_code, 200)
+    self.assertTemplateUsed(response, 'dashboard/dashboard.html')
+    self.assertContains(response, 'data-testid="dashboard-recent-content"')
+```
+
+The status code check stays — a 500 or redirect should still fail loudly —
+but it never stands alone.
+
+---
+
+## Rule 20: Mock assertions verify behaviour, not coverage
+
+`mock.assert_called_once()` proves the function was called. It does NOT prove
+it was called correctly. A test that mocks `send_email`, calls the view, and
+then asserts `mock_send.assert_called_once()` passes even if the mock was
+called with the wrong recipient, the wrong template, or empty context.
+
+Bad — mock theatre:
+```python
+@patch('events.services.send_registration_confirmation')
+def test_registration_sends_confirmation(self, mock_send):
+    self.client.post('/api/events/foo/register', {'email': 'a@b.com'})
+    mock_send.assert_called_once()  # passes for any call shape
+```
+
+Good — pin the arg shape that matters:
+```python
+@patch('events.services.send_registration_confirmation')
+def test_registration_sends_confirmation(self, mock_send):
+    self.client.post('/api/events/foo/register', {'email': 'a@b.com'})
+    mock_send.assert_called_once()
+    args, kwargs = mock_send.call_args
+    self.assertEqual(kwargs['user'].email, 'a@b.com')
+    self.assertEqual(kwargs['event'].slug, 'foo')
+```
+
+Better — exercise the actual outcome instead of the mock. If the side effect
+is observable (`mail.outbox`, a DB row, a notification record), assert on
+that and skip the mock entirely:
+
+```python
+def test_registration_sends_confirmation(self):
+    self.client.post('/api/events/foo/register', {'email': 'a@b.com'})
+    self.assertEqual(len(mail.outbox), 1)
+    self.assertEqual(mail.outbox[0].to, ['a@b.com'])
+    self.assertIn('foo', mail.outbox[0].subject)
+```
+
+Use mocks when the real call would hit a network (Stripe, Slack, SES API,
+GitHub). Even then, pin the arg shape that proves the call was correct.
 
 ---
 

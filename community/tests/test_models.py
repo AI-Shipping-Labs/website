@@ -46,12 +46,3 @@ class CommunityAuditLogModelTest(TestCase):
             details='{"source": "email_matcher"}',
         )
         self.assertEqual(log.action, "link")
-
-    def test_ordering_is_newest_first(self):
-        log1 = CommunityAuditLog.objects.create(user=self.user, action="invite")
-        log2 = CommunityAuditLog.objects.create(user=self.user, action="remove")
-        logs = list(CommunityAuditLog.objects.all())
-        self.assertEqual(logs[0], log2)
-        self.assertEqual(logs[1], log1)
-
-

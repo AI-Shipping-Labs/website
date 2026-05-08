@@ -88,12 +88,6 @@ class ContentSourceModelTest(TestCase):
         self.assertIsNotNone(source.id)
         self.assertIsNotNone(source.created_at)
 
-    def test_content_source_str(self):
-        source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
-        )
-        self.assertEqual(str(source), 'AI-Shipping-Labs/blog')
-
     def test_content_source_short_name(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/blog',
@@ -148,14 +142,6 @@ class SyncLogModelTest(TestCase):
         self.assertEqual(log.items_deleted, 0)
         self.assertEqual(log.errors, [])
         self.assertIsNone(log.finished_at)
-
-    def test_sync_log_str(self):
-        log = SyncLog.objects.create(
-            source=self.source,
-            status='success',
-        )
-        self.assertIn('AI-Shipping-Labs/blog', str(log))
-        self.assertIn('success', str(log))
 
     def test_sync_log_total_items(self):
         log = SyncLog.objects.create(

@@ -1,20 +1,10 @@
-from django.test import TestCase
+"""Tests for the ``StripePaymentLink`` model.
 
-from payments.models import StripePaymentLink
-
-
-class StripePaymentLinkModelTest(TestCase):
-    def setUp(self):
-        self.link = StripePaymentLink.objects.create(
-            tier_name='basic',
-            billing_period='monthly',
-            url='https://buy.stripe.com/test123',
-        )
-
-    def test_different_period_allowed(self):
-        StripePaymentLink.objects.create(
-            tier_name='basic',
-            billing_period='annual',
-            url='https://buy.stripe.com/test789',
-        )
-        self.assertEqual(StripePaymentLink.objects.count(), 2)
+The previous ``test_different_period_allowed`` round-tripped
+``StripePaymentLink`` rows with different ``billing_period``
+values to confirm Django can save two different rows — pure
+ORM behaviour, not project logic. Removed per
+``_docs/testing-guidelines.md`` Rule 3. Stripe-specific
+behaviour for these links is exercised by the checkout/webhook
+integration tests in ``payments/tests/`` proper.
+"""

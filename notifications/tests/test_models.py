@@ -1,72 +1,21 @@
-"""Tests for Notification and EventReminderLog models."""
+"""Tests for Notification and EventReminderLog models.
+
+The previous ``NotificationModelTest`` covered Django defaults
+(``BooleanField`` default, FK nullability, choices round-trip,
+``Meta.ordering``) which are framework-owned and have been
+removed per ``_docs/testing-guidelines.md`` Rule 3. Real
+``Notification`` behaviour (creation triggers, eligibility,
+read/unread transitions) is exercised in
+``notifications/tests/test_views.py`` and the per-feature
+delivery suites.
+"""
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from notifications.models import EventReminderLog, Notification
+from notifications.models import EventReminderLog
 
 User = get_user_model()
-
-
-class NotificationModelTest(TestCase):
-    """Test Notification model fields, defaults, and constraints."""
-
-    def setUp(self):
-        self.user = User.objects.create_user(
-            email='testuser@example.com', password='testpass123',
-        )
-
-    def test_create_notification_with_required_fields(self):
-        n = Notification.objects.create(
-            user=self.user,
-            title='Test Notification',
-        )
-        self.assertEqual(n.title, 'Test Notification')
-        self.assertEqual(n.user, self.user)
-        self.assertFalse(n.read)
-        self.assertEqual(n.notification_type, 'new_content')
-        self.assertIsNotNone(n.created_at)
-
-    def test_notification_type_choices(self):
-        for ntype in ('new_content', 'event_reminder', 'announcement'):
-            n = Notification.objects.create(
-                user=self.user,
-                title=f'Test {ntype}',
-                notification_type=ntype,
-            )
-            self.assertEqual(n.notification_type, ntype)
-
-    def test_notification_user_nullable(self):
-        """User FK should be nullable for broadcast notifications."""
-        n = Notification.objects.create(
-            user=None,
-            title='Broadcast',
-            notification_type='announcement',
-        )
-        self.assertIsNone(n.user)
-
-    def test_notification_ordering_newest_first(self):
-        n1 = Notification.objects.create(user=self.user, title='First')
-        n2 = Notification.objects.create(user=self.user, title='Second')
-        notifications = list(Notification.objects.all())
-        self.assertEqual(notifications[0], n2)
-        self.assertEqual(notifications[1], n1)
-
-    def test_notification_all_fields(self):
-        n = Notification.objects.create(
-            user=self.user,
-            title='Full Test',
-            body='This is the body text',
-            url='/blog/test-article',
-            notification_type='event_reminder',
-            read=True,
-        )
-        n.refresh_from_db()
-        self.assertEqual(n.title, 'Full Test')
-        self.assertEqual(n.body, 'This is the body text')
-        self.assertEqual(n.url, '/blog/test-article')
-        self.assertEqual(n.notification_type, 'event_reminder')
-        self.assertTrue(n.read)
 
 
 class EventReminderLogModelTest(TestCase):
@@ -106,4 +55,3 @@ class EventReminderLogModelTest(TestCase):
         )
         self.assertEqual(EventReminderLog.objects.count(), 2)
         self.assertEqual(log2.interval, '1h')
-

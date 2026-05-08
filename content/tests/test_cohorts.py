@@ -57,21 +57,6 @@ class CohortModelTest(TestCase):
         self.assertTrue(cohort.is_active)
         self.assertIsNone(cohort.max_participants)
 
-    def test_ordering_by_start_date(self):
-        Cohort.objects.create(
-            course=self.course, name='Later',
-            start_date=datetime.date(2026, 6, 1),
-            end_date=datetime.date(2026, 9, 1),
-        )
-        Cohort.objects.create(
-            course=self.course, name='Earlier',
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
-        )
-        cohorts = list(Cohort.objects.filter(course=self.course))
-        self.assertEqual(cohorts[0].name, 'Earlier')
-        self.assertEqual(cohorts[1].name, 'Later')
-
     def test_enrollment_count_empty(self):
         cohort = Cohort.objects.create(
             course=self.course, name='Empty',

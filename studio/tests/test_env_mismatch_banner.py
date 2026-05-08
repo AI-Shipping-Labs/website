@@ -56,17 +56,20 @@ class NormalizeHostTripleTest(TestCase):
             ('http', 'localhost', 8000),
         )
 
-    def test_default_https_port_resolved(self):
-        self.assertEqual(
-            _normalize_host_triple('https', 'aishippinglabs.com'),
-            ('https', 'aishippinglabs.com', 443),
-        )
-
-    def test_default_http_port_resolved(self):
-        self.assertEqual(
-            _normalize_host_triple('http', 'localhost'),
-            ('http', 'localhost', 80),
-        )
+    def test_default_port_resolved_per_scheme(self):
+        # Two-row table: each scheme has a single canonical default
+        # port that ``_normalize_host_triple`` must fill in when the
+        # host carries no explicit ``:port``.
+        cases = [
+            # scheme, host, expected_triple
+            ('https', 'aishippinglabs.com', ('https', 'aishippinglabs.com', 443)),
+            ('http', 'localhost', ('http', 'localhost', 80)),
+        ]
+        for scheme, host, expected in cases:
+            with self.subTest(scheme=scheme):
+                self.assertEqual(
+                    _normalize_host_triple(scheme, host), expected,
+                )
 
     def test_explicit_default_port_equal_to_omitted(self):
         with_port = _normalize_host_triple('https', 'aishippinglabs.com:443')

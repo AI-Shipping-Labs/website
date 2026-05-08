@@ -82,19 +82,6 @@ class EventModelFieldsTest(TestCase):
         event = Event(slug='my-event')
         self.assertEqual(event.get_absolute_url(), '/events/my-event')
 
-    def test_ordering_by_start_datetime_desc(self):
-        Event.objects.create(
-            title='Old', slug='old',
-            start_datetime=timezone.now() - timedelta(days=10),
-        )
-        Event.objects.create(
-            title='New', slug='new',
-            start_datetime=timezone.now(),
-        )
-        events = list(Event.objects.all())
-        self.assertEqual(events[0].slug, 'new')
-        self.assertEqual(events[1].slug, 'old')
-
     def test_default_timezone(self):
         event = Event.objects.create(
             title='TZ Test', slug='tz-test',

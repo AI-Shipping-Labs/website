@@ -43,16 +43,9 @@ class InstructorBioRenderingTest(TestCase):
         self.assertNotIn('Original', instructor.bio_html)
 
 
-class InstructorOrderingTest(TestCase):
-    """Default queryset ordering is alphabetical by ``name``."""
-
-    def test_default_queryset_ordered_by_name(self):
-        Instructor.objects.create(instructor_id='zoe', name='Zoe')
-        Instructor.objects.create(instructor_id='alice', name='Alice')
-        Instructor.objects.create(instructor_id='mark', name='Mark')
-
-        names = list(Instructor.objects.values_list('name', flat=True))
-        self.assertEqual(names, ['Alice', 'Mark', 'Zoe'])
+# ``InstructorOrderingTest::test_default_queryset_ordered_by_name``
+# previously asserted on ``Meta.ordering`` — Django framework
+# behaviour, removed per ``_docs/testing-guidelines.md`` Rule 3.
 
 
 class InstructorSlugUniquenessTest(TestCase):

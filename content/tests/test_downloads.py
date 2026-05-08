@@ -57,20 +57,12 @@ class DownloadModelFieldsTest(TestCase):
         self.assertTrue(dl.published)
         self.assertIsNotNone(dl.created_at)
 
-    def test_ordering_by_created_at_desc(self):
-        Download.objects.create(
-            title='Old', slug='old',
-            file_url='https://example.com/old.pdf',
-        )
-        Download.objects.create(
-            title='New', slug='new',
-            file_url='https://example.com/new.pdf',
-        )
-        downloads = list(Download.objects.all())
-        self.assertEqual(downloads[0].slug, 'new')
-        self.assertEqual(downloads[1].slug, 'old')
-
     def test_get_absolute_url(self):
+        # Kept: our ``get_absolute_url`` is wired to the URLConf, so a
+        # rename of the route would break this assertion. The companion
+        # ``test_ordering_by_created_at_desc`` test that exercised
+        # ``Meta.ordering`` was removed per
+        # ``_docs/testing-guidelines.md`` Rule 3.
         dl = Download(slug='my-download')
         self.assertEqual(dl.get_absolute_url(), '/downloads/my-download')
 

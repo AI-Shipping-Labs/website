@@ -45,7 +45,8 @@
       <div class="grid gap-6 sm:grid-cols-2">
         {% for project in projects %}
         <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50">
-          <a href="/projects/{{ project.slug }}">
+          {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
+          <a href="/projects/{{ project.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
             {% if project.cover_image_url %}
             <div class="aspect-video w-full overflow-hidden bg-muted">
               <img src="{{ project.cover_image_url }}" alt="{{ project.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">

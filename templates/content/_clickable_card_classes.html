@@ -1,0 +1,25 @@
+{% comment %}
+Issue #523 — shared CSS class string for the outer <a> wrapper of every
+clickable catalog/preview card.
+
+Owns:
+- `group` so descendants can use `group-hover:` (the title turning accent,
+  the cover image scaling, the trailing arrow translating, etc).
+- `block` so the entire card area is the click target.
+- `focus-visible:` ring so keyboard users see a focus indicator that
+  desktop mouse users do not.
+
+Hover state (border/title accent), padding, and layout stay on the
+surrounding <article> / per-template wrapper because each surface uses
+its own grid + spacing rules. The point of this partial is one source of
+truth for the anchor + a11y contract; not for layout. New clickable card
+surfaces only need to add this include to their wrapping <a>.
+
+Usage: render the partial inside the class attribute of your wrapping <a>:
+
+    <a href="..." class="{# {% include 'content/_clickable_card_classes.html' %} #} ...other classes">
+
+The literal example tag is escaped above so this comment cannot self-recurse.
+A single-line {# #} comment would only consume one line and let later lines
+render live template code — see _docs feedback_django_comment_leak.md.
+{% endcomment %}group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background

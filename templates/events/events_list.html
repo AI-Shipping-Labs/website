@@ -78,7 +78,8 @@
         <div class="space-y-6">
           {% for event in upcoming_events %}
           <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
-            <a href="/events/{{ event.slug }}">
+            {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
+            <a href="/events/{{ event.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2 mb-2 flex-wrap">
@@ -165,10 +166,11 @@
         <div class="space-y-8">
           {% for event in past_events %}
           <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+            {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
             {% if event.kind == 'workshop' and event.workshop %}
-            <a href="{{ event.workshop.get_absolute_url }}" data-testid="past-card-workshop-link">
+            <a href="{{ event.workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-workshop-link">
             {% else %}
-            <a href="/events/{{ event.slug }}">
+            <a href="/events/{{ event.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
             {% endif %}
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1">
@@ -235,10 +237,11 @@
         <div class="space-y-4">
           {% for event in past_events %}
           <article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50">
+            {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
             {% if event.kind == 'workshop' and event.workshop %}
-            <a href="{{ event.workshop.get_absolute_url }}" data-testid="past-card-workshop-link">
+            <a href="{{ event.workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-workshop-link">
             {% else %}
-            <a href="/events/{{ event.slug }}">
+            <a href="/events/{{ event.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
             {% endif %}
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 flex-1">

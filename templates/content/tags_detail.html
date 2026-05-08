@@ -30,7 +30,8 @@
       <div class="space-y-6">
         {% for item in results %}
         <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
-          <a href="{{ item.url }}">
+          {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
+          <a href="{{ item.url }}" class="{% include 'content/_clickable_card_classes.html' %}">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex-1">
                 <div class="flex items-center gap-2 mb-2">

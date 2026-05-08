@@ -39,7 +39,8 @@
           </div>
         </div>
         {% else %}
-        <a href="/interview/{{ cat.slug }}" class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+        {# Issue #523 — keyboard-focus ring on the clickable category card. #}
+        <a href="/interview/{{ cat.slug }}" class="{% include 'content/_clickable_card_classes.html' %} rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
           <div class="flex items-start justify-between">
             <div>
               <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">{{ cat.title }}</h2>

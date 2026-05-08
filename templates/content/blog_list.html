@@ -23,8 +23,15 @@
       {% if articles %}
       <div class="space-y-8">
         {% for article in articles %}
+        {% comment %}
+        Issue #523 — outer <a> wraps the cover + body so the entire card
+        is one click target. Tag chips are rendered as a sibling block
+        AFTER the closing </a> so they remain real <a> elements (no
+        nested anchors / no invalid HTML) and middle-click works on
+        both the article and the tag chips independently.
+        {% endcomment %}
         <article class="group rounded-lg border border-border bg-card p-4 sm:p-6 transition-colors hover:border-accent/50">
-          <a href="/blog/{{ article.slug }}">
+          <a href="/blog/{{ article.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               {% if article.cover_image_url %}
               <div class="sm:w-48 sm:flex-shrink-0">
@@ -58,17 +65,23 @@
                   </span>
                   {% endif %}
                 </div>
-                {% if article.tags %}
-                <div class="mt-3 flex flex-wrap gap-2">
-                  {% for tag in article.tags %}
-                  <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]" onclick="event.stopPropagation();">{{ tag }}</a>
-                  {% endfor %}
-                </div>
-                {% endif %}
               </div>
               <i data-lucide="arrow-right" class="hidden sm:block h-5 w-5 flex-shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-accent"></i>
             </div>
           </a>
+          {% if article.tags %}
+          {% comment %}
+          Tag chips live OUTSIDE the wrapping <a> so we can render them
+          as real anchors. event.stopPropagation() is defensive — even
+          though they are no longer nested, future enhancements (e.g. a
+          card-level click handler on the <article>) shouldn't intercept.
+          {% endcomment %}
+          <div class="mt-3 flex flex-wrap gap-2" data-testid="blog-card-tags">
+            {% for tag in article.tags %}
+            <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]" onclick="event.stopPropagation();">{{ tag }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
         </article>
         {% endfor %}
       </div>

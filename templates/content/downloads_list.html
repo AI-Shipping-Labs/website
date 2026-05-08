@@ -23,35 +23,65 @@
       {% if downloads %}
       <div class="grid gap-6 sm:grid-cols-2">
         {% for item in downloads %}
-        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50">
-          {% if item.download.cover_image_url %}
-          <div class="aspect-video w-full overflow-hidden bg-muted">
-            <img src="{{ item.download.cover_image_url }}" alt="{{ item.download.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
-          </div>
-          {% endif %}
-          <div class="p-6">
-            <div class="flex items-center gap-2 mb-3">
-              <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ item.download.file_type_color }}">
-                {{ item.download.file_type_label }}
-              </span>
-              {% if item.download.human_file_size %}
-              <span class="text-xs text-muted-foreground">{{ item.download.human_file_size }}</span>
-              {% endif %}
-              {% if item.download.required_level > 0 %}
-              <i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground"></i>
+        {% comment %}
+        Issue #523 — there is no /downloads/<slug> detail page in content/urls.py,
+        only /api/downloads/<slug>/file (the file endpoint) and the access-state
+        CTAs (signup / pricing). To make the card body clickable while keeping
+        the in-card CTA semantics intact, the outer <a> matches the SAME
+        destination as the primary CTA below — lead-magnet → signup-with-next,
+        authorised → /api/downloads/<slug>/file, gated → /pricing — so the
+        card click and the button click do exactly the same thing. The CTA
+        block stays as a sibling block OUTSIDE the wrapping <a>; tag chips
+        also live outside so they remain real anchors (no nested <a>).
+        {% endcomment %}
+        {% if item.show_email_form %}
+          {% with card_href="/accounts/signup?next=/api/downloads/"|add:item.download.slug|add:"/file" %}
+        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
+          <a href="{{ card_href }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
+          {% endwith %}
+        {% elif item.has_access %}
+        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
+          <a href="/api/downloads/{{ item.download.slug }}/file" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
+        {% else %}
+        <article class="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-accent/50" data-testid="download-card">
+          <a href="/pricing" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="download-card-body-link">
+        {% endif %}
+            {% if item.download.cover_image_url %}
+            <div class="aspect-video w-full overflow-hidden bg-muted">
+              <img src="{{ item.download.cover_image_url }}" alt="{{ item.download.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
+            </div>
+            {% endif %}
+            <div class="p-6 pb-3">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ item.download.file_type_color }}">
+                  {{ item.download.file_type_label }}
+                </span>
+                {% if item.download.human_file_size %}
+                <span class="text-xs text-muted-foreground">{{ item.download.human_file_size }}</span>
+                {% endif %}
+                {% if item.download.required_level > 0 %}
+                <i data-lucide="lock" class="inline h-4 w-4 text-muted-foreground"></i>
+                {% endif %}
+              </div>
+
+              <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+                {{ item.download.title }}
+              </h2>
+
+              {% if item.download.description %}
+              <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ item.download.description }}</p>
               {% endif %}
             </div>
+          </a>
 
-            <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
-              {{ item.download.title }}
-            </h2>
-
-            {% if item.download.description %}
-            <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ item.download.description }}</p>
-            {% endif %}
-
+          {% comment %}
+          Tag chips and CTA block live OUTSIDE the wrapping <a> so they stay
+          interactive as their own anchors. event.stopPropagation() on tag
+          chips is defensive — they're already siblings, not children.
+          {% endcomment %}
+          <div class="px-6 pb-6">
             {% if item.download.tags %}
-            <div class="mt-3 flex flex-wrap gap-1.5">
+            <div class="flex flex-wrap gap-1.5">
               {% for tag in item.download.tags %}
               <a href="{% tag_add_url base_path selected_tags tag %}" class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors" onclick="event.stopPropagation();">{{ tag }}</a>
               {% endfor %}

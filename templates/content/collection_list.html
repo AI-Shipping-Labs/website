@@ -41,8 +41,9 @@
             {% for item in category.links %}
             {% if item.has_access %}
             {# Accessible link: opens in new tab #}
+            {# Issue #523 — keyboard-focus ring on the curated-link card wrapper. #}
             <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer"
-               class="group flex flex-col rounded-xl border border-border bg-card p-4 sm:p-6 transition-colors hover:border-accent/50 overflow-hidden">
+               class="{% include 'content/_clickable_card_classes.html' %} flex flex-col rounded-xl border border-border bg-card p-4 sm:p-6 transition-colors hover:border-accent/50 overflow-hidden">
               <div class="flex flex-1 flex-col">
                 <div class="mb-2 flex items-start justify-between gap-2">
                   <span class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">

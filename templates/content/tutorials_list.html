@@ -23,7 +23,8 @@
       <div class="space-y-8">
         {% for tutorial in tutorials %}
         <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
-          <a href="/tutorials/{{ tutorial.slug }}">
+          {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
+          <a href="/tutorials/{{ tutorial.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex-1">
                 <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">

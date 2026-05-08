@@ -70,7 +70,7 @@
   <ol class="space-y-4">
     {% for week in weeks %}
     <li data-week-number="{{ week.week_number }}" class="border border-border rounded-lg p-4">
-      <h3 class="text-sm font-semibold text-foreground">Week {{ week.week_number }}{% if week.theme %} -- {{ week.theme }}{% endif %}</h3>
+      <h3 class="text-sm font-semibold text-foreground">Week {{ week.week_number }}{% if week.theme %} — {{ week.theme }}{% endif %}</h3>
       {% if week.checkpoints.all %}
       <ul class="list-disc list-inside text-sm text-foreground mt-2 space-y-1">
         {% for cp in week.checkpoints.all %}
@@ -119,7 +119,7 @@
     {% for r in resources %}
     <li>
       {% if r.url %}<a href="{{ r.url }}" class="text-accent hover:underline">{{ r.title }}</a>{% else %}{{ r.title }}{% endif %}
-      {% if r.note %} -- <span class="text-muted-foreground">{{ r.note }}</span>{% endif %}
+      {% if r.note %} — <span class="text-muted-foreground">{{ r.note }}</span>{% endif %}
     </li>
     {% endfor %}
   </ul>

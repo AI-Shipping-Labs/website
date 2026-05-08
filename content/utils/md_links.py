@@ -244,6 +244,7 @@ def rewrite_workshop_md_links(
     page_lookup,
     source_path=None,
     sync_errors=None,
+    cross_workshop_lookup=None,
 ):
     """Rewrite intra-workshop ``.md`` links in ``body`` to platform URLs.
 
@@ -270,6 +271,13 @@ def rewrite_workshop_md_links(
         sync_errors: Optional list to append warning records to. Each record
             has shape ``{'file': source_path, 'error': '...'}`` so it surfaces
             on the SyncLog.
+        cross_workshop_lookup: Optional sync-wide lookup of OTHER workshops
+            keyed by on-disk folder name (issue #526). When provided, this
+            rewriter suppresses the "Cross-workshop or out-of-tree link ...
+            left as-is" warning for ``..``-prefixed links because a later
+            ``rewrite_cross_workshop_md_links`` pass will handle them. The
+            actual rewriting of cross-workshop links is NOT done here — only
+            the warning is suppressed.
 
     Returns:
         str: The body with internal ``.md`` links rewritten where possible.
@@ -282,6 +290,7 @@ def rewrite_workshop_md_links(
         return body
 
     page_lookup = page_lookup or {}
+    suppress_cross_workshop_warning = cross_workshop_lookup is not None
 
     def _warn(message):
         logger.warning(message)
@@ -324,10 +333,15 @@ def rewrite_workshop_md_links(
             path_part = path_part[2:]
 
         if path_part.startswith('/') or '/' in path_part or path_part.startswith('..'):
-            _warn(
-                f'Cross-workshop or out-of-tree link "{target}" in '
-                f'{source_path or "(unknown file)"} left as-is.'
-            )
+            # ``..``-prefixed links are handled by the cross-workshop pass
+            # (issue #526). When we know that pass will run, suppress the
+            # warning here so we don't double-warn on links the cross pass
+            # successfully resolves.
+            if not suppress_cross_workshop_warning:
+                _warn(
+                    f'Cross-workshop or out-of-tree link "{target}" in '
+                    f'{source_path or "(unknown file)"} left as-is.'
+                )
             return None
 
         canonical = _lookup_filename(path_part)
@@ -361,6 +375,209 @@ def rewrite_workshop_md_links(
             label = page_meta.get('title') or label
 
         return f'[{label}]({url}{fragment}{title})'
+
+    return _MD_LINK_RE.sub(_replace, body)
+
+
+_CROSS_WORKSHOP_RELATIVE_RE = re.compile(
+    r'^\.\./'
+    r'(?P<folder>[^/#?]+)'
+    r'(?:/(?P<sub>[^#?]*))?'
+    r'(?P<frag>#[^?]*)?$'
+)
+
+
+def _build_github_url_re(workshops_repo_name):
+    """Build a regex that matches a GitHub tree/blob URL inside the configured
+    workshops repo. Any branch name is accepted because authors don't always
+    pin to the configured branch. ``<sub>`` may be empty (workshop landing).
+    """
+    repo = re.escape(workshops_repo_name)
+    return re.compile(
+        rf'^https?://github\.com/{repo}/(?:tree|blob)/'
+        r'(?P<branch>[^/]+)/'
+        r'(?P<year>[^/]+)/'
+        r'(?P<folder>[^/#?]+)'
+        r'(?:/(?P<sub>[^#?]*))?'
+        r'(?P<frag>#[^?]*)?$'
+    )
+
+
+def rewrite_cross_workshop_md_links(
+    body,
+    cross_workshop_lookup,
+    workshops_repo_name,
+    source_workshop_folder=None,
+    source_path=None,
+    sync_errors=None,
+):
+    """Rewrite cross-workshop ``.md`` links to ``/workshops/<slug>`` URLs.
+
+    Issue #526. Authors write cross-workshop references in two shapes:
+
+    1. Relative parent-dir links: ``[label](../<folder>/...)``.
+    2. Absolute GitHub URLs into the workshops repo:
+       ``[label](https://github.com/<repo>/tree/<branch>/<year>/<folder>/...)``.
+
+    Both shapes resolve against ``cross_workshop_lookup``, which is a
+    sync-wide map keyed by on-disk folder name (e.g.
+    ``2026-04-21-end-to-end-agent-deployment``). Each value carries the
+    target workshop's ``slug``, ``title``, ``content_id``, ``url``, and a
+    ``pages`` sub-map of ``{filename: {'slug', 'title'}}`` for sub-page
+    resolution.
+
+    Resolution rules (see issue #526):
+
+    - ``../<folder>(/?)`` -> ``/workshops/<target-slug>``.
+    - ``../<folder>/<page>.md`` -> ``/workshops/<target-slug>/tutorial/<page-slug>``.
+    - ``../<folder>/<page>.md#frag`` -> the same with the fragment preserved.
+    - GitHub ``tree``/``blob`` URLs into the workshops repo: same outcome.
+    - Folder not in the lookup: leave the URL untouched, emit a warning.
+    - Page filename not in the target's ``pages``: leave URL, emit a warning.
+    - Non-``.md`` sub-paths (``deploy.sh``, ``aws-account/``, etc.): leave
+      URL untouched, NO warning — those are deliberate code links.
+    - GitHub URLs to other repos: leave URL, NO warning.
+    - Image syntax (``![alt](...)``) is excluded by the regex.
+    - Bare URLs in code fences are excluded by the regex (they don't match
+      the ``[label](url)`` pattern).
+
+    Args:
+        body: Raw markdown text.
+        cross_workshop_lookup: Sync-wide mapping
+            ``{folder_name: {'slug', 'title', 'content_id', 'url', 'pages'}}``.
+            ``pages`` is itself ``{filename: {'slug', 'title'}}``.
+        workshops_repo_name: Full workshops repo (e.g.
+            ``"AI-Shipping-Labs/workshops"``). Used to recognise GitHub URLs
+            into the configured workshops repo. Must be non-empty.
+        source_workshop_folder: On-disk folder name of the workshop owning
+            this body (used so a relative link like ``../<own-folder>/...``
+            doesn't bounce to itself in odd ways — currently only used for
+            error messages, but kept for symmetry with the page lookup).
+        source_path: Repo-relative path of the file being rewritten, used
+            only for log/warning messages.
+        sync_errors: Optional list to append warning records to. Each record
+            has shape ``{'file': source_path, 'error': '...'}`` so it
+            surfaces on the SyncLog.
+
+    Returns:
+        str: The body with cross-workshop ``.md`` links rewritten where
+        possible. Unrecognised shapes and unresolved targets are left
+        byte-for-byte untouched.
+    """
+    del source_workshop_folder  # currently unused, kept for API symmetry
+
+    if not body:
+        return body
+
+    cross_workshop_lookup = cross_workshop_lookup or {}
+
+    def _warn(message):
+        logger.warning(message)
+        if sync_errors is not None:
+            sync_errors.append({
+                'file': source_path or '',
+                'error': message,
+            })
+
+    github_url_re = (
+        _build_github_url_re(workshops_repo_name)
+        if workshops_repo_name else None
+    )
+
+    def _resolve_to_url(folder, sub, frag):
+        """Translate a (folder, sub, frag) triple to a platform URL.
+
+        Returns the rewritten URL string on success, or ``None`` to leave the
+        original link untouched. ``frag`` includes the leading ``#`` when
+        present, or is empty.
+        """
+        target = cross_workshop_lookup.get(folder)
+        if target is None:
+            _warn(
+                f'Cross-workshop link "{folder}" in '
+                f'{source_path or "(unknown file)"}: target folder '
+                f'"{folder}" not found in synced workshops.'
+            )
+            return None
+
+        # Strip a redundant leading "./" and trailing "/" in the sub path.
+        sub = (sub or '').strip()
+        if sub.startswith('./'):
+            sub = sub[2:]
+        if sub.endswith('/'):
+            sub = sub[:-1]
+
+        landing_url = target.get('url') or f'/workshops/{target["slug"]}'
+
+        # Empty sub == workshop landing.
+        if not sub:
+            return f'{landing_url}{frag}'
+
+        # Subdir or non-md path inside an existing workshop: out of scope —
+        # leave it alone, NO warning. These are deliberate code links.
+        if '/' in sub or not sub.lower().endswith('.md'):
+            return None
+
+        # README.md inside a sub-path resolves to the workshop landing.
+        if sub.upper() == 'README.MD':
+            return f'{landing_url}{frag}'
+
+        pages = target.get('pages') or {}
+        page = pages.get(sub)
+        if page is None:
+            # Case-insensitive fallback (authors mix case on .md files).
+            for known_filename, meta in pages.items():
+                if known_filename.lower() == sub.lower():
+                    page = meta
+                    break
+
+        if page is None:
+            _warn(
+                f'Cross-workshop sub-page link "{sub}" in '
+                f'{source_path or "(unknown file)"}: page "{sub}" not '
+                f'found in target workshop "{folder}".'
+            )
+            return None
+
+        return (
+            f'/workshops/{target["slug"]}/tutorial/{page["slug"]}{frag}'
+        )
+
+    def _replace(match):
+        target = match.group('target')
+        title = match.group('title') or ''
+        label = match.group('label')
+
+        # Shape 1: relative parent-dir link.
+        m = _CROSS_WORKSHOP_RELATIVE_RE.match(target)
+        if m:
+            # Reject more than one level up (`../../...`) — out of scope.
+            folder = m.group('folder')
+            if folder == '..':
+                # The regex anchors `^\.\./<folder>`, so `folder == '..'`
+                # means the original was `../../...` — out of scope.
+                return match.group(0)
+            sub = m.group('sub') or ''
+            frag = m.group('frag') or ''
+            url = _resolve_to_url(folder, sub, frag)
+            if url is None:
+                return match.group(0)
+            return f'[{label}]({url}{title})'
+
+        # Shape 2: absolute GitHub URL into the configured workshops repo.
+        if github_url_re is not None:
+            m = github_url_re.match(target)
+            if m:
+                folder = m.group('folder')
+                sub = m.group('sub') or ''
+                frag = m.group('frag') or ''
+                url = _resolve_to_url(folder, sub, frag)
+                if url is None:
+                    return match.group(0)
+                return f'[{label}]({url}{title})'
+
+        # Anything else (different repo, unrelated URL): leave alone.
+        return match.group(0)
 
     return _MD_LINK_RE.sub(_replace, body)
 

@@ -38,13 +38,16 @@
 
         <!-- Monthly / Yearly Toggle -->
         <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
-          <span class="text-sm text-foreground" id="monthly-label">Monthly</span>
-          <button type="button" id="billing-toggle"
-                  class="relative inline-flex h-8 w-14 sm:h-6 sm:w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-secondary transition-colors min-w-[44px] min-h-[44px] items-center"
-                  aria-label="Toggle annual pricing">
-            <span class="pointer-events-none inline-block h-6 w-6 sm:h-5 sm:w-5 transform rounded-full bg-foreground shadow ring-0 transition-transform translate-x-0.5 sm:translate-x-0" id="billing-toggle-dot"></span>
-          </button>
-          <span class="text-sm text-muted-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
+          <span class="whitespace-nowrap text-sm text-muted-foreground" id="monthly-label">Monthly</span>
+          <div class="touch-target-toggle">
+            <button type="button" id="billing-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    aria-label="Toggle annual pricing"
+                    aria-pressed="true">
+              <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-accent-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
+            </button>
+          </div>
+          <span class="whitespace-nowrap text-sm text-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
         </div>
       </div>
 
@@ -96,8 +99,8 @@
             <div class="flex items-baseline">
               <span class="text-4xl font-semibold text-foreground tier-price"
                     data-monthly="{{ item.tier.price_eur_month }}"
-                    data-annual="{{ item.tier.price_eur_year }}">&euro;{{ item.tier.price_eur_month }}</span>
-              <span class="ml-2 text-muted-foreground tier-period">/month</span>
+                    data-annual="{{ item.tier.price_eur_year }}">&euro;{{ item.tier.price_eur_year }}</span>
+              <span class="ml-2 text-muted-foreground tier-period">/year</span>
             </div>
             {% else %}
             <div class="flex items-baseline">
@@ -145,7 +148,7 @@
               {{ item.state.action_label }}
             </a>
             {% elif stripe_checkout_enabled %}
-            <a href="{{ item.payment_link_monthly }}"
+            <a href="{{ item.payment_link_annual }}"
                class="tier-cta-link block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors cursor-pointer min-h-[44px] flex items-center justify-center {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-tier="{{ item.tier.slug }}"
                data-link-monthly="{{ item.payment_link_monthly }}"
@@ -154,7 +157,7 @@
               {{ item.state.action_label }}
             </a>
             {% else %}
-            <a href="{{ item.payment_link_monthly }}"
+            <a href="{{ item.payment_link_annual }}"
                class="tier-cta-link block w-full rounded-md px-4 py-3 sm:py-2.5 text-center text-sm font-medium transition-colors cursor-pointer min-h-[44px] flex items-center justify-center {% if item.tier.slug == 'main' %}bg-accent text-accent-foreground hover:bg-accent/90{% else %}bg-secondary text-foreground hover:bg-secondary/80{% endif %}"
                data-link-monthly="{{ item.payment_link_monthly }}"
                data-link-annual="{{ item.payment_link_annual }}"
@@ -175,8 +178,8 @@
 
 {% block extra_scripts %}
 <script>
-// Billing toggle (monthly/annual)
-var isAnnual = false;
+// Billing toggle (annual/monthly)
+var isAnnual = true;
 document.getElementById('billing-toggle').addEventListener('click', function() {
   isAnnual = !isAnnual;
   var dot = document.getElementById('billing-toggle-dot');
@@ -184,29 +187,22 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
   var monthlyLabel = document.getElementById('monthly-label');
   var annualLabel = document.getElementById('annual-label');
 
-  var isMobile = window.innerWidth < 640;
   if (isAnnual) {
-    dot.classList.add(isMobile ? 'translate-x-7' : 'translate-x-5');
-    dot.classList.remove('translate-x-0', 'translate-x-0.5');
-    if (!isMobile) dot.classList.remove('translate-x-7');
-    if (isMobile) dot.classList.remove('translate-x-5');
-    dot.classList.add('bg-accent-foreground');
-    dot.classList.remove('bg-foreground');
+    dot.classList.add('translate-x-5', 'bg-accent-foreground');
+    dot.classList.remove('translate-x-0', 'bg-foreground');
     toggleBtn.classList.add('bg-accent');
     toggleBtn.classList.remove('bg-secondary');
-    monthlyLabel.className = 'text-sm text-muted-foreground';
-    annualLabel.className = 'text-sm text-foreground';
+    toggleBtn.setAttribute('aria-pressed', 'true');
+    monthlyLabel.className = 'whitespace-nowrap text-sm text-muted-foreground';
+    annualLabel.className = 'whitespace-nowrap text-sm text-foreground';
   } else {
-    dot.classList.remove('translate-x-5', 'translate-x-7');
-    dot.classList.add(isMobile ? 'translate-x-0.5' : 'translate-x-0');
-    if (!isMobile) dot.classList.remove('translate-x-0.5');
-    if (isMobile) dot.classList.remove('translate-x-0');
-    dot.classList.add('bg-foreground');
-    dot.classList.remove('bg-accent-foreground');
+    dot.classList.remove('translate-x-5', 'bg-accent-foreground');
+    dot.classList.add('translate-x-0', 'bg-foreground');
     toggleBtn.classList.remove('bg-accent');
     toggleBtn.classList.add('bg-secondary');
-    monthlyLabel.className = 'text-sm text-foreground';
-    annualLabel.className = 'text-sm text-muted-foreground';
+    toggleBtn.setAttribute('aria-pressed', 'false');
+    monthlyLabel.className = 'whitespace-nowrap text-sm text-foreground';
+    annualLabel.className = 'whitespace-nowrap text-sm text-muted-foreground';
   }
 
   // Update prices

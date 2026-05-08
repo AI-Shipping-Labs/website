@@ -230,32 +230,41 @@ class TestScenario2CompareAllFourTiers:
 @pytest.mark.django_db
 class TestScenario3BillingToggle:
     """
-    Scenario 3: Cost-conscious visitor toggles to annual billing to see
-    the savings.
+    Scenario 3: Cost-conscious visitor compares annual and monthly billing.
     """
 
-    def test_default_shows_monthly_prices(self, django_server, page):
-        """Verify the default state shows monthly prices."""
+    def test_default_shows_annual_prices(self, django_server, page):
+        """Verify the default state shows annual prices and pressed state."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
+        toggle = page.locator("#billing-toggle")
+        assert toggle.get_attribute("aria-pressed") == "true"
+
+        annual_label = page.locator("#annual-label")
+        assert "text-foreground" in annual_label.get_attribute("class")
+        monthly_label = page.locator("#monthly-label")
+        assert "text-muted-foreground" in monthly_label.get_attribute(
+            "class"
+        )
+
         # Check Basic price
         basic_card = _get_tier_card_by_name(page, "Basic")
         basic_price = basic_card.locator(".tier-price").inner_text()
-        assert "20" in basic_price
+        assert "200" in basic_price
 
         basic_period = basic_card.locator(".tier-period").inner_text()
-        assert "/month" in basic_period
+        assert "/year" in basic_period
 
         # Check Main price
         main_card = _get_tier_card_by_name(page, "Main")
         main_price = main_card.locator(".tier-price").inner_text()
-        assert "50" in main_price
+        assert "500" in main_price
 
         # Check Premium price
         premium_card = _get_tier_card_by_name(page, "Premium")
         premium_price = premium_card.locator(".tier-price").inner_text()
-        assert "100" in premium_price
+        assert "1000" in premium_price
     def test_save_indicator_visible(self, django_server, page):
         """Verify the Save ~17% indicator is visible near the Annual label."""
         page.goto(
@@ -264,8 +273,8 @@ class TestScenario3BillingToggle:
         annual_label = page.locator("#annual-label")
         label_text = annual_label.inner_text()
         assert "Save ~17%" in label_text
-    def test_toggle_to_annual_shows_annual_prices(self, django_server, page):
-        """Click the toggle to switch to Annual and verify annual prices."""
+    def test_toggle_to_monthly_shows_monthly_prices(self, django_server, page):
+        """Click the toggle to switch to Monthly and verify monthly prices."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
@@ -273,70 +282,18 @@ class TestScenario3BillingToggle:
         page.locator("#billing-toggle").click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Verify Annual label is highlighted (text-foreground) and
-        # Monthly is muted
+        # Verify Monthly label is highlighted (text-foreground) and
+        # Annual is muted
+        toggle = page.locator("#billing-toggle")
+        assert toggle.get_attribute("aria-pressed") == "false"
         annual_label = page.locator("#annual-label")
-        assert "text-foreground" in annual_label.get_attribute("class")
+        assert "text-muted-foreground" in annual_label.get_attribute("class")
         monthly_label = page.locator("#monthly-label")
-        assert "text-muted-foreground" in monthly_label.get_attribute(
+        assert "text-foreground" in monthly_label.get_attribute(
             "class"
         )
 
-        # Check annual prices
-        basic_card = _get_tier_card_by_name(page, "Basic")
-        assert "200" in basic_card.locator(".tier-price").inner_text()
-        assert "/year" in basic_card.locator(
-            ".tier-period"
-        ).inner_text()
-
-        main_card = _get_tier_card_by_name(page, "Main")
-        assert "500" in main_card.locator(".tier-price").inner_text()
-
-        premium_card = _get_tier_card_by_name(page, "Premium")
-        assert "1000" in premium_card.locator(
-            ".tier-price"
-        ).inner_text()
-    def test_free_tier_unaffected_by_toggle(self, django_server, page):
-        """Verify the Free tier price remains 0 when toggling to annual."""
-        page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
-        )
-        free_card = _get_tier_card_by_name(page, "Free")
-        price_before = free_card.locator(
-            "span.text-4xl"
-        ).inner_text()
-        assert "0" in price_before
-
-        # Toggle to annual
-        page.locator("#billing-toggle").click()
-        page.wait_for_load_state("domcontentloaded")
-
-        price_after = free_card.locator(
-            "span.text-4xl"
-        ).inner_text()
-        assert "0" in price_after
-
-        # Period should still say /forever
-        period = free_card.locator(
-            "span.text-muted-foreground"
-        ).filter(has_text="/forever")
-        assert period.count() == 1
-    def test_toggle_back_to_monthly_restores_prices(self, django_server, page):
-        """Toggle to annual and back to monthly, verify prices revert."""
-        page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
-        )
-        toggle = page.locator("#billing-toggle")
-
-        # Toggle to annual
-        toggle.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Toggle back to monthly
-        toggle.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Verify monthly prices
+        # Check monthly prices
         basic_card = _get_tier_card_by_name(page, "Basic")
         assert "20" in basic_card.locator(".tier-price").inner_text()
         assert "/month" in basic_card.locator(
@@ -350,7 +307,61 @@ class TestScenario3BillingToggle:
         assert "100" in premium_card.locator(
             ".tier-price"
         ).inner_text()
-        assert "/month" in premium_card.locator(
+    def test_free_tier_unaffected_by_toggle(self, django_server, page):
+        """Verify the Free tier price remains 0 when toggling billing."""
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        free_card = _get_tier_card_by_name(page, "Free")
+        price_before = free_card.locator(
+            "span.text-4xl"
+        ).inner_text()
+        assert "0" in price_before
+
+        # Toggle to monthly
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
+
+        price_after = free_card.locator(
+            "span.text-4xl"
+        ).inner_text()
+        assert "0" in price_after
+
+        # Period should still say /forever
+        period = free_card.locator(
+            "span.text-muted-foreground"
+        ).filter(has_text="/forever")
+        assert period.count() == 1
+    def test_toggle_back_to_annual_restores_prices(self, django_server, page):
+        """Toggle to monthly and back to annual, verify prices revert."""
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+        toggle = page.locator("#billing-toggle")
+
+        # Toggle to monthly
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
+
+        # Toggle back to annual
+        toggle.click()
+        page.wait_for_load_state("domcontentloaded")
+
+        # Verify annual prices
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        assert "200" in basic_card.locator(".tier-price").inner_text()
+        assert "/year" in basic_card.locator(
+            ".tier-period"
+        ).inner_text()
+
+        main_card = _get_tier_card_by_name(page, "Main")
+        assert "500" in main_card.locator(".tier-price").inner_text()
+
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        assert "1000" in premium_card.locator(
+            ".tier-price"
+        ).inner_text()
+        assert "/year" in premium_card.locator(
             ".tier-period"
         ).inner_text()
 @pytest.mark.django_db
@@ -368,6 +379,9 @@ class TestScenario4MainMonthlyStripeLink:
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
+
         main_card = _get_tier_card_by_name(page, "Main")
         join_button = main_card.locator("a.tier-cta-link")
         monthly_link = join_button.get_attribute("href")
@@ -389,8 +403,8 @@ class TestScenario4MainMonthlyStripeLink:
 @pytest.mark.django_db
 class TestScenario5AnnualStripeLinksSwap:
     """
-    Scenario 5: Visitor switches to annual billing and verifies Join buttons
-    update to annual Stripe links.
+    Scenario 5: Visitor switches between annual and monthly billing and verifies
+    Join button links.
     """
 
     def test_paid_tiers_have_distinct_monthly_and_annual_data_attributes(
@@ -415,17 +429,13 @@ class TestScenario5AnnualStripeLinksSwap:
             assert monthly_attr != annual_attr, (
                 f"{tier_name} monthly and annual links are the same"
             )
-    def test_toggle_to_annual_updates_href_to_annual_links(
+    def test_default_href_uses_annual_links(
         self, django_server
     , page):
-        """After toggling to annual, each paid tier Join button href matches
-        its data-link-annual value."""
+        """By default, each paid tier Join button href matches data-link-annual."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
-        # Toggle to annual
-        page.locator("#billing-toggle").click()
-        page.wait_for_load_state("domcontentloaded")
 
         for tier_name in ["Basic", "Main", "Premium"]:
             card = _get_tier_card_by_name(page, tier_name)
@@ -436,19 +446,17 @@ class TestScenario5AnnualStripeLinksSwap:
                 f"{tier_name} href {href} does not match "
                 f"data-link-annual {annual_attr}"
             )
-    def test_toggle_back_to_monthly_reverts_href_to_monthly_links(
+    def test_toggle_to_monthly_reverts_href_to_monthly_links(
         self, django_server
     , page):
-        """After toggling back to monthly, each paid tier Join button href
-        reverts to data-link-monthly."""
+        """After toggling to monthly, each paid tier Join button href matches
+        data-link-monthly."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
         toggle = page.locator("#billing-toggle")
 
-        # Toggle to annual then back to monthly
-        toggle.click()
-        page.wait_for_load_state("domcontentloaded")
+        # Toggle to monthly
         toggle.click()
         page.wait_for_load_state("domcontentloaded")
 
@@ -471,14 +479,11 @@ class TestScenario6PremiumAnnualStripeLink:
     def test_premium_annual_shows_correct_price_and_stripe_link(
         self, django_server
     , page):
-        """Toggle to annual, verify Premium shows 1000/year and the correct
+        """Verify Premium defaults to 1000/year and the correct
         Stripe link."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
-        # Toggle to annual
-        page.locator("#billing-toggle").click()
-        page.wait_for_load_state("domcontentloaded")
 
         premium_card = _get_tier_card_by_name(page, "Premium")
 
@@ -697,20 +702,19 @@ class TestScenario10RapidToggleStressTest:
     stay consistent.
     """
 
-    def test_rapid_toggle_returns_to_monthly_after_even_clicks(
+    def test_rapid_toggle_returns_to_annual_after_even_clicks(
         self, django_server
     , page):
         """Click toggle rapidly multiple times. An even number of clicks
-        (starting from the monthly default) returns to monthly. Verify that
+        (starting from the annual default) returns to annual. Verify that
         rapid toggling does not corrupt state."""
         page.goto(
             f"{django_server}/pricing", wait_until="domcontentloaded"
         )
 
         # Use JavaScript to fire exactly 6 click events rapidly
-        # (even number -> back to monthly default)
-        # monthly->annual->monthly->annual->monthly->annual->monthly
-        # Wait, 6 clicks from false: T F T F T F => false = monthly
+        # (even number -> back to annual default)
+        # annual->monthly->annual->monthly->annual->monthly->annual
         page.evaluate("""
             const toggle = document.getElementById('billing-toggle');
             for (let i = 0; i < 6; i++) {
@@ -720,62 +724,7 @@ class TestScenario10RapidToggleStressTest:
 
         page.wait_for_load_state("domcontentloaded")
 
-        # Verify monthly prices (even clicks = back to default)
-        basic_card = _get_tier_card_by_name(page, "Basic")
-        assert "20" in basic_card.locator(".tier-price").inner_text()
-        assert "/month" in basic_card.locator(
-            ".tier-period"
-        ).inner_text()
-
-        main_card = _get_tier_card_by_name(page, "Main")
-        assert "50" in main_card.locator(".tier-price").inner_text()
-        assert "/month" in main_card.locator(
-            ".tier-period"
-        ).inner_text()
-
-        premium_card = _get_tier_card_by_name(page, "Premium")
-        assert "100" in premium_card.locator(
-            ".tier-price"
-        ).inner_text()
-        assert "/month" in premium_card.locator(
-            ".tier-period"
-        ).inner_text()
-
-        # Verify links match monthly
-        for tier_name in ["Basic", "Main", "Premium"]:
-            card = _get_tier_card_by_name(page, tier_name)
-            cta = card.locator("a.tier-cta-link")
-            href = cta.get_attribute("href")
-            monthly_attr = cta.get_attribute("data-link-monthly")
-            assert href == monthly_attr, (
-                f"{tier_name} href after rapid toggle doesn't match "
-                f"monthly link"
-            )
-    def test_one_more_toggle_after_rapid_switches_to_annual(
-        self, django_server
-    , page):
-        """After rapid even-number toggles (back to monthly), one more click
-        switches to annual. Confirms state is not corrupted by rapid
-        toggling."""
-        page.goto(
-            f"{django_server}/pricing", wait_until="domcontentloaded"
-        )
-
-        # Fire exactly 6 click events via JavaScript (back to monthly)
-        page.evaluate("""
-            const toggle = document.getElementById('billing-toggle');
-            for (let i = 0; i < 6; i++) {
-                toggle.click();
-            }
-        """)
-
-        page.wait_for_load_state("domcontentloaded")
-
-        # One more click -> annual (7 total = odd = annual)
-        page.locator("#billing-toggle").click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Verify annual state
+        # Verify annual prices (even clicks = back to default)
         basic_card = _get_tier_card_by_name(page, "Basic")
         assert "200" in basic_card.locator(".tier-price").inner_text()
         assert "/year" in basic_card.locator(
@@ -784,6 +733,9 @@ class TestScenario10RapidToggleStressTest:
 
         main_card = _get_tier_card_by_name(page, "Main")
         assert "500" in main_card.locator(".tier-price").inner_text()
+        assert "/year" in main_card.locator(
+            ".tier-period"
+        ).inner_text()
 
         premium_card = _get_tier_card_by_name(page, "Premium")
         assert "1000" in premium_card.locator(
@@ -800,6 +752,58 @@ class TestScenario10RapidToggleStressTest:
             href = cta.get_attribute("href")
             annual_attr = cta.get_attribute("data-link-annual")
             assert href == annual_attr, (
-                f"{tier_name} href after toggle doesn't match "
+                f"{tier_name} href after rapid toggle doesn't match "
                 f"annual link"
+            )
+    def test_one_more_toggle_after_rapid_switches_to_monthly(
+        self, django_server
+    , page):
+        """After rapid even-number toggles (back to annual), one more click
+        switches to monthly. Confirms state is not corrupted by rapid
+        toggling."""
+        page.goto(
+            f"{django_server}/pricing", wait_until="domcontentloaded"
+        )
+
+        # Fire exactly 6 click events via JavaScript (back to annual)
+        page.evaluate("""
+            const toggle = document.getElementById('billing-toggle');
+            for (let i = 0; i < 6; i++) {
+                toggle.click();
+            }
+        """)
+
+        page.wait_for_load_state("domcontentloaded")
+
+        # One more click -> monthly (7 total = odd = monthly)
+        page.locator("#billing-toggle").click()
+        page.wait_for_load_state("domcontentloaded")
+
+        # Verify monthly state
+        basic_card = _get_tier_card_by_name(page, "Basic")
+        assert "20" in basic_card.locator(".tier-price").inner_text()
+        assert "/month" in basic_card.locator(
+            ".tier-period"
+        ).inner_text()
+
+        main_card = _get_tier_card_by_name(page, "Main")
+        assert "50" in main_card.locator(".tier-price").inner_text()
+
+        premium_card = _get_tier_card_by_name(page, "Premium")
+        assert "100" in premium_card.locator(
+            ".tier-price"
+        ).inner_text()
+        assert "/month" in premium_card.locator(
+            ".tier-period"
+        ).inner_text()
+
+        # Verify links match monthly
+        for tier_name in ["Basic", "Main", "Premium"]:
+            card = _get_tier_card_by_name(page, tier_name)
+            cta = card.locator("a.tier-cta-link")
+            href = cta.get_attribute("href")
+            monthly_attr = cta.get_attribute("data-link-monthly")
+            assert href == monthly_attr, (
+                f"{tier_name} href after toggle doesn't match "
+                f"monthly link"
             )

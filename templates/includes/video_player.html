@@ -29,42 +29,17 @@
   {% endif %}
 
   {% if has_timestamps %}
-  <style>
-    .video-chapters > summary::-webkit-details-marker,
-    .video-chapters > summary::marker { display: none; }
-    .video-chapters[open] .video-chapters-chevron { transform: rotate(180deg); }
-  </style>
-  <details class="video-chapters mt-4 rounded-lg border border-border bg-card" data-testid="video-chapters">
-    <summary class="cursor-pointer list-none flex items-center gap-3 px-4 py-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted/50 transition-colors rounded-lg">
-      <span class="flex-1">Chapters ({{ timestamps|length }})</span>
-      <i data-lucide="chevron-down" class="video-chapters-chevron h-4 w-4 transition-transform duration-200 flex-shrink-0"></i>
-    </summary>
-    <div class="space-y-1 px-4 pb-4">
-      {% for ts in timestamps %}
-      <div class="rounded-md px-1 py-1">
-        <button
-          type="button"
-          class="video-timestamp flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-secondary/50"
-          data-time-seconds="{{ ts.time_seconds }}"
-          data-source="{{ source_type }}"
-          {% if source_type == "youtube" %}data-video-id="{{ video_id }}"{% endif %}
-          {% if source_type == "loom" %}data-video-id="{{ video_id }}"{% endif %}
-        >
-          <span class="shrink-0 font-mono text-sm font-medium text-accent">{{ ts.formatted_time }}</span>
-          <span class="text-sm text-foreground">{{ ts.label }}</span>
-        </button>
-        {% if ts.tutorial_page %}
-        <a href="{{ ts.tutorial_page.get_absolute_url }}"
-           class="ml-9 mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
-           data-testid="timestamp-tutorial-link">
-          <i data-lucide="arrow-right" class="h-3 w-3"></i>
-          Tutorial: {{ ts.tutorial_page.title }}
-        </a>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </details>
+  {% comment %}
+    Issue #516: Chapters accordion uses the shared section-header partial
+    so its summary typography matches the workshop transcript and the
+    homepage FAQ. The summary text is "Chapters (N)" in `text-base
+    font-medium text-foreground` (sentence case, not uppercase).
+  {% endcomment %}
+  {% with ts_count_str=timestamps|length|stringformat:"d" %}
+  {% with chapters_summary="Chapters ("|add:ts_count_str|add:")" %}
+  {% include "includes/_accordion.html" with summary=chapters_summary testid="video-chapters" details_extra_class="mt-4 video-chapters" body_template="includes/_video_chapters_body.html" body_class="space-y-1 px-4 pb-4" %}
+  {% endwith %}
+  {% endwith %}
   {% endif %}
 </div>
 

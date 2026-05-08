@@ -45,7 +45,7 @@
         <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_module.pk == unit.module.pk %}open{% endif %}>
           <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
             <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
-            <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ nav_module.title }}</span>
+            <span class="text-sm font-medium text-foreground">{{ nav_module.title }}</span>
           </summary>
           <div>
             <ul class="space-y-0.5 mt-1">

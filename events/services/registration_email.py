@@ -5,6 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import boto3
+from django.conf import settings
 from django.template.loader import render_to_string
 
 from email_app.services.email_service import EmailService
@@ -97,6 +98,19 @@ def _send_raw_email(to_email, subject, html_body, ics_content, method='REQUEST')
     Returns:
         str: SES message ID.
     """
+    # Issue #509: kill-switch for tests / local dev. Mirrors the gate in
+    # EmailService._send_ses so neither boto3 client construction site can
+    # reach a real SES account when SES_ENABLED is False. Returns a
+    # recognisable synthetic message id so the caller's EmailLog row still
+    # records the attempt.
+    if not getattr(settings, 'SES_ENABLED', False):
+        logger.info(
+            'SES disabled - skipping registration email to %s (subject=%s)',
+            to_email,
+            subject,
+        )
+        return 'ses-disabled-noop'
+
     from_email = get_config(
         'SES_FROM_EMAIL', 'community@aishippinglabs.com',
     )

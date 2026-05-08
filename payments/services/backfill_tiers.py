@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 import stripe
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import TierOverride
 from integrations.config import get_config
 from payments.models import WebhookEvent
 from payments.services.import_stripe import (

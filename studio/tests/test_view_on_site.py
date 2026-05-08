@@ -5,11 +5,11 @@ both in list rows and in edit/review page headers. Links must open in a new
 tab (target="_blank").
 """
 
+import datetime
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
-
-import datetime
 
 from content.models import Article, Course, Download, Project, Workshop
 from events.models import Event

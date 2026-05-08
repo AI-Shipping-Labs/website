@@ -1,5 +1,4 @@
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from datetime import timezone as datetime_timezone
 from io import StringIO
 from unittest.mock import patch

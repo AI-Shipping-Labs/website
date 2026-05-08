@@ -18,7 +18,12 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.models import User
-from accounts.return_context import append_next, get_next_url, sanitize_next_url
+from accounts.return_context import (
+    append_next,
+    get_next_url,
+    sanitize_next_url,
+    should_skip_logout_redirect,
+)
 from accounts.services.verification import (
     DEFAULT_UNVERIFIED_USER_TTL_DAYS,
     resolve_unverified_ttl_days,
@@ -105,9 +110,20 @@ def signup_redirect_view(request):
 
 
 def logout_view(request):
-    """Log out the user and redirect to homepage."""
+    """Log out the user and redirect.
+
+    Honours a sanitized ``?next=`` query parameter so users who sign out
+    from a public detail page (event/course/workshop/blog/etc.) stay on
+    the same page and can inspect the anonymous view. When ``next`` is
+    missing, malformed, off-site, or points at a member-only/admin
+    surface — ``/account``, ``/accounts``, ``/studio``, ``/admin``,
+    ``/notifications`` — the user is sent to ``/`` instead. Issue #519.
+    """
     logout(request)
-    return redirect("/")
+    next_url = get_next_url(request, default="/")
+    if next_url == "/" or should_skip_logout_redirect(next_url):
+        return redirect("/")
+    return redirect(next_url)
 
 
 def _generate_verification_token(user_id, expiry_hours=24):

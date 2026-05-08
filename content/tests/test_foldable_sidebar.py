@@ -232,10 +232,26 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
             content_id="11111111-1111-1111-1111-111111111111",
         )
         response = self.client.get(page.get_absolute_url())
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="page-paywall"')
-        self.assertNotContains(response, 'Secret workshop body')
-        self.assertNotContains(response, 'id="content-sidebar-collapse-btn"')
-        self.assertNotContains(response, 'id="content-sidebar-floating-toggle"')
-        self.assertNotContains(response, 'data-testid="mark-page-complete-btn"')
-        self.assertNotContains(response, 'data-testid="qa-section"')
+        # Issue #515: gated workshop pages return 403 with the teaser
+        # layout (locked-video thumbnail + first ~150 words + paywall
+        # card). The full ``page-body`` block is still hidden — the
+        # teaser uses ``teaser-body`` instead.
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="page-paywall"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="page-body"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'id="content-sidebar-collapse-btn"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'id="content-sidebar-floating-toggle"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="mark-page-complete-btn"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="qa-section"', status_code=403,
+        )

@@ -14,7 +14,14 @@ methods the sync pipeline and admin need.
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from content.access import VISIBILITY_CHOICES, get_user_level
+from content.access import (
+    LEVEL_BASIC,
+    LEVEL_OPEN,
+    LEVEL_REGISTERED,
+    UNIT_VISIBILITY_CHOICES,
+    VISIBILITY_CHOICES,
+    get_user_level,
+)
 from content.models.mixins import (
     SourceMetadataMixin,
     SyncedContentIdentityMixin,
@@ -26,6 +33,33 @@ STATUS_CHOICES = [
     ('draft', 'Draft'),
     ('published', 'Published'),
 ]
+
+
+def _can_access_level(user, required_level):
+    """Decide whether ``user`` clears a workshop gate at ``required_level``.
+
+    Mirrors :func:`content.access.can_access` semantics for the three
+    workshop gate fields without going through a Content instance:
+
+    - ``LEVEL_OPEN``: anonymous + paid tier allowed; free verified
+      allowed; free unverified blocked.
+    - ``LEVEL_REGISTERED``: anonymous denied; any tier allowed when
+      email is verified or the user is already on a paid tier.
+    - Numeric ``>= LEVEL_BASIC`` gates: pure level comparison.
+    """
+    if required_level == LEVEL_OPEN:
+        if user is None or not user.is_authenticated:
+            return True
+        if get_user_level(user) >= LEVEL_BASIC:
+            return True
+        return bool(user.email_verified)
+    if required_level == LEVEL_REGISTERED:
+        if user is None or not user.is_authenticated:
+            return False
+        if get_user_level(user) >= LEVEL_BASIC:
+            return True
+        return bool(user.email_verified)
+    return get_user_level(user) >= required_level
 
 
 class Workshop(
@@ -98,8 +132,12 @@ class Workshop(
     )
     pages_required_level = models.IntegerField(
         default=10,
-        choices=VISIBILITY_CHOICES,
-        help_text='Minimum tier level required to view workshop pages.',
+        choices=UNIT_VISIBILITY_CHOICES,
+        help_text=(
+            'Minimum tier level required to view workshop pages. Accepts '
+            'LEVEL_REGISTERED (5) so authors can require a free account '
+            'without requiring payment.'
+        ),
     )
     recording_required_level = models.IntegerField(
         default=20,
@@ -193,16 +231,21 @@ class Workshop(
         ).first()
 
     def user_can_access_landing(self, user):
-        """Return True when ``user``'s effective level >= landing gate."""
-        return get_user_level(user) >= self.landing_required_level
+        """Return True when ``user`` may view the workshop landing."""
+        return _can_access_level(user, self.landing_required_level)
 
     def user_can_access_pages(self, user):
-        """Return True when ``user``'s effective level >= pages gate."""
-        return get_user_level(user) >= self.pages_required_level
+        """Return True when ``user`` may view the workshop tutorial pages.
+
+        Honours ``LEVEL_REGISTERED``: anonymous visitors are denied, any
+        authenticated user is allowed if their email is verified or they
+        already hold a paid tier.
+        """
+        return _can_access_level(user, self.pages_required_level)
 
     def user_can_access_recording(self, user):
-        """Return True when ``user``'s effective level >= recording gate."""
-        return get_user_level(user) >= self.recording_required_level
+        """Return True when ``user`` may watch the workshop recording."""
+        return _can_access_level(user, self.recording_required_level)
 
 
 class WorkshopPage(

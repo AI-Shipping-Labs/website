@@ -395,7 +395,8 @@ class WorkshopPageDetailIsCompletedContextTest(TierSetupMixin, TestCase):
 
     def test_button_hidden_when_gated(self):
         # Free user looking at a Basic-gated page sees the paywall and
-        # no button.
+        # no button. Issue #515: gated pages now return 403 to mirror the
+        # course-unit teaser pattern.
         free_user = User.objects.create_user(
             email='free2@example.com', password='x',
         )
@@ -403,9 +404,9 @@ class WorkshopPageDetailIsCompletedContextTest(TierSetupMixin, TestCase):
         free_user.save()
         self.client.login(email='free2@example.com', password='x')
         response = self.client.get(self.pages[0].get_absolute_url())
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
         self.assertNotContains(
-            response, 'data-testid="mark-page-complete-btn"',
+            response, 'data-testid="mark-page-complete-btn"', status_code=403,
         )
 
 

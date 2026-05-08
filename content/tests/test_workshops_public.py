@@ -402,22 +402,35 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         # Default workshop: landing=0, pages=10, recording=20.
         # Anon (level 0) passes landing only — so the recording-tier
         # paywall renders (anon is below pages too, but the recording
-        # gate is what matters on the video page).
+        # gate is what matters on the video page). Issue #515 returns 403
+        # to mirror the course-unit teaser pattern.
         response = self.client.get('/workshops/ws/video')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="video-paywall"')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="video-paywall"', status_code=403,
+        )
         self.assertContains(
             response, 'Upgrade to Main to watch the recording',
+            status_code=403,
         )
 
     def test_video_basic_below_recording_sees_paywall(self):
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/ws/video')
-        self.assertContains(response, 'data-testid="video-paywall"')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="video-paywall"', status_code=403,
+        )
         # Issue #481: pill reads "Main or above required".
-        self.assertContains(response, 'Main or above required')
-        self.assertNotContains(response, 'Main+ required')
-        self.assertContains(response, 'Current access: Basic member')
+        self.assertContains(
+            response, 'Main or above required', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'Main+ required', status_code=403,
+        )
+        self.assertContains(
+            response, 'Current access: Basic member', status_code=403,
+        )
 
     def test_video_main_renders_player(self):
         self.client.force_login(self.user_main)
@@ -493,21 +506,36 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws/tutorial/nope')
         self.assertEqual(response.status_code, 404)
 
-    def test_page_anon_returns_200_with_paywall_not_403(self):
-        # SEO path: anonymous gets 200 + title + breadcrumb + paywall card.
+    def test_page_anon_returns_403_with_paywall(self):
+        # Issue #515 ports the course-unit teaser pattern: gated tutorial
+        # pages now return 403 (mirroring course units) and render the
+        # title, breadcrumb, ~150-word teaser body, and paywall card.
         response = self.client.get('/workshops/ws/tutorial/one')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="page-title"')
-        self.assertContains(response, 'data-testid="page-paywall"')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="page-title"', status_code=403,
+        )
+        self.assertContains(
+            response, 'data-testid="page-paywall"', status_code=403,
+        )
         self.assertContains(
             response, 'Upgrade to Basic to access this workshop',
+            status_code=403,
         )
         # Issue #481: paywall pill reads "Basic or above required".
-        self.assertContains(response, 'Basic or above required')
-        self.assertNotContains(response, 'Basic+ required')
-        self.assertNotContains(response, 'data-testid="gated-current-state"')
-        # Body must NOT render
-        self.assertNotContains(response, 'data-testid="page-body"')
+        self.assertContains(
+            response, 'Basic or above required', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'Basic+ required', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="gated-current-state"', status_code=403,
+        )
+        # Full body must NOT render
+        self.assertNotContains(
+            response, 'data-testid="page-body"', status_code=403,
+        )
 
     def test_page_free_member_sees_current_access_state(self):
         user_free = User.objects.create_user(
@@ -515,8 +543,13 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         )
         self.client.force_login(user_free)
         response = self.client.get('/workshops/ws/tutorial/one')
-        self.assertContains(response, 'data-testid="page-paywall"')
-        self.assertContains(response, 'Current access: Free member')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="page-paywall"', status_code=403,
+        )
+        self.assertContains(
+            response, 'Current access: Free member', status_code=403,
+        )
 
     def test_page_basic_renders_body(self):
         self.client.force_login(self.user_basic)
@@ -611,15 +644,20 @@ class LegacyWorkshopPageRedirectTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Starting Notebook')
 
     def test_canonical_tutorial_page_renders_directly(self):
+        # Anonymous user fails the default pages gate (Basic+); issue #515
+        # returns 403 with the teaser layout. The point of the test is
+        # that we don't redirect — the gated render still happens.
         response = self.client.get(
             '/workshops/legacy-ws/tutorial/starting-notebook',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
         self.assertNotIn('Location', response)
 
     def test_video_route_is_not_captured_by_legacy_redirect(self):
+        # Anonymous fails the default recording gate (Main+) so the gated
+        # paywall render returns 403 (not a redirect).
         response = self.client.get('/workshops/legacy-ws/video')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
         self.assertNotIn('Location', response)
 
     def test_unknown_workshop_stays_404(self):

@@ -8,15 +8,15 @@
   {% include "includes/header.html" %}
 
   <!-- Section Nav (right side dots) -->
-  <nav class="fixed right-6 top-1/2 z-40 hidden -translate-y-1/2 xl:block" id="section-nav">
-    <ul class="flex flex-col gap-3">
+  <nav class="fixed right-3 top-1/2 z-40 hidden -translate-y-1/2 xl:block" id="section-nav">
+    <ul class="flex flex-col items-end gap-3">
       {% for section in section_nav %}
       <li>
         <button onclick="document.getElementById('{{ section.id }}').scrollIntoView({behavior:'smooth'})"
                 class="group flex items-center gap-3 text-sm transition-all text-muted-foreground hover:text-foreground"
                 data-section="{{ section.id }}">
+          <span>{{ section.label }}</span>
           <span class="h-2 w-2 rounded-full bg-muted-foreground/40 group-hover:bg-foreground/60 transition-all"></span>
-          <span class="opacity-0 transition-opacity group-hover:opacity-100">{{ section.label }}</span>
         </button>
       </li>
       {% endfor %}

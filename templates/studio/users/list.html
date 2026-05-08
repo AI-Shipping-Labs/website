@@ -132,7 +132,15 @@
       {% for row in page.object_list %}
       <tr class="hover:bg-secondary/50 transition-colors" data-testid="user-row-{{ row.pk }}">
         <td class="px-3 py-1.5 align-top min-w-0" data-label="User">
-          <div class="min-w-0">
+          {% comment %}
+            The User cell's identity area links to /studio/users/<id>/. The
+            row keeps an explicit `View` action in the actions column so we
+            satisfy both AC bullets: clickable identity AND a discoverable
+            row action that matches the Studio table-action pattern.
+          {% endcomment %}
+          <a href="{% url 'studio_user_detail' row.pk %}"
+             data-testid="user-row-link"
+             class="block min-w-0 hover:text-accent focus:outline-none focus:ring-1 focus:ring-accent rounded-sm">
             {% if row.full_name %}
             <div class="text-sm font-medium text-foreground truncate"
                  title="{{ row.full_name }}"
@@ -152,7 +160,7 @@
                  data-testid="user-email">{{ row.email }}</div>
             <div class="text-[11px] leading-4 text-muted-foreground">Joined {{ row.date_joined|date:"M d, Y" }}</div>
             {% endif %}
-          </div>
+          </a>
         </td>
         <td class="px-3 py-1.5 align-top" data-label="Membership">
           <div class="flex flex-wrap items-center gap-1" data-testid="membership-badges" aria-label="Membership state for {{ row.email }}">

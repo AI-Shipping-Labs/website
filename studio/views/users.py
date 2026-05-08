@@ -47,7 +47,7 @@ from accounts.utils.tags import (
 )
 from integrations.config import get_config
 from payments.services.backfill_tiers import backfill_user_from_stripe
-from plans.models import InterviewNote
+from plans.models import InterviewNote, Plan
 from studio.decorators import staff_required, superuser_required
 
 User = get_user_model()
@@ -665,6 +665,12 @@ def user_detail(request, user_id):
         .select_related('plan__sprint', 'created_by')
         .order_by('-created_at')
     )
+    member_plans = list(
+        Plan.objects
+        .filter(member=user)
+        .select_related('sprint')
+        .order_by('-created_at')
+    )
 
     context = {
         'detail_user': user,
@@ -677,6 +683,13 @@ def user_detail(request, user_id):
         'internal_notes': note_queryset.internal(),
         'external_notes': note_queryset.external(),
         'current_plan': None,
+        'member_plans': member_plans,
+        # /admin/accounts/user/<id>/change/ is the canonical destructive
+        # surface for users (delete, password reset, full ORM edits).
+        # Linking it from the Studio overview keeps Studio focused on
+        # day-to-day CRM tasks without duplicating that surface.
+        'django_admin_url': f'/admin/accounts/user/{user.pk}/change/',
+        'slack_status': _slack_status(user),
     }
     return render(request, 'studio/users/detail.html', context)
 

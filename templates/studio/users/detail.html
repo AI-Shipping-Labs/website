@@ -3,51 +3,83 @@
 {% block studio_title %}User: {{ detail_user.email }}{% endblock %}
 
 {% block studio_content %}
-<div class="mb-8">
+<div class="mb-6">
   <a href="{% url 'studio_user_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
     &larr; Back to users
   </a>
-  <h1 class="text-2xl font-semibold text-foreground mt-2 break-all" data-testid="user-detail-email">{{ detail_user.email }}</h1>
-  <p class="text-muted-foreground mt-1">User details and contact tags. Visible to staff only.</p>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+{% comment %}
+  CRM-style header: identity on the left, operator action area on the
+  right. Keeps the page anchor (h1 with detail_user.email) for tests
+  while bringing key actions (Login as, View as user, Django Admin)
+  onto the same row so staff don't have to scroll for them.
+{% endcomment %}
+<header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        data-testid="user-detail-header">
+  <div class="min-w-0">
+    <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Member</p>
+    <h1 class="text-2xl font-semibold text-foreground mt-1 break-all" data-testid="user-detail-email">{{ detail_user.email }}</h1>
+    {% if detail_user.first_name or detail_user.last_name %}
+    <p class="text-sm text-muted-foreground mt-1" data-testid="user-detail-name">{{ detail_user.first_name }} {{ detail_user.last_name }}</p>
+    {% endif %}
+    <p class="text-xs text-muted-foreground mt-2">Visible to staff only.</p>
+  </div>
 
-  <!-- Profile summary -->
-  <div class="bg-card border border-border rounded-lg p-6">
+  <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="user-detail-actions">
+    <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="user-detail-impersonate"
+              title="Impersonate this user (your admin session is preserved)"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Login as user
+      </button>
+    </form>
+    <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="user-detail-view-as"
+              title="See the site as this user via impersonation"
+              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+        View as user
+      </button>
+    </form>
+    <a href="{{ django_admin_url }}"
+       data-testid="user-detail-django-admin"
+       title="Open Django Admin for destructive or admin-only edits"
+       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+      Django Admin
+    </a>
+  </div>
+</header>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mb-8">
+
+  <!-- Profile / contact context -->
+  <section class="bg-card border border-border rounded-lg p-6" data-testid="user-detail-profile-section">
     <h2 class="text-lg font-semibold text-foreground mb-4">Profile</h2>
     <dl class="space-y-3 text-sm">
       <div class="flex justify-between gap-4">
         <dt class="text-muted-foreground">Email</dt>
         <dd class="text-foreground font-mono break-all">{{ detail_user.email }}</dd>
       </div>
+      {% if detail_user.first_name or detail_user.last_name %}
       <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Tier</dt>
-        <dd class="text-foreground" data-testid="user-detail-tier">
-          {{ tier_name }}
-          {% if has_override %}
-          <span class="text-xs text-muted-foreground">(override active)</span>
-          {% endif %}
-        </dd>
+        <dt class="text-muted-foreground">Name</dt>
+        <dd class="text-foreground">{{ detail_user.first_name }} {{ detail_user.last_name }}</dd>
       </div>
+      {% endif %}
       <div class="flex justify-between gap-4">
         <dt class="text-muted-foreground">Joined</dt>
         <dd class="text-foreground">{{ detail_user.date_joined|date:"M d, Y" }}</dd>
       </div>
+      {% if detail_user.last_login %}
       <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Subscribed</dt>
-        <dd>
-          {% if is_subscribed %}
-          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Yes</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">No</span>
-          {% endif %}
-        </dd>
+        <dt class="text-muted-foreground">Last login</dt>
+        <dd class="text-foreground">{{ detail_user.last_login|date:"M d, Y" }}</dd>
       </div>
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Status</dt>
-        <dd class="text-foreground">{{ status }}</dd>
-      </div>
+      {% endif %}
       {% if detail_user.stripe_customer_id %}
       <div class="flex justify-between gap-4">
         <dt class="text-muted-foreground">Stripe</dt>
@@ -65,58 +97,132 @@
       </button>
     </form>
     {% endif %}
-  </div>
+  </section>
 
-  <!-- Tags -->
-  <div class="bg-card border border-border rounded-lg p-6" data-testid="user-tags-section">
-    <h2 class="text-lg font-semibold text-foreground mb-4">Tags</h2>
-
-    <div class="mb-4">
-      {% if tags %}
-      <div class="flex flex-wrap gap-2" data-testid="user-tags-chips">
-        {% for tag in tags %}
-        <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-accent/20 text-accent-foreground border border-accent/40" data-testid="user-tag-chip" data-tag="{{ tag }}">
-          {{ tag }}
-          <form method="post" action="{% url 'studio_user_tag_remove' detail_user.pk %}" class="inline">
-            {% csrf_token %}
-            <input type="hidden" name="tag" value="{{ tag }}">
-            <button type="submit"
-                    class="text-muted-foreground hover:text-foreground"
-                    aria-label="Remove tag {{ tag }}"
-                    data-testid="user-tag-remove">x</button>
-          </form>
-        </span>
-        {% endfor %}
+  <!-- Membership / community status -->
+  <section class="bg-card border border-border rounded-lg p-6" data-testid="user-detail-membership-section">
+    <h2 class="text-lg font-semibold text-foreground mb-4">Membership &amp; community</h2>
+    <dl class="space-y-3 text-sm">
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Tier</dt>
+        <dd class="text-foreground" data-testid="user-detail-tier">
+          {{ tier_name }}
+          {% if has_override %}
+          <span class="text-xs text-muted-foreground">(override active)</span>
+          {% endif %}
+        </dd>
       </div>
-      {% else %}
-      <p class="text-sm text-muted-foreground" data-testid="user-tags-empty">No tags yet. Add one below.</p>
-      {% endif %}
-    </div>
-
-    <form method="post" action="{% url 'studio_user_tag_add' detail_user.pk %}" class="flex flex-wrap items-center gap-2" data-testid="user-tag-add-form">
-      {% csrf_token %}
-      <input type="text"
-             name="tag"
-             list="known-contact-tags"
-             placeholder="Add a tag..."
-             autocomplete="off"
-             data-testid="user-tag-input"
-             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
-      <datalist id="known-contact-tags">
-        {% for tag in known_tags %}
-        <option value="{{ tag }}"></option>
-        {% endfor %}
-      </datalist>
-      <button type="submit"
-              data-testid="user-tag-add-submit"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Add tag
-      </button>
-    </form>
-    <p class="text-xs text-muted-foreground mt-2">
-      Tags are normalized to lowercase and hyphenated. They are visible to staff only and never rendered on public pages.
-    </p>
-  </div>
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Status</dt>
+        <dd class="text-foreground">{{ status }}</dd>
+      </div>
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Newsletter</dt>
+        <dd>
+          {% if is_subscribed %}
+          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Subscribed</span>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Unsubscribed</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="flex justify-between gap-4">
+        <dt class="text-muted-foreground">Slack</dt>
+        <dd>
+          {% if slack_status == 'Member' %}
+          <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300">Member</span>
+          {% elif slack_status == 'Not in Slack' %}
+          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Not in Slack</span>
+          {% else %}
+          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Never checked</span>
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+  </section>
 </div>
+
+<!-- Tags -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-tags-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Tags</h2>
+
+  <div class="mb-4">
+    {% if tags %}
+    <div class="flex flex-wrap items-center gap-2" data-testid="user-tags-chips">
+      {% for tag in tags %}
+      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-accent/20 text-accent-foreground border border-accent/40" data-testid="user-tag-chip" data-tag="{{ tag }}">
+        {{ tag }}
+        <form method="post" action="{% url 'studio_user_tag_remove' detail_user.pk %}" class="inline">
+          {% csrf_token %}
+          <input type="hidden" name="tag" value="{{ tag }}">
+          <button type="submit"
+                  class="text-muted-foreground hover:text-foreground"
+                  aria-label="Remove tag {{ tag }}"
+                  data-testid="user-tag-remove">x</button>
+        </form>
+      </span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-muted-foreground" data-testid="user-tags-empty">No tags yet. Add one below.</p>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{% url 'studio_user_tag_add' detail_user.pk %}" class="flex flex-wrap items-center gap-2" data-testid="user-tag-add-form">
+    {% csrf_token %}
+    <input type="text"
+           name="tag"
+           list="known-contact-tags"
+           placeholder="Add a tag..."
+           autocomplete="off"
+           data-testid="user-tag-input"
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+    <datalist id="known-contact-tags">
+      {% for tag in known_tags %}
+      <option value="{{ tag }}"></option>
+      {% endfor %}
+    </datalist>
+    <button type="submit"
+            data-testid="user-tag-add-submit"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Add tag
+    </button>
+  </form>
+  <p class="text-xs text-muted-foreground mt-2">
+    Tags are normalized to lowercase and hyphenated. They are visible to staff only and never rendered on public pages.
+  </p>
+</section>
+
+<!-- Sprint / plan context -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-plans-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Sprints &amp; plans</h2>
+  {% if member_plans %}
+  <ul class="divide-y divide-border" data-testid="user-detail-plans-list">
+    {% for member_plan in member_plans %}
+    <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="user-detail-plan-item">
+      <div class="min-w-0">
+        <a href="{% url 'studio_plan_detail' plan_id=member_plan.pk %}"
+           data-testid="user-detail-plan-link"
+           class="text-sm font-medium text-accent hover:underline">{{ member_plan.sprint.name }}</a>
+        <p class="text-xs text-muted-foreground">
+          Status: {{ member_plan.get_status_display }}
+          {% if member_plan.shared_at %}&middot; Shared {{ member_plan.shared_at|date:"Y-m-d" }}{% endif %}
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <a href="{% url 'studio_sprint_detail' sprint_id=member_plan.sprint.pk %}"
+           class="text-xs text-muted-foreground hover:text-foreground hover:underline">Sprint</a>
+        <a href="{% url 'studio_plan_edit' plan_id=member_plan.pk %}"
+           class="text-xs text-muted-foreground hover:text-foreground hover:underline">Edit plan</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="user-detail-plans-empty">No sprints or plans yet.</p>
+  {% endif %}
+</section>
+
 {% include "studio/users/_member_notes.html" %}
 {% endblock %}

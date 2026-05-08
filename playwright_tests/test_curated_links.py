@@ -30,6 +30,8 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
 
+SECTION_HEADING_SELECTOR = "h2.text-xl.font-semibold.text-foreground"
+
 
 def _create_curated_link(
     title,
@@ -86,23 +88,24 @@ class TestScenario1VisitorBrowsesByCategory:
     """Visitor browses curated links organized by category."""
 
     def test_links_grouped_under_category_headers(self, django_server, page):
-        """Two published curated links in different categories appear under
-        their respective category headers with descriptive subtitles."""
+        """Published curated links in the new categories appear under
+        their respective section headers with descriptive subtitles
+        (issue #524)."""
         _clear_curated_links()
         _create_curated_link(
-            title="FastAPI Toolkit",
-            description="A toolkit for building FastAPI applications.",
-            url="https://github.com/example/fastapi-toolkit",
-            category="tools",
-            tags=["python", "api"],
+            title="Weekend Agent Workshop",
+            description="Build an LLM agent in a weekend.",
+            url="https://example.com/weekend-agent",
+            category="workshops",
+            tags=["agents"],
             sort_order=1,
         )
         _create_curated_link(
-            title="LLaMA Hub",
-            description="A hub for LLaMA models and fine-tuning resources.",
-            url="https://github.com/example/llama-hub",
-            category="models",
-            tags=["llm", "models"],
+            title="MLOps Foundations",
+            description="A course on MLOps foundations.",
+            url="https://example.com/mlops-course",
+            category="courses",
+            tags=["mlops"],
             sort_order=1,
         )
 
@@ -112,35 +115,28 @@ class TestScenario1VisitorBrowsesByCategory:
         )
         body = page.content()
 
-        # Page heading (& is HTML-encoded as &amp; in raw HTML)
+        # Page heading uses the new copy (issue #524)
         heading = page.locator("h1")
-        assert "Tools, Models & Courses" in heading.inner_text()
+        assert "Workshops, Courses & More" in heading.inner_text()
 
         # Both links visible
-        assert "FastAPI Toolkit" in body
-        assert "LLaMA Hub" in body
+        assert "Weekend Agent Workshop" in body
+        assert "MLOps Foundations" in body
 
-        # Category headers present
-        assert "Tools" in body
-        assert "Models" in body
-
-        # FastAPI Toolkit appears under "Tools" header
-        # LLaMA Hub appears under "Models" header
-        tools_pos = body.index(">Tools<")
-        models_pos = body.index(">Models<")
-        fastapi_pos = body.index("FastAPI Toolkit")
-        llama_pos = body.index("LLaMA Hub")
-
-        # FastAPI Toolkit comes after Tools header
-        assert fastapi_pos > tools_pos
-        # LLaMA Hub comes after Models header
-        assert llama_pos > models_pos
-        # Tools section comes before Models section
-        assert tools_pos < models_pos
+        # Workshops section appears before Courses section.
+        # Use the section-heading selector so we don't match the
+        # site nav, which lists "Courses" before "Workshops".
+        headings = page.locator(SECTION_HEADING_SELECTOR)
+        rendered = [
+            headings.nth(i).inner_text()
+            for i in range(headings.count())
+        ]
+        # Only Workshops and Courses categories are seeded here.
+        assert rendered == ["Workshops", "Courses"]
 
         # Category descriptions (subtitles) present
-        assert "GitHub repos, CLIs, and dev tools" in body
-        assert "Model hubs, runtimes, and inference" in body
+        assert "Hands-on workshop materials and tutorials" in body
+        assert "Courses and learning tracks" in body
 # ---------------------------------------------------------------
 # Scenario 2: Visitor clicks an open link and it opens in a new tab
 # ---------------------------------------------------------------

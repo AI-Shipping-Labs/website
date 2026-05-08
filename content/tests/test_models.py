@@ -187,8 +187,15 @@ class CuratedLinkModelTest(TestCase):
         self.assertEqual(self.link.category_icon_name, 'wrench')
         self.link.category = 'models'
         self.assertEqual(self.link.category_icon_name, 'cpu')
+        # Issue #524: `courses` icon changed from `graduation-cap` to
+        # `book-open` so it does not collide with the new `workshops`
+        # category which now claims `graduation-cap`.
         self.link.category = 'courses'
+        self.assertEqual(self.link.category_icon_name, 'book-open')
+        self.link.category = 'workshops'
         self.assertEqual(self.link.category_icon_name, 'graduation-cap')
+        self.link.category = 'articles'
+        self.assertEqual(self.link.category_icon_name, 'file-text')
         self.link.category = 'other'
         self.assertEqual(self.link.category_icon_name, 'folder-open')
 

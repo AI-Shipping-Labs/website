@@ -291,19 +291,35 @@ def collection_list(request):
             ),
         })
 
-    # Map category keys to icon names (mirrors CuratedLink.category_icon_name)
+    # Map visible section keys to icon names. Keys here drive both the
+    # rendered section order and the badge icon shown on each card. The
+    # legacy `tools` and `models` categories are intentionally absent —
+    # rows with those categories fold into `other` (issue #524).
     category_icons = {
-        'tools': 'wrench',
-        'models': 'cpu',
-        'courses': 'graduation-cap',
+        'workshops': 'graduation-cap',
+        'courses': 'book-open',
+        'articles': 'file-text',
         'other': 'folder-open',
     }
 
-    # Group by category, preserving the canonical category order
-    category_order = ['tools', 'models', 'courses', 'other']
+    # Group by display category, preserving the canonical visible order.
+    # Existing rows with category in {'tools', 'models'} render under the
+    # `other` section without mutating the stored value (issue #524).
+    category_order = ['workshops', 'courses', 'articles', 'other']
+    legacy_other_categories = {'tools', 'models'}
     grouped = []
     for cat_key in category_order:
-        cat_links = [a for a in annotated_links if a['link'].category == cat_key]
+        if cat_key == 'other':
+            cat_links = [
+                a for a in annotated_links
+                if a['link'].category == 'other'
+                or a['link'].category in legacy_other_categories
+            ]
+        else:
+            cat_links = [
+                a for a in annotated_links
+                if a['link'].category == cat_key
+            ]
         if cat_links:
             grouped.append({
                 'key': cat_key,

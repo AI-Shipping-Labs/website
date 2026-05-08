@@ -31,10 +31,11 @@ class PricingMobileResponsiveTest(TestCase):
         self.assertEqual(content.count("p-5 sm:p-8"), 4)
 
     def test_billing_toggle_has_adequate_tap_target(self):
-        """Billing toggle button should have min 44px tap target."""
+        """Billing toggle should use the shared wrapper for a 44px tap area."""
         content = self._get_pricing_content()
-        self.assertIn("min-w-[44px]", content)
-        self.assertIn("min-h-[44px]", content)
+        toggle_pos = content.index('id="billing-toggle"')
+        preceding = content[max(0, toggle_pos - 200):toggle_pos]
+        self.assertIn("touch-target-toggle", preceding)
 
     def test_cta_buttons_have_min_height(self):
         """CTA buttons should have min-h-[44px] for adequate tap targets."""
@@ -42,7 +43,7 @@ class PricingMobileResponsiveTest(TestCase):
         # There should be at least 4 CTA elements with min-h-[44px]
         # (one per tier card: Subscribe + 3 Join buttons)
         cta_min_height_count = content.count("min-h-[44px]")
-        # billing toggle (1) + dismiss button (1) + 4 CTA buttons = 6
+        # dismiss button (1) + 4 CTA buttons = 5
         self.assertGreaterEqual(cta_min_height_count, 5)
 
     def test_cta_buttons_have_responsive_vertical_padding(self):
@@ -97,7 +98,19 @@ class PricingMobileResponsiveTest(TestCase):
         content = self._get_pricing_content()
         self.assertIn("shrink-0 text-accent", content)
 
-    def test_billing_toggle_has_larger_mobile_size(self):
-        """Billing toggle should be larger on mobile (h-8 w-14) than desktop (sm:h-6 sm:w-11)."""
+    def test_billing_toggle_uses_homepage_size(self):
+        """Billing toggle should use the same compact dimensions as homepage."""
         content = self._get_pricing_content()
-        self.assertIn("h-8 w-14 sm:h-6 sm:w-11", content)
+        self.assertIn("h-6 w-11", content)
+        self.assertNotIn("h-8 w-14 sm:h-6 sm:w-11", content)
+
+    def test_billing_toggle_defaults_to_annual_accessible_state(self):
+        """Billing toggle should render as pressed with annual label emphasized."""
+        content = self._get_pricing_content()
+        self.assertIn('aria-pressed="true"', content)
+        self.assertIn('id="monthly-label">Monthly</span>', content)
+        self.assertIn(
+            'class="whitespace-nowrap text-sm text-foreground" id="annual-label"',
+            content,
+        )
+        self.assertIn('translate-x-5" id="billing-toggle-dot"', content)

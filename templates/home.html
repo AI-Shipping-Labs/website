@@ -113,15 +113,16 @@
         </p>
 
         <div class="mt-4 flex items-center justify-center gap-4 sm:mt-8">
-          <span class="text-sm text-muted-foreground" id="monthly-label">Monthly</span>
+          <span class="whitespace-nowrap text-sm text-muted-foreground" id="monthly-label">Monthly</span>
           <div class="touch-target-toggle">
             <button type="button" id="billing-toggle"
-                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors"
-                    aria-label="Toggle annual pricing">
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-accent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    aria-label="Toggle annual pricing"
+                    aria-pressed="true">
               <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-accent-foreground shadow ring-0 transition-transform translate-x-5" id="billing-toggle-dot"></span>
             </button>
           </div>
-          <span class="text-sm text-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
+          <span class="whitespace-nowrap text-sm text-foreground" id="annual-label">Annual <span class="text-accent">(Save ~17%)</span></span>
         </div>
       </div>
 
@@ -535,15 +536,17 @@ document.getElementById('billing-toggle').addEventListener('click', function() {
     dot.classList.remove('translate-x-0', 'bg-foreground');
     toggleBtn.classList.add('bg-accent');
     toggleBtn.classList.remove('bg-secondary');
-    monthlyLabel.className = 'text-sm text-muted-foreground';
-    annualLabel.className = 'text-sm text-foreground';
+    toggleBtn.setAttribute('aria-pressed', 'true');
+    monthlyLabel.className = 'whitespace-nowrap text-sm text-muted-foreground';
+    annualLabel.className = 'whitespace-nowrap text-sm text-foreground';
   } else {
     dot.classList.remove('translate-x-5', 'bg-accent-foreground');
     dot.classList.add('translate-x-0', 'bg-foreground');
     toggleBtn.classList.remove('bg-accent');
     toggleBtn.classList.add('bg-secondary');
-    monthlyLabel.className = 'text-sm text-foreground';
-    annualLabel.className = 'text-sm text-muted-foreground';
+    toggleBtn.setAttribute('aria-pressed', 'false');
+    monthlyLabel.className = 'whitespace-nowrap text-sm text-foreground';
+    annualLabel.className = 'whitespace-nowrap text-sm text-muted-foreground';
   }
 
   // Update prices

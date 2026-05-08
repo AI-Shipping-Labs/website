@@ -35,6 +35,25 @@
             <span class="text-foreground truncate">{{ page.title }}</span>
           </div>
 
+          {% if is_gated %}
+          <!-- Back-to-workshop link gives gated visitors a way out without
+               having to dig into the breadcrumb. -->
+          <a href="{{ workshop.get_absolute_url }}" class="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="teaser-back-link">
+            <i data-lucide="arrow-left" class="h-4 w-4"></i>
+            Back to {{ workshop.title }}
+          </a>
+
+          <!-- Free badge advertises the no-cost path on registered-walled
+               workshops. Mirrors the workshop landing card so the teaser
+               page is consistent with the catalog and detail surfaces. -->
+          {% if workshop.pages_required_level < 10 %}
+          <span class="mb-3 inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="page-free-badge">
+            <i data-lucide="badge-check" class="h-3 w-3"></i>
+            Free
+          </span>
+          {% endif %}
+          {% endif %}
+
           {% if show_watch_bar %}
           <a href="{{ watch_bar_url }}"
              class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/20"
@@ -51,10 +70,53 @@
           <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl mb-8" data-testid="page-title">{{ page.title }}</h1>
 
           {% if is_gated %}
-          <!-- Pages-level paywall. Title and breadcrumb are still visible
-               so the page is SEO-indexable and the visitor knows what
-               they would unlock. -->
-          {% include "content/_gated_access_card.html" with gated_card_testid="page-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description="The page title and workshop navigation are visible now; membership unlocks the tutorial body." required_tier_name=pages_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="page-upgrade-cta" %}
+          <!-- Pages-level paywall. Title, breadcrumb, and back link stay
+               visible so the page is SEO-indexable and the visitor knows
+               what they would unlock. Issue #515 ports the course-unit
+               teaser-with-fade pattern from #248: a locked-video thumbnail
+               (when the page anchors a recording section), the first ~150
+               words of body with a fade-out gradient, and a pinned
+               sign-in / upgrade card below the fade. -->
+          {% if gated_reason == "unverified_email" %}
+          {% include "content/_verify_email_required.html" %}
+          {% elif teaser_body_html %}
+          {% if has_video %}
+          <div class="mb-8" data-testid="teaser-video-thumbnail">
+            <div class="relative aspect-video rounded-lg overflow-hidden border border-border bg-muted">
+              {% if video_thumbnail_url %}
+              <img src="{{ video_thumbnail_url }}"
+                   alt="Video preview for {{ page.title }}"
+                   class="w-full h-full object-cover"
+                   loading="lazy"
+                   referrerpolicy="no-referrer">
+              {% endif %}
+              <!-- Disabled play button overlay — visually conveys "video here, locked" -->
+              <div class="absolute inset-0 flex items-center justify-center bg-background/40">
+                <div class="flex h-16 w-16 items-center justify-center rounded-full border border-white/30 bg-background/70 backdrop-blur-sm" aria-hidden="true">
+                  <i data-lucide="lock" class="h-7 w-7 text-foreground"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="relative mb-8" data-testid="teaser-body-wrapper">
+            <div class="prose teaser-body" data-testid="teaser-body">
+              {{ teaser_body_html|safe }}
+            </div>
+            <!-- Fade-out gradient over the bottom of the teaser body. Sits
+                 above the prose but below the CTA so the eye is led down. -->
+            <div class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-background"></div>
+          </div>
+
+          <div class="mt-10">
+            {% include "content/_gated_access_card.html" %}
+          </div>
+          {% else %}
+          <!-- Empty body fallback: render the bare paywall card so we don't
+               ship an empty fade-out / dangling teaser wrapper. -->
+          {% include "content/_gated_access_card.html" %}
+          {% endif %}
           {% else %}
           <!-- Page body -->
           {% if page.body_html %}

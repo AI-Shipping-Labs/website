@@ -1043,8 +1043,14 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
         main_html = main_element.inner_html()
         assert "<iframe" not in main_html.lower()
 
-        # The video URL should not appear in the main content.
-        assert "secret123" not in main_html
+        # The recording's video URL must not be embedded as a player.
+        # Issue #515 ports the course-unit teaser pattern: the locked
+        # thumbnail (img.youtube.com/vi/<id>/hqdefault.jpg) IS shown so
+        # the visitor sees what they'd unlock — that's a public preview
+        # image, not the recording. Assert the bare watch URL doesn't
+        # leak (would indicate the embed JSON / iframe path).
+        assert "watch?v=secret123" not in main_html
+        assert 'data-testid="video-player"' not in main_html
 
         # Recording paywall CTA present.
         paywall = page.locator('[data-testid="video-paywall"]')

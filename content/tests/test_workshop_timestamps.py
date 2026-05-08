@@ -306,9 +306,15 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
 
     def test_anon_no_bar_even_if_video_start_set(self):
         # Anonymous = level 0, fails both gates => paywall + no bar.
+        # Issue #515: gated tutorial pages return 403.
         response = self.client.get('/workshops/wb/tutorial/setup')
-        self.assertContains(response, 'data-testid="page-paywall"')
-        self.assertNotContains(response, 'data-testid="watch-this-section"')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="page-paywall"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="watch-this-section"', status_code=403,
+        )
 
 
 # --- workshop_video ?t= and inverse-links tests -----------------------
@@ -394,11 +400,19 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
     def test_paywalled_user_does_not_get_inverse_links(self):
         # Below the recording gate the paywall renders and the inverse
         # links section is absent (no timestamps panel either).
+        # Issue #515: gated workshop video page returns 403.
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/vl/video?t=16:00')
-        self.assertContains(response, 'data-testid="video-paywall"')
-        self.assertNotContains(response, 'data-testid="video-chapters"')
-        self.assertNotContains(response, 'start: 960')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="video-paywall"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'data-testid="video-chapters"', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'start: 960', status_code=403,
+        )
 
 
 class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):

@@ -115,10 +115,10 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         # Q&A include is in the {% else %} branch and must not render.
         self.client.force_login(self.free_user)
         response = self.client.get('/workshops/paid-ws/tutorial/intro')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="page-paywall"')
-        self.assertNotContains(response, 'id="qa-section"')
-        self.assertNotContains(response, 'Questions &amp; Answers')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, 'data-testid="page-paywall"', status_code=403)
+        self.assertNotContains(response, 'id="qa-section"', status_code=403)
+        self.assertNotContains(response, 'Questions &amp; Answers', status_code=403)
 
     def test_qa_script_loaded_on_workshop_page(self):
         # The script include lives in {% block extra_scripts %} on the

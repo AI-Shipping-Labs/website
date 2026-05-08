@@ -375,12 +375,17 @@ class TestScenario3FreeUserSeesUpgradePath:
         # Title visible
         assert "Premium Workshop on Fine-Tuning" in body
 
-        # No video player or YouTube iframe shown
+        # No video player or YouTube iframe shown — only the locked
+        # teaser thumbnail (issue #515) is allowed.
         main_element = page.locator("main")
         main_html = main_element.inner_html()
         assert 'data-source="youtube"' not in main_html
         # No iframe embed for the gated recording.
-        assert "ft999" not in main_html
+        assert "youtube.com/embed" not in main_html
+        # The locked-video teaser thumbnail IS rendered (per #515 spec:
+        # "Show a locked-video thumbnail (YouTube hqdefault.jpg from
+        # event.recording_url)").
+        assert "img.youtube.com/vi/ft999" in main_html
 
         # Workshop video paywall card and CTA visible.
         paywall = page.locator('[data-testid="video-paywall"]')

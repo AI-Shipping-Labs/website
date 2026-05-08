@@ -18,21 +18,63 @@ The catalog always shows every published workshop (with a tier badge) so
 users see what they would unlock by upgrading.
 """
 
+from urllib.parse import urlencode
+
 from django.http import Http404, HttpResponsePermanentRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from content.access import get_required_tier_name, get_user_level
+from content.access import (
+    LEVEL_BASIC,
+    LEVEL_OPEN,
+    LEVEL_REGISTERED,
+    build_verify_email_context,
+    get_required_tier_name,
+    get_user_level,
+)
 from content.models import Workshop, WorkshopPage
 from content.services import completion as completion_service
 from content.templatetags.video_utils import (
     append_query_param,
     detect_video_source,
     format_timestamp,
+    get_video_thumbnail_url,
     parse_video_timestamp,
 )
+from content.utils.teaser import truncate_to_words
 from content.views.pages import _filter_by_tags, _get_selected_tags
+
+# Approximate word budget for the locked-page teaser body. Mirrors the
+# constant used by ``content.views.courses.TEASER_WORD_LIMIT`` so the
+# same fade-out pattern shows on workshop tutorial / video pages.
+TEASER_WORD_LIMIT = 150
+
+
+def _gated_reason_for_level(user, required_level):
+    """Return the gated reason for a workshop gate at ``required_level``.
+
+    Mirrors :func:`content.access.get_gated_reason` but uses the bare
+    level field instead of an instance attribute. Empty string means
+    "user has access". The reasons match the values course units emit so
+    template branches stay aligned.
+    """
+    # Anonymous on a registration wall: registered-required CTA.
+    if (
+        required_level == LEVEL_REGISTERED
+        and (user is None or not user.is_authenticated)
+    ):
+        return 'authentication_required'
+    # Free authenticated user blocked by email verification.
+    if (
+        required_level in (LEVEL_OPEN, LEVEL_REGISTERED)
+        and user is not None
+        and user.is_authenticated
+        and not getattr(user, 'email_verified', False)
+        and get_user_level(user) < LEVEL_BASIC
+    ):
+        return 'unverified_email'
+    return 'insufficient_tier'
 
 
 def workshops_list(request):
@@ -282,14 +324,149 @@ def workshop_video(request, slug):
         'video_source_type': video_source_type,
         'recording_embed_url_with_start': recording_embed_url_with_start,
     })
-    return render(request, 'content/workshop_video.html', context)
+
+    status = 200
+    # Build teaser context only when the recording gate trips and the
+    # landing gate didn't (a landing-failed visitor sees a wholesale
+    # paywall, not a teaser). Mirrors the workshop_page_detail logic.
+    is_recording_gated = (
+        context['can_access_landing'] and not context['can_access_recording']
+    )
+    if is_recording_gated:
+        gated_extras, gated_status = _build_video_gated_context(
+            request, workshop, event,
+        )
+        context.update(gated_extras)
+        status = gated_status
+
+    return render(
+        request, 'content/workshop_video.html', context, status=status,
+    )
+
+
+def _build_video_gated_context(request, workshop, event):
+    """Build the teaser / sign-in context for a recording-gated workshop.
+
+    Returns ``(context_extras, http_status)``. Status is 200 for the
+    unverified-email path and 403 otherwise.
+    """
+    user = request.user
+    video_url = f'{workshop.get_absolute_url()}/video'
+    gated_reason = _gated_reason_for_level(
+        user, workshop.recording_required_level,
+    )
+
+    if gated_reason == 'unverified_email':
+        return (
+            {
+                'gated_reason': 'unverified_email',
+                **build_verify_email_context(user),
+            },
+            200,
+        )
+
+    # Locked-video thumbnail. Skip when there's no recording yet — the
+    # template falls back to the existing "Recording not available yet"
+    # card so we don't tease something that doesn't exist.
+    has_video = False
+    video_thumbnail_url = None
+    if event and event.recording_url:
+        thumb = get_video_thumbnail_url(event.recording_url)
+        if thumb:
+            has_video = True
+            video_thumbnail_url = thumb
+
+    # Description-driven teaser body (workshop has no separate longer
+    # body; the description is the source). Empty descriptions fall
+    # through to the bare paywall card.
+    teaser_body_html = None
+    if workshop.description_html:
+        teaser_body_html = truncate_to_words(
+            workshop.description_html, TEASER_WORD_LIMIT,
+        )
+
+    # First three timestamp labels as a teaser list (no clickable links
+    # — teaser only). The legacy timestamps may be ``{time, label}`` or
+    # ``{time_seconds, label}``; tolerate both shapes.
+    teaser_timestamps = []
+    if event and event.timestamps:
+        for ts in event.timestamps[:3]:
+            if not isinstance(ts, dict):
+                continue
+            label = ts.get('label') or ts.get('title') or ''
+            if label:
+                teaser_timestamps.append(label)
+
+    recording_tier_name = get_required_tier_name(
+        workshop.recording_required_level,
+    )
+    next_qs = urlencode({'next': video_url})
+
+    if gated_reason == 'authentication_required':
+        gated_heading = 'Sign in to watch this recording'
+        gated_description = (
+            'This recording is free with a free account. Sign in or '
+            'create one in seconds.'
+        )
+        gated_cta_url = f'/accounts/login/?{next_qs}'
+        gated_cta_label = 'Sign In'
+        signup_cta_url = f'/accounts/signup/?{next_qs}'
+        signup_cta_label = 'Create a free account'
+        required_tier_name = ''
+        current_user_state = ''
+    else:
+        gated_heading = (
+            f'Upgrade to {recording_tier_name} to watch the recording'
+        )
+        gated_description = (
+            'Unlock the full recording, timestamps, and downloadable '
+            'materials with a membership.'
+        )
+        gated_cta_url = '/pricing'
+        gated_cta_label = 'View Pricing'
+        required_tier_name = recording_tier_name
+        current_user_state = ''
+        if user.is_authenticated:
+            current_user_state = (
+                f'Current access: {get_required_tier_name(get_user_level(user))} member'
+            )
+        signup_cta_url = ''
+        signup_cta_label = ''
+        if not user.is_authenticated:
+            signup_cta_url = f'/accounts/signup/?{next_qs}'
+            signup_cta_label = 'Create a free account'
+
+    return (
+        {
+            'gated_reason': gated_reason,
+            'teaser_body_html': teaser_body_html,
+            'video_thumbnail_url': video_thumbnail_url,
+            'has_video': has_video,
+            'teaser_timestamps': teaser_timestamps,
+            'signup_cta_url': signup_cta_url,
+            'signup_cta_label': signup_cta_label,
+            'gated_card_testid': 'video-paywall',
+            'gated_icon': 'play',
+            'gated_heading': gated_heading,
+            'gated_description': gated_description,
+            'required_tier_name': required_tier_name,
+            'current_user_state': current_user_state,
+            'gated_cta_url': gated_cta_url,
+            'gated_cta_label': gated_cta_label,
+            'gated_cta_testid': 'video-upgrade-cta',
+        },
+        403,
+    )
 
 
 def workshop_page_detail(request, slug, page_slug):
     """Single tutorial page within a workshop, gated by pages level.
 
     Returns the page even when the user is below the gate so the page is
-    SEO-indexable; the body is replaced by an upgrade card.
+    SEO-indexable; the body is replaced by a teaser-with-fade preview
+    plus an upgrade or sign-in card. Mirrors the course-unit teaser
+    layout from issue #248 so the gating UX stays consistent across
+    content types.
     """
     workshop = _resolve_workshop(slug)
     pages = list(workshop.pages.all().order_by('sort_order'))
@@ -367,7 +544,126 @@ def workshop_page_detail(request, slug, page_slug):
         'bottom_prev_testid': 'page-prev-btn',
         'bottom_next_testid': 'page-next-btn',
     })
-    return render(request, 'content/workshop_page_detail.html', context)
+
+    status = 200
+    if is_gated:
+        gated_extras, gated_status = _build_page_gated_context(
+            request, workshop, page,
+        )
+        context.update(gated_extras)
+        status = gated_status
+
+    return render(
+        request, 'content/workshop_page_detail.html', context, status=status,
+    )
+
+
+def _build_page_gated_context(request, workshop, page):
+    """Build the teaser / sign-in / verify-email context for a gated page.
+
+    Mirrors the course-unit teaser pattern (issue #248): the template
+    expects ``teaser_body_html``, ``video_thumbnail_url``, ``has_video``,
+    ``signup_cta_url``, ``signup_cta_label``, ``gated_heading``,
+    ``gated_description``, ``gated_cta_url``, ``gated_cta_label``,
+    ``gated_card_testid``, ``gated_cta_testid``, ``gated_reason``.
+
+    Returns ``(context_extras, http_status)`` where the status is 200 for
+    the unverified-email branch (the user can resolve it without leaving
+    the page) and 403 otherwise.
+    """
+    user = request.user
+    page_url = page.get_absolute_url()
+    gated_reason = _gated_reason_for_level(user, workshop.pages_required_level)
+
+    if gated_reason == 'unverified_email':
+        return (
+            {
+                'gated_reason': 'unverified_email',
+                **build_verify_email_context(user),
+            },
+            200,
+        )
+
+    # Build teaser body (HTML-aware truncation). Empty body falls back
+    # to the bare paywall card so we never render an empty fade-out.
+    teaser_body_html = None
+    if page.body_html:
+        teaser_body_html = truncate_to_words(page.body_html, TEASER_WORD_LIMIT)
+
+    # Locked-video thumbnail (YouTube hqdefault) when the page anchors a
+    # section of the workshop recording. Loom is supported too via
+    # ``get_video_thumbnail_url``.
+    has_video = False
+    video_thumbnail_url = None
+    event = workshop.event
+    if page.video_start and event and event.recording_url:
+        thumb = get_video_thumbnail_url(event.recording_url)
+        if thumb:
+            has_video = True
+            video_thumbnail_url = thumb
+
+    pages_tier_name = get_required_tier_name(workshop.pages_required_level)
+    next_qs = urlencode({'next': page_url})
+
+    if gated_reason == 'authentication_required':
+        gated_heading = 'Sign in to keep reading this tutorial'
+        gated_description = (
+            'This tutorial is free with a free account. Sign in or create '
+            'one in seconds.'
+        )
+        gated_cta_url = f'/accounts/login/?{next_qs}'
+        gated_cta_label = 'Sign In'
+        signup_cta_url = f'/accounts/signup/?{next_qs}'
+        signup_cta_label = 'Create a free account'
+        required_tier_name = ''
+        current_user_state = ''
+    else:
+        # Insufficient-tier path: anonymous on a paid workshop or signed-in
+        # user below ``pages_required_level``.
+        gated_heading = (
+            f'Upgrade to {pages_tier_name} to access this workshop'
+        )
+        gated_description = (
+            'The page title and workshop navigation are visible now; '
+            'membership unlocks the tutorial body.'
+        )
+        gated_cta_url = '/pricing'
+        gated_cta_label = 'View Pricing'
+        required_tier_name = pages_tier_name
+        current_user_state = ''
+        if user.is_authenticated:
+            current_user_state = (
+                f'Current access: {get_required_tier_name(get_user_level(user))} member'
+            )
+        signup_cta_url = ''
+        signup_cta_label = ''
+        if not user.is_authenticated:
+            # Anonymous on a paid-tier wall: surface a "create a free
+            # account" companion to the upgrade button so the visitor
+            # has a no-cost path to start the funnel.
+            signup_cta_url = f'/accounts/signup/?{next_qs}'
+            signup_cta_label = 'Create a free account'
+
+    return (
+        {
+            'gated_reason': gated_reason,
+            'teaser_body_html': teaser_body_html,
+            'video_thumbnail_url': video_thumbnail_url,
+            'has_video': has_video,
+            'signup_cta_url': signup_cta_url,
+            'signup_cta_label': signup_cta_label,
+            'gated_card_testid': 'page-paywall',
+            'gated_icon': 'book-open',
+            'gated_heading': gated_heading,
+            'gated_description': gated_description,
+            'required_tier_name': required_tier_name,
+            'current_user_state': current_user_state,
+            'gated_cta_url': gated_cta_url,
+            'gated_cta_label': gated_cta_label,
+            'gated_cta_testid': 'page-upgrade-cta',
+        },
+        403,
+    )
 
 
 def legacy_workshop_page_redirect(request, slug, page_slug):

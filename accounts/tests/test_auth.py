@@ -75,6 +75,71 @@ class LoginViewTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/")
 
+    def test_login_page_links_to_password_reset_request_page(self):
+        response = self.client.get("/accounts/login/")
+        content = response.content.decode()
+        link_start = content.index('id="forgot-password-link"')
+        forgot_link = content[max(0, link_start - 200):link_start + 200]
+
+        self.assertContains(response, 'id="forgot-password-link"')
+        self.assertContains(response, 'href="/accounts/password-reset-request"')
+        self.assertNotIn("?view=forgot", forgot_link)
+        self.assertNotIn("onclick=", forgot_link)
+
+
+@tag('core')
+class PasswordResetRequestViewTest(TestCase):
+    """Tests for the public password-reset request page."""
+
+    def test_anonymous_user_can_open_request_page(self):
+        response = self.client.get("/accounts/password-reset-request")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/password_reset_request.html")
+        self.assertContains(response, "Reset your password")
+        self.assertContains(
+            response,
+            "Enter your account email and we'll send you a reset link.",
+        )
+        self.assertContains(response, 'type="email"')
+        self.assertContains(response, 'id="password-reset-email"')
+        self.assertContains(response, 'name="email"')
+        self.assertContains(response, "text-base")
+        self.assertContains(response, "Send reset link")
+        self.assertContains(response, "Sending...")
+        self.assertContains(
+            response,
+            "If that email is on file, a reset link is on its way.",
+        )
+        self.assertContains(response, 'href="/accounts/login/"')
+        self.assertContains(response, "Back to sign in")
+
+    def test_request_page_uses_auth_card_padding(self):
+        response = self.client.get("/accounts/password-reset-request")
+        self.assertContains(response, "p-5 sm:p-8")
+
+    def test_request_page_posts_to_existing_api_with_csrf(self):
+        response = self.client.get("/accounts/password-reset-request")
+        content = response.content.decode()
+
+        self.assertIn("fetch('/api/password-reset-request'", content)
+        self.assertIn("'X-CSRFToken': window.authHelpers.getCsrfToken()", content)
+        self.assertIn("window.authHelpers.setPendingState", content)
+        self.assertIn("An error occurred. Please try again.", content)
+
+    def test_authenticated_user_redirects_to_account(self):
+        user = User.objects.create_user(email="reset-auth@example.com")
+        self.client.force_login(user)
+
+        response = self.client.get("/accounts/password-reset-request")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/account/")
+
+    def test_request_page_url_name(self):
+        url = reverse("account_password_reset_request")
+        self.assertEqual(url, "/accounts/password-reset-request")
+
 
 @tag('core')
 class SharedAuthTemplateTest(TestCase):

@@ -104,6 +104,14 @@ def register_view(request):
     return render(request, "accounts/register.html", context)
 
 
+@ensure_csrf_cookie
+def password_reset_request_view(request):
+    """Render the public password-reset request page."""
+    if request.user.is_authenticated:
+        return redirect("/account/")
+    return render(request, "accounts/password_reset_request.html")
+
+
 def signup_redirect_view(request):
     """Redirect legacy signup/register shortcuts while preserving ``next``."""
     return redirect(append_next("/accounts/register/", get_next_url(request, default="")))

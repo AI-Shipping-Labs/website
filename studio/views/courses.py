@@ -5,13 +5,14 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
-from content.models import Course, CourseAccess, Module, Unit
+from content.models import Course, CourseAccess, Enrollment, Module, Unit
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import (
@@ -89,6 +90,11 @@ def course_edit(request, course_id):
     modules = list(course.modules.prefetch_related('units').order_by('sort_order'))
     total_unit_count = sum(len(module.units.all()) for module in modules)
 
+    access_count = CourseAccess.objects.filter(course=course).count()
+    active_enrollment_count = Enrollment.objects.filter(
+        course=course, unenrolled_at__isnull=True,
+    ).count()
+
     return render(request, 'studio/courses/form.html', {
         'course': course,
         'modules': modules,
@@ -99,6 +105,8 @@ def course_edit(request, course_id):
         'notify_url': reverse('studio_course_notify', kwargs={'course_id': course.pk}),
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
         'create_stripe_product_url': reverse('studio_course_create_stripe_product', kwargs={'course_id': course.pk}),
+        'access_count': access_count,
+        'active_enrollment_count': active_enrollment_count,
     })
 
 
@@ -265,18 +273,31 @@ def course_access_list(request, course_id):
 @staff_required
 @require_POST
 def course_access_grant(request, course_id):
-    """Grant a user access to a course by email."""
+    """Grant a user access to a course.
+
+    Accepts either a ``user_id`` (selected via the autocomplete) or an
+    ``email`` (the keyboard-fast path). When both are provided, ``user_id``
+    wins so the autocomplete selection is authoritative.
+    """
     course = get_object_or_404(Course, pk=course_id)
+    user_id_raw = request.POST.get('user_id', '').strip()
     email = request.POST.get('email', '').strip()
 
-    if not email:
+    user = None
+    if user_id_raw:
+        try:
+            user = User.objects.get(pk=int(user_id_raw))
+        except (ValueError, User.DoesNotExist):
+            messages.error(request, 'Selected user no longer exists.')
+            return redirect('studio_course_access_list', course_id=course.pk)
+    elif email:
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            messages.error(request, f'No user found with email "{email}".')
+            return redirect('studio_course_access_list', course_id=course.pk)
+    else:
         messages.error(request, 'Please provide an email address.')
-        return redirect('studio_course_access_list', course_id=course.pk)
-
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        messages.error(request, f'No user found with email "{email}".')
         return redirect('studio_course_access_list', course_id=course.pk)
 
     # Check if the user already has access
@@ -284,7 +305,7 @@ def course_access_grant(request, course_id):
     if existing:
         messages.info(
             request,
-            f'{email} already has {existing.access_type} access to this course.',
+            f'{user.email} already has {existing.access_type} access to this course.',
         )
         return redirect('studio_course_access_list', course_id=course.pk)
 
@@ -294,7 +315,7 @@ def course_access_grant(request, course_id):
         access_type='granted',
         granted_by=request.user,
     )
-    messages.success(request, f'Access granted to {email}.')
+    messages.success(request, f'Access granted to {user.email}.')
     return redirect('studio_course_access_list', course_id=course.pk)
 
 
@@ -317,3 +338,34 @@ def course_access_revoke(request, course_id, access_id):
     access.delete()
     messages.success(request, f'Access revoked for {email}.')
     return redirect('studio_course_access_list', course_id=course.pk)
+
+
+@staff_required
+def course_user_search(request, course_id):
+    """Staff-only JSON endpoint that searches users for the access autocomplete.
+
+    Accepts a ``q`` query parameter. Searches by email substring (case-insensitive)
+    and exact numeric user ID. Returns at most 10 results with only the limited
+    identity fields needed for selection (``id``, ``email``, ``name``). The
+    course must exist (404 otherwise) so the URL can be tied to the access
+    management page even though the search itself is course-agnostic.
+    """
+    get_object_or_404(Course, pk=course_id)
+    query = request.GET.get('q', '').strip()
+    if not query:
+        return JsonResponse({'results': []})
+
+    qs = User.objects.filter(email__icontains=query)
+    if query.isdigit():
+        qs = User.objects.filter(Q(email__icontains=query) | Q(pk=int(query)))
+
+    qs = qs.order_by('email')[:10]
+    results = [
+        {
+            'id': u.pk,
+            'email': u.email,
+            'name': (u.get_full_name() or '').strip(),
+        }
+        for u in qs
+    ]
+    return JsonResponse({'results': results})

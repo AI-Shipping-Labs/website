@@ -15,20 +15,31 @@
   <p class="text-muted-foreground mt-1">Manage who is enrolled in "{{ course.title }}".</p>
 </div>
 
-{# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
+{% comment %}Messages render once at the top of the studio main content area via studio/base.html (issue #347).{% endcomment %}
 
 <!-- Manual enroll form -->
-<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
+<div class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">Enroll a user</h2>
-  <form method="post" action="{% url 'studio_course_enrollment_create' course_id=course.pk %}" autocomplete="off" class="flex items-end space-x-4">
+  <form method="post" action="{% url 'studio_course_enrollment_create' course_id=course.pk %}" autocomplete="off"
+        class="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4"
+        data-testid="enroll-form">
     {% csrf_token %}
-    <div class="flex-1">
-      <label class="block text-sm font-medium text-foreground mb-1" for="enroll-email">User email</label>
-      <input id="enroll-email" type="email" name="email" required placeholder="user@example.com"
+    <div class="flex-1 relative" data-testid="user-lookup">
+      <label class="block text-sm font-medium text-foreground mb-1" for="enroll-email">User email or ID</label>
+      <input id="enroll-email" type="text" name="email" required
+             placeholder="user@example.com or numeric ID"
              autocomplete="off"
+             data-testid="enroll-email-input"
+             data-search-url="{% url 'studio_course_user_search' course_id=course.pk %}"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <input type="hidden" name="user_id" id="enroll-user-id" value="" data-testid="enroll-user-id-input">
+      <ul id="enroll-suggestions"
+          data-testid="enroll-suggestions"
+          class="hidden absolute z-10 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto"></ul>
+      <p class="text-xs text-muted-foreground mt-1">Search by email fragment or paste a numeric user ID. Enter an exact email to enroll by typed email.</p>
     </div>
-    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <button type="submit"
+            class="bg-accent text-accent-foreground px-4 py-3 sm:py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]">
       Enroll user
     </button>
   </form>
@@ -49,54 +60,168 @@
   {% endif %}
 </form>
 
-<!-- Enrollments table -->
-<div class="bg-card border border-border rounded-lg overflow-x-auto">
-  <table class="w-full">
-    <thead class="bg-secondary">
-      <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unenrolled</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-border">
-      {% for enr in enrollments %}
-      <tr class="hover:bg-secondary/50 transition-colors" data-testid="enrollment-row">
-        <td class="px-6 py-4 text-sm text-foreground">{{ enr.user.email }}</td>
-        <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full
-            {% if enr.source == 'manual' %}bg-blue-500/20 text-blue-400
-            {% elif enr.source == 'auto_progress' %}bg-purple-500/20 text-purple-400
-            {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-            {{ enr.get_source_display }}
-          </span>
-        </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ enr.enrolled_at|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">
-          {% if enr.unenrolled_at %}{{ enr.unenrolled_at|date:"M d, Y H:i" }}{% else %}—{% endif %}
-        </td>
-        <td class="px-6 py-4 text-right">
-          {% if not enr.unenrolled_at %}
-          <form method="post" action="{% url 'studio_course_enrollment_unenroll' course_id=course.pk enrollment_id=enr.pk %}" class="inline"
-                onsubmit="return confirm('Unenroll {{ enr.user.email }} from {{ course.title }}?');">
-            {% csrf_token %}
-            <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline" data-testid="unenroll-row-btn">Unenroll</button>
-          </form>
-          {% else %}
-          <span class="text-xs text-muted-foreground">—</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">
-          No enrollments for this course yet.
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Enrollments: desktop table + mobile cards -->
+<div class="bg-card border border-border rounded-lg overflow-hidden" data-testid="enrollments-records">
+  <!-- Desktop / tablet table -->
+  <div class="hidden md:block">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Enrolled</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Unenrolled</th>
+          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for enr in enrollments %}
+        <tr class="hover:bg-secondary/50 transition-colors" data-testid="enrollment-row">
+          <td class="px-6 py-4 text-sm text-foreground">
+            <div class="font-medium">{{ enr.user.email }}</div>
+            <div class="text-xs text-muted-foreground">ID: {{ enr.user.pk }}</div>
+          </td>
+          <td class="px-6 py-4">
+            <span class="text-xs px-2 py-1 rounded-full
+              {% if enr.source == 'manual' %}bg-blue-500/20 text-blue-400
+              {% elif enr.source == 'auto_progress' %}bg-purple-500/20 text-purple-400
+              {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+              {{ enr.get_source_display }}
+            </span>
+          </td>
+          <td class="px-6 py-4 text-sm text-muted-foreground">{{ enr.enrolled_at|date:"M d, Y H:i" }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground">
+            {% if enr.unenrolled_at %}{{ enr.unenrolled_at|date:"M d, Y H:i" }}{% else %}-{% endif %}
+          </td>
+          <td class="px-6 py-4 text-right">
+            {% if not enr.unenrolled_at %}
+            <form method="post" action="{% url 'studio_course_enrollment_unenroll' course_id=course.pk enrollment_id=enr.pk %}" class="inline"
+                  onsubmit="return confirm('Unenroll {{ enr.user.email }} from {{ course.title }}?');">
+              {% csrf_token %}
+              <button type="submit"
+                      class="text-sm text-red-400 hover:text-red-300 hover:underline px-2 py-1 min-h-[44px] inline-flex items-center"
+                      data-testid="unenroll-row-btn">Unenroll</button>
+            </form>
+            {% else %}
+            <span class="text-xs text-muted-foreground">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">
+            No enrollments for this course yet.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Mobile cards -->
+  <ul class="md:hidden divide-y divide-border" data-testid="enrollment-cards">
+    {% for enr in enrollments %}
+    <li class="p-4 space-y-2" data-testid="enrollment-card">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium text-foreground break-all">{{ enr.user.email }}</div>
+          <div class="text-xs text-muted-foreground">ID: {{ enr.user.pk }}</div>
+        </div>
+        <span class="text-xs px-2 py-1 rounded-full whitespace-nowrap
+          {% if enr.source == 'manual' %}bg-blue-500/20 text-blue-400
+          {% elif enr.source == 'auto_progress' %}bg-purple-500/20 text-purple-400
+          {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {{ enr.get_source_display }}
+        </span>
+      </div>
+      <dl class="text-xs text-muted-foreground space-y-1">
+        <div class="flex gap-2">
+          <dt class="w-24 shrink-0">Enrolled</dt>
+          <dd>{{ enr.enrolled_at|date:"M d, Y H:i" }}</dd>
+        </div>
+        {% if enr.unenrolled_at %}
+        <div class="flex gap-2">
+          <dt class="w-24 shrink-0">Unenrolled</dt>
+          <dd>{{ enr.unenrolled_at|date:"M d, Y H:i" }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+      <div class="pt-2">
+        {% if not enr.unenrolled_at %}
+        <form method="post" action="{% url 'studio_course_enrollment_unenroll' course_id=course.pk enrollment_id=enr.pk %}"
+              onsubmit="return confirm('Unenroll {{ enr.user.email }} from {{ course.title }}?');">
+          {% csrf_token %}
+          <button type="submit"
+                  class="w-full inline-flex items-center justify-center px-4 py-3 min-h-[44px] rounded-lg border border-red-500/40 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                  data-testid="unenroll-row-btn-mobile">Unenroll</button>
+        </form>
+        {% else %}
+        <p class="text-xs text-muted-foreground italic">Already unenrolled.</p>
+        {% endif %}
+      </div>
+    </li>
+    {% empty %}
+    <li class="px-4 py-8 text-center text-sm text-muted-foreground">No enrollments for this course yet.</li>
+    {% endfor %}
+  </ul>
 </div>
+
+<script>
+(function() {
+  var input = document.getElementById('enroll-email');
+  var hidden = document.getElementById('enroll-user-id');
+  var list = document.getElementById('enroll-suggestions');
+  if (!input || !hidden || !list) { return; }
+  var url = input.dataset.searchUrl;
+  var debounce;
+
+  function clearSelection() { hidden.value = ''; }
+  function hideList() { list.classList.add('hidden'); list.innerHTML = ''; }
+
+  function render(items) {
+    list.innerHTML = '';
+    if (!items.length) { hideList(); return; }
+    items.forEach(function(u) {
+      var li = document.createElement('li');
+      li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
+      li.setAttribute('data-testid', 'enroll-suggestion');
+      li.setAttribute('data-user-id', u.id);
+      li.setAttribute('data-email', u.email);
+      var emailSpan = document.createElement('div');
+      emailSpan.className = 'font-medium break-all';
+      emailSpan.textContent = u.email;
+      var meta = document.createElement('div');
+      meta.className = 'text-xs text-muted-foreground';
+      meta.textContent = 'ID ' + u.id + (u.name ? ' - ' + u.name : '');
+      li.appendChild(emailSpan);
+      li.appendChild(meta);
+      li.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        input.value = u.email;
+        hidden.value = u.id;
+        hideList();
+      });
+      list.appendChild(li);
+    });
+    list.classList.remove('hidden');
+  }
+
+  input.addEventListener('input', function() {
+    clearSelection();
+    var q = input.value.trim();
+    if (debounce) { clearTimeout(debounce); }
+    if (q.length < 2) { hideList(); return; }
+    debounce = setTimeout(function() {
+      fetch(url + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : { results: [] }; })
+        .then(function(d) { render(d.results || []); })
+        .catch(function() { hideList(); });
+    }, 200);
+  });
+
+  input.addEventListener('blur', function() {
+    setTimeout(hideList, 150);
+  });
+})();
+</script>
 {% endblock %}

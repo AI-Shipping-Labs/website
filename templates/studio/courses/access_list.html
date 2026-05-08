@@ -15,68 +15,189 @@
   <p class="text-muted-foreground mt-1">Grant or revoke individual access to "{{ course.title }}".</p>
 </div>
 
-{# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}
+{% comment %}Messages render once at the top of the studio main content area via studio/base.html (issue #347).{% endcomment %}
 
 <!-- Grant Access Form -->
-<div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
+<div class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">Grant Access</h2>
-  <form method="post" action="{% url 'studio_course_access_grant' course_id=course.pk %}" autocomplete="off" class="flex items-end space-x-4">
+  <form method="post" action="{% url 'studio_course_access_grant' course_id=course.pk %}" autocomplete="off"
+        class="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4"
+        data-testid="grant-access-form">
     {% csrf_token %}
-    <div class="flex-1">
-      <label class="block text-sm font-medium text-foreground mb-1">User Email</label>
-      <input type="email" name="email" required placeholder="user@example.com"
+    <div class="flex-1 relative" data-testid="user-lookup">
+      <label class="block text-sm font-medium text-foreground mb-1" for="grant-email">User email or ID</label>
+      <input id="grant-email" type="text" name="email" required
+             placeholder="user@example.com or numeric ID"
              autocomplete="off"
+             data-testid="grant-email-input"
+             data-search-url="{% url 'studio_course_user_search' course_id=course.pk %}"
              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <input type="hidden" name="user_id" id="grant-user-id" value="" data-testid="grant-user-id-input">
+      <ul id="grant-suggestions"
+          data-testid="grant-suggestions"
+          class="hidden absolute z-10 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto"></ul>
+      <p class="text-xs text-muted-foreground mt-1">Search by email fragment or paste a numeric user ID. Enter an exact email and submit to grant by typed email.</p>
     </div>
-    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <button type="submit"
+            class="bg-accent text-accent-foreground px-4 py-3 sm:py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+            data-testid="grant-submit-btn">
       Grant Access
     </button>
   </form>
 </div>
 
-<!-- Access Records Table -->
-<div class="bg-card border border-border rounded-lg overflow-hidden">
-  <table class="w-full">
-    <thead class="bg-secondary">
-      <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User Email</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Access Type</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-border">
-      {% for access in access_records %}
-      <tr class="hover:bg-secondary/50 transition-colors">
-        <td class="px-6 py-4 text-sm text-foreground">{{ access.user.email }}</td>
-        <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full {% if access.access_type == 'granted' %}bg-blue-500/20 text-blue-400{% else %}bg-green-500/20 text-green-400{% endif %}">
-            {{ access.get_access_type_display }}
-          </span>
-        </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">
-          {% if access.granted_by %}{{ access.granted_by.email }}{% else %}-{% endif %}
-        </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ access.created_at|date:"M d, Y H:i" }}</td>
-        <td class="px-6 py-4 text-right">
-          {% if access.access_type == 'granted' %}
-          <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}" class="inline"
-                onsubmit="return confirm('Revoke access for {{ access.user.email }}?');">
-            {% csrf_token %}
-            <button type="submit" class="text-sm text-red-400 hover:text-red-300 hover:underline">Revoke</button>
-          </form>
-          {% else %}
-          <span class="text-xs text-muted-foreground">-</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No individual access records for this course.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Access Records: desktop table + mobile cards -->
+<div class="bg-card border border-border rounded-lg overflow-hidden" data-testid="access-records">
+  <!-- Desktop / tablet table -->
+  <div class="hidden md:block">
+    <table class="w-full">
+      <thead class="bg-secondary">
+        <tr>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Access Type</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Granted By</th>
+          <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+          <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for access in access_records %}
+        <tr class="hover:bg-secondary/50 transition-colors" data-testid="access-row">
+          <td class="px-6 py-4 text-sm text-foreground">
+            <div class="font-medium">{{ access.user.email }}</div>
+            <div class="text-xs text-muted-foreground">ID: {{ access.user.pk }}</div>
+          </td>
+          <td class="px-6 py-4">
+            <span class="text-xs px-2 py-1 rounded-full {% if access.access_type == 'granted' %}bg-blue-500/20 text-blue-400{% else %}bg-green-500/20 text-green-400{% endif %}">
+              {{ access.get_access_type_display }}
+            </span>
+          </td>
+          <td class="px-6 py-4 text-sm text-muted-foreground">
+            {% if access.granted_by %}{{ access.granted_by.email }}{% else %}-{% endif %}
+          </td>
+          <td class="px-6 py-4 text-sm text-muted-foreground">{{ access.created_at|date:"M d, Y H:i" }}</td>
+          <td class="px-6 py-4 text-right">
+            {% if access.access_type == 'granted' %}
+            <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}" class="inline"
+                  onsubmit="return confirm('Revoke access for {{ access.user.email }}?');">
+              {% csrf_token %}
+              <button type="submit"
+                      class="text-sm text-red-400 hover:text-red-300 hover:underline px-2 py-1 min-h-[44px] inline-flex items-center"
+                      data-testid="revoke-btn">Revoke</button>
+            </form>
+            {% else %}
+            <span class="text-xs text-muted-foreground" title="Purchased access cannot be revoked from Studio.">Purchased - cannot revoke</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No individual access records for this course.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Mobile cards -->
+  <ul class="md:hidden divide-y divide-border" data-testid="access-cards">
+    {% for access in access_records %}
+    <li class="p-4 space-y-2" data-testid="access-card">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium text-foreground break-all">{{ access.user.email }}</div>
+          <div class="text-xs text-muted-foreground">ID: {{ access.user.pk }}</div>
+        </div>
+        <span class="text-xs px-2 py-1 rounded-full whitespace-nowrap {% if access.access_type == 'granted' %}bg-blue-500/20 text-blue-400{% else %}bg-green-500/20 text-green-400{% endif %}">
+          {{ access.get_access_type_display }}
+        </span>
+      </div>
+      <dl class="text-xs text-muted-foreground space-y-1">
+        <div class="flex gap-2">
+          <dt class="w-20 shrink-0">Granted by</dt>
+          <dd class="break-all">{% if access.granted_by %}{{ access.granted_by.email }}{% else %}-{% endif %}</dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="w-20 shrink-0">Date</dt>
+          <dd>{{ access.created_at|date:"M d, Y H:i" }}</dd>
+        </div>
+      </dl>
+      <div class="pt-2">
+        {% if access.access_type == 'granted' %}
+        <form method="post" action="{% url 'studio_course_access_revoke' course_id=course.pk access_id=access.pk %}"
+              onsubmit="return confirm('Revoke access for {{ access.user.email }}?');">
+          {% csrf_token %}
+          <button type="submit"
+                  class="w-full inline-flex items-center justify-center px-4 py-3 min-h-[44px] rounded-lg border border-red-500/40 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                  data-testid="revoke-btn-mobile">Revoke access</button>
+        </form>
+        {% else %}
+        <p class="text-xs text-muted-foreground italic">Purchased access cannot be revoked from Studio.</p>
+        {% endif %}
+      </div>
+    </li>
+    {% empty %}
+    <li class="px-4 py-8 text-center text-sm text-muted-foreground">No individual access records for this course.</li>
+    {% endfor %}
+  </ul>
 </div>
+
+<script>
+(function() {
+  var input = document.getElementById('grant-email');
+  var hidden = document.getElementById('grant-user-id');
+  var list = document.getElementById('grant-suggestions');
+  if (!input || !hidden || !list) { return; }
+  var url = input.dataset.searchUrl;
+  var debounce;
+
+  function clearSelection() { hidden.value = ''; }
+  function hideList() { list.classList.add('hidden'); list.innerHTML = ''; }
+
+  function render(items) {
+    list.innerHTML = '';
+    if (!items.length) { hideList(); return; }
+    items.forEach(function(u) {
+      var li = document.createElement('li');
+      li.className = 'cursor-pointer px-4 py-3 hover:bg-secondary text-sm text-foreground';
+      li.setAttribute('data-testid', 'grant-suggestion');
+      li.setAttribute('data-user-id', u.id);
+      li.setAttribute('data-email', u.email);
+      var emailSpan = document.createElement('div');
+      emailSpan.className = 'font-medium break-all';
+      emailSpan.textContent = u.email;
+      var meta = document.createElement('div');
+      meta.className = 'text-xs text-muted-foreground';
+      meta.textContent = 'ID ' + u.id + (u.name ? ' - ' + u.name : '');
+      li.appendChild(emailSpan);
+      li.appendChild(meta);
+      li.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        input.value = u.email;
+        hidden.value = u.id;
+        hideList();
+      });
+      list.appendChild(li);
+    });
+    list.classList.remove('hidden');
+  }
+
+  input.addEventListener('input', function() {
+    clearSelection();
+    var q = input.value.trim();
+    if (debounce) { clearTimeout(debounce); }
+    if (q.length < 2) { hideList(); return; }
+    debounce = setTimeout(function() {
+      fetch(url + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : { results: [] }; })
+        .then(function(d) { render(d.results || []); })
+        .catch(function() { hideList(); });
+    }, 200);
+  });
+
+  input.addEventListener('blur', function() {
+    setTimeout(hideList, 150);
+  });
+})();
+</script>
 {% endblock %}

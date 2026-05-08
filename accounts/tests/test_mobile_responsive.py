@@ -268,6 +268,20 @@ class FormInputTextBaseTest(TestCase):
         self.assertIsNotNone(input_match)
         self.assertIn("text-base", input_match.group(0))
 
+    def test_password_reset_request_email_input_uses_text_base(self):
+        """Password reset request email input uses text-base."""
+        response = self.client.get("/accounts/password-reset-request")
+        content = response.content.decode()
+        input_match = re.search(
+            r'id="password-reset-email"[^>]*class="[^"]*"', content
+        )
+        if not input_match:
+            input_match = re.search(
+                r'class="[^"]*"[^>]*id="password-reset-email"', content
+            )
+        self.assertIsNotNone(input_match)
+        self.assertIn("text-base", input_match.group(0))
+
     def test_account_password_inputs_use_text_base(self):
         """Account page change password inputs use text-base."""
         self.client.force_login(self.user)
@@ -324,5 +338,17 @@ class RegisterPageMobilePaddingTest(TestCase):
         response = self.client.get("/accounts/register/")
         content = response.content.decode()
         heading_pos = content.index("Create Account</h1>")
+        preceding = content[max(0, heading_pos - 400):heading_pos]
+        self.assertIn("p-5 sm:p-8", preceding)
+
+
+class PasswordResetRequestMobilePaddingTest(TestCase):
+    """Password reset request page card uses responsive padding."""
+
+    def test_password_reset_request_card_has_responsive_padding(self):
+        """Password reset request card uses p-5 sm:p-8."""
+        response = self.client.get("/accounts/password-reset-request")
+        content = response.content.decode()
+        heading_pos = content.index("Reset your password</h1>")
         preceding = content[max(0, heading_pos - 400):heading_pos]
         self.assertIn("p-5 sm:p-8", preceding)

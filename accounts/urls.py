@@ -17,6 +17,7 @@ from accounts.views.auth import (
     logout_view,
     password_reset_api,
     password_reset_request_api,
+    password_reset_request_view,
     register_api,
     register_view,
     signup_redirect_view,
@@ -27,6 +28,11 @@ urlpatterns = [
     path('login/', login_view, name='account_login'),
     path('logout/', logout_view, name='account_logout'),
     path('register/', register_view, name='account_register'),
+    path(
+        'password-reset-request',
+        password_reset_request_view,
+        name='account_password_reset_request',
+    ),
     path('signup/', signup_redirect_view, name='account_signup'),
     path('', include('allauth.urls')),
 ]

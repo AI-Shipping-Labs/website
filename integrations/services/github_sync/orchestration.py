@@ -533,6 +533,144 @@ def _classify_repo_files(repo_dir, classify_errors=None):
     }
 
 
+_DEFAULT_WORKSHOPS_REPO = 'AI-Shipping-Labs/workshops'
+
+
+def _resolve_workshops_repo_name(source):
+    """Return the GitHub repo name to use when matching cross-workshop URLs.
+
+    Issue #526. Cross-workshop links use the configured workshops content
+    source's ``repo_name`` so detection isn't hardcoded to one host. Strategy:
+
+    1. If the current ``source`` ITSELF holds workshop folders (i.e. this
+       sync is happening on the workshops repo), use ``source.repo_name``.
+    2. Else look for any other ``ContentSource`` whose name contains
+       ``"workshop"`` (matches ``AI-Shipping-Labs/workshops`` and the legacy
+       ``workshops-content`` seed alike) and use the first match.
+    3. Fall back to the production default ``AI-Shipping-Labs/workshops``.
+
+    Step 1 is the common path; the lookup runs while we're already syncing
+    the workshops repo. The DB lookup is a defensive secondary path.
+    """
+    if source is not None and source.repo_name:
+        return source.repo_name
+    try:
+        candidate = (
+            ContentSource.objects
+            .filter(repo_name__icontains='workshop')
+            .order_by('repo_name')
+            .values_list('repo_name', flat=True)
+            .first()
+        )
+    except Exception:
+        candidate = None
+    return candidate or _DEFAULT_WORKSHOPS_REPO
+
+
+def _build_cross_workshop_lookup(workshop_dirs, repo_dir, errors=None):
+    """Build a sync-wide ``{folder_name: workshop-meta}`` lookup once per sync.
+
+    Issue #526. ``rewrite_cross_workshop_md_links`` consumes this map to
+    rewrite ``..``-relative and absolute-GitHub-URL workshop references in
+    every workshop body. The map is keyed by the on-disk dated-slug folder
+    name (e.g. ``2026-04-21-end-to-end-agent-deployment``) because that's
+    what authors write in their links.
+
+    Each value carries:
+
+    - ``slug``: the URL slug from ``workshop.yaml``.
+    - ``title``: the workshop title from ``workshop.yaml``.
+    - ``content_id``: the workshop UUID from ``workshop.yaml``.
+    - ``url``: the public landing URL (``/workshops/<slug>``).
+    - ``pages``: ``{filename: {'slug', 'title'}}`` for every ``.md`` page
+      with a frontmatter ``title:`` (README is excluded — links to it are
+      rewritten to the bare landing URL by the rewriter).
+
+    A workshop whose ``workshop.yaml`` is missing required fields (``slug:``
+    in particular) is skipped with an ``errors`` entry. Folders whose
+    ``workshop.yaml`` cannot be parsed are also skipped — link resolution
+    surfaces a separate "folder not found" warning later.
+
+    Args:
+        workshop_dirs: Absolute paths from
+            ``_classify_repo_files()['workshop_dirs']``.
+        repo_dir: Absolute path to the cloned repo (used to compute
+            relative paths for error messages).
+        errors: Optional list to append per-workshop build-time errors to.
+
+    Returns:
+        dict: ``{folder_name: meta}``.
+    """
+    from integrations.services.github_sync.repo import derive_slug
+
+    lookup = {}
+    for workshop_path in workshop_dirs:
+        folder_name = os.path.basename(workshop_path.rstrip(os.sep))
+        yaml_path = os.path.join(workshop_path, 'workshop.yaml')
+        try:
+            data = _parse_yaml_file(yaml_path)
+        except Exception:
+            # Unparseable workshop.yaml is reported elsewhere by the
+            # workshop dispatcher; here we just skip.
+            continue
+        if not isinstance(data, dict):
+            continue
+        slug = data.get('slug')
+        if not slug:
+            if errors is not None:
+                rel_yaml = os.path.relpath(yaml_path, repo_dir)
+                errors.append({
+                    'file': rel_yaml,
+                    'error': (
+                        f'workshop.yaml at {rel_yaml} is missing required '
+                        f'field "slug"; cannot resolve cross-workshop links '
+                        f'to it.'
+                    ),
+                })
+            continue
+
+        title = data.get('title') or slug
+        content_id = data.get('content_id') or ''
+
+        pages = {}
+        try:
+            page_filenames = sorted(os.listdir(workshop_path))
+        except OSError:
+            page_filenames = []
+        for filename in page_filenames:
+            if (
+                not filename.endswith('.md')
+                or filename.upper() == 'README.MD'
+                or filename.startswith('.')
+            ):
+                continue
+            page_path = os.path.join(workshop_path, filename)
+            if not os.path.isfile(page_path):
+                continue
+            try:
+                metadata, _ = _parse_markdown_file(page_path)
+            except Exception:
+                continue
+            page_title = metadata.get('title')
+            if not page_title:
+                continue
+            page_slug = metadata.get('slug') or derive_slug(filename)
+            pages[filename] = {
+                'slug': page_slug,
+                'title': page_title,
+            }
+
+        lookup[folder_name] = {
+            'slug': slug,
+            'title': title,
+            'content_id': content_id,
+            'url': f'/workshops/{slug}',
+            'pages': pages,
+        }
+
+    return lookup
+
+
 def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
     """Walk a cloned repo and dispatch each content file to its parser.
 
@@ -568,6 +706,15 @@ def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
         repo_dir, classify_errors=stats['errors'],
     )
 
+    # Issue #526: build the sync-wide cross-workshop lookup once, before
+    # any workshop body is rewritten, so `rewrite_cross_workshop_md_links`
+    # can resolve `../<folder>/...` and full-GitHub-URL references to
+    # native `/workshops/<slug>` URLs across the whole sync run.
+    cross_workshop_lookup = _build_cross_workshop_lookup(
+        classified['workshop_dirs'], repo_dir, errors=stats['errors'],
+    )
+    workshops_repo_name = _resolve_workshops_repo_name(source)
+
     # Each dispatch helper runs even when its file list is empty so the
     # stale-content cleanup sweep fires. Without this, deleting the last
     # course/workshop/article from the repo would leave the matching
@@ -579,6 +726,8 @@ def _sync_repo(source, repo_dir, commit_sha, sync_log, known_images=None):
     _dispatch_workshops(
         source, repo_dir, classified['workshop_dirs'],
         commit_sha, stats, known_images=known_images,
+        cross_workshop_lookup=cross_workshop_lookup,
+        workshops_repo_name=workshops_repo_name,
     )
     _dispatch_articles(
         source, repo_dir, classified['article_files'],

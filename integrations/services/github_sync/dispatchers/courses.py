@@ -740,7 +740,8 @@ def _build_workshop_page_lookup(
 
 def _resolve_workshop_landing_copy(
     workshop_dir, data, rel_path, page_lookup, workshop_slug, repo_name,
-    sync_errors,
+    sync_errors, cross_workshop_lookup=None, workshops_repo_name=None,
+    source_workshop_folder=None,
 ):
     """Resolve the markdown body for a workshop's landing description.
 
@@ -788,7 +789,10 @@ def _resolve_workshop_landing_copy(
         applies.
     """
     from content.utils.copy_file import resolve_copy_file_content
-    from content.utils.md_links import rewrite_workshop_md_links
+    from content.utils.md_links import (
+        rewrite_cross_workshop_md_links,
+        rewrite_workshop_md_links,
+    )
 
     explicit_copy_file = data.get('copy_file')
     yaml_description = data.get('description', '') or ''
@@ -855,14 +859,32 @@ def _resolve_workshop_landing_copy(
 
     # Rewrite intra-workshop ``.md`` links (including the README virtual
     # entry that points back at the landing — useful when copy_file is a
-    # tutorial file that itself links to README).
+    # tutorial file that itself links to README). Issue #526: pass the
+    # cross_workshop_lookup so the intra-workshop pass suppresses its
+    # "out-of-tree" warning for ``..``-prefixed links — the cross-workshop
+    # pass below picks them up.
+    landing_source_path = os.path.join(rel_path, source_filename)
     body = rewrite_workshop_md_links(
         body,
         workshop_slug=workshop_slug,
         page_lookup=page_lookup,
-        source_path=os.path.join(rel_path, source_filename),
+        source_path=landing_source_path,
         sync_errors=sync_errors,
+        cross_workshop_lookup=cross_workshop_lookup,
     )
+
+    # Issue #526: rewrite cross-workshop links so the README's
+    # ``[Previous workshop](../<sibling-folder>/)`` resolves to a native
+    # ``/workshops/<slug>`` URL on the workshop landing page.
+    if cross_workshop_lookup is not None and workshops_repo_name:
+        body = rewrite_cross_workshop_md_links(
+            body,
+            cross_workshop_lookup=cross_workshop_lookup,
+            workshops_repo_name=workshops_repo_name,
+            source_workshop_folder=source_workshop_folder,
+            source_path=landing_source_path,
+            sync_errors=sync_errors,
+        )
 
     return body
 

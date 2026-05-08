@@ -18,7 +18,11 @@ Covers:
 
 from django.test import TestCase
 
-from content.utils.md_links import rewrite_md_links, rewrite_workshop_md_links
+from content.utils.md_links import (
+    rewrite_cross_workshop_md_links,
+    rewrite_md_links,
+    rewrite_workshop_md_links,
+)
 
 COURSE_LOOKUP = {
     'fundamentals': {
@@ -569,3 +573,406 @@ class RewriteWorkshopMdLinksReadmeVirtualEntryTest(TestCase):
             result,
         )
         self.assertNotIn('/tutorial/intro', result)
+
+
+# Sync-wide cross-workshop lookup keyed by on-disk dated-slug folder name
+# (issue #526). One source workshop (lambda-agent-deployment) links to
+# one target workshop (end-to-end-agent-deployment).
+CROSS_WORKSHOP_LOOKUP = {
+    '2026-04-21-end-to-end-agent-deployment': {
+        'slug': 'end-to-end-agent-deployment',
+        'title': 'End-to-End Agent Deployment',
+        'content_id': 'd754ae83-3f43-4c35-9737-f89205de5e3c',
+        'url': '/workshops/end-to-end-agent-deployment',
+        'pages': {
+            '01-overview.md': {'slug': 'overview', 'title': 'Overview'},
+            '10-qa.md': {'slug': 'qa', 'title': 'Q&A'},
+        },
+    },
+    '2026-05-05-lambda-agent-deployment': {
+        'slug': 'lambda-agent-deployment',
+        'title': 'Deploying an Agent to AWS Lambda',
+        'content_id': '3fe4f80c-dba1-4d20-a4dc-bbfc014bbf16',
+        'url': '/workshops/lambda-agent-deployment',
+        'pages': {
+            '01-overview.md': {
+                'slug': 'overview', 'title': 'Overview and setup',
+            },
+        },
+    },
+}
+
+WORKSHOPS_REPO = 'AI-Shipping-Labs/workshops'
+
+
+class RewriteCrossWorkshopMdLinksTest(TestCase):
+    """Unit tests for ``rewrite_cross_workshop_md_links`` (issue #526).
+
+    Authors link ACROSS workshops in two shapes today: ``..``-relative
+    paths and absolute GitHub URLs into the workshops repo. Both must be
+    rewritten to native ``/workshops/<slug>`` URLs so the rendered HTML
+    doesn't 404.
+    """
+
+    source_folder = '2026-05-05-lambda-agent-deployment'
+    source_path = (
+        '2026/2026-05-05-lambda-agent-deployment/01-overview.md'
+    )
+
+    def _rewrite(self, body, **kwargs):
+        kwargs.setdefault(
+            'cross_workshop_lookup', CROSS_WORKSHOP_LOOKUP,
+        )
+        kwargs.setdefault('workshops_repo_name', WORKSHOPS_REPO)
+        kwargs.setdefault('source_workshop_folder', self.source_folder)
+        kwargs.setdefault('source_path', self.source_path)
+        return rewrite_cross_workshop_md_links(body, **kwargs)
+
+    def test_relative_link_with_trailing_slash_resolves_to_landing(self):
+        body = (
+            'A follow-up to '
+            '[the previous workshop](../2026-04-21-end-to-end-agent-deployment/).'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[the previous workshop](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+        self.assertNotIn('../2026-04-21-end-to-end-agent-deployment', result)
+
+    def test_relative_link_no_trailing_slash_resolves_to_landing(self):
+        body = '[label](../2026-04-21-end-to-end-agent-deployment)'
+        result = self._rewrite(body)
+        self.assertIn(
+            '[label](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+
+    def test_relative_link_with_md_subpage_resolves_to_tutorial(self):
+        body = '[Q&A](../2026-04-21-end-to-end-agent-deployment/10-qa.md)'
+        result = self._rewrite(body)
+        self.assertIn(
+            '[Q&A](/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            result,
+        )
+
+    def test_relative_md_subpage_preserves_anchor_fragment(self):
+        body = (
+            '[link](../2026-04-21-end-to-end-agent-deployment/10-qa.md#tmux)'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[link]'
+            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            result,
+        )
+
+    def test_relative_landing_preserves_anchor_fragment(self):
+        body = (
+            '[link]'
+            '(../2026-04-21-end-to-end-agent-deployment/#prerequisites)'
+        )
+        result = self._rewrite(body)
+        # Trailing-slash + fragment: regex sees folder + sub='' + frag.
+        self.assertIn(
+            '[link](/workshops/end-to-end-agent-deployment#prerequisites)',
+            result,
+        )
+
+    def test_github_tree_url_resolves_to_landing(self):
+        body = (
+            '[label](https://github.com/AI-Shipping-Labs/workshops/tree/'
+            'main/2026/2026-04-21-end-to-end-agent-deployment)'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[label](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+        self.assertNotIn('github.com', result)
+
+    def test_github_tree_url_trailing_slash_resolves_to_landing(self):
+        body = (
+            '[label](https://github.com/AI-Shipping-Labs/workshops/tree/'
+            'main/2026/2026-04-21-end-to-end-agent-deployment/)'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[label](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+
+    def test_github_blob_md_url_resolves_to_tutorial(self):
+        body = (
+            '[label](https://github.com/AI-Shipping-Labs/workshops/blob/'
+            'main/2026/2026-04-21-end-to-end-agent-deployment/10-qa.md)'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[label](/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            result,
+        )
+
+    def test_github_blob_url_with_anchor_preserves_fragment(self):
+        body = (
+            '[link](https://github.com/AI-Shipping-Labs/workshops/blob/'
+            'main/2026/2026-04-21-end-to-end-agent-deployment/10-qa.md#tmux)'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[link]'
+            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            result,
+        )
+
+    def test_unknown_folder_relative_left_intact_with_warning(self):
+        body = '[gone](../2099-12-31-deleted-workshop/)'
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertIn('[gone](../2099-12-31-deleted-workshop/)', result)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('2099-12-31-deleted-workshop', errors[0]['error'])
+        self.assertIn('not found', errors[0]['error'])
+        self.assertEqual(errors[0]['file'], self.source_path)
+
+    def test_unknown_folder_github_url_left_intact_with_warning(self):
+        body = (
+            '[gone](https://github.com/AI-Shipping-Labs/workshops/tree/'
+            'main/2099/2099-12-31-deleted-workshop)'
+        )
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertIn('2099-12-31-deleted-workshop', result)
+        self.assertIn('github.com', result)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('2099-12-31-deleted-workshop', errors[0]['error'])
+
+    def test_missing_subpage_left_intact_with_warning(self):
+        body = (
+            '[bad]'
+            '(../2026-04-21-end-to-end-agent-deployment/99-missing.md)'
+        )
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertIn('99-missing.md', result)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('99-missing.md', errors[0]['error'])
+        self.assertIn('2026-04-21-end-to-end-agent-deployment',
+                      errors[0]['error'])
+
+    def test_non_md_subpath_inside_existing_workshop_untouched_no_warning(self):
+        """``deploy.sh`` etc. point at code, not pages — leave alone, no warn."""
+        body = (
+            '[script]'
+            '(../2026-04-21-end-to-end-agent-deployment/deploy.sh)'
+        )
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        self.assertEqual(errors, [])
+
+    def test_subdirectory_inside_existing_workshop_untouched_no_warning(self):
+        body = (
+            '[scripts]'
+            '(../2026-04-21-end-to-end-agent-deployment/deploy/scripts)'
+        )
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        self.assertEqual(errors, [])
+
+    def test_github_url_to_different_repo_untouched_no_warning(self):
+        body = '[link](https://github.com/other-org/repo/tree/main/foo)'
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        self.assertEqual(errors, [])
+
+    def test_github_url_to_workshops_repo_subdir_untouched_no_warning(self):
+        """Code inside an existing workshop folder remains a GitHub URL."""
+        body = (
+            '[deploy scripts]'
+            '(https://github.com/AI-Shipping-Labs/workshops/tree/main/'
+            '2026/2026-05-05-lambda-agent-deployment/deploy/scripts)'
+        )
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        self.assertEqual(errors, [])
+
+    def test_image_syntax_is_not_rewritten(self):
+        body = (
+            '![diagram]'
+            '(../2026-04-21-end-to-end-agent-deployment/diagram.png)'
+        )
+        result = self._rewrite(body)
+        # Image syntax is preserved verbatim — `(?<!\!)` excludes it.
+        self.assertEqual(body, result)
+
+    def test_image_syntax_with_md_target_is_not_rewritten(self):
+        body = (
+            '![alt]'
+            '(../2026-04-21-end-to-end-agent-deployment/10-qa.md) '
+            'and a real link '
+            '[Q&A](../2026-04-21-end-to-end-agent-deployment/10-qa.md).'
+        )
+        result = self._rewrite(body)
+        # Image left alone.
+        self.assertIn(
+            '![alt](../2026-04-21-end-to-end-agent-deployment/10-qa.md)',
+            result,
+        )
+        # Non-image link rewritten.
+        self.assertIn(
+            '[Q&A](/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            result,
+        )
+
+    def test_two_levels_up_left_intact(self):
+        """``../../foo/bar.md`` is out-of-tree — must remain untouched."""
+        body = '[far](../../foo/bar.md)'
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        # No warning either — out-of-tree is not the cross-workshop pass's
+        # concern.
+        self.assertEqual(errors, [])
+
+    def test_repo_name_is_configurable(self):
+        """A different repo name in the lookup matches that host, not the default."""
+        body = (
+            '[link](https://github.com/Other/workshops-repo/tree/'
+            'main/2026/2026-04-21-end-to-end-agent-deployment)'
+        )
+        # Rewriter only matches the configured repo: with a different repo
+        # name the URL is left alone.
+        result = rewrite_cross_workshop_md_links(
+            body,
+            cross_workshop_lookup=CROSS_WORKSHOP_LOOKUP,
+            workshops_repo_name='AI-Shipping-Labs/workshops',
+        )
+        self.assertEqual(body, result)
+        # And with the matching repo name it rewrites.
+        result_match = rewrite_cross_workshop_md_links(
+            body,
+            cross_workshop_lookup=CROSS_WORKSHOP_LOOKUP,
+            workshops_repo_name='Other/workshops-repo',
+        )
+        self.assertIn(
+            '[link](/workshops/end-to-end-agent-deployment)',
+            result_match,
+        )
+
+    def test_branch_name_is_permissive(self):
+        """Authors don't always pin to ``main`` — accept any branch name."""
+        body = (
+            '[link](https://github.com/AI-Shipping-Labs/workshops/tree/'
+            'develop/2026/2026-04-21-end-to-end-agent-deployment)'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[link](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+
+    def test_empty_body_returns_empty(self):
+        self.assertEqual(self._rewrite(''), '')
+
+    def test_no_links_in_body_returned_unchanged(self):
+        body = 'Plain prose with no links.'
+        self.assertEqual(self._rewrite(body), body)
+
+    def test_anchor_only_link_left_intact_no_warning(self):
+        body = 'Jump to [section](#setup).'
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        self.assertEqual(errors, [])
+
+    def test_external_unrelated_link_left_intact_no_warning(self):
+        body = 'Read the [docs](https://example.com/page).'
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        self.assertEqual(errors, [])
+
+    def test_intra_workshop_sibling_link_untouched_no_warning(self):
+        """Sibling ``10-qa.md`` is the intra-workshop pass's job, not ours."""
+        body = '[Q&A](10-qa.md)'
+        errors = []
+        result = self._rewrite(body, sync_errors=errors)
+        self.assertEqual(body, result)
+        self.assertEqual(errors, [])
+
+    def test_readme_md_subpage_resolves_to_landing(self):
+        body = '[r](../2026-04-21-end-to-end-agent-deployment/README.md)'
+        result = self._rewrite(body)
+        self.assertIn(
+            '[r](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+
+    def test_multiple_cross_workshop_links_in_one_body(self):
+        body = (
+            'See [the workshop]'
+            '(../2026-04-21-end-to-end-agent-deployment/) and '
+            '[the Q&A]'
+            '(../2026-04-21-end-to-end-agent-deployment/10-qa.md#tmux) and '
+            '[via GitHub](https://github.com/AI-Shipping-Labs/workshops/'
+            'tree/main/2026/2026-04-21-end-to-end-agent-deployment).'
+        )
+        result = self._rewrite(body)
+        self.assertIn(
+            '[the workshop](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+        self.assertIn(
+            '[the Q&A]'
+            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            result,
+        )
+        self.assertIn(
+            '[via GitHub](/workshops/end-to-end-agent-deployment)',
+            result,
+        )
+
+
+class RewriteWorkshopMdLinksCrossWorkshopWarningSuppressionTest(TestCase):
+    """Issue #526: when a cross_workshop_lookup is provided, the
+    intra-workshop rewriter must NOT emit "Cross-workshop or out-of-tree
+    link ... left as-is" warnings for ``..``-prefixed links — the
+    cross-workshop pass picks them up.
+    """
+
+    workshop_slug = 'end-to-end-agent-deployment'
+    intra_lookup = WORKSHOP_LOOKUP
+
+    def test_warning_suppressed_when_cross_lookup_passed(self):
+        body = '[over](../other-workshop/01-foo.md)'
+        errors = []
+        result = rewrite_workshop_md_links(
+            body,
+            workshop_slug=self.workshop_slug,
+            page_lookup=self.intra_lookup,
+            sync_errors=errors,
+            cross_workshop_lookup={'foo': {'slug': 'foo'}},
+        )
+        # Body unchanged — the cross-workshop pass (not run here) would
+        # rewrite or warn separately.
+        self.assertEqual(body, result)
+        # No double-warning.
+        self.assertEqual(errors, [])
+
+    def test_warning_still_emitted_when_no_cross_lookup(self):
+        body = '[over](../other-workshop/01-foo.md)'
+        errors = []
+        rewrite_workshop_md_links(
+            body,
+            workshop_slug=self.workshop_slug,
+            page_lookup=self.intra_lookup,
+            sync_errors=errors,
+        )
+        # Backward compat: the legacy warning fires when no cross lookup
+        # is supplied (older callers / tests).
+        self.assertEqual(len(errors), 1)
+        self.assertIn('Cross-workshop', errors[0]['error'])

@@ -78,7 +78,8 @@ def _extract_workshop_folder_date(folder_name):
 
 
 def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
-                        known_images=None):
+                        known_images=None, cross_workshop_lookup=None,
+                        workshops_repo_name=None):
     """Walker dispatch handler: process workshop directories.
 
     ``workshop_dirs`` is the list of absolute paths to dirs containing
@@ -87,6 +88,13 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
     Stale workshops (folder deleted between syncs) are set to
     ``status='draft'``. The linked Event is NOT unpublished — it's
     standalone and may have been edited independently in Studio.
+
+    ``cross_workshop_lookup`` (issue #526) is the sync-wide
+    ``{folder_name: workshop-meta}`` map built by
+    ``_build_cross_workshop_lookup``. It is threaded down so each page's
+    body can resolve cross-workshop ``..``-style and absolute-GitHub URL
+    links to native ``/workshops/<slug>`` URLs. ``workshops_repo_name``
+    pairs with it so the GitHub-URL detector matches the right host.
     """
     from content.models import Workshop
 
@@ -97,6 +105,8 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
         _sync_single_workshop(
             workshop_path, repo_dir, source, commit_sha, stats,
             seen_slugs, failed_slugs, known_images=known_images,
+            cross_workshop_lookup=cross_workshop_lookup,
+            workshops_repo_name=workshops_repo_name,
         )
 
     # Stale cleanup: workshops whose source folder disappeared this sync.
@@ -122,6 +132,7 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
 def _sync_single_workshop(
     workshop_dir, repo_dir, source, commit_sha, stats,
     seen_slugs, failed_slugs, known_images=None,
+    cross_workshop_lookup=None, workshops_repo_name=None,
 ):
     """Parse one ``workshop.yaml`` folder into a ``Workshop`` with pages.
 
@@ -257,9 +268,18 @@ def _sync_single_workshop(
         # frontmatter-stripped, leading-H1-stripped, image-URL-rewritten,
         # and intra-workshop-link-rewritten. ``Workshop.save()`` will then
         # render description_html through render_markdown exactly once.
+        # Issue #526: also pass through the cross-workshop rewriter so
+        # ``[Previous workshop](../<sibling-folder>/)`` in README.md
+        # resolves on the workshop landing page too.
+        source_workshop_folder = os.path.basename(
+            workshop_dir.rstrip(os.sep),
+        )
         landing_description = _resolve_workshop_landing_copy(
             workshop_dir, data, rel_path, page_lookup, slug,
             source.repo_name, stats['errors'],
+            cross_workshop_lookup=cross_workshop_lookup,
+            workshops_repo_name=workshops_repo_name,
+            source_workshop_folder=source_workshop_folder,
         )
 
         workshop_defaults = {
@@ -329,11 +349,15 @@ def _sync_single_workshop(
         # Sync pages — every *.md file in the folder except README.md.
         # Pass the pre-built page_lookup so the rewriter sees the same
         # virtual entries (README.md, copy_file) we used for the landing
-        # description.
+        # description. Issue #526: also pass the sync-wide cross-workshop
+        # lookup so each page can rewrite cross-workshop links.
         _sync_workshop_pages(
             workshop, workshop_dir, repo_dir, source.repo_name,
             commit_sha, stats, known_images=known_images,
             page_lookup=page_lookup,
+            cross_workshop_lookup=cross_workshop_lookup,
+            workshops_repo_name=workshops_repo_name,
+            source_workshop_folder=source_workshop_folder,
         )
 
     except Exception as e:
@@ -443,6 +467,8 @@ def _derive_workshop_event_content_id(repo_name, workshop_source_path):
 def _sync_workshop_pages(
     workshop, workshop_dir, repo_dir, repo_name, commit_sha, stats,
     known_images=None, page_lookup=None,
+    cross_workshop_lookup=None, workshops_repo_name=None,
+    source_workshop_folder=None,
 ):
     """Sync ``*.md`` pages under a workshop folder into ``WorkshopPage`` rows.
 
@@ -469,7 +495,10 @@ def _sync_workshop_pages(
     # against #301 stays localised to this function.
     from content.models import WorkshopPage
     from content.templatetags.video_utils import parse_video_timestamp
-    from content.utils.md_links import rewrite_workshop_md_links
+    from content.utils.md_links import (
+        rewrite_cross_workshop_md_links,
+        rewrite_workshop_md_links,
+    )
 
     # Issue #301/#304: build a {filename -> page-meta} lookup once per
     # workshop so the link rewriter can resolve sibling ``.md`` links
@@ -529,13 +558,30 @@ def _sync_workshop_pages(
             # Issue #301: rewrite intra-workshop ``.md`` links to platform
             # URLs. Run on the raw markdown (before WorkshopPage.save() calls
             # markdown.markdown()) so the rewriter doesn't have to parse HTML.
+            # Issue #526: pass cross_workshop_lookup so the intra-workshop
+            # pass suppresses its "out-of-tree" warning for ``..``-prefixed
+            # links — the cross-workshop pass below picks them up.
             body = rewrite_workshop_md_links(
                 body,
                 workshop_slug=workshop.slug,
                 page_lookup=page_lookup,
                 source_path=rel_path,
                 sync_errors=stats.get('errors'),
+                cross_workshop_lookup=cross_workshop_lookup,
             )
+            # Issue #526: rewrite cross-workshop links AFTER the
+            # intra-workshop pass so it picks up the ``..``-prefixed and
+            # absolute-GitHub-URL links the previous pass intentionally
+            # leaves untouched.
+            if cross_workshop_lookup is not None and workshops_repo_name:
+                body = rewrite_cross_workshop_md_links(
+                    body,
+                    cross_workshop_lookup=cross_workshop_lookup,
+                    workshops_repo_name=workshops_repo_name,
+                    source_workshop_folder=source_workshop_folder,
+                    source_path=rel_path,
+                    sync_errors=stats.get('errors'),
+                )
 
             # Parse and validate the optional `video_start` frontmatter
             # key. Stored verbatim as a string when valid; logged to

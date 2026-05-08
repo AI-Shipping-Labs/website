@@ -1464,3 +1464,204 @@ class WorkshopRenameIdempotencyTest(_WorkshopSyncFixtureBase):
             page_pks_after, original_page_pks,
             'Workshop pages must keep their pks after a folder rename.',
         )
+
+
+class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
+    """Issue #526: cross-workshop ``..``-relative and absolute-GitHub-URL
+    links are rewritten at sync time to native ``/workshops/<slug>`` URLs.
+
+    Two sibling workshops are synced from one repo so the cross-workshop
+    lookup contains both. Workshop A's page body links to workshop B
+    using the on-disk dated-slug folder name; the rewriter must turn the
+    rendered ``href`` into the platform URL.
+    """
+
+    target_folder = '2026/2026-04-21-end-to-end-agent-deployment'
+    source_folder = '2026/2026-05-05-lambda-agent-deployment'
+
+    def _write_two_workshops(self, source_body):
+        # Target workshop (linked TO).
+        self._write_workshop_yaml(
+            folder=self.target_folder,
+            content_id='d754ae83-3f43-4c35-9737-f89205de5e3c',
+            slug='end-to-end-agent-deployment',
+            title='End-to-End Agent Deployment',
+        )
+        self._write_page(
+            self.target_folder, '01-overview.md',
+            title='Welcome and overview',
+            body='Body of overview.\n',
+        )
+        self._write_page(
+            self.target_folder, '10-qa.md', title='Q&A: side discussions',
+            body='Body of Q&A.\n',
+        )
+        # Source workshop (linking FROM).
+        self._write_workshop_yaml(
+            folder=self.source_folder,
+            content_id='3fe4f80c-dba1-4d20-a4dc-bbfc014bbf16',
+            slug='lambda-agent-deployment',
+            title='Deploying an Agent to AWS Lambda',
+        )
+        self._write_page(
+            self.source_folder, '01-overview.md',
+            title='Overview and setup',
+            body=source_body,
+        )
+
+    def test_relative_cross_workshop_link_rewrites_to_native_url(self):
+        body = (
+            'A follow-up to '
+            '[the previous workshop]'
+            '(../2026-04-21-end-to-end-agent-deployment/).\n'
+        )
+        self._write_two_workshops(source_body=body)
+
+        sync_log = sync_repo(self.source, self.repo)
+        # Empty list — no warnings about cross-workshop being out-of-tree.
+        cross_warnings = [
+            e for e in sync_log.errors
+            if 'Cross-workshop' in e.get('error', '')
+        ]
+        self.assertEqual(
+            cross_warnings, [],
+            f'Cross-workshop pass should resolve cleanly, got: {cross_warnings}',
+        )
+
+        source = Workshop.objects.get(slug='lambda-agent-deployment')
+        page = WorkshopPage.objects.get(workshop=source, slug='overview')
+
+        # Stored markdown body has the rewritten URL.
+        self.assertIn(
+            '[the previous workshop](/workshops/end-to-end-agent-deployment)',
+            page.body,
+        )
+        # And the rendered HTML carries the right href.
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment"',
+            page.body_html,
+        )
+        # The pre-rewrite URL must NOT appear in the rendered HTML.
+        self.assertNotIn(
+            'href="../2026-04-21-end-to-end-agent-deployment/"',
+            page.body_html,
+        )
+        self.assertNotIn(
+            'href="../2026-04-21-end-to-end-agent-deployment"',
+            page.body_html,
+        )
+
+    def test_relative_cross_workshop_subpage_link_with_anchor(self):
+        body = (
+            '[setup details]'
+            '(../2026-04-21-end-to-end-agent-deployment/'
+            '01-overview.md#prerequisites)\n'
+        )
+        self._write_two_workshops(source_body=body)
+        sync_repo(self.source, self.repo)
+        source = Workshop.objects.get(slug='lambda-agent-deployment')
+        page = WorkshopPage.objects.get(workshop=source, slug='overview')
+        # Sub-page resolves through the target's pages map; anchor preserved.
+        self.assertIn(
+            '[setup details](/workshops/end-to-end-agent-deployment/'
+            'tutorial/overview#prerequisites)',
+            page.body,
+        )
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment/tutorial/'
+            'overview#prerequisites"',
+            page.body_html,
+        )
+
+    def test_github_tree_url_cross_workshop_link_is_rewritten(self):
+        body = (
+            '[the workshop repo]'
+            '(https://github.com/AI-Shipping-Labs/workshops-content/'
+            'tree/main/2026/2026-04-21-end-to-end-agent-deployment)\n'
+        )
+        self._write_two_workshops(source_body=body)
+        sync_repo(self.source, self.repo)
+        source = Workshop.objects.get(slug='lambda-agent-deployment')
+        page = WorkshopPage.objects.get(workshop=source, slug='overview')
+        self.assertIn(
+            '[the workshop repo](/workshops/end-to-end-agent-deployment)',
+            page.body,
+        )
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment"',
+            page.body_html,
+        )
+
+    def test_unresolvable_cross_workshop_folder_surfaces_in_sync_log(self):
+        body = '[gone](../2099-12-31-deleted-workshop/)\n'
+        self._write_two_workshops(source_body=body)
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        source = Workshop.objects.get(slug='lambda-agent-deployment')
+        page = WorkshopPage.objects.get(workshop=source, slug='overview')
+        # Original link is preserved verbatim.
+        self.assertIn(
+            '[gone](../2099-12-31-deleted-workshop/)',
+            page.body,
+        )
+
+        broken = [
+            e for e in sync_log.errors
+            if '2099-12-31-deleted-workshop' in e.get('error', '')
+        ]
+        self.assertEqual(
+            len(broken), 1,
+            f'Expected one broken-link warning, got: {sync_log.errors}',
+        )
+        msg = broken[0]['error']
+        self.assertIn('not found', msg)
+        # The error is attributed to the source page that contained the link.
+        self.assertIn('01-overview.md', broken[0]['file'])
+
+    def test_workshop_landing_description_cross_workshop_link_rewrites(self):
+        """The README -> Workshop.description path is also rewritten."""
+        # Target workshop (linked TO).
+        self._write_workshop_yaml(
+            folder=self.target_folder,
+            content_id='d754ae83-3f43-4c35-9737-f89205de5e3c',
+            slug='end-to-end-agent-deployment',
+            title='End-to-End Agent Deployment',
+        )
+        self._write_page(
+            self.target_folder, '01-overview.md', title='Overview',
+            body='Body.\n',
+        )
+        # Source workshop with a README that points at the target.
+        self._write_workshop_yaml(
+            folder=self.source_folder,
+            content_id='3fe4f80c-dba1-4d20-a4dc-bbfc014bbf16',
+            slug='lambda-agent-deployment',
+            title='Deploying an Agent to AWS Lambda',
+        )
+        # README.md becomes the workshop landing description (issue #304).
+        self._write(
+            f'{self.source_folder}/README.md',
+            '# Lambda Agent Deployment\n\n'
+            '[Previous workshop: end-to-end agent deployment]'
+            '(../2026-04-21-end-to-end-agent-deployment/)\n',
+        )
+        self._write_page(
+            self.source_folder, '01-overview.md', title='Overview',
+            body='Body.\n',
+        )
+
+        sync_repo(self.source, self.repo)
+
+        source = Workshop.objects.get(slug='lambda-agent-deployment')
+        # Workshop.description is the rewritten markdown body.
+        self.assertIn(
+            '[Previous workshop: end-to-end agent deployment]'
+            '(/workshops/end-to-end-agent-deployment)',
+            source.description,
+        )
+        # And the rendered description_html carries the right href.
+        self.assertIn(
+            'href="/workshops/end-to-end-agent-deployment"',
+            source.description_html,
+        )

@@ -80,6 +80,30 @@
       {% else %}
       <p class="text-xs text-muted-foreground mt-2">No checkpoints yet.</p>
       {% endif %}
+
+      {% comment %}
+      Read-only view of the participant ``WeekNote`` rows (issue #499).
+      Staff cannot edit or delete from Studio -- the member-authored
+      notes are owner-only, and the Studio surface is for context
+      not authoring. Empty weeks render a small caption.
+      {% endcomment %}
+      <div class="mt-3 border-t border-border pt-3" data-testid="studio-plan-week-notes" data-week-id="{{ week.pk }}">
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Participant notes</h4>
+        {% if week.notes.all %}
+        <ul class="space-y-2">
+          {% for note in week.notes.all %}
+          <li class="rounded-md border border-border bg-card p-2" data-testid="studio-plan-week-note">
+            <p class="text-xs text-muted-foreground">
+              {% if note.author %}{{ note.author.email }}{% else %}-{% endif %} &middot; {{ note.created_at|date:"Y-m-d H:i" }}
+            </p>
+            <p class="mt-1 whitespace-pre-line text-sm text-foreground">{{ note.body }}</p>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-xs text-muted-foreground italic">No participant notes for this week.</p>
+        {% endif %}
+      </div>
     </li>
     {% endfor %}
   </ol>
@@ -138,5 +162,21 @@
   {% endif %}
 </section>
 
+{% comment %}
+Plan comments thread (issue #499). Staff hits this Studio page to
+post or read comments on member plans, including private plans;
+the comments app permission hook recognises staff users on plan
+threads regardless of visibility. The shared partial is reused
+verbatim so there is exactly one comments UI across the site.
+{% endcomment %}
+<section class="bg-card border border-border rounded-lg p-6 mb-8" data-testid="studio-plan-comments-section">
+  {% include "comments/_qa_section.html" with content_id=plan.comment_content_id user_authenticated=user.is_authenticated section_heading="Plan comments" composer_placeholder="Comment on this plan..." composer_button_label="Post comment" composer_signin_prompt="to comment on this plan" %}
+</section>
+
 {% include "studio/users/_member_notes.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% include "comments/_qa_script.html" %}
 {% endblock %}

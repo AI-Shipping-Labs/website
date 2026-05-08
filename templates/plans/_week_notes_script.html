@@ -1,0 +1,40 @@
+<script>
+  // Inline edit toggle for participant week notes (issue #499).
+  // Plain JS, no framework, mirrors the small toggles already used
+  // elsewhere in the plan body. The actual create/update/delete
+  // flows are classic form posts back to Django -- this script only
+  // shows / hides the inline edit form when the user clicks Edit /
+  // Cancel.
+  (function () {
+    'use strict';
+    function showEditForm(noteEl) {
+      var bodyEl = noteEl.querySelector('[data-week-note-body]');
+      var formEl = noteEl.querySelector('[data-week-note-edit-form]');
+      if (!formEl) { return; }
+      if (bodyEl) { bodyEl.classList.add('hidden'); }
+      formEl.classList.remove('hidden');
+      var ta = formEl.querySelector('textarea');
+      if (ta) { ta.focus(); }
+    }
+    function hideEditForm(noteEl) {
+      var bodyEl = noteEl.querySelector('[data-week-note-body]');
+      var formEl = noteEl.querySelector('[data-week-note-edit-form]');
+      if (!formEl) { return; }
+      if (bodyEl) { bodyEl.classList.remove('hidden'); }
+      formEl.classList.add('hidden');
+    }
+    document.addEventListener('click', function (event) {
+      var editBtn = event.target.closest('[data-week-note-edit]');
+      if (editBtn) {
+        var noteEl = editBtn.closest('[data-testid="plan-week-note"]');
+        if (noteEl) { showEditForm(noteEl); }
+        return;
+      }
+      var cancelBtn = event.target.closest('[data-week-note-cancel]');
+      if (cancelBtn) {
+        var noteEl2 = cancelBtn.closest('[data-testid="plan-week-note"]');
+        if (noteEl2) { hideEditForm(noteEl2); }
+      }
+    });
+  })();
+</script>

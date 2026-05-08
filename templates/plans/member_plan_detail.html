@@ -36,9 +36,24 @@
 
       {% include "plans/_plan_body.html" %}
 
+      {% comment %}
+      Plan comments thread (issue #499). On the read-only teammate
+      view the composer is enabled for any authenticated user who
+      could already see the plan -- visibility was already enforced
+      by ``Plan.objects.visible_to_member(...)`` in the view, so
+      reaching this template means the viewer can read AND write.
+      {% endcomment %}
+      <div data-testid="plan-comments-section">
+        {% include "comments/_qa_section.html" with content_id=plan.comment_content_id user_authenticated=user.is_authenticated section_heading="Comments" composer_placeholder="Write a comment about this plan..." composer_button_label="Post comment" composer_signin_prompt="to comment on this plan" composer_disabled=comments_composer_disabled composer_disabled_reason=comments_disabled_reason %}
+      </div>
+
     </div>
   </section>
 
   {% include "includes/footer.html" %}
 </main>
+{% endblock %}
+
+{% block extra_scripts %}
+{% include "comments/_qa_script.html" %}
 {% endblock %}

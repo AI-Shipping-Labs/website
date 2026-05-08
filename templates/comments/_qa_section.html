@@ -1,28 +1,64 @@
+{% comment %}
+Shared comments thread partial.
+
+Used by the course unit Q&A surface, the workshop tutorial Q&A
+surface, and the personal plan comments surface (issue #499). The
+plan surface customizes the section heading and composer copy via
+template parameters; the JavaScript IIFE in
+``comments/_qa_script.html`` reads ``data-content-id`` on the wrapper
+and is identical across surfaces.
+
+Parameters:
+- ``content_id`` (required): UUID matching the content's
+  ``content_id`` / ``Plan.comment_content_id`` field.
+- ``user_authenticated`` (required): boolean truth value of
+  ``request.user.is_authenticated``.
+- ``section_heading`` (optional, default "Questions & Answers"): the
+  heading text rendered above the thread.
+- ``composer_placeholder`` (optional, default "Ask a question about
+  this lesson..."): placeholder text for the new-comment textarea.
+- ``composer_button_label`` (optional, default "Post Question"): label
+  for the submit button.
+- ``composer_signin_prompt`` (optional, default "to ask questions"):
+  trailing copy after the "Sign in" anchor in the anonymous branch.
+- ``composer_disabled`` (optional, default False): when True the
+  authenticated branch hides the textarea and renders a "discussion
+  not available" notice instead. Used by private-plan owner pages
+  where comments are visible but only staff can write.
+- ``composer_disabled_reason`` (optional): the text shown in the
+  disabled notice. Defaults to a generic message.
+{% endcomment %}
 <div class="mt-12 mb-12" id="qa-section" data-content-id="{{ content_id }}">
   <h2 class="mb-6 flex items-center gap-2 text-xl font-semibold tracking-tight">
     <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
-    Questions &amp; Answers (<span id="qa-count">0</span>)
+    {% if section_heading %}{{ section_heading }}{% else %}Questions &amp; Answers{% endif %} (<span id="qa-count">0</span>)
   </h2>
 
   {% if user_authenticated %}
-  <div class="mb-8">
-    <textarea
-      id="qa-new-question"
-      rows="3"
-      placeholder="Ask a question about this lesson..."
-      class="w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-    ></textarea>
-    <button
-      type="button"
-      id="qa-post-btn"
-      class="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-    >
-      Post Question
-    </button>
-  </div>
+    {% if composer_disabled %}
+    <div class="mb-8 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground" data-testid="qa-composer-disabled">
+      {{ composer_disabled_reason|default:"Discussion is not available right now." }}
+    </div>
+    {% else %}
+    <div class="mb-8">
+      <textarea
+        id="qa-new-question"
+        rows="3"
+        placeholder="{{ composer_placeholder|default:'Ask a question about this lesson...' }}"
+        class="w-full rounded-lg border border-border bg-card p-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+      ></textarea>
+      <button
+        type="button"
+        id="qa-post-btn"
+        class="mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+      >
+        {{ composer_button_label|default:"Post Question" }}
+      </button>
+    </div>
+    {% endif %}
   {% else %}
   <div class="mb-8 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground">
-    <a href="/accounts/login/" class="text-accent hover:underline">Sign in</a> to ask questions
+    <a href="/accounts/login/" class="text-accent hover:underline">Sign in</a> {{ composer_signin_prompt|default:"to ask questions" }}
   </div>
   {% endif %}
 

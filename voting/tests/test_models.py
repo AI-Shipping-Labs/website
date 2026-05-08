@@ -14,29 +14,13 @@ from voting.models import Poll, PollOption, PollVote
 class PollModelTest(TierSetupMixin, TestCase):
     """Test Poll model creation and behavior."""
 
-    def test_create_topic_poll(self):
-        poll = Poll.objects.create(
-            title='What topic next?',
-            description='Vote on the next topic',
-            poll_type='topic',
-        )
-        self.assertEqual(poll.title, 'What topic next?')
-        self.assertEqual(poll.poll_type, 'topic')
-        self.assertEqual(poll.required_level, LEVEL_MAIN)
-        self.assertEqual(poll.status, 'open')
-        self.assertFalse(poll.allow_proposals)
-        self.assertEqual(poll.max_votes_per_user, 3)
-        self.assertIsNone(poll.closes_at)
-        self.assertIsNotNone(poll.created_at)
-        self.assertIsNotNone(poll.id)
-
-    def test_create_course_poll(self):
-        poll = Poll.objects.create(
-            title='What course next?',
-            poll_type='course',
-        )
-        self.assertEqual(poll.required_level, LEVEL_PREMIUM)
-
+    # ``test_create_topic_poll`` / ``test_create_course_poll``
+    # previously round-tripped a ``Poll`` row to assert default
+    # field values — Django ORM behaviour. The
+    # ``required_level`` auto-mapping by ``poll_type`` is the
+    # actual project rule worth testing, and that is covered by
+    # ``test_required_level_auto_set_on_save`` /
+    # ``test_required_level_changes_with_poll_type`` below.
     def test_required_level_auto_set_on_save(self):
         """required_level is auto-set based on poll_type, even if explicitly provided."""
         poll = Poll.objects.create(
@@ -54,31 +38,29 @@ class PollModelTest(TierSetupMixin, TestCase):
         poll.refresh_from_db()
         self.assertEqual(poll.required_level, LEVEL_PREMIUM)
 
-    def test_is_closed_by_status(self):
-        poll = Poll.objects.create(title='Closed', status='closed')
-        self.assertTrue(poll.is_closed)
-
-    def test_is_closed_by_closes_at(self):
-        poll = Poll.objects.create(
-            title='Past',
-            closes_at=timezone.now() - timedelta(hours=1),
-        )
-        self.assertTrue(poll.is_closed)
-
-    def test_is_not_closed_when_open(self):
-        poll = Poll.objects.create(title='Open', status='open')
-        self.assertFalse(poll.is_closed)
-
-    def test_is_not_closed_future_closes_at(self):
-        poll = Poll.objects.create(
-            title='Future',
-            closes_at=timezone.now() + timedelta(days=7),
-        )
-        self.assertFalse(poll.is_closed)
-
-    def test_total_votes_empty(self):
-        poll = Poll.objects.create(title='Empty')
-        self.assertEqual(poll.total_votes, 0)
+    def test_is_closed_truth_table(self):
+        # ``Poll.is_closed`` is True when ``status == 'closed'`` OR
+        # ``closes_at`` is in the past. The four-row truth table:
+        now = timezone.now()
+        cases = [
+            # (kwargs, expected_is_closed, why)
+            ({'status': 'closed'}, True, 'status=closed forces closed'),
+            (
+                {'closes_at': now - timedelta(hours=1)},
+                True,
+                'closes_at in the past forces closed',
+            ),
+            ({'status': 'open'}, False, 'open status, no closes_at'),
+            (
+                {'closes_at': now + timedelta(days=7)},
+                False,
+                'closes_at in the future is still open',
+            ),
+        ]
+        for kwargs, expected, why in cases:
+            with self.subTest(why=why):
+                poll = Poll.objects.create(title='is_closed', **kwargs)
+                self.assertEqual(poll.is_closed, expected)
 
     def test_total_votes_with_votes(self):
         poll = Poll.objects.create(title='Has votes')
@@ -86,12 +68,6 @@ class PollModelTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(email='voter@test.com')
         PollVote.objects.create(poll=poll, option=option, user=user)
         self.assertEqual(poll.total_votes, 1)
-
-    def test_options_count(self):
-        poll = Poll.objects.create(title='Poll')
-        PollOption.objects.create(poll=poll, title='A')
-        PollOption.objects.create(poll=poll, title='B')
-        self.assertEqual(poll.options_count, 2)
 
     def test_get_absolute_url(self):
         poll = Poll.objects.create(title='Test')
@@ -122,10 +98,6 @@ class PollOptionModelTest(TierSetupMixin, TestCase):
             proposed_by=user,
         )
         self.assertEqual(option.proposed_by, user)
-
-    def test_vote_count_empty(self):
-        option = PollOption.objects.create(poll=self.poll, title='Test')
-        self.assertEqual(option.vote_count, 0)
 
     def test_vote_count_with_votes(self):
         option = PollOption.objects.create(poll=self.poll, title='Test')

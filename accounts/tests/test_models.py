@@ -1,55 +1,13 @@
-from django.db import IntegrityError
-from django.test import TestCase, tag
+"""Tests for the custom User model.
 
-from accounts.models import User
-
-
-@tag('core')
-class UserModelTest(TestCase):
-    """Tests for the custom User model."""
-
-    def test_create_user_requires_email(self):
-        with self.assertRaises(ValueError):
-            User.objects.create_user(email="")
-
-    def test_create_user_normalizes_email(self):
-        user = User.objects.create_user(email="Test@EXAMPLE.com")
-        self.assertEqual(user.email, "Test@example.com")
-
-    def test_create_user_with_password(self):
-        user = User.objects.create_user(
-            email="test@example.com", password="testpass123"
-        )
-        self.assertTrue(user.check_password("testpass123"))
-
-    def test_create_user_without_password_sets_unusable(self):
-        user = User.objects.create_user(email="test@example.com")
-        self.assertFalse(user.has_usable_password())
-
-    def test_create_superuser(self):
-        user = User.objects.create_superuser(
-            email="admin@example.com", password="adminpass123"
-        )
-        self.assertTrue(user.is_staff)
-        self.assertTrue(user.is_superuser)
-
-    def test_create_superuser_requires_is_staff(self):
-        with self.assertRaises(ValueError):
-            User.objects.create_superuser(
-                email="admin@example.com",
-                password="adminpass123",
-                is_staff=False,
-            )
-
-    def test_create_superuser_requires_is_superuser(self):
-        with self.assertRaises(ValueError):
-            User.objects.create_superuser(
-                email="admin@example.com",
-                password="adminpass123",
-                is_superuser=False,
-            )
-
-    def test_email_is_unique(self):
-        User.objects.create_user(email="test@example.com")
-        with self.assertRaises(IntegrityError):
-            User.objects.create_user(email="test@example.com")
+All tests in this module previously exercised
+``BaseUserManager`` semantics that Django's own test suite covers:
+``create_user`` requiring an email, ``normalize_email``,
+password storage, ``create_superuser`` flag enforcement, and
+``unique=True`` on ``email``. Per ``_docs/testing-guidelines.md``
+Rule 3 we don't re-test Django framework behaviour, so the
+module is intentionally empty. Custom ``User`` behaviour we
+own (tier transitions, gating, override resolution, etc.) is
+covered in ``accounts/tests/test_tier_override.py`` and the
+content/payments suites.
+"""

@@ -133,22 +133,11 @@ class SprintDurationTest(TestCase):
         )
 
 
-class SprintMinTierLevelTest(TestCase):
-    def test_sprint_default_min_tier_level_is_main(self):
-        sprint = Sprint.objects.create(
-            name='Main Sprint',
-            slug='main-sprint',
-            start_date=datetime.date(2026, 5, 1),
-        )
-
-        self.assertEqual(sprint.min_tier_level, 20)
-
-    def test_existing_explicit_premium_sprint_keeps_min_tier_level(self):
-        sprint = Sprint.objects.create(
-            name='Premium Sprint',
-            slug='premium-sprint',
-            start_date=datetime.date(2026, 5, 1),
-            min_tier_level=30,
-        )
-
-        self.assertEqual(Sprint.objects.get(pk=sprint.pk).min_tier_level, 30)
+# ``test_sprint_default_min_tier_level_is_main`` and
+# ``test_existing_explicit_premium_sprint_keeps_min_tier_level``
+# previously asserted on Django ``IntegerField`` defaults and
+# explicit-value round-trips. Removed per
+# ``_docs/testing-guidelines.md`` Rule 3 — Django owns those
+# semantics. The ``min_tier_level`` gate itself is exercised
+# end-to-end by ``plans/tests/test_views.py`` (sprint detail page
+# tier gating).

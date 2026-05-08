@@ -34,56 +34,27 @@ class CuratedLinkModelFieldsTest(TestCase):
         )
         self.assertEqual(link.tags, ['python', 'ai'])
 
-    def test_required_level_tier_name_property(self):
-        link = CuratedLink(required_level=LEVEL_BASIC)
-        self.assertEqual(link.required_level_tier_name, 'Basic')
-
-    def test_required_level_tier_name_open(self):
-        link = CuratedLink(required_level=LEVEL_OPEN)
-        self.assertEqual(link.required_level_tier_name, 'Free')
+    def test_required_level_tier_name_lookup(self):
+        # ``CuratedLink.required_level_tier_name`` maps a numeric level
+        # to a human-readable tier name. Two-row lookup table.
+        cases = [
+            (LEVEL_OPEN, 'Free'),
+            (LEVEL_BASIC, 'Basic'),
+        ]
+        for level, expected_name in cases:
+            with self.subTest(level=level):
+                link = CuratedLink(required_level=level)
+                self.assertEqual(link.required_level_tier_name, expected_name)
 
 
 # --- Model ordering tests ---
 
 
-class CuratedLinkOrderingTest(TestCase):
-    """Test that links are ordered by sort_order, then title."""
-
-    def test_ordering_by_sort_order(self):
-        CuratedLink.objects.create(
-            item_id='order-b', title='B Link',
-            url='https://example.com', category='tools',
-            sort_order=2,
-        )
-        CuratedLink.objects.create(
-            item_id='order-a', title='A Link',
-            url='https://example.com', category='tools',
-            sort_order=1,
-        )
-        CuratedLink.objects.create(
-            item_id='order-c', title='C Link',
-            url='https://example.com', category='tools',
-            sort_order=3,
-        )
-        links = list(CuratedLink.objects.all())
-        self.assertEqual(links[0].item_id, 'order-a')
-        self.assertEqual(links[1].item_id, 'order-b')
-        self.assertEqual(links[2].item_id, 'order-c')
-
-    def test_ordering_by_title_when_same_sort_order(self):
-        CuratedLink.objects.create(
-            item_id='order-z', title='Zebra',
-            url='https://example.com', category='tools',
-            sort_order=0,
-        )
-        CuratedLink.objects.create(
-            item_id='order-alpha', title='Alpha',
-            url='https://example.com', category='tools',
-            sort_order=0,
-        )
-        links = list(CuratedLink.objects.all())
-        self.assertEqual(links[0].title, 'Alpha')
-        self.assertEqual(links[1].title, 'Zebra')
+# Tests for ``CuratedLink`` ``Meta.ordering`` (sort_order then title) lived
+# here. They were removed per ``_docs/testing-guidelines.md`` Rule 3 — Django
+# owns ``Meta.ordering`` semantics, and the user-visible ordering on
+# ``/resources`` is exercised by ``ResourcesSortOrderTest`` below, which is
+# the authoritative test layer.
 
 
 # --- View: /resources page ---

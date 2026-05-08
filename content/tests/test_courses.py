@@ -112,14 +112,6 @@ class CourseModelTest(TestCase):
         )
         self.assertEqual(course.required_tier_name, 'Main')
 
-    def test_ordering_by_created_at_desc(self):
-        Course.objects.create(title='Older', slug='older')
-        Course.objects.create(title='Newer', slug='newer')
-        courses = list(Course.objects.all())
-        self.assertEqual(courses[0].slug, 'newer')
-        self.assertEqual(courses[1].slug, 'older')
-
-
 @tag('core')
 class ModuleModelTest(TestCase):
     """Test Module model fields."""
@@ -135,14 +127,6 @@ class ModuleModelTest(TestCase):
         self.assertEqual(module.title, 'Module 1')
         self.assertEqual(module.course, self.course)
         self.assertEqual(module.sort_order, 1)
-
-    def test_ordering_by_sort_order(self):
-        Module.objects.create(course=self.course, title='Second', slug='second', sort_order=2)
-        Module.objects.create(course=self.course, title='First', slug='first', sort_order=1)
-        modules = list(Module.objects.filter(course=self.course))
-        self.assertEqual(modules[0].title, 'First')
-        self.assertEqual(modules[1].title, 'Second')
-
 
 @tag('core')
 class UnitModelTest(TestCase):
@@ -195,14 +179,6 @@ class UnitModelTest(TestCase):
         )
         self.assertEqual(unit.get_absolute_url(), '/courses/course/module/url-test')
 
-    def test_ordering_by_sort_order(self):
-        Unit.objects.create(module=self.module, title='Second', slug='second', sort_order=2)
-        Unit.objects.create(module=self.module, title='First', slug='first', sort_order=1)
-        units = list(Unit.objects.filter(module=self.module))
-        self.assertEqual(units[0].title, 'First')
-        self.assertEqual(units[1].title, 'Second')
-
-
 @tag('core')
 class UserCourseProgressModelTest(TestCase):
     """Test UserCourseProgress model."""
@@ -224,17 +200,22 @@ class UserCourseProgressModelTest(TestCase):
         )
         self.assertIsNotNone(progress.completed_at)
 
-    def test_str_completed(self):
-        progress = UserCourseProgress.objects.create(
-            user=self.user, unit=self.unit, completed_at=timezone.now(),
-        )
-        self.assertIn('completed', str(progress))
-
-    def test_str_in_progress(self):
-        progress = UserCourseProgress.objects.create(
-            user=self.user, unit=self.unit, completed_at=None,
-        )
-        self.assertIn('in progress', str(progress))
+    def test_str_branches_on_completed_at(self):
+        # ``UserCourseProgress.__str__`` flips between
+        # ``'completed'`` and ``'in progress'`` based on whether
+        # ``completed_at`` is set. Both branches in one ``subTest``.
+        cases = [
+            ('completed', timezone.now()),
+            ('in progress', None),
+        ]
+        for expected_marker, completed_at in cases:
+            with self.subTest(expected_marker=expected_marker):
+                progress = UserCourseProgress(
+                    user=self.user,
+                    unit=self.unit,
+                    completed_at=completed_at,
+                )
+                self.assertIn(expected_marker, str(progress))
 
 @tag('core')
 class CourseTotalAndCompletedTest(TestCase):

@@ -45,25 +45,32 @@ class ExtractSortOrderTest(TestCase):
 
 
 class DeriveSlugTest(TestCase):
-    """Test derive_slug helper function."""
+    """Test derive_slug helper function.
 
-    def test_strip_numeric_prefix_from_directory(self):
-        self.assertEqual(derive_slug('01-day-1'), 'day-1')
+    ``derive_slug`` strips an optional ``NN-`` numeric prefix and the
+    optional ``.md`` extension. The behaviour is a single regex match,
+    not branching code, so the per-shape tests collapse into one
+    ``subTest``-parameterized table.
+    """
 
-    def test_strip_numeric_prefix_from_filename(self):
-        self.assertEqual(derive_slug('02-environment.md'), 'environment')
-
-    def test_no_numeric_prefix_filename(self):
-        self.assertEqual(derive_slug('lesson.md'), 'lesson')
-
-    def test_no_numeric_prefix_directory(self):
-        self.assertEqual(derive_slug('appendix'), 'appendix')
-
-    def test_multi_digit_prefix(self):
-        self.assertEqual(derive_slug('123-advanced-topics'), 'advanced-topics')
-
-    def test_no_extension(self):
-        self.assertEqual(derive_slug('01-introduction'), 'introduction')
+    def test_derive_slug_table(self):
+        cases = [
+            # (filename_or_dir, expected_slug, why)
+            ('01-day-1', 'day-1', 'numeric prefix stripped from directory'),
+            ('02-environment.md', 'environment',
+             'numeric prefix and .md extension stripped from filename'),
+            ('lesson.md', 'lesson',
+             'no numeric prefix on filename — only .md stripped'),
+            ('appendix', 'appendix',
+             'no numeric prefix on directory — name kept verbatim'),
+            ('123-advanced-topics', 'advanced-topics',
+             'multi-digit prefix stripped'),
+            ('01-introduction', 'introduction',
+             'numeric prefix stripped even without extension'),
+        ]
+        for name, expected, label in cases:
+            with self.subTest(name=name, why=label):
+                self.assertEqual(derive_slug(name), expected)
 
 
 class RequiredFieldsTest(TestCase):

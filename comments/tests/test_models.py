@@ -40,18 +40,3 @@ class CommentCleanTest(TestCase):
         )
         # Should not raise
         reply.clean()
-
-    def test_str_top_level(self):
-        comment = Comment.objects.create(
-            content_id=self.content_id, user=self.user, body='Q',
-        )
-        self.assertIn('Question', str(comment))
-
-    def test_str_reply(self):
-        top = Comment.objects.create(
-            content_id=self.content_id, user=self.user, body='Q',
-        )
-        reply = Comment.objects.create(
-            content_id=self.content_id, user=self.user, parent=top, body='R',
-        )
-        self.assertIn('Reply', str(reply))

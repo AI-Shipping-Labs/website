@@ -443,16 +443,18 @@ def test_laptop_keeps_three_column_grid(django_server, page):
             );
             const cs = getComputedStyle(el);
             const articles = el.querySelectorAll('article');
-            // Read border + padding of the first article to confirm card
-            // chrome is preserved.
+            // Read the article border plus the clickable card body's padding
+            // to confirm card chrome is preserved.
             const a = articles[0];
             const acs = a ? getComputedStyle(a) : null;
+            const body = a ? a.querySelector('a') : null;
+            const bcs = body ? getComputedStyle(body) : null;
             return {
                 display: cs.display,
                 cols: cs.gridTemplateColumns.split(' ').length,
                 cardCount: articles.length,
                 cardBorder: acs ? acs.borderTopWidth : null,
-                cardPadding: acs ? acs.paddingTop : null,
+                cardBodyPadding: bcs ? bcs.paddingTop : null,
             };
         }"""
     )
@@ -461,9 +463,10 @@ def test_laptop_keeps_three_column_grid(django_server, page):
         f"At 1280px expected lg:grid-cols-3 (3 tracks), got {info['cols']}"
     )
     assert info["cardCount"] == 3
-    # The card retains its existing 1px border and `p-6` (24px) padding.
+    # The card retains its existing 1px border and the clickable card body
+    # retains its `p-6` (24px) padding.
     assert info["cardBorder"] == "1px"
-    assert info["cardPadding"] == "24px"
+    assert info["cardBodyPadding"] == "24px"
 
     _screenshot(page, "desktop-1280")
 

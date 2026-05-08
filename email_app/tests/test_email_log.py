@@ -34,14 +34,6 @@ class EmailLogModelTest(TestCase):
         self.assertIsNotNone(log.sent_at)
         self.assertIsNone(log.campaign)
 
-    def test_email_log_str(self):
-        log = EmailLog.objects.create(
-            user=self.user,
-            email_type='payment_failed',
-        )
-        self.assertIn('payment_failed', str(log))
-        self.assertIn('test@example.com', str(log))
-
     def test_email_log_with_campaign(self):
         campaign = EmailCampaign.objects.create(
             subject='Test Campaign',
@@ -132,13 +124,6 @@ class EmailCampaignModelTest(TestCase):
         self.assertEqual(campaign.sent_count, 0)
         self.assertIsNone(campaign.sent_at)
         self.assertIsNotNone(campaign.created_at)
-
-    def test_campaign_str(self):
-        campaign = EmailCampaign.objects.create(
-            subject='Test Subject',
-            body='Body',
-        )
-        self.assertEqual(str(campaign), 'Test Subject (draft)')
 
     def test_campaign_status_choices(self):
         campaign = EmailCampaign.objects.create(

@@ -12,6 +12,21 @@ User = get_user_model()
 
 
 class ActivitiesSprintHubTest(TestCase):
+    def test_global_nav_keeps_expected_order(self):
+        response = self.client.get('/activities')
+        content = response.content.decode()
+
+        about_index = content.index('href="/about"')
+        membership_index = content.index('href="/pricing"')
+        activities_index = content.index('href="/activities"')
+        resources_index = content.index('id="resources-dropdown-btn"')
+        faq_index = content.index('href="/faq"')
+
+        self.assertLess(about_index, membership_index)
+        self.assertLess(membership_index, activities_index)
+        self.assertLess(activities_index, resources_index)
+        self.assertLess(resources_index, faq_index)
+
     def test_active_sprint_details_render_for_anonymous_users(self):
         sprint = Sprint.objects.create(
             name='May Shipping Sprint',
@@ -26,16 +41,48 @@ class ActivitiesSprintHubTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="activities-sprints-section"')
+        self.assertContains(response, 'id="community-sprints"')
+        self.assertContains(response, 'Active community sprints')
+        self.assertContains(response, 'time-bound cohorts for shipping projects')
         self.assertContains(response, sprint.name)
         self.assertContains(response, 'May 15, 2026')
         self.assertContains(response, '4 weeks')
         self.assertContains(response, 'Active')
-        self.assertContains(response, 'Main tier required')
+        self.assertContains(response, 'Membership: Main')
+        self.assertContains(response, 'Joining requires Main membership')
         self.assertContains(response, 'Log in to join')
         self.assertContains(
             response,
             f'{reverse("account_login")}?next=/sprints/{sprint.slug}',
         )
+
+    def test_sprints_render_before_secondary_nav_and_tier_activity_content(self):
+        Sprint.objects.create(
+            name='May Shipping Sprint',
+            slug='may-shipping-sprint',
+            start_date=datetime.date(2026, 5, 15),
+            duration_weeks=4,
+            status='active',
+            min_tier_level=20,
+        )
+
+        response = self.client.get('/activities')
+        content = response.content.decode()
+
+        sprint_section_index = content.index(
+            'data-testid="activities-sprints-section"'
+        )
+        sprint_card_index = content.index('data-testid="activities-sprint-card"')
+        secondary_nav_index = content.index(
+            'data-testid="activities-secondary-nav"'
+        )
+        access_by_tier_index = content.index('Access by Tier')
+        quick_comparison_index = content.index('Quick comparison')
+
+        self.assertLess(sprint_section_index, sprint_card_index)
+        self.assertLess(sprint_card_index, secondary_nav_index)
+        self.assertLess(secondary_nav_index, access_by_tier_index)
+        self.assertLess(access_by_tier_index, quick_comparison_index)
 
     def test_draft_sprint_is_hidden_from_anonymous_and_member(self):
         Sprint.objects.create(
@@ -88,7 +135,9 @@ class ActivitiesSprintHubTest(TestCase):
         response = self.client.get('/activities')
 
         self.assertContains(response, 'data-testid="activities-sprints-empty"')
-        self.assertContains(response, 'No active community sprints right now')
+        self.assertContains(response, 'Next sprint coming soon')
+        self.assertContains(response, 'href="/events"')
+        self.assertContains(response, 'href="/workshops"')
         self.assertNotContains(response, 'data-testid="activities-sprint-card"')
 
     def test_member_cta_points_to_pricing_when_under_required_tier(self):

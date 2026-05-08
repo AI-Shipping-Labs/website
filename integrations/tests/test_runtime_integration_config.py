@@ -228,6 +228,8 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
     @override_settings(
         SES_FROM_EMAIL="settings@example.com",
         AWS_SES_REGION="us-east-1",
+        # Issue #509: opt in so _send_raw_email exercises the boto3 path.
+        SES_ENABLED=True,
     )
     @patch("events.services.registration_email.boto3.client")
     def test_registration_email_uses_db_sender_and_region(self, mock_boto_client):

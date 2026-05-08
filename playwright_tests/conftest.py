@@ -47,6 +47,16 @@ def _start_django_server():
     settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = ''
     settings.SLACK_COMMUNITY_CHANNEL_IDS = []
 
+    # Disable Amazon SES for E2E tests so no real emails are sent (issue #509).
+    # EmailService._send_ses and events.services.registration_email._send_raw_email
+    # both check SES_ENABLED and return a synthetic noop message id when disabled.
+    # Belt-and-suspenders: blanking the AWS credentials means any future code path
+    # that slips past the gate would still fail with InvalidClientTokenId rather
+    # than reach a real account.
+    settings.SES_ENABLED = False
+    settings.AWS_ACCESS_KEY_ID = ''
+    settings.AWS_SECRET_ACCESS_KEY = ''
+
     # Enable Stripe Checkout so that upgrade/downgrade/cancel buttons and
     # the JS-based checkout flow are rendered in templates.  The setting
     # defaults to False (payment-links mode) but E2E tests for the account

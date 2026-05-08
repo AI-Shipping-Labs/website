@@ -3,7 +3,6 @@ from django.db import connection
 
 from website.test_database_guard import is_database_test_scoped
 
-
 pytest_plugins = ["playwright_tests.conftest"]
 
 

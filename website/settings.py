@@ -512,6 +512,25 @@ SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID'
 SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 
+# Amazon SES kill-switch (issue #509)
+# Mirrors the SLACK_ENABLED pattern above. Production deploys MUST set
+# SES_ENABLED=true to enable transactional + campaign mail; every other
+# environment (local dev, CI, Playwright, manage.py test) defaults to off so
+# that no real emails are sent. Both code paths that build a boto3 SES client
+# (EmailService._send_ses and events.services.registration_email._send_raw_email)
+# short-circuit when this flag is False, returning a synthetic
+# ``ses-disabled-noop`` message id so EmailLog rows still record the attempt.
+# As a belt-and-suspenders defence we also blank the AWS access keys here so
+# that any future code path that slips past the gate cannot authenticate
+# against a real SES account using leaked env credentials.
+SES_ENABLED = (
+    not TESTING
+    and os.environ.get('SES_ENABLED', 'false').lower() == 'true'
+)
+if not SES_ENABLED:
+    AWS_ACCESS_KEY_ID = ''
+    AWS_SECRET_ACCESS_KEY = ''
+
 # Cache configuration
 # django-q writes cluster heartbeats (used by the /studio/worker/ dashboard)
 # to Django's cache backend. The default LocMemCache is per-process, so the

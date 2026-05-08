@@ -388,6 +388,19 @@ class EmailService:
         Raises:
             EmailServiceError: If SES API call fails.
         """
+        # Issue #509: kill-switch for tests / local dev. When SES_ENABLED is
+        # False the gate short-circuits BEFORE the boto3 client is built, so
+        # no real network call is made and production sender reputation is
+        # never touched. The synthetic message id is intentionally
+        # recognisable in EmailLog queries during incident response.
+        if not getattr(settings, "SES_ENABLED", False):
+            logger.info(
+                "SES disabled - skipping send to %s (subject=%s)",
+                to_email,
+                subject,
+            )
+            return "ses-disabled-noop"
+
         from_email = get_config(
             "SES_FROM_EMAIL",
             "community@aishippinglabs.com",

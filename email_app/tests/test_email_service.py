@@ -218,8 +218,14 @@ class EmailServiceTemplateRenderingTest(TestCase):
         self.assertIn('zoom.us/j/123', html)
 
 
+@override_settings(SES_ENABLED=True)
 class EmailServiceSESIntegrationTest(TestCase):
-    """Test SES API integration (mocked)."""
+    """Test SES API integration (mocked).
+
+    The whole class opts in to SES_ENABLED=True (issue #509). The kill-switch
+    defaults False under TESTING; without the override every test in this
+    suite would short-circuit before reaching the boto3 mock and fail.
+    """
 
     def setUp(self):
         clear_config_cache()

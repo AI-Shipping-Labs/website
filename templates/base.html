@@ -181,6 +181,17 @@
     .prose ul, .prose ol { margin-top: 1rem; margin-left: 1.5rem; color: hsl(var(--muted-foreground)); list-style: disc; }
     .prose ol { list-style: decimal; }
     .prose li { margin: 0.25rem 0; }
+    /* Issue #527: tighten prose <li> rhythm inside the workshop landing
+       description and the tutorial page body so the markdown
+       Walkthrough/Links lists feel in the same family as the canonical
+       card rows. Pins line-height 1.5 + the 0.25rem margin against
+       any future drift in the global .prose li rule above.
+       Uses a `prose-tight` class (not the `data-testid` attribute) so
+       this CSS does not introduce literal substrings that would
+       false-positive `assertNotContains(response, 'data-testid="..."')`
+       paywall assertions in the test suite. Consumer templates opt in
+       by adding `prose-tight` as a second class on the prose wrapper. */
+    .prose-tight li { margin: 0.25rem 0; line-height: 1.5; }
     .prose code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); font-variant-ligatures: none; }
     .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; font-variant-ligatures: none; }
     .prose pre code { background: transparent; padding: 0; border: none; color: hsl(var(--card-foreground)); }

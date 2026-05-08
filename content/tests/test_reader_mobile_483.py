@@ -331,12 +331,16 @@ class WorkshopReaderParityTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
-        # The workshop sidebar list row now uses px-2 py-1.5 (same as
-        # the course sidebar). The previous template used px-3 py-2.
+        # Issue #527: both the workshop sidebar drawer rows and the
+        # course sidebar unit rows now render via the shared
+        # `templates/includes/_list_row.html` partial, which uses the
+        # canonical scale `px-3 py-2`. (The original #483 fix landed on
+        # `px-2 py-1.5`; #527 promoted both readers to the new canonical
+        # scale to match the workshop landing card.)
         idx = body.find('data-testid="sidebar-current-page"')
         self.assertNotEqual(idx, -1)
         window = body[max(0, idx - 600):idx + 200]
-        self.assertIn('px-2 py-1.5', window)
+        self.assertIn('px-3 py-2', window)
 
     def test_workshop_sidebar_uses_circle_glyph_for_uncompleted_pages(
         self,

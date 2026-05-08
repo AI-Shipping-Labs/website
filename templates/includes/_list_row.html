@@ -1,0 +1,81 @@
+{% comment %}
+Shared list-row partial (issue #527).
+
+Renders one anchor row for "list of navigation/index items" surfaces —
+the workshop landing's "Tutorial pages" `<ol>`, the reader sidebar's
+workshop pages `<ul>`, and the reader sidebar's course module units
+`<ul>`. All three render the same kind of data (the workshop's tutorial
+pages or a course's unit list) but used to render with three different
+templates with different padding, font sizes, marker icons, and color.
+This partial is the canonical row template.
+
+Canonical scale
+----------------
+- `flex items-center min-h-[44px] gap-2.5 rounded-md px-3 py-2`
+- `text-sm` (14px), 400 weight (active rows: 500 / `font-medium`)
+- `text-foreground` (active: `text-accent`)
+- Sibling `<li>` entries should be wrapped in a parent with `space-y-0.5`
+  (no `mt-*` on individual `<li>`).
+
+Marker variants — the caller fills the leading `<span>` slot via the
+`marker_*` parameters:
+
+- Numbered (workshop landing): `marker_kind="number"`, `marker_number=N`.
+  Renders a `bg-accent/15` numeric badge.
+- Completion (drawer, authenticated complete): `marker_kind="check"`.
+  Renders the green `check-circle-2` glyph.
+- Plain (drawer, anonymous or incomplete): `marker_kind="circle"`.
+  Renders the `circle` glyph at 40% opacity.
+- Custom: `marker_kind="custom"` and pass `marker_html` (rendered with
+  `|safe`) to inject any other glyph.
+
+Trailing chevron (`chevron-right`) renders by default. Pass
+`trailing_icon="lock"` to swap in the lock glyph (used when a workshop
+page is gated). Pass `trailing_icon=""` to omit the trailing icon.
+
+Parameters
+----------
+href: row destination (required).
+title: visible row text (required).
+is_current: truthy applies the `bg-accent/10 text-accent font-medium`
+    active state.
+marker_kind: one of `number`, `check`, `circle`, `custom`, or empty.
+marker_number: number to render when `marker_kind="number"`.
+marker_html: raw HTML to inject when `marker_kind="custom"` (rendered
+    with `|safe`).
+trailing_icon: lucide icon name for the trailing icon. Defaults to
+    `chevron-right`. Pass an empty string to omit.
+testid: optional `data-testid` for the anchor.
+marker_testid: optional `data-testid` for the marker icon (used so the
+    completion glyph carries `sidebar-completed-page` for tests).
+extra_anchor_class: optional Tailwind classes appended to the anchor.
+extra_attrs: optional raw attribute string (rendered with `|safe`),
+    e.g. `aria-current="page"`.
+
+Notes
+-----
+- The anchor sets `min-h-[44px]` so taps land on iOS/Android even when
+  the title is short.
+- `<span>` text uses `truncate` so long titles do not wrap and break
+  the row rhythm.
+{% endcomment %}
+<a href="{{ href }}"
+   class="group flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if is_current %}bg-accent/10 text-accent font-medium{% else %}text-foreground hover:bg-muted/50{% endif %}{% if extra_anchor_class %} {{ extra_anchor_class }}{% endif %}"
+   {% if testid %}data-testid="{{ testid }}"{% endif %}
+   {% if extra_attrs %}{{ extra_attrs|safe }}{% endif %}>
+  <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center">
+    {% if marker_kind == "number" %}
+      <span class="flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-[11px] font-semibold text-accent">{{ marker_number }}</span>
+    {% elif marker_kind == "check" %}
+      <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400"{% if marker_testid %} data-testid="{{ marker_testid }}"{% endif %}></i>
+    {% elif marker_kind == "circle" %}
+      <i data-lucide="circle" class="h-4 w-4 opacity-40"></i>
+    {% elif marker_kind == "custom" %}
+      {{ marker_html|safe }}
+    {% endif %}
+  </span>
+  <span class="min-w-0 flex-1 truncate">{{ title }}</span>
+  {% if trailing_icon != "" %}
+    <i data-lucide="{{ trailing_icon|default:'chevron-right' }}" class="h-4 w-4 flex-shrink-0 text-muted-foreground{% if trailing_icon_testid_class %} {{ trailing_icon_testid_class }}{% endif %}"{% if trailing_icon_testid %} data-testid="{{ trailing_icon_testid }}"{% endif %}></i>
+  {% endif %}
+</a>

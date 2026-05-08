@@ -7,7 +7,6 @@ ALLOWED_HOSTS_BY_ENV = {
     "prod": [
         "aishippinglabs.com",
         "www.aishippinglabs.com",
-        "prod.aishippinglabs.com",
     ],
 }
 
@@ -20,7 +19,6 @@ CSRF_TRUSTED_ORIGINS_BY_ENV = {
     "prod": [
         "https://aishippinglabs.com",
         "https://www.aishippinglabs.com",
-        "https://prod.aishippinglabs.com",
     ],
 }
 

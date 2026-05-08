@@ -26,10 +26,10 @@ jobs:
 
     env:
       AWS_REGION: eu-west-1
-      # Hostname the verify step polls. Currently prod.aishippinglabs.com
-      # because the apex still serves the legacy Next.js site. Switch to
-      # aishippinglabs.com after the apex DNS cutover.
-      PROD_HOST: prod.aishippinglabs.com
+      # Hostname the verify step polls. The apex DNS cutover has happened —
+      # production users land on the apex, and `prod.aishippinglabs.com` is
+      # a legacy alias that may be retired.
+      PROD_HOST: aishippinglabs.com
 
     steps:
       - name: Echo Inputs

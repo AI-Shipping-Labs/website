@@ -88,7 +88,7 @@ class UpdateTaskDefinitionAllowedHostsTest(SimpleTestCase):
             self.assertEqual(environment["DEBUG"], "False")
             self.assertEqual(
                 environment["ALLOWED_HOSTS"],
-                "aishippinglabs.com,www.aishippinglabs.com,prod.aishippinglabs.com",
+                "aishippinglabs.com,www.aishippinglabs.com",
             )
 
     def test_run_migrations_only_set_on_web_container(self):

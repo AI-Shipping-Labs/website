@@ -220,7 +220,13 @@
   </section>
 
   <!-- Event Recordings / Resources Section -->
-  <section id="resources" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28">
+  {% comment %}
+    Issue #512: convert mobile layout to a horizontal scroll-snap carousel
+    so the section never bursts the Pixel 7 viewport. Desktop grid
+    (md:grid-cols-2 lg:grid-cols-3) is unchanged. `overflow-x-hidden` on
+    the section is a belt-and-suspenders parent overflow guard.
+  {% endcomment %}
+  <section id="resources" class="border-t border-border bg-background py-12 sm:py-20 lg:py-28 overflow-x-hidden">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -242,15 +248,21 @@
       </div>
 
       {% if recordings %}
-      <div class="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {% comment %}
+        Issue #512: max-md collapses the grid into a horizontal scroll-snap
+        carousel, mirroring the testimonial cards pattern. The desktop grid
+        classes are kept byte-for-byte identical to before.
+      {% endcomment %}
+      <div class="mt-10 gap-6 max-md:-mx-4 max-md:flex max-md:snap-x max-md:snap-mandatory max-md:overflow-x-auto max-md:scroll-smooth max-md:px-4 max-md:pb-4 max-md:[scrollbar-width:none] md:grid md:grid-cols-2 lg:grid-cols-3"
+           data-testid="home-recordings-carousel">
         {% for recording in recordings %}
-        <article class="group flex flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50">
+        <article class="group flex min-w-0 flex-col rounded-xl border border-border bg-card p-6 transition-colors hover:border-accent/50 max-md:w-[min(82vw,22rem)] max-md:flex-none max-md:snap-center">
           <div class="flex-1">
-            <div class="flex items-center gap-2 mb-2">
-              <i data-lucide="video" class="h-5 w-5 text-accent"></i>
-              <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ recording.title }}</h3>
+            <div class="flex min-w-0 items-center gap-2 mb-2">
+              <i data-lucide="video" class="h-5 w-5 shrink-0 text-accent"></i>
+              <h3 class="break-words text-lg font-semibold text-foreground transition-colors group-hover:text-accent [overflow-wrap:anywhere]">{{ recording.title }}</h3>
             </div>
-            <p class="mt-2 line-clamp-3 text-sm text-muted-foreground">{{ recording.description }}</p>
+            <p class="mt-2 line-clamp-3 break-words text-sm text-muted-foreground">{{ recording.description }}</p>
             <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span class="inline-flex items-center gap-1.5">
                 <i data-lucide="calendar" class="h-4 w-4"></i>

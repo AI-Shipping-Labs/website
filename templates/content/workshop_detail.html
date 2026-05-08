@@ -166,7 +166,7 @@
 
       <!-- Description (always shown when landing is accessible) -->
       {% if workshop.description_html %}
-      <div class="prose mb-12" data-testid="workshop-description">
+      <div class="prose prose-tight mb-12" data-testid="workshop-description">
         {{ workshop.description_html|safe }}
       </div>
       {% endif %}
@@ -177,20 +177,20 @@
       {% if pages %}
       <div class="mb-12" data-testid="workshop-pages-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Tutorial pages</h2>
-        <ol class="rounded-lg border border-border bg-card p-1">
+        {% comment %}
+          Issue #527: list rows use the shared `_list_row.html` partial so
+          this card matches the reader sidebar drawer rows in
+          font-size, weight, color, padding, and inter-row gap. The
+          numbered marker variant keeps the existing accent badge.
+        {% endcomment %}
+        <ol class="space-y-0.5 rounded-lg border border-border bg-card p-1">
           {% for page in pages %}
           <li>
-            <a href="{{ page.get_absolute_url }}"
-               class="group flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-               data-testid="workshop-page-row">
-              <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">{{ forloop.counter }}</span>
-              <span class="min-w-0 flex-1 truncate text-sm text-foreground transition-colors group-hover:text-accent">{{ page.title }}</span>
-              {% if not can_access_pages %}
-              <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0" data-testid="workshop-page-lock-icon"></i>
-              {% else %}
-              <i data-lucide="chevron-right" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-              {% endif %}
-            </a>
+            {% if not can_access_pages %}
+              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="number" marker_number=forloop.counter trailing_icon="lock" trailing_icon_testid="workshop-page-lock-icon" testid="workshop-page-row" %}
+            {% else %}
+              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="number" marker_number=forloop.counter testid="workshop-page-row" %}
+            {% endif %}
           </li>
           {% endfor %}
         </ol>

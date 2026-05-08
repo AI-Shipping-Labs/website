@@ -44,19 +44,24 @@
             <span class="text-sm font-medium text-foreground">{{ nav_module.title }}</span>
           </summary>
           <div>
+            {% comment %}
+              Issue #527: unit rows use the shared `_list_row.html`
+              partial so they match the workshop drawer rows and the
+              landing's "Tutorial pages" card. The module `<summary>`
+              typography (issue #516) is unchanged.
+            {% endcomment %}
             <ul class="space-y-0.5 mt-1">
               {% for nav_unit in nav_module.units.all %}
               <li>
-                <a href="{{ nav_unit.get_absolute_url }}"
-                   class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors {% if nav_unit.pk == unit.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}"
-                   {% if nav_unit.pk == unit.pk %}aria-current="page"{% endif %}>
-                  {% if nav_unit.pk in completed_unit_ids %}
-                  <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+                {% if nav_unit.pk in completed_unit_ids %}
+                  {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
+                {% else %}
+                  {% if nav_unit.pk == unit.pk %}
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="circle" trailing_icon="" extra_attrs='aria-current="page"' %}
                   {% else %}
-                  <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 opacity-40"></i>
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="circle" trailing_icon="" extra_attrs="" %}
                   {% endif %}
-                  <span class="truncate">{{ nav_unit.title }}</span>
-                </a>
+                {% endif %}
               </li>
               {% endfor %}
             </ul>
@@ -65,23 +70,28 @@
         {% endfor %}
       {% elif reader_nav_kind == "workshop" %}
         {% comment %}
-          Issue #483: workshop sidebar row spacing matches the course
-          sidebar (px-2 py-1.5) and uses the same icon size + completion
-          glyph so the two readers feel structurally identical.
+          Issue #527: workshop drawer rows use the shared `_list_row.html`
+          partial so they match the workshop landing card's "Tutorial
+          pages" `<ol>` and the course unit drawer rows. The completion
+          glyph still carries `data-testid="sidebar-completed-page"`.
+          Auth-state divergence is limited to the marker icon.
         {% endcomment %}
         <ul class="space-y-0.5">
           {% for nav_page in pages %}
           <li>
-            <a href="{{ nav_page.get_absolute_url }}"
-               class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors {% if nav_page.pk == page.pk %}bg-accent/10 text-accent font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-muted/50{% endif %}"
-               {% if nav_page.pk == page.pk %}data-testid="sidebar-current-page" aria-current="page"{% endif %}>
+            {% if nav_page.pk == page.pk %}
               {% if nav_page.pk in completed_page_ids %}
-              <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0" data-testid="sidebar-completed-page"></i>
+                {% include "includes/_list_row.html" with href=nav_page.get_absolute_url title=nav_page.title is_current=True marker_kind="check" marker_testid="sidebar-completed-page" trailing_icon="" testid="sidebar-current-page" extra_attrs='aria-current="page"' %}
               {% else %}
-              <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 opacity-40"></i>
+                {% include "includes/_list_row.html" with href=nav_page.get_absolute_url title=nav_page.title is_current=True marker_kind="circle" trailing_icon="" testid="sidebar-current-page" extra_attrs='aria-current="page"' %}
               {% endif %}
-              <span class="truncate">{{ nav_page.title }}</span>
-            </a>
+            {% else %}
+              {% if nav_page.pk in completed_page_ids %}
+                {% include "includes/_list_row.html" with href=nav_page.get_absolute_url title=nav_page.title is_current=False marker_kind="check" marker_testid="sidebar-completed-page" trailing_icon="" extra_attrs="" %}
+              {% else %}
+                {% include "includes/_list_row.html" with href=nav_page.get_absolute_url title=nav_page.title is_current=False marker_kind="circle" trailing_icon="" extra_attrs="" %}
+              {% endif %}
+            {% endif %}
           </li>
           {% endfor %}
         </ul>

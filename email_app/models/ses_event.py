@@ -89,6 +89,46 @@ class SesEvent(models.Model):
             "not in our database (still logged for audit)."
         ),
     )
+    # Issue #495: correlate bounce/complaint events back to the specific
+    # transactional or campaign send that produced them. Populated when
+    # the inner SES mail.messageId matches an EmailLog.ses_message_id;
+    # null when the event arrives without correlation data (or for older
+    # rows that pre-date the field).
+    email_log = models.ForeignKey(
+        "email_app.EmailLog",
+        on_delete=models.SET_NULL,
+        related_name="ses_events",
+        null=True,
+        blank=True,
+        help_text=(
+            "Matched EmailLog row when the SES mail.messageId on the "
+            "incoming event lines up with a transactional/campaign send."
+        ),
+    )
+    bounce_type = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text=(
+            'SES bounceType ("Permanent", "Transient", "Undetermined") for '
+            'bounce events; empty for non-bounce events.'
+        ),
+    )
+    bounce_subtype = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text='SES bounceSubType (e.g. "General", "NoEmail", "Suppressed").',
+    )
+    diagnostic_code = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Diagnostic / status / reason text from the bounced or "
+            "complained recipient entry (where present)."
+        ),
+    )
     action_taken = models.CharField(
         max_length=255,
         blank=True,

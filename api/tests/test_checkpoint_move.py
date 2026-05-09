@@ -37,7 +37,6 @@ class CheckpointMoveTestBase(TestCase):
             email="o@test.com", password="pw",
         )
         cls.staff_token = Token.objects.create(user=cls.staff, name="s")
-        cls.member_token = Token.objects.create(user=cls.member, name="m")
 
         cls.sprint = Sprint.objects.create(
             name="s", slug="s",
@@ -242,28 +241,6 @@ class CheckpointMoveValidationTest(CheckpointMoveTestBase):
         )
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["code"], "unknown_checkpoint")
-
-    def test_move_non_staff_other_users_plan_returns_403(self):
-        # Member token cannot touch other_plan's checkpoints.
-        other_week = Week.objects.create(
-            plan=self.other_plan, week_number=1,
-        )
-        other_cp = Checkpoint.objects.create(
-            week=other_week, description="x", position=0,
-        )
-        before = Checkpoint.objects.get(pk=other_cp.pk).position
-        response = self._move(
-            other_cp.id,
-            {"week_id": other_week.id, "position": 1},
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(
-            response.json()["code"], "forbidden_other_user_plan",
-        )
-        self.assertEqual(
-            Checkpoint.objects.get(pk=other_cp.pk).position, before,
-        )
 
 
 class CheckpointMoveAtomicityTest(TransactionTestCase):

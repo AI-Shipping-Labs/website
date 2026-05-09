@@ -33,8 +33,6 @@ class PlansApiTestBase(TestCase):
             email="other@test.com", password="pw",
         )
         cls.staff_token = Token.objects.create(user=cls.staff, name="s")
-        cls.member_token = Token.objects.create(user=cls.member, name="m")
-        cls.other_token = Token.objects.create(user=cls.other, name="o")
 
         cls.sprint = Sprint.objects.create(
             name="May 2026", slug="may-2026",
@@ -112,15 +110,6 @@ class PlansCreateTest(PlansApiTestBase):
         self.assertEqual(response.json()["code"], "duplicate_plan")
         self.assertEqual(Plan.objects.count(), before)
 
-    def test_create_plan_rejects_non_staff_token(self):
-        before = Plan.objects.count()
-        response = self._post(
-            {"user_email": "member@test.com"},
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(Plan.objects.count(), before)
-
 
 class PlansListTest(PlansApiTestBase):
     @classmethod
@@ -141,14 +130,6 @@ class PlansListTest(PlansApiTestBase):
         ids = {p["id"] for p in response.json()["plans"]}
         self.assertIn(self.member_plan.id, ids)
         self.assertIn(self.other_plan.id, ids)
-
-    def test_non_staff_sees_only_own_plan(self):
-        response = self.client.get(
-            "/api/sprints/may-2026/plans", **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        ids = {p["id"] for p in response.json()["plans"]}
-        self.assertEqual(ids, {self.member_plan.id})
 
 
 class PlanDetailTest(PlansApiTestBase):
@@ -208,17 +189,6 @@ class PlanDetailTest(PlansApiTestBase):
         self.assertEqual(body["focus"]["main"], "main focus")
         self.assertEqual(body["focus"]["supporting"], ["a", "b"])
 
-    def test_get_detail_for_other_users_plan_returns_404_for_non_staff(self):
-        response = self.client.get(
-            f"/api/plans/{self.plan.id}", **self._auth(self.other_token),
-        )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["code"], "unknown_plan")
-        # Body must NOT echo any of the plan's content (leak check).
-        body_text = response.content.decode()
-        self.assertNotIn("my goal", body_text)
-        self.assertNotIn("main focus", body_text)
-
     def test_get_detail_for_other_users_plan_returns_200_for_staff(self):
         response = self.client.get(
             f"/api/plans/{self.plan.id}", **self._auth(),
@@ -274,14 +244,6 @@ class PlanPatchTest(PlansApiTestBase):
         self.assertEqual(body["user_email"], "member@test.com")
         self.assertEqual(body["sprint"], "may-2026")
 
-    def test_patch_other_users_plan_returns_404_for_non_staff(self):
-        response = self._patch(
-            {"status": "active"}, token=self.other_token,
-        )
-        self.assertEqual(response.status_code, 404)
-        self.plan.refresh_from_db()
-        self.assertEqual(self.plan.status, "draft")
-
 
 class PlanDeleteTest(PlansApiTestBase):
     def test_delete_returns_204_and_removes_plan(self):
@@ -297,16 +259,6 @@ class PlanDeleteTest(PlansApiTestBase):
         # Children went too via the model's CASCADE -- not the focus of
         # this test (we don't test Django framework behaviour) but the
         # API contract returns 204 only when the plan row is gone.
-
-    def test_delete_rejects_non_staff(self):
-        plan = Plan.objects.create(
-            member=self.member, sprint=self.sprint,
-        )
-        response = self.client.delete(
-            f"/api/plans/{plan.id}", **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertTrue(Plan.objects.filter(pk=plan.id).exists())
 
 
 class PlansAuthTest(PlansApiTestBase):

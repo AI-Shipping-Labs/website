@@ -29,7 +29,6 @@ class CourseCertificateApiTestBase(TestCase):
             email='alice@test.com', password='pw',
         )
         cls.staff_token = Token.objects.create(user=cls.staff, name='s')
-        cls.member_token = Token.objects.create(user=cls.member, name='m')
         cls.course = Course.objects.create(
             title='AI Buildcamp',
             slug='ai-buildcamp',
@@ -73,14 +72,6 @@ class CourseCertificatesListTest(CourseCertificateApiTestBase):
         self.assertEqual(alice_row['pdf_url'], 'http://example.com/alice.pdf')
         self.assertIsNone(alice_row['submission_id'])
         self.assertIsNotNone(alice_row['issued_at'])
-
-    def test_non_staff_returns_403(self):
-        response = self.client.get(
-            '/api/courses/ai-buildcamp/certificates',
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()['code'], 'forbidden_other_user_plan')
 
     def test_no_token_returns_401(self):
         response = self.client.get('/api/courses/ai-buildcamp/certificates')
@@ -271,15 +262,6 @@ class CourseCertificateCreateTest(CourseCertificateApiTestBase):
         self.assertFalse(response.json()['created'])
         self.assertEqual(CourseCertificate.objects.count(), before)
 
-    def test_non_staff_returns_403_no_side_effects(self):
-        before = CourseCertificate.objects.count()
-        response = self._post(
-            {'user_email': 'alice@test.com', 'pdf_url': ''},
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(CourseCertificate.objects.count(), before)
-
     def test_unknown_course_returns_404(self):
         response = self._post(
             {'user_email': 'alice@test.com', 'pdf_url': ''},
@@ -317,18 +299,6 @@ class CourseCertificateDeleteTest(CourseCertificateApiTestBase):
             **self._auth(),
         )
         self.assertEqual(response.status_code, 204)
-
-    def test_non_staff_returns_403_no_side_effects(self):
-        CourseCertificate.objects.create(
-            user=self.alice, course=self.course,
-        )
-        before = CourseCertificate.objects.count()
-        response = self.client.delete(
-            '/api/courses/ai-buildcamp/certificates/alice@test.com',
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(CourseCertificate.objects.count(), before)
 
     def test_unknown_course_returns_404(self):
         response = self.client.delete(

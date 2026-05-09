@@ -22,7 +22,6 @@ class SprintApiTestBase(TestCase):
             email="member@test.com", password="pw",
         )
         cls.staff_token = Token.objects.create(user=cls.staff, name="staff")
-        cls.member_token = Token.objects.create(user=cls.member, name="m")
 
         cls.sprint_active = Sprint.objects.create(
             name="May 2026", slug="may-2026",
@@ -101,19 +100,6 @@ class SprintsCreateTest(SprintApiTestBase):
         self.assertEqual(body["details"]["field"], "start_date")
         self.assertEqual(Sprint.objects.count(), before)
 
-    def test_create_rejects_non_staff_token(self):
-        before = Sprint.objects.count()
-        response = self._post(
-            {
-                "name": "x", "slug": "x",
-                "start_date": "2026-01-01", "duration_weeks": 6,
-            },
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["code"], "forbidden_other_user_plan")
-        self.assertEqual(Sprint.objects.count(), before)
-
 
 class SprintDetailTest(SprintApiTestBase):
     def test_detail_for_unknown_slug_returns_404(self):
@@ -151,21 +137,6 @@ class SprintDetailTest(SprintApiTestBase):
         )
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Sprint.objects.filter(slug="jul-2026").exists())
-
-    def test_detail_for_non_staff_with_no_plan_returns_404(self):
-        response = self.client.get(
-            "/api/sprints/may-2026", **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["code"], "unknown_sprint")
-
-    def test_detail_for_non_staff_with_plan_in_sprint_returns_200(self):
-        Plan.objects.create(member=self.member, sprint=self.sprint_active)
-        response = self.client.get(
-            "/api/sprints/may-2026", **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["slug"], "may-2026")
 
 
 class SprintsAuthTest(SprintApiTestBase):

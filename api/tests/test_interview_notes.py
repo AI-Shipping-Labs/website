@@ -39,8 +39,6 @@ class InterviewNotesTestBase(TestCase):
             email="other@test.com", password="pw",
         )
         cls.staff_token = Token.objects.create(user=cls.staff, name="s")
-        cls.member_token = Token.objects.create(user=cls.member, name="m")
-        cls.other_token = Token.objects.create(user=cls.other, name="o")
 
         cls.sprint = Sprint.objects.create(
             name="s", slug="s",
@@ -77,52 +75,8 @@ class PlanInterviewNotesListTest(InterviewNotesTestBase):
         self.assertIn(self.internal_note.id, ids)
         self.assertIn(self.external_note.id, ids)
 
-    def test_non_staff_sees_only_external_notes(self):
-        response = self.client.get(
-            f"/api/plans/{self.member_plan.id}/interview-notes",
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        ids = {n["id"] for n in response.json()["interview_notes"]}
-        self.assertIn(self.external_note.id, ids)
-        self.assertNotIn(self.internal_note.id, ids)
-        # And the internal note's body must not leak via the response
-        # text either.
-        body = response.content.decode()
-        self.assertNotIn("Member is shy", body)
-
-    def test_non_staff_visibility_internal_filter_returns_403(self):
-        response = self.client.get(
-            f"/api/plans/{self.member_plan.id}"
-            "/interview-notes?visibility=internal",
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(
-            response.json()["code"], "forbidden_internal_note",
-        )
-
 
 class InterviewNoteDetailTest(InterviewNotesTestBase):
-    def test_non_staff_detail_on_internal_note_returns_404(self):
-        response = self.client.get(
-            f"/api/interview-notes/{self.internal_note.id}",
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["code"], "unknown_note")
-        # Body must NOT echo the internal note's content.
-        body = response.content.decode()
-        self.assertNotIn("Member is shy", body)
-
-    def test_non_staff_detail_on_external_note_returns_200(self):
-        response = self.client.get(
-            f"/api/interview-notes/{self.external_note.id}",
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["id"], self.external_note.id)
-
     def test_staff_detail_on_internal_note_returns_200(self):
         response = self.client.get(
             f"/api/interview-notes/{self.internal_note.id}",
@@ -189,35 +143,6 @@ class InterviewNoteCreateTest(InterviewNotesTestBase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(InterviewNote.objects.count(), before + 1)
         self.assertEqual(response.json()["visibility"], "internal")
-
-    def test_non_staff_create_internal_returns_403(self):
-        before = InterviewNote.objects.count()
-        response = self._post(
-            {
-                "user_email": "member@test.com",
-                "visibility": "internal",
-                "body": "evil",
-            },
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(
-            response.json()["code"], "forbidden_internal_note",
-        )
-        self.assertEqual(InterviewNote.objects.count(), before)
-
-    def test_non_staff_can_create_external_note(self):
-        before = InterviewNote.objects.count()
-        response = self._post(
-            {
-                "user_email": "member@test.com",
-                "visibility": "external",
-                "body": "ok to share",
-            },
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(InterviewNote.objects.count(), before + 1)
 
     def test_member_notes_create_alias_creates_note(self):
         before = InterviewNote.objects.count()
@@ -306,42 +231,6 @@ class UserInterviewNotesInboxTest(InterviewNotesTestBase):
         )
         self.assertEqual(alias.status_code, 200)
         self.assertEqual(alias.json(), legacy.json())
-
-    def test_non_staff_inbox_other_email_returns_403(self):
-        response = self.client.get(
-            "/api/users/other@test.com/notes",
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(
-            response.json()["code"], "forbidden_other_user_plan",
-        )
-
-    def test_non_staff_own_email_returns_filtered_to_external(self):
-        external_inbox = InterviewNote.objects.create(
-            plan=None, member=self.member,
-            visibility="external", kind="general",
-            body="ok to share inbox",
-            created_by=self.staff,
-        )
-        response = self.client.get(
-            "/api/users/member@test.com/notes",
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        ids = {n["id"] for n in response.json()["interview_notes"]}
-        self.assertIn(external_inbox.id, ids)
-        self.assertIn(self.external_note.id, ids)
-        self.assertNotIn(self.inbox_note.id, ids)
-        self.assertNotIn(self.internal_note.id, ids)
-
-    def test_non_staff_own_email_plan_null_returns_only_unattached_external(self):
-        response = self.client.get(
-            "/api/users/member@test.com/notes?plan=null",
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["interview_notes"], [])
 
     def test_notes_alias_without_authorization_returns_401(self):
         response = self.client.get("/api/users/member@test.com/notes")

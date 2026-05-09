@@ -14,6 +14,7 @@ masked prefix.
 import secrets
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -51,11 +52,33 @@ class Token(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+    def _token_user_is_staff(self):
+        """Return True iff the token owner is eligible for API tokens."""
+        if self.user_id is None:
+            return False
+        if hasattr(self, "_state") and "user" in getattr(self._state, "fields_cache", {}):
+            return bool(getattr(self.user, "is_staff", False))
+
+        User = self._meta.get_field("user").remote_field.model
+        return User.objects.filter(pk=self.user_id, is_staff=True).exists()
+
+    def clean(self):
+        super().clean()
+        if not self._token_user_is_staff():
+            raise ValidationError(
+                {
+                    "user": (
+                        "API tokens can only be created for staff or admin users."
+                    ),
+                }
+            )
+
     def save(self, *args, **kwargs):
         """Populate ``key`` with a fresh ``token_urlsafe(32)`` if blank.
 
         Saving an existing instance with a populated key preserves it.
         """
+        self.clean()
         if not self.key:
             self.key = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)

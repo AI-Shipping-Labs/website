@@ -16,6 +16,15 @@
     return endpoints[item.dataset.itemType] + item.dataset.itemId;
   }
 
+  function getCookie(name) {
+    const prefix = name + '=';
+    return document.cookie.split(';').map(function (cookie) {
+      return cookie.trim();
+    }).find(function (cookie) {
+      return cookie.startsWith(prefix);
+    })?.substring(prefix.length) || '';
+  }
+
   function setStatus(item, text, state) {
     const status = item.querySelector('[data-save-status]');
     if (!status) { return; }
@@ -26,12 +35,17 @@
   }
 
   function apiPatch(path, body) {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (apiToken) {
+      headers.Authorization = 'Token ' + apiToken;
+    } else {
+      headers['X-CSRFToken'] = getCookie('csrftoken');
+    }
     return fetch(apiBase + path.replace(/^\//, ''), {
       method: 'PATCH',
-      headers: {
-        'Authorization': 'Token ' + apiToken,
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
       body: JSON.stringify(body),
     }).then(function (response) {
       if (!response.ok) {

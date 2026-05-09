@@ -28,10 +28,9 @@ from django.http import JsonResponse
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
-from accounts.auth import token_required
 from api.safety import error_response
 from api.serializers.plans import serialize_checkpoint
-from api.utils import parse_json_body, require_methods
+from api.utils import parse_json_body, require_methods, token_or_session_required
 from api.views._permissions import visible_plans_for
 from plans.models import Checkpoint, Week
 
@@ -101,7 +100,7 @@ def _load_checkpoint_for_write(user, checkpoint_id):
     return cp, None
 
 
-@token_required
+@token_or_session_required
 @csrf_exempt
 @require_methods("POST")
 def week_checkpoints_create(request, week_id):
@@ -164,7 +163,7 @@ def week_checkpoints_create(request, week_id):
     return JsonResponse(serialize_checkpoint(cp), status=201)
 
 
-@token_required
+@token_or_session_required
 @csrf_exempt
 @require_methods("PATCH", "DELETE")
 def checkpoint_detail(request, checkpoint_id):
@@ -238,7 +237,7 @@ def checkpoint_detail(request, checkpoint_id):
     return JsonResponse(serialize_checkpoint(cp), status=200)
 
 
-@token_required
+@token_or_session_required
 @csrf_exempt
 @require_methods("POST")
 def checkpoint_move(request, checkpoint_id):

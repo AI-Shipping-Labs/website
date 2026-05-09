@@ -42,7 +42,6 @@ class CourseEnrollmentApiTestBase(TestCase):
             'premium',
         )
         cls.staff_token = Token.objects.create(user=cls.staff, name='s')
-        cls.member_token = Token.objects.create(user=cls.member, name='m')
         cls.course = Course.objects.create(
             title='Premium Deep Dive',
             slug='premium-deep-dive',
@@ -107,15 +106,6 @@ class CourseEnrollmentsListScopeTest(CourseEnrollmentApiTestBase):
 
         bob_row = next(r for r in rows if r['user_email'] == 'bob@test.com')
         self.assertIsNotNone(bob_row['unenrolled_at'])
-
-    def test_non_staff_token_only_sees_own_row(self):
-        response = self.client.get(
-            '/api/courses/premium-deep-dive/enrollments',
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        emails = [row['user_email'] for row in response.json()['enrollments']]
-        self.assertEqual(emails, ['m@test.com'])
 
     def test_no_token_returns_401(self):
         response = self.client.get('/api/courses/premium-deep-dive/enrollments')
@@ -278,16 +268,6 @@ class CourseEnrollmentsBulkPostTest(CourseEnrollmentApiTestBase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_non_staff_returns_403_no_side_effects(self):
-        before = Enrollment.objects.count()
-        response = self._post(
-            {'user_email': 'alice@test.com'},
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()['code'], 'forbidden_other_user_plan')
-        self.assertEqual(Enrollment.objects.count(), before)
-
     def test_unknown_course_returns_404(self):
         response = self.client.post(
             '/api/courses/nope/enrollments',
@@ -307,7 +287,6 @@ class CourseEnrollmentDeleteTest(CourseEnrollmentApiTestBase):
             User.objects.create_user(email='alice@test.com', password='pw'),
             'premium',
         )
-        cls.target_token = Token.objects.create(user=cls.target, name='t')
 
     def test_delete_idempotent_204_when_not_enrolled(self):
         response = self.client.delete(
@@ -356,22 +335,6 @@ class CourseEnrollmentDeleteTest(CourseEnrollmentApiTestBase):
             **self._auth(),
         )
         self.assertEqual(response.status_code, 204)
-
-    def test_non_staff_delete_returns_403_no_side_effects(self):
-        Enrollment.objects.create(course=self.course, user=self.target)
-        before_count = Enrollment.objects.filter(
-            course=self.course, unenrolled_at__isnull=True,
-        ).count()
-        response = self.client.delete(
-            '/api/courses/premium-deep-dive/enrollments/alice@test.com',
-            **self._auth(self.target_token),
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()['code'], 'forbidden_other_user_plan')
-        after_count = Enrollment.objects.filter(
-            course=self.course, unenrolled_at__isnull=True,
-        ).count()
-        self.assertEqual(after_count, before_count)
 
     def test_unknown_course_returns_404(self):
         response = self.client.delete(

@@ -36,9 +36,6 @@ class BulkImportTestBase(TestCase):
         cls.member3 = User.objects.create_user(
             email="m3@test.com", password="pw",
         )
-        cls.non_staff_token = Token.objects.create(
-            user=cls.member1, name="m",
-        )
         cls.sprint = Sprint.objects.create(
             name="May 2026", slug="may-2026",
             start_date=datetime.date(2026, 5, 1),
@@ -181,18 +178,6 @@ class BulkImportFailureModesTest(BulkImportTestBase):
         self.assertEqual(body["code"], "duplicate_plan")
         self.assertEqual(body["details"]["index"], 1)
         # Atomic: m2's plan rolled back.
-        self.assertEqual(Plan.objects.count(), before)
-
-    def test_non_staff_returns_403(self):
-        before = Plan.objects.count()
-        response = self._post(
-            {"plans": [{"user_email": "m1@test.com"}]},
-            token=self.non_staff_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(
-            response.json()["code"], "forbidden_other_user_plan",
-        )
         self.assertEqual(Plan.objects.count(), before)
 
     def test_invalid_json_returns_400(self):

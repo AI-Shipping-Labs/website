@@ -7,10 +7,12 @@ see the shareable body without any interview-note or toggle UI.
 
 import datetime
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from accounts.models import Token
 from plans.models import (
     Checkpoint,
     Deliverable,
@@ -323,7 +325,15 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
         self.assertContains(response, 'data-testid="plan-row-done-toggle"')
         self.assertContains(response, 'data-testid="plan-item-markdown-input"')
         self.assertContains(response, 'data-testid="plan-item-edit"')
-        self.assertContains(response, 'data-api-token=')
+        self.assertNotContains(response, 'data-api-token=')
+        self.assertIn(settings.CSRF_COOKIE_NAME, response.cookies)
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        self.assertEqual(
+            Token.objects.filter(
+                user=self.owner, name='member-plan-editor',
+            ).count(),
+            0,
+        )
         self.assertNotContains(response, 'Internal notes')
         self.assertNotContains(response, 'href="/studio/')
 

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}FAQ | AI Shipping Labs{% endblock %}
+{% block meta_description %}Frequently asked questions about AI Shipping Labs membership, billing, tiers, and how to get started.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="px-4 pt-32 pb-16 sm:px-6 lg:px-8 lg:pt-40 lg:pb-24">
+    <div class="mx-auto max-w-3xl">
+      <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to home
+      </a>
+
+      <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Frequently Asked Questions</h1>
+
+      <div class="mt-12 space-y-3">
+        {% for faq in faq_items %}
+          {% include "includes/_accordion.html" with summary=faq.question body=faq.answer details_extra_class="faq-item" body_class="mt-1 px-4 pb-4 text-muted-foreground" %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

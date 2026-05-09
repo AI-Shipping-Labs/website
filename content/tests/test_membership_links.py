@@ -107,14 +107,14 @@ class FooterLinksTest(TestCase):
         self.assertIsNotNone(match, "Membership Tiers link missing in footer")
         self.assertEqual(match.group(1), "/pricing")
 
-    def test_faq_link_points_to_about_faq_anchor(self):
+    def test_faq_link_points_to_standalone_faq_page(self):
         response = self.client.get("/")
         footer = _extract_footer(response.content.decode())
         match = re.search(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', footer
         )
         self.assertIsNotNone(match, "FAQ link missing in footer")
-        self.assertEqual(match.group(1), "/about#faq")
+        self.assertEqual(match.group(1), "/faq")
 
 
 class AboutPageMembershipCtaTest(TestCase):

@@ -1,6 +1,7 @@
-from django.shortcuts import redirect
+from django.shortcuts import render
+
+from content.views.home import FAQ_ITEMS
 
 
 def faq(request):
-    """Permanent compatibility redirect for the legacy FAQ URL."""
-    return redirect("/about#faq", permanent=True)
+    return render(request, 'content/faq.html', {'faq_items': FAQ_ITEMS})

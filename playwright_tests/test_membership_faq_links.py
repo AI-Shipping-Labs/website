@@ -48,9 +48,9 @@ class TestLoggedInUserMembershipNavigation:
 
 @pytest.mark.django_db(transaction=True)
 class TestLoggedInUserFaqNavigation:
-    """A logged-in user can reach the About FAQ section from the footer."""
+    """A logged-in user can reach the standalone FAQ page from the footer."""
 
-    def test_footer_faq_link_lands_on_about_faq_section(
+    def test_footer_faq_link_lands_on_standalone_faq_page(
         self, django_server, browser, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -67,14 +67,13 @@ class TestLoggedInUserFaqNavigation:
         footer_faq.click()
         page.wait_for_load_state("domcontentloaded")
 
-        assert page.url.endswith("/about#faq"), (
-            f"Expected to land on /about#faq, got {page.url}"
+        assert page.url.endswith("/faq"), (
+            f"Expected to land on /faq, got {page.url}"
         )
 
-        page.locator("#faq").scroll_into_view_if_needed()
         body_text = page.locator("body").inner_text()
         assert "Who is this community for?" in body_text, (
-            "Expected FAQ questions to render on /about#faq"
+            "Expected FAQ questions to render on /faq"
         )
 
         ctx.close()

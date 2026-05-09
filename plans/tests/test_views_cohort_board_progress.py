@@ -152,7 +152,7 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
 
 
 class CohortBoardSortOrderTest(TestCase):
-    """Plan rows sort by progress_done desc, then progress_total desc, then email asc."""
+    """Viewer row is first; remaining rows sort by progress, then email."""
 
     @classmethod
     def setUpTestData(cls):
@@ -189,16 +189,16 @@ class CohortBoardSortOrderTest(TestCase):
     def setUp(self):
         self.client.force_login(self.viewer)
 
-    def test_plan_rows_sorted_by_done_desc_then_total_desc_then_email_asc(self):
+    def test_viewer_row_first_then_plan_rows_sorted_by_progress(self):
         url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
         response = self.client.get(url)
         rows = response.context['progress_rows']
         plan_rows = [r for r in rows if r['plan'] is not None]
         emails_in_order = [r['member'].email for r in plan_rows]
-        # alice 4/5 -> viewer 2/5 -> bob 1/3
+        # viewer is pinned first, then alice 4/5 -> bob 1/3.
         self.assertEqual(
             emails_in_order,
-            ['alice@test.com', 'z-viewer@test.com', 'bob@test.com'],
+            ['z-viewer@test.com', 'alice@test.com', 'bob@test.com'],
         )
 
     def test_no_plan_rows_pinned_to_bottom(self):
@@ -208,6 +208,16 @@ class CohortBoardSortOrderTest(TestCase):
         # Last row is the no-plan member.
         self.assertEqual(rows[-1]['kind'], 'no_plan')
         self.assertEqual(rows[-1]['member'].pk, self.carol.pk)
+
+    def test_board_uses_table_markup_for_progress_comparison(self):
+        url = reverse('cohort_board', kwargs={'sprint_slug': self.sprint.slug})
+        response = self.client.get(url)
+        self.assertContains(response, '<table')
+        self.assertContains(response, '<th scope="col"', count=4)
+        self.assertContains(response, 'Member')
+        self.assertContains(response, 'Progress')
+        self.assertContains(response, 'Status')
+        self.assertContains(response, 'Details')
 
 
 class CohortBoardSortTiebreakTest(TestCase):

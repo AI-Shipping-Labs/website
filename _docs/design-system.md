@@ -97,6 +97,13 @@ Variable-height detail cards:
 - Inside detail cards, stack variable facts such as dates, duration, status, requirements, and next-step guidance as rows instead of splitting them into equal columns.
 - Use compact grouped rows (`gap-3` or `gap-4`) for facts; reserve grids for repeated cards of the same visual weight and predictable height.
 
+Comparison and progress lists:
+
+- Use tables or table-like rows for member progress, status comparisons, reviewer queues, or any surface where users compare the same fields across many records. Avoid two-column card grids for these scenarios because reading order and relative progress become ambiguous.
+- Put the current user's own record first when the page is a signed-in member surface. The rest of the rows can follow the product sort order.
+- Keep table columns predictable and scannable: identity first, then primary metric/progress, then status, then details/actions.
+- Wrap wide tables in `overflow-x-auto` on small screens instead of collapsing them into uneven cards when comparison is the primary task.
+
 ## Breakpoints and Mobile Carousels
 
 Tailwind defaults apply: `sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px.

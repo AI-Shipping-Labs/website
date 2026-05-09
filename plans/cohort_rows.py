@@ -51,13 +51,15 @@ def build_progress_rows(*, plans, no_plan_members, viewer):
     Returns a list of dicts with keys: ``kind``, ``member``, ``plan``,
     ``progress_done``, ``progress_total``, ``is_self``. Sort order:
 
-    1. ``no_plan`` rows pinned to the bottom.
-    2. Plan rows: ``progress_done`` desc, ``progress_total`` desc,
+    1. The viewer's own row first, regardless of progress or plan state.
+    2. Other plan rows: ``progress_done`` desc, ``progress_total`` desc,
        ``member.email`` asc as a deterministic tiebreaker.
-    3. Within ``no_plan`` rows: ``member.email`` asc.
+    3. Other ``no_plan`` rows pinned to the bottom, then
+       ``member.email`` asc.
 
-    The viewer's own row is included in the plan-rows section so the
-    member sees themselves on the same list as everyone else.
+    The viewer's own row is still included on the same list as everyone
+    else, but is pinned first so members can find their own record
+    immediately.
     """
     plan_rows = []
     for plan in plans:
@@ -70,27 +72,27 @@ def build_progress_rows(*, plans, no_plan_members, viewer):
             'is_self': plan.member_id == getattr(viewer, 'id', None),
         })
 
-    plan_rows.sort(
+    no_plan_rows = [
+        {
+            'kind': ROW_KIND_NO_PLAN,
+            'member': member,
+            'plan': None,
+            'progress_done': 0,
+            'progress_total': 0,
+            'is_self': member.id == getattr(viewer, 'id', None),
+        }
+        for member in no_plan_members
+    ]
+
+    rows = plan_rows + no_plan_rows
+    rows.sort(
         key=lambda row: (
+            not row['is_self'],
+            row['kind'] == ROW_KIND_NO_PLAN,
             -row['progress_done'],
             -row['progress_total'],
             row['member'].email,
         ),
     )
 
-    no_plan_rows = sorted(
-        (
-            {
-                'kind': ROW_KIND_NO_PLAN,
-                'member': member,
-                'plan': None,
-                'progress_done': 0,
-                'progress_total': 0,
-                'is_self': member.id == getattr(viewer, 'id', None),
-            }
-            for member in no_plan_members
-        ),
-        key=lambda row: row['member'].email,
-    )
-
-    return plan_rows + no_plan_rows
+    return rows

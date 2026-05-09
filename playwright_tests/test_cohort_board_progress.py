@@ -123,7 +123,7 @@ def _set_user_name(email, first_name, last_name):
 class TestProgressVisibleForEveryMember:
     """The board surfaces every teammate's progress, public or private."""
 
-    def test_four_members_render_in_correct_progress_order(
+    def test_four_members_render_in_table_with_viewer_first(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -175,13 +175,19 @@ class TestProgressVisibleForEveryMember:
             rows = page.locator('[data-progress-row-kind]')
             rows.first.wait_for(state='visible')
             assert rows.count() == 4
+            assert page.locator('table[data-testid="cohort-plan-list"]').count() == 0
+            assert page.locator('[data-testid="cohort-plan-list"] table').is_visible()
 
             kinds = [
                 rows.nth(i).get_attribute('data-progress-row-kind')
                 for i in range(rows.count())
             ]
-            # alice (cohort) -> viewer (cohort) -> bob (private) -> carol (no_plan)
+            # viewer is pinned first, then alice -> bob -> carol.
             assert kinds == ['cohort', 'cohort', 'private', 'no_plan']
+            first_name = rows.first.locator(
+                '[data-testid="cohort-plan-name"]',
+            ).inner_text()
+            assert 'Vince Viewer (you)' in first_name
         finally:
             context.close()
 
@@ -398,8 +404,9 @@ class TestSortStableOnReload:
             second_render = _read_peer_emails()
             assert first_render == second_render
 
-            # Alice -> Bob -> Carol -> Viewer (alphabetical by email).
+            # Viewer is pinned first; peers stay alphabetical after it.
             joined = ' '.join(first_render)
+            assert first_render[0] == 'viewer (you)'
             assert joined.find('Alice') < joined.find('Bob')
             assert joined.find('Bob') < joined.find('Carol')
         finally:

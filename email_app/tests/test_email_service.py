@@ -64,9 +64,10 @@ class EmailServiceSendTest(TestCase):
         self.service.send(self.user, 'welcome', {'tier_name': 'Basic'})
 
         mock_ses.assert_called_once()
-        args = mock_ses.call_args
-        self.assertEqual(args[0][0], 'alice@example.com')  # to_email
-        self.assertIn('Welcome to Basic', args[0][1])  # subject
+        to_email, subject, html = mock_ses.call_args[0]
+        self.assertEqual(to_email, 'alice@example.com')
+        self.assertIn('Welcome to Basic', subject)
+        self.assertIn('Basic', html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-003')
     def test_send_skips_unsubscribed_user(self, mock_ses):
@@ -129,6 +130,8 @@ class EmailServiceSendTest(TestCase):
 
         self.assertIsNotNone(log)
         mock_ses.assert_called_once()
+        self.assertEqual(mock_ses.call_args[0][0], 'alice@example.com')
+        self.assertIn('Welcome', mock_ses.call_args[0][1])
 
 
 class EmailServiceTemplateRenderingTest(TestCase):

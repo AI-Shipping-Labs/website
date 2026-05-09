@@ -409,6 +409,9 @@ class GitHubWebhookEndpointTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'ok')
+        self.assertTrue(
+            SyncLog.objects.filter(source=self.source, status='queued').exists()
+        )
 
     def test_invalid_signature_returns_400(self):
         payload = {
@@ -480,6 +483,10 @@ class GitHubWebhookEndpointTest(TestCase):
         with patch('integrations.views.github_webhook.sync_content_source'):
             response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ok')
+        self.assertTrue(
+            SyncLog.objects.filter(source=self.source, status='queued').exists()
+        )
 
     def test_webhook_logged(self):
         from integrations.models import WebhookLog
@@ -509,6 +516,10 @@ class GitHubWebhookEndpointTest(TestCase):
                 HTTP_X_GITHUB_EVENT='push',
             )
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ok')
+        self.assertTrue(
+            SyncLog.objects.filter(source=self.source, status='queued').exists()
+        )
 
 
 # ===========================================================================
@@ -2203,34 +2214,6 @@ class SeedContentSourcesCommandTest(TestCase):
 
 
 # ===========================================================================
-# Django Admin Registration Tests
-# ===========================================================================
-
-
-class AdminRegistrationTest(TestCase):
-    """Test that models are registered in Django admin."""
-
-    def setUp(self):
-        self.client = Client()
-        self.admin = User.objects.create_superuser(
-            email='admin@test.com', password='testpass',
-        )
-        self.client.login(email='admin@test.com', password='testpass')
-
-    def test_content_source_admin_accessible(self):
-        response = self.client.get('/admin/integrations/contentsource/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_sync_log_admin_accessible(self):
-        response = self.client.get('/admin/integrations/synclog/')
-        self.assertEqual(response.status_code, 200)
-
-    def test_content_source_admin_add(self):
-        response = self.client.get('/admin/integrations/contentsource/add/')
-        self.assertEqual(response.status_code, 200)
-
-
-# ===========================================================================
 # Direct Admin Edit Flag Test
 # ===========================================================================
 
@@ -2346,9 +2329,14 @@ class S3ImageUploadTest(TestCase):
         self.assertEqual(result['uploaded'], 1)
         self.assertEqual(result['skipped'], 0)
         mock_s3.upload_file.assert_called_once()
-        call_args = mock_s3.upload_file.call_args
-        self.assertEqual(call_args[0][1], 'test-bucket')
-        self.assertEqual(call_args[0][2], 'content/hero.png')
+        filepath, bucket, key = mock_s3.upload_file.call_args[0]
+        self.assertTrue(filepath.endswith('hero.png'))
+        self.assertEqual(bucket, 'test-bucket')
+        self.assertEqual(key, 'content/hero.png')
+        self.assertEqual(
+            mock_s3.upload_file.call_args.kwargs['ExtraArgs']['ContentType'],
+            'image/png',
+        )
 
     @override_settings(
         AWS_S3_CONTENT_BUCKET='test-bucket',
@@ -2405,6 +2393,10 @@ class S3ImageUploadTest(TestCase):
         self.assertEqual(result['uploaded'], 1)
         self.assertEqual(result['skipped'], 0)
         mock_s3.upload_file.assert_called_once()
+        filepath, bucket, key = mock_s3.upload_file.call_args[0]
+        self.assertTrue(filepath.endswith('hero.png'))
+        self.assertEqual(bucket, 'test-bucket')
+        self.assertEqual(key, 'content/hero.png')
 
     @override_settings(
         AWS_S3_CONTENT_BUCKET='test-bucket',

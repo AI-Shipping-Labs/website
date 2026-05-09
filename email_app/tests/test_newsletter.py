@@ -95,7 +95,7 @@ class SubscribeAPITest(TestCase):
     @patch("email_app.views.newsletter._send_subscribe_verification_email")
     def test_subscribe_existing_unverified_resends_email(self, mock_send):
         """If existing user is unverified, re-send verification email."""
-        User.objects.create_user(
+        user = User.objects.create_user(
             email="unverified@example.com",
             email_verified=False,
         )
@@ -106,7 +106,7 @@ class SubscribeAPITest(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        mock_send.assert_called_once()
+        mock_send.assert_called_once_with(user, redirect_to=None)
 
     def test_subscribe_missing_email_returns_400(self):
         response = self.client.post(
@@ -468,10 +468,6 @@ class UnsubscribeAPITest(TestCase):
 class SubscribePageTest(TestCase):
     """Test the /subscribe dedicated page."""
 
-    def test_subscribe_page_returns_200(self):
-        response = self.client.get("/subscribe")
-        self.assertEqual(response.status_code, 200)
-
     def test_subscribe_page_uses_correct_template(self):
         response = self.client.get("/subscribe")
         self.assertTemplateUsed(response, "email_app/subscribe.html")
@@ -512,6 +508,8 @@ class EmailServiceUnsubscribeLinkTest(TestCase):
         service.send(user, "welcome", {"tier_name": "Free"})
 
         mock_ses.assert_called_once()
+        self.assertEqual(mock_ses.call_args[0][0], "test@example.com")
+        self.assertIn("Welcome to Free", mock_ses.call_args[0][1])
         html_body = mock_ses.call_args[0][2]
         self.assertIn("Unsubscribe", html_body)
         self.assertIn("/api/unsubscribe?token=", html_body)
@@ -526,10 +524,6 @@ class SubscriberAdminTest(TestCase):
             password="adminpass123",
         )
         self.client.login(email="admin@example.com", password="adminpass123")
-
-    def test_subscriber_admin_list_accessible(self):
-        response = self.client.get("/admin/email_app/subscriber/")
-        self.assertEqual(response.status_code, 200)
 
     def test_subscriber_admin_shows_users(self):
         User.objects.create_user(email="sub1@example.com")
@@ -831,6 +825,8 @@ class EmailVerificationTemplateCopyTest(TestCase):
         self.assertEqual(resp.status_code, 200)
 
         mock_ses.assert_called_once()
+        self.assertEqual(mock_ses.call_args[0][0], "render-sub@example.com")
+        self.assertIn("Verify", mock_ses.call_args[0][1])
         html = mock_ses.call_args[0][2]
         # Account creation is disclosed verbatim per the spec.
         self.assertIn("we've created a free account for you", html.lower())
@@ -859,6 +855,8 @@ class EmailVerificationTemplateCopyTest(TestCase):
         self.assertEqual(resp.status_code, 201)
 
         mock_ses.assert_called_once()
+        self.assertEqual(mock_ses.call_args[0][0], "render-reg@example.com")
+        self.assertIn("Verify", mock_ses.call_args[0][1])
         html = mock_ses.call_args[0][2]
         # Same body / context as the subscribe path — both call paths
         # render the same template with the same disclosures.

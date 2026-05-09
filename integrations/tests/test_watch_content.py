@@ -80,9 +80,7 @@ class DebouncedSyncerTest(TestCase):
         syncer._sync_content_source = wrapper
         syncer.schedule(self.source.repo_name, self.source)
         done.wait(timeout=2.0)
-        mock_sync.assert_called_once()
-        # First positional arg is the source.
-        self.assertEqual(mock_sync.call_args.args[0], self.source)
+        mock_sync.assert_called_once_with(self.source, repo_dir='/tmp/x')
 
     def test_tiers_sentinel_routes_to_tiers_sync(self):
         syncer = self._make_syncer(debounce=0.05)

@@ -967,22 +967,13 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
             status='draft',
         )
 
-    def test_campaign_list_accessible(self):
-        """Admin campaign list page loads."""
-        response = self.client.get('/admin/email_app/emailcampaign/')
-        self.assertEqual(response.status_code, 200)
-
     def test_campaign_list_shows_campaigns(self):
         """Campaign list shows subject, status, sent_count."""
         response = self.client.get('/admin/email_app/emailcampaign/')
+        self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn('Test Campaign', content)
         self.assertIn('Draft', content)
-
-    def test_campaign_add_form(self):
-        """Admin can access the add campaign form."""
-        response = self.client.get('/admin/email_app/emailcampaign/add/')
-        self.assertEqual(response.status_code, 200)
 
     def test_campaign_add_creates_campaign(self):
         """Admin can create a new campaign."""
@@ -1036,9 +1027,11 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
 
         # SES should be called with [TEST] prefix
         mock_service._send_ses.assert_called_once()
-        call_args = mock_service._send_ses.call_args
-        self.assertEqual(call_args[0][0], 'admin@test.com')
-        self.assertIn('[TEST]', call_args[0][1])
+        to_email, subject, html = mock_service._send_ses.call_args[0]
+        self.assertEqual(to_email, 'admin@test.com')
+        self.assertEqual(subject, '[TEST] Test Campaign')
+        self.assertIn('<p>Test content.</p>', html)
+        self.assertIn('http://example.com/unsub', html)
 
     def test_send_test_email_get_not_allowed(self):
         """Send test email only accepts POST."""

@@ -86,10 +86,12 @@ class RegisterAPITest(TestCase):
     @patch("accounts.views.auth._send_verification_email")
     def test_register_sends_verification_email(self, mock_send):
         """Registration triggers a verification email to the new user."""
-        self._post({"email": "verify-send@example.com", "password": "secure1234"})
-        mock_send.assert_called_once()
-        sent_user = mock_send.call_args[0][0]
-        self.assertEqual(sent_user.email, "verify-send@example.com")
+        resp = self._post(
+            {"email": "verify-send@example.com", "password": "secure1234"}
+        )
+        self.assertEqual(resp.status_code, 201)
+        user = User.objects.get(email="verify-send@example.com")
+        mock_send.assert_called_once_with(user)
 
     def test_register_user_has_password(self):
         """Registered user has a usable password."""
@@ -388,9 +390,14 @@ class LoginAPITest(TestCase):
 
     def test_login_authenticates_session(self):
         """After login, user is authenticated in the session."""
-        self._post({"email": "login@example.com", "password": "correct1234"})
+        login_resp = self._post(
+            {"email": "login@example.com", "password": "correct1234"}
+        )
+        self.assertEqual(login_resp.status_code, 200)
         resp = self.client.get("/account/")
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
+        self.assertTemplateUsed(resp, "accounts/account.html")
 
     def test_login_wrong_password_returns_401(self):
         """Wrong password returns 401."""
@@ -424,12 +431,15 @@ class LoginAPITest(TestCase):
 
     def test_login_case_insensitive_email(self):
         """Login works with different email casing."""
-        resp = self._post({"email": "LOGIN@EXAMPLE.COM", "password": "correct1234"})
+        resp = self._post(
+            {"email": "LOGIN@EXAMPLE.COM", "password": "correct1234"}
+        )
         # Django's ModelBackend is case-sensitive by default; our authenticate
         # lowercases the email, so this should work if the stored email matches.
         # The stored email is "login@example.com" (normalized domain).
         # We send "login@example.com" after lowercasing.
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
 
     def test_login_url_name(self):
         url = reverse("api_login")
@@ -529,11 +539,12 @@ class PasswordResetRequestAPITest(TestCase):
     @patch("accounts.views.auth._send_password_reset_email")
     def test_reset_request_sends_email_to_existing_user(self, mock_send):
         """Password reset request sends a reset email to existing user."""
-        User.objects.create_user(email="reset-email@example.com", password="test1234")
-        self._post({"email": "reset-email@example.com"})
-        mock_send.assert_called_once()
-        sent_user = mock_send.call_args[0][0]
-        self.assertEqual(sent_user.email, "reset-email@example.com")
+        user = User.objects.create_user(
+            email="reset-email@example.com", password="test1234"
+        )
+        resp = self._post({"email": "reset-email@example.com"})
+        self.assertEqual(resp.status_code, 200)
+        mock_send.assert_called_once_with(user)
 
     @patch("accounts.views.auth._send_password_reset_email")
     def test_reset_request_does_not_send_email_for_nonexistent_user(self, mock_send):
@@ -732,6 +743,7 @@ class ChangePasswordAPITest(TestCase):
         )
         resp = self.client.get("/account/")
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
 
     def test_logged_out_redirects(self):
         """Logged-out user gets redirect."""
@@ -756,10 +768,6 @@ class ChangePasswordAPITest(TestCase):
 
 class RegisterPageTest(TestCase):
     """Tests for the registration page template."""
-
-    def test_register_page_returns_200(self):
-        resp = self.client.get("/accounts/register/")
-        self.assertEqual(resp.status_code, 200)
 
     def test_register_page_uses_correct_template(self):
         resp = self.client.get("/accounts/register/")
@@ -996,6 +1004,8 @@ class OAuthCoexistenceTest(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 200)
+        user = User.objects.get(email="emailuser@example.com")
+        self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
 
     def test_oauth_user_without_password_cannot_login_with_password(self):
         """User without usable password (OAuth only) gets 401 on login API."""
@@ -1031,6 +1041,7 @@ class UnverifiedUserAccessTest(TestCase):
         self.client.force_login(user)
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "AI Shipping Labs")
 
     def test_unverified_user_can_access_account_page(self):
         """Unverified user can access their account page."""
@@ -1040,6 +1051,8 @@ class UnverifiedUserAccessTest(TestCase):
         self.client.force_login(user)
         resp = self.client.get("/account/")
         self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "accounts/account.html")
+        self.assertEqual(resp.context["user"].email, "unv2@example.com")
 
 
 # ── CSRF Cookie on Login/Register Pages ─────────────────────────────
@@ -1243,9 +1256,7 @@ class ResendVerificationApiTest(TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.redirect_chain, [("/account/", 302)])
-            patched_send.assert_called_once()
-            sent_user = patched_send.call_args[0][0]
-            self.assertEqual(sent_user.pk, user.pk)
+            patched_send.assert_called_once_with(user)
             self.assertContains(response, "Verification email sent")
             self.assertContains(response, 'data-message-tag="success"')
 
@@ -1277,7 +1288,7 @@ class ResendVerificationApiTest(TestCase):
             response = self.client.post(self.URL, follow=True)
 
             self.assertEqual(response.redirect_chain, [("/account/", 302)])
-            patched_send.assert_called_once()
+            patched_send.assert_called_once_with(user)
             self.assertContains(response, "verification email")
             self.assertContains(response, 'data-message-tag="error"')
             self.assertIsNone(_cache.get(f"verify-email-resend:{user.id}"))
@@ -1296,7 +1307,7 @@ class ResendVerificationApiTest(TestCase):
                 response = self.client.post(self.URL, follow=True)
 
             self.assertEqual(response.redirect_chain, [("/account/", 302)])
-            patched_send.assert_called_once()
+            patched_send.assert_called_once_with(user)
             self.assertContains(response, "verification email")
             self.assertContains(response, 'data-message-tag="error"')
             self.assertIsNone(_cache.get(f"verify-email-resend:{user.id}"))

@@ -236,10 +236,6 @@ class EventsListPageTest(TestCase):
             status='draft',
         )
 
-    def test_events_list_status_200(self):
-        response = self.client.get('/events')
-        self.assertEqual(response.status_code, 200)
-
     def test_events_list_template(self):
         response = self.client.get('/events')
         self.assertTemplateUsed(response, 'events/events_list.html')
@@ -405,10 +401,6 @@ class EventDetailPageTest(TestCase):
             status='upcoming',
         )
 
-    def test_detail_status_200(self):
-        response = self.client.get('/events/detail-event')
-        self.assertEqual(response.status_code, 200)
-
     def test_detail_template(self):
         response = self.client.get('/events/detail-event')
         self.assertTemplateUsed(response, 'events/event_detail.html')
@@ -469,6 +461,8 @@ class EventDetailPageTest(TestCase):
         self.client.login(email='admin@test.com', password='pass')
         response = self.client.get('/events/draft-event-staff')
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'events/event_detail.html')
+        self.assertContains(response, 'Draft Event')
 
     def test_back_link_to_events(self):
         response = self.client.get('/events/detail-event')
@@ -1264,12 +1258,6 @@ class EventCalendarIcsViewTest(TestCase):
         self.assertIn('BEGIN:VCALENDAR', body)
         self.assertIn('END:VCALENDAR', body)
         self.assertIn('SUMMARY:ICS Download Event', body)
-
-    def test_anonymous_user_can_download_ics(self):
-        # Public download — registered users typically use this, but the
-        # detail page is also public so the .ics is too.
-        response = self.client.get('/events/ics-download-event/calendar.ics')
-        self.assertEqual(response.status_code, 200)
 
     def test_draft_event_returns_404_for_anonymous(self):
         Event.objects.create(

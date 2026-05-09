@@ -97,6 +97,12 @@ def _top(primary_locator):
     return box["y"]
 
 
+def _bottom(primary_locator):
+    box = primary_locator.bounding_box()
+    assert box is not None
+    return box["y"] + box["height"]
+
+
 def _primary_nav_labels(page):
     return page.evaluate(
         """() => {
@@ -131,7 +137,9 @@ class TestActivitiesSprintFirstLayout:
             "Resources",
         ]
         page.get_by_role("heading", name="Active community sprints").wait_for()
+        intro = page.locator('[data-testid="activities-sprints-intro-row"]')
         card = page.locator('[data-testid="activities-sprint-card"]').first
+        assert _bottom(intro) <= _top(card)
         assert _top(card) < 900
         body = page.locator("body").inner_text()
         assert "May Shipping Sprint" in body
@@ -143,6 +151,12 @@ class TestActivitiesSprintFirstLayout:
         assert "Log in to join" in cta.inner_text()
         assert "/accounts/login/?next=/sprints/may-shipping-sprint" in (
             cta.get_attribute("href")
+        )
+        assert _top(card.locator('[data-testid="activities-sprint-duration"]')) > _top(
+            card.locator('[data-testid="activities-sprint-start"]')
+        )
+        assert _top(cta) > _top(
+            card.locator('[data-testid="activities-sprint-guidance"]')
         )
         secondary_top = _top(page.locator('[data-testid="activities-secondary-nav"]'))
         assert _top(card) < secondary_top
@@ -160,9 +174,17 @@ class TestActivitiesSprintFirstLayout:
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
         heading = page.get_by_role("heading", name="Active community sprints")
+        intro = page.locator('[data-testid="activities-sprints-intro-row"]')
         card = page.locator('[data-testid="activities-sprint-card"]').first
         assert _top(heading) < 220
+        assert _bottom(intro) <= _top(card)
         assert _top(card) < 600
+        assert _top(card.locator('[data-testid="activities-sprint-duration"]')) > _top(
+            card.locator('[data-testid="activities-sprint-start"]')
+        )
+        assert _top(card.locator('[data-testid="activities-sprint-cta"]')) > _top(
+            card.locator('[data-testid="activities-sprint-guidance"]')
+        )
         _assert_no_horizontal_overflow(page)
         _shot(page, "02-activities-anonymous-pixel7")
         context.close()
@@ -196,6 +218,9 @@ class TestActivitiesSprintFirstLayout:
 
         empty = page.locator('[data-testid="activities-sprints-empty"]')
         assert empty.is_visible()
+        assert _bottom(page.locator('[data-testid="activities-sprints-intro-row"]')) <= _top(
+            empty
+        )
         assert "Next sprint coming soon" in empty.inner_text()
         assert empty.locator('a[href="/events"]').count() == 1
         assert empty.locator('a[href="/workshops"]').count() == 1

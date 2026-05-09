@@ -9,8 +9,8 @@
 
   <section id="community-sprints" class="border-t border-border bg-background pt-24 pb-12 sm:pt-28 sm:pb-16 lg:pt-32" data-testid="activities-sprints-section">
     <div class="mx-auto max-w-7xl px-6 lg:px-8">
-      <div class="grid gap-8 lg:grid-cols-[minmax(0,0.78fr)_minmax(420px,1fr)] lg:items-start">
-        <div class="max-w-2xl">
+      <div class="space-y-8">
+        <div class="max-w-3xl" data-testid="activities-sprints-intro-row">
           <p class="inline-flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-accent">
             <i data-lucide="timer" class="h-4 w-4"></i>
             Activities
@@ -27,38 +27,36 @@
           </p>
         </div>
 
-        <div class="min-w-0">
+        <div class="min-w-0" data-testid="activities-sprints-card-row">
           {% if activity_sprints %}
-          <div class="grid gap-4">
+          <div class="space-y-4">
             {% for item in activity_sprints %}
             <article class="rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6" data-testid="activities-sprint-card">
-              <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="inline-flex items-center rounded-full border border-border px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="activities-sprint-status">
-                      {{ item.sprint.get_status_display }}
-                    </span>
-                    <span class="inline-flex items-center rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent" data-testid="activities-sprint-tier">
-                      Membership: {{ item.required_tier_name }}
-                    </span>
-                  </div>
-                  <h2 class="mt-4 text-xl font-semibold text-foreground" data-testid="activities-sprint-name">{{ item.sprint.name }}</h2>
-                  <dl class="mt-4 grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
-                    <div>
-                      <dt class="font-medium text-foreground">Start date</dt>
-                      <dd data-testid="activities-sprint-start">{{ item.sprint.start_date|date:"F j, Y" }}</dd>
-                    </div>
-                    <div>
-                      <dt class="font-medium text-foreground">Duration</dt>
-                      <dd data-testid="activities-sprint-duration">{{ item.sprint.duration_weeks }} weeks</dd>
-                    </div>
-                  </dl>
-                  <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
-                    Joining requires {{ item.required_tier_name }} membership. Use the next step below to continue.
-                  </p>
+              <div class="space-y-5">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="inline-flex items-center rounded-full border border-border px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="activities-sprint-status">
+                    {{ item.sprint.get_status_display }}
+                  </span>
+                  <span class="inline-flex items-center rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent" data-testid="activities-sprint-tier">
+                    Membership: {{ item.required_tier_name }}
+                  </span>
                 </div>
+                <h2 class="text-xl font-semibold text-foreground" data-testid="activities-sprint-name">{{ item.sprint.name }}</h2>
+                <dl class="space-y-3 text-sm text-muted-foreground" data-testid="activities-sprint-facts">
+                  <div>
+                    <dt class="font-medium text-foreground">Start date</dt>
+                    <dd data-testid="activities-sprint-start">{{ item.sprint.start_date|date:"F j, Y" }}</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium text-foreground">Duration</dt>
+                    <dd data-testid="activities-sprint-duration">{{ item.sprint.duration_weeks }} weeks</dd>
+                  </div>
+                </dl>
+                <p class="text-sm leading-relaxed text-muted-foreground" data-testid="activities-sprint-guidance">
+                  Joining requires {{ item.required_tier_name }} membership. Use the next step below to continue.
+                </p>
                 <a href="{{ item.cta_url }}"
-                   class="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 sm:w-auto"
+                   class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 sm:w-fit"
                    data-testid="activities-sprint-cta">
                   {{ item.cta_label }}
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>

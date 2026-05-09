@@ -53,10 +53,46 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertContains(response, 'Membership: Main')
         self.assertContains(response, 'Joining requires Main membership')
         self.assertContains(response, 'Log in to join')
+        self.assertContains(response, 'data-testid="activities-sprints-intro-row"')
+        self.assertContains(response, 'data-testid="activities-sprints-card-row"')
+        self.assertContains(response, 'data-testid="activities-sprint-facts"')
         self.assertContains(
             response,
             f'{reverse("account_login")}?next=/sprints/{sprint.slug}',
         )
+
+    def test_sprint_section_uses_stacked_detail_layout(self):
+        Sprint.objects.create(
+            name='May Shipping Sprint',
+            slug='may-shipping-sprint',
+            start_date=datetime.date(2026, 5, 15),
+            duration_weeks=4,
+            status='active',
+            min_tier_level=20,
+        )
+
+        response = self.client.get('/activities')
+        content = response.content.decode()
+
+        intro_index = content.index('data-testid="activities-sprints-intro-row"')
+        card_row_index = content.index('data-testid="activities-sprints-card-row"')
+        card_index = content.index('data-testid="activities-sprint-card"')
+        facts_index = content.index('data-testid="activities-sprint-facts"')
+        guidance_index = content.index('data-testid="activities-sprint-guidance"')
+        cta_index = content.index('data-testid="activities-sprint-cta"')
+
+        self.assertLess(intro_index, card_row_index)
+        self.assertLess(card_row_index, card_index)
+        self.assertLess(card_index, facts_index)
+        self.assertLess(facts_index, guidance_index)
+        self.assertLess(guidance_index, cta_index)
+        self.assertNotIn(
+            'lg:grid-cols-[minmax(0,0.78fr)_minmax(420px,1fr)]',
+            content,
+        )
+        facts_markup = content[facts_index:guidance_index]
+        self.assertNotIn('sm:grid-cols-2', facts_markup)
+        self.assertNotIn('sm:flex-row sm:items-start sm:justify-between', content)
 
     def test_sprints_render_before_secondary_nav_and_tier_activity_content(self):
         Sprint.objects.create(

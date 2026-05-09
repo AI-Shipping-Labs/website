@@ -177,6 +177,15 @@ Some acceptance criteria are marked `[HUMAN]` in issues (OAuth flows, Stripe red
 | Priority | `P0` (must have), `P1` (important), `P2` (nice to have) |
 | Special | `human` (code done, needs manual verification) |
 
+## Temporary Files
+
+All agents must use the project-local `.tmp/` directory for temporary files (screenshots, previews, downloads, scratch data). This directory is gitignored.
+
+- Never write temp files to `/tmp`, `/data/tmp`, or any path outside the project root
+- When running `scripts/capture_screenshots.py`, pass `--output .tmp/screenshots`
+- Agents should create subdirectories inside `.tmp/` as needed (e.g. `.tmp/screenshots/`, `.tmp/previews/`)
+- The `.tmp/` directory is excluded from git via `.gitignore`
+
 ## Technology Stack
 
 - Backend: Django (Python), managed with uv

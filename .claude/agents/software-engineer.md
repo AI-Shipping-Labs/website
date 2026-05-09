@@ -158,6 +158,7 @@ Commit message rules:
 - Every issue must include tests. All tests must pass before reporting to orchestrator.
 - Follow existing patterns. If there's already a convention in the codebase, follow it.
 - Always `git pull` before starting work.
+- Use `.tmp/` inside the project root for any temporary files (screenshots, previews, scratch data). Never write to `/tmp`, `/data/tmp`, or paths outside the project.
 
 ## Django Conventions
 

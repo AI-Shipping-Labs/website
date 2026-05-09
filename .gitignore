@@ -19,6 +19,9 @@ htmlcov/
 # OS files
 .DS_Store
 
+# Agent temp files (screenshots, previews, etc.)
+.tmp/
+
 # Content repo (local clone)
 _content-repo/
 

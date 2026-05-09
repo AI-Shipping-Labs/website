@@ -4,8 +4,8 @@ Capture screenshots of Django pages for issue documentation.
 
 Usage:
     uv run python scripts/capture_screenshots.py --urls /account/ /blog/ --issue 70
-    uv run python scripts/capture_screenshots.py --urls / /pricing --output /tmp/screenshots
-    uv run python scripts/capture_screenshots.py --urls /projects --output /tmp/screenshots --viewport 393x851
+    uv run python scripts/capture_screenshots.py --urls / /pricing --output .tmp/screenshots
+    uv run python scripts/capture_screenshots.py --urls /projects --output .tmp/screenshots --viewport 393x851
 
 This script:
 1. Starts the Django dev server (if not already running)
@@ -294,7 +294,7 @@ def main():
                         help="GitHub repo for issue upload")
     args = parser.parse_args()
 
-    output_dir = args.output or tempfile.mkdtemp(prefix="screenshots_")
+    output_dir = args.output or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".tmp", "screenshots")
     print(f"Output directory: {output_dir}")
 
     # Start server if not running

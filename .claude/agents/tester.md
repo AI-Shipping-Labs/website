@@ -182,7 +182,7 @@ COMMENT
 This step is NOT optional. Screenshots are used by agents to verify pages rendered correctly, not just for human review. After tests pass, capture screenshots of the feature's key pages and attach them to the issue:
 
 ```bash
-uv run python scripts/capture_screenshots.py --urls {relevant URLs} --issue {NUMBER}
+uv run python scripts/capture_screenshots.py --urls {relevant URLs} --issue {NUMBER} --output .tmp/screenshots
 ```
 
 For authenticated pages, add `--login-email main@test.com` (or another test user).

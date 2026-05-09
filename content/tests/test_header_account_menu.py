@@ -116,7 +116,8 @@ class HeaderAccountMenuTest(TestCase):
         self.assertIn("Mobile Member", html)
         self.assertIn("Notifications", html)
         self.assertIn("mobile-notification-badge", html)
-        self.assertIn("mobile-resources-toggle", html)
+        self.assertIn("mobile-learn-toggle", html)
+        self.assertIn("mobile-community-toggle", html)
         section_start = html.index('data-testid="mobile-account-section"')
         logout_start = html.index(reverse("account_logout"), section_start)
         mobile_account_html = html[section_start:logout_start]

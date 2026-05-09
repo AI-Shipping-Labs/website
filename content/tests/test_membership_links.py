@@ -1,4 +1,4 @@
-"""Header/footer/about Membership and FAQ links."""
+"""Header/footer/about pricing and FAQ links."""
 
 import re
 
@@ -29,21 +29,15 @@ class HeaderLinksAnonymousTest(TestCase):
         # No fixtures; the anonymous homepage renders without DB content.
         pass
 
-    def test_desktop_membership_link_points_to_pricing(self):
+    def test_membership_is_removed_from_primary_header_nav(self):
         response = self.client.get("/")
         header = _extract_header(response.content.decode())
-        # There are two Membership links inside the header (desktop + mobile);
-        # both must point at /pricing.
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', header
         )
-        self.assertEqual(
-            len(membership_links),
-            2,
-            f"Expected 2 Membership links in header, got {membership_links}",
-        )
-        for href in membership_links:
-            self.assertEqual(href, "/pricing")
+        self.assertEqual(membership_links, [])
+        self.assertIn('id="learn-dropdown-btn"', header)
+        self.assertIn('id="community-dropdown-btn"', header)
 
     def test_faq_is_not_a_primary_header_link(self):
         response = self.client.get("/")
@@ -68,7 +62,7 @@ class HeaderLinksAuthenticatedTest(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    def test_authenticated_header_membership_link_is_pricing(self):
+    def test_authenticated_header_has_no_membership_text_nav(self):
         # Use a non-home page (about) so the dashboard does not interfere
         # with the test of the header partial.
         response = self.client.get("/about")
@@ -76,9 +70,9 @@ class HeaderLinksAuthenticatedTest(TestCase):
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', header
         )
-        self.assertTrue(membership_links)
-        for href in membership_links:
-            self.assertEqual(href, "/pricing")
+        self.assertEqual(membership_links, [])
+        self.assertIn('id="learn-dropdown-btn"', header)
+        self.assertIn('id="community-dropdown-btn"', header)
 
     def test_authenticated_header_has_no_primary_faq_link(self):
         response = self.client.get("/about")

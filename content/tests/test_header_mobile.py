@@ -48,12 +48,10 @@ class HeaderMobileMenuTest(TestCase):
         """Mobile menu nav links should use py-3 for 44px tap target height."""
         response = self.client.get("/")
         content = response.content.decode()
-        # Find the mobile menu section and extract the About link tag
         menu_start = content.index('id="mobile-menu"')
         menu_html = content[menu_start:]
-        # Match the <a> tag containing href="/about" and check its class
-        match = re.search(r'<a[^>]*href="/about"[^>]*>', menu_html)
-        self.assertIsNotNone(match, "About link not found in mobile menu")
+        match = re.search(r'<a[^>]*href="/courses"[^>]*>', menu_html)
+        self.assertIsNotNone(match, "Courses link not found in mobile menu")
         self.assertIn("py-3", match.group(0))
 
     def test_notification_dropdown_has_max_width_constraint(self):
@@ -78,29 +76,42 @@ class HeaderMobileMenuTest(TestCase):
         content = response.content.decode()
         self.assertIn('min-w-0', content)
 
-    def test_resources_section_has_chevron_indicator(self):
-        """The Resources section in mobile menu should have a chevron SVG indicator."""
+    def test_mobile_nav_sections_have_chevron_indicators(self):
+        """The Learn and Community sections should have chevron SVG indicators."""
         response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('id="mobile-resources-chevron"', content)
-        self.assertIn('id="mobile-resources-toggle"', content)
+        self.assertIn('id="mobile-learn-chevron"', content)
+        self.assertIn('id="mobile-learn-toggle"', content)
+        self.assertIn('id="mobile-community-chevron"', content)
+        self.assertIn('id="mobile-community-toggle"', content)
 
-    def test_resources_toggle_is_button(self):
-        """The Resources heading in mobile menu should be a button (for accordion behavior)."""
+    def test_mobile_nav_toggles_are_buttons(self):
+        """The Learn and Community headings should be buttons."""
         response = self.client.get("/")
         content = response.content.decode()
-        toggle_pos = content.index('id="mobile-resources-toggle"')
-        tag_start = content.rfind("<", 0, toggle_pos)
-        tag_name = content[tag_start:tag_start + 10]
-        self.assertTrue(tag_name.startswith("<button"))
+        for toggle_id in ['mobile-learn-toggle', 'mobile-community-toggle']:
+            toggle_pos = content.index(f'id="{toggle_id}"')
+            tag_start = content.rfind("<", 0, toggle_pos)
+            tag_name = content[tag_start:tag_start + 10]
+            self.assertTrue(tag_name.startswith("<button"))
 
-    def test_activities_and_resources_links_remain_distinct(self):
-        """Activities is top-level; Resources curated links use the /resources URL."""
+    def test_learn_and_community_links_are_grouped(self):
+        """Learn and Community expose the requested grouped links."""
         response = self.client.get("/")
         content = response.content.decode()
+        self.assertIn('id="learn-dropdown-btn"', content)
+        self.assertIn('id="community-dropdown-btn"', content)
+        self.assertIn('href="/courses"', content)
+        self.assertIn('href="/workshops"', content)
+        self.assertIn('href="/learning-path/ai-engineer"', content)
+        self.assertIn('href="/projects"', content)
+        self.assertIn('href="/interview"', content)
+        self.assertIn('href="/blog"', content)
+        self.assertIn('href="/sprints"', content)
+        self.assertIn('href="/events"', content)
         self.assertIn('href="/activities"', content)
-        self.assertIn('id="resources-dropdown-btn"', content)
         self.assertIn('href="/resources"', content)
+        self.assertNotIn('id="resources-dropdown-btn"', content)
 
     def test_close_on_outside_click_script_present(self):
         """The script should include close-on-outside-click logic for the mobile menu."""

@@ -32,6 +32,7 @@ from content.views.pages import (
     downloads_list,
     project_detail,
     projects_list,
+    sprints_index,
     tutorial_detail,
     tutorials_list,
 )
@@ -62,6 +63,7 @@ urlpatterns = [
     path('privacy', privacy, name='privacy'),
     path('impressum', impressum, name='impressum'),
     path('activities', activities, name='activities'),
+    path('sprints', sprints_index, name='sprints_index'),
     path('faq', faq, name='faq'),
     path('blog', blog_list, name='blog_list'),
     path('blog/<slug:slug>', blog_detail, name='blog_detail'),

@@ -86,7 +86,10 @@ class AccountSprintPlanCardVisibleWithPlanTest(TestCase):
     def test_card_shows_open_my_plan_with_correct_href(self):
         response = self.client.get('/account/')
 
-        expected_href = reverse('my_plan_detail', kwargs={'plan_id': self.plan.pk})
+        expected_href = reverse(
+            'my_plan_detail',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
+        )
         self.assertContains(
             response, f'href="{expected_href}"',
         )

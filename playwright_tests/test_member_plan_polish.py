@@ -118,18 +118,18 @@ class TestMemberPlanPolish:
         context = _auth_context(browser, "member@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/account/plan/{data['plan_id']}",
+            f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
             wait_until="domcontentloaded",
         )
 
         assert page.locator('[data-testid="header-plan-link"]').get_attribute("href") == (
-            f"/account/plan/{data['plan_id']}"
+            f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}"
         )
         assert page.locator('[data-testid="mobile-header-plan-link"]').get_attribute("href") == (
-            f"/account/plan/{data['plan_id']}"
+            f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}"
         )
         assert page.locator('[data-testid="my-plan-edit-cta"]').get_attribute("href") == (
-            f"/account/plan/{data['plan_id']}/edit/"
+            f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}/edit"
         )
 
         item = page.locator('[data-testid="plan-checkpoint"]').first
@@ -190,6 +190,47 @@ class TestMemberPlanPolish:
         assert page.locator('[data-testid="plan-row-done-toggle"]').count() == 0
         assert page.locator('[data-testid="plan-item-edit"]').count() == 0
         assert page.locator('[data-testid="plan-item-markdown-input"]').count() == 0
+        context.close()
+
+    def test_mobile_visibility_control_fits_390px_workspace(
+        self, django_server, browser, tmp_path,
+    ):
+        _ensure_tiers()
+        _clear_plan_data()
+        _create_user("member@test.com", tier_slug="free", email_verified=True)
+        _create_user("teammate@test.com", tier_slug="free", email_verified=True)
+        data = _seed_polish_plan()
+
+        context = _auth_context(browser, "member@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(
+            f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
+            wait_until="domcontentloaded",
+        )
+        page.locator('[data-testid="plan-visibility-form"]').wait_for(
+            state="visible",
+        )
+
+        page.screenshot(
+            path=str(tmp_path / "owner-workspace-visibility-390.png"),
+            full_page=True,
+        )
+        assert page.evaluate(
+            "() => document.documentElement.scrollWidth"
+            " <= document.documentElement.clientWidth"
+        )
+        viewport_width = page.viewport_size["width"]
+        for selector in [
+            '[data-testid="plan-visibility-form"]',
+            '[data-testid="visibility-select"]',
+            '[data-testid="visibility-save"]',
+        ]:
+            box = page.locator(selector).bounding_box()
+            assert box is not None
+            assert box["x"] >= 0
+            assert box["x"] + box["width"] <= viewport_width
+
         context.close()
 
     def test_studio_participant_links_open_user_detail(self, django_server, browser):

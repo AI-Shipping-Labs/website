@@ -5,26 +5,26 @@ to one ``Week`` of one ``Plan``. They are deliberately distinct from
 ``InterviewNote`` records, which are staff-authored interview /
 intake notes that must NEVER appear on member-facing surfaces.
 
-URLs follow the no-trailing-slash convention used elsewhere in
-``plans/urls.py``:
+URLs follow the sprint-scoped no-trailing-slash convention used
+elsewhere in ``plans/urls.py``:
 
-- ``POST /account/plan/<plan_id>/weeks/<week_id>/notes`` -- create a
+- ``POST /sprints/<slug>/plan/<plan_id>/weeks/<week_id>/notes`` -- create a
   note on the given week. Owner-only. Empty body returns HTTP 400 and
   does not create a row.
-- ``POST /account/plan/<plan_id>/week-notes/<note_id>`` (with
+- ``POST /sprints/<slug>/plan/<plan_id>/week-notes/<note_id>`` (with
   ``_method=patch``) or ``PATCH ...`` -- update the body of a note.
   Author-only. Empty body returns 400.
-- ``POST /account/plan/<plan_id>/week-notes/<note_id>/delete`` or
+- ``POST /sprints/<slug>/plan/<plan_id>/week-notes/<note_id>/delete`` or
   ``DELETE ...`` -- delete the note. Author-only.
 
 Cross-plan / cross-author / non-owner attempts always return 404,
 not 403, so plan IDs do not leak through error codes (matches the
 style already used by :func:`my_plan_detail`).
 
-Form posts redirect back to ``/account/plan/<plan_id>`` with a
-flash message; AJAX (``X-Requested-With: XMLHttpRequest``) callers
-get JSON. The Playwright test exercises the redirect path because
-that is what the textarea/button UI actually does.
+Form posts redirect back to the sprint-scoped owner workspace with a
+flash message; AJAX (``X-Requested-With: XMLHttpRequest``) callers get
+JSON. The Playwright test exercises the redirect path because that is
+what the textarea/button UI actually does.
 """
 
 from __future__ import annotations
@@ -51,14 +51,23 @@ def _is_ajax(request) -> bool:
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
 
-def _owned_plan_or_404(plan_id, user) -> Plan:
+def _owned_plan_or_404(plan_id, sprint_slug, user) -> Plan:
     """Return ``plan_id`` if it exists AND ``user`` is the owner.
 
     Other ownership states (different member, anonymous, missing) all
     surface as 404 -- matching ``my_plan_detail`` so the existence of
     plan IDs stays opaque.
     """
-    return get_object_or_404(Plan.objects.filter(pk=plan_id, member=user))
+    return get_object_or_404(
+        Plan.objects.filter(pk=plan_id, member=user, sprint__slug=sprint_slug),
+    )
+
+
+def _owner_workspace_url(plan: Plan) -> str:
+    return reverse(
+        'my_plan_detail',
+        kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk},
+    )
 
 
 def _serialize_note(note: WeekNote) -> dict:
@@ -73,9 +82,9 @@ def _serialize_note(note: WeekNote) -> dict:
 
 @login_required
 @require_http_methods(['POST'])
-def week_note_create(request, plan_id, week_id):
+def week_note_create(request, sprint_slug, plan_id, week_id):
     """Create a ``WeekNote`` on ``week_id``. Owner-only."""
-    plan = _owned_plan_or_404(plan_id, request.user)
+    plan = _owned_plan_or_404(plan_id, sprint_slug, request.user)
     week = get_object_or_404(Week.objects.filter(pk=week_id, plan=plan))
 
     body = (request.POST.get('body') or '').strip()
@@ -96,15 +105,12 @@ def week_note_create(request, plan_id, week_id):
         return JsonResponse(_serialize_note(note), status=201)
 
     messages.success(request, 'Note added.')
-    return redirect(
-        reverse('my_plan_detail', kwargs={'plan_id': plan.pk})
-        + f'#week-{week.pk}'
-    )
+    return redirect(_owner_workspace_url(plan) + f'#week-{week.pk}')
 
 
 @login_required
 @require_http_methods(['POST', 'PATCH'])
-def week_note_update(request, plan_id, note_id):
+def week_note_update(request, sprint_slug, plan_id, note_id):
     """Update the body of a participant ``WeekNote``. Author-only.
 
     Cross-author edits (a non-author plan owner trying to mutate a
@@ -114,7 +120,7 @@ def week_note_update(request, plan_id, note_id):
     re-check ``note.author_id == request.user.id`` in case the model
     is ever invoked from another surface.
     """
-    plan = _owned_plan_or_404(plan_id, request.user)
+    plan = _owned_plan_or_404(plan_id, sprint_slug, request.user)
     note = _resolve_note_or_404(plan, note_id, request.user)
 
     body = _extract_body(request)
@@ -132,17 +138,14 @@ def week_note_update(request, plan_id, note_id):
         return JsonResponse(_serialize_note(note))
 
     messages.success(request, 'Note updated.')
-    return redirect(
-        reverse('my_plan_detail', kwargs={'plan_id': plan.pk})
-        + f'#week-{note.week_id}'
-    )
+    return redirect(_owner_workspace_url(plan) + f'#week-{note.week_id}')
 
 
 @login_required
 @require_http_methods(['POST', 'DELETE'])
-def week_note_delete(request, plan_id, note_id):
+def week_note_delete(request, sprint_slug, plan_id, note_id):
     """Delete a participant ``WeekNote``. Author-only."""
-    plan = _owned_plan_or_404(plan_id, request.user)
+    plan = _owned_plan_or_404(plan_id, sprint_slug, request.user)
     note = _resolve_note_or_404(plan, note_id, request.user)
 
     week_id = note.week_id
@@ -152,10 +155,7 @@ def week_note_delete(request, plan_id, note_id):
         return JsonResponse({'ok': True})
 
     messages.success(request, 'Note deleted.')
-    return redirect(
-        reverse('my_plan_detail', kwargs={'plan_id': plan.pk})
-        + f'#week-{week_id}'
-    )
+    return redirect(_owner_workspace_url(plan) + f'#week-{week_id}')
 
 
 def _resolve_note_or_404(plan: Plan, note_id, user) -> WeekNote:

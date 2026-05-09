@@ -1,35 +1,286 @@
 {% comment %}
-Shared shareable-plan body partial (issue #440, extended in #499).
+Member-facing sprint plan body.
 
-Used by both ``plans/member_plan_detail.html`` (read-only, viewed by
-teammates) and ``plans/my_plan_detail.html`` (owner edit surface). The
-two templates differ only in the visibility-toggle form at the top and
-in the "View cohort board" CTA -- everything else is rendered here.
-
-DO NOT render ``InterviewNote`` rows in this partial. Internal and
-external interview notes are deliberately omitted from member-facing
-views in this issue.
-
-Issue #499 adds participant ``WeekNote`` rendering inside each week.
-Notes show owner-authored body text + a relative timestamp. The owner
-(``plan_can_edit`` is True) sees an add-note textarea, plus inline
-edit/delete controls on their own notes. Teammates on cohort plans
-see the notes read-only with no edit/delete affordances. Empty weeks
-render the "no notes yet" copy on the owner page; on the read-only
-teammate view the empty state is silent (no notes section emitted)
-to keep the page tight when a week has nothing to say.
-
-Required context:
-- ``plan`` (with related ``weeks``, ``resources``, ``deliverables``,
-  ``next_steps`` prefetched by the view; ``weeks__notes__author``
-  prefetched on the views that need notes).
-- ``plan_can_edit`` (boolean): whether the viewer is the owner.
+Used by the owner workspace and teammate read-only plan view. Keep
+``data-testid`` and ``data-*`` hooks stable for the member plan JS and
+existing tests.
 {% endcomment %}
 {% load accounts_extras plan_markdown %}
 
-<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-summary">
-  <h2 class="text-xl font-semibold mb-4">Summary</h2>
-  <dl class="grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
+<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-weeks">
+  <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-xs font-medium uppercase tracking-widest text-accent">Timeline</p>
+      <h2 class="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Weekly work</h2>
+    </div>
+    <p class="text-sm text-muted-foreground">Checkpoints are the primary flow for this sprint plan.</p>
+  </div>
+
+  <div class="space-y-4">
+    {% for week in plan.weeks.all %}
+    <article class="rounded-lg border border-border bg-background p-4" id="week-{{ week.pk }}" data-testid="plan-week" data-week-id="{{ week.pk }}">
+      <div class="flex flex-col gap-1 border-b border-border pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 class="text-base font-semibold text-foreground">
+          Week {{ week.week_number }}{% if week.theme %}: {{ week.theme }}{% endif %}
+        </h3>
+        <span class="text-xs text-muted-foreground">Sprint week {{ week.week_number }}</span>
+      </div>
+
+      <ul class="mt-3 divide-y divide-border text-sm">
+        {% for checkpoint in week.checkpoints.all %}
+        <li class="flex min-h-[44px] items-start gap-3 py-3 {% if checkpoint.done_at %}is-complete{% endif %}"
+            data-testid="plan-checkpoint"
+            data-plan-item
+            data-item-type="checkpoint"
+            data-item-id="{{ checkpoint.pk }}">
+          {% if plan_can_edit %}
+          <input type="checkbox"
+                 class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+                 data-testid="plan-row-done-toggle"
+                 data-done-toggle
+                 aria-label="Mark checkpoint done"
+                 {% if checkpoint.done_at %}checked{% endif %}>
+          {% else %}
+            {% if checkpoint.done_at %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-500/15 text-xs text-green-400" aria-label="Done">&#10003;</span>
+            {% else %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs text-muted-foreground" aria-label="Not done"></span>
+            {% endif %}
+          {% endif %}
+          <div class="min-w-0 flex-1">
+            <div class="plan-markdown {% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+                 data-rendered-markdown>{{ checkpoint.description|plan_markdown }}</div>
+            {% if plan_can_edit %}
+            <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                      rows="3"
+                      data-markdown-input
+                      data-testid="plan-item-markdown-input">{{ checkpoint.description }}</textarea>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
+              <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
+              <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
+              <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+            </div>
+            {% endif %}
+          </div>
+        </li>
+        {% empty %}
+        <li class="py-3 text-sm italic text-muted-foreground">No checkpoints in this week.</li>
+        {% endfor %}
+      </ul>
+
+      <div class="mt-4 rounded-lg border border-border/70 bg-secondary/40 p-3" data-testid="plan-week-notes" data-week-id="{{ week.pk }}">
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Week notes</h4>
+        {% if week.notes.all %}
+        <ul class="space-y-3" data-testid="plan-week-notes-list">
+          {% for note in week.notes.all %}
+          <li class="rounded-md border border-border bg-card p-3" data-testid="plan-week-note" data-note-id="{{ note.pk }}">
+            <div class="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                {% if note.author %}{{ note.author|display_name }}{% else %}Member{% endif %}
+                &middot; {{ note.created_at|date:"M j, Y H:i" }}
+                {% if note.updated_at and note.updated_at != note.created_at %}
+                <span data-testid="plan-week-note-edited">(edited)</span>
+                {% endif %}
+              </span>
+              {% if plan_can_edit and note.author_id == request.user.id %}
+              <span class="space-x-2 whitespace-nowrap">
+                <button type="button"
+                        class="text-accent hover:underline"
+                        data-week-note-edit
+                        data-testid="plan-week-note-edit">Edit</button>
+                <form method="post" action="{% url 'week_note_delete' sprint_slug=plan.sprint.slug plan_id=plan.pk note_id=note.pk %}" class="inline" onsubmit="return confirm('Delete this note?');">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="text-destructive hover:underline"
+                          data-testid="plan-week-note-delete">Delete</button>
+                </form>
+              </span>
+              {% endif %}
+            </div>
+            <p class="mt-2 whitespace-pre-line text-sm text-foreground" data-testid="plan-week-note-body" data-week-note-body>{{ note.body }}</p>
+            {% if plan_can_edit and note.author_id == request.user.id %}
+            <form method="post"
+                  action="{% url 'week_note_update' sprint_slug=plan.sprint.slug plan_id=plan.pk note_id=note.pk %}"
+                  class="mt-2 hidden"
+                  data-week-note-edit-form
+                  data-testid="plan-week-note-edit-form">
+              {% csrf_token %}
+              <textarea name="body"
+                        rows="3"
+                        class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                        data-testid="plan-week-note-edit-textarea">{{ note.body }}</textarea>
+              <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <button type="submit"
+                        class="rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground"
+                        data-testid="plan-week-note-edit-save">Save</button>
+                <button type="button"
+                        class="text-muted-foreground hover:text-foreground"
+                        data-week-note-cancel
+                        data-testid="plan-week-note-edit-cancel">Cancel</button>
+              </div>
+            </form>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-xs text-muted-foreground italic" data-testid="plan-week-notes-empty">
+          {% if plan_can_edit %}No notes yet for this week. Capture how it went below.{% else %}No notes yet for this week.{% endif %}
+        </p>
+        {% endif %}
+
+        {% if plan_can_edit %}
+        <form method="post"
+              action="{% url 'week_note_create' sprint_slug=plan.sprint.slug plan_id=plan.pk week_id=week.pk %}"
+              class="mt-3"
+              data-testid="plan-week-note-add-form">
+          {% csrf_token %}
+          <label for="week-{{ week.pk }}-note-input" class="sr-only">Add a note for week {{ week.week_number }}</label>
+          <textarea id="week-{{ week.pk }}-note-input"
+                    name="body"
+                    rows="2"
+                    placeholder="How did this week go?"
+                    class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                    data-testid="plan-week-note-add-textarea"></textarea>
+          <button type="submit"
+                  class="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-3 py-2 text-xs font-medium text-accent-foreground"
+                  data-testid="plan-week-note-add-submit">Add note</button>
+        </form>
+        {% endif %}
+      </div>
+    </article>
+    {% empty %}
+    <p class="text-sm text-muted-foreground">No weeks yet.</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% if plan.deliverables.all or plan.next_steps.all %}
+<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-action-items">
+  <div class="grid gap-6 lg:grid-cols-2">
+    {% if plan.deliverables.all %}
+    <div data-testid="plan-deliverables">
+      <h2 class="text-lg font-semibold text-foreground">Deliverables</h2>
+      <ul class="mt-3 divide-y divide-border text-sm">
+        {% for deliverable in plan.deliverables.all %}
+        <li class="flex min-h-[44px] items-start gap-3 py-3 {% if deliverable.done_at %}is-complete{% endif %}"
+            data-testid="plan-deliverable"
+            data-plan-item
+            data-item-type="deliverable"
+            data-item-id="{{ deliverable.pk }}">
+          {% if plan_can_edit %}
+          <input type="checkbox"
+                 class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+                 data-testid="plan-row-done-toggle"
+                 data-done-toggle
+                 aria-label="Mark deliverable done"
+                 {% if deliverable.done_at %}checked{% endif %}>
+          {% else %}
+            {% if deliverable.done_at %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-500/15 text-xs text-green-400" aria-label="Done">&#10003;</span>
+            {% else %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs text-muted-foreground" aria-label="Not done"></span>
+            {% endif %}
+          {% endif %}
+          <div class="min-w-0 flex-1">
+            <div class="plan-markdown {% if deliverable.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+                 data-rendered-markdown>{{ deliverable.description|plan_markdown }}</div>
+            {% if plan_can_edit %}
+            <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                      rows="3"
+                      data-markdown-input
+                      data-testid="plan-item-markdown-input">{{ deliverable.description }}</textarea>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
+              <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
+              <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
+              <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+            </div>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if plan.next_steps.all %}
+    <div data-testid="plan-next-steps">
+      <h2 class="text-lg font-semibold text-foreground">Next steps</h2>
+      <ul class="mt-3 divide-y divide-border text-sm">
+        {% for step in plan.next_steps.all %}
+        <li class="flex min-h-[44px] items-start gap-3 py-3 {% if step.done_at %}is-complete{% endif %}"
+            data-testid="plan-next-step"
+            data-plan-item
+            data-item-type="next-step"
+            data-item-id="{{ step.pk }}">
+          {% if plan_can_edit %}
+          <input type="checkbox"
+                 class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
+                 data-testid="plan-row-done-toggle"
+                 data-done-toggle
+                 aria-label="Mark next step done"
+                 {% if step.done_at %}checked{% endif %}>
+          {% else %}
+            {% if step.done_at %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-500/15 text-xs text-green-400" aria-label="Done">&#10003;</span>
+            {% else %}
+            <span class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs text-muted-foreground" aria-label="Not done"></span>
+            {% endif %}
+          {% endif %}
+          <div class="min-w-0 flex-1">
+            <div class="plan-markdown {% if step.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
+                 data-rendered-markdown>{{ step.description|plan_markdown }}</div>
+            {% if plan_can_edit %}
+            <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                      rows="3"
+                      data-markdown-input
+                      data-testid="plan-item-markdown-input">{{ step.description }}</textarea>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
+              <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
+              <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
+              <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
+            </div>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if plan.resources.all %}
+<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-resources">
+  <h2 class="text-lg font-semibold text-foreground">Resources</h2>
+  <ul class="mt-3 space-y-3 text-sm">
+    {% for resource in plan.resources.all %}
+    <li class="rounded-lg border border-border bg-background p-4" data-testid="plan-resource">
+      {% if resource.url %}
+      <a href="{{ resource.url }}" class="inline-flex min-h-[44px] items-center gap-2 font-medium text-accent hover:underline" rel="noopener noreferrer" target="_blank">
+        {{ resource.title }}
+        <i data-lucide="external-link" class="h-4 w-4"></i>
+      </a>
+      <p class="mt-1 break-all text-xs text-muted-foreground">{{ resource.url }}</p>
+      {% else %}
+      <p class="font-medium text-foreground">{{ resource.title }}</p>
+      {% endif %}
+      {% if resource.note %}
+      <div class="plan-markdown mt-2 text-muted-foreground">{{ resource.note|plan_markdown }}</div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-summary">
+  <h2 class="text-lg font-semibold text-foreground">Plan context</h2>
+  <dl class="mt-4 grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
     {% if plan.summary_current_situation %}
     <div>
       <dt class="text-muted-foreground">Current situation</dt>
@@ -64,10 +315,10 @@ Required context:
 </section>
 
 {% if plan.focus_main or plan.focus_supporting %}
-<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-focus">
-  <h2 class="text-xl font-semibold mb-4">Focus</h2>
+<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-focus">
+  <h2 class="text-lg font-semibold text-foreground">Focus</h2>
   {% if plan.focus_main %}
-  <div class="plan-markdown text-foreground" data-testid="plan-focus-main">{{ plan.focus_main|plan_markdown }}</div>
+  <div class="plan-markdown mt-3 text-foreground" data-testid="plan-focus-main">{{ plan.focus_main|plan_markdown }}</div>
   {% endif %}
   {% if plan.focus_supporting %}
   <ul class="mt-4 list-disc list-inside text-sm text-muted-foreground space-y-1">
@@ -80,263 +331,8 @@ Required context:
 {% endif %}
 
 {% if plan.accountability %}
-<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-accountability">
-  <h2 class="text-xl font-semibold mb-4">Accountability</h2>
-  <div class="plan-markdown text-foreground">{{ plan.accountability|plan_markdown }}</div>
-</section>
-{% endif %}
-
-<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-weeks">
-  <h2 class="text-xl font-semibold mb-4">Weeks</h2>
-  {% for week in plan.weeks.all %}
-  <div class="mb-6 last:mb-0" id="week-{{ week.pk }}" data-testid="plan-week" data-week-id="{{ week.pk }}">
-    <h3 class="text-base font-medium mb-2">
-      Week {{ week.week_number }}{% if week.theme %} &mdash; {{ week.theme }}{% endif %}
-    </h3>
-    <ul class="space-y-1 text-sm">
-      {% for checkpoint in week.checkpoints.all %}
-      <li class="flex items-start gap-3 rounded-lg border border-transparent py-1.5 {% if checkpoint.done_at %}is-complete{% endif %}"
-          data-testid="plan-checkpoint"
-          data-plan-item
-          data-item-type="checkpoint"
-          data-item-id="{{ checkpoint.pk }}">
-        {% if plan_can_edit %}
-        <input type="checkbox"
-               class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
-               data-testid="plan-row-done-toggle"
-               data-done-toggle
-               aria-label="Mark checkpoint done"
-               {% if checkpoint.done_at %}checked{% endif %}>
-        {% else %}
-          {% if checkpoint.done_at %}
-          <span class="mt-0.5 text-emerald-500" aria-label="Done">&#10003;</span>
-          {% else %}
-          <span class="mt-0.5 text-muted-foreground" aria-label="Not done">&#9633;</span>
-          {% endif %}
-        {% endif %}
-        <div class="min-w-0 flex-1">
-          <div class="plan-markdown {% if checkpoint.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
-               data-rendered-markdown>{{ checkpoint.description|plan_markdown }}</div>
-          {% if plan_can_edit %}
-          <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                    rows="3"
-                    data-markdown-input
-                    data-testid="plan-item-markdown-input">{{ checkpoint.description }}</textarea>
-          <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
-            <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
-            <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
-            <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
-          </div>
-          {% endif %}
-        </div>
-      </li>
-      {% empty %}
-      <li class="text-sm text-muted-foreground italic">No checkpoints in this week.</li>
-      {% endfor %}
-    </ul>
-
-    {% comment %}
-    Participant notes (issue #499). Owner gets a textarea + inline
-    edit/delete controls; teammates see notes read-only. The
-    surrounding ``data-testid`` attributes anchor the Playwright
-    coverage so we can assert on a single week's note section
-    independent of the rest of the page.
-    {% endcomment %}
-    <div class="mt-4 rounded-lg border border-border/50 bg-secondary/40 p-3" data-testid="plan-week-notes" data-week-id="{{ week.pk }}">
-      <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Participant notes</h4>
-      {% if week.notes.all %}
-      <ul class="space-y-3" data-testid="plan-week-notes-list">
-        {% for note in week.notes.all %}
-        <li class="rounded-md border border-border bg-card p-3" data-testid="plan-week-note" data-note-id="{{ note.pk }}">
-          <div class="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              {% if note.author %}{{ note.author|display_name }}{% else %}Member{% endif %}
-              &middot; {{ note.created_at|date:"M j, Y H:i" }}
-              {% if note.updated_at and note.updated_at != note.created_at %}
-              <span data-testid="plan-week-note-edited">(edited)</span>
-              {% endif %}
-            </span>
-            {% if plan_can_edit and note.author_id == request.user.id %}
-            <span class="space-x-2 whitespace-nowrap">
-              <button type="button"
-                      class="text-accent hover:underline"
-                      data-week-note-edit
-                      data-testid="plan-week-note-edit">Edit</button>
-              <form method="post" action="{% url 'week_note_delete' plan_id=plan.pk note_id=note.pk %}" class="inline" onsubmit="return confirm('Delete this note?');">
-                {% csrf_token %}
-                <button type="submit"
-                        class="text-destructive hover:underline"
-                        data-testid="plan-week-note-delete">Delete</button>
-              </form>
-            </span>
-            {% endif %}
-          </div>
-          <p class="mt-2 whitespace-pre-line text-sm text-foreground" data-testid="plan-week-note-body" data-week-note-body>{{ note.body }}</p>
-          {% if plan_can_edit and note.author_id == request.user.id %}
-          <form method="post"
-                action="{% url 'week_note_update' plan_id=plan.pk note_id=note.pk %}"
-                class="mt-2 hidden"
-                data-week-note-edit-form
-                data-testid="plan-week-note-edit-form">
-            {% csrf_token %}
-            <textarea name="body"
-                      rows="3"
-                      class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                      data-testid="plan-week-note-edit-textarea">{{ note.body }}</textarea>
-            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <button type="submit"
-                      class="rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground"
-                      data-testid="plan-week-note-edit-save">Save</button>
-              <button type="button"
-                      class="text-muted-foreground hover:text-foreground"
-                      data-week-note-cancel
-                      data-testid="plan-week-note-edit-cancel">Cancel</button>
-            </div>
-          </form>
-          {% endif %}
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="text-xs text-muted-foreground italic" data-testid="plan-week-notes-empty">
-        {% if plan_can_edit %}No notes yet for this week. Capture how it went below.{% else %}No notes yet for this week.{% endif %}
-      </p>
-      {% endif %}
-
-      {% if plan_can_edit %}
-      <form method="post"
-            action="{% url 'week_note_create' plan_id=plan.pk week_id=week.pk %}"
-            class="mt-3"
-            data-testid="plan-week-note-add-form">
-        {% csrf_token %}
-        <label for="week-{{ week.pk }}-note-input" class="sr-only">Add a note for week {{ week.week_number }}</label>
-        <textarea id="week-{{ week.pk }}-note-input"
-                  name="body"
-                  rows="2"
-                  placeholder="How did this week go?"
-                  class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                  data-testid="plan-week-note-add-textarea"></textarea>
-        <button type="submit"
-                class="mt-2 inline-flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground"
-                data-testid="plan-week-note-add-submit">Add note</button>
-      </form>
-      {% endif %}
-    </div>
-  </div>
-  {% empty %}
-  <p class="text-sm text-muted-foreground">No weeks yet.</p>
-  {% endfor %}
-</section>
-
-{% if plan.resources.all %}
-<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-resources">
-  <h2 class="text-xl font-semibold mb-4">Resources</h2>
-  <ul class="space-y-2 text-sm">
-    {% for resource in plan.resources.all %}
-    <li>
-      {% if resource.url %}
-      <a href="{{ resource.url }}" class="text-accent hover:underline" rel="noopener noreferrer" target="_blank">{{ resource.title }}</a>
-      {% else %}
-      <span class="text-foreground">{{ resource.title }}</span>
-      {% endif %}
-      {% if resource.note %}
-      <span class="plan-markdown block text-muted-foreground mt-1">{{ resource.note|plan_markdown }}</span>
-      {% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
-{% if plan.deliverables.all %}
-<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-deliverables">
-  <h2 class="text-xl font-semibold mb-4">Deliverables</h2>
-  <ul class="space-y-2 text-sm">
-    {% for deliverable in plan.deliverables.all %}
-    <li class="flex items-start gap-3 rounded-lg border border-transparent py-1.5 {% if deliverable.done_at %}is-complete{% endif %}"
-        data-testid="plan-deliverable"
-        data-plan-item
-        data-item-type="deliverable"
-        data-item-id="{{ deliverable.pk }}">
-      {% if plan_can_edit %}
-      <input type="checkbox"
-             class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
-             data-testid="plan-row-done-toggle"
-             data-done-toggle
-             aria-label="Mark deliverable done"
-             {% if deliverable.done_at %}checked{% endif %}>
-      {% else %}
-        {% if deliverable.done_at %}
-        <span class="mt-0.5 text-emerald-500" aria-label="Done">&#10003;</span>
-        {% else %}
-        <span class="mt-0.5 text-muted-foreground" aria-label="Not done">&#9633;</span>
-        {% endif %}
-      {% endif %}
-      <div class="min-w-0 flex-1">
-        <div class="plan-markdown {% if deliverable.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
-             data-rendered-markdown>{{ deliverable.description|plan_markdown }}</div>
-        {% if plan_can_edit %}
-        <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                  rows="3"
-                  data-markdown-input
-                  data-testid="plan-item-markdown-input">{{ deliverable.description }}</textarea>
-        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
-          <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
-          <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
-          <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
-        </div>
-        {% endif %}
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
-{% if plan.next_steps.all %}
-<section class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-6" data-testid="plan-next-steps">
-  <h2 class="text-xl font-semibold mb-4">Next Steps</h2>
-  <ul class="space-y-2 text-sm">
-    {% for step in plan.next_steps.all %}
-    <li class="flex items-start gap-3 rounded-lg border border-transparent py-1.5 {% if step.done_at %}is-complete{% endif %}"
-        data-testid="plan-next-step"
-        data-plan-item
-        data-item-type="next-step"
-        data-item-id="{{ step.pk }}">
-      {% if plan_can_edit %}
-      <input type="checkbox"
-             class="mt-1 h-4 w-4 rounded border-border bg-background text-accent focus:ring-accent"
-             data-testid="plan-row-done-toggle"
-             data-done-toggle
-             aria-label="Mark next step done"
-             {% if step.done_at %}checked{% endif %}>
-      {% else %}
-        {% if step.done_at %}
-        <span class="mt-0.5 text-emerald-500" aria-label="Done">&#10003;</span>
-        {% else %}
-        <span class="mt-0.5 text-muted-foreground" aria-label="Not done">&#9633;</span>
-        {% endif %}
-      {% endif %}
-      <div class="min-w-0 flex-1">
-        <div class="plan-markdown inline-block align-top {% if step.done_at %}text-muted-foreground line-through{% else %}text-foreground{% endif %}"
-             data-rendered-markdown>{{ step.description|plan_markdown }}</div>
-        {% if plan_can_edit %}
-        <textarea class="mt-2 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                  rows="3"
-                  data-markdown-input
-                  data-testid="plan-item-markdown-input">{{ step.description }}</textarea>
-        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <button type="button" class="text-accent hover:underline" data-edit-item data-testid="plan-item-edit">Edit</button>
-          <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-save-item data-testid="plan-item-save">Save</button>
-          <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-cancel-edit>Cancel</button>
-          <span class="text-muted-foreground" data-save-status data-testid="plan-item-save-status" aria-live="polite"></span>
-        </div>
-        {% endif %}
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-accountability">
+  <h2 class="text-lg font-semibold text-foreground">Accountability</h2>
+  <div class="plan-markdown mt-3 text-foreground">{{ plan.accountability|plan_markdown }}</div>
 </section>
 {% endif %}

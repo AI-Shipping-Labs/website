@@ -107,7 +107,11 @@ def _get_activity_sprints(user):
 
             if enrolled and viewer_plan:
                 cta_url = reverse(
-                    'my_plan_detail', kwargs={'plan_id': viewer_plan.pk},
+                    'my_plan_detail',
+                    kwargs={
+                        'sprint_slug': sprint.slug,
+                        'plan_id': viewer_plan.pk,
+                    },
                 )
                 cta_label = 'Open my plan'
             elif enrolled:

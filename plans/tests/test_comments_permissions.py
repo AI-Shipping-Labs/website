@@ -348,7 +348,13 @@ class MyPlanRendersCommentsSectionTest(_PlanCommentsBase):
     def test_owner_page_includes_comments_section(self):
         self.client.force_login(self.owner)
         response = self.client.get(
-            reverse('my_plan_detail', kwargs={'plan_id': self.cohort_plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.cohort_plan.pk,
+                },
+            ),
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="plan-comments-section"')
@@ -362,7 +368,13 @@ class MyPlanRendersCommentsSectionTest(_PlanCommentsBase):
     def test_private_owner_page_disables_composer(self):
         self.client.force_login(self.owner)
         response = self.client.get(
-            reverse('my_plan_detail', kwargs={'plan_id': self.private_plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.other_sprint.slug,
+                    'plan_id': self.private_plan.pk,
+                },
+            ),
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="plan-comments-section"')

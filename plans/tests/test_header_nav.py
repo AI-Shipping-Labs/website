@@ -32,7 +32,8 @@ class HeaderPlanLinkTest(TestCase):
         self.client.force_login(self.user)
         response = self.client.get('/')
         expected_href = reverse(
-            'my_plan_detail', kwargs={'plan_id': plan.pk},
+            'my_plan_detail',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': plan.pk},
         )
         self.assertContains(response, f'href="{expected_href}"')
         self.assertContains(response, 'data-testid="header-plan-link"')
@@ -62,10 +63,12 @@ class HeaderPlanLinkTest(TestCase):
         self.client.force_login(self.user)
         response = self.client.get('/')
         expected_href = reverse(
-            'my_plan_detail', kwargs={'plan_id': newer_plan.pk},
+            'my_plan_detail',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': newer_plan.pk},
         )
         older_href = reverse(
-            'my_plan_detail', kwargs={'plan_id': older_plan.pk},
+            'my_plan_detail',
+            kwargs={'sprint_slug': older_sprint.slug, 'plan_id': older_plan.pk},
         )
         self.assertContains(response, f'href="{expected_href}"')
         self.assertNotContains(
@@ -78,7 +81,10 @@ class HeaderPlanLinkTest(TestCase):
             member=self.user, sprint=self.sprint, visibility='cohort',
         )
         self.client.force_login(self.user)
-        url = reverse('my_plan_detail', kwargs={'plan_id': plan.pk})
+        url = reverse(
+            'my_plan_detail',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': plan.pk},
+        )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         cohort_url = reverse(
@@ -86,6 +92,9 @@ class HeaderPlanLinkTest(TestCase):
         )
         self.assertContains(response, f'href="{cohort_url}"')
         self.assertContains(response, 'data-testid="view-cohort-board-cta"')
-        edit_url = reverse('account_plan_edit', kwargs={'plan_id': plan.pk})
+        edit_url = reverse(
+            'my_plan_edit',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': plan.pk},
+        )
         self.assertContains(response, f'href="{edit_url}"')
         self.assertContains(response, 'data-testid="my-plan-edit-cta"')

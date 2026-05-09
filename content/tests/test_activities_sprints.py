@@ -220,7 +220,10 @@ class ActivitiesSprintHubTest(TestCase):
         self.assertContains(response, 'Open my plan')
         self.assertContains(
             response,
-            reverse('my_plan_detail', kwargs={'plan_id': plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={'sprint_slug': sprint.slug, 'plan_id': plan.pk},
+            ),
         )
 
 

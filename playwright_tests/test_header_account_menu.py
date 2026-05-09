@@ -166,7 +166,9 @@ def test_member_with_plan_desktop_account_menu_includes_plan_link(
     plan_link = menu.locator('[data-testid="header-plan-link"]')
     assert menu.is_visible()
     assert plan_link.is_visible()
-    assert plan_link.get_attribute("href") == f"/account/plan/{plan.pk}"
+    assert plan_link.get_attribute("href") == (
+        f"/sprints/{plan.sprint.slug}/plan/{plan.pk}"
+    )
 
     context.close()
 

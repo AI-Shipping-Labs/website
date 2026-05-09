@@ -115,7 +115,7 @@
             <a href="{% url 'account' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Account</a>
             <a href="/account/#profile" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none">Profile</a>
             {% if user_latest_plan %}
-            <a href="{% url 'my_plan_detail' plan_id=user_latest_plan.pk %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none" data-testid="header-plan-link">Plan</a>
+            <a href="{% url 'my_plan_detail' sprint_slug=user_latest_plan.sprint.slug plan_id=user_latest_plan.pk %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none" data-testid="header-plan-link">Plan</a>
             {% endif %}
             {% if user.is_staff %}
             <a href="{% url 'studio_dashboard' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-accent hover:bg-secondary focus:bg-secondary focus:outline-none">Studio</a>
@@ -220,7 +220,7 @@
           Profile
         </a>
         {% if user_latest_plan %}
-        <a href="{% url 'my_plan_detail' plan_id=user_latest_plan.pk %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
+        <a href="{% url 'my_plan_detail' sprint_slug=user_latest_plan.sprint.slug plan_id=user_latest_plan.pk %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-header-plan-link">
           Plan
         </a>
         {% endif %}

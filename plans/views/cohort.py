@@ -159,7 +159,11 @@ def member_plan_detail(request, sprint_slug, plan_id):
     )
 
     if plan.member_id == request.user.id:
-        return redirect('my_plan_detail', plan_id=plan.pk)
+        return redirect(
+            'my_plan_detail',
+            sprint_slug=sprint.slug,
+            plan_id=plan.pk,
+        )
 
     # Comments composer is enabled for any authenticated viewer who
     # can already see the plan -- which is exactly the predicate the
@@ -179,15 +183,14 @@ def member_plan_detail(request, sprint_slug, plan_id):
     )
 
 
-@login_required
-def my_plan_detail(request, plan_id):
-    """The member's own plan, with the visibility toggle UI.
-
-    Owner-only. Any other authenticated user gets 404 (per spec, 404
-    not 403 -- avoids leaking the existence of plan IDs).
-    """
-    plan = get_object_or_404(
-        Plan.objects.filter(pk=plan_id, member=request.user)
+def _owner_plan_or_404(plan_id, sprint_slug, user):
+    """Return an owner plan only when the URL slug matches its sprint."""
+    return get_object_or_404(
+        Plan.objects.filter(
+            pk=plan_id,
+            member=user,
+            sprint__slug=sprint_slug,
+        )
         .select_related('member', 'sprint')
         .prefetch_related(
             'weeks__checkpoints',
@@ -197,6 +200,16 @@ def my_plan_detail(request, plan_id):
             'next_steps',
         ),
     )
+
+
+@login_required
+def my_plan_detail(request, sprint_slug, plan_id):
+    """The member's own plan, with the visibility toggle UI.
+
+    Owner-only. Any other authenticated user gets 404 (per spec, 404
+    not 403 -- avoids leaking the existence of plan IDs).
+    """
+    plan = _owner_plan_or_404(plan_id, sprint_slug, request.user)
     progress = plan.weeks.aggregate(
         total=Count('checkpoints'),
         done=Count('checkpoints', filter=Q(checkpoints__done_at__isnull=False)),
@@ -235,8 +248,19 @@ def my_plan_detail(request, plan_id):
 
 
 @login_required
+def my_plan_edit(request, sprint_slug, plan_id):
+    """Owner edit route under the sprint namespace.
+
+    The member workspace already supports checkbox, item, note, and
+    visibility edits, so this route renders the same member workspace
+    instead of the Studio editor shell.
+    """
+    return my_plan_detail(request, sprint_slug=sprint_slug, plan_id=plan_id)
+
+
+@login_required
 @require_POST
-def update_plan_visibility(request, plan_id):
+def update_plan_visibility(request, sprint_slug, plan_id):
     """Owner-only POST endpoint that flips the plan's visibility.
 
     Accepts only values from ``PLAN_VISIBILITY_CHOICES``. Anything else
@@ -246,7 +270,11 @@ def update_plan_visibility(request, plan_id):
     ``login_required`` decorator before any side effect.
     """
     plan = get_object_or_404(
-        Plan.objects.filter(pk=plan_id, member=request.user),
+        Plan.objects.filter(
+            pk=plan_id,
+            member=request.user,
+            sprint__slug=sprint_slug,
+        ),
     )
 
     raw = request.POST.get('visibility')
@@ -261,4 +289,9 @@ def update_plan_visibility(request, plan_id):
         request,
         'Plan visibility updated.',
     )
-    return redirect(reverse('my_plan_detail', kwargs={'plan_id': plan.pk}))
+    return redirect(
+        reverse(
+            'my_plan_detail',
+            kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk},
+        ),
+    )

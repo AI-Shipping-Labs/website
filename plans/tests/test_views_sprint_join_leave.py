@@ -88,7 +88,10 @@ class SprintJoinTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response['Location'],
-            reverse('my_plan_detail', kwargs={'plan_id': plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={'sprint_slug': self.sprint.slug, 'plan_id': plan.pk},
+            ),
         )
         # Enrollment was created on this join.
         self.assertTrue(

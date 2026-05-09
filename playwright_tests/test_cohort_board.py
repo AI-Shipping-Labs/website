@@ -160,16 +160,18 @@ class TestMemberOptsInToCohortVisibility:
             callout.wait_for(state='visible')
             assert 'private' in callout.inner_text().lower()
 
-            # Step 2: click the callout link to /account/plan/<id>/.
+            # Step 2: click the callout link to the owner workspace.
             callout.locator('a').first.click()
-            page.wait_for_url(f'{django_server}/account/plan/{viewer_plan.pk}')
+            page.wait_for_url(
+                f'{django_server}/sprints/{sprint.slug}/plan/{viewer_plan.pk}',
+            )
 
             # Step 3: switch the visibility selector to ``cohort`` and save.
             select = page.locator('[data-testid="visibility-select"]')
             select.select_option('cohort')
             page.locator('[data-testid="visibility-save"]').click()
             page.wait_for_url(
-                f'{django_server}/account/plan/{viewer_plan.pk}',
+                f'{django_server}/sprints/{sprint.slug}/plan/{viewer_plan.pk}',
             )
 
             # Step 4: success message rendered, selector now reads cohort.

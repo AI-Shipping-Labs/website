@@ -2,7 +2,8 @@
 
 The header shows a ``Plan`` link only for authenticated members who
 have at least one :class:`plans.models.Plan` row. The link points to
-the most recently created plan's ``my_plan_detail`` view. Members with
+the most recently created plan's sprint-scoped ``my_plan_detail`` view.
+Members with
 zero plans see no link (per AC: "Authenticated user with no plans does
 NOT see the Plan link").
 """
@@ -29,6 +30,7 @@ def current_user_latest_plan(context):
         return None
     return (
         Plan.objects.filter(member=user)
+        .select_related('sprint')
         .order_by('-created_at')
         .first()
     )

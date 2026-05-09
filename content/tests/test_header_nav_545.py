@@ -92,7 +92,10 @@ class HeaderTextNavigationIssue545Test(TestCase):
         self.assertIn('href="/account/#profile"', header)
         self.assertIn(reverse('account_logout'), header)
         self.assertIn(
-            reverse('my_plan_detail', kwargs={'plan_id': plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={'sprint_slug': self.sprint.slug, 'plan_id': plan.pk},
+            ),
             header,
         )
         self.assertIn('data-testid="header-plan-link"', header)

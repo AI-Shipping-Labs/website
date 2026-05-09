@@ -106,7 +106,11 @@ def sprint_join(request, sprint_slug):
 
     plan = _viewer_plan(sprint, request.user)
     if plan is not None:
-        return redirect('my_plan_detail', plan_id=plan.pk)
+        return redirect(
+            'my_plan_detail',
+            sprint_slug=sprint.slug,
+            plan_id=plan.pk,
+        )
     return redirect('cohort_board', sprint_slug=sprint.slug)
 
 

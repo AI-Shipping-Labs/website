@@ -29,12 +29,12 @@
         {% if viewer_plan.visibility == "cohort" %}
         <p class="text-sm text-foreground">
           Your plan is shared with the cohort.
-          <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
+          <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
         </p>
         {% else %}
         <p class="text-sm text-foreground">
           Your plan is private &mdash; share it with your cohort to appear on the board.
-          <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
+          <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
         </p>
         {% endif %}
       </aside>
@@ -67,7 +67,7 @@
                 <span class="hidden" data-testid="progress-row-kind-{{ row.member.pk }}">{{ row.kind }}</span>
                 {% if row.kind == 'cohort' %}
                   {% if row.is_self %}
-                  <a href="{% url 'my_plan_detail' plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
+                  <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
                   {% else %}
                   <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
                   {% endif %}
@@ -131,7 +131,7 @@
           As teammates enroll, they will appear here with their progress.
         </p>
         {% if viewer_plan %}
-        <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+        <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
           View your own plan
         </a>
         {% endif %}

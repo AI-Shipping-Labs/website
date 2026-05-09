@@ -146,7 +146,11 @@ class CohortBoardProgressRowsContextShapeTest(TestCase):
         # Viewer's own row links to the editable my-plan page, NOT the
         # read-only member_plan_detail.
         my_plan_url = reverse(
-            'my_plan_detail', kwargs={'plan_id': self.viewer_plan.pk},
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': self.viewer_plan.pk,
+            },
         )
         self.assertContains(response, f'href="{my_plan_url}"')
 

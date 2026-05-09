@@ -3,7 +3,7 @@
 Three flows are exercised end-to-end:
 
 1. Plan owner adds, edits, and deletes a participant note for a
-   week on their own ``/account/plan/<plan_id>`` page.
+   week on their own sprint-scoped plan workspace.
 2. A teammate enrolled in the same cohort sees the note read-only
    on the ``/sprints/<slug>/plans/<plan_id>`` view and can post a
    comment in the shared comments thread.
@@ -118,7 +118,7 @@ class TestParticipantNotes:
         context = _auth_context(browser, "owner-499@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/account/plan/{data['plan_id']}",
+            f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
             wait_until="domcontentloaded",
         )
 
@@ -207,7 +207,7 @@ class TestPlanCommentsThread:
         context = _auth_context(browser, "owner-499@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/account/plan/{data['plan_id']}",
+            f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
             wait_until="domcontentloaded",
         )
 
@@ -252,7 +252,7 @@ class TestPlanCommentsThread:
         context = _auth_context(browser, "owner-499@test.com")
         page = context.new_page()
         page.goto(
-            f"{django_server}/account/plan/{data['plan_id']}",
+            f"{django_server}/sprints/{data['sprint_slug']}/plan/{data['plan_id']}",
             wait_until="domcontentloaded",
         )
 

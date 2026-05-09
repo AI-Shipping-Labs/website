@@ -14,12 +14,9 @@ through to it). Until then, every change to the API contract should be
 reflected here so the editor stays compatible.
 
 ``build_plan_editor_context`` (issue #444) is the single source of
-truth for the full template context the editor template needs. Both
-the staff Studio editor view and the member-facing
-``/account/plan/<id>/edit/`` view call it. It mints (or reuses) a
-per-user API token under a parameterizable name so the staff token
-(``studio-plan-editor``) and member token (``member-plan-editor``)
-are distinct rows that staff can audit and revoke independently.
+truth for the full template context the Studio editor template needs.
+It mints (or reuses) a per-user API token under a parameterizable name
+so staff tokens can be audited and revoked independently.
 """
 
 import json

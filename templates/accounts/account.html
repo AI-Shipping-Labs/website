@@ -3,15 +3,15 @@
 {% block title %}Account | {{ site_name }}{% endblock %}
 
 {% block body %}
-<main class="min-h-screen">
+<main class="min-h-screen pt-24">
   {% include "includes/header.html" %}
 
-  <section class="relative min-h-screen overflow-hidden pt-24">
-    <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-32">
+    <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
 
-      <h1 class="text-3xl font-semibold tracking-tight mb-2">Account</h1>
-      <p class="text-muted-foreground mb-10">Manage your membership and preferences</p>
+      <div class="mb-8">
+        <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">Account</h1>
+        <p class="mt-2 text-sm text-muted-foreground">Manage your membership and preferences</p>
+      </div>
 
       {% if not user.email_verified %}
       <!-- Email Verification Banner (issue #448) -->
@@ -42,7 +42,7 @@
       {% endif %}
 
       <!-- Profile Section (issue #447: name form lives inline here) -->
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-8" id="profile-section">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8" id="profile-section">
         <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
           <i data-lucide="user" class="h-5 w-5 text-accent"></i>
           Profile
@@ -98,7 +98,7 @@
 
       {% if plan %}
       <!-- Sprint Plan Section (issue #442) -->
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-8" id="sprint-plan-section" data-testid="account-sprint-plan-card">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8" id="sprint-plan-section" data-testid="account-sprint-plan-card">
         <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
           <i data-lucide="map" class="h-5 w-5 text-accent"></i>
           Your sprint plan
@@ -135,7 +135,7 @@
       {% endif %}
 
       <!-- Membership Section -->
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mb-8">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mb-8">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="crown" class="h-5 w-5 text-accent"></i>
           Membership
@@ -272,7 +272,7 @@
       </div>
 
       <!-- Email Preferences Section -->
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8" id="email-preferences-section">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6" id="email-preferences-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="mail" class="h-5 w-5 text-accent"></i>
           Email Preferences
@@ -300,7 +300,7 @@
       </div>
 
       <!-- Display Preferences Section -->
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mt-8" id="display-preferences-section">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="display-preferences-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="globe" class="h-5 w-5 text-accent"></i>
           Display Preferences
@@ -352,7 +352,7 @@
       </div>
 
       <!-- Change Password Section -->
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mt-8" id="change-password-section">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="change-password-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="lock" class="h-5 w-5 text-accent"></i>
           Change Password
@@ -387,7 +387,7 @@
       </div>
 
       <!-- Account Info Section -->
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 mt-8" id="account-info-section">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6 mt-8" id="account-info-section">
         <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
           <i data-lucide="info" class="h-5 w-5 text-accent"></i>
           Account info
@@ -402,12 +402,11 @@
       </div>
 
     </div>
-  </section>
 
   {% if stripe_checkout_enabled %}
   <!-- Upgrade Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="upgrade-modal">
-    <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 max-w-md w-full mx-4">
+    <div class="rounded-lg border border-border bg-card p-5 sm:p-6 max-w-md w-full mx-4">
       <h3 class="text-xl font-semibold mb-4">Upgrade Your Plan</h3>
       <p class="text-sm text-muted-foreground mb-6">Choose a tier to upgrade to. You will be redirected to Stripe Checkout.</p>
       <div class="space-y-3" id="upgrade-tiers">
@@ -431,7 +430,7 @@
 
   <!-- Downgrade Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="downgrade-modal">
-    <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 max-w-md w-full mx-4">
+    <div class="rounded-lg border border-border bg-card p-5 sm:p-6 max-w-md w-full mx-4">
       <h3 class="text-xl font-semibold mb-4">Downgrade Your Plan</h3>
       <p class="text-sm text-muted-foreground mb-6">
         Select a lower tier. The change will take effect at the end of your current billing period.
@@ -457,7 +456,7 @@
 
   <!-- Cancel Confirmation Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" id="cancel-modal">
-    <div class="rounded-2xl border border-border bg-card p-5 sm:p-8 max-w-md w-full mx-4">
+    <div class="rounded-lg border border-border bg-card p-5 sm:p-6 max-w-md w-full mx-4">
       <div class="flex items-center gap-3 mb-4">
         <i data-lucide="alert-triangle" class="h-6 w-6 text-red-400"></i>
         <h3 class="text-xl font-semibold">Cancel Subscription</h3>

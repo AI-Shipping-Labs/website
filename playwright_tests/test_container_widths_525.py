@@ -501,7 +501,7 @@ class TestMobileNoHorizontalOverflow:
 @pytest.mark.django_db(transaction=True)
 class TestAuthenticatedDashboardAndAccount:
     """The authenticated homepage (dashboard) is ``max-w-7xl`` and the
-    account page is ``max-w-3xl`` — verifies the two sibling shells
+    account page is ``max-w-5xl`` — verifies the two sibling shells
     share the standard widths.
     """
 
@@ -545,8 +545,8 @@ class TestAuthenticatedDashboardAndAccount:
             )
             cls = _outer_wrapper_class_string(page)
             assert cls is not None
-            assert 'max-w-3xl' in cls, (
-                f'/account/: expected max-w-3xl, got: {cls!r}'
+            assert 'max-w-5xl' in cls, (
+                f'/account/: expected max-w-5xl, got: {cls!r}'
             )
         finally:
             ctx.close()

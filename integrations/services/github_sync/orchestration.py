@@ -35,6 +35,40 @@ from integrations.services.github_sync.repo import (
 )
 
 
+def _is_head_unchanged_skip(log):
+    """Return True for skip logs written by the HEAD-unchanged fast path."""
+    return (
+        log is not None
+        and log.status == 'skipped'
+        and bool(log.commit_sha)
+        and any(
+            (error or {}).get('error') == 'HEAD unchanged'
+            for error in (log.errors or [])
+        )
+    )
+
+
+def _can_skip_for_unchanged_head(source):
+    """Decide whether the cheap HEAD check may short-circuit this sync."""
+    if not source.last_synced_commit:
+        return False
+
+    latest_terminal_log = (
+        SyncLog.objects.filter(source=source)
+        .exclude(status__in=['queued', 'running'])
+        .order_by('-started_at')
+        .first()
+    )
+    if latest_terminal_log is None:
+        return source.last_sync_status == 'success'
+    if latest_terminal_log.status == 'success':
+        return True
+    return (
+        _is_head_unchanged_skip(latest_terminal_log)
+        and latest_terminal_log.commit_sha == source.last_synced_commit
+    )
+
+
 def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
     """Sync content from a GitHub repo into the database.
 
@@ -105,7 +139,8 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
     # the optimisation when:
     #   - ``force=True`` (operator clicked "Force resync" or webhook fired)
     #   - ``repo_dir`` is provided (no remote to check; tests + ``--from-disk``)
-    #   - the previous sync didn't end in ``success`` (we want to retry)
+    #   - the latest terminal sync wasn't success or a prior HEAD skip
+    #     (we want to retry failures)
     #   - we don't yet have a baseline (first-ever sync)
     #
     # If the HEAD lookup itself fails (network error, missing auth) we
@@ -114,8 +149,7 @@ def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
     if (
         repo_dir is None
         and not force
-        and source.last_synced_commit
-        and source.last_sync_status == 'success'
+        and _can_skip_for_unchanged_head(source)
     ):
         head_sha = fetch_remote_head_sha(source.repo_name, source.is_private)
         if head_sha and head_sha == source.last_synced_commit:

@@ -19,6 +19,7 @@ import uuid
 from unittest import mock
 
 from django.test import TestCase
+from django.utils import timezone
 
 from integrations.models import ContentSource, SyncLog
 from integrations.services.github import (
@@ -224,6 +225,34 @@ class SyncSkipNewShaTest(TestCase):
         log = sync_content_source(self.source, repo_dir=self.temp_dir)
         self.assertEqual(log.status, 'success')
         self.assertEqual(log.items_created, 1)
+
+    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
+    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
+    def test_queued_source_with_new_sha_runs_normally(
+        self, mock_clone, mock_fetch, mock_acquire,
+    ):
+        """Issue #556: queued pickup must not turn a new HEAD into a skip."""
+        mock_acquire.return_value = True
+        mock_fetch.return_value = 'b' * 40
+        mock_clone.side_effect = RuntimeError('short-circuit')
+        self.source.last_sync_status = 'queued'
+        self.source.save(update_fields=['last_sync_status'])
+        SyncLog.objects.create(
+            source=self.source,
+            status='success',
+            commit_sha='a' * 40,
+            finished_at=timezone.now(),
+        )
+        SyncLog.objects.create(source=self.source, status='queued')
+
+        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
+            log = sync_content_source(self.source)
+
+        self.assertEqual(log.status, 'failed')
+        self.assertIn('Sync failed for owner/blog-235-new-sha', logs.output[0])
+        mock_fetch.assert_called_once()
+        mock_clone.assert_called_once()
 
 
 class SyncSkipForceTest(TestCase):

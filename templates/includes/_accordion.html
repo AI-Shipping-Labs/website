@@ -35,11 +35,11 @@ Notes
 <details class="rounded-lg border border-border bg-card{% if details_extra_class %} {{ details_extra_class }}{% endif %}"
          {% if testid %}data-testid="{{ testid }}"{% endif %}
          {% if open %}open{% endif %}>
-  <summary class="cursor-pointer list-none flex items-center gap-3 px-4 py-3 text-base font-medium text-foreground hover:text-accent transition-colors min-h-[44px] rounded-lg">
+  <summary class="cursor-pointer list-none flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-base font-medium text-foreground hover:text-accent transition-colors min-h-[44px] rounded-lg">
     <span class="flex-1">{{ summary }}</span>
-    <i data-lucide="chevron-down" class="accordion-chevron h-4 w-4 transition-transform duration-200 flex-shrink-0"></i>
+    <i data-lucide="chevron-down" class="accordion-chevron h-5 w-5 sm:h-4 sm:w-4 transition-transform duration-200 flex-shrink-0"></i>
   </summary>
-  <div class="{{ body_class|default:'mt-1 px-4 pb-4' }}">
+  <div class="{{ body_class|default:'mt-0.5 px-3 pb-3 sm:mt-1 sm:px-4 sm:pb-4' }}">
     {% if body_template %}{% include body_template %}{% else %}{{ body|safe }}{% endif %}
   </div>
 </details>

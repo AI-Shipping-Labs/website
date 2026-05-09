@@ -52,6 +52,8 @@ def token_required(view_func):
         token = Token.objects.filter(key=key).select_related("user").first()
         if token is None:
             return JsonResponse({"error": "Invalid token"}, status=401)
+        if not token.user.is_staff:
+            return JsonResponse({"error": "Invalid token"}, status=401)
 
         token.last_used_at = timezone.now()
         token.save(update_fields=["last_used_at"])

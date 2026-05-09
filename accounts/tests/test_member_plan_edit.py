@@ -1,13 +1,14 @@
 """Member sprint plan edit route regressions for issue #548."""
 
 import datetime
+import json
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from accounts.models import Token
-from plans.models import Plan, Sprint, Week
+from plans.models import Checkpoint, Plan, Sprint, Week
 
 User = get_user_model()
 
@@ -99,17 +100,18 @@ class MemberPlanEditTokenTest(TestCase):
             kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
         )
 
-    def test_token_minted_under_member_plan_editor_name(self):
+    def test_member_workspace_does_not_mint_or_expose_api_token(self):
         response = self.client.get(self._edit_url())
         self.assertEqual(response.status_code, 200)
-        tokens = Token.objects.filter(
-            user=self.member, name='member-plan-editor',
+        self.assertNotContains(response, 'data-api-token=')
+        self.assertEqual(
+            Token.objects.filter(
+                user=self.member, name='member-plan-editor',
+            ).count(),
+            0,
         )
-        self.assertEqual(tokens.count(), 1)
-        token = tokens.get()
-        self.assertContains(response, f'data-api-token="{token.key}"')
 
-    def test_token_reused_across_reloads(self):
+    def test_reloads_do_not_create_member_plan_editor_token(self):
         self.client.get(self._edit_url())
         self.client.get(self._edit_url())
         self.client.get(self._edit_url())
@@ -117,7 +119,7 @@ class MemberPlanEditTokenTest(TestCase):
             Token.objects.filter(
                 user=self.member, name='member-plan-editor',
             ).count(),
-            1,
+            0,
         )
 
     def test_does_not_mint_studio_plan_editor_token_for_member(self):
@@ -128,6 +130,69 @@ class MemberPlanEditTokenTest(TestCase):
             ).count(),
             0,
         )
+
+
+class MemberPlanEditSessionWriteTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(
+            email='member@test.com', password='pw',
+        )
+        cls.other = User.objects.create_user(
+            email='other@test.com', password='pw',
+        )
+        cls.sprint = Sprint.objects.create(
+            name='S', slug='s',
+            start_date=datetime.date(2026, 5, 1),
+        )
+        cls.plan = Plan.objects.create(
+            member=cls.member, sprint=cls.sprint,
+        )
+        cls.week = Week.objects.create(
+            plan=cls.plan, week_number=1, position=0,
+        )
+        cls.checkpoint = Checkpoint.objects.create(
+            week=cls.week, description='Before', position=0,
+        )
+
+    def _patch_checkpoint(self, client, csrf_token=None):
+        headers = {}
+        if csrf_token:
+            headers['HTTP_X_CSRFTOKEN'] = csrf_token
+        return client.patch(
+            f'/api/checkpoints/{self.checkpoint.pk}',
+            data=json.dumps({'description': 'After'}),
+            content_type='application/json',
+            **headers,
+        )
+
+    def test_member_session_write_requires_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        client.login(email='member@test.com', password='pw')
+
+        response = self._patch_checkpoint(client)
+        self.assertEqual(response.status_code, 403)
+
+        self.checkpoint.refresh_from_db()
+        self.assertEqual(self.checkpoint.description, 'Before')
+
+    def test_member_session_write_with_csrf_updates_owned_plan(self):
+        client = Client(enforce_csrf_checks=True)
+        client.login(email='member@test.com', password='pw')
+        page = client.get(
+            reverse(
+                'my_plan_edit',
+                kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
+            ),
+        )
+        csrf_token = page.cookies['csrftoken'].value
+
+        response = self._patch_checkpoint(client, csrf_token=csrf_token)
+        self.assertEqual(response.status_code, 200)
+
+        self.checkpoint.refresh_from_db()
+        self.assertEqual(self.checkpoint.description, 'After')
+        self.assertFalse(Token.objects.filter(user=self.member).exists())
 
 
 class StaffEditorRegressionTest(TestCase):

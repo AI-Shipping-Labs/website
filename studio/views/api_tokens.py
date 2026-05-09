@@ -24,6 +24,13 @@ from studio.decorators import superuser_required
 
 User = get_user_model()
 
+RESERVED_SYSTEM_TOKEN_NAMES = frozenset(
+    {
+        "member-plan-editor",
+        "studio-plan-editor",
+    }
+)
+
 
 # Session key holding the one-shot stash of the new token's plaintext key
 # and identifying primary key. The ``created`` view pops this and never
@@ -76,12 +83,29 @@ class TokenCreateForm(forms.Form):
             .order_by("email")
         )
 
+    def clean_user(self):
+        user = self.cleaned_data["user"]
+        if not user.is_staff:
+            raise forms.ValidationError(
+                "API tokens can only be created for staff or admin users."
+            )
+        return user
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        if name in RESERVED_SYSTEM_TOKEN_NAMES:
+            raise forms.ValidationError(
+                "That token name is reserved for system-managed tokens."
+            )
+        return name
+
 
 @superuser_required
 def studio_api_token_list(request):
-    """List every token row so operators can audit and revoke."""
+    """List operator-created API tokens for audit and revocation."""
     tokens = (
         Token.objects.select_related("user")
+        .exclude(name__in=RESERVED_SYSTEM_TOKEN_NAMES)
         .order_by("-created_at")
     )
     return render(

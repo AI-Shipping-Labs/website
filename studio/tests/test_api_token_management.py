@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
 from accounts.models import Token
-from studio.views.api_tokens import SESSION_KEY
+from studio.views.api_tokens import RESERVED_SYSTEM_TOKEN_NAMES, SESSION_KEY
 
 User = get_user_model()
 
@@ -101,6 +101,25 @@ class ApiTokenListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No API tokens yet")
 
+    def test_reserved_system_tokens_are_not_listed_as_operator_tokens(self):
+        for name in RESERVED_SYSTEM_TOKEN_NAMES:
+            Token.objects.create(user=self.superuser, name=name)
+
+        response = self.client.get("/studio/api-tokens/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "script-import")
+        for name in RESERVED_SYSTEM_TOKEN_NAMES:
+            self.assertNotContains(response, name)
+
+    def test_empty_state_when_only_reserved_system_tokens_exist(self):
+        Token.objects.all().delete()
+        Token.objects.create(user=self.superuser, name="studio-plan-editor")
+
+        response = self.client.get("/studio/api-tokens/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No API tokens yet")
+        self.assertNotContains(response, "studio-plan-editor")
+
 
 class ApiTokenCreateFormTest(TestCase):
     """User dropdown is restricted to admin accounts."""
@@ -146,7 +165,26 @@ class ApiTokenCreateFormTest(TestCase):
         )
         # Form invalidates, no token created.
         self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["form"],
+            "user",
+            "Select a valid choice. That choice is not one of the available choices.",
+        )
         self.assertFalse(Token.objects.filter(name="sneak").exists())
+
+    def test_create_form_rejects_reserved_system_name(self):
+        response = self.client.post(
+            "/studio/api-tokens/new/",
+            {"user": str(self.staff_only.pk), "name": "studio-plan-editor"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["form"],
+            "name",
+            "That token name is reserved for system-managed tokens.",
+        )
+        self.assertFalse(Token.objects.filter(name="studio-plan-editor").exists())
 
     def test_create_token_redirects_to_one_shot_view(self):
         response = self.client.post(

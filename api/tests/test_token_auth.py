@@ -3,6 +3,7 @@
 import json
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -55,6 +56,26 @@ class TokenAuthTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_existing_non_staff_token_row_is_rejected(self):
+        member = User.objects.create_user(
+            email="stale-member-token@test.com",
+            password="testpass",
+        )
+        stale_token = Token(
+            key="stale-member-token-key",
+            user=member,
+            name="legacy-member-token",
+        )
+        Token.objects.bulk_create([stale_token])
+
+        response = self.client.get(
+            "/api/contacts/export",
+            HTTP_AUTHORIZATION=f"Token {stale_token.key}",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"error": "Invalid token"})
+
     def test_token_save_generates_key_when_blank(self):
         token = Token(user=self.admin)
         token.save()
@@ -66,6 +87,18 @@ class TokenAuthTest(TestCase):
         # would silently rotate the token key out from under the client.
         token.save()
         self.assertEqual(token.key, first_key)
+
+    def test_token_creation_rejects_non_staff_user(self):
+        member = User.objects.create_user(
+            email="member-token@test.com",
+            password="testpass",
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "API tokens can only be created for staff or admin users.",
+        ):
+            Token.objects.create(user=member, name="not-allowed")
 
     def test_valid_token_updates_last_used_at(self):
         fresh_token = Token.objects.create(user=self.admin)

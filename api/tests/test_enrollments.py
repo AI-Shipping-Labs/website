@@ -36,7 +36,6 @@ class EnrollmentApiTestBase(TestCase):
             'premium',
         )
         cls.staff_token = Token.objects.create(user=cls.staff, name='s')
-        cls.member_token = Token.objects.create(user=cls.member, name='m')
         cls.sprint = Sprint.objects.create(
             name='May 2026', slug='may-2026',
             start_date=datetime.date(2026, 5, 1),
@@ -74,27 +73,6 @@ class EnrollmentsListScopeTest(EnrollmentApiTestBase):
         self.assertEqual(
             emails, {'m@test.com', 'alice@test.com', 'bob@test.com'},
         )
-
-    def test_non_staff_token_only_sees_own_row(self):
-        response = self.client.get(
-            '/api/sprints/may-2026/enrollments',
-            **self._auth(self.member_token),
-        )
-        self.assertEqual(response.status_code, 200)
-        emails = [row['user_email'] for row in response.json()['enrollments']]
-        self.assertEqual(emails, ['m@test.com'])
-
-    def test_non_enrolled_non_staff_sees_empty_list(self):
-        outsider = User.objects.create_user(
-            email='out@test.com', password='pw',
-        )
-        token = Token.objects.create(user=outsider, name='o')
-        response = self.client.get(
-            '/api/sprints/may-2026/enrollments',
-            HTTP_AUTHORIZATION=f'Token {token.key}',
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {'enrollments': []})
 
     def test_no_token_returns_401(self):
         response = self.client.get('/api/sprints/may-2026/enrollments')
@@ -165,16 +143,6 @@ class EnrollmentsBulkPostTest(EnrollmentApiTestBase):
         )
         self.assertEqual(enrollment.enrolled_by_id, self.staff.pk)
 
-    def test_non_staff_returns_403_no_side_effects(self):
-        before = SprintEnrollment.objects.count()
-        response = self._post(
-            {'user_emails': ['main@test.com']},
-            token=self.member_token,
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()['code'], 'forbidden_other_user_plan')
-        self.assertEqual(SprintEnrollment.objects.count(), before)
-
     def test_missing_user_emails_returns_422(self):
         response = self._post({})
         self.assertEqual(response.status_code, 422)
@@ -206,7 +174,6 @@ class EnrollmentDeleteTest(EnrollmentApiTestBase):
             User.objects.create_user(email='main@test.com', password='pw'),
             'main',
         )
-        cls.target_token = Token.objects.create(user=cls.target, name='t')
 
     def test_delete_idempotent_204_when_not_enrolled(self):
         response = self.client.delete(
@@ -245,17 +212,6 @@ class EnrollmentDeleteTest(EnrollmentApiTestBase):
         )
         self.assertEqual(first.status_code, 204)
         self.assertEqual(second.status_code, 204)
-
-    def test_non_staff_delete_returns_403_no_side_effects(self):
-        SprintEnrollment.objects.create(sprint=self.sprint, user=self.target)
-        before = SprintEnrollment.objects.count()
-        response = self.client.delete(
-            '/api/sprints/may-2026/enrollments/main@test.com',
-            **self._auth(self.target_token),
-        )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()['code'], 'forbidden_other_user_plan')
-        self.assertEqual(SprintEnrollment.objects.count(), before)
 
     def test_unknown_sprint_returns_404(self):
         response = self.client.delete(

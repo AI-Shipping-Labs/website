@@ -8,6 +8,9 @@ import json
 from functools import wraps
 
 from django.http import JsonResponse
+from django.middleware.csrf import CsrfViewMiddleware
+
+from accounts.auth import token_required
 
 
 def parse_json_body(request):
@@ -46,3 +49,37 @@ def require_methods(*methods):
         return wrapper
 
     return decorator
+
+
+def token_or_session_required(view_func):
+    """Allow staff/operator token auth or logged-in browser session auth.
+
+    API clients keep using ``Authorization: Token ...`` and bypass CSRF as
+    before. Browser calls without an Authorization header must come from an
+    authenticated session and pass Django's normal CSRF check.
+    """
+    token_view = token_required(view_func)
+    csrf_checker = CsrfViewMiddleware(lambda request: None)
+
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if request.headers.get("Authorization"):
+            return token_view(request, *args, **kwargs)
+        if not getattr(request.user, "is_authenticated", False):
+            return JsonResponse({"error": "Authentication required"}, status=401)
+
+        def csrf_checked_callback(request, *args, **kwargs):
+            return None
+
+        failure_response = csrf_checker.process_view(
+            request,
+            csrf_checked_callback,
+            args,
+            kwargs,
+        )
+        if failure_response is not None:
+            return failure_response
+        return view_func(request, *args, **kwargs)
+
+    wrapper.csrf_exempt = True
+    return wrapper

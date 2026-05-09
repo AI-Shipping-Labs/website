@@ -12,9 +12,9 @@ URL renders:
 
 - the ``#mobile-menu-btn`` hamburger button (mobile-only via ``md:hidden``)
 - the ``#mobile-menu`` container
-- the ``#mobile-learn-toggle`` and ``#mobile-community-toggle`` buttons
+- the ``#mobile-community-toggle`` and ``#mobile-resources-toggle`` buttons
   with representative links (the accordion content)
-- the desktop ``#learn-dropdown-btn`` and ``#community-dropdown-btn``
+- the desktop ``#community-dropdown-btn`` and ``#resources-dropdown-btn``
 - the existing peer-review business-logic markup the page is supposed to
   render -- so we don't accidentally claim the chrome is fixed by deleting
   the page body.
@@ -46,16 +46,16 @@ User = get_user_model()
 HEADER_TOKENS = (
     'id="mobile-menu-btn"',
     'id="mobile-menu"',
-    'id="mobile-learn-toggle"',
-    'id="mobile-learn-list"',
     'id="mobile-community-toggle"',
     'id="mobile-community-list"',
-    'id="learn-dropdown-btn"',
+    'id="mobile-resources-toggle"',
+    'id="mobile-resources-list"',
     'id="community-dropdown-btn"',
+    'id="resources-dropdown-btn"',
 )
 
 # Representative links from inside the text-nav accordions.
-LEARN_BLOG_LINK = '<a href="/blog"'
+RESOURCES_BLOG_LINK = '<a href="/blog"'
 COMMUNITY_SPRINTS_LINK = '<a href="/sprints"'
 
 # A token that MUST appear if ``templates/includes/footer.html`` was
@@ -98,7 +98,7 @@ def _assert_header_chrome(test, response, url):
             '-- includes/header.html was not rendered',
         )
     test.assertIn(
-        LEARN_BLOG_LINK, html,
+        RESOURCES_BLOG_LINK, html,
         f'{url}: missing the /blog link inside the mobile Learn '
         'accordion -- the accordion markup was not rendered',
     )

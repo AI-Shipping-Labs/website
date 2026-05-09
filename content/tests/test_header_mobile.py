@@ -77,30 +77,35 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('min-w-0', content)
 
     def test_mobile_nav_sections_have_chevron_indicators(self):
-        """The Learn and Community sections should have chevron SVG indicators."""
+        """The Community and Resources sections should have chevron SVG indicators."""
         response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('id="mobile-learn-chevron"', content)
-        self.assertIn('id="mobile-learn-toggle"', content)
         self.assertIn('id="mobile-community-chevron"', content)
         self.assertIn('id="mobile-community-toggle"', content)
+        self.assertIn('id="mobile-resources-chevron"', content)
+        self.assertIn('id="mobile-resources-toggle"', content)
+        self.assertNotIn('id="mobile-learn-toggle"', content)
 
     def test_mobile_nav_toggles_are_buttons(self):
-        """The Learn and Community headings should be buttons."""
+        """The Community and Resources headings should be buttons."""
         response = self.client.get("/")
         content = response.content.decode()
-        for toggle_id in ['mobile-learn-toggle', 'mobile-community-toggle']:
+        for toggle_id in ['mobile-community-toggle', 'mobile-resources-toggle']:
             toggle_pos = content.index(f'id="{toggle_id}"')
             tag_start = content.rfind("<", 0, toggle_pos)
             tag_name = content[tag_start:tag_start + 10]
             self.assertTrue(tag_name.startswith("<button"))
 
-    def test_learn_and_community_links_are_grouped(self):
-        """Learn and Community expose the requested grouped links."""
+    def test_mobile_public_ia_links_are_exposed(self):
+        """Mobile exposes the groomed public IA and grouped links."""
         response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('id="learn-dropdown-btn"', content)
+        self.assertIn('href="/about"', content)
+        self.assertIn('href="/pricing"', content)
+        self.assertIn('href="/faq"', content)
         self.assertIn('id="community-dropdown-btn"', content)
+        self.assertIn('id="resources-dropdown-btn"', content)
+        self.assertNotIn('id="learn-dropdown-btn"', content)
         self.assertIn('href="/courses"', content)
         self.assertIn('href="/workshops"', content)
         self.assertIn('href="/learning-path/ai-engineer"', content)
@@ -109,9 +114,11 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('href="/blog"', content)
         self.assertIn('href="/sprints"', content)
         self.assertIn('href="/events"', content)
-        self.assertIn('href="/activities"', content)
         self.assertIn('href="/resources"', content)
-        self.assertNotIn('id="resources-dropdown-btn"', content)
+
+        header = content[:content.index("</header>")]
+        self.assertNotIn('href="/activities"', header)
+        self.assertNotIn('>Activities</a>', header)
 
     def test_close_on_outside_click_script_present(self):
         """The script should include close-on-outside-click logic for the mobile menu."""

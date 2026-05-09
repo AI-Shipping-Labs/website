@@ -195,13 +195,13 @@ def test_mobile_account_section_and_text_nav_coexist_without_overflow(
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     page.locator("#mobile-menu-btn").click()
-    page.locator("#mobile-learn-toggle").click()
     page.locator("#mobile-community-toggle").click()
+    page.locator("#mobile-resources-toggle").click()
 
     menu = page.locator("#mobile-menu")
     assert menu.is_visible()
-    assert page.locator("#mobile-learn-list").is_visible()
     assert page.locator("#mobile-community-list").is_visible()
+    assert page.locator("#mobile-resources-list").is_visible()
     assert page.locator('[data-testid="mobile-account-section"]').is_visible()
     for label in ["Notifications", "Account", "Profile", "Log out"]:
         assert menu.get_by_role("link", name=label).is_visible()

@@ -1,7 +1,7 @@
 """Playwright E2E tests for the mobile (hamburger) navigation menu (Issue #272).
 
 Covers:
-- Learn and Community accordions are collapsed by default.
+- Community and Resources accordions are collapsed by default.
 - Tapping each section expands the list and rotates the chevron 180 degrees.
 - Even when text navigation is expanded, items below it (Sign in / Account /
   Studio / Logout) remain reachable because the menu container itself
@@ -74,8 +74,11 @@ class TestMobileMenuHitTarget:
         assert btn.get_attribute("aria-label") == "Close menu"
 
         public_links = [
-            "Learn",
+            "About",
+            "Membership",
             "Community",
+            "Resources",
+            "FAQ",
             "Sign in",
         ]
         for label in public_links:
@@ -96,9 +99,15 @@ class TestMobileMenuHitTarget:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         assert not page.locator("#mobile-menu-btn").is_visible()
-        assert page.locator("#learn-dropdown-btn").is_visible()
+        assert page.locator('[data-testid="desktop-primary-nav"]').get_by_role(
+            "link", name="About"
+        ).is_visible()
+        assert page.locator('[data-testid="desktop-primary-nav"]').get_by_role(
+            "link", name="Membership"
+        ).is_visible()
         assert page.locator("#community-dropdown-btn").is_visible()
-        assert page.locator("#resources-dropdown-btn").count() == 0
+        assert page.locator("#resources-dropdown-btn").is_visible()
+        assert page.locator("#learn-dropdown-btn").count() == 0
 
         context.close()
 
@@ -119,7 +128,7 @@ class TestMobileMenuTextNavAccordion:
 
         _open_mobile_menu(page)
 
-        for section in ["learn", "community"]:
+        for section in ["community", "resources"]:
             section_list = page.locator(f"#mobile-{section}-list")
             assert section_list.count() == 1
             assert "hidden" in (section_list.get_attribute("class") or "")
@@ -140,18 +149,17 @@ class TestMobileMenuTextNavAccordion:
         _open_mobile_menu(page)
 
         expected = {
-            "learn": [
+            "community": [
+                "Community Sprints",
+                "Events",
+            ],
+            "resources": [
                 "Courses",
                 "Workshops",
                 "Learning Path",
                 "Project Ideas",
                 "Interview Prep",
                 "Blog",
-            ],
-            "community": [
-                "Community Sprints",
-                "Events",
-                "Activities",
                 "Curated Links",
             ],
         }
@@ -179,8 +187,8 @@ class TestMobileMenuTextNavAccordion:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
-        page.locator("#mobile-learn-toggle").click()
         page.locator("#mobile-community-toggle").click()
+        page.locator("#mobile-resources-toggle").click()
 
         # Container must declare a bounded height + scroll behavior.
         overflow_y, max_height = page.evaluate(
@@ -245,8 +253,8 @@ class TestMobileMenuAuthenticatedItemsReachable:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
-        page.locator("#mobile-learn-toggle").click()
         page.locator("#mobile-community-toggle").click()
+        page.locator("#mobile-resources-toggle").click()
 
         # Studio and Log out are below the text nav for staff users.
         studio_link = page.locator('#mobile-menu a:has-text("Studio")')

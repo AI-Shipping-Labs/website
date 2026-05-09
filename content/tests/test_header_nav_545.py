@@ -10,7 +10,7 @@ from plans.models import Plan, Sprint
 User = get_user_model()
 
 
-LEARN_LINKS = [
+RESOURCES_LINKS = [
     ('Courses', '/courses'),
     ('Workshops', '/workshops'),
     ('Learning Path', '/learning-path/ai-engineer'),
@@ -22,8 +22,6 @@ LEARN_LINKS = [
 COMMUNITY_LINKS = [
     ('Community Sprints', '/sprints'),
     ('Events', '/events'),
-    ('Activities', '/activities'),
-    ('Curated Links', '/resources'),
 ]
 
 
@@ -44,33 +42,53 @@ class HeaderTextNavigationIssue545Test(TestCase):
         html = response.content.decode()
         return html[:html.index('</header>')]
 
-    def assert_primary_text_nav(self, header):
-        self.assertIn('id="learn-dropdown-btn"', header)
+    def assert_public_navigation_ia(self, header):
+        self.assertIn('href="/about"', header)
+        self.assertIn('>About</a>', header)
+        self.assertIn('href="/pricing"', header)
+        self.assertIn('>Membership</a>', header)
         self.assertIn('id="community-dropdown-btn"', header)
-        self.assertIn('id="mobile-learn-toggle"', header)
+        self.assertIn('id="resources-dropdown-btn"', header)
+        self.assertIn('href="/faq"', header)
+        self.assertIn('>FAQ</a>', header)
         self.assertIn('id="mobile-community-toggle"', header)
-        self.assertNotIn('id="resources-dropdown-btn"', header)
-        self.assertNotIn('id="mobile-resources-toggle"', header)
+        self.assertIn('id="mobile-resources-toggle"', header)
+        self.assertNotIn('id="learn-dropdown-btn"', header)
+        self.assertNotIn('id="mobile-learn-toggle"', header)
 
         primary = header[
             header.index('data-testid="desktop-primary-nav"'):
             header.index('<div class="hidden md:flex md:items-center md:gap-4">')
         ]
-        self.assertEqual(re.findall(r'id="([^"]+-dropdown-btn)"', primary), [
-            'learn-dropdown-btn',
-            'community-dropdown-btn',
-        ])
-        self.assertNotIn('href="/about"', primary)
-        self.assertNotIn('href="/pricing"', primary)
+        self.assertEqual(
+            re.findall(r'id="([^"]+-dropdown-btn)"', primary),
+            ['community-dropdown-btn', 'resources-dropdown-btn'],
+        )
+        for label in ['About', 'Membership', 'Community', 'Resources', 'FAQ']:
+            self.assertIn(label, primary)
 
-        for label, href in LEARN_LINKS + COMMUNITY_LINKS:
+        self.assertLess(primary.index('>About</a>'), primary.index('>Membership</a>'))
+        self.assertLess(
+            primary.index('>Membership</a>'),
+            primary.index('id="community-dropdown-btn"'),
+        )
+        self.assertLess(
+            primary.index('id="community-dropdown-btn"'),
+            primary.index('id="resources-dropdown-btn"'),
+        )
+        self.assertLess(primary.index('id="resources-dropdown-btn"'), primary.index('>FAQ</a>'))
+
+        self.assertNotIn('>Activities</a>', primary)
+        self.assertNotIn('href="/activities"', primary)
+
+        for label, href in COMMUNITY_LINKS + RESOURCES_LINKS + [('Curated Links', '/resources')]:
             self.assertIn(f'href="{href}"', header)
             self.assertIn(label, header)
 
-    def test_anonymous_header_uses_learn_and_community_text_nav(self):
+    def test_anonymous_header_exposes_groomed_public_navigation_ia(self):
         header = self._header_html()
 
-        self.assert_primary_text_nav(header)
+        self.assert_public_navigation_ia(header)
         self.assertIn(reverse('account_login'), header)
         self.assertNotIn('id="notification-bell-btn"', header)
         self.assertNotIn('data-testid="account-menu"', header)
@@ -85,7 +103,7 @@ class HeaderTextNavigationIssue545Test(TestCase):
 
         header = self._header_html(user)
 
-        self.assert_primary_text_nav(header)
+        self.assert_public_navigation_ia(header)
         self.assertIn('id="notification-bell-btn"', header)
         self.assertIn('data-testid="account-menu"', header)
         self.assertIn('data-testid="theme-toggle"', header)
@@ -111,7 +129,7 @@ class HeaderTextNavigationIssue545Test(TestCase):
 
         header = self._header_html(staff)
 
-        self.assert_primary_text_nav(header)
+        self.assert_public_navigation_ia(header)
         self.assertIn(reverse('studio_dashboard'), header)
         self.assertIn('data-testid="header-admin-role-badge"', header)
         primary = header[
@@ -123,6 +141,9 @@ class HeaderTextNavigationIssue545Test(TestCase):
     def test_public_nav_destinations_continue_to_resolve(self):
         for path in [
             '/activities',
+            '/about',
+            '/pricing',
+            '/faq',
             '/events',
             '/resources',
             '/courses',

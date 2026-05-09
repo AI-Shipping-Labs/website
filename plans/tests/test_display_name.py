@@ -8,6 +8,7 @@ otherwise the email local-part. Whitespace-only names count as empty.
 """
 
 import datetime
+from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
@@ -18,6 +19,41 @@ from accounts.utils.display import display_name
 from plans.models import Plan, Sprint
 
 User = get_user_model()
+
+
+class _TestIdTextParser(HTMLParser):
+    def __init__(self, testid):
+        super().__init__()
+        self.testid = testid
+        self.values = []
+        self._depth = 0
+        self._parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if self._depth:
+            self._depth += 1
+            return
+        if dict(attrs).get('data-testid') == self.testid:
+            self._depth = 1
+            self._parts = []
+
+    def handle_endtag(self, tag):
+        if not self._depth:
+            return
+        self._depth -= 1
+        if not self._depth:
+            self.values.append(''.join(self._parts).strip())
+            self._parts = []
+
+    def handle_data(self, data):
+        if self._depth:
+            self._parts.append(data)
+
+
+def _texts_for_testid(html, testid):
+    parser = _TestIdTextParser(testid)
+    parser.feed(html)
+    return parser.values
 
 
 class DisplayNameHelperTest(TestCase):
@@ -123,11 +159,9 @@ class DisplayNameTemplateFilterRendersInCohortBoardTest(TestCase):
         # the cohort plan card so we don't false-match a different
         # ``ada`` elsewhere on the page (there is none, but the scoped
         # assertion is still the safe form per testing Rule 2).
-        plan_names = [
-            line.strip()
-            for line in response.content.decode().split('data-testid="cohort-plan-name"')[1:]
-        ]
-        # Each fragment starts with ">{name}\n            </h2>".
-        seen = {fragment.split('</h2>', 1)[0].split('>', 1)[1].strip() for fragment in plan_names}
+        seen = set(_texts_for_testid(
+            response.content.decode(),
+            'cohort-plan-name',
+        ))
         self.assertIn('Alice Smith', seen)
         self.assertIn('ada', seen)

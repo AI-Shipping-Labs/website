@@ -23,22 +23,55 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Start CI timing profile
+        run: |
+          now=$(date +%s)
+          echo "CI_JOB_START=${now}" >> "$GITHUB_ENV"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+          echo "CI_TIMING phase=job_start epoch=${now} sha=${GITHUB_SHA}"
+
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Report checkout timing
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=checkout seconds=$((now - CI_PHASE_START)) source=runner_clock"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+
+      - name: Report setup-uv timing
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=setup_uv seconds=$((now - CI_PHASE_START)) source=runner_clock"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
+      - name: Report setup-python timing
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=setup_python seconds=$((now - CI_PHASE_START)) source=runner_clock"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+
       - name: Install dependencies
-        run: uv sync
+        run: |
+          start=$(date +%s)
+          uv sync
+          end=$(date +%s)
+          echo "CI_TIMING phase=uv_sync seconds=$((end - start))"
 
       - name: Collect static files
-        run: uv run python manage.py collectstatic --noinput
+        run: |
+          start=$(date +%s)
+          uv run python manage.py collectstatic --noinput
+          end=$(date +%s)
+          echo "CI_TIMING phase=collectstatic seconds=$((end - start))"
 
       - name: Run Django system checks
         # Issue #529: gate deploys on `manage.py check --fail-level ERROR`
@@ -54,9 +87,17 @@ jobs:
           DEBUG: "False"
           SES_ENABLED: "true"
           SECRET_KEY: "ci-system-check-only-not-a-real-secret"
-        run: uv run python manage.py check --fail-level ERROR
+        run: |
+          start=$(date +%s)
+          uv run python manage.py check --fail-level ERROR
+          end=$(date +%s)
+          echo "CI_TIMING phase=django_check seconds=$((end - start))"
+
+      - name: Start test database cache restore timing
+        run: echo "CI_PHASE_START=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Cache test database
+        id: test-db-cache
         # Issue #532: DJANGO_TEST_DB_NAME below moves Django's SQLite test
         # database off the default in-memory URI so --keepdb has files to
         # preserve between runs. The cache key hashes every migration file in
@@ -70,15 +111,26 @@ jobs:
             test_db*.sqlite3-shm
           key: test-db-v2-${{ runner.os }}-py3.13-${{ hashFiles('**/migrations/*.py') }}
 
+      - name: Report test database cache restore timing
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=test_db_cache_restore seconds=$((now - CI_PHASE_START)) cache_hit=${{ steps.test-db-cache.outputs.cache-hit }}"
+          echo "CI_PHASE_START=${now}" >> "$GITHUB_ENV"
+
       - name: Validate cached test database
         # Issue #533: a restored --keepdb SQLite file can have migrations
         # marked applied while data-migration seed rows are missing. If the
         # canonical tiers are absent, discard the stale cache so Django builds
         # a fresh test database from migrations.
         run: |
+          start=$(date +%s)
+          deleted=false
           if ! compgen -G 'test_db*.sqlite3' > /dev/null; then
+            end=$(date +%s)
+            echo "CI_TIMING phase=cached_test_db_validation seconds=$((end - start)) cache_hit=${{ steps.test-db-cache.outputs.cache-hit }} restored_files=0 deleted=${deleted}"
             exit 0
           fi
+          restored_files=$(find . -maxdepth 1 -name 'test_db*.sqlite3' | wc -l | tr -d ' ')
           if uv run python - <<'PY'
           import glob
           import sqlite3
@@ -99,9 +151,14 @@ jobs:
                   sys.exit(1)
           PY
           then
+            end=$(date +%s)
+            echo "CI_TIMING phase=cached_test_db_validation seconds=$((end - start)) cache_hit=${{ steps.test-db-cache.outputs.cache-hit }} restored_files=${restored_files} deleted=${deleted}"
             exit 0
           fi
           rm -f test_db.sqlite3 test_db*.sqlite3 test_db*.sqlite3-wal test_db*.sqlite3-shm
+          deleted=true
+          end=$(date +%s)
+          echo "CI_TIMING phase=cached_test_db_validation seconds=$((end - start)) cache_hit=${{ steps.test-db-cache.outputs.cache-hit }} restored_files=${restored_files} deleted=${deleted}"
 
       - name: Run unit and integration tests
         # Explicit 4 matches ubuntu-latest vCPU count; was 'auto' before #342.
@@ -109,7 +166,29 @@ jobs:
         # --keepdb can reuse the cached test_db*.sqlite3 files.
         env:
           DJANGO_TEST_DB_NAME: test_db.sqlite3
-        run: uv run python manage.py test --parallel 4 --keepdb
+        run: |
+          set -o pipefail
+          start=$(date +%s)
+          set +e
+          uv run python manage.py test --parallel 4 --keepdb 2>&1 | tee test-output.log
+          status=${PIPESTATUS[0]}
+          set -e
+          end=$(date +%s)
+          runner_seconds=$(sed -nE 's/^Ran [0-9]+ tests in ([0-9.]+)s$/\1/p' test-output.log | tail -1)
+          echo "CI_TIMING phase=test_wall seconds=$((end - start))"
+          if [ -n "${runner_seconds}" ]; then
+            echo "CI_TIMING phase=test_runner seconds=${runner_seconds}"
+          else
+            echo "CI_TIMING phase=test_runner seconds=unavailable"
+          fi
+          exit "${status}"
+
+      - name: Report total job timing
+        if: always()
+        run: |
+          now=$(date +%s)
+          echo "CI_TIMING phase=job_total seconds=$((now - CI_JOB_START)) source=runner_clock_excludes_post_job_steps"
+          echo "CI_TIMING phase=post_job_overhead seconds=unavailable source=github_actions_native_step_timings note=cache_save_and_action_post_steps_run_after_final_step"
 
   deploy:
     name: Deploy to Dev

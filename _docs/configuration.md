@@ -141,7 +141,9 @@ Keys to set in Studio:
 | `AWS_ACCESS_KEY_ID` | secret | IAM user with `ses:SendEmail` and `ses:SendRawEmail`. Force-blanked when `SES_ENABLED=false` so any code path that slips past the gate cannot authenticate. |
 | `AWS_SECRET_ACCESS_KEY` | secret | Paired with the access key ID. Same force-blank as above. |
 | `AWS_SES_REGION` | non-secret | e.g. `us-east-1`, `eu-west-1`. |
-| `SES_FROM_EMAIL` | non-secret | Must be a verified sender (or be on a verified domain) in SES. |
+| `SES_TRANSACTIONAL_FROM_EMAIL` | non-secret | Sender for required account/service email. Defaults to `noreply@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
+| `SES_PROMOTIONAL_FROM_EMAIL` | non-secret | Sender for campaigns/newsletters/marketing email. Defaults to `content@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
+| `SES_FROM_EMAIL` | non-secret | Legacy fallback sender used only when the explicit transactional/promotional sender key is not configured. |
 | `SES_CONFIGURATION_SET_NAME` | non-secret | Optional SES configuration set name for delivery, open, and click event publishing. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
 

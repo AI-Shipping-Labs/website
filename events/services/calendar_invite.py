@@ -6,7 +6,11 @@ from django.utils import timezone
 from icalendar import Calendar, vCalAddress, vText
 from icalendar import Event as ICalEvent
 
-from integrations.config import get_config, site_base_url
+from email_app.services.email_classification import (
+    EMAIL_KIND_TRANSACTIONAL,
+    get_sender_for_kind,
+)
+from integrations.config import site_base_url
 
 
 def generate_ics(event, method='REQUEST'):
@@ -53,7 +57,7 @@ def generate_ics(event, method='REQUEST'):
     vevent.add('location', vText(join_url))
 
     # Organizer
-    from_email = get_config('SES_FROM_EMAIL', 'community@aishippinglabs.com')
+    from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
     organizer = vCalAddress(f'mailto:{from_email}')
     organizer.params['cn'] = vText('AI Shipping Labs')
     vevent.add('organizer', organizer)

@@ -4,9 +4,15 @@ import os
 from unittest.mock import patch
 
 from allauth.socialaccount.models import SocialApp
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from email_app.services.email_classification import (
+    EMAIL_KIND_PROMOTIONAL,
+    EMAIL_KIND_TRANSACTIONAL,
+    get_sender_for_kind,
+)
 from integrations.config import clear_config_cache, get_config
 from integrations.models import IntegrationSetting
 from integrations.settings_registry import INTEGRATION_GROUPS
@@ -61,6 +67,54 @@ class GetConfigTest(TestCase):
         clear_config_cache()
         result2 = get_config('TEST_KEY')
         self.assertEqual(result2, 'db_val')
+
+
+class SesSenderConfigTest(TestCase):
+    """Separate transactional/promotional sender keys resolve correctly."""
+
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def test_default_transactional_sender(self):
+        self.assertEqual(
+            settings.SES_TRANSACTIONAL_FROM_EMAIL,
+            'noreply@aishippinglabs.com',
+        )
+
+    def test_default_promotional_sender(self):
+        self.assertEqual(
+            settings.SES_PROMOTIONAL_FROM_EMAIL,
+            'content@aishippinglabs.com',
+        )
+
+    def test_studio_override_wins_for_transactional_sender(self):
+        IntegrationSetting.objects.create(
+            key='SES_TRANSACTIONAL_FROM_EMAIL',
+            value='tx@example.test',
+            group='ses',
+        )
+        clear_config_cache()
+
+        self.assertEqual(
+            get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL),
+            'tx@example.test',
+        )
+
+    def test_studio_override_wins_for_promotional_sender(self):
+        IntegrationSetting.objects.create(
+            key='SES_PROMOTIONAL_FROM_EMAIL',
+            value='promo@example.test',
+            group='ses',
+        )
+        clear_config_cache()
+
+        self.assertEqual(
+            get_sender_for_kind(EMAIL_KIND_PROMOTIONAL),
+            'promo@example.test',
+        )
 
 
 class SettingsDashboardViewTest(TestCase):
@@ -213,7 +267,11 @@ class SettingsDashboardViewTest(TestCase):
         )
 
         self.client.login(email='admin@test.com', password='testpass')
-        with patch.dict(os.environ, {'SES_FROM_EMAIL': 'ops@example.test'}, clear=True):
+        with patch.dict(
+            os.environ,
+            {'SES_TRANSACTIONAL_FROM_EMAIL': 'ops@example.test'},
+            clear=True,
+        ):
             response = self.client.get('/studio/settings/')
 
         summary = response.context['status_summary']

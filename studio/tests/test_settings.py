@@ -92,3 +92,27 @@ class BooleanSettingRoundTripTest(TestCase):
         )
         self.assertIsNotNone(match)
         self.assertIn('checked', match.group(0))
+
+
+class EmailSesSenderSettingsTest(TestCase):
+    """Email (SES) exposes separate sender fields for both email classes."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = User.objects.create_user(
+            email='ses-admin@test.com', password='testpass', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client.login(email='ses-admin@test.com', password='testpass')
+
+    def test_dashboard_renders_transactional_and_promotional_sender_fields(self):
+        response = self.client.get('/studio/settings/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        self.assertIn('name="SES_TRANSACTIONAL_FROM_EMAIL"', body)
+        self.assertIn('name="SES_PROMOTIONAL_FROM_EMAIL"', body)
+        self.assertIn('required account and service email', body)
+        self.assertIn('campaigns, newsletters, and marketing email', body)
+        self.assertIn('Must be verified in SES', body)

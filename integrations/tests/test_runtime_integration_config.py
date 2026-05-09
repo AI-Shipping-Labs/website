@@ -226,7 +226,7 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
         self.assertFalse(ses_service.validate_sns_notification({}))
 
     @override_settings(
-        SES_FROM_EMAIL="settings@example.com",
+        SES_TRANSACTIONAL_FROM_EMAIL="settings@example.com",
         AWS_SES_REGION="us-east-1",
         # Issue #509: opt in so _send_raw_email exercises the boto3 path.
         SES_ENABLED=True,
@@ -238,7 +238,7 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {"MessageId": "ses-message-id"}
         mock_boto_client.return_value = mock_client
-        set_integration("SES_FROM_EMAIL", "events@example.com", "email")
+        set_integration("SES_TRANSACTIONAL_FROM_EMAIL", "events@example.com", "email")
         set_integration("AWS_SES_REGION", "eu-west-1", "email")
 
         message_id = _send_raw_email(
@@ -256,11 +256,11 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
             "events@example.com",
         )
 
-    @override_settings(SES_FROM_EMAIL="settings@example.com")
+    @override_settings(SES_TRANSACTIONAL_FROM_EMAIL="settings@example.com")
     def test_calendar_invite_organizer_uses_db_sender(self):
         from events.services.calendar_invite import generate_ics
 
-        set_integration("SES_FROM_EMAIL", "calendar@example.com", "email")
+        set_integration("SES_TRANSACTIONAL_FROM_EMAIL", "calendar@example.com", "email")
         event = SimpleNamespace(
             title="Runtime Config Event",
             slug="runtime-config-event",

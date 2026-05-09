@@ -17,7 +17,7 @@ from payments.models import Tier
 
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
-    SES_FROM_EMAIL='community@aishippinglabs.com',
+    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
 )
 class GenerateIcsTest(TestCase):
     """Tests for .ics calendar file generation."""
@@ -125,7 +125,7 @@ class GenerateIcsTest(TestCase):
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
 
         organizer = vevent.get('organizer')
-        self.assertIn('community@aishippinglabs.com', str(organizer))
+        self.assertIn('noreply@aishippinglabs.com', str(organizer))
 
     def test_generate_ics_join_url_not_zoom(self):
         """Join URL uses the site join path, not direct Zoom URL."""
@@ -145,7 +145,7 @@ class GenerateIcsTest(TestCase):
 
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
-    SES_FROM_EMAIL='community@aishippinglabs.com',
+    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
@@ -199,6 +199,7 @@ class SendRegistrationConfirmationTest(TestCase):
 
         # Verify the email was sent to the right address
         self.assertEqual(call_kwargs['Destination']['ToAddresses'], ['test@example.com'])
+        self.assertEqual(call_kwargs['FromEmailAddress'], 'noreply@aishippinglabs.com')
 
         # Verify EmailLog was created
         self.assertIsNotNone(result)
@@ -250,7 +251,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertIn('event.ics', raw_data)
 
     @patch('events.services.registration_email.boto3')
-    def test_send_email_html_footer_has_no_internal_text(self, mock_boto3):
+    def test_send_email_html_footer_has_no_unsubscribe_link(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'msg-clean'}
         mock_boto3.client.return_value = mock_client
@@ -267,7 +268,8 @@ class SendRegistrationConfirmationTest(TestCase):
         html = parts['text/html']
 
         self.assertIn('email-footer', html)
-        self.assertIn('/api/unsubscribe?token=', html)
+        self.assertNotIn('/api/unsubscribe?token=', html)
+        self.assertNotIn('Unsubscribe', html)
         assert_no_internal_footer_text(self, html)
 
     @patch('events.services.registration_email.boto3')
@@ -308,7 +310,11 @@ class SendRegistrationConfirmationTest(TestCase):
         html_body = parts.get('text/html', '')
         self.assertIn('/events/test-event/join', html_body)
 
-    def test_send_email_skips_unsubscribed_user(self):
+    @patch('events.services.registration_email.boto3')
+    def test_send_email_delivers_to_unsubscribed_user(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'msg-unsub'}
+        mock_boto3.client.return_value = mock_client
         unsubscribed_user = User.objects.create_user(
             email='unsub@example.com',
             password='testpass123',
@@ -318,14 +324,16 @@ class SendRegistrationConfirmationTest(TestCase):
             event=self.event, user=unsubscribed_user,
         )
 
-        # Should return None without calling SES
         result = send_registration_confirmation(registration)
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        mock_client.send_email.assert_called_once()
+        self.assertEqual(result.email_type, 'event_registration')
+        self.assertEqual(result.ses_message_id, 'msg-unsub')
 
 
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
-    SES_FROM_EMAIL='community@aishippinglabs.com',
+    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',

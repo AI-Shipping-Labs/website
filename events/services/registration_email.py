@@ -8,6 +8,10 @@ import boto3
 from django.conf import settings
 from django.template.loader import render_to_string
 
+from email_app.services.email_classification import (
+    EMAIL_KIND_TRANSACTIONAL,
+    get_sender_for_kind,
+)
 from email_app.services.email_service import EmailService
 from events.services.calendar_invite import generate_ics
 from integrations.config import get_config, site_base_url
@@ -22,18 +26,10 @@ def send_registration_confirmation(registration):
         registration: EventRegistration model instance.
 
     Returns:
-        EmailLog instance if sent, None if skipped (unsubscribed user).
+        EmailLog instance for the sent registration email.
     """
     user = registration.user
     event = registration.event
-
-    # Don't send to unsubscribed users
-    if getattr(user, 'unsubscribed', False):
-        logger.info(
-            'Skipping registration email to unsubscribed user %s',
-            user.email,
-        )
-        return None
 
     site_url = site_base_url()
     join_url = f'{site_url}/events/{event.slug}/join'
@@ -51,11 +47,9 @@ def send_registration_confirmation(registration):
     )
 
     # Wrap in base HTML email template
-    unsubscribe_url = email_service._build_unsubscribe_url(user)
     full_html = render_to_string('email_app/base_email.html', {
         'subject': subject,
         'body_html': body_html,
-        'unsubscribe_url': unsubscribe_url,
     })
 
     # Generate .ics
@@ -111,9 +105,7 @@ def _send_raw_email(to_email, subject, html_body, ics_content, method='REQUEST')
         )
         return 'ses-disabled-noop'
 
-    from_email = get_config(
-        'SES_FROM_EMAIL', 'community@aishippinglabs.com',
-    )
+    from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
 
     msg = MIMEMultipart('mixed')
     msg['Subject'] = subject

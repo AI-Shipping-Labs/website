@@ -22,26 +22,17 @@ from django.conf import settings
 from django.template import Context, Template
 from django.template.loader import render_to_string
 
+from email_app.services.email_classification import (
+    EMAIL_KIND_PROMOTIONAL,
+    EmailClassificationError,
+    classify_email_type,
+    get_sender_for_kind,
+)
 from integrations.config import get_config, site_base_url
 
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "email_templates"
-
-# Valid transactional email types
-TRANSACTIONAL_TYPES = {
-    "welcome",
-    "payment_failed",
-    "cancellation",
-    "community_invite",
-    "lead_magnet_delivery",
-    "event_reminder",
-    "email_verification",
-    "email_verification_reminder",
-    "password_reset",
-    "event_registration",
-    "welcome_imported",
-}
 
 # Issue #450: footer "verify your email" CTA shown to unverified recipients.
 # Default-on for every transactional + campaign email; this set names the
@@ -109,8 +100,15 @@ class EmailService:
         if context is None:
             context = {}
 
-        # Don't send to unsubscribed users
-        if getattr(user, "unsubscribed", False):
+        try:
+            email_kind = classify_email_type(template_name)
+        except EmailClassificationError as exc:
+            raise EmailServiceError(str(exc)) from exc
+
+        # Promotional sends respect the global newsletter unsubscribe flag.
+        # Transactional sends must remain deliverable for account/service
+        # continuity even when the user opted out of marketing.
+        if email_kind == EMAIL_KIND_PROMOTIONAL and getattr(user, "unsubscribed", False):
             logger.info(
                 'Skipping email "%s" to unsubscribed user %s',
                 template_name,
@@ -126,8 +124,9 @@ class EmailService:
             context,
         )
 
-        # Build the unsubscribe URL
-        unsubscribe_url = self._build_unsubscribe_url(user)
+        unsubscribe_url = None
+        if email_kind == EMAIL_KIND_PROMOTIONAL:
+            unsubscribe_url = self._build_unsubscribe_url(user)
 
         # Issue #450: only mint the verify-email token when the footer CTA
         # will actually render (unverified recipient + opted-in template).
@@ -146,7 +145,13 @@ class EmailService:
         )
 
         # Send via SES
-        ses_message_id = self._send_ses(user.email, subject, full_html)
+        ses_message_id = self._send_ses(
+            user.email,
+            subject,
+            full_html,
+            email_kind=email_kind,
+            unsubscribe_url=unsubscribe_url,
+        )
 
         # Log the send
         from email_app.models import EmailLog
@@ -372,6 +377,7 @@ class EmailService:
         subject,
         html_body,
         *,
+        email_kind="transactional",
         unsubscribe_url=None,
     ):
         """Send an email via Amazon SES v2 SendEmail API.
@@ -416,10 +422,7 @@ class EmailService:
                 print("", flush=True)
             return "ses-disabled-noop"
 
-        from_email = get_config(
-            "SES_FROM_EMAIL",
-            "community@aishippinglabs.com",
-        )
+        from_email = get_sender_for_kind(email_kind)
         content = {
             "Simple": {
                 "Subject": {

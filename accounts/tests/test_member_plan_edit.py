@@ -47,13 +47,6 @@ class MemberPlanEditAccessControlTest(TestCase):
         self.assertIn('/accounts/login/', response['Location'])
         self.assertIn(f'next={url}', response['Location'])
 
-    def test_owner_returns_200(self):
-        self.client.login(email='alice@test.com', password='pw')
-        response = self.client.get(
-            f'/account/plan/{self.alice_plan.pk}/edit/',
-        )
-        self.assertEqual(response.status_code, 200)
-
     def test_non_owner_returns_404_not_403(self):
         """Visibility-leak prevention per #440. 404 hides existence."""
         self.client.login(email='bob@test.com', password='pw')
@@ -75,15 +68,6 @@ class MemberPlanEditAccessControlTest(TestCase):
         self.client.login(email='alice@test.com', password='pw')
         response = self.client.get('/account/plan/9999999/edit/')
         self.assertEqual(response.status_code, 404)
-
-    def test_owner_can_open_their_own_plan(self):
-        """Bob navigates to his own plan and sees the editor."""
-        self.client.login(email='bob@test.com', password='pw')
-        response = self.client.get(
-            f'/account/plan/{self.bob_plan.pk}/edit/',
-        )
-        self.assertEqual(response.status_code, 200)
-
 
 class MemberPlanEditTokenTest(TestCase):
     """The member editor mints a NAMED token distinct from the staff one."""

@@ -28,6 +28,8 @@ class LoginViewTest(TestCase):
     def test_login_page_returns_200(self):
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/login.html")
+        self.assertContains(response, "login-form")
 
     def test_login_page_uses_correct_template(self):
         response = self.client.get("/accounts/login/")

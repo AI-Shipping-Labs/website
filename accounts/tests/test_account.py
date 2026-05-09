@@ -25,11 +25,13 @@ class AccountPageAccessTest(TestCase):
         self.assertIn("/accounts/login/", response.url)
 
     def test_logged_in_returns_200(self):
-        """GET /account/ for logged-in user returns 200."""
+        """GET /account/ for logged-in user renders the account page."""
         user = User.objects.create_user(email="test@example.com")
         self.client.force_login(user)
         response = self.client.get("/account/")
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/account.html")
+        self.assertEqual(response.context["user"].email, "test@example.com")
 
     def test_uses_correct_template(self):
         user = User.objects.create_user(email="test@example.com")

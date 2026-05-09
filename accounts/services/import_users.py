@@ -25,6 +25,7 @@ from django_q.models import Schedule
 from accounts.models import (
     IMPORT_BATCH_SOURCE_CHOICES,
     IMPORT_SOURCE_MANUAL,
+    IMPORT_SOURCE_STRIPE,
     ImportBatch,
     TierOverride,
 )
@@ -68,6 +69,7 @@ class ImportRow:
     extra_user_fields: dict = field(default_factory=dict)
     validation_error: str = ""
     diagnostics: dict = field(default_factory=dict)
+    subscription_active: bool = False
 
 
 def register_import_adapter(source, adapter_fn):
@@ -206,17 +208,18 @@ def reconcile_user(
                 dry_run=True,
             )
             if tier and tier.level > 0:
-                _apply_tier_override(
-                    existing,
-                    tier,
-                    row.tier_expiry,
-                    actor,
-                    batch=batch,
-                    row_number=row_number,
-                    email=email,
-                    source=source,
-                    dry_run=True,
-                )
+                if source != IMPORT_SOURCE_STRIPE:
+                    _apply_tier_override(
+                        existing,
+                        tier,
+                        row.tier_expiry,
+                        actor,
+                        batch=batch,
+                        row_number=row_number,
+                        email=email,
+                        source=source,
+                        dry_run=True,
+                    )
         return action, None
 
     with transaction.atomic():
@@ -250,17 +253,21 @@ def reconcile_user(
             user.save(update_fields=sorted(update_fields))
 
         if tier and tier.level > 0:
-            _apply_tier_override(
-                user,
-                tier,
-                row.tier_expiry,
-                actor,
-                batch=batch,
-                row_number=row_number,
-                email=email,
-                source=source,
-                dry_run=False,
-            )
+            if source == IMPORT_SOURCE_STRIPE:
+                if row.subscription_active:
+                    _apply_stripe_subscription_tier(user, tier)
+            else:
+                _apply_tier_override(
+                    user,
+                    tier,
+                    row.tier_expiry,
+                    actor,
+                    batch=batch,
+                    row_number=row_number,
+                    email=email,
+                    source=source,
+                    dry_run=False,
+                )
 
     return action, user
 
@@ -581,6 +588,18 @@ def _apply_tier_override(
         granted_by=actor,
         is_active=True,
     )
+
+
+def _apply_stripe_subscription_tier(user, tier):
+    if user.tier_id != tier.id:
+        user.tier = tier
+        user.save(update_fields=["tier"])
+
+    TierOverride.objects.filter(
+        user=user,
+        override_tier=tier,
+        is_active=True,
+    ).update(is_active=False)
 
 
 def _append_conflict(

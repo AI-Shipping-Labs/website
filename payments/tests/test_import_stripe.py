@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as datetime_timezone
 from io import StringIO
 from unittest.mock import patch
@@ -6,6 +6,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from accounts.models import ImportBatch, TierOverride
 from accounts.services.import_users import get_import_adapter, run_import_batch
@@ -147,7 +148,7 @@ class StripeImportAdapterTest(TestCase):
             },
         )
 
-    def test_active_subscription_imports_subscription_fields_tier_and_tags(self):
+    def test_active_subscription_imports_subscription_fields_and_sets_tier_directly(self):
         period_end = 1_800_001_000
         customers = [customer("cus_active", "active@example.com")]
         subscriptions = {
@@ -172,8 +173,9 @@ class StripeImportAdapterTest(TestCase):
             user.billing_period_end,
             datetime.fromtimestamp(period_end, tz=datetime_timezone.utc),
         )
+        self.assertEqual(user.tier, self.basic)
         self.assertEqual(user.tags, ["stripe:imported", "stripe:active", "stripe:plan-basic"])
-        self.assertEqual(TierOverride.objects.get(user=user).override_tier, self.basic)
+        self.assertFalse(TierOverride.objects.filter(user=user).exists())
 
     def test_trialing_subscription_grants_active_import_access(self):
         customers = [customer("cus_trial", "trial@example.com")]
@@ -191,7 +193,26 @@ class StripeImportAdapterTest(TestCase):
         self.assertEqual(user.subscription_id, "sub_trial")
         self.assertIn("stripe:active", user.tags)
         self.assertIn("stripe:plan-main", user.tags)
-        self.assertEqual(TierOverride.objects.get(user=user).override_tier, self.main)
+        self.assertEqual(user.tier, self.main)
+        self.assertFalse(TierOverride.objects.filter(user=user).exists())
+
+    def test_no_active_subscription_does_not_change_existing_tier(self):
+        User.objects.create_user(email="inactive@example.com", tier=self.main)
+        customers = [customer("cus_inactive", "inactive@example.com")]
+        subscriptions = {
+            "cus_inactive": [
+                subscription("sub_old", status="canceled", price_id="price_basic_monthly")
+            ]
+        }
+        customer_patch, subscription_patch = self._patch_stripe(customers, subscriptions)
+
+        with customer_patch, subscription_patch:
+            run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
+
+        user = User.objects.get(email="inactive@example.com")
+        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.subscription_id, "")
+        self.assertFalse(TierOverride.objects.filter(user=user).exists())
 
     def test_churned_customer_imports_without_paid_access(self):
         customers = [customer("cus_churned", "churned@example.com")]
@@ -263,7 +284,56 @@ class StripeImportAdapterTest(TestCase):
         user = User.objects.get(email="multi@example.com")
         self.assertEqual(user.subscription_id, "sub_main_late")
         self.assertIn("stripe:plan-main", user.tags)
-        self.assertEqual(TierOverride.objects.get(user=user).override_tier, self.main)
+        self.assertEqual(user.tier, self.main)
+        self.assertFalse(TierOverride.objects.filter(user=user).exists())
+
+    def test_existing_redundant_override_is_deactivated_for_active_subscription(self):
+        user = User.objects.create_user(email="redundant@example.com")
+        override = TierOverride.objects.create(
+            user=user,
+            original_tier=user.tier,
+            override_tier=self.main,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+        customers = [customer("cus_redundant", "redundant@example.com")]
+        subscriptions = {
+            "cus_redundant": [
+                subscription("sub_redundant", price_id="price_main_monthly")
+            ]
+        }
+        customer_patch, subscription_patch = self._patch_stripe(customers, subscriptions)
+
+        with customer_patch, subscription_patch:
+            run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
+
+        user.refresh_from_db()
+        override.refresh_from_db()
+        self.assertEqual(user.tier, self.main)
+        self.assertFalse(override.is_active)
+
+    def test_existing_different_override_stays_active_for_active_subscription(self):
+        user = User.objects.create_user(email="courtesy@example.com")
+        override = TierOverride.objects.create(
+            user=user,
+            original_tier=user.tier,
+            override_tier=self.main,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+        customers = [customer("cus_courtesy", "courtesy@example.com")]
+        subscriptions = {
+            "cus_courtesy": [
+                subscription("sub_courtesy", price_id="price_premium_monthly")
+            ]
+        }
+        customer_patch, subscription_patch = self._patch_stripe(customers, subscriptions)
+
+        with customer_patch, subscription_patch:
+            run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
+
+        user.refresh_from_db()
+        override.refresh_from_db()
+        self.assertEqual(user.tier, self.premium)
+        self.assertTrue(override.is_active)
 
     def test_existing_customer_id_is_not_overwritten(self):
         existing = User.objects.create_user(

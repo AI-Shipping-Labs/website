@@ -111,6 +111,7 @@ def _row_for_customer(customer, *, secret_key, price_to_tier):
         tier_expiry=tier_expiry,
         tags=tags,
         extra_user_fields=extra_user_fields,
+        subscription_active=selected is not None,
     )
 
 

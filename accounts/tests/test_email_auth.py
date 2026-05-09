@@ -609,6 +609,20 @@ class PasswordResetAPITest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "accounts/password_reset.html")
         self.assertEqual(resp.context["token"], token)
+        self.assertEqual(resp.context["reset_email"], self.user.email)
+
+    def test_get_form_has_password_manager_hints(self):
+        token = _make_password_reset_token(self.user.pk)
+        resp = self.client.get(f"{self.url}?token={token}")
+
+        self.assertContains(resp, 'method="post"')
+        self.assertContains(resp, 'action="/api/password-reset"')
+        self.assertContains(resp, 'id="reset-username"')
+        self.assertContains(resp, 'autocomplete="username"')
+        self.assertContains(resp, 'value="resetpw@example.com"')
+        self.assertContains(resp, 'id="new-password"')
+        self.assertContains(resp, 'name="new_password"')
+        self.assertContains(resp, 'autocomplete="new-password"', count=2)
 
     def test_get_shows_error_for_expired_token(self):
         """GET with expired token shows error message."""
@@ -623,6 +637,13 @@ class PasswordResetAPITest(TestCase):
         resp = self.client.get(f"{self.url}?token=garbage")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("error", resp.context)
+
+    def test_get_shows_error_for_wrong_action_token(self):
+        token = _make_verification_token(self.user.pk)
+        resp = self.client.get(f"{self.url}?token={token}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("error", resp.context)
+        self.assertContains(resp, "Invalid password reset link.")
 
     def test_get_missing_token_returns_400(self):
         """GET without token returns 400."""

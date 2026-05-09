@@ -553,9 +553,13 @@ def password_reset_api(request):
         if not token:
             return JsonResponse({"error": "Token is required"}, status=400)
 
-        # Validate token before rendering form
+        # Validate token before rendering form. The email is included as a
+        # hidden username hint so browser password managers can associate the
+        # generated password with the right account.
         try:
-            jwt.decode(token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM])
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM]
+            )
         except jwt.ExpiredSignatureError:
             return render(
                 request,
@@ -569,8 +573,26 @@ def password_reset_api(request):
                 {"error": "Invalid password reset link."},
             )
 
+        if payload.get("action") != "password_reset":
+            return render(
+                request,
+                "accounts/password_reset.html",
+                {"error": "Invalid password reset link."},
+            )
+
+        try:
+            user = User.objects.get(pk=payload.get("user_id"))
+        except User.DoesNotExist:
+            return render(
+                request,
+                "accounts/password_reset.html",
+                {"error": "Invalid password reset link."},
+            )
+
         return render(
-            request, "accounts/password_reset.html", {"token": token}
+            request,
+            "accounts/password_reset.html",
+            {"token": token, "reset_email": user.email},
         )
 
     elif request.method == "POST":

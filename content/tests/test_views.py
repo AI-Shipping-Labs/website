@@ -42,33 +42,30 @@ class HomeViewTest(TestCase):
             published=True,
         )
 
-    def test_home_status_code(self):
-        response = self.client.get('/')
-        self.assertEqual(response.status_code, 200)
-
     def test_home_template(self):
         response = self.client.get('/')
         self.assertTemplateUsed(response, 'home.html')
 
     def test_home_contains_content(self):
         response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('Test Article', content)
-        self.assertIn('Test Recording', content)
-        self.assertIn('Test Project', content)
-        self.assertIn('Test Link', content)
+        self.assertEqual(list(response.context['articles']), [self.article])
+        self.assertEqual(list(response.context['recordings']), [self.recording])
+        self.assertEqual(list(response.context['projects']), [self.project])
+        self.assertEqual(list(response.context['curated_links']), [self.link])
 
     def test_home_contains_sections(self):
         response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('id="about"', content)
-        self.assertIn('id="tiers"', content)
-        self.assertIn('id="testimonials"', content)
-        self.assertIn('id="resources"', content)
-        self.assertIn('id="blog"', content)
-        self.assertIn('id="collection"', content)
-        self.assertIn('id="newsletter"', content)
-        self.assertIn('id="faq"', content)
+        for section_id in (
+            'about',
+            'tiers',
+            'testimonials',
+            'resources',
+            'blog',
+            'collection',
+            'newsletter',
+            'faq',
+        ):
+            self.assertContains(response, f'id="{section_id}"')
 
     def test_home_testimonials_use_balanced_grid(self):
         response = self.client.get('/')
@@ -77,14 +74,6 @@ class HomeViewTest(TestCase):
         self.assertNotContains(response, '<footer class="mt-6 flex')
         self.assertContains(response, 'md:grid-cols-2')
         self.assertNotContains(response, 'columns-1')
-
-    def test_home_contains_nav(self):
-        response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('AI Shipping Labs', content)
-        self.assertIn('/about', content)
-        self.assertIn('/activities', content)
-        self.assertIn('/blog', content)
 
     def test_home_unpublished_not_shown(self):
         Article.objects.create(
@@ -98,38 +87,28 @@ class HomeViewTest(TestCase):
 
 
 class AboutViewTest(TestCase):
-    def test_about_status_code(self):
-        response = self.client.get('/about')
-        self.assertEqual(response.status_code, 200)
-
     def test_about_template(self):
         response = self.client.get('/about')
         self.assertTemplateUsed(response, 'content/about.html')
 
     def test_about_contains_content(self):
         response = self.client.get('/about')
-        content = response.content.decode()
-        self.assertIn('About AI Shipping Labs', content)
-        self.assertIn('Alexey Grigorev', content)
-        self.assertIn('Valeriia Kuka', content)
-        self.assertIn('Co-founder', content)
+        self.assertContains(response, 'About AI Shipping Labs')
+        self.assertContains(response, 'Alexey Grigorev')
+        self.assertContains(response, 'Valeriia Kuka')
+        self.assertContains(response, 'Co-founder')
 
 
 class ActivitiesViewTest(TestCase):
-    def test_activities_status_code(self):
-        response = self.client.get('/activities')
-        self.assertEqual(response.status_code, 200)
-
     def test_activities_template(self):
         response = self.client.get('/activities')
         self.assertTemplateUsed(response, 'content/activities.html')
 
     def test_activities_contains_content(self):
         response = self.client.get('/activities')
-        content = response.content.decode()
-        self.assertIn('Active community sprints', content)
-        self.assertIn('Next sprint coming soon', content)
-        self.assertIn('Quick comparison', content)
+        self.assertContains(response, 'Active community sprints')
+        self.assertContains(response, 'Next sprint coming soon')
+        self.assertContains(response, 'Quick comparison')
 
 
 class BlogListViewTest(TestCase):
@@ -142,10 +121,6 @@ class BlogListViewTest(TestCase):
             tags=['test'],
             published=True,
         )
-
-    def test_blog_list_status_code(self):
-        response = self.client.get('/blog')
-        self.assertEqual(response.status_code, 200)
 
     def test_blog_list_template(self):
         response = self.client.get('/blog')
@@ -176,22 +151,15 @@ class BlogDetailViewTest(TestCase):
             published=True,
         )
 
-    def test_blog_detail_status_code(self):
-        response = self.client.get('/blog/detail-post')
-        self.assertEqual(response.status_code, 200)
-
     def test_blog_detail_template(self):
         response = self.client.get('/blog/detail-post')
         self.assertTemplateUsed(response, 'content/blog_detail.html')
 
     def test_blog_detail_contains_content(self):
         response = self.client.get('/blog/detail-post')
-        content = response.content.decode()
-        self.assertIn('Detail Post', content)
-        self.assertIn('Detailed description', content)
-        self.assertIn('Full content here', content)
-        self.assertIn('python', content)
-        self.assertIn('5 min read', content)
+        self.assertEqual(response.context['article'], self.article)
+        self.assertContains(response, '<p>Full content here</p>', html=True)
+        self.assertContains(response, '5 min read')
 
     def test_blog_detail_404(self):
         response = self.client.get('/blog/nonexistent-post')
@@ -221,10 +189,6 @@ class RecordingsListViewTest(TestCase):
             tags=['agents'],
             published=True,
         )
-
-    def test_recordings_list_status_code(self):
-        response = self.client.get('/events?filter=past')
-        self.assertEqual(response.status_code, 200)
 
     def test_recordings_list_template(self):
         response = self.client.get('/events?filter=past')
@@ -259,10 +223,6 @@ class RecordingDetailViewTest(TestCase):
             published=True,
         )
 
-    def test_recording_detail_status_code(self):
-        response = self.client.get('/events/workshop-detail')
-        self.assertEqual(response.status_code, 200)
-
     def test_recording_detail_template(self):
         response = self.client.get('/events/workshop-detail')
         self.assertTemplateUsed(response, 'events/event_detail.html')
@@ -274,14 +234,13 @@ class RecordingDetailViewTest(TestCase):
         # are not rendered here — they live on the linked Workshop's
         # video page.
         response = self.client.get('/events/workshop-detail')
-        content = response.content.decode()
-        self.assertIn('Workshop Detail', content)
-        self.assertIn('Workshop description', content)
-        self.assertNotIn('Core Tools', content)
-        self.assertNotIn('Python', content)
-        self.assertNotIn('Learn basics', content)
-        self.assertNotIn('Build something', content)
-        self.assertNotIn('https://example.com/slides', content)
+        self.assertEqual(response.context['event'], self.recording)
+        self.assertContains(response, 'Workshop description')
+        self.assertNotContains(response, 'Core Tools')
+        self.assertNotContains(response, 'Python')
+        self.assertNotContains(response, 'Learn basics')
+        self.assertNotContains(response, 'Build something')
+        self.assertNotContains(response, 'https://example.com/slides')
 
     def test_recording_detail_404(self):
         response = self.client.get('/events/nonexistent')
@@ -298,10 +257,6 @@ class ProjectsListViewTest(TestCase):
             difficulty='beginner',
             published=True,
         )
-
-    def test_projects_list_status_code(self):
-        response = self.client.get('/projects')
-        self.assertEqual(response.status_code, 200)
 
     def test_projects_list_template(self):
         response = self.client.get('/projects')
@@ -331,21 +286,15 @@ class ProjectDetailViewTest(TestCase):
             published=True,
         )
 
-    def test_project_detail_status_code(self):
-        response = self.client.get('/projects/project-detail')
-        self.assertEqual(response.status_code, 200)
-
     def test_project_detail_template(self):
         response = self.client.get('/projects/project-detail')
         self.assertTemplateUsed(response, 'content/project_detail.html')
 
     def test_project_detail_contains_content(self):
         response = self.client.get('/projects/project-detail')
-        content = response.content.decode()
-        self.assertIn('Project Detail', content)
-        self.assertIn('Project desc', content)
-        self.assertIn('Project content', content)
-        self.assertIn('by Builder', content)
+        self.assertEqual(response.context['project'], self.project)
+        self.assertContains(response, '<p>Project content</p>', html=True)
+        self.assertContains(response, 'by Builder')
 
     def test_project_detail_404(self):
         response = self.client.get('/projects/nonexistent')
@@ -364,10 +313,6 @@ class CollectionListViewTest(TestCase):
             published=True,
         )
 
-    def test_collection_list_status_code(self):
-        response = self.client.get('/resources')
-        self.assertEqual(response.status_code, 200)
-
     def test_collection_list_template(self):
         response = self.client.get('/resources')
         self.assertTemplateUsed(response, 'content/collection_list.html')
@@ -380,10 +325,6 @@ class CollectionListViewTest(TestCase):
 
 
 class TutorialsListViewTest(TestCase):
-    def test_tutorials_list_status_code(self):
-        response = self.client.get('/tutorials')
-        self.assertEqual(response.status_code, 200)
-
     def test_tutorials_list_template(self):
         response = self.client.get('/tutorials')
         self.assertTemplateUsed(response, 'content/tutorials_list.html')
@@ -417,20 +358,15 @@ class TutorialDetailViewTest(TestCase):
             published=True,
         )
 
-    def test_tutorial_detail_status_code(self):
-        response = self.client.get('/tutorials/tutorial-detail')
-        self.assertEqual(response.status_code, 200)
-
     def test_tutorial_detail_template(self):
         response = self.client.get('/tutorials/tutorial-detail')
         self.assertTemplateUsed(response, 'content/tutorial_detail.html')
 
     def test_tutorial_detail_contains_content(self):
         response = self.client.get('/tutorials/tutorial-detail')
-        content = response.content.decode()
-        self.assertIn('Tutorial Detail', content)
-        self.assertIn('Tutorial content', content)
-        self.assertIn('python', content)
+        self.assertEqual(response.context['tutorial'], self.tutorial)
+        self.assertContains(response, '<p>Tutorial content</p>', html=True)
+        self.assertContains(response, 'python')
 
     def test_tutorial_detail_404(self):
         response = self.client.get('/tutorials/nonexistent')

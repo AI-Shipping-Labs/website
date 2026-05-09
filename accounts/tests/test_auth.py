@@ -111,7 +111,7 @@ class PasswordResetRequestViewTest(TestCase):
         self.assertContains(response, "Sending...")
         self.assertContains(
             response,
-            "If that email is on file, a reset link is on its way.",
+            "If an account exists for that email, we’ll send password reset instructions shortly.",
         )
         self.assertContains(response, 'href="/accounts/login/"')
         self.assertContains(response, "Back to sign in")

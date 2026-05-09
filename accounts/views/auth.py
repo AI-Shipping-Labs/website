@@ -537,7 +537,7 @@ def password_reset_request_api(request):
     return JsonResponse(
         {
             "status": "ok",
-            "message": "If an account exists with that email, a password reset link has been sent.",
+            "message": "If an account exists for that email, we’ll send password reset instructions shortly.",
         }
     )
 

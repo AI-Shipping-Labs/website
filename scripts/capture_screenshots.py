@@ -5,6 +5,7 @@ Capture screenshots of Django pages for issue documentation.
 Usage:
     uv run python scripts/capture_screenshots.py --urls /account/ /blog/ --issue 70
     uv run python scripts/capture_screenshots.py --urls / /pricing --output /tmp/screenshots
+    uv run python scripts/capture_screenshots.py --urls /projects --output /tmp/screenshots --viewport 393x851
 
 This script:
 1. Starts the Django dev server (if not already running)
@@ -40,8 +41,28 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "website.settings")
 DJANGO_HOST = "127.0.0.1"
 DJANGO_PORT = 8766  # Different from test port to avoid conflicts
 DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
-VIEWPORT = {"width": 1280, "height": 720}
+DEFAULT_VIEWPORT = {"width": 1280, "height": 720}
 SCREENSHOT_BRANCH = "screenshots"
+
+
+def parse_viewport(value):
+    """Parse a WIDTHxHEIGHT viewport string for Playwright."""
+    try:
+        width_text, height_text = value.lower().split("x", 1)
+        width = int(width_text)
+        height = int(height_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("viewport must be WIDTHxHEIGHT, e.g. 1280x900") from exc
+
+    if width <= 0 or height <= 0:
+        raise argparse.ArgumentTypeError("viewport width and height must be positive integers")
+
+    return {"width": width, "height": height}
+
+
+def viewport_label(viewport):
+    """Return a compact label for filenames and comments."""
+    return f"{viewport['width']}x{viewport['height']}"
 
 
 def _server_is_running(url):
@@ -82,13 +103,14 @@ def _start_django_server():
     raise RuntimeError("Django dev server did not start in time")
 
 
-def capture_screenshots(urls, output_dir, login_as=None):
+def capture_screenshots(urls, output_dir, login_as=None, viewport=None):
     """Capture screenshots of the given URLs.
 
     Args:
         urls: List of URL paths (e.g., ["/account/", "/blog/"])
         output_dir: Directory to save screenshots
         login_as: Optional dict with 'email' and 'password' to log in first
+        viewport: Playwright viewport dict. Defaults to the historical 1280x720.
 
     Returns:
         List of (url, filepath) tuples for captured screenshots
@@ -97,10 +119,13 @@ def capture_screenshots(urls, output_dir, login_as=None):
 
     os.makedirs(output_dir, exist_ok=True)
     results = []
+    viewport = viewport or DEFAULT_VIEWPORT
+    label = viewport_label(viewport)
+    suffix = "" if viewport == DEFAULT_VIEWPORT else f"_{label}"
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport=VIEWPORT, color_scheme="dark")
+        context = browser.new_context(viewport=viewport, color_scheme="dark")
         page = context.new_page()
 
         try:
@@ -115,14 +140,14 @@ def capture_screenshots(urls, output_dir, login_as=None):
             for url_path in urls:
                 full_url = f"{DJANGO_BASE_URL}{url_path}"
                 safe_name = url_path.strip("/").replace("/", "_") or "home"
-                filepath = os.path.join(output_dir, f"{safe_name}.png")
+                filepath = os.path.join(output_dir, f"{safe_name}{suffix}.png")
 
                 page.goto(full_url, wait_until="networkidle", timeout=30000)
                 page.wait_for_timeout(1000)
                 page.screenshot(path=filepath, full_page=True)
 
                 results.append((url_path, filepath))
-                print(f"  Captured: {url_path} -> {filepath}")
+                print(f"  Captured ({label}): {url_path} -> {filepath}")
 
         finally:
             browser.close()
@@ -200,7 +225,7 @@ def _upload_file_to_branch(filepath, dest_path, repo, branch=SCREENSHOT_BRANCH):
     return raw_url
 
 
-def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website"):
+def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website", viewport=None):
     """Upload screenshots to the orphan branch and post a comment on the issue.
 
     Each screenshot is uploaded to issue-{N}/{safe_name}.png on the 'screenshots'
@@ -210,15 +235,19 @@ def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website"):
         issue_number: GitHub issue number
         screenshots: List of (url_path, filepath) tuples
         repo: GitHub repo in "owner/repo" format
+        viewport: Viewport used for labels. Defaults to the historical 1280x720.
     """
     if not screenshots:
         return
 
     image_entries = []
+    viewport = viewport or DEFAULT_VIEWPORT
+    label = viewport_label(viewport)
+    suffix = "" if viewport == DEFAULT_VIEWPORT else f"_{label}"
 
     for url_path, filepath in screenshots:
         safe_name = url_path.strip("/").replace("/", "_") or "home"
-        dest_path = f"issue-{issue_number}/{safe_name}.png"
+        dest_path = f"issue-{issue_number}/{safe_name}{suffix}.png"
 
         try:
             raw_url = _upload_file_to_branch(filepath, dest_path, repo)
@@ -231,10 +260,10 @@ def upload_to_issue(issue_number, screenshots, repo="AI-Shipping-Labs/website"):
         return
 
     # Build a single comment with all screenshots
-    body_lines = ["## Screenshots\n"]
+    body_lines = [f"## Screenshots ({label})\n"]
     for url_path, raw_url in image_entries:
         safe_name = url_path.strip("/").replace("/", "_") or "home"
-        body_lines.append(f"### `{url_path}`\n")
+        body_lines.append(f"### `{url_path}` ({label})\n")
         body_lines.append(f"![{safe_name}]({raw_url})\n")
 
     body = "\n".join(body_lines)
@@ -255,6 +284,8 @@ def main():
                         help="GitHub issue number to upload screenshots to")
     parser.add_argument("--output", default=None,
                         help="Output directory (default: temp dir)")
+    parser.add_argument("--viewport", type=parse_viewport, default=DEFAULT_VIEWPORT,
+                        help="Viewport as WIDTHxHEIGHT (default: 1280x720)")
     parser.add_argument("--login-email", default=None,
                         help="Email to log in as before capturing")
     parser.add_argument("--login-password", default="testpass123",
@@ -277,11 +308,11 @@ def main():
     if args.login_email:
         login_as = {"email": args.login_email, "password": args.login_password}
 
-    print(f"Capturing {len(args.urls)} screenshots...")
-    screenshots = capture_screenshots(args.urls, output_dir, login_as=login_as)
+    print(f"Capturing {len(args.urls)} screenshots at {viewport_label(args.viewport)}...")
+    screenshots = capture_screenshots(args.urls, output_dir, login_as=login_as, viewport=args.viewport)
 
     if args.issue:
-        upload_to_issue(args.issue, screenshots, repo=args.repo)
+        upload_to_issue(args.issue, screenshots, repo=args.repo, viewport=args.viewport)
 
     print(f"\nDone. {len(screenshots)} screenshots saved to {output_dir}")
     return screenshots

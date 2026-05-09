@@ -24,12 +24,21 @@ class ContentSyncQueueResult:
 
 def _mark_source_queued(source, batch_id=None):
     """Create the queued SyncLog row and mark the source as queued."""
-    SyncLog.objects.create(
+    previous_status = source.last_sync_status
+    queued_log = SyncLog.objects.create(
         source=source,
         batch_id=batch_id,
         status='queued',
     )
     source.last_sync_status = 'queued'
+    source.save(update_fields=['last_sync_status', 'updated_at'])
+    return previous_status, queued_log
+
+
+def _clear_queued_state(source, previous_status, queued_log):
+    """Undo a queued marker when enqueueing fails before a worker can run."""
+    queued_log.delete()
+    source.last_sync_status = previous_status
     source.save(update_fields=['last_sync_status', 'updated_at'])
 
 
@@ -54,6 +63,10 @@ def enqueue_content_sync(
     task_name=None,
 ):
     """Queue one content source sync, falling back inline when django-q is absent."""
+    queued_marker = None
+    if mark_queued:
+        queued_marker = _mark_source_queued(source, batch_id=batch_id)
+
     try:
         task_id = _enqueue_async_task(
             source,
@@ -62,6 +75,8 @@ def enqueue_content_sync(
             task_name=task_name,
         )
     except ImportError:
+        if queued_marker is not None:
+            _clear_queued_state(source, *queued_marker)
         try:
             sync_content_source(source, batch_id=batch_id, force=force)
         except Exception as exc:
@@ -83,6 +98,8 @@ def enqueue_content_sync(
             message=f'Sync completed for {source.repo_name}',
         )
     except Exception as exc:
+        if queued_marker is not None:
+            _clear_queued_state(source, *queued_marker)
         return ContentSyncQueueResult(
             ok=False,
             queued=False,
@@ -92,9 +109,6 @@ def enqueue_content_sync(
             message=f'Sync failed for {source.repo_name}: {exc}',
             error=str(exc),
         )
-
-    if mark_queued:
-        _mark_source_queued(source, batch_id=batch_id)
 
     return ContentSyncQueueResult(
         ok=True,

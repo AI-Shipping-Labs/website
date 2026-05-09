@@ -668,6 +668,39 @@ def _aggregate_batch(logs):
     }
 
 
+def _is_metadata_only_skip(log):
+    """Return True for HEAD-unchanged skips that contain no content results."""
+    return (
+        log.status == 'skipped'
+        and not (log.items_detail or [])
+        and not log.items_created
+        and not log.items_updated
+        and not log.items_unchanged
+        and not log.items_deleted
+    )
+
+
+def _latest_result_log_for_dashboard(latest_logs):
+    """Pick the newest log with content details for the dashboard table.
+
+    HEAD-unchanged skips only prove the repo is current; they do not carry
+    content-type detail rows. Keep the current skipped status on the card, but
+    render the most recent real sync results instead of a synthetic "Other" row.
+    """
+    logs = list(latest_logs[:50])
+    if not logs:
+        return None
+
+    newest = logs[0]
+    if not _is_metadata_only_skip(newest):
+        return newest
+
+    for log in logs[1:]:
+        if not _is_metadata_only_skip(log):
+            return log
+    return newest
+
+
 def _build_repos_context():
     """Build the per-repo dashboard payload (cards + last batches).
 
@@ -710,8 +743,8 @@ def _build_repos_context():
             source=source,
         ).exclude(status__in=['running', 'queued']).order_by('-started_at')
 
-        if latest_logs.exists():
-            newest = latest_logs.first()
+        newest = _latest_result_log_for_dashboard(latest_logs)
+        if newest:
             if newest.batch_id:
                 batch_logs = SyncLog.objects.filter(
                     batch_id=newest.batch_id,

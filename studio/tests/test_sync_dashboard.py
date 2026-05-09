@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -246,6 +247,47 @@ class StudioSyncDashboardTest(TestCase):
         response = self.client.get('/studio/sync/')
         self.assertContains(response, 'My New Article')
         self.assertContains(response, '/blog/my-new-article')
+
+    def test_dashboard_uses_previous_details_after_head_unchanged_skip(self):
+        """Issue #556: HEAD-unchanged skips must not render an Other row."""
+        now = timezone.now()
+        source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/workshops',
+            last_sync_status='skipped',
+            last_synced_at=now,
+        )
+        success_log = SyncLog.objects.create(
+            source=source,
+            status='success',
+            items_updated=1,
+            items_detail=[{
+                'title': 'Build with Agents',
+                'slug': 'build-with-agents',
+                'action': 'updated',
+                'content_type': 'workshop',
+            }],
+            finished_at=now - timedelta(hours=1),
+        )
+        SyncLog.objects.filter(pk=success_log.pk).update(
+            started_at=now - timedelta(hours=1),
+        )
+        skipped_log = SyncLog.objects.create(
+            source=source,
+            status='skipped',
+            commit_sha='a' * 40,
+            errors=[{'file': '', 'error': 'HEAD unchanged'}],
+            finished_at=now,
+        )
+        SyncLog.objects.filter(pk=skipped_log.pk).update(started_at=now)
+
+        response = self.client.get('/studio/sync/')
+        repo = response.context['repos'][0]
+        per_type = repo['last_batch']['per_type']
+
+        self.assertEqual(repo['overall_status'], 'skipped')
+        self.assertEqual([row['content_type'] for row in per_type], ['workshop'])
+        self.assertEqual(per_type[0]['items_detail'][0]['title'], 'Build with Agents')
+        self.assertNotIn('other', [row['content_type'] for row in per_type])
 
     def test_dashboard_requires_staff(self):
         client = Client()

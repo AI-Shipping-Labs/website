@@ -44,6 +44,27 @@ class ContentSyncQueueServiceTest(TestCase):
         log = SyncLog.objects.get(source=self.source)
         self.assertEqual(log.status, 'queued')
 
+    @patch('integrations.services.content_sync_queue._enqueue_async_task')
+    def test_async_enqueue_marks_queued_before_dispatch(self, mock_enqueue):
+        """Issue #556: workers must see queued state before pickup."""
+        observed = {}
+
+        def observe(source, **kwargs):
+            source.refresh_from_db()
+            observed['status'] = source.last_sync_status
+            observed['queued_log_exists'] = SyncLog.objects.filter(
+                source=source,
+                status='queued',
+            ).exists()
+            return 'task-id'
+
+        mock_enqueue.side_effect = observe
+
+        enqueue_content_sync(self.source)
+
+        self.assertEqual(observed['status'], 'queued')
+        self.assertTrue(observed['queued_log_exists'])
+
     @patch('django_q.tasks.async_task')
     def test_async_enqueue_uses_batch_id_for_queued_log(self, mock_async):
         batch_id = uuid.uuid4()

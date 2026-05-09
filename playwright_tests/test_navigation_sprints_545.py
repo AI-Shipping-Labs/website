@@ -77,11 +77,16 @@ def test_anonymous_desktop_navigation_groups_and_sprints_link(
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     nav = _desktop_text_nav(page)
-    assert nav.get_by_role("button", name="Learn").is_visible()
+    assert nav.get_by_role("link", name="About").get_attribute("href") == "/about"
+    assert nav.get_by_role("link", name="Membership").get_attribute("href") == "/pricing"
+    assert nav.get_by_role("link", name="FAQ").get_attribute("href") == "/faq"
     assert nav.get_by_role("button", name="Community").is_visible()
-    assert nav.get_by_text("Resources", exact=True).count() == 0
-    assert nav.get_by_role("link", name="Membership").count() == 0
+    assert nav.get_by_role("button", name="Resources").is_visible()
     assert page.locator("#community-dropdown a", has_text="Community Sprints").get_attribute("href") == "/sprints"
+    assert page.locator("#community-dropdown a", has_text="Events").get_attribute("href") == "/events"
+    assert page.locator("#resources-dropdown a", has_text="Courses").get_attribute("href") == "/courses"
+    assert page.locator("#resources-dropdown a", has_text="Curated Links").get_attribute("href") == "/resources"
+    assert nav.get_by_role("link", name="Activities").count() == 0
     _assert_no_horizontal_overflow(page)
     _shot(page, "01-anonymous-desktop-nav")
 
@@ -92,10 +97,15 @@ def test_anonymous_mobile_navigation_groups(django_server, browser):
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     page.locator("#mobile-menu-btn").click()
-    page.locator("#mobile-learn-toggle").click()
     page.locator("#mobile-community-toggle").click()
+    page.locator("#mobile-resources-toggle").click()
 
-    learn = page.locator("#mobile-learn-list")
+    menu = page.locator("#mobile-menu")
+    assert menu.get_by_role("link", name="About").get_attribute("href") == "/about"
+    assert menu.get_by_role("link", name="Membership").get_attribute("href") == "/pricing"
+    assert menu.get_by_role("link", name="FAQ").get_attribute("href") == "/faq"
+
+    resources = page.locator("#mobile-resources-list")
     for label in [
         "Courses",
         "Workshops",
@@ -103,13 +113,15 @@ def test_anonymous_mobile_navigation_groups(django_server, browser):
         "Project Ideas",
         "Interview Prep",
         "Blog",
+        "Curated Links",
     ]:
-        assert learn.get_by_text(label, exact=True).is_visible()
+        assert resources.get_by_text(label, exact=True).is_visible()
 
     community = page.locator("#mobile-community-list")
-    for label in ["Community Sprints", "Events", "Activities", "Curated Links"]:
+    for label in ["Community Sprints", "Events"]:
         assert community.get_by_text(label, exact=True).is_visible()
     assert community.locator('a[href="/sprints"]').count() == 1
+    assert menu.get_by_role("link", name="Activities").count() == 0
     _assert_no_horizontal_overflow(page)
     _shot(page, "02-anonymous-mobile-nav")
     context.close()
@@ -127,8 +139,11 @@ def test_authenticated_member_navigation_preserves_account_controls(
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     nav = _desktop_text_nav(page)
-    assert nav.get_by_role("button", name="Learn").is_visible()
+    assert nav.get_by_role("link", name="About").is_visible()
+    assert nav.get_by_role("link", name="Membership").is_visible()
+    assert nav.get_by_role("link", name="FAQ").is_visible()
     assert nav.get_by_role("button", name="Community").is_visible()
+    assert nav.get_by_role("button", name="Resources").is_visible()
     assert page.locator("#notification-bell-btn").is_visible()
     assert page.locator("#account-menu-trigger").is_visible()
     page.locator("#account-menu-trigger").click()
@@ -150,6 +165,7 @@ def test_staff_navigation_preserves_studio_in_account_controls(
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
     _desktop_text_nav(page).get_by_role("button", name="Community").wait_for()
+    _desktop_text_nav(page).get_by_role("button", name="Resources").wait_for()
     page.locator("#account-menu-trigger").click()
     assert page.locator("#account-menu-dropdown").get_by_role("menuitem", name="Studio").is_visible()
     _shot(page, "04-staff-nav")

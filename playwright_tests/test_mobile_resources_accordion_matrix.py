@@ -13,14 +13,14 @@ This file covers two complementary checks:
 Test 1: ``test_mobile_text_navigation_present_on_each_url`` --
   Iterates a matrix of 9 representative public-page URLs at iPhone-sized
   viewport (390x844). For each URL it taps the hamburger, taps the
-  Learn and Community toggles, and asserts representative links inside
+  Community and Resources toggles, and asserts representative links inside
   both accordion lists become visible. The assertion includes the
   URL in its failure message so a future regression points at the page,
   not just "menu broken".
 
 Test 2: ``test_desktop_header_renders_on_peer_review_pages`` -- At
   1024x768 (desktop), the four peer-review URLs must render the desktop
-  nav (Learn and Community dropdowns) and must NOT show
+  nav (Community and Resources dropdowns) and must NOT show
   the mobile hamburger. This covers the desktop side of the same template
   fix.
 
@@ -243,8 +243,8 @@ class TestMobileTextNavigationAcrossPages:
 
                     _open_mobile_menu(page)
 
-                    # Step 2: Learn and Community toggles are reachable.
-                    for section in ["learn", "community"]:
+                    # Step 2: Community and Resources toggles are reachable.
+                    for section in ["community", "resources"]:
                         toggle = page.locator(f"#mobile-{section}-toggle")
                         if toggle.count() != 1 or not toggle.is_visible():
                             failures.append(
@@ -257,7 +257,7 @@ class TestMobileTextNavigationAcrossPages:
                     # Step 3: representative links inside both expanded
                     # accordions are visible.
                     blog_link = page.locator(
-                        '#mobile-learn-list a[href="/blog"]'
+                        '#mobile-resources-list a[href="/blog"]'
                     )
                     if blog_link.count() != 1 or not blog_link.is_visible():
                         failures.append(
@@ -293,7 +293,7 @@ class TestMobileTextNavigationAcrossPages:
 
 class TestDesktopHeaderOnPeerReviewPages:
     """At desktop width the same four peer-review URLs must render the
-    desktop nav (Learn and Community dropdown triggers) and must NOT show
+    desktop nav (Community and Resources dropdown triggers) and must NOT show
     the mobile hamburger."""
 
     def test_desktop_header_renders_on_peer_review_pages(
@@ -329,11 +329,14 @@ class TestDesktopHeaderOnPeerReviewPages:
                         wait_until="domcontentloaded",
                     )
 
-                    learn_dd = page.locator("#learn-dropdown-btn")
-                    if learn_dd.count() != 1 or not learn_dd.is_visible():
+                    resources_dd = page.locator("#resources-dropdown-btn")
+                    if (
+                        resources_dd.count() != 1
+                        or not resources_dd.is_visible()
+                    ):
                         failures.append(
-                            f"{path}: desktop Learn dropdown button "
-                            "(#learn-dropdown-btn) not visible"
+                            f"{path}: desktop Resources dropdown button "
+                            "(#resources-dropdown-btn) not visible"
                         )
 
                     community_dd = page.locator("#community-dropdown-btn")
@@ -430,11 +433,11 @@ class TestHomepageMobileMenuStillWorks:
         try:
             page.goto(f"{django_server}/", wait_until="domcontentloaded")
             _open_mobile_menu(page)
-            _expand_mobile_section(page, "learn")
             _expand_mobile_section(page, "community")
+            _expand_mobile_section(page, "resources")
 
             blog = page.locator(
-                '#mobile-learn-list a[href="/blog"]'
+                '#mobile-resources-list a[href="/blog"]'
             )
             assert blog.count() == 1
             assert blog.is_visible()

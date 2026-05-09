@@ -20,6 +20,12 @@ def _extract_footer(html):
     return match.group(0)
 
 
+def _extract_desktop_primary_nav(header):
+    start = header.index('data-testid="desktop-primary-nav"')
+    end = header.index('<div class="hidden md:flex md:items-center md:gap-4">')
+    return header[start:end]
+
+
 class HeaderLinksAnonymousTest(TestCase):
     """Anonymous user lands on the marketing homepage -- header still
     points at real pages, not anchors."""
@@ -29,23 +35,26 @@ class HeaderLinksAnonymousTest(TestCase):
         # No fixtures; the anonymous homepage renders without DB content.
         pass
 
-    def test_membership_is_removed_from_primary_header_nav(self):
+    def test_membership_is_primary_header_nav(self):
         response = self.client.get("/")
         header = _extract_header(response.content.decode())
+        primary = _extract_desktop_primary_nav(header)
         membership_links = re.findall(
-            r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', header
+            r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
-        self.assertEqual(membership_links, [])
-        self.assertIn('id="learn-dropdown-btn"', header)
-        self.assertIn('id="community-dropdown-btn"', header)
+        self.assertEqual(membership_links, ["/pricing"])
+        self.assertNotIn('id="learn-dropdown-btn"', primary)
+        self.assertIn('id="community-dropdown-btn"', primary)
+        self.assertIn('id="resources-dropdown-btn"', primary)
 
-    def test_faq_is_not_a_primary_header_link(self):
+    def test_faq_is_primary_header_link(self):
         response = self.client.get("/")
         header = _extract_header(response.content.decode())
+        primary = _extract_desktop_primary_nav(header)
         faq_links = re.findall(
-            r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', header
+            r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', primary
         )
-        self.assertEqual(faq_links, [])
+        self.assertEqual(faq_links, ["/faq"])
 
 
 class HeaderLinksAuthenticatedTest(TestCase):
@@ -62,25 +71,28 @@ class HeaderLinksAuthenticatedTest(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    def test_authenticated_header_has_no_membership_text_nav(self):
+    def test_authenticated_header_has_membership_text_nav(self):
         # Use a non-home page (about) so the dashboard does not interfere
         # with the test of the header partial.
         response = self.client.get("/about")
         header = _extract_header(response.content.decode())
+        primary = _extract_desktop_primary_nav(header)
         membership_links = re.findall(
-            r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', header
+            r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
-        self.assertEqual(membership_links, [])
-        self.assertIn('id="learn-dropdown-btn"', header)
-        self.assertIn('id="community-dropdown-btn"', header)
+        self.assertEqual(membership_links, ["/pricing"])
+        self.assertNotIn('id="learn-dropdown-btn"', primary)
+        self.assertIn('id="community-dropdown-btn"', primary)
+        self.assertIn('id="resources-dropdown-btn"', primary)
 
-    def test_authenticated_header_has_no_primary_faq_link(self):
+    def test_authenticated_header_has_primary_faq_link(self):
         response = self.client.get("/about")
         header = _extract_header(response.content.decode())
+        primary = _extract_desktop_primary_nav(header)
         faq_links = re.findall(
-            r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', header
+            r'<a[^>]*href="([^"]+)"[^>]*>\s*FAQ\s*</a>', primary
         )
-        self.assertEqual(faq_links, [])
+        self.assertEqual(faq_links, ["/faq"])
 
 
 class FooterLinksTest(TestCase):

@@ -90,6 +90,13 @@ Common card padding:
 - List rows: `px-3 py-2` with `min-h-[44px]`.
 - Studio table cells: `px-4 py-3`.
 
+Variable-height detail cards:
+
+- Do not force related detail content into competing multi-column layouts when sections can have very different content height. A single vertical flow is often clearer than side-by-side blocks with awkward empty space.
+- When a section combines explanatory copy with one primary detail card, stack them as two rows: intro/description first, primary card second.
+- Inside detail cards, stack variable facts such as dates, duration, status, requirements, and next-step guidance as rows instead of splitting them into equal columns.
+- Use compact grouped rows (`gap-3` or `gap-4`) for facts; reserve grids for repeated cards of the same visual weight and predictable height.
+
 ## Breakpoints and Mobile Carousels
 
 Tailwind defaults apply: `sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px.

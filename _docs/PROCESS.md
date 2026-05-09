@@ -2,7 +2,7 @@
 
 ## Overview
 
-We use GitHub Issues to track development of the AI Shipping Labs platform. All work is tracked as issues with labels — no project boards. Four agents handle the full lifecycle from raw request to shipped code.
+We use GitHub Issues to track development of the AI Shipping Labs platform. All work is tracked as issues with labels — no project boards. Four core agents handle the full lifecycle from raw request to shipped code. A designer agent may provide audit/spec support for UI-heavy work, but does not replace any lifecycle step.
 
 ## Links
 
@@ -30,6 +30,7 @@ User creates issue     →  PM grooms        →  Engineer builds  →  Tester v
 | Agent | File | Role |
 |-------|------|------|
 | Product Manager | `.claude/agents/product-manager.md` | Grooms issues into specs (start) + user acceptance review (end) |
+| Designer | `.claude/agents/designer.md` | Audits UI surfaces against `_docs/design-system.md`; produces screenshot-backed findings only |
 | Software Engineer | `.claude/agents/software-engineer.md` | Implements code + tests, does NOT commit until approved |
 | Tester | `.claude/agents/tester.md` | Runs all tests, verifies acceptance criteria technically |
 | On-Call Engineer | `.claude/agents/oncall-engineer.md` | Monitors CI/CD after push, fixes failures |
@@ -92,6 +93,7 @@ Orchestrator picks groomed issue
 - Stay in the orchestrator role. Do not personally perform active issue role work when a product-manager, software-engineer, tester, or on-call agent can own it. The orchestrator coordinates, unblocks, reviews handoffs, and launches the next role agent.
 - Launch role agents asynchronously/non-blocking by default. Do not wait on a subagent unless its result is the immediate blocker for the next orchestrator action; keep grooming, triaging, or advancing independent issues while agents work, so one stuck agent does not stall the pipeline.
 - Treat new user feedback, links, recordings, screenshots, or raw requests as intake. Create raw issues when needed, then launch a product-manager agent to groom them instead of grooming them inline, unless the user explicitly asks the orchestrator to edit the issue text directly.
+- For UI-heavy issues, the orchestrator or product manager may invoke the designer agent before grooming or acceptance review. The designer produces a report only; the product manager still owns acceptance criteria and the software engineer still owns implementation.
 - Groom any `needs grooming` issues first (launch product-manager in grooming mode)
 - Pick the next groomed issues (2 at a time, in parallel when independent)
 - Before launching any SWE agent in an isolated worktree, ensure `main` has no uncommitted changes. If there are, commit them (or stash with the user's approval) first. Worktrees are created from `HEAD`, so uncommitted main changes are invisible to the agent; when the agent's branch merges back, it will overwrite or conflict with that work. Run `git status` and resolve before invoking the agent.

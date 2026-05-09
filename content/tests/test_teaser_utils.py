@@ -12,12 +12,12 @@ The truncator must:
 * No-op on empty input.
 """
 
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 from content.utils.teaser import first_sentence, truncate_to_words
 
 
-class TruncateToWordsTest(TestCase):
+class TruncateToWordsTest(SimpleTestCase):
 
     def test_empty_string_returns_empty(self):
         self.assertEqual(truncate_to_words('', 50), '')
@@ -143,7 +143,7 @@ class TruncateToWordsTest(TestCase):
         self.assertIn('one two three', result)
 
 
-class FirstSentenceTest(TestCase):
+class FirstSentenceTest(SimpleTestCase):
 
     def test_empty_returns_empty(self):
         self.assertEqual(first_sentence(''), '')

@@ -9,7 +9,7 @@ Covers:
 - Old numeric URLs return 404
 """
 
-from django.test import Client, TestCase
+from django.test import Client, SimpleTestCase, TestCase
 
 from content.models import Course, Module, Unit
 from integrations.services.github import (
@@ -19,7 +19,7 @@ from integrations.services.github import (
 )
 
 
-class ExtractSortOrderTest(TestCase):
+class ExtractSortOrderTest(SimpleTestCase):
     """Test extract_sort_order helper function."""
 
     def test_numeric_prefix(self):
@@ -44,7 +44,7 @@ class ExtractSortOrderTest(TestCase):
         self.assertEqual(extract_sort_order('00-intro'), 0)
 
 
-class DeriveSlugTest(TestCase):
+class DeriveSlugTest(SimpleTestCase):
     """Test derive_slug helper function.
 
     ``derive_slug`` strips an optional ``NN-`` numeric prefix and the
@@ -73,7 +73,7 @@ class DeriveSlugTest(TestCase):
                 self.assertEqual(derive_slug(name), expected)
 
 
-class RequiredFieldsTest(TestCase):
+class RequiredFieldsTest(SimpleTestCase):
     """Test that sort_order is no longer required for module and unit."""
 
     def test_module_required_fields_no_sort_order(self):

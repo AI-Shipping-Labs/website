@@ -9,7 +9,7 @@ helper is ``_is_content_file`` plus ``DebouncedSyncer``.
 import threading
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from integrations.management.commands.watch_content import (
     TIERS_SENTINEL,
@@ -19,7 +19,7 @@ from integrations.management.commands.watch_content import (
 from integrations.models import ContentSource
 
 
-class IsContentFileTest(TestCase):
+class IsContentFileTest(SimpleTestCase):
     """``_is_content_file`` recognizes content files."""
 
     def test_md_file_is_content(self):

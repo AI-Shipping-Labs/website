@@ -51,8 +51,8 @@
               <img src="{{ item.download.cover_image_url }}" alt="{{ item.download.title }}" class="h-full w-full object-cover transition-transform group-hover:scale-105">
             </div>
             {% endif %}
-            <div class="p-6 pb-3">
-              <div class="flex items-center gap-2 mb-3">
+            <div class="p-4 pb-3 sm:p-5 sm:pb-3">
+              <div class="mb-3 flex flex-wrap items-center gap-2">
                 <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ item.download.file_type_color }}">
                   {{ item.download.file_type_label }}
                 </span>
@@ -64,7 +64,7 @@
                 {% endif %}
               </div>
 
-              <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+              <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
                 {{ item.download.title }}
               </h2>
 
@@ -79,12 +79,15 @@
           interactive as their own anchors. event.stopPropagation() on tag
           chips is defensive — they're already siblings, not children.
           {% endcomment %}
-          <div class="px-6 pb-6">
+          <div class="px-4 pb-4 sm:px-5 sm:pb-5">
             {% if item.download.tags %}
-            <div class="flex flex-wrap gap-1.5">
-              {% for tag in item.download.tags %}
+            <div class="flex flex-wrap gap-1.5" data-testid="download-card-tags">
+              {% for tag in item.download.tags|slice:":3" %}
               <a href="{% tag_add_url base_path selected_tags tag %}" class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors" onclick="event.stopPropagation();">{{ tag }}</a>
               {% endfor %}
+              {% if item.download.tags|length > 3 %}
+              <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.download.tags|length|add:'-3' }} more download tags">+{{ item.download.tags|length|add:"-3" }}</span>
+              {% endif %}
             </div>
             {% endif %}
 
@@ -94,7 +97,7 @@
                 <div class="rounded-lg border border-accent/30 bg-accent/5 p-4 text-center">
                   <p class="text-sm text-muted-foreground mb-2">Enter your email to download for free</p>
                   <a href="/accounts/signup?next=/api/downloads/{{ item.download.slug }}/file"
-                     class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                     class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
                     <i data-lucide="mail" class="h-4 w-4"></i>
                     Sign Up to Download
                   </a>
@@ -102,7 +105,7 @@
               {% elif item.has_access %}
                 <!-- Authorized: show download button -->
                 <a href="/api/downloads/{{ item.download.slug }}/file"
-                   class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                   class="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
                   <i data-lucide="download" class="h-4 w-4"></i>
                   Download
                 </a>
@@ -111,7 +114,7 @@
                 <div class="rounded-lg border border-border bg-muted/30 p-4 text-center">
                   <p class="text-sm text-muted-foreground mb-2">{{ item.cta_message }}</p>
                   <a href="/pricing"
-                     class="inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10">
+                     class="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-accent/50 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/10">
                     <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
                     View Pricing
                   </a>

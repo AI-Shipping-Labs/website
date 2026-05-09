@@ -25,31 +25,31 @@
         {% for workshop in workshops %}
         {% with workshop_primary_instructor=workshop.primary_instructor %}
         <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50" data-testid="workshop-card">
-          <a href="{{ workshop.get_absolute_url }}" class="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <a href="{{ workshop.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %} h-full">
             {% if workshop.pages_required_level >= 10 %}
               {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% else %}
               {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% endif %}
-            <div class="min-w-0 p-5 sm:p-6">
-              <div class="flex flex-wrap items-center gap-2 mb-3">
+            <div class="min-w-0 p-4 sm:p-5">
+              <div class="mb-3 flex flex-wrap items-center gap-2">
                 <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
                   <i data-lucide="graduation-cap" class="h-3 w-3"></i>
                   Workshop
                 </span>
                 {% if workshop.pages_required_level >= 10 %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
+                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
                   <i data-lucide="lock" class="h-3 w-3"></i>
                   {{ workshop.pages_required_level|required_tier_label }}
                 </span>
                 {% else %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-free-badge">
+                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="workshop-free-badge">
                   <i data-lucide="badge-check" class="h-3 w-3"></i>
                   Free
                 </span>
                 {% endif %}
               </div>
-              <h2 class="line-clamp-3 break-words text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
+              <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
                 {{ workshop.title }}
               </h2>
               <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -68,10 +68,13 @@
               <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ workshop.description_html|striptags|truncatechars:140 }}</p>
               {% endif %}
               {% if workshop.tags %}
-              <div class="mt-3 flex flex-wrap gap-1.5">
-                {% for tag in workshop.tags %}
+              <div class="mt-3 flex flex-wrap gap-1.5" data-testid="workshop-card-tags">
+                {% for tag in workshop.tags|slice:":3" %}
                 <span class="max-w-full truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
                 {% endfor %}
+                {% if workshop.tags|length > 3 %}
+                <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ workshop.tags|length|add:'-3' }} more workshop tags">+{{ workshop.tags|length|add:"-3" }}</span>
+                {% endif %}
               </div>
               {% endif %}
             </div>

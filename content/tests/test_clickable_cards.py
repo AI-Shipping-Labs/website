@@ -20,7 +20,7 @@ from html.parser import HTMLParser
 
 from django.test import Client, TestCase
 
-from content.models import Article, CuratedLink, Download, Project, Tutorial
+from content.models import Article, Course, CuratedLink, Download, Project, Tutorial, Workshop
 from events.models import Event
 
 # Class string emitted by ``templates/content/_clickable_card_classes.html``.
@@ -145,6 +145,18 @@ class BlogListClickableCardTest(TestCase):
             'just rendered outside the wrapping card anchor.',
         )
 
+    def test_blog_card_caps_visible_tag_chips(self):
+        """Long tag lists should not dominate the compact listing card."""
+        self.article.tags = ['one', 'two', 'three', 'four', 'five']
+        self.article.save()
+        response = self.client.get('/blog')
+        body = response.content.decode()
+        tags_block = body.split('data-testid="blog-card-tags"', 1)[1].split('</div>', 1)[0]
+        self.assertIn('one', tags_block)
+        self.assertIn('three', tags_block)
+        self.assertIn('+2', tags_block)
+        self.assertNotIn('four', tags_block)
+
 
 class DownloadsListClickableCardTest(TestCase):
     """Visitor clicks the empty area of a download card and reaches the
@@ -247,6 +259,103 @@ class DownloadsListClickableCardTest(TestCase):
             'one for the body wrapper, one for the inner Sign Up CTA. '
             f'Got: {len(signup_links)}',
         )
+
+    def test_download_card_caps_visible_tag_chips(self):
+        Download.objects.create(
+            title='Many Tags',
+            slug='many-tags',
+            description='Tag cap test.',
+            file_url='https://example.com/x.pdf',
+            file_type='pdf',
+            required_level=0,
+            tags=['one', 'two', 'three', 'four'],
+            published=True,
+        )
+        response = self.client.get('/downloads')
+        body = response.content.decode()
+        tags_block = body.split('data-testid="download-card-tags"', 1)[1].split('</div>', 1)[0]
+        self.assertIn('one', tags_block)
+        self.assertIn('three', tags_block)
+        self.assertIn('+1', tags_block)
+        self.assertNotIn('four', tags_block)
+
+
+class CatalogTagDensityTest(TestCase):
+    """Compact catalog cards cap visible tags and expose an overflow chip."""
+
+    def test_courses_card_caps_visible_tag_chips(self):
+        Course.objects.create(
+            title='Course With Many Tags',
+            slug='many-course-tags',
+            status='published',
+            tags=['one', 'two', 'three', 'four'],
+        )
+        response = self.client.get('/courses')
+        body = response.content.decode()
+        tags_block = body.split('data-testid="course-card-tags"', 1)[1].split('</div>', 1)[0]
+        self.assertIn('one', tags_block)
+        self.assertIn('three', tags_block)
+        self.assertIn('+1', tags_block)
+        self.assertNotIn('four', tags_block)
+
+    def test_workshops_card_caps_visible_tag_chips(self):
+        Workshop.objects.create(
+            title='Workshop With Many Tags',
+            slug='many-workshop-tags',
+            status='published',
+            date=datetime.date(2026, 4, 21),
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=20,
+            tags=['one', 'two', 'three', 'four', 'five'],
+        )
+        response = self.client.get('/workshops')
+        body = response.content.decode()
+        tags_block = body.split('data-testid="workshop-card-tags"', 1)[1].split('</div>', 1)[0]
+        self.assertIn('one', tags_block)
+        self.assertIn('three', tags_block)
+        self.assertIn('+2', tags_block)
+        self.assertNotIn('four', tags_block)
+
+    def test_resources_card_caps_visible_tag_chips(self):
+        CuratedLink.objects.create(
+            item_id='many-resource-tags',
+            title='Many Resource Tags',
+            url='https://example.com',
+            description='Tag cap test.',
+            category='tools',
+            required_level=0,
+            published=True,
+            tags=['one', 'two', 'three', 'four'],
+        )
+        response = self.client.get('/resources')
+        body = response.content.decode()
+        resource_card = body.split('Many Resource Tags', 1)[1].split('</a>', 1)[0]
+        self.assertIn('one', resource_card)
+        self.assertIn('three', resource_card)
+        self.assertIn('+1', resource_card)
+        self.assertNotIn('four', resource_card)
+
+    def test_past_event_recording_tags_are_capped_and_not_nested(self):
+        Event.objects.create(
+            title='Many Event Tags',
+            slug='many-event-tags',
+            description='Tag cap test.',
+            start_datetime=datetime.datetime(2026, 1, 3, tzinfo=datetime.UTC),
+            status='completed',
+            recording_url='https://youtu.be/abc',
+            tags=['one', 'two', 'three', 'four'],
+            published=True,
+        )
+        response = self.client.get('/events?filter=past')
+        body = response.content.decode()
+        tags_block = body.split('data-testid="event-card-tags"', 1)[1].split('</div>', 1)[0]
+        self.assertIn('one', tags_block)
+        self.assertIn('three', tags_block)
+        self.assertIn('+1', tags_block)
+        self.assertNotIn('four', tags_block)
+        scan = _scan_anchors(body)
+        self.assertEqual(scan.nested_anchor_hrefs, [])
 
 
 class HomepageRecordingsCardTest(TestCase):

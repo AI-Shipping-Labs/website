@@ -10,7 +10,7 @@ representative helper.
 
 import datetime
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from content.markdown_extensions import (
     MermaidExtension,
@@ -23,7 +23,7 @@ from content.models.workshop import render_markdown as render_workshop_md
 from events.models.event import render_markdown as render_event_md
 
 
-class MermaidExtensionExportsTest(TestCase):
+class MermaidExtensionExportsTest(SimpleTestCase):
     """The extension module must expose the two public symbols the spec
     names. Importing them from the package init also has to work, since
     the helpers do exactly that."""
@@ -33,7 +33,7 @@ class MermaidExtensionExportsTest(TestCase):
         self.assertTrue(callable(MermaidPreprocessor))
 
 
-class RenderMermaidFenceTest(TestCase):
+class RenderMermaidFenceTest(SimpleTestCase):
     """``` ```mermaid ``` ``` fences must turn into a single
     ``<div class="mermaid">…</div>`` and never reach codehilite.
     """
@@ -70,7 +70,7 @@ class RenderMermaidFenceTest(TestCase):
         self.assertNotIn('<p><div class="mermaid"', html)
 
 
-class RenderNonMermaidFenceTest(TestCase):
+class RenderNonMermaidFenceTest(SimpleTestCase):
     """A fence in any other language must keep its existing codehilite
     behaviour. This is the regression guard for the rest of the site."""
 
@@ -87,7 +87,7 @@ class RenderNonMermaidFenceTest(TestCase):
         self.assertNotIn('<div class="mermaid">', html)
 
 
-class HtmlEscapingTest(TestCase):
+class HtmlEscapingTest(SimpleTestCase):
     """Special characters in the mermaid source must be escaped so the
     preprocessor never emits invalid HTML or smuggles a <script> tag
     through to the browser."""
@@ -126,7 +126,7 @@ class HtmlEscapingTest(TestCase):
         self.assertIn('&quot;Quoted&quot;', html)
 
 
-class MixedContentTest(TestCase):
+class MixedContentTest(SimpleTestCase):
     """A mermaid fence and a python fence in the same document each
     render through the appropriate path."""
 
@@ -148,7 +148,7 @@ class MixedContentTest(TestCase):
         self.assertNotIn('x = 1', html.split('class="codehilite"')[0])
 
 
-class SharedAcrossHelpersTest(TestCase):
+class SharedAcrossHelpersTest(SimpleTestCase):
     """All four ``render_markdown`` helpers share the same extension
     list, so one mermaid fence rendered through each must produce the
     same div.mermaid output."""

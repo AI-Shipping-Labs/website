@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import uuid
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from content.models import Course, Module, Unit
 from integrations.models import ContentSource
@@ -31,7 +31,7 @@ from integrations.services.github import (
 )
 
 
-class MatchesIgnorePatternsTest(TestCase):
+class MatchesIgnorePatternsTest(SimpleTestCase):
     """Unit tests for the glob matcher used by course sync."""
 
     def test_empty_patterns_never_match(self):
@@ -79,7 +79,7 @@ class MatchesIgnorePatternsTest(TestCase):
         self.assertFalse(_matches_ignore_patterns('x.md', ['']))
 
 
-class ExtractReadmeTitleTest(TestCase):
+class ExtractReadmeTitleTest(SimpleTestCase):
     """Unit tests for pulling the H1 out of a README body."""
 
     def test_first_h1_is_used(self):
@@ -109,7 +109,7 @@ class ExtractReadmeTitleTest(TestCase):
         )
 
 
-class DeriveReadmeContentIdTest(TestCase):
+class DeriveReadmeContentIdTest(SimpleTestCase):
     """The derived UUID must be stable and distinct per module."""
 
     def test_stable_across_calls(self):

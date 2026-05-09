@@ -16,7 +16,7 @@ Covers:
 - Anchor fragments are preserved
 """
 
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 from content.utils.md_links import (
     rewrite_cross_workshop_md_links,
@@ -41,7 +41,7 @@ COURSE_LOOKUP = {
 }
 
 
-class RewriteMdLinksTest(TestCase):
+class RewriteMdLinksTest(SimpleTestCase):
     """Unit tests for resolution rules in rewrite_md_links."""
 
     def test_sibling_md_link_resolves_to_platform_url(self):
@@ -271,7 +271,7 @@ WORKSHOP_LOOKUP = {
 }
 
 
-class RewriteWorkshopMdLinksTest(TestCase):
+class RewriteWorkshopMdLinksTest(SimpleTestCase):
     """Unit tests for resolution rules in rewrite_workshop_md_links (issue #301)."""
 
     workshop_slug = 'end-to-end-agent-deployment'
@@ -488,7 +488,7 @@ WORKSHOP_LOOKUP_WITH_README = {
 }
 
 
-class RewriteWorkshopMdLinksReadmeVirtualEntryTest(TestCase):
+class RewriteWorkshopMdLinksReadmeVirtualEntryTest(SimpleTestCase):
     """Issue #304: README.md (and copy_file) virtual entries route to the
     workshop landing URL with the workshop title as the substituted label."""
 
@@ -605,7 +605,7 @@ CROSS_WORKSHOP_LOOKUP = {
 WORKSHOPS_REPO = 'AI-Shipping-Labs/workshops'
 
 
-class RewriteCrossWorkshopMdLinksTest(TestCase):
+class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
     """Unit tests for ``rewrite_cross_workshop_md_links`` (issue #526).
 
     Authors link ACROSS workshops in two shapes today: ``..``-relative
@@ -937,7 +937,7 @@ class RewriteCrossWorkshopMdLinksTest(TestCase):
         )
 
 
-class RewriteWorkshopMdLinksCrossWorkshopWarningSuppressionTest(TestCase):
+class RewriteWorkshopMdLinksCrossWorkshopWarningSuppressionTest(SimpleTestCase):
     """Issue #526: when a cross_workshop_lookup is provided, the
     intra-workshop rewriter must NOT emit "Cross-workshop or out-of-tree
     link ... left as-is" warnings for ``..``-prefixed links — the

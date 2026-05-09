@@ -21,7 +21,7 @@ import tempfile
 import uuid
 from datetime import date
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from content.models import Article, Course, Module, Unit
 from content.utils.h1 import strip_leading_title_h1
@@ -29,7 +29,7 @@ from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
 
-class StripLeadingTitleH1Test(TestCase):
+class StripLeadingTitleH1Test(SimpleTestCase):
     """Pure-function tests for the H1-stripping utility."""
 
     # ---- Acceptance criterion 1: exact match -> stripped ------------------

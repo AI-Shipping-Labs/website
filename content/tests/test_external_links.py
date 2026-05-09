@@ -12,7 +12,7 @@ where links must be left ALONE (anchor, relative, root-relative,
 same-domain, mailto, hand-written ``target``) are where regressions hide.
 """
 
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, override_settings
 
 from content.markdown_extensions import (
     ExternalLinksExtension,
@@ -24,7 +24,7 @@ from content.models.workshop import render_markdown as render_workshop_md
 from events.models.event import render_markdown as render_event_md
 
 
-class ExternalLinksExportsTest(TestCase):
+class ExternalLinksExportsTest(SimpleTestCase):
     """Public symbols required by the spec must be importable from the
     extension module AND the package init."""
 
@@ -45,7 +45,7 @@ class ExternalLinksExportsTest(TestCase):
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
-class ExternalLinkRewriteTest(TestCase):
+class ExternalLinkRewriteTest(SimpleTestCase):
     """The happy path: an external link must gain target=_blank and a
     rel attribute that contains the noopener token."""
 
@@ -71,7 +71,7 @@ class ExternalLinkRewriteTest(TestCase):
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
-class InternalLinkLeftAloneTest(TestCase):
+class InternalLinkLeftAloneTest(SimpleTestCase):
     """Internal links must not gain ``target`` or ``rel`` attributes.
     These cases are the regression guard for the rewrite logic."""
 
@@ -120,7 +120,7 @@ class InternalLinkLeftAloneTest(TestCase):
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
-class AuthorOverridesPreservedTest(TestCase):
+class AuthorOverridesPreservedTest(SimpleTestCase):
     """Authors can override the default behaviour with ``target="_self"``
     or by writing their own raw ``<a>`` tag — the extension must respect
     those choices."""
@@ -155,7 +155,7 @@ class AuthorOverridesPreservedTest(TestCase):
         self.assertIn('rel="nofollow noopener"', html)
 
 
-class SiteHostDetectionTest(TestCase):
+class SiteHostDetectionTest(SimpleTestCase):
     """Same-domain detection must use ``settings.SITE_BASE_URL`` and
     treat both apex + www as internal. An unset SITE_BASE_URL means
     everything absolute is external (the safe default)."""
@@ -214,7 +214,7 @@ class SiteHostDetectionTest(TestCase):
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
-class MermaidCoexistenceTest(TestCase):
+class MermaidCoexistenceTest(SimpleTestCase):
     """The external_links treeprocessor must not interfere with the
     mermaid stash. Mermaid blocks become ``<div class="mermaid">``
     placeholders before parse, so the treeprocessor never sees ``<a>``
@@ -247,7 +247,7 @@ class MermaidCoexistenceTest(TestCase):
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
-class SharedAcrossHelpersTest(TestCase):
+class SharedAcrossHelpersTest(SimpleTestCase):
     """All four ``render_markdown`` helpers share the same extension
     list, so an external link rendered through each must be rewritten
     identically. This is the smoke-test for AC #3 (every helper wired
@@ -277,7 +277,7 @@ class SharedAcrossHelpersTest(TestCase):
 
 
 @override_settings(SITE_BASE_URL='https://aishippinglabs.com')
-class IdempotenceTest(TestCase):
+class IdempotenceTest(SimpleTestCase):
     """Re-running the rewrite over already-rewritten output must be a
     no-op (no doubled noopener tokens, no target reset). This matters
     because content can be re-saved during sync and the rendered HTML

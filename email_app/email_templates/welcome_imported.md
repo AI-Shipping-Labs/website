@@ -19,4 +19,4 @@ You can get started in either of these ways:
 - [Set your password]({{ password_reset_url }})
 - [Sign in to AI Shipping Labs]({{ sign_in_url }})
 
-If this was unexpected, use the unsubscribe link below or reply to this email to ask for account deletion.
+If this was unexpected, reply to this email to ask for account deletion.

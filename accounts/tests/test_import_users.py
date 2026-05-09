@@ -486,7 +486,9 @@ class WelcomeImportedEmailTaskTest(TestCase):
         self.assertIn("Set your password", html_body)
         self.assertIn("/api/password-reset?token=", html_body)
         self.assertIn("Sign in to AI Shipping Labs", html_body)
-        self.assertIn("/api/unsubscribe?token=", html_body)
+        self.assertEqual(_mock_send.call_args.kwargs["email_kind"], "transactional")
+        self.assertIsNone(_mock_send.call_args.kwargs["unsubscribe_url"])
+        self.assertNotIn("/api/unsubscribe?token=", html_body)
 
     @patch("email_app.services.email_service.EmailService._send_ses")
     def test_unsubscribed_user_is_skipped(self, mock_send):

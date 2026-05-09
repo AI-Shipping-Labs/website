@@ -47,7 +47,7 @@
           <p class="text-sm text-foreground" data-testid="sprint-cta-enrolled">You're enrolled.</p>
           <div class="mt-4 flex flex-wrap items-center gap-3">
             {% if viewer_plan %}
-            <a href="{% url 'my_plan_detail' plan_id=viewer_plan.pk %}"
+            <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}"
                class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors"
                data-testid="sprint-cta-open-plan">
               Open my plan

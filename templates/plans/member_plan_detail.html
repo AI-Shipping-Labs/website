@@ -22,16 +22,23 @@
 
   <section class="relative min-h-screen overflow-hidden pt-24">
     <div class="absolute inset-0 hero-gradient"></div>
-    <div class="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+    <div class="relative mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
 
       <header class="mb-8">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">{{ sprint.name }}</p>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ sprint.name }}</p>
         <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="plan-owner-name">
           {{ plan.member|display_name }}'s plan
         </h1>
-        <p class="text-sm text-muted-foreground mt-2">
-          <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}" class="text-accent hover:underline">&larr; Back to cohort board</a>
-        </p>
+        <nav class="mt-5 flex flex-wrap gap-3 text-sm" aria-label="Sprint plan navigation">
+          <a href="{% url 'sprint_detail' sprint_slug=sprint.slug %}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+            <i data-lucide="arrow-left" class="h-4 w-4"></i>
+            Sprint detail
+          </a>
+          <a href="{% url 'cohort_board' sprint_slug=sprint.slug %}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+            <i data-lucide="users" class="h-4 w-4"></i>
+            Cohort board
+          </a>
+        </nav>
       </header>
 
       {% include "plans/_plan_body.html" %}

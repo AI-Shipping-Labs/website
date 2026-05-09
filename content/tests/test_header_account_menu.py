@@ -96,7 +96,10 @@ class HeaderAccountMenuTest(TestCase):
             visibility="private",
         )
         staff_html = self._get_header(staff)
-        plan_href = reverse("my_plan_detail", kwargs={"plan_id": plan.pk})
+        plan_href = reverse(
+            "my_plan_detail",
+            kwargs={"sprint_slug": self.sprint.slug, "plan_id": plan.pk},
+        )
         self.assertIn(f'href="{plan_href}"', staff_html)
         self.assertIn('data-testid="header-plan-link"', staff_html)
         self.assertIn('data-testid="mobile-header-plan-link"', staff_html)

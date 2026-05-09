@@ -24,6 +24,10 @@ class MyPlanDetailAccessTest(TestCase):
             name='May 2026', slug='may-2026',
             start_date=datetime.date(2026, 5, 1),
         )
+        cls.other_sprint = Sprint.objects.create(
+            name='June 2026', slug='june-2026',
+            start_date=datetime.date(2026, 6, 1),
+        )
         cls.owner = User.objects.create_user(
             email='owner@test.com', password='pw',
         )
@@ -39,21 +43,60 @@ class MyPlanDetailAccessTest(TestCase):
 
     def test_my_plan_detail_owner_returns_200(self):
         self.client.force_login(self.owner)
-        url = reverse('my_plan_detail', kwargs={'plan_id': self.owner_plan.pk})
+        url = reverse(
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': self.owner_plan.pk,
+            },
+        )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
     def test_my_plan_detail_non_owner_returns_404(self):
         self.client.force_login(self.teammate)
-        url = reverse('my_plan_detail', kwargs={'plan_id': self.owner_plan.pk})
+        url = reverse(
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': self.owner_plan.pk,
+            },
+        )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
     def test_my_plan_detail_anonymous_redirects_to_login(self):
-        url = reverse('my_plan_detail', kwargs={'plan_id': self.owner_plan.pk})
+        url = reverse(
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': self.owner_plan.pk,
+            },
+        )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response['Location'])
+
+    def test_my_plan_detail_wrong_sprint_slug_returns_404(self):
+        self.client.force_login(self.owner)
+        url = reverse(
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': self.other_sprint.slug,
+                'plan_id': self.owner_plan.pk,
+            },
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_old_account_plan_urls_are_not_compatible(self):
+        self.client.force_login(self.owner)
+        detail_response = self.client.get(f'/account/plan/{self.owner_plan.pk}')
+        edit_response = self.client.get(
+            f'/account/plan/{self.owner_plan.pk}/edit/',
+        )
+        self.assertEqual(detail_response.status_code, 404)
+        self.assertEqual(edit_response.status_code, 404)
 
 
 class VisibilityToggleTest(TestCase):
@@ -76,7 +119,8 @@ class VisibilityToggleTest(TestCase):
 
     def _toggle_url(self):
         return reverse(
-            'update_plan_visibility', kwargs={'plan_id': self.plan.pk},
+            'update_plan_visibility',
+            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
         )
 
     def test_visibility_toggle_to_cohort(self):
@@ -85,7 +129,10 @@ class VisibilityToggleTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response['Location'],
-            reverse('my_plan_detail', kwargs={'plan_id': self.plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
+            ),
         )
         self.plan.refresh_from_db()
         self.assertEqual(self.plan.visibility, 'cohort')

@@ -11,6 +11,7 @@ from plans.views.cohort import (
     cohort_board,
     member_plan_detail,
     my_plan_detail,
+    my_plan_edit,
     update_plan_visibility,
 )
 from plans.views.notes import (
@@ -51,37 +52,40 @@ urlpatterns = [
         name='member_plan_detail',
     ),
     path(
-        'sprints/<slug:sprint_slug>',
-        sprint_detail,
-        name='sprint_detail',
-    ),
-    path(
-        'account/plan/<int:plan_id>',
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>',
         my_plan_detail,
         name='my_plan_detail',
     ),
     path(
-        'account/plan/<int:plan_id>/visibility',
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/edit',
+        my_plan_edit,
+        name='my_plan_edit',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/visibility',
         update_plan_visibility,
         name='update_plan_visibility',
     ),
-    # Participant week notes (issue #499). Owner-only CRUD that maps
-    # to the existing ``WeekNote`` model -- no parallel comment-style
-    # table. Trailing slashes are intentionally absent to match the
-    # ``/account/...`` style already used above.
+    # Participant week notes (issue #499), now scoped to the sprint
+    # workspace URL so form submits keep members in sprint context.
     path(
-        'account/plan/<int:plan_id>/weeks/<int:week_id>/notes',
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/weeks/<int:week_id>/notes',
         week_note_create,
         name='week_note_create',
     ),
     path(
-        'account/plan/<int:plan_id>/week-notes/<int:note_id>',
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/week-notes/<int:note_id>',
         week_note_update,
         name='week_note_update',
     ),
     path(
-        'account/plan/<int:plan_id>/week-notes/<int:note_id>/delete',
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/week-notes/<int:note_id>/delete',
         week_note_delete,
         name='week_note_delete',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>',
+        sprint_detail,
+        name='sprint_detail',
     ),
 ]

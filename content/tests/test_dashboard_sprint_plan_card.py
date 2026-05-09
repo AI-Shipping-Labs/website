@@ -44,7 +44,10 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
             response, 'data-testid="account-sprint-plan-card"',
         )
         # The Open my plan CTA points at the read-only owner view.
-        expected_href = reverse('my_plan_detail', kwargs={'plan_id': plan.pk})
+        expected_href = reverse(
+            'my_plan_detail',
+            kwargs={'sprint_slug': sprint.slug, 'plan_id': plan.pk},
+        )
         self.assertContains(response, f'href="{expected_href}"')
         # Sprint metadata is rendered.
         self.assertContains(response, 'August 2026')
@@ -169,7 +172,10 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         )
         self.assertContains(
             response,
-            reverse('my_plan_detail', kwargs={'plan_id': plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={'sprint_slug': current.slug, 'plan_id': plan.pk},
+            ),
         )
         self.assertContains(response, 'Other Sprint')
         self.assertContains(

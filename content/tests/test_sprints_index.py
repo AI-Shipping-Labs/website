@@ -134,7 +134,10 @@ class SprintsIndexTest(TestCase):
         self.assertContains(response, 'Open my plan')
         self.assertContains(
             response,
-            reverse('my_plan_detail', kwargs={'plan_id': plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={'sprint_slug': sprint.slug, 'plan_id': plan.pk},
+            ),
         )
 
     def test_enrolled_member_without_plan_cta_points_to_board(self):

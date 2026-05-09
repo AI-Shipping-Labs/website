@@ -87,7 +87,7 @@
         </p>
         {% endif %}
         <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-5">
-          <a href="{% url 'my_plan_detail' plan_id=plan.pk %}"
+          <a href="{% url 'my_plan_detail' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"
              class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
              data-testid="account-sprint-plan-open">
             <i data-lucide="arrow-right-circle" class="h-4 w-4"></i>

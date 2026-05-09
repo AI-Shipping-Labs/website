@@ -1,10 +1,10 @@
 """Tests for participant week-note CRUD endpoints (issue #499).
 
-Covers the three URL routes added in ``plans/urls.py``:
+Covers the three sprint-scoped URL routes in ``plans/urls.py``:
 
-- ``POST /account/plan/<plan_id>/weeks/<week_id>/notes``
-- ``POST /account/plan/<plan_id>/week-notes/<note_id>`` (update)
-- ``POST /account/plan/<plan_id>/week-notes/<note_id>/delete``
+- ``POST /sprints/<slug>/plan/<plan_id>/weeks/<week_id>/notes``
+- ``POST /sprints/<slug>/plan/<plan_id>/week-notes/<note_id>`` (update)
+- ``POST /sprints/<slug>/plan/<plan_id>/week-notes/<note_id>/delete``
 
 Plus the rendering invariants on the owner page (notes appear under
 the right week, newest first; teammate cohort view shows notes
@@ -57,7 +57,11 @@ class WeekNoteCreateTest(TestCase):
     def _create_url(self, plan, week):
         return reverse(
             'week_note_create',
-            kwargs={'plan_id': plan.pk, 'week_id': week.pk},
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': plan.pk,
+                'week_id': week.pk,
+            },
         )
 
     def test_owner_can_create_note(self):
@@ -145,13 +149,21 @@ class WeekNoteUpdateDeleteTest(TestCase):
     def _update_url(self, plan, note):
         return reverse(
             'week_note_update',
-            kwargs={'plan_id': plan.pk, 'note_id': note.pk},
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': plan.pk,
+                'note_id': note.pk,
+            },
         )
 
     def _delete_url(self, plan, note):
         return reverse(
             'week_note_delete',
-            kwargs={'plan_id': plan.pk, 'note_id': note.pk},
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': plan.pk,
+                'note_id': note.pk,
+            },
         )
 
     def test_owner_can_update_own_note(self):
@@ -248,7 +260,13 @@ class MyPlanRendersWeekNotesTest(TestCase):
     def test_owner_page_renders_notes_with_edit_form(self):
         self.client.force_login(self.owner)
         response = self.client.get(
-            reverse('my_plan_detail', kwargs={'plan_id': self.plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'OLDEST_NOTE_MARKER')
@@ -263,7 +281,13 @@ class MyPlanRendersWeekNotesTest(TestCase):
     def test_owner_page_orders_notes_newest_first(self):
         self.client.force_login(self.owner)
         response = self.client.get(
-            reverse('my_plan_detail', kwargs={'plan_id': self.plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
         )
         body = response.content.decode('utf-8')
         new_pos = body.find('NEWEST_NOTE_MARKER')
@@ -283,7 +307,13 @@ class MyPlanRendersWeekNotesTest(TestCase):
         )
         self.client.force_login(self.owner)
         response = self.client.get(
-            reverse('my_plan_detail', kwargs={'plan_id': self.plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'SECRET_INTERNAL_DETAIL')

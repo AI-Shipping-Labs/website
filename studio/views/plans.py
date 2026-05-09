@@ -1,4 +1,4 @@
-"""Studio views for managing personal sprint plans (issues #432, #434, #444).
+"""Studio views for managing personal sprint plans (issues #432, #434).
 
 The form-based CRUD pages from #432 (list / new / detail / note) live
 unchanged here. ``plan_edit`` was replaced in #434 with a thin
@@ -7,12 +7,10 @@ writes from that page go through the JSON API in #433. The view is
 intentionally GET-only -- there is no ``request.POST`` handling, no
 ``Save`` button, and no parallel reorder endpoint inside Studio.
 
-Issue #444 extracts the editor body into ``_editor_body.html`` and the
-context-build into ``studio.services.plan_editor.build_plan_editor_context``
-so the member-facing ``/account/plan/<id>/edit/`` view can include the
-SAME partial rather than introducing a parallel editor surface. The
-token name parameter (``studio-plan-editor`` here, ``member-plan-editor``
-in the member view) is the only difference.
+Issue #444 extracted the editor body into ``_editor_body.html`` and the
+context-build into ``studio.services.plan_editor.build_plan_editor_context``.
+Member-facing plan workspaces now use sprint-scoped routes and do not
+include this Studio editor surface.
 
 Interview-note visibility is enforced at the queryset layer
 (:meth:`plans.models.InterviewNoteQuerySet.visible_to`). The plan detail

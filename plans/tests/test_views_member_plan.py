@@ -76,7 +76,10 @@ class MemberPlanDetailTest(TestCase):
         )
         my_plan_url = reverse(
             'my_plan_detail',
-            kwargs={'plan_id': self.alice_plan_cohort.pk},
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': self.alice_plan_cohort.pk,
+            },
         )
         response = self.client.get(url)
         self.assertRedirects(response, my_plan_url, fetch_redirect_response=False)
@@ -292,11 +295,27 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
             plan=cls.plan,
             description='Book **review**',
         )
+        cls.linked_resource = Resource.objects.create(
+            plan=cls.plan,
+            title='Launch checklist',
+            url='https://example.com/checklist',
+            note='Use before demo',
+        )
+        cls.unlinked_resource = Resource.objects.create(
+            plan=cls.plan,
+            title='Internal prep notes',
+        )
 
     def test_owner_page_renders_markdown_and_edit_controls(self):
         self.client.force_login(self.owner)
         response = self.client.get(
-            reverse('my_plan_detail', kwargs={'plan_id': self.plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<strong>owner</strong>', html=True)
@@ -308,9 +327,39 @@ class MyPlanDetailOwnerSurfaceTest(TestCase):
         self.assertNotContains(response, 'Internal notes')
         self.assertNotContains(response, 'href="/studio/')
 
+    def test_owner_workspace_prioritizes_timeline_and_resources(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
+        )
+        body = response.content.decode('utf-8')
+        self.assertContains(response, 'Sprint workspace')
+        self.assertContains(response, 'data-testid="plan-weeks"')
+        self.assertContains(response, 'data-testid="plan-deliverables"')
+        self.assertContains(response, 'data-testid="plan-next-steps"')
+        self.assertContains(response, 'data-testid="plan-resources"')
+        self.assertContains(response, 'href="https://example.com/checklist"')
+        self.assertContains(response, 'Internal prep notes')
+        self.assertLess(
+            body.index('data-testid="plan-weeks"'),
+            body.index('data-testid="plan-summary"'),
+        )
+
     def test_other_member_gets_404_for_owner_page(self):
         self.client.force_login(self.other)
         response = self.client.get(
-            reverse('my_plan_detail', kwargs={'plan_id': self.plan.pk}),
+            reverse(
+                'my_plan_detail',
+                kwargs={
+                    'sprint_slug': self.sprint.slug,
+                    'plan_id': self.plan.pk,
+                },
+            ),
         )
         self.assertEqual(response.status_code, 404)

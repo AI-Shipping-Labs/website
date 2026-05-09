@@ -1,13 +1,11 @@
-"""Playwright E2E tests for the member-facing plan editor (issue #444).
+"""Playwright E2E tests for the member-facing plan workspace (issue #548).
 
-Members edit their OWN plan via ``/account/plan/<id>/edit/`` using the
-same drag-drop authoring UI staff use in Studio. These scenarios cover:
+Members open their own sprint-scoped plan workspace. These scenarios cover:
 
-- Member opens their own plan and reorders a checkpoint within Week 1.
-- Member edits the ``Goal`` summary textarea via the autosave path.
+- Member opens their own plan workspace under ``/sprints/<slug>/plan/<id>/edit``.
 - Member cannot view another member's plan (404, no email leak).
 - Anonymous user is redirected to login from the member URL.
-- Staff editor still works after the partial extraction (regression).
+- Staff Studio editor still works (regression).
 """
 
 import datetime
@@ -102,7 +100,7 @@ def _seed_plan_with_two_checkpoints(member_email, sprint=None):
 
 @pytest.mark.django_db(transaction=True)
 class TestMemberOpensOwnPlan:
-    """Member opens their own plan and the editor renders fully."""
+    """Member opens their own plan and the workspace renders fully."""
 
     def test_member_sees_editor_with_their_email_and_sprint(
         self, django_server, browser,
@@ -118,70 +116,15 @@ class TestMemberOpensOwnPlan:
         page = context.new_page()
 
         page.goto(
-            f"{django_server}/account/plan/{plan_pk}/edit/",
+            f"{django_server}/sprints/spring-cohort/plan/{plan_pk}/edit",
             wait_until="domcontentloaded",
         )
-        # The editor header carries the member email and sprint.
-        page.locator(
-            '[data-testid="plan-editor-header"]'
-        ).wait_for(state="visible")
-        header_text = page.locator(
-            '[data-testid="plan-editor-header"]'
-        ).inner_text()
-        assert "member@test.com" in header_text
-        assert "Spring Cohort" in header_text
-
-        # The save indicator is present in its initial saved state.
-        page.locator('[data-testid="save-indicator"]').wait_for(
+        page.locator('[data-testid="member-plan"]').wait_for(state="visible")
+        assert "Spring Cohort" in page.locator("body").inner_text()
+        page.locator('[data-testid="plan-weeks"]').wait_for(state="visible")
+        page.locator('[data-testid="plan-checkpoint"]').first.wait_for(
             state="visible",
         )
-
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestMemberEditsSummaryFieldAutosaves:
-    """Member types in the Goal field; the saved indicator transitions."""
-
-    def test_goal_textarea_persists_after_blur(
-        self, django_server, browser,
-    ):
-        _ensure_tiers()
-        _clear_plans_data()
-        _create_user(
-            "member@test.com", tier_slug="free", email_verified=True,
-        )
-        plan_pk = _seed_plan_with_two_checkpoints("member@test.com")
-
-        context = _auth_context(browser, "member@test.com")
-        page = context.new_page()
-
-        page.goto(
-            f"{django_server}/account/plan/{plan_pk}/edit/",
-            wait_until="domcontentloaded",
-        )
-
-        goal_textarea = page.locator('[data-testid="summary-goal"]')
-        goal_textarea.click()
-        goal_textarea.fill("Ship one project this sprint")
-        # Blur to trigger the debounced save.
-        page.locator('[data-testid="plan-editor-header"]').click()
-
-        # Wait for the saved indicator to settle on ``saved``.
-        page.wait_for_function(
-            """() => {
-                const el = document.querySelector('[data-testid="save-indicator"]');
-                return el && el.getAttribute('data-state') === 'saved';
-            }""",
-            timeout=5000,
-        )
-
-        # Reload and the textarea still has the goal text.
-        page.reload(wait_until="domcontentloaded")
-        reloaded_value = page.locator(
-            '[data-testid="summary-goal"]'
-        ).input_value()
-        assert reloaded_value == "Ship one project this sprint"
 
         context.close()
 
@@ -219,7 +162,7 @@ class TestMemberCannotViewOtherMembersPlan:
 
         # Bob hits Alice's plan id -> 404.
         response = page.goto(
-            f"{django_server}/account/plan/{alice_plan_pk}/edit/",
+            f"{django_server}/sprints/spring-cohort/plan/{alice_plan_pk}/edit",
             wait_until="domcontentloaded",
         )
         assert response is not None
@@ -229,16 +172,11 @@ class TestMemberCannotViewOtherMembersPlan:
 
         # Bob hits his OWN plan id -> 200 with editor.
         page.goto(
-            f"{django_server}/account/plan/{bob_plan_pk}/edit/",
+            f"{django_server}/sprints/spring-cohort/plan/{bob_plan_pk}/edit",
             wait_until="domcontentloaded",
         )
-        page.locator(
-            '[data-testid="plan-editor-header"]'
-        ).wait_for(state="visible")
-        header_text = page.locator(
-            '[data-testid="plan-editor-header"]'
-        ).inner_text()
-        assert "bob@test.com" in header_text
+        page.locator('[data-testid="member-plan"]').wait_for(state="visible")
+        page.locator('[data-testid="plan-weeks"]').wait_for(state="visible")
 
         context.close()
 
@@ -273,12 +211,12 @@ class TestAnonymousRedirectedToLogin:
         page = context.new_page()
 
         page.goto(
-            f"{django_server}/account/plan/{plan_pk}/edit/",
+            f"{django_server}/sprints/s/plan/{plan_pk}/edit",
             wait_until="domcontentloaded",
         )
         # Final URL must be on the login page with next preserved.
         assert "/accounts/login/" in page.url
-        assert f"next=/account/plan/{plan_pk}/edit/" in page.url
+        assert f"next=/sprints/s/plan/{plan_pk}/edit" in page.url
 
         context.close()
 

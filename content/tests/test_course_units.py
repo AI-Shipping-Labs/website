@@ -30,22 +30,19 @@ class CourseUnitSetupMixin(TierSetupMixin):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-
-    def setUp(self):
-        self.client = Client()
-        self.course = Course.objects.create(
+        cls.course = Course.objects.create(
             title='Test Course', slug='test-course',
             status='published', required_level=LEVEL_MAIN,
             description='A paid course.',
         )
-        self.module1 = Module.objects.create(
-            course=self.course, title='Module 1', slug='module-1', sort_order=1,
+        cls.module1 = Module.objects.create(
+            course=cls.course, title='Module 1', slug='module-1', sort_order=1,
         )
-        self.module2 = Module.objects.create(
-            course=self.course, title='Module 2', slug='module-2', sort_order=2,
+        cls.module2 = Module.objects.create(
+            course=cls.course, title='Module 2', slug='module-2', sort_order=2,
         )
-        self.unit1 = Unit.objects.create(
-            module=self.module1, title='Lesson 1', slug='lesson-1', sort_order=1,
+        cls.unit1 = Unit.objects.create(
+            module=cls.module1, title='Lesson 1', slug='lesson-1', sort_order=1,
             body='# Introduction\nThis is the **first** lesson.',
             homework='## Exercise 1\nDo **this**.',
             video_url='https://www.youtube.com/watch?v=dQw4w9WgXcB',
@@ -54,19 +51,33 @@ class CourseUnitSetupMixin(TierSetupMixin):
                 {'time_seconds': 120, 'label': 'Setup'},
             ],
         )
-        self.unit2 = Unit.objects.create(
-            module=self.module1, title='Lesson 2', slug='lesson-2', sort_order=2,
+        cls.unit2 = Unit.objects.create(
+            module=cls.module1, title='Lesson 2', slug='lesson-2', sort_order=2,
             body='# Second lesson\nMore content.',
         )
-        self.unit3 = Unit.objects.create(
-            module=self.module2, title='Advanced Lesson', slug='advanced-lesson', sort_order=1,
+        cls.unit3 = Unit.objects.create(
+            module=cls.module2, title='Advanced Lesson', slug='advanced-lesson', sort_order=1,
             body='# Advanced\nDeep dive.',
         )
-        self.preview_unit = Unit.objects.create(
-            module=self.module1, title='Preview Lesson', slug='preview-lesson', sort_order=3,
+        cls.preview_unit = Unit.objects.create(
+            module=cls.module1, title='Preview Lesson', slug='preview-lesson', sort_order=3,
             body='# Preview\nFree to all.',
             is_preview=True,
         )
+
+    def setUp(self):
+        self.client = Client()
+
+    def _create_tier_user(self, email, tier):
+        user = User.objects.create_user(email=email)
+        user.tier = tier
+        user.save(update_fields=['tier'])
+        return user
+
+    def _login_tier_user(self, email, tier):
+        user = self._create_tier_user(email, tier)
+        self.client.force_login(user)
+        return user
 
 
 # ============================================================
@@ -78,11 +89,7 @@ class CourseUnitDetailViewTest(CourseUnitSetupMixin, TestCase):
     """Test the /courses/{slug}/{module_sort}/{unit_sort} page."""
 
     def _login_main_user(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
-        return user
+        return self._login_tier_user('main@test.com', self.main_tier)
 
     def test_authorized_user_gets_200(self):
         self._login_main_user()
@@ -202,35 +209,23 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         self.assertContains(response, 'Sign in to access this lesson', status_code=403)
 
     def test_basic_user_sees_upgrade_message(self):
-        user = User.objects.create_user(email='basic2@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic2@test.com', password='testpass')
+        self._login_tier_user('basic2@test.com', self.basic_tier)
         response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Upgrade to Main', status_code=403)
         self.assertContains(response, 'View Pricing', status_code=403)
 
     def test_basic_user_gets_403_for_main_course(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
+        self._login_tier_user('basic@test.com', self.basic_tier)
         response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 403)
 
     def test_main_user_gets_200(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self._login_tier_user('main@test.com', self.main_tier)
         response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
 
     def test_premium_user_gets_200(self):
-        user = User.objects.create_user(email='prem@test.com', password='testpass')
-        user.tier = self.premium_tier
-        user.save()
-        self.client.login(email='prem@test.com', password='testpass')
+        self._login_tier_user('prem@test.com', self.premium_tier)
         response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertEqual(response.status_code, 200)
 
@@ -239,10 +234,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_preview_unit_accessible_to_basic_user(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
+        self._login_tier_user('basic@test.com', self.basic_tier)
         response = self.client.get('/courses/test-course/module-1/preview-lesson')
         self.assertEqual(response.status_code, 200)
 
@@ -263,8 +255,7 @@ class CourseUnitAccessControlTest(CourseUnitSetupMixin, TestCase):
             module=module, title='Free Lesson', slug='free-lesson', sort_order=1,
             body='Free content.',
         )
-        User.objects.create_user(email='user@test.com', password='testpass')
-        self.client.login(email='user@test.com', password='testpass')
+        self.client.force_login(User.objects.create_user(email='user@test.com'))
         response = self.client.get('/courses/free-course/m1/free-lesson')
         self.assertEqual(response.status_code, 200)
 
@@ -337,10 +328,7 @@ class CourseUnitProgressTest(CourseUnitSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
-        self.user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self.user = self._login_tier_user('main@test.com', self.main_tier)
 
     def test_shows_mark_as_completed_button(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
@@ -365,10 +353,7 @@ class NextUnitButtonTest(CourseUnitSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
-        self.user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self.user = self._login_tier_user('main@test.com', self.main_tier)
 
     def test_next_unit_within_module(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
@@ -400,26 +385,17 @@ class ApiCourseUnitDetailTest(CourseUnitSetupMixin, TestCase):
     """Test GET /api/courses/{slug}/units/{unit_id}."""
 
     def test_authorized_user_gets_200(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self._login_tier_user('main@test.com', self.main_tier)
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         self.assertEqual(response.status_code, 200)
 
     def test_returns_json(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self._login_tier_user('main@test.com', self.main_tier)
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         self.assertEqual(response['Content-Type'], 'application/json')
 
     def test_includes_full_content(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self._login_tier_user('main@test.com', self.main_tier)
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         data = json.loads(response.content)
         self.assertEqual(data['title'], 'Lesson 1')
@@ -430,31 +406,23 @@ class ApiCourseUnitDetailTest(CourseUnitSetupMixin, TestCase):
         self.assertEqual(len(data['timestamps']), 2)
 
     def test_includes_module_info(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self._login_tier_user('main@test.com', self.main_tier)
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         data = json.loads(response.content)
         self.assertEqual(data['module']['title'], 'Module 1')
 
     def test_includes_completion_status(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self._login_tier_user('main@test.com', self.main_tier)
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         data = json.loads(response.content)
         self.assertFalse(data['is_completed'])
 
     def test_completed_unit_shows_true(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
+        user = self._create_tier_user('main@test.com', self.main_tier)
         UserCourseProgress.objects.create(
             user=user, unit=self.unit1, completed_at=timezone.now(),
         )
-        self.client.login(email='main@test.com', password='testpass')
+        self.client.force_login(user)
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         data = json.loads(response.content)
         self.assertTrue(data['is_completed'])
@@ -472,10 +440,7 @@ class ApiCourseUnitDetailTest(CourseUnitSetupMixin, TestCase):
         self.assertEqual(data['error'], 'Authentication required')
 
     def test_unauthorized_user_gets_403_with_tier_name(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
+        self._login_tier_user('basic@test.com', self.basic_tier)
         response = self.client.get(f'/api/courses/test-course/units/{self.unit1.pk}')
         self.assertEqual(response.status_code, 403)
         data = json.loads(response.content)
@@ -489,18 +454,12 @@ class ApiCourseUnitDetailTest(CourseUnitSetupMixin, TestCase):
         self.assertTrue(data['is_preview'])
 
     def test_preview_unit_accessible_to_basic_user(self):
-        user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
-        user.save()
-        self.client.login(email='basic@test.com', password='testpass')
+        self._login_tier_user('basic@test.com', self.basic_tier)
         response = self.client.get(f'/api/courses/test-course/units/{self.preview_unit.pk}')
         self.assertEqual(response.status_code, 200)
 
     def test_nonexistent_unit_returns_404(self):
-        user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self._login_tier_user('main@test.com', self.main_tier)
         response = self.client.get('/api/courses/test-course/units/99999')
         self.assertEqual(response.status_code, 404)
 
@@ -529,10 +488,7 @@ class ApiCourseUnitCompleteTest(CourseUnitSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
-        self.user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self.user = self._login_tier_user('main@test.com', self.main_tier)
 
     def test_mark_complete_creates_progress(self):
         response = self.client.post(
@@ -585,10 +541,7 @@ class ApiCourseUnitCompleteTest(CourseUnitSetupMixin, TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_unauthorized_user_gets_403(self):
-        basic_user = User.objects.create_user(email='basic@test.com', password='testpass')
-        basic_user.tier = self.basic_tier
-        basic_user.save()
-        self.client.login(email='basic@test.com', password='testpass')
+        self._login_tier_user('basic@test.com', self.basic_tier)
         response = self.client.post(
             f'/api/courses/test-course/units/{self.unit1.pk}/complete',
         )
@@ -630,20 +583,21 @@ class ApiCourseUnitCompleteTest(CourseUnitSetupMixin, TestCase):
 class NextUnitHelperTest(TestCase):
     """Test the _get_next_unit helper function."""
 
-    def setUp(self):
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
             title='Nav Course', slug='nav-course', status='published',
         )
-        self.m1 = Module.objects.create(
-            course=self.course, title='M1', slug='m1', sort_order=1,
+        cls.m1 = Module.objects.create(
+            course=cls.course, title='M1', slug='m1', sort_order=1,
         )
-        self.m2 = Module.objects.create(
-            course=self.course, title='M2', slug='m2', sort_order=2,
+        cls.m2 = Module.objects.create(
+            course=cls.course, title='M2', slug='m2', sort_order=2,
         )
-        self.u1 = Unit.objects.create(module=self.m1, title='U1', slug='u1', sort_order=1)
-        self.u2 = Unit.objects.create(module=self.m1, title='U2', slug='u2', sort_order=2)
-        self.u3 = Unit.objects.create(module=self.m2, title='U3', slug='u3', sort_order=1)
-        self.u4 = Unit.objects.create(module=self.m2, title='U4', slug='u4', sort_order=2)
+        cls.u1 = Unit.objects.create(module=cls.m1, title='U1', slug='u1', sort_order=1)
+        cls.u2 = Unit.objects.create(module=cls.m1, title='U2', slug='u2', sort_order=2)
+        cls.u3 = Unit.objects.create(module=cls.m2, title='U3', slug='u3', sort_order=1)
+        cls.u4 = Unit.objects.create(module=cls.m2, title='U4', slug='u4', sort_order=2)
 
     def test_next_within_module(self):
         from content.views.courses import _get_next_unit
@@ -669,20 +623,21 @@ class NextUnitHelperTest(TestCase):
 class PrevUnitHelperTest(TestCase):
     """Test the _get_prev_unit helper function."""
 
-    def setUp(self):
-        self.course = Course.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
             title='Nav Course', slug='nav-prev-course', status='published',
         )
-        self.m1 = Module.objects.create(
-            course=self.course, title='M1', slug='m1', sort_order=0,
+        cls.m1 = Module.objects.create(
+            course=cls.course, title='M1', slug='m1', sort_order=0,
         )
-        self.m2 = Module.objects.create(
-            course=self.course, title='M2', slug='m2', sort_order=1,
+        cls.m2 = Module.objects.create(
+            course=cls.course, title='M2', slug='m2', sort_order=1,
         )
-        self.u1 = Unit.objects.create(module=self.m1, title='U1', slug='u1', sort_order=0)
-        self.u2 = Unit.objects.create(module=self.m1, title='U2', slug='u2', sort_order=1)
-        self.u3 = Unit.objects.create(module=self.m2, title='U3', slug='u3', sort_order=0)
-        self.u4 = Unit.objects.create(module=self.m2, title='U4', slug='u4', sort_order=1)
+        cls.u1 = Unit.objects.create(module=cls.m1, title='U1', slug='u1', sort_order=0)
+        cls.u2 = Unit.objects.create(module=cls.m1, title='U2', slug='u2', sort_order=1)
+        cls.u3 = Unit.objects.create(module=cls.m2, title='U3', slug='u3', sort_order=0)
+        cls.u4 = Unit.objects.create(module=cls.m2, title='U4', slug='u4', sort_order=1)
 
     def test_first_unit_returns_none(self):
         from content.views.courses import _get_prev_unit
@@ -729,10 +684,7 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
-        self.user.save()
-        self.client.login(email='main@test.com', password='testpass')
+        self.user = self._login_tier_user('main@test.com', self.main_tier)
 
     def test_prev_unit_in_context_for_non_first_unit(self):
         response = self.client.get('/courses/test-course/module-1/lesson-2')
@@ -831,9 +783,11 @@ class UnitBodyHtmlSyncTest(TestCase):
             course=cls.course, title='Module 1', slug='module-1', sort_order=1,
         )
 
+    def _unit_html_fields(self, unit):
+        return Unit.objects.values_list('body_html', 'homework_html').get(pk=unit.pk)
+
     def test_update_or_create_renders_body_html(self):
         """When body is updated via update_or_create, body_html is re-rendered."""
-        from content.models import Unit
         unit, created = Unit.objects.update_or_create(
             module=self.module,
             source_path='test/unit-1.md',
@@ -844,7 +798,8 @@ class UnitBodyHtmlSyncTest(TestCase):
             },
         )
         self.assertTrue(created)
-        self.assertIn('<h1>Hello</h1>', unit.body_html)
+        body_html, _ = self._unit_html_fields(unit)
+        self.assertIn('<h1>Hello</h1>', body_html)
 
         # Update body via update_or_create
         unit, created = Unit.objects.update_or_create(
@@ -857,13 +812,12 @@ class UnitBodyHtmlSyncTest(TestCase):
             },
         )
         self.assertFalse(created)
-        unit.refresh_from_db()
-        self.assertIn('<h1>Updated</h1>', unit.body_html)
-        self.assertNotIn('Hello', unit.body_html)
+        body_html, _ = self._unit_html_fields(unit)
+        self.assertIn('<h1>Updated</h1>', body_html)
+        self.assertNotIn('Hello', body_html)
 
     def test_update_or_create_renders_homework_html(self):
         """When homework is updated via update_or_create, homework_html is re-rendered."""
-        from content.models import Unit
         unit, created = Unit.objects.update_or_create(
             module=self.module,
             source_path='test/homework.md',
@@ -874,7 +828,8 @@ class UnitBodyHtmlSyncTest(TestCase):
             },
         )
         self.assertTrue(created)
-        self.assertIn('Task A', unit.homework_html)
+        _, homework_html = self._unit_html_fields(unit)
+        self.assertIn('Task A', homework_html)
 
         # Update homework
         unit, created = Unit.objects.update_or_create(
@@ -887,9 +842,9 @@ class UnitBodyHtmlSyncTest(TestCase):
             },
         )
         self.assertFalse(created)
-        unit.refresh_from_db()
-        self.assertIn('Task C', unit.homework_html)
-        self.assertNotIn('Task A', unit.homework_html)
+        _, homework_html = self._unit_html_fields(unit)
+        self.assertIn('Task C', homework_html)
+        self.assertNotIn('Task A', homework_html)
 
     def test_body_html_not_stale_after_content_change(self):
         """Regression test: body_html must match body after sync update.
@@ -897,7 +852,6 @@ class UnitBodyHtmlSyncTest(TestCase):
         Previously, update_or_create with update_fields would skip body_html
         because it wasn't in the defaults dict, leaving stale rendered HTML.
         """
-        from content.models import Unit
         # Create with old content
         unit = Unit.objects.create(
             module=self.module,
@@ -919,10 +873,10 @@ class UnitBodyHtmlSyncTest(TestCase):
                 'body': '# New content\n\nWith **formatting**.',
             },
         )
-        unit.refresh_from_db()
-        self.assertIn('<h1>New content</h1>', unit.body_html)
-        self.assertIn('<strong>formatting</strong>', unit.body_html)
-        self.assertNotIn('Old content', unit.body_html)
+        body_html, _ = self._unit_html_fields(unit)
+        self.assertIn('<h1>New content</h1>', body_html)
+        self.assertIn('<strong>formatting</strong>', body_html)
+        self.assertNotIn('Old content', body_html)
 
 
 class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
@@ -948,19 +902,19 @@ class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
         cls.unit_url = '/courses/disc-course/mod-one/lesson-one'
 
     def test_free_tier_user_does_not_see_discussion_on_unit(self):
-        user = User.objects.create_user(email='free-unit@test.com', password='testpass')
+        user = User.objects.create_user(email='free-unit@test.com')
         user.tier = self.free_tier
-        user.save()
-        self.client.login(email='free-unit@test.com', password='testpass')
+        user.save(update_fields=['tier'])
+        self.client.force_login(user)
         response = self.client.get(self.unit_url)
         self.assertEqual(response.status_code, 403)
         self.assertNotContains(response, 'Join the discussion', status_code=403)
 
     def test_main_tier_user_sees_discussion_on_unit(self):
-        user = User.objects.create_user(email='main-unit@test.com', password='testpass')
+        user = User.objects.create_user(email='main-unit@test.com')
         user.tier = self.main_tier
-        user.save()
-        self.client.login(email='main-unit@test.com', password='testpass')
+        user.save(update_fields=['tier'])
+        self.client.force_login(user)
         response = self.client.get(self.unit_url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Join the discussion')

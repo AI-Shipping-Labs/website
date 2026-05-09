@@ -410,6 +410,36 @@ The pilot is not worth scaling if:
 The pilot itself is NOT executed as part of this audit. `mutmut` is not added to `pyproject.toml`
 in this issue — that is part of the follow-up issue.
 
+### Issue #550 pilot result
+
+Issue #550 ran the proposed bounded pilot against `content/tier_config.py` on 2026-05-09. The
+target test module was `content/tests/test_tier_config.py` (41 tests at the time of the run).
+
+Tooling:
+
+- Tool/version: `mutmut 2.5.1` via ephemeral `uv run --with 'mutmut==2.5.1'`.
+- Command:
+  ```bash
+  uv run --with 'mutmut==2.5.1' mutmut run \
+    --paths-to-mutate content/tier_config.py \
+    --tests-dir content/tests/test_tier_config.py \
+    --runner "uv run pytest --no-header -q content/tests/test_tier_config.py" \
+    --simple-output --no-progress
+  ```
+- Runtime: 3m33.309s wall clock.
+- Result: 38 mutants total; 37 killed, 1 survived, 0 timeout, 0 error.
+- Mutation score: 97.4% killed.
+
+Survivor triage:
+
+| Mutant | Status | Reason |
+|---|---|---|
+| `content/tier_config.py:24`, `prev_tier_name = None` -> `prev_tier_name = ""` | equivalent/ignore | Both values are falsy before the first tier, so the first tier still gets no inheritance prefix and all later prefixes are driven by assigned tier names. |
+
+The pilot found no non-equivalent surviving mutants, so no test cleanup was applied for #550. Per
+the worth-scaling criteria above, this target is not a good candidate for further mutation-budget
+spend; the existing tests already pin the meaningful tier, feature, and activity behavior tightly.
+
 ## 9. Follow-up issues filed
 
 Each item below is filed as a separate issue with the `needs grooming` label, linking back to

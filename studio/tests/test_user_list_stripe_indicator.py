@@ -21,6 +21,7 @@ from django.test import TestCase
 
 from integrations.config import clear_config_cache, get_config
 from integrations.models import IntegrationSetting
+from payments.models import Tier
 
 User = get_user_model()
 
@@ -67,6 +68,11 @@ class StudioUserListStripeIndicatorTest(TestCase):
         cls.user_without_stripe = User.objects.create_user(
             email='free@test.com', password='testpass',
             stripe_customer_id='',
+        )
+        cls.imported_paid_user = User.objects.create_user(
+            email='imported-paid@test.com', password='testpass',
+            stripe_customer_id='cus_PAID',
+            tier=Tier.objects.get(slug='main'),
         )
 
     def setUp(self):
@@ -120,6 +126,14 @@ class StudioUserListStripeIndicatorTest(TestCase):
 
         row_html = _row_html(response.content.decode(), self.user_without_stripe.pk)
         self.assertNotIn('data-testid="stripe-indicator"', row_html)
+
+    def test_stripe_imported_paid_user_shows_base_tier_without_override_badge(self):
+        response = self.client.get('/studio/users/', {'q': 'imported-paid@test.com'})
+        self.assertEqual(response.status_code, 200)
+
+        row_html = _row_html(response.content.decode(), self.imported_paid_user.pk)
+        self.assertIn('Main', row_html)
+        self.assertNotIn('(override)', row_html)
 
     # ------------------------------------------------------------------
     # Linking: <a> when account configured, <span> when not

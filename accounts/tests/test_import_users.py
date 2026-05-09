@@ -386,6 +386,25 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(override.expires_at, expiry)
         self.assertEqual(batch.users_created, 1)
 
+    def test_inactive_stripe_tier_slug_does_not_create_override(self):
+        user = User.objects.create_user(email="inactive-stripe-tier@example.com")
+
+        batch = run_import_batch(
+            "stripe",
+            rows(
+                ImportRow(
+                    email="inactive-stripe-tier@example.com",
+                    tier_slug="main",
+                    subscription_active=False,
+                )
+            ),
+        )
+
+        user.refresh_from_db()
+        self.assertEqual(user.tier.slug, "free")
+        self.assertFalse(TierOverride.objects.filter(user=user).exists())
+        self.assertEqual(batch.users_updated, 1)
+
     def test_tier_conflict_preserves_existing_active_override(self):
         premium_tier = Tier.objects.get(slug="premium")
         user = User.objects.create_user(email="tier-conflict@example.com")

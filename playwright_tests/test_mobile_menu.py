@@ -1,9 +1,9 @@
 """Playwright E2E tests for the mobile (hamburger) navigation menu (Issue #272).
 
 Covers:
-- Resources accordion is collapsed by default (chevron pointing down).
-- Tapping Resources expands the list and rotates the chevron 180 degrees.
-- Even when Resources is expanded, items below it (Sign in / Account /
+- Learn and Community accordions are collapsed by default.
+- Tapping each section expands the list and rotates the chevron 180 degrees.
+- Even when text navigation is expanded, items below it (Sign in / Account /
   Studio / Logout) remain reachable because the menu container itself
   scrolls (max-h + overflow-y-auto), not the page.
 - Behavior holds at both Pixel 7 (412px) and iPhone SE (375px) widths.
@@ -74,10 +74,8 @@ class TestMobileMenuHitTarget:
         assert btn.get_attribute("aria-label") == "Close menu"
 
         public_links = [
-            "About",
-            "Activities",
-            "Membership",
-            "Resources",
+            "Learn",
+            "Community",
             "Sign in",
         ]
         for label in public_links:
@@ -98,8 +96,9 @@ class TestMobileMenuHitTarget:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         assert not page.locator("#mobile-menu-btn").is_visible()
-        assert page.locator('nav a[href="/about"]').first.is_visible()
-        assert page.locator("#resources-dropdown-btn").is_visible()
+        assert page.locator("#learn-dropdown-btn").is_visible()
+        assert page.locator("#community-dropdown-btn").is_visible()
+        assert page.locator("#resources-dropdown-btn").count() == 0
 
         context.close()
 
@@ -109,85 +108,69 @@ class TestMobileMenuHitTarget:
     MOBILE_VIEWPORTS,
     ids=["pixel7-412", "iphonese-375"],
 )
-class TestMobileMenuResourcesAccordion:
-    def test_resources_collapsed_by_default(
+class TestMobileMenuTextNavAccordion:
+    def test_text_nav_sections_collapsed_by_default(
         self, django_server, browser, viewport
     ):
-        """When the menu first opens, the Resources sub-list is hidden and
-        the chevron is in its base (non-rotated) state."""
+        """When the menu first opens, text-nav sub-lists are hidden."""
         context = browser.new_context(viewport=viewport)
         page = context.new_page()
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
 
-        resources_list = page.locator("#mobile-resources-list")
-        # Element is in DOM but visually hidden via the `hidden` class.
-        assert resources_list.count() == 1
-        assert "hidden" in (resources_list.get_attribute("class") or ""), (
-            "Resources list must start collapsed (hidden class present)"
-        )
-        assert not resources_list.is_visible(), (
-            "Resources list must not be visible until tapped"
-        )
+        for section in ["learn", "community"]:
+            section_list = page.locator(f"#mobile-{section}-list")
+            assert section_list.count() == 1
+            assert "hidden" in (section_list.get_attribute("class") or "")
+            assert not section_list.is_visible()
 
-        # Sub-links must not be reachable to a tap.
-        blog_link = page.locator(
-            '#mobile-resources-list a[href="/blog"]'
-        )
-        assert not blog_link.is_visible()
-
-        chevron = page.locator("#mobile-resources-chevron")
-        assert "rotate-180" not in (chevron.get_attribute("class") or ""), (
-            "Chevron must not be rotated while Resources is collapsed"
-        )
+            chevron = page.locator(f"#mobile-{section}-chevron")
+            assert "rotate-180" not in (chevron.get_attribute("class") or "")
 
         context.close()
 
-    def test_tapping_resources_expands_list_and_rotates_chevron(
+    def test_tapping_text_nav_sections_expands_lists_and_rotates_chevrons(
         self, django_server, browser, viewport
     ):
-        """Tapping the Resources toggle reveals the sub-list and rotates the
-        chevron 180 degrees."""
         context = browser.new_context(viewport=viewport)
         page = context.new_page()
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
-        page.locator("#mobile-resources-toggle").click()
 
-        resources_list = page.locator("#mobile-resources-list")
-        assert "hidden" not in (resources_list.get_attribute("class") or "")
-        assert resources_list.is_visible()
-
-        # A representative sub-link is now visible / clickable.
-        resource_links = [
-            "Blog",
-            "Courses",
-            "Project Ideas",
-            "Events",
-            "Workshops",
-            "Curated Links",
-            "Interview Prep",
-            "Learning Path",
-        ]
-        for label in resource_links:
-            assert page.locator("#mobile-resources-list").get_by_text(
-                label,
-                exact=True,
-            ).is_visible()
-
-        chevron = page.locator("#mobile-resources-chevron")
-        assert "rotate-180" in (chevron.get_attribute("class") or ""), (
-            "Chevron must be rotated 180 when Resources is expanded"
-        )
+        expected = {
+            "learn": [
+                "Courses",
+                "Workshops",
+                "Learning Path",
+                "Project Ideas",
+                "Interview Prep",
+                "Blog",
+            ],
+            "community": [
+                "Community Sprints",
+                "Events",
+                "Activities",
+                "Curated Links",
+            ],
+        }
+        for section, labels in expected.items():
+            page.locator(f"#mobile-{section}-toggle").click()
+            section_list = page.locator(f"#mobile-{section}-list")
+            assert "hidden" not in (section_list.get_attribute("class") or "")
+            assert section_list.is_visible()
+            for label in labels:
+                assert section_list.get_by_text(label, exact=True).is_visible()
+            chevron = page.locator(f"#mobile-{section}-chevron")
+            assert "rotate-180" in (chevron.get_attribute("class") or "")
 
         context.close()
 
-    def test_items_below_resources_remain_reachable_when_expanded(
+    def test_items_below_text_nav_remain_reachable_when_expanded(
         self, django_server, browser, viewport
     ):
-        """When Resources is expanded the menu may exceed the viewport.
+        """When text nav is expanded the menu may exceed the viewport.
         The mobile-menu container itself must scroll (max-h + overflow-y-auto)
         so Sign in (anonymous user) is still reachable by scrolling within the
         menu, not by scrolling the page."""
@@ -196,7 +179,8 @@ class TestMobileMenuResourcesAccordion:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
-        page.locator("#mobile-resources-toggle").click()
+        page.locator("#mobile-learn-toggle").click()
+        page.locator("#mobile-community-toggle").click()
 
         # Container must declare a bounded height + scroll behavior.
         overflow_y, max_height = page.evaluate(
@@ -230,8 +214,8 @@ class TestMobileMenuResourcesAccordion:
 
 class TestMobileMenuAuthenticatedItemsReachable:
     """For an authenticated staff user the menu has more items below
-    Resources (Notifications, Studio, Account, Log out). They must all be
-    reachable when Resources is expanded."""
+    the text nav (Notifications, Studio, Account, Log out). They must all be
+    reachable when the text nav is expanded."""
 
     def test_member_account_actions_reachable(self, django_server, browser):
         _create_user(email="mobilemenu-member@test.com")
@@ -250,7 +234,7 @@ class TestMobileMenuAuthenticatedItemsReachable:
 
         context.close()
 
-    def test_studio_and_logout_reachable_when_resources_expanded(
+    def test_studio_and_logout_reachable_when_text_nav_expanded(
         self, django_server, browser
     ):
         _create_staff_user(email="mobilemenu-staff@test.com")
@@ -261,9 +245,10 @@ class TestMobileMenuAuthenticatedItemsReachable:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
-        page.locator("#mobile-resources-toggle").click()
+        page.locator("#mobile-learn-toggle").click()
+        page.locator("#mobile-community-toggle").click()
 
-        # Studio and Log out are below Resources for staff users.
+        # Studio and Log out are below the text nav for staff users.
         studio_link = page.locator('#mobile-menu a:has-text("Studio")')
         logout_link = page.locator('#mobile-menu a:has-text("Log out")')
         assert studio_link.count() >= 1
@@ -272,7 +257,7 @@ class TestMobileMenuAuthenticatedItemsReachable:
         # Scrolling within the menu container brings them into view.
         logout_link.first.scroll_into_view_if_needed()
         assert logout_link.first.is_visible(), (
-            "Log out must be reachable when Resources is expanded"
+            "Log out must be reachable when text nav is expanded"
         )
 
         # The page itself should not need to scroll vertically; the menu

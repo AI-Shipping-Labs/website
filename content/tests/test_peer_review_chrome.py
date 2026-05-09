@@ -4,7 +4,7 @@ The four peer-review templates extend ``base.html`` directly. ``base.html``
 does NOT include the site header -- every page is responsible for including
 ``includes/header.html`` itself. Before issue #463 the four templates below
 forgot to do that, so on mobile (390x844) the hamburger button and the
-``Resources`` accordion that lives inside the mobile menu were entirely
+text-nav accordions that live inside the mobile menu were entirely
 missing from those routes.
 
 These tests assert at the response-HTML level that each fixed peer-review
@@ -12,9 +12,9 @@ URL renders:
 
 - the ``#mobile-menu-btn`` hamburger button (mobile-only via ``md:hidden``)
 - the ``#mobile-menu`` container
-- the ``#mobile-resources-toggle`` button and ``#mobile-resources-list``
-  with at least the ``/blog`` link (the accordion content)
-- the desktop ``#resources-dropdown-btn`` (so the desktop nav is wired in too)
+- the ``#mobile-learn-toggle`` and ``#mobile-community-toggle`` buttons
+  with representative links (the accordion content)
+- the desktop ``#learn-dropdown-btn`` and ``#community-dropdown-btn``
 - the existing peer-review business-logic markup the page is supposed to
   render -- so we don't accidentally claim the chrome is fixed by deleting
   the page body.
@@ -41,19 +41,22 @@ User = get_user_model()
 
 # Tokens that MUST appear in the rendered HTML if and only if
 # ``templates/includes/header.html`` was included by the page. They cover
-# the hamburger, the mobile menu container, the Resources accordion (the
-# specific element the bug was about) and the desktop dropdown trigger.
+# the hamburger, the mobile menu container, the text-nav accordions and
+# the desktop dropdown triggers.
 HEADER_TOKENS = (
     'id="mobile-menu-btn"',
     'id="mobile-menu"',
-    'id="mobile-resources-toggle"',
-    'id="mobile-resources-list"',
-    'id="resources-dropdown-btn"',
+    'id="mobile-learn-toggle"',
+    'id="mobile-learn-list"',
+    'id="mobile-community-toggle"',
+    'id="mobile-community-list"',
+    'id="learn-dropdown-btn"',
+    'id="community-dropdown-btn"',
 )
 
-# A representative link from inside the Resources accordion. If the
-# accordion markup is missing, this link is missing too.
-RESOURCES_BLOG_LINK = '<a href="/blog"'
+# Representative links from inside the text-nav accordions.
+LEARN_BLOG_LINK = '<a href="/blog"'
+COMMUNITY_SPRINTS_LINK = '<a href="/sprints"'
 
 # A token that MUST appear if ``templates/includes/footer.html`` was
 # included. The footer's inline ``<script>`` defines a global
@@ -81,7 +84,7 @@ def _create_user(email):
 
 
 def _assert_header_chrome(test, response, url):
-    """Assert all of header chrome, mobile resources accordion content,
+    """Assert all of header chrome, mobile text-nav accordion content,
     desktop dropdown, and footer are present on ``response``."""
     test.assertEqual(
         response.status_code, 200,
@@ -95,8 +98,13 @@ def _assert_header_chrome(test, response, url):
             '-- includes/header.html was not rendered',
         )
     test.assertIn(
-        RESOURCES_BLOG_LINK, html,
-        f'{url}: missing the /blog link inside the mobile Resources '
+        LEARN_BLOG_LINK, html,
+        f'{url}: missing the /blog link inside the mobile Learn '
+        'accordion -- the accordion markup was not rendered',
+    )
+    test.assertIn(
+        COMMUNITY_SPRINTS_LINK, html,
+        f'{url}: missing the /sprints link inside the mobile Community '
         'accordion -- the accordion markup was not rendered',
     )
     test.assertIn(

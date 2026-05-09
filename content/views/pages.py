@@ -159,6 +159,14 @@ def activities(request):
     return render(request, 'content/activities.html', context)
 
 
+def sprints_index(request):
+    """Public community sprints discovery page."""
+    context = {
+        'activity_sprints': _get_activity_sprints(request.user),
+    }
+    return render(request, 'content/sprints_index.html', context)
+
+
 @ensure_csrf_cookie
 def blog_list(request):
     """Blog listing page with optional tag filtering."""

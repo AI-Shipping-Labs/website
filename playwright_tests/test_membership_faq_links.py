@@ -1,4 +1,4 @@
-"""Header/footer Membership and FAQ navigation."""
+"""Header/footer pricing and FAQ navigation."""
 
 import os
 
@@ -16,10 +16,9 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 @pytest.mark.django_db(transaction=True)
 class TestLoggedInUserMembershipNavigation:
-    """A logged-in user can reach the pricing page from the header
-    Membership link without bouncing off a missing anchor."""
+    """The removed header Membership link does not affect pricing access."""
 
-    def test_header_membership_link_lands_on_pricing_page(
+    def test_header_no_longer_has_membership_link_and_pricing_still_loads(
         self, django_server, browser, django_db_blocker
     ):
         with django_db_blocker.unblock():
@@ -27,15 +26,12 @@ class TestLoggedInUserMembershipNavigation:
 
         ctx = _auth_context(browser, "nav-membership@test.com")
         page = ctx.new_page()
-        # Start on the dashboard so we exercise the bug path: dashboard ->
-        # header Membership link -> pricing page.
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
-        # Click the desktop Membership link in the header.
-        page.locator("header a", has_text="Membership").first.click()
+        assert page.locator("header a", has_text="Membership").count() == 0
+        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
         page.wait_for_load_state("domcontentloaded")
 
-        # We must land on the pricing page (not bounce back to /#tiers).
         assert page.url.rstrip("/").endswith("/pricing"), (
             f"Expected to land on /pricing, got {page.url}"
         )

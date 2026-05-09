@@ -16,16 +16,20 @@ class ActivitiesSprintHubTest(TestCase):
         response = self.client.get('/activities')
         content = response.content.decode()
 
-        about_index = content.index('href="/about"')
-        membership_index = content.index('href="/pricing"')
-        activities_index = content.index('href="/activities"')
-        resources_index = content.index('id="resources-dropdown-btn"')
+        learn_index = content.index('id="learn-dropdown-btn"')
+        community_index = content.index('id="community-dropdown-btn"')
 
-        self.assertLess(about_index, membership_index)
-        self.assertLess(membership_index, activities_index)
-        self.assertLess(activities_index, resources_index)
+        self.assertLess(learn_index, community_index)
         header_end = content.index('</header>')
         header = content[:header_end]
+        self.assertIn('href="/courses"', header)
+        self.assertIn('href="/sprints"', header)
+        self.assertIn('href="/activities"', header)
+        self.assertIn('href="/resources"', header)
+        self.assertNotIn('id="resources-dropdown-btn"', header)
+        self.assertNotIn('>Resources', header)
+        self.assertNotIn('>Membership</a>', header)
+        self.assertNotIn('>About</a>', header)
         self.assertNotIn('href="/faq"', header)
         self.assertNotIn('>FAQ</a>', header)
 

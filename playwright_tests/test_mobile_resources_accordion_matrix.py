@@ -1,26 +1,26 @@
-"""Playwright matrix test for the mobile Resources accordion (issue #463).
+"""Playwright matrix test for the mobile text navigation (issue #463).
 
 This is the "headline" regression test for the bug: the four peer-review
 templates extended ``base.html`` directly but never included
 ``includes/header.html``, so the entire site header -- including the
-mobile hamburger and the Resources accordion -- was missing on those
+mobile hamburger and the text navigation -- was missing on those
 URLs. The visible symptom on a phone was that you could land on
 ``/courses/<slug>/submit`` (or ``/reviews``, or ``/certificates/<uuid>``)
 and have no way to navigate back to the Blog or other sections.
 
 This file covers two complementary checks:
 
-Test 1: ``test_mobile_resources_accordion_present_on_each_url`` --
+Test 1: ``test_mobile_text_navigation_present_on_each_url`` --
   Iterates a matrix of 9 representative public-page URLs at iPhone-sized
   viewport (390x844). For each URL it taps the hamburger, taps the
-  Resources toggle, and asserts the ``/blog`` link inside
-  ``#mobile-resources-list`` becomes visible. The assertion includes the
+  Learn and Community toggles, and asserts representative links inside
+  both accordion lists become visible. The assertion includes the
   URL in its failure message so a future regression points at the page,
   not just "menu broken".
 
 Test 2: ``test_desktop_header_renders_on_peer_review_pages`` -- At
   1024x768 (desktop), the four peer-review URLs must render the desktop
-  nav (about/activities/membership/resources-dropdown) and must NOT show
+  nav (Learn and Community dropdowns) and must NOT show
   the mobile hamburger. This covers the desktop side of the same template
   fix.
 
@@ -93,7 +93,7 @@ def _build_fixtures():
         slug=COURSE_SLUG,
         defaults={
             "title": "Peer Review Matrix Course",
-            "description": "Course used by the mobile-resources matrix test.",
+            "description": "Course used by the mobile text navigation matrix test.",
             "status": "published",
             "required_level": 0,
             "peer_review_enabled": True,
@@ -169,11 +169,11 @@ def _open_mobile_menu(page):
     page.wait_for_selector("#mobile-menu:not(.hidden)", timeout=2000)
 
 
-def _expand_resources(page):
-    """Tap the Resources toggle and wait for the sub-list to be visible."""
-    page.locator("#mobile-resources-toggle").click()
+def _expand_mobile_section(page, section):
+    """Tap a mobile text-nav toggle and wait for the sub-list."""
+    page.locator(f"#mobile-{section}-toggle").click()
     page.wait_for_selector(
-        "#mobile-resources-list:not(.hidden)", timeout=2000
+        f"#mobile-{section}-list:not(.hidden)", timeout=2000
     )
 
 
@@ -197,12 +197,12 @@ def _matrix_urls(fx):
 # ---------------------------------------------------------------------------
 
 
-class TestMobileResourcesAccordionAcrossPages:
-    """The mobile Resources accordion must be reachable on every public
+class TestMobileTextNavigationAcrossPages:
+    """The mobile text navigation must be reachable on every public
     page type, including the four peer-review templates that previously
     skipped ``includes/header.html``."""
 
-    def test_mobile_resources_accordion_present_on_each_url(
+    def test_mobile_text_navigation_present_on_each_url(
         self, django_server, browser
     ):
         fx = _build_fixtures()
@@ -243,34 +243,42 @@ class TestMobileResourcesAccordionAcrossPages:
 
                     _open_mobile_menu(page)
 
-                    # Step 2: Resources toggle is reachable.
-                    toggle = page.locator("#mobile-resources-toggle")
-                    if toggle.count() != 1 or not toggle.is_visible():
-                        failures.append(
-                            f"[{label}] {path}: "
-                            "#mobile-resources-toggle is missing"
-                        )
-                        continue
+                    # Step 2: Learn and Community toggles are reachable.
+                    for section in ["learn", "community"]:
+                        toggle = page.locator(f"#mobile-{section}-toggle")
+                        if toggle.count() != 1 or not toggle.is_visible():
+                            failures.append(
+                                f"[{label}] {path}: "
+                                f"#mobile-{section}-toggle is missing"
+                            )
+                            continue
+                        _expand_mobile_section(page, section)
 
-                    _expand_resources(page)
-
-                    # Step 3: the /blog link inside the expanded
-                    # accordion is visible. This is the headline
-                    # assertion from the spec.
+                    # Step 3: representative links inside both expanded
+                    # accordions are visible.
                     blog_link = page.locator(
-                        '#mobile-resources-list a[href="/blog"]'
+                        '#mobile-learn-list a[href="/blog"]'
                     )
                     if blog_link.count() != 1 or not blog_link.is_visible():
                         failures.append(
-                            f"[{label}] {path}: Resources accordion did "
+                            f"[{label}] {path}: text navigation did "
                             "not expand to show the /blog link"
+                        )
+                        continue
+                    sprints_link = page.locator(
+                        '#mobile-community-list a[href="/sprints"]'
+                    )
+                    if sprints_link.count() != 1 or not sprints_link.is_visible():
+                        failures.append(
+                            f"[{label}] {path}: text navigation did "
+                            "not expand to show the /sprints link"
                         )
                         continue
                 finally:
                     page.close()
 
             assert not failures, (
-                "Mobile Resources accordion is missing on the following "
+                "Mobile text navigation is missing on the following "
                 "URLs:\n  - " + "\n  - ".join(failures)
             )
         finally:
@@ -285,8 +293,8 @@ class TestMobileResourcesAccordionAcrossPages:
 
 class TestDesktopHeaderOnPeerReviewPages:
     """At desktop width the same four peer-review URLs must render the
-    desktop nav (About / Activities / Membership / Resources dropdown
-    trigger) and must NOT show the mobile hamburger."""
+    desktop nav (Learn and Community dropdown triggers) and must NOT show
+    the mobile hamburger."""
 
     def test_desktop_header_renders_on_peer_review_pages(
         self, django_server, browser
@@ -321,23 +329,21 @@ class TestDesktopHeaderOnPeerReviewPages:
                         wait_until="domcontentloaded",
                     )
 
-                    # Desktop nav element must render.
-                    desktop_about = page.locator(
-                        'nav a[href="/about"]'
-                    ).first
-                    if not desktop_about.is_visible():
+                    learn_dd = page.locator("#learn-dropdown-btn")
+                    if learn_dd.count() != 1 or not learn_dd.is_visible():
                         failures.append(
-                            f"{path}: desktop nav About link not visible"
+                            f"{path}: desktop Learn dropdown button "
+                            "(#learn-dropdown-btn) not visible"
                         )
 
-                    resources_dd = page.locator("#resources-dropdown-btn")
+                    community_dd = page.locator("#community-dropdown-btn")
                     if (
-                        resources_dd.count() != 1
-                        or not resources_dd.is_visible()
+                        community_dd.count() != 1
+                        or not community_dd.is_visible()
                     ):
                         failures.append(
-                            f"{path}: desktop Resources dropdown button "
-                            "(#resources-dropdown-btn) not visible"
+                            f"{path}: desktop Community dropdown button "
+                            "(#community-dropdown-btn) not visible"
                         )
 
                     # Hamburger must be hidden at desktop width.
@@ -414,7 +420,7 @@ class TestHomepageMobileMenuStillWorks:
     interaction here so a CI failure points at this issue's tests when
     the fix's blast radius is wrong."""
 
-    def test_homepage_mobile_resources_still_expands(
+    def test_homepage_mobile_text_navigation_still_expands(
         self, django_server, browser
     ):
         # Make sure tier table exists before hitting the homepage.
@@ -424,12 +430,18 @@ class TestHomepageMobileMenuStillWorks:
         try:
             page.goto(f"{django_server}/", wait_until="domcontentloaded")
             _open_mobile_menu(page)
-            _expand_resources(page)
+            _expand_mobile_section(page, "learn")
+            _expand_mobile_section(page, "community")
 
             blog = page.locator(
-                '#mobile-resources-list a[href="/blog"]'
+                '#mobile-learn-list a[href="/blog"]'
             )
             assert blog.count() == 1
             assert blog.is_visible()
+            sprints = page.locator(
+                '#mobile-community-list a[href="/sprints"]'
+            )
+            assert sprints.count() == 1
+            assert sprints.is_visible()
         finally:
             context.close()

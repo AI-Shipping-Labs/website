@@ -25,7 +25,7 @@
         {% for course in courses %}
         <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50">
           {% with course_primary_instructor=course.primary_instructor %}
-          <a href="/courses/{{ course.slug }}" class="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <a href="/courses/{{ course.slug }}" class="{% include 'content/_clickable_card_classes.html' %} h-full">
             {% if course.is_free %}
               {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% elif course.required_level > 0 %}
@@ -33,12 +33,12 @@
             {% else %}
               {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
             {% endif %}
-            <div class="min-w-0 p-5 sm:p-6">
-              <div class="flex flex-wrap items-center gap-2 mb-3">
+            <div class="min-w-0 p-4 sm:p-5">
+              <div class="mb-3 flex flex-wrap items-center gap-2">
                 {% if course.is_free %}
-                <span class="rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">Free</span>
+                <span class="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-medium text-green-400">Free</span>
                 {% elif course.required_level > 0 %}
-                <span class="rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent">{{ course.required_level|required_tier_label }}</span>
+                <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">{{ course.required_level|required_tier_label }}</span>
                 {% endif %}
                 {% if course.pk in enrolled_course_ids %}
                 <span class="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-xs font-medium text-green-400" data-testid="enrolled-badge">
@@ -47,7 +47,7 @@
                 </span>
                 {% endif %}
               </div>
-              <h2 class="line-clamp-3 break-words text-lg font-semibold text-foreground transition-colors group-hover:text-accent">
+              <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
                 {{ course.title }}
               </h2>
               {% if course_primary_instructor %}
@@ -57,10 +57,13 @@
               <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ course.description|truncatechars:120 }}</p>
               {% endif %}
               {% if course.tags %}
-              <div class="mt-3 flex flex-wrap gap-1.5">
-                {% for tag in course.tags %}
+              <div class="mt-3 flex flex-wrap gap-1.5" data-testid="course-card-tags">
+                {% for tag in course.tags|slice:":3" %}
                 <span class="max-w-full truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
                 {% endfor %}
+                {% if course.tags|length > 3 %}
+                <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ course.tags|length|add:'-3' }} more course tags">+{{ course.tags|length|add:"-3" }}</span>
+                {% endif %}
               </div>
               {% endif %}
             </div>

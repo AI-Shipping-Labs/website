@@ -76,10 +76,13 @@
           though they are no longer nested, future enhancements (e.g. a
           card-level click handler on the <article>) shouldn't intercept.
           {% endcomment %}
-          <div class="mt-3 flex flex-wrap gap-2" data-testid="blog-card-tags">
-            {% for tag in article.tags %}
-            <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center rounded-full bg-secondary px-3 py-2 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors min-h-[44px]" onclick="event.stopPropagation();">{{ tag }}</a>
+          <div class="mt-3 flex flex-wrap gap-1.5" data-testid="blog-card-tags">
+            {% for tag in article.tags|slice:":3" %}
+            <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex min-h-[44px] items-center rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary/80" onclick="event.stopPropagation();">{{ tag }}</a>
             {% endfor %}
+            {% if article.tags|length > 3 %}
+            <span class="inline-flex min-h-[44px] items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground" aria-label="{{ article.tags|length|add:'-3' }} more article tags">+{{ article.tags|length|add:"-3" }}</span>
+            {% endif %}
           </div>
           {% endif %}
         </article>

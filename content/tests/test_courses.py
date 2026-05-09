@@ -488,12 +488,12 @@ class CoursesListViewTest(TestCase):
         body = response.content.decode()
         fallback = body.split(
             'data-testid="course-card-preview-fallback"', 1,
-        )[1].split('<div class="min-w-0 p-5', 1)[0]
+        )[1].split('<div class="min-w-0 p-4 sm:p-5"', 1)[0]
         self.assertContains(response, 'data-testid="course-card-preview-fallback"')
         self.assertNotIn('Published Course', fallback)
         self.assertNotIn('Test Instructor', fallback)
         self.assertNotIn('python', fallback)
-        self.assertContains(response, 'block h-full focus-visible:outline-none')
+        self.assertContains(response, 'group block focus-visible:outline-none')
         self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
 

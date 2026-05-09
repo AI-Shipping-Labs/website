@@ -135,7 +135,7 @@ class MobileTypographyAndSpacingTest(TestCase):
         """Login page should use reduced padding on mobile."""
         response = self.client.get("/accounts/login/")
         content = response.content.decode()
-        self.assertIn("py-16 sm:py-24", content)
+        self.assertIn("px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12", content)
 
     def test_footer_uses_reduced_mobile_padding(self):
         """Footer should use reduced padding on mobile."""

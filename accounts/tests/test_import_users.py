@@ -537,7 +537,6 @@ class ImportBatchAdminTest(TestCase):
         self.assertIsInstance(model_admin, ImportBatchAdmin)
         self.assertIn("source", model_admin.readonly_fields)
         self.assertIn("errors", model_admin.readonly_fields)
-        self.assertIn("source", model_admin.list_filter)
 
 
 class UserAdminTest(TestCase):

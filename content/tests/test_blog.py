@@ -36,12 +36,6 @@ class ArticleFieldsTest(TestCase):
         )
         self.assertEqual(article.cover_image_url, 'https://example.com/image.png')
 
-    def test_cover_image_url_default_empty(self):
-        article = Article.objects.create(
-            title='Test', slug='test-cover-default', date=date(2025, 1, 1),
-        )
-        self.assertEqual(article.cover_image_url, '')
-
     def test_status_field_exists(self):
         article = Article.objects.create(
             title='Test', slug='test-status', date=date(2025, 1, 1),

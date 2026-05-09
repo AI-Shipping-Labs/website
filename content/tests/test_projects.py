@@ -383,6 +383,61 @@ class ProjectsListDisplayTest(TestCase):
         self.assertContains(response, 'python')
         self.assertContains(response, 'ai')
 
+    def test_project_card_tags_are_capped_with_overflow_chip(self):
+        Project.objects.create(
+            title='Many Tags Project',
+            slug='many-tags-project',
+            description='A project with lots of topic tags',
+            date=date(2025, 8, 11),
+            author='Community Member',
+            difficulty='intermediate',
+            tags=['agents', 'rag', 'python', 'evaluation', 'deployment'],
+            published=True,
+        )
+        response = self.client.get('/projects')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="project-card-tags"', count=2)
+        self.assertContains(response, 'agents')
+        self.assertContains(response, 'rag')
+        self.assertContains(response, 'python')
+        self.assertContains(response, '+2')
+        self.assertNotContains(response, 'evaluation')
+        self.assertNotContains(response, 'deployment')
+
+    def test_official_badge_only_for_first_party_project_authors(self):
+        Project.objects.create(
+            title='Labs Project',
+            slug='labs-project',
+            description='First-party project',
+            date=date(2025, 8, 11),
+            author='AI Shipping Labs',
+            published=True,
+        )
+        Project.objects.create(
+            title='Alexey Project',
+            slug='alexey-project',
+            description='First-party project',
+            date=date(2025, 8, 12),
+            author='Alexey Grigorev',
+            published=True,
+        )
+        Project.objects.create(
+            title='Community Project',
+            slug='community-project',
+            description='Member project',
+            date=date(2025, 8, 13),
+            author='Community Member',
+            published=True,
+        )
+        response = self.client.get('/projects')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Official', count=2)
+        self.assertContains(response, 'Community Member')
+
+    def test_project_card_has_arrow_affordance(self):
+        response = self.client.get('/projects')
+        self.assertContains(response, 'data-lucide="arrow-right"')
+
     def test_shows_cover_image(self):
         response = self.client.get('/projects')
         self.assertContains(response, 'https://example.com/project-cover.jpg')
@@ -410,8 +465,9 @@ class ProjectsListDisplayTest(TestCase):
         # Both cards visible
         self.assertContains(response, 'Display Project')
         self.assertContains(response, 'Pro Techniques')
-        # Exactly one lock icon — on the gated card
+        # Exactly one lock icon — on the gated card — plus the tier label.
         self.assertContains(response, 'data-lucide="lock"', count=1)
+        self.assertContains(response, 'Basic or above')
 
     def test_no_lock_icon_when_all_projects_are_open(self):
         # Replaces playwright_tests/test_project_showcase.py::TestScenario12VisitorDistinguishesOpenFromGated::test_lock_icon_on_gated_project_and_no_icon_on_open

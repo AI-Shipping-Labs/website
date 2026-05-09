@@ -391,10 +391,10 @@ class TestMiddleClickOpensNewTab:
         page = context.new_page()
         page.goto(f'{django_server}/projects', wait_until='domcontentloaded')
 
-        # Ctrl+Click opens the link in a new tab natively because the
+        # Ctrl/Cmd-click opens the link in a new tab natively because the
         # wrapper is an <a href>, not a JS-only handler. Validate the
         # behaviour by asserting on the rendered card link's attributes
-        # (the contract that Ctrl+Click + middle-click rely on at the
+        # (the contract that Ctrl/Cmd-click + middle-click rely on at the
         # browser level): no `target` override, real href, no JS-only
         # navigation. This is the same contract test_curated_links uses
         # for `target="_blank"` external links.
@@ -408,11 +408,22 @@ class TestMiddleClickOpensNewTab:
         # falls through to the browser's native open-in-new-tab path).
         assert link.get_attribute('onclick') is None
 
-        # Issue the Ctrl+Click and verify a new page opens in this context.
-        with context.expect_page() as new_page_info:
-            link.click(modifiers=['ControlOrMeta'])
+        # Issue an explicit platform modifier click and verify a new page
+        # opens in this context. Using keyboard.down/up avoids ambiguity in
+        # synthetic `ControlOrMeta` click dispatch across Playwright versions.
+        modifier = (
+            'Meta'
+            if os.name == 'posix' and os.uname().sysname == 'Darwin'
+            else 'Control'
+        )
+        page.keyboard.down(modifier)
+        try:
+            with context.expect_page() as new_page_info:
+                link.click()
+        finally:
+            page.keyboard.up(modifier)
         new_page = new_page_info.value
-        assert new_page is not None, 'Ctrl+Click did not open a new tab'
+        assert new_page is not None, 'Ctrl/Cmd-click did not open a new tab'
 
         # Original tab is unchanged (the listing page).
         assert page.url.rstrip('/').endswith('/projects')

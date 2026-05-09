@@ -11,7 +11,7 @@ User = get_user_model()
 
 
 class AccountPageMobilePaddingTest(TestCase):
-    """Account page card sections use p-5 sm:p-8 padding."""
+    """Account page card sections use compact responsive card padding."""
 
     @classmethod
     def setUpTestData(cls):
@@ -23,16 +23,16 @@ class AccountPageMobilePaddingTest(TestCase):
         self.client.force_login(self.user)
 
     def test_membership_card_has_responsive_padding(self):
-        """Membership section uses p-5 sm:p-8 instead of just p-8."""
+        """Membership section uses p-5 sm:p-6 instead of oversized padding."""
         response = self.client.get("/account/")
         content = response.content.decode()
         # Find the Membership heading with the crown icon
         membership_heading_pos = content.index('<i data-lucide="crown"')
         preceding = content[max(0, membership_heading_pos - 200):membership_heading_pos]
-        self.assertIn("p-5 sm:p-8", preceding)
+        self.assertIn("p-5 sm:p-6", preceding)
 
     def test_email_preferences_card_has_responsive_padding(self):
-        """Email preferences section uses p-5 sm:p-8."""
+        """Email preferences section uses p-5 sm:p-6."""
         response = self.client.get("/account/")
         content = response.content.decode()
         section_match = re.search(
@@ -43,10 +43,10 @@ class AccountPageMobilePaddingTest(TestCase):
                 r'class="[^"]*"[^>]*id="email-preferences-section"', content
             )
         self.assertIsNotNone(section_match)
-        self.assertIn("p-5 sm:p-8", section_match.group(0))
+        self.assertIn("p-5 sm:p-6", section_match.group(0))
 
     def test_change_password_card_has_responsive_padding(self):
-        """Change password section uses p-5 sm:p-8."""
+        """Change password section uses p-5 sm:p-6."""
         response = self.client.get("/account/")
         content = response.content.decode()
         section_match = re.search(
@@ -57,7 +57,7 @@ class AccountPageMobilePaddingTest(TestCase):
                 r'class="[^"]*"[^>]*id="change-password-section"', content
             )
         self.assertIsNotNone(section_match)
-        self.assertIn("p-5 sm:p-8", section_match.group(0))
+        self.assertIn("p-5 sm:p-6", section_match.group(0))
 
 
 class AccountPageActionButtonsStackTest(TestCase):
@@ -105,22 +105,22 @@ class AccountPageModalMobileTest(TestCase):
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_modals_have_responsive_padding(self):
-        """Modal content areas use p-5 sm:p-8 for better mobile spacing."""
+        """Modal content areas use p-5 sm:p-6 for member card consistency."""
         response = self.client.get("/account/")
         content = response.content.decode()
         # Check upgrade modal
         upgrade_modal_pos = content.index('id="upgrade-modal"')
         modal_section = content[upgrade_modal_pos:upgrade_modal_pos + 500]
-        self.assertIn("p-5 sm:p-8", modal_section)
+        self.assertIn("p-5 sm:p-6", modal_section)
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_cancel_modal_has_responsive_padding(self):
-        """Cancel modal content area uses p-5 sm:p-8."""
+        """Cancel modal content area uses p-5 sm:p-6."""
         response = self.client.get("/account/")
         content = response.content.decode()
         cancel_modal_pos = content.index('id="cancel-modal"')
         modal_section = content[cancel_modal_pos:cancel_modal_pos + 500]
-        self.assertIn("p-5 sm:p-8", modal_section)
+        self.assertIn("p-5 sm:p-6", modal_section)
 
 
 class CancelModalTapTargetsTest(TestCase):
@@ -318,28 +318,28 @@ class LoginPageLinksWrapTest(TestCase):
 
 
 class LoginPageMobilePaddingTest(TestCase):
-    """Login page card uses responsive padding."""
+    """Login page card uses compact responsive padding."""
 
     def test_login_card_has_responsive_padding(self):
-        """Login card uses p-5 sm:p-8."""
+        """Login card uses p-5 sm:p-6."""
         response = self.client.get("/accounts/login/")
         content = response.content.decode()
         # Find the card div containing the sign-in heading
         signin_pos = content.index("Sign in</h1>")
         preceding = content[max(0, signin_pos - 400):signin_pos]
-        self.assertIn("p-5 sm:p-8", preceding)
+        self.assertIn("p-5 sm:p-6", preceding)
 
 
 class RegisterPageMobilePaddingTest(TestCase):
-    """Register page card uses responsive padding."""
+    """Register page card uses compact responsive padding."""
 
     def test_register_card_has_responsive_padding(self):
-        """Register card uses p-5 sm:p-8."""
+        """Register card uses p-5 sm:p-6."""
         response = self.client.get("/accounts/register/")
         content = response.content.decode()
         heading_pos = content.index("Create Account</h1>")
         preceding = content[max(0, heading_pos - 400):heading_pos]
-        self.assertIn("p-5 sm:p-8", preceding)
+        self.assertIn("p-5 sm:p-6", preceding)
 
 
 class PasswordResetRequestMobilePaddingTest(TestCase):

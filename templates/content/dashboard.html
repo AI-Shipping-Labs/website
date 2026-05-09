@@ -5,7 +5,7 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
-  <div class="mx-auto max-w-7xl px-3 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
+  <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
 
     <!-- Checkout Success Banner (shown via JS when ?checkout=success is present) -->
     <div id="checkout-success-banner" class="mb-6 hidden rounded-xl border border-green-500/30 bg-green-500/10 p-4" role="alert">
@@ -21,11 +21,11 @@
     </div>
 
     <!-- Welcome Banner -->
-    <section class="mb-10">
-      <div class="w-full rounded-2xl border border-border bg-card p-4 sm:p-8">
+    <section class="mb-8">
+      <div class="w-full rounded-lg border border-border bg-card p-5 sm:p-6">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div class="min-w-0">
-            <h1 class="text-xl font-semibold tracking-tight sm:text-3xl">
+            <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">
               Welcome back{% if user.first_name %}, {{ user.first_name }}{% endif %}
             </h1>
             <div class="mt-2 flex items-center gap-3">
@@ -53,11 +53,11 @@
             </div>
           </div>
           <div class="flex gap-3 sm:flex-row sm:flex-wrap">
-            <a href="{% url 'account' %}" class="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+            <a href="{% url 'account' %}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
               <i data-lucide="settings" class="h-4 w-4"></i>
               Account
             </a>
-            <a href="/pricing" class="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            <a href="/pricing" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>
@@ -68,8 +68,8 @@
 
     {% if plan %}
     <!-- Sprint Plan Section (issue #442) -->
-    <section class="mb-10">
-      <div class="rounded-2xl border border-border bg-card p-5 sm:p-8" id="sprint-plan-section" data-testid="account-sprint-plan-card">
+    <section class="mb-8">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6" id="sprint-plan-section" data-testid="account-sprint-plan-card">
         <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
           <i data-lucide="map" class="h-5 w-5 text-accent"></i>
           Your sprint plan
@@ -108,18 +108,18 @@
 
     <!-- Slack Community Section -->
     {% if show_slack_join %}
-    <section class="mb-10">
-      <div class="rounded-2xl border border-border bg-card p-6">
+    <section class="mb-8">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
         <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
-            <i data-lucide="message-square" class="h-6 w-6 text-purple-400"></i>
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-secondary">
+            <i data-lucide="message-square" class="h-5 w-5 text-accent"></i>
           </div>
           <div class="flex-1">
             <h2 class="text-lg font-semibold text-foreground">Join our Slack community</h2>
             <p class="mt-1 text-sm text-muted-foreground">Connect with other builders in our private Slack workspace.</p>
             <p class="mt-2 text-xs text-muted-foreground">Already joined? It may take up to an hour for your account to be linked automatically.</p>
           </div>
-          <a href="{{ slack_invite_url }}" target="_blank" rel="noopener" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-purple-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-500">
+          <a href="{{ slack_invite_url }}" target="_blank" rel="noopener" class="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
             <i data-lucide="message-square" class="h-4 w-4"></i>
             Join Slack
           </a>
@@ -127,11 +127,11 @@
       </div>
     </section>
     {% elif slack_connected %}
-    <section class="mb-10">
-      <div class="rounded-2xl border border-border bg-card p-6">
+    <section class="mb-8">
+      <div class="rounded-lg border border-border bg-card p-5 sm:p-6">
         <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-500/10">
-            <i data-lucide="check-circle" class="h-6 w-6 text-green-400"></i>
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-green-500/10">
+            <i data-lucide="check-circle" class="h-5 w-5 text-green-400"></i>
           </div>
           <div class="flex-1">
             <h2 class="text-lg font-semibold text-foreground">Connected to Slack</h2>

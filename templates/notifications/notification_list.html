@@ -6,21 +6,26 @@
 {% include "includes/header.html" %}
 
 <main class="min-h-screen pt-24">
-  <div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-    <div class="mb-8 flex items-center justify-between">
-      <h1 class="text-2xl font-semibold tracking-tight">Notifications</h1>
+  <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+    <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">Notifications</h1>
+        <p class="mt-2 text-sm text-muted-foreground">Updates from your courses, events, and community activity.</p>
+      </div>
       <button onclick="markAllRead()" id="mark-all-btn"
-              class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+        <i data-lucide="check-check" class="h-4 w-4"></i>
         Mark all as read
       </button>
     </div>
 
     {% if notifications %}
-    <div class="space-y-2">
+    <div class="rounded-lg border border-border bg-card p-3 sm:p-4">
+      <div class="space-y-2">
       {% for notification in notifications %}
       <a href="{{ notification.url }}"
          onclick="markRead(event, {{ notification.pk }}, '{{ notification.url }}')"
-         class="block rounded-lg border {% if not notification.read %}border-accent/30 bg-card{% else %}border-border bg-background{% endif %} p-4 transition-colors hover:bg-secondary/50">
+         class="block rounded-lg border {% if not notification.read %}border-accent/30 bg-accent/5{% else %}border-border bg-background{% endif %} p-4 transition-colors hover:border-accent/50 hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
         <div class="flex items-start gap-3">
           {% if not notification.read %}
           <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-accent"></span>
@@ -39,6 +44,7 @@
         </div>
       </a>
       {% endfor %}
+      </div>
     </div>
 
     <!-- Pagination -->
@@ -63,9 +69,12 @@
     {% endif %}
 
     {% else %}
-    <div class="rounded-lg border border-border bg-card p-12 text-center">
-      <i data-lucide="bell-off" class="mx-auto h-12 w-12 text-muted-foreground/40"></i>
-      <p class="mt-4 text-muted-foreground">No notifications yet.</p>
+    <div class="rounded-lg border border-border bg-card p-8 text-center sm:p-10">
+      <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-secondary">
+        <i data-lucide="bell-off" class="h-6 w-6 text-muted-foreground"></i>
+      </div>
+      <h2 class="mt-4 text-base font-semibold leading-snug text-foreground">No notifications yet</h2>
+      <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">When there is something new for your account, it will show up here.</p>
     </div>
     {% endif %}
   </div>

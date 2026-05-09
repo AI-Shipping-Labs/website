@@ -386,7 +386,15 @@ YOUTUBE_CLIENT_ID = os.environ.get('YOUTUBE_CLIENT_ID', '')
 YOUTUBE_CLIENT_SECRET = os.environ.get('YOUTUBE_CLIENT_SECRET', '')
 YOUTUBE_REFRESH_TOKEN = os.environ.get('YOUTUBE_REFRESH_TOKEN', '')
 
-SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', 'community@aishippinglabs.com')
+SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', '')
+SES_TRANSACTIONAL_FROM_EMAIL = os.environ.get(
+    'SES_TRANSACTIONAL_FROM_EMAIL',
+    SES_FROM_EMAIL or 'noreply@aishippinglabs.com',
+)
+SES_PROMOTIONAL_FROM_EMAIL = os.environ.get(
+    'SES_PROMOTIONAL_FROM_EMAIL',
+    SES_FROM_EMAIL or 'content@aishippinglabs.com',
+)
 SES_WEBHOOK_VALIDATION_ENABLED = os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
 
 # Email campaign chunking: number of recipients per chunked send_campaign_batch task.

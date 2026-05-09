@@ -132,6 +132,27 @@ class SettingsExportTest(TestCase):
         keys = [entry['key'] for entry in payload['integration_settings']]
         self.assertNotIn('LEGACY_DROPPED_KEY', keys)
 
+    def test_export_includes_configured_ses_sender_keys(self):
+        IntegrationSetting.objects.create(
+            key='SES_TRANSACTIONAL_FROM_EMAIL',
+            value='tx@example.test',
+            is_secret=False,
+            group='ses',
+        )
+        IntegrationSetting.objects.create(
+            key='SES_PROMOTIONAL_FROM_EMAIL',
+            value='promo@example.test',
+            is_secret=False,
+            group='ses',
+        )
+
+        response = self.client.get('/studio/settings/export/')
+        payload = json.loads(response.content.decode())
+
+        keys = {entry['key']: entry['value'] for entry in payload['integration_settings']}
+        self.assertEqual(keys['SES_TRANSACTIONAL_FROM_EMAIL'], 'tx@example.test')
+        self.assertEqual(keys['SES_PROMOTIONAL_FROM_EMAIL'], 'promo@example.test')
+
 
 class SettingsImportTest(TestCase):
     """POST /studio/settings/import/ upserts and validates."""
@@ -209,6 +230,25 @@ class SettingsImportTest(TestCase):
         self.assertEqual(
             IntegrationSetting.objects.get(key='STRIPE_SECRET_KEY').value,
             'new-value',
+        )
+
+    def test_import_accepts_ses_sender_keys(self):
+        response = self._post_payload({
+            'format_version': 1,
+            'integration_settings': [
+                {'key': 'SES_TRANSACTIONAL_FROM_EMAIL', 'value': 'tx@example.test'},
+                {'key': 'SES_PROMOTIONAL_FROM_EMAIL', 'value': 'promo@example.test'},
+            ],
+            'auth_providers': [],
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            IntegrationSetting.objects.get(key='SES_TRANSACTIONAL_FROM_EMAIL').value,
+            'tx@example.test',
+        )
+        self.assertEqual(
+            IntegrationSetting.objects.get(key='SES_PROMOTIONAL_FROM_EMAIL').value,
+            'promo@example.test',
         )
 
     def test_malformed_json_is_rejected_with_message(self):

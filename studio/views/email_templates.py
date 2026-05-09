@@ -21,6 +21,7 @@ from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
 from email_app.models import EmailTemplateOverride
+from email_app.services.email_classification import TRANSACTIONAL_EMAIL_TYPES
 from email_app.services.email_service import (
     TEMPLATES_DIR,
     EmailService,
@@ -50,13 +51,11 @@ TEMPLATE_DISPLAY_ORDER = [
 
 def _all_template_names():
     """Return the canonical list of editable template slugs."""
-    # Source of truth: the ``TRANSACTIONAL_TYPES`` set on EmailService.
+    # Source of truth: the central transactional classification set.
     # We render in TEMPLATE_DISPLAY_ORDER and append any extras that may
     # show up later so the page never silently drops one.
-    from email_app.services.email_service import TRANSACTIONAL_TYPES
-
     known = list(TEMPLATE_DISPLAY_ORDER)
-    for name in sorted(TRANSACTIONAL_TYPES):
+    for name in sorted(TRANSACTIONAL_EMAIL_TYPES):
         if name not in known:
             known.append(name)
     # Filter to ones we can actually load (file or override) so the list

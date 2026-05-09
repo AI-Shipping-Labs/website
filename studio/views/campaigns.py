@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.utils.tags import normalize_tags
 from email_app.models import EmailCampaign
+from email_app.services.email_classification import EMAIL_KIND_PROMOTIONAL
 from email_app.services.email_service import EmailService, EmailServiceError
 from studio.decorators import staff_required
 
@@ -396,7 +397,13 @@ def campaign_test_send(request, campaign_id):
         )
 
         try:
-            service._send_ses(recipient, subject, full_html)
+            service._send_ses(
+                recipient,
+                subject,
+                full_html,
+                email_kind=EMAIL_KIND_PROMOTIONAL,
+                unsubscribe_url=unsubscribe_url,
+            )
         except EmailServiceError as exc:
             failed[recipient] = str(exc)
             logger.warning(

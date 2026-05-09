@@ -268,6 +268,8 @@ class StudioCampaignDetailTest(TestCase):
             "preview@example.com",
             "[TEST] Detail Campaign",
             "<html>test</html>",
+            email_kind="promotional",
+            unsubscribe_url=None,
         )
 
         self.campaign.refresh_from_db()
@@ -293,6 +295,11 @@ class StudioCampaignDetailTest(TestCase):
         html = mock_ses.call_args[0][2]
         self.assertIn("/api/unsubscribe?token=", html)
         self.assertNotIn('<p class="verify-email-cta">', html)
+        self.assertEqual(mock_ses.call_args.kwargs["email_kind"], "promotional")
+        self.assertIn(
+            "/api/unsubscribe?token=",
+            mock_ses.call_args.kwargs["unsubscribe_url"],
+        )
         assert_no_internal_footer_text(self, html)
 
     @patch("studio.views.campaigns.EmailService")

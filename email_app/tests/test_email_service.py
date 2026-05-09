@@ -19,6 +19,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 
 from email_app.models import EmailLog
+from email_app.services.email_classification import (
+    EMAIL_KIND_PROMOTIONAL,
+    EMAIL_KIND_TRANSACTIONAL,
+    classify_email_type,
+)
 from email_app.services.email_service import EmailService, EmailServiceError
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
@@ -43,11 +48,15 @@ class EmailServiceSendTest(TestCase):
     """Test EmailService.send() method."""
 
     def setUp(self):
+        clear_config_cache()
         self.user = User.objects.create_user(
             email='alice@example.com',
             first_name='Alice',
         )
         self.service = EmailService()
+
+    def tearDown(self):
+        clear_config_cache()
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-001')
     def test_send_creates_email_log(self, mock_ses):
@@ -70,15 +79,19 @@ class EmailServiceSendTest(TestCase):
         self.assertIn('Basic', html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-003')
-    def test_send_skips_unsubscribed_user(self, mock_ses):
+    def test_transactional_send_delivers_to_unsubscribed_user(self, mock_ses):
         self.user.unsubscribed = True
         self.user.save()
 
-        result = self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
+        result = self.service.send(
+            self.user,
+            'password_reset',
+            {'reset_url': 'https://example.test/reset'},
+        )
 
-        self.assertIsNone(result)
-        mock_ses.assert_not_called()
-        self.assertEqual(EmailLog.objects.count(), 0)
+        self.assertIsNotNone(result)
+        mock_ses.assert_called_once()
+        self.assertEqual(EmailLog.objects.count(), 1)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-004')
     def test_send_renders_user_name_in_body(self, mock_ses):
@@ -97,19 +110,34 @@ class EmailServiceSendTest(TestCase):
         html_body = call_args[0][2]
         self.assertIn('bob', html_body)
 
-    def test_send_invalid_template_raises_error(self):
+    def test_send_unknown_template_kind_raises_error(self):
         with self.assertRaises(EmailServiceError) as ctx:
             self.service.send(self.user, 'nonexistent_template', {})
-        self.assertIn('not found', str(ctx.exception))
+        self.assertIn('not classified', str(ctx.exception))
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-006')
-    def test_send_includes_unsubscribe_link(self, mock_ses):
-        self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
+    def test_transactional_send_excludes_unsubscribe_link(self, mock_ses):
+        self.service.send(
+            self.user,
+            'password_reset',
+            {'reset_url': 'https://example.test/reset'},
+        )
 
         call_args = mock_ses.call_args
         html_body = call_args[0][2]
-        self.assertIn('Unsubscribe', html_body)
-        self.assertIn('/api/unsubscribe?token=', html_body)
+        self.assertNotIn('Unsubscribe', html_body)
+        self.assertNotIn('/api/unsubscribe?token=', html_body)
+
+    @patch.object(EmailService, '_send_ses', return_value='ses-msg-006b')
+    def test_transactional_send_uses_transactional_kind(self, mock_ses):
+        self.service.send(
+            self.user,
+            'password_reset',
+            {'reset_url': 'https://example.test/reset'},
+        )
+
+        self.assertEqual(mock_ses.call_args.kwargs['email_kind'], EMAIL_KIND_TRANSACTIONAL)
+        self.assertIsNone(mock_ses.call_args.kwargs['unsubscribe_url'])
 
     @patch.object(EmailService, '_send_ses', return_value='ses-msg-007')
     def test_send_includes_header_and_footer(self, mock_ses):
@@ -132,6 +160,16 @@ class EmailServiceSendTest(TestCase):
         mock_ses.assert_called_once()
         self.assertEqual(mock_ses.call_args[0][0], 'alice@example.com')
         self.assertIn('Welcome', mock_ses.call_args[0][1])
+
+    def test_ambiguous_templates_are_explicitly_transactional(self):
+        self.assertEqual(
+            classify_email_type('community_invite'),
+            EMAIL_KIND_TRANSACTIONAL,
+        )
+        self.assertEqual(
+            classify_email_type('lead_magnet_delivery'),
+            EMAIL_KIND_TRANSACTIONAL,
+        )
 
 
 class EmailServiceTemplateRenderingTest(TestCase):
@@ -386,22 +424,27 @@ class EmailServiceSESIntegrationTest(TestCase):
         self.assertIn('Failed to send email via SES to to@example.com', logs.output[0])
         self.assertIn('SES send failed', str(ctx.exception))
 
-    @override_settings(SES_FROM_EMAIL='custom@example.com')
+    @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='custom@example.com')
     @patch('email_app.services.email_service.boto3')
-    def test_send_ses_uses_configured_from_email(self, mock_boto3):
+    def test_send_ses_uses_configured_transactional_from_email(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
         mock_boto3.client.return_value = mock_client
 
-        self.service._send_ses('to@example.com', 'Sub', '<html/>')
+        self.service._send_ses(
+            'to@example.com',
+            'Sub',
+            '<html/>',
+            email_kind=EMAIL_KIND_TRANSACTIONAL,
+        )
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['FromEmailAddress'], 'custom@example.com')
 
     @patch('email_app.services.email_service.boto3')
-    def test_send_ses_uses_integration_setting_from_email(self, mock_boto3):
+    def test_send_ses_uses_integration_setting_transactional_from_email(self, mock_boto3):
         IntegrationSetting.objects.create(
-            key='SES_FROM_EMAIL',
+            key='SES_TRANSACTIONAL_FROM_EMAIL',
             value='sender@example.com',
             group='ses',
         )
@@ -411,10 +454,53 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
         mock_boto3.client.return_value = mock_client
 
-        self.service._send_ses('to@example.com', 'Sub', '<html/>')
+        self.service._send_ses(
+            'to@example.com',
+            'Sub',
+            '<html/>',
+            email_kind=EMAIL_KIND_TRANSACTIONAL,
+        )
 
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['FromEmailAddress'], 'sender@example.com')
+
+    @override_settings(SES_PROMOTIONAL_FROM_EMAIL='promo@example.com')
+    @patch('email_app.services.email_service.boto3')
+    def test_send_ses_uses_configured_promotional_from_email(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-123'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses(
+            'to@example.com',
+            'Sub',
+            '<html/>',
+            email_kind=EMAIL_KIND_PROMOTIONAL,
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(call_kwargs['FromEmailAddress'], 'promo@example.com')
+
+    @override_settings(
+        SES_FROM_EMAIL='legacy@example.com',
+        SES_TRANSACTIONAL_FROM_EMAIL='',
+        SES_PROMOTIONAL_FROM_EMAIL='',
+    )
+    @patch('email_app.services.email_service.boto3')
+    def test_send_ses_uses_legacy_from_email_fallback(self, mock_boto3):
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'id-123'}
+        mock_boto3.client.return_value = mock_client
+
+        self.service._send_ses(
+            'to@example.com',
+            'Sub',
+            '<html/>',
+            email_kind=EMAIL_KIND_TRANSACTIONAL,
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        self.assertEqual(call_kwargs['FromEmailAddress'], 'legacy@example.com')
 
     @patch('email_app.services.email_service.boto3')
     def test_send_email_passes_configuration_set_when_set(self, mock_boto3):
@@ -585,7 +671,7 @@ class VerifyEmailFooterTest(TestCase):
         assert_no_internal_footer_text(self, html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-450-5')
-    def test_verify_cta_is_above_unsubscribe_in_rendered_html(self, mock_ses):
+    def test_verify_cta_renders_without_transactional_unsubscribe(self, mock_ses):
         self.service.send(
             self.unverified, 'welcome', {'tier_name': 'Free'},
         )
@@ -593,15 +679,8 @@ class VerifyEmailFooterTest(TestCase):
 
         # Find the rendered CTA paragraph, not the CSS rule in <style>.
         verify_idx = html.find('<p class="verify-email-cta">')
-        unsub_idx = html.find('/api/unsubscribe?token=')
-
         self.assertNotEqual(verify_idx, -1, 'verify CTA missing')
-        self.assertNotEqual(unsub_idx, -1, 'unsubscribe link missing')
-        self.assertLess(
-            verify_idx,
-            unsub_idx,
-            'verify CTA must appear before the unsubscribe link in DOM order',
-        )
+        self.assertNotIn('/api/unsubscribe?token=', html)
         assert_no_internal_footer_text(self, html)
 
     @patch.object(EmailService, '_send_ses', return_value='ses-450-6')

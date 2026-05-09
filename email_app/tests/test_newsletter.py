@@ -497,10 +497,10 @@ class FooterSubscribeFormTest(TestCase):
 
 
 class EmailServiceUnsubscribeLinkTest(TestCase):
-    """Test that every outgoing email includes an unsubscribe link."""
+    """Transactional EmailService sends do not include marketing unsubscribe UI."""
 
     @patch("email_app.services.email_service.EmailService._send_ses", return_value="msg-id")
-    def test_email_includes_unsubscribe_link(self, mock_ses):
+    def test_transactional_email_excludes_unsubscribe_link(self, mock_ses):
         from email_app.services.email_service import EmailService
 
         user = User.objects.create_user(email="test@example.com")
@@ -511,8 +511,8 @@ class EmailServiceUnsubscribeLinkTest(TestCase):
         self.assertEqual(mock_ses.call_args[0][0], "test@example.com")
         self.assertIn("Welcome to Free", mock_ses.call_args[0][1])
         html_body = mock_ses.call_args[0][2]
-        self.assertIn("Unsubscribe", html_body)
-        self.assertIn("/api/unsubscribe?token=", html_body)
+        self.assertNotIn("Unsubscribe", html_body)
+        self.assertNotIn("/api/unsubscribe?token=", html_body)
 
 
 class SubscriberAdminTest(TestCase):

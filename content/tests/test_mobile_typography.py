@@ -132,10 +132,11 @@ class MobileTypographyAndSpacingTest(TestCase):
         self.assertIn("px-4 py-10 sm:px-6 sm:py-20 lg:px-8 lg:py-28", content)
 
     def test_login_uses_reduced_mobile_padding(self):
-        """Login page should use reduced padding on mobile."""
+        """Login page should use the refreshed auth-shell spacing from #543."""
         response = self.client.get("/accounts/login/")
         content = response.content.decode()
-        self.assertIn("px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12", content)
+        expected_spacing = "px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12"
+        self.assertIn(expected_spacing, content)
 
     def test_footer_uses_reduced_mobile_padding(self):
         """Footer should use reduced padding on mobile."""

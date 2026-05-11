@@ -36,6 +36,40 @@
       </div>
       {% endif %}
 
+      {% if event_group and event_group_events %}
+      <section class="mb-6 rounded-2xl border border-border bg-card p-6" data-testid="sprint-meeting-schedule">
+        <h2 class="text-lg font-semibold text-foreground mb-3">Meeting schedule</h2>
+        <ul class="divide-y divide-border" data-testid="sprint-meeting-schedule-list">
+          {% for ev in event_group_events %}
+          <li class="py-3" data-testid="sprint-meeting-schedule-row">
+            <a href="{% url 'event_detail' slug=ev.slug %}"
+               class="block hover:bg-secondary/50 -mx-2 px-2 rounded-md transition-colors {% if ev.is_past %}text-muted-foreground{% else %}text-foreground{% endif %}"
+               data-testid="sprint-meeting-schedule-link">
+              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span class="text-sm font-medium" data-testid="sprint-meeting-schedule-date">
+                  {{ ev.start_datetime|date:"D, M j, Y" }}
+                </span>
+                <span class="text-sm" data-testid="sprint-meeting-schedule-time">
+                  {{ ev.start_datetime|date:"H:i" }} {{ ev.timezone }}
+                </span>
+                {% if ev.location %}
+                <span class="text-xs text-muted-foreground" data-testid="sprint-meeting-schedule-location">
+                  {{ ev.location }}
+                </span>
+                {% else %}
+                <span class="text-xs text-muted-foreground" data-testid="sprint-meeting-schedule-location">
+                  {{ ev.get_platform_display }}
+                </span>
+                {% endif %}
+              </div>
+              <div class="text-sm mt-1">{{ ev.title }}</div>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
       <div class="rounded-2xl border border-border bg-card p-6">
         {% if not is_authenticated %}
           <a href="/accounts/login/?next=/sprints/{{ sprint.slug }}"

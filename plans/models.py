@@ -103,6 +103,23 @@ class Sprint(TimestampedModelMixin, models.Model):
             'pilot, or raise to Premium for high-touch sprints.'
         ),
     )
+    # Optional link to a recurring meeting series (issue #565).
+    # ``SET_NULL`` (not ``CASCADE``) because deleting the event group must
+    # only sever the link; the sprint itself and every other sprint that
+    # referenced the group survive. ForeignKey (not OneToOne) because the
+    # same recurring meeting series can back several sprints at once
+    # (e.g. "Wednesday office hours" running across May and June cohorts).
+    event_group = models.ForeignKey(
+        'events.EventGroup',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='sprints',
+        help_text=(
+            'Optional recurring meeting series whose occurrences are '
+            'surfaced on the sprint detail page. Deleting the group '
+            'unlinks the sprint; the sprint itself is preserved.'
+        ),
+    )
 
     class Meta:
         ordering = ['-start_date']

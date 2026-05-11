@@ -15,11 +15,13 @@ the JSON API mirror lives in ``api/views/enrollments.py``.
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from content.access import LEVEL_TO_TIER_NAME, get_user_level
+from events.models import Event
 from plans.models import Plan, Sprint, SprintEnrollment
 
 
@@ -40,13 +42,27 @@ def _is_enrolled(sprint, user):
     return SprintEnrollment.objects.filter(sprint=sprint, user=user).exists()
 
 
-def _resolve_sprint_or_404(slug, user):
+def _resolve_sprint_or_404(slug, user, *, with_event_group=False):
     """Look up a sprint by slug, hiding draft sprints from non-staff.
 
     Mirrors the events surface: a sprint with status=draft is invisible
     to anonymous and non-staff users. Staff can preview the page.
+
+    When ``with_event_group=True`` the lookup pulls the linked
+    ``EventGroup`` (one extra row) and prefetches its events ordered by
+    start datetime so the public sprint detail page can render the
+    "Meeting schedule" section without N+1 queries (issue #565).
     """
-    sprint = get_object_or_404(Sprint, slug=slug)
+    qs = Sprint.objects.all()
+    if with_event_group:
+        qs = qs.select_related('event_group').prefetch_related(
+            Prefetch(
+                'event_group__events',
+                queryset=Event.objects.order_by('start_datetime'),
+                to_attr='ordered_events',
+            ),
+        )
+    sprint = get_object_or_404(qs, slug=slug)
     if sprint.status == 'draft':
         if not user.is_authenticated or not user.is_staff:
             raise Http404('Sprint not found')
@@ -55,7 +71,9 @@ def _resolve_sprint_or_404(slug, user):
 
 def sprint_detail(request, sprint_slug):
     """Public detail page for a sprint with a tier-aware Join CTA."""
-    sprint = _resolve_sprint_or_404(sprint_slug, request.user)
+    sprint = _resolve_sprint_or_404(
+        sprint_slug, request.user, with_event_group=True,
+    )
 
     user = request.user
     is_authenticated = user.is_authenticated
@@ -64,6 +82,11 @@ def sprint_detail(request, sprint_slug):
     enrolled = _is_enrolled(sprint, user)
     viewer_plan = _viewer_plan(sprint, user)
     required_tier_name = LEVEL_TO_TIER_NAME.get(sprint.min_tier_level, 'Premium')
+
+    event_group = sprint.event_group
+    event_group_events = (
+        getattr(event_group, 'ordered_events', []) if event_group else []
+    )
 
     return render(
         request,
@@ -75,6 +98,8 @@ def sprint_detail(request, sprint_slug):
             'eligible': eligible,
             'viewer_plan': viewer_plan,
             'required_tier_name': required_tier_name,
+            'event_group': event_group,
+            'event_group_events': event_group_events,
         },
     )
 

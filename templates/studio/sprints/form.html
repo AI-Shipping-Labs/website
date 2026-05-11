@@ -60,6 +60,30 @@
       </select>
     </div>
 
+    <div class="mb-6" id="event-group-field">
+      <label for="sprint-event-group" class="block text-sm font-medium text-foreground mb-1">Event group</label>
+      <select name="event_group"
+              id="sprint-event-group"
+              data-testid="sprint-event-group"
+              class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent studio-select">
+        <option value="" {% if not form_data.event_group %}selected{% endif %}>— None —</option>
+        {% for group in event_groups %}
+        <option value="{{ group.pk }}" {% if form_data.event_group == group.pk|stringformat:"s" %}selected{% endif %}>{{ group.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">
+        Optional recurring meeting series for this sprint.
+        <a href="{% url 'studio_event_group_new' %}"
+           class="text-accent hover:underline"
+           data-testid="sprint-create-event-group-hint">Create a new event group</a>.
+      </p>
+      {% if form_action == 'edit' %}
+      <p class="text-xs text-muted-foreground mt-1" data-testid="sprint-event-group-unlink-hint">
+        Unlinking removes the link; the event group and its events stay.
+      </p>
+      {% endif %}
+    </div>
+
     <div class="mb-6">
       <label class="block text-sm font-medium text-foreground mb-1">Minimum tier to join</label>
       <select name="min_tier_level"

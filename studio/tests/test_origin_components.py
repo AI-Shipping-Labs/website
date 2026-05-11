@@ -96,6 +96,7 @@ class StudioOriginComponentsTest(TestCase):
             title='Synced Event',
             slug='synced-event',
             start_datetime=timezone.now(),
+            origin='github',
             source_repo='AI-Shipping-Labs/content',
             source_path='events/synced-event.md',
             source_commit='7890123def456abc',

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -26,6 +27,11 @@ EVENT_KIND_CHOICES = [
     ('workshop', 'Workshop'),
     ('meetup', 'Meetup'),
     ('q_and_a', 'Q&A'),
+]
+
+EVENT_ORIGIN_CHOICES = [
+    ('github', 'GitHub'),
+    ('studio', 'Studio'),
 ]
 
 
@@ -198,6 +204,36 @@ class Event(
         help_text='Data from recap frontmatter / event recap_data for include rendering.',
     )
 
+    # Issue #564: explicit origin gate. ``github`` means the row is synced
+    # from a content repo and ``source_repo`` must be non-empty; ``studio``
+    # means the row was authored in Studio (e.g. via the event-group flow)
+    # and ``source_repo`` must be empty. The invariant is enforced in
+    # ``Event.save()`` so a future code path cannot silently mix the two.
+    origin = models.CharField(
+        max_length=20,
+        choices=EVENT_ORIGIN_CHOICES,
+        default='studio',
+        help_text=(
+            'Authoritative source-of-truth gate. ``github`` rows are '
+            'managed by the sync pipeline; ``studio`` rows are authored '
+            'in Studio and never touched by sync.'
+        ),
+    )
+    event_group = models.ForeignKey(
+        'events.EventGroup',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='events',
+        help_text=(
+            'Optional parent series. Deleting the group preserves the '
+            'events but unlinks them.'
+        ),
+    )
+    series_position = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='1-indexed position within the parent event group.',
+    )
+
     class Meta:
         ordering = ['-start_datetime']
 
@@ -223,6 +259,22 @@ class Event(
             self.published_at = timezone.now()
         elif not self.published:
             self.published_at = None
+
+        # Issue #564: enforce the origin invariant.
+        # ``github`` MUST have a non-empty ``source_repo``; ``studio`` MUST
+        # NOT. Violation raises ``ValidationError`` so a careless code path
+        # cannot silently mix the two sources.
+        has_source_repo = bool(self.source_repo)
+        if self.origin == 'github' and not has_source_repo:
+            raise ValidationError(
+                "Event.origin='github' requires a non-empty source_repo. "
+                "Set source_repo or change origin to 'studio'."
+            )
+        if self.origin == 'studio' and has_source_repo:
+            raise ValidationError(
+                "Event.origin='studio' must have an empty source_repo. "
+                "Clear source_repo or change origin to 'github'."
+            )
 
         super().save(*args, **kwargs)
 

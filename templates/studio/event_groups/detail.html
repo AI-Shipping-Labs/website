@@ -1,0 +1,171 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{{ group.name }}{% endblock %}
+
+{% block studio_content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_event_list' %}" class="hover:text-foreground">Events</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_event_group_list' %}" class="hover:text-foreground">Event groups</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">{{ group.name }}</span>
+  </div>
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold text-foreground" data-testid="event-group-name">{{ group.name }}</h1>
+      <p class="text-muted-foreground mt-1" data-testid="event-group-cadence">
+        {{ group.get_cadence_display }} on {{ group.get_day_of_week_display }} at {{ group.start_time|time:"H:i" }} {{ group.timezone }}
+        — {{ events|length }} occurrence{{ events|length|pluralize }}
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="{{ group.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
+         class="inline-flex items-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted">
+        <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
+        <span>View public series page</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+{% if add_error %}
+<div class="mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300" data-testid="add-error">
+  {{ add_error }}
+</div>
+{% endif %}
+
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+
+  <!-- Member events table -->
+  <div class="space-y-4 min-w-0">
+    <div class="bg-card border border-border rounded-lg overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-muted/40">
+          <tr>
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Start</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">End</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Registrations</th>
+            <th class="px-4 py-2 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {% for event in events %}
+          <tr data-testid="event-group-member-row">
+            <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="series-position">{{ event.series_position|default:"—" }}</td>
+            <td class="px-4 py-3 text-sm text-foreground">
+              <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="hover:text-accent">{{ event.title }}</a>
+            </td>
+            <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="event-start">{{ event.start_datetime|date:"M d, Y H:i" }}</td>
+            <td class="px-4 py-3 text-sm text-muted-foreground">{% if event.end_datetime %}{{ event.end_datetime|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
+            <td class="px-4 py-3 text-sm">{% studio_status_badge event.status event.get_status_display %}</td>
+            <td class="px-4 py-3 text-sm text-muted-foreground">{{ event.registration_count }}</td>
+            <td class="px-4 py-3 text-sm text-right space-x-3">
+              <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-accent hover:underline" data-testid="member-event-edit">Edit</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="px-4 py-6 text-center text-sm text-muted-foreground">No member events.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Add another occurrence -->
+    <form method="post" action="{% url 'studio_event_group_add_occurrence' group_id=group.pk %}"
+          class="bg-card border border-border rounded-lg p-4 space-y-3"
+          data-testid="add-occurrence-form">
+      {% csrf_token %}
+      <h2 class="text-sm font-medium text-foreground">Add another occurrence</h2>
+      <p class="text-xs text-muted-foreground">Creates one more event in this series with the next available position.</p>
+      <div class="grid grid-cols-3 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-foreground mb-1" for="add-start-date">Start date</label>
+          <input id="add-start-date" type="text" name="start_date" placeholder="dd/mm/yyyy" required
+                 class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-foreground mb-1" for="add-duration">Duration (hours)</label>
+          <input id="add-duration" type="number" name="duration_hours" value="1" step="0.5" min="0.5"
+                 class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+        </div>
+        <div class="flex items-end">
+          <button type="submit"
+                  class="inline-flex items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+                  data-testid="add-occurrence-submit">
+            Add
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Sidebar: metadata edit + delete -->
+  <aside class="space-y-4 lg:sticky lg:top-8">
+    <form method="post" class="bg-card border border-border rounded-lg p-4 space-y-3"
+          data-testid="event-group-metadata-form">
+      {% csrf_token %}
+      <h2 class="text-sm font-medium text-foreground">Series metadata</h2>
+      <p class="text-xs text-muted-foreground">
+        Only the name, slug, and description are editable here. Schedule fields
+        were inputs to the generator — to change one occurrence, edit that event.
+      </p>
+      <div>
+        <label class="block text-xs font-medium text-foreground mb-1" for="meta-name">Name</label>
+        <input id="meta-name" type="text" name="name" value="{{ group.name }}" required
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-foreground mb-1" for="meta-slug">Slug</label>
+        <input id="meta-slug" type="text" name="slug" value="{{ group.slug }}"
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-foreground mb-1" for="meta-description">Description (markdown)</label>
+        <textarea id="meta-description" name="description" rows="4"
+                  class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono">{{ group.description }}</textarea>
+      </div>
+      <button type="submit"
+              class="inline-flex w-full items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+              data-testid="event-group-metadata-save">
+        Save metadata
+      </button>
+    </form>
+
+    <div class="bg-card border border-red-500/30 rounded-lg p-4 space-y-3" data-testid="event-group-delete-panel">
+      <h2 class="text-sm font-medium text-red-300">Delete series</h2>
+      <p class="text-xs text-muted-foreground">
+        Deleting the series will leave the {{ events|length }} member event{{ events|length|pluralize }}
+        in place but unlink them from the series. To delete the events themselves,
+        delete each event from the events list.
+      </p>
+      <form method="post" action="{% url 'studio_event_group_delete' group_id=group.pk %}"
+            data-testid="event-group-delete-form"
+            onsubmit="return confirm('Delete this series? The member events will remain.');">
+        {% csrf_token %}
+        <button type="submit"
+                class="inline-flex w-full items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-500/20"
+                data-testid="event-group-delete-submit">
+          Delete series
+        </button>
+      </form>
+    </div>
+  </aside>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  flatpickr('#add-start-date', { dateFormat: 'd/m/Y', allowInput: true, theme: 'dark' });
+});
+</script>
+{% endblock %}

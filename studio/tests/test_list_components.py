@@ -136,6 +136,7 @@ class StudioListComponentRenderTest(TestCase):
             status='completed',
             recording_url='https://youtube.com/watch?v=shared',
             published=True,
+            origin='github',
             source_repo='AI-Shipping-Labs/content',
         )
         Project.objects.create(

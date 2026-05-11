@@ -24,6 +24,13 @@
     </a>
     {% endif %}
   </div>
+  {% if event.event_group %}
+  <div class="mt-3 rounded-md border border-border bg-secondary/40 px-4 py-2 text-sm" data-testid="event-parent-group">
+    Part of series:
+    <a href="{% url 'studio_event_group_detail' group_id=event.event_group.pk %}" class="text-accent hover:underline">{{ event.event_group.name }}</a>.
+    <span class="text-muted-foreground">Editing this event only affects this occurrence.</span>
+  </div>
+  {% endif %}
 </div>
 
 {% url 'studio_event_list' as event_cancel_url %}

@@ -61,6 +61,13 @@ from studio.views.enrollments import (
     enrollment_list,
     enrollment_unenroll,
 )
+from studio.views.event_groups import (
+    event_group_add_occurrence,
+    event_group_create,
+    event_group_delete,
+    event_group_detail,
+    event_group_list,
+)
 from studio.views.events import event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.member_notes import (
@@ -238,6 +245,26 @@ urlpatterns = [
     path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
     path('events/<int:event_id>/notify', event_notify, name='studio_event_notify'),
     path('events/<int:event_id>/announce-slack', event_announce_slack, name='studio_event_announce_slack'),
+
+    # Event groups (issue #564). The literal ``new`` route is registered
+    # before the ``<int:group_id>`` routes so the slug is not swallowed.
+    path('event-groups/', event_group_list, name='studio_event_group_list'),
+    path('event-groups/new', event_group_create, name='studio_event_group_new'),
+    path(
+        'event-groups/<int:group_id>/',
+        event_group_detail,
+        name='studio_event_group_detail',
+    ),
+    path(
+        'event-groups/<int:group_id>/add-occurrence',
+        event_group_add_occurrence,
+        name='studio_event_group_add_occurrence',
+    ),
+    path(
+        'event-groups/<int:group_id>/delete',
+        event_group_delete,
+        name='studio_event_group_delete',
+    ),
 
     # Workshops (issue #297)
     # ``resync/`` is registered before ``<int:workshop_id>/`` so the

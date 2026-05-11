@@ -529,6 +529,7 @@ class EventAdminFormTest(TestCase):
             'published': True,
             'required_level': 0,
             'ics_sequence': 0,
+            'origin': 'studio',
         }
         form = EventAdminForm(data=form_data)
         self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")
@@ -555,6 +556,7 @@ class EventAdminFormTest(TestCase):
             'published': True,
             'required_level': 0,
             'ics_sequence': 0,
+            'origin': 'studio',
         }
         form = EventAdminForm(data=form_data)
         self.assertTrue(form.is_valid(), f"Form errors: {form.errors}")

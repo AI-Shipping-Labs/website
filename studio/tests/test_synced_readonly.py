@@ -220,6 +220,7 @@ class SyncedRecordingReadOnlyTest(TestCase):
             start_datetime=timezone.now(), status='completed',
             recording_url='https://youtube.com/watch?v=test',
             published=True,
+            origin='github',
             source_repo='AI-Shipping-Labs/content',
             source_path='synced-rec.md',
             source_commit='def4567890abcdef1234567890abcdef12345678',

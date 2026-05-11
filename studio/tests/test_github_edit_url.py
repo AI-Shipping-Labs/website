@@ -33,6 +33,7 @@ class GitHubEditUrlPrefixedSourcePathTest(TestCase):
         cls.event = Event.objects.create(
             title='Test Event', slug='test-evt',
             start_datetime=timezone.now(),
+            origin='github',
             source_repo='AI-Shipping-Labs/content',
             source_path='events/test-evt.yaml',
         )

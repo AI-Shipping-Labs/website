@@ -1788,9 +1788,11 @@ class StudioSidebarSyncLinkTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_sidebar_has_content_sync_link(self):
+        # Issue #570 lower-cased the label to ``Content sync`` and moved
+        # it under the new ``Operations`` section. The URL is unchanged.
         response = self.client.get('/studio/')
         self.assertContains(response, '/studio/sync/')
-        self.assertContains(response, 'Content Sync')
+        self.assertContains(response, '<span>Content sync</span>', html=True)
 
 
 class SyncLogModelTest(TestCase):

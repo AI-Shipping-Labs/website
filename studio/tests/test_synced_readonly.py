@@ -455,6 +455,13 @@ class DashboardSyncSectionTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_dashboard_has_sync_section(self):
+        """The Studio dashboard surfaces a sync entry point.
+
+        Issue #570 renamed the sidebar nav label to ``Content sync`` (lower
+        case "sync") and moved it under the new ``Operations`` section.
+        The ``Sync Dashboard`` quick-action card on the dashboard body is
+        unchanged.
+        """
         response = self.client.get('/studio/')
-        self.assertContains(response, 'Content Sync')
+        self.assertContains(response, '<span>Content sync</span>', html=True)
         self.assertContains(response, 'Sync Dashboard')

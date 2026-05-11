@@ -237,13 +237,23 @@ class TestSidebarScrollsIndependently:
             f"got window.scrollY={page_scroll_y}"
         )
 
-        # The last sidebar item ("Back to site") should now be visible inside
-        # the sidebar's clip rect.
-        back_link = page.locator(
-            'aside#studio-sidebar a[href="/"]:has-text("Back to site")'
+        # After scrolling to the bottom of the sidebar, the bottom-most
+        # nav link must be inside the visible clip rect. Issue #570 moved
+        # "Back to website" to the top utility row, so the bottom is now
+        # an Operations item — for a superuser, that is the API tokens
+        # link (just above the v{VERSION} footer). We need to first
+        # expand the Operations section so the link is rendered into the
+        # flow.
+        page.locator(
+            'aside#studio-sidebar [aria-controls="studio-section-operations"]'
+        ).click()
+        sidebar_handle.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+
+        bottom_link = page.locator(
+            'aside#studio-sidebar [data-testid="api-tokens-nav-link"]'
         )
-        assert back_link.count() == 1
-        link_box = back_link.bounding_box()
+        assert bottom_link.count() == 1
+        link_box = bottom_link.bounding_box()
         sidebar_box = sidebar_handle.bounding_box()
         assert link_box is not None and sidebar_box is not None
         # The link's top is within the sidebar's visible rect.
@@ -401,6 +411,11 @@ class TestMobileDrawerToggle:
         page.locator("#studio-sidebar-toggle").click()
 
         nav = page.locator("#studio-sidebar-nav")
+        # Issue #570 collapses Operations by default. Expand it so the
+        # Settings link is in the DOM flow and reachable for the click.
+        page.locator(
+            'aside#studio-sidebar [aria-controls="studio-section-operations"]'
+        ).click()
         settings_link = page.locator(
             'aside#studio-sidebar a[href="/studio/settings/"]'
         )
@@ -517,7 +532,7 @@ class TestMobileSidebarScrollAffordance:
         )
         assert not affordance.is_visible()
 
-    def test_system_links_remain_reachable_after_scrolling(
+    def test_operations_links_remain_reachable_after_scrolling(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -530,26 +545,36 @@ class TestMobileSidebarScrollAffordance:
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
         page.locator("#studio-sidebar-toggle").click()
 
+        # Issue #570 collapses Operations by default — expand it so the
+        # links are part of the scrollable nav flow.
+        page.locator(
+            '[aria-controls="studio-section-operations"]'
+        ).click()
+
         nav = page.locator("#studio-sidebar-nav")
         nav.evaluate("el => { el.scrollTop = el.scrollHeight; }")
 
         for label in [
-            "Content Sync",
+            "Content sync",
             "Worker",
             "Redirects",
-            "Announcement",
             "Settings",
         ]:
-            link = page.locator(f'aside#studio-sidebar a:has-text("{label}")')
+            link = page.locator(
+                f'aside#studio-sidebar a:has(span:text-is("{label}"))'
+            )
             assert link.count() == 1
             assert link.is_visible()
 
 
 @pytest.mark.django_db(transaction=True)
 class TestSidebarNavOrder:
-    """The Studio nav groups and links retain their existing order."""
+    """The reorganised Studio nav (issue #570) renders its five
+    collapsible section headers in the expected order. Per-link order
+    inside each section is covered by ``studio/tests/test_sidebar.py``
+    and by ``test_studio_sidebar_reorg.py``."""
 
-    def test_sidebar_nav_groups_and_links_stay_in_order(
+    def test_sidebar_section_headers_render_in_expected_order(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -561,45 +586,25 @@ class TestSidebarNavOrder:
 
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
-        nav_items = page.locator("#studio-sidebar-nav p, #studio-sidebar-nav a")
-        actual = [
-            item.strip()
-            for item in nav_items.all_inner_texts()
-            if item.strip() and not item.strip().startswith("v")
+        # The buttons' labels live inside a nested <span>. We assert on
+        # the DOM text (not ``inner_text``), because the section-header
+        # span wears the ``uppercase`` Tailwind class — ``inner_text``
+        # returns the CSS-rendered ``CONTENT`` instead of the DOM
+        # ``Content``. Read the inner <span> label directly to keep the
+        # contract tied to the markup rather than CSS.
+        label_locator = page.locator(
+            "#studio-sidebar-nav [data-studio-section-toggle] > span > span"
+        )
+        labels = [
+            (text or "").strip()
+            for text in label_locator.all_text_contents()
         ]
-        assert actual == [
-            "CONTENT",
-            "Courses",
-            "Articles",
-            "Projects",
-            "Recordings",
-            "Workshops",
-            "Downloads",
-            "MEMBERS",
-            "CRM",
-            "Sprints",
-            "Plans",
-            "EVENTS & OUTREACH",
+        assert labels == [
+            "Content",
+            "People",
             "Events",
-            "Campaigns",
-            "Notifications",
-            "ANALYTICS",
-            "UTM Campaigns",
-            "UTM Analytics",
-            "USERS",
-            "Users",
-            "Tier Overrides",
-            "User imports",
-            "New User",
-            "SYSTEM",
-            "Content Sync",
-            "Worker",
-            "Redirects",
-            "Announcement",
-            "Email templates",
-            "Settings",
-            "API tokens",
-            "Back to site",
+            "Marketing",
+            "Operations",
         ]
 
 

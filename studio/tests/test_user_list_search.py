@@ -36,6 +36,7 @@ class StudioUserListSearchTest(TestCase):
             first_name='Grace',
             last_name='Hopper',
             stripe_customer_id='cus_USSV1H5ew94CBG',
+            slack_user_id='U02GRACE9',
         )
         cls.grace.tags = ['stripe']
         cls.grace.save(update_fields=['tags'])
@@ -46,6 +47,11 @@ class StudioUserListSearchTest(TestCase):
             first_name='Alan',
             last_name='Turing',
         )
+
+        # Issue #561 — Slack ID OR-arm. Ada gets a Slack ID so the
+        # search can pivot on it specifically.
+        cls.ada.slack_user_id = 'U01ADA123'
+        cls.ada.save(update_fields=['slack_user_id'])
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
@@ -140,9 +146,39 @@ class StudioUserListSearchTest(TestCase):
         emails = self._emails_for('zznosuchstring')
         self.assertEqual(emails, set())
 
+    # --- slack user id (issue #561) -----------------------------------------
+
+    def test_search_matches_slack_user_id_exact(self):
+        # Paste a Slack ID and find the matching user.
+        self.assertEqual(
+            self._emails_for('U01ADA123'),
+            {'ada@example.com'},
+        )
+
+    def test_search_matches_slack_user_id_substring(self):
+        # Substring match still works, e.g. operator paste only a prefix.
+        self.assertEqual(
+            self._emails_for('U02GRACE'),
+            {'grace@example.com'},
+        )
+
+    def test_search_matches_slack_user_id_case_insensitive(self):
+        # Slack IDs are conventionally uppercase but search is permissive.
+        self.assertEqual(
+            self._emails_for('u02grace'),
+            {'grace@example.com'},
+        )
+
+    def test_blank_slack_user_id_does_not_match_empty_query_substring(self):
+        # Alan has slack_user_id='' so a generic ``U`` substring must NOT
+        # spuriously include him via the empty-string substring trap.
+        emails = self._emails_for('U01ADA')
+        self.assertEqual(emails, {'ada@example.com'})
+        self.assertNotIn('alan@example.com', emails)
+
     def test_search_placeholder_text_updated(self):
         response = self.client.get('/studio/users/')
-        self.assertContains(response, 'Email, name, Stripe ID, or tag')
+        self.assertContains(response, 'Email, name, Stripe ID, Slack ID, or tag')
 
 
 class StudioUserListSearchTagFilterUnchangedTest(TestCase):

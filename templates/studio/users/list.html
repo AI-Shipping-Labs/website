@@ -103,7 +103,7 @@
     <input type="hidden" name="filter" value="{{ active_filter }}">
     <input type="hidden" name="slack" value="{{ slack_filter }}">
     {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
-    <input type="text" name="q" value="{{ search }}" placeholder="Email, name, Stripe ID, or tag"
+    <input type="text" name="q" value="{{ search }}" placeholder="Email, name, Stripe ID, Slack ID, or tag"
            autocomplete="off"
            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
     <button type="submit" class="bg-secondary border border-border px-4 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">Search</button>
@@ -170,12 +170,36 @@
             {% else %}
             <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground">No newsletter</span>
             {% endif %}
-            {% if row.slack_status == 'Member' %}
-            <span class="inline-flex items-center rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-purple-300" data-testid="slack-status">Slack</span>
-            {% elif row.slack_status == 'Not in Slack' %}
-            <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">No Slack</span>
+            {% comment %}
+              Slack pill (issue #358) + optional deep-link anchor (issue #561).
+              When the user has a slack_user_id AND the operator has set
+              SLACK_TEAM_ID in Studio, the pill is wrapped in an <a> that
+              opens the member's Slack profile in a new tab. Pill text
+              stays unchanged ("Slack" / "No Slack" / "Slack unchecked")
+              so existing pill assertions keep passing.
+            {% endcomment %}
+            {% if row.slack_user_id and slack_team_id %}
+            <a href="https://app.slack.com/client/{{ slack_team_id }}/{{ row.slack_user_id }}"
+               target="_blank" rel="noopener"
+               data-testid="slack-profile-link"
+               aria-label="Open {{ row.email }} in Slack"
+               class="inline-flex">
+              {% if row.slack_status == 'Member' %}
+              <span class="inline-flex items-center rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-purple-300" data-testid="slack-status">Slack</span>
+              {% elif row.slack_status == 'Not in Slack' %}
+              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">No Slack</span>
+              {% else %}
+              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
+              {% endif %}
+            </a>
             {% else %}
-            <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
+              {% if row.slack_status == 'Member' %}
+              <span class="inline-flex items-center rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-purple-300" data-testid="slack-status">Slack</span>
+              {% elif row.slack_status == 'Not in Slack' %}
+              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">No Slack</span>
+              {% else %}
+              <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground" data-testid="slack-status">Slack unchecked</span>
+              {% endif %}
             {% endif %}
             {% if row.stripe_customer_id %}
               {% if stripe_account_id %}

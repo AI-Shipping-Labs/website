@@ -108,6 +108,18 @@ INTEGRATION_GROUPS = [
             {'key': 'SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID', 'is_secret': False, 'description': 'Test-only announcement channel ID, e.g. #integration-tests. Used only when SLACK_ENVIRONMENT=test.'},
             {'key': 'SLACK_ANNOUNCEMENTS_CHANNEL_NAME', 'is_secret': False, 'description': 'Display name of the announcements channel (e.g. #announcements). Used in UI copy.'},
             {'key': 'SLACK_INVITE_URL', 'is_secret': False, 'description': 'Public Slack workspace invite URL shown to Main+ members on the dashboard.'},
+            {
+                'key': 'SLACK_TEAM_ID',
+                'is_secret': False,
+                'description': (
+                    'Workspace team ID (e.g. "T01ABC123"). Used to build deep '
+                    'links from Studio to a member\'s Slack profile. Find it in '
+                    'Slack: workspace menu > Settings & administration > '
+                    'Workspace settings, or in any Slack URL after "/team/". '
+                    'Optional — when blank, the Slack icon next to a user is '
+                    'shown but not clickable.'
+                ),
+            },
         ],
     },
     {

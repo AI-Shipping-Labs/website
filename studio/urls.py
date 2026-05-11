@@ -129,6 +129,7 @@ from studio.views.users import (
     user_detail,
     user_export_csv,
     user_list,
+    user_slack_id_set,
     user_sync_from_stripe,
     user_tag_add,
     user_tag_remove,
@@ -367,6 +368,13 @@ urlpatterns = [
     ),
     path('users/<int:user_id>/tags/add', user_tag_add, name='studio_user_tag_add'),
     path('users/<int:user_id>/tags/remove', user_tag_remove, name='studio_user_tag_remove'),
+    # Manual Slack ID edit (issue #561). POST-only; the GET surface lives
+    # on /studio/users/<id>/ where the inline form is rendered.
+    path(
+        'users/<int:user_id>/slack-id/',
+        user_slack_id_set,
+        name='studio_user_slack_id_set',
+    ),
     # Inline tier-override controls on the user detail page (issue #562).
     # These mirror /studio/users/tier-override/{create,revoke} but resolve
     # the user from the URL and always redirect back to /studio/users/<id>/.

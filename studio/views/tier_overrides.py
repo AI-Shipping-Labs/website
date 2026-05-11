@@ -36,6 +36,17 @@ def tier_override_page(request):
     is_highest_tier = False
     error_message = ''
 
+    # Cross-cutting list of every currently-active override across the platform.
+    # ``select_related`` avoids N+1 when rendering user / tier / granted-by columns.
+    active_overrides = (
+        TierOverride.objects
+        .filter(is_active=True, expires_at__gt=timezone.now())
+        .select_related(
+            'user', 'override_tier', 'original_tier', 'granted_by',
+        )
+        .order_by('expires_at')
+    )
+
     if search_email:
         try:
             searched_user = User.objects.select_related('tier').get(
@@ -77,6 +88,7 @@ def tier_override_page(request):
         'search_email': search_email,
         'searched_user': searched_user,
         'active_override': active_override,
+        'active_overrides': active_overrides,
         'override_history': override_history,
         'available_tiers': available_tiers,
         'is_highest_tier': is_highest_tier,

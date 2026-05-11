@@ -18,6 +18,90 @@
 </div>
 {% endif %}
 
+{# Active overrides list (issue #567). Shows every TierOverride with #}
+{# is_active=True and expires_at > now(), ordered soonest-expiring first. #}
+{# TODO: add pagination if the list ever grows past ~100 rows. #}
+<div class="bg-card border border-border rounded-lg overflow-hidden mb-8"
+     data-testid="active-overrides-section">
+  <div class="px-6 py-4 border-b border-border flex items-center justify-between">
+    <h2 class="text-lg font-semibold text-foreground">Active overrides</h2>
+    {% if active_overrides %}
+    <span class="text-xs text-muted-foreground" data-testid="active-overrides-count">
+      {{ active_overrides|length }} active
+    </span>
+    {% else %}
+    <span class="text-xs text-muted-foreground" data-testid="active-overrides-count">
+      No active overrides
+    </span>
+    {% endif %}
+  </div>
+
+  {% if active_overrides %}
+  <table class="w-full" data-testid="active-overrides-table">
+    <thead class="bg-secondary">
+      <tr>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Effective tier</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Base tier</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Set at</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Expires</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Set by</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for override in active_overrides %}
+      <tr class="hover:bg-secondary/50 transition-colors"
+          data-testid="active-override-row"
+          data-user-email="{{ override.user.email }}">
+        <td class="px-6 py-4 text-sm">
+          <a href="{% url 'studio_user_detail' override.user.pk %}"
+             class="text-accent hover:underline"
+             data-testid="active-override-user-link">{{ override.user.email }}</a>
+          {% with full_name=override.user.get_full_name %}
+          {% if full_name %}
+          <div class="text-xs text-muted-foreground mt-0.5">{{ full_name }}</div>
+          {% endif %}
+          {% endwith %}
+        </td>
+        <td class="px-6 py-4 text-sm text-foreground"
+            data-testid="active-override-effective-tier">{{ override.override_tier.name }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground"
+            data-testid="active-override-base-tier">{% if override.original_tier %}{{ override.original_tier.name }}{% else %}-{% endif %}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground"
+            data-testid="active-override-set-at">{{ override.created_at|date:"M d, Y H:i" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground"
+            data-testid="active-override-expires-at">
+          <div>{{ override.expires_at|date:"M d, Y H:i" }}</div>
+          <div class="text-xs">in {{ override.expires_at|timeuntil }}</div>
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground"
+            data-testid="active-override-set-by">{% if override.granted_by %}{{ override.granted_by.email }}{% else %}-{% endif %}</td>
+        <td class="px-6 py-4">
+          <form method="post" action="{% url 'studio_tier_override_revoke' %}"
+                onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
+            {% csrf_token %}
+            <input type="hidden" name="override_id" value="{{ override.pk }}">
+            <input type="hidden" name="email" value="{{ override.user.email }}">
+            <button type="submit"
+                    class="text-sm text-red-400 hover:text-red-300 hover:underline"
+                    data-testid="active-override-revoke">
+              Revoke
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="px-6 py-6 text-sm text-muted-foreground"
+       data-testid="active-overrides-empty">
+    No active overrides right now. Use the form below to grant one.
+  </div>
+  {% endif %}
+</div>
+
 <!-- Search Form -->
 <div class="bg-card border border-border rounded-lg p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">Search User</h2>

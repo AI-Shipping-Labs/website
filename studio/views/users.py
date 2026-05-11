@@ -46,9 +46,11 @@ from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
 from integrations.config import get_config
+from payments.models import Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from plans.models import InterviewNote, Plan
 from studio.decorators import staff_required, superuser_required
+from studio.views.tier_overrides import DURATION_CHOICES
 
 User = get_user_model()
 
@@ -649,6 +651,21 @@ def _active_override_for_user(user):
     )
 
 
+def _tier_source(user, has_override):
+    """Classify the source of the displayed tier for the badge.
+
+    'override' wins when an active override exists, regardless of whether
+    the user also has a Stripe customer record. Otherwise 'stripe' if the
+    user is connected to Stripe, 'default' for users who never paid /
+    were created manually.
+    """
+    if has_override:
+        return 'override'
+    if user.stripe_customer_id:
+        return 'stripe'
+    return 'default'
+
+
 @staff_required
 def user_detail(request, user_id):
     """Staff-only user detail page with contact tags and member notes.
@@ -672,10 +689,23 @@ def user_detail(request, user_id):
         .order_by('-created_at')
     )
 
+    # Inline tier-override block (issue #562). Reuses the same business
+    # rules as the standalone /studio/users/tier-override/ page: only
+    # offer tiers strictly above the user's stored tier level, default
+    # to the lowest available one, and surface the existing five
+    # DURATION_CHOICES labels.
+    current_level = user.tier.level if user.tier_id else 0
+    available_override_tiers = list(
+        Tier.objects.filter(level__gt=current_level).order_by('level')
+    )
+    is_highest_tier = not available_override_tiers
+    has_override = override is not None
+
     context = {
         'detail_user': user,
         'tier_name': _effective_tier_name(user, override),
-        'has_override': override is not None,
+        'has_override': has_override,
+        'active_override': override,
         'is_subscribed': not user.unsubscribed,
         'tags': list(user.tags or []),
         'known_tags': _all_known_contact_tags(),
@@ -690,8 +720,112 @@ def user_detail(request, user_id):
         # day-to-day CRM tasks without duplicating that surface.
         'django_admin_url': f'/admin/accounts/user/{user.pk}/change/',
         'slack_status': _slack_status(user),
+        # Inline tier-override controls (issue #562).
+        'available_override_tiers': available_override_tiers,
+        'is_highest_tier': is_highest_tier,
+        'override_duration_labels': [label for label, _ in DURATION_CHOICES],
+        'tier_source': _tier_source(user, has_override),
     }
     return render(request, 'studio/users/detail.html', context)
+
+
+@staff_required
+@require_POST
+def user_tier_override_create(request, user_id):
+    """Create a tier override for a user from the user detail page.
+
+    Mirrors the business logic of ``tier_overrides.tier_override_create``
+    but resolves the user from the URL (no email field) and always
+    redirects back to the detail page. The upward-only invariant
+    (override level must be strictly greater than the user's current
+    tier level) is enforced here too; downgrade / same-tier attempts
+    are rejected with a flash error and no row is created.
+    """
+    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    tier_id = (request.POST.get('tier_id') or '').strip()
+    duration = (request.POST.get('duration') or '').strip()
+
+    if not tier_id or not duration:
+        messages.error(request, 'Missing required fields.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    try:
+        override_tier = Tier.objects.get(pk=tier_id)
+    except Tier.DoesNotExist:
+        messages.error(request, 'Invalid tier selected.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    current_level = user.tier.level if user.tier_id else 0
+    if override_tier.level <= current_level:
+        messages.error(
+            request,
+            'Tier override must upgrade the user. '
+            f'Pick a tier above {user.tier.name if user.tier_id else "Free"}.',
+        )
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    now = timezone.now()
+    expires_at = None
+    for label, delta in DURATION_CHOICES:
+        if label == duration:
+            expires_at = now + delta
+            break
+
+    if expires_at is None:
+        messages.error(request, f'Invalid duration: {duration}.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    # Deactivate any existing active override so the "one active per user"
+    # invariant of the standalone page is preserved here too.
+    TierOverride.objects.filter(user=user, is_active=True).update(
+        is_active=False,
+    )
+
+    TierOverride.objects.create(
+        user=user,
+        original_tier=user.tier,
+        override_tier=override_tier,
+        expires_at=expires_at,
+        granted_by=request.user,
+        is_active=True,
+    )
+
+    messages.success(
+        request,
+        f'{user.email} -> {override_tier.name} until '
+        f'{expires_at.strftime("%Y-%m-%d %H:%M UTC")}',
+    )
+    return redirect('studio_user_detail', user_id=user.pk)
+
+
+@staff_required
+@require_POST
+def user_tier_override_revoke(request, user_id):
+    """Revoke a user's active override and return to the detail page.
+
+    Kept as a thin wrapper around the same row update the standalone
+    revoke view performs so the standalone page's semantics
+    (``tier_override_revoke``) stay untouched.
+    """
+    user = get_object_or_404(User, pk=user_id)
+    override_id = (request.POST.get('override_id') or '').strip()
+    if not override_id:
+        messages.error(request, 'Missing override ID.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    try:
+        override = TierOverride.objects.get(
+            pk=override_id, user=user, is_active=True,
+        )
+    except TierOverride.DoesNotExist:
+        messages.error(request, 'Override not found or already inactive.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    override.is_active = False
+    override.save(update_fields=['is_active'])
+
+    messages.success(request, f'Override revoked for {user.email}.')
+    return redirect('studio_user_detail', user_id=user.pk)
 
 
 @staff_required

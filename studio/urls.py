@@ -132,6 +132,8 @@ from studio.views.users import (
     user_sync_from_stripe,
     user_tag_add,
     user_tag_remove,
+    user_tier_override_create,
+    user_tier_override_revoke,
 )
 from studio.views.utm_analytics import (
     utm_campaign_detail as utm_analytics_campaign_detail,
@@ -365,6 +367,19 @@ urlpatterns = [
     ),
     path('users/<int:user_id>/tags/add', user_tag_add, name='studio_user_tag_add'),
     path('users/<int:user_id>/tags/remove', user_tag_remove, name='studio_user_tag_remove'),
+    # Inline tier-override controls on the user detail page (issue #562).
+    # These mirror /studio/users/tier-override/{create,revoke} but resolve
+    # the user from the URL and always redirect back to /studio/users/<id>/.
+    path(
+        'users/<int:user_id>/tier-override/create',
+        user_tier_override_create,
+        name='studio_user_tier_override_create',
+    ),
+    path(
+        'users/<int:user_id>/tier-override/revoke',
+        user_tier_override_revoke,
+        name='studio_user_tier_override_revoke',
+    ),
 
     # Sprints (issue #432). Members section.
     path('sprints/', sprint_list, name='studio_sprint_list'),

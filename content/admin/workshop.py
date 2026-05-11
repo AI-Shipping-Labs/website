@@ -9,7 +9,7 @@ class WorkshopPageInline(admin.StackedInline):
     model = WorkshopPage
     extra = 0
     ordering = ['sort_order']
-    fields = ['title', 'slug', 'sort_order', 'body']
+    fields = ['title', 'slug', 'sort_order', 'required_level', 'body']
     classes = ['collapse']
 
 
@@ -74,8 +74,10 @@ class WorkshopAdmin(admin.ModelAdmin):
 class WorkshopPageAdmin(admin.ModelAdmin):
     """Admin for WorkshopPage (accessible directly, plus as inline)."""
 
-    list_display = ['title', 'workshop', 'sort_order', 'slug']
-    list_filter = ['workshop']
+    list_display = [
+        'title', 'workshop', 'sort_order', 'slug', 'required_level',
+    ]
+    list_filter = ['workshop', 'required_level']
     search_fields = ['title', 'body']
     ordering = ['workshop', 'sort_order']
     raw_id_fields = ['workshop']

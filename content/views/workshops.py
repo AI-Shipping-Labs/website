@@ -112,6 +112,12 @@ def _build_landing_context(workshop, user):
 
     Returns the access flags, tier names, and CTA messages so each view
     can wire in the right paywall card without re-deriving the same state.
+
+    Issue #571 fix: the pages paywall must branch on
+    ``_gated_reason_for_level`` so an anonymous visitor on a workshop
+    using the new ``pages_required_level=LEVEL_REGISTERED`` (5) default
+    sees Sign-In-shaped copy (matching the tutorial-page paywall) rather
+    than the nonsensical "Upgrade to Free" / "/pricing" combo.
     """
     can_access_landing = workshop.user_can_access_landing(user)
     can_access_pages = workshop.user_can_access_pages(user)
@@ -130,13 +136,45 @@ def _build_landing_context(workshop, user):
             f'Current access: {get_required_tier_name(get_user_level(user))} member'
         )
 
+    # Default the pages-paywall context to the empty / "no paywall" shape.
+    # Each not-can_access branch fills these in; the insufficient-tier
+    # path keeps the legacy "Upgrade to {tier}" copy and the
+    # authentication-required path (anonymous + LEVEL_REGISTERED) emits
+    # Sign-In-shaped copy to match _build_page_gated_context.
     pages_cta_message = ''
     pages_cta_url = ''
+    pages_cta_label = 'View Pricing'
+    pages_gated_description = (
+        'The workshop overview and page list are visible now; '
+        'membership unlocks the step-by-step tutorial.'
+    )
+    pages_required_tier_name = pages_tier_name
+    pages_signup_cta_url = ''
+    pages_signup_cta_label = ''
     if not can_access_pages:
-        pages_cta_message = (
-            f'Upgrade to {pages_tier_name} to access this workshop'
+        pages_gated_reason = _gated_reason_for_level(
+            user, workshop.pages_required_level,
         )
-        pages_cta_url = '/pricing'
+        if pages_gated_reason == 'authentication_required':
+            landing_url = workshop.get_absolute_url()
+            next_qs = urlencode({'next': landing_url})
+            pages_cta_message = 'Sign in to access this workshop'
+            pages_gated_description = (
+                'This workshop is free with a free account. Sign in or '
+                'create one in seconds.'
+            )
+            pages_cta_url = f'/accounts/login/?{next_qs}'
+            pages_cta_label = 'Sign In'
+            pages_signup_cta_url = f'/accounts/signup/?{next_qs}'
+            pages_signup_cta_label = 'Create a free account'
+            # Blank the pill — there's no "tier" to display when the
+            # visitor just needs to authenticate.
+            pages_required_tier_name = ''
+        else:
+            pages_cta_message = (
+                f'Upgrade to {pages_tier_name} to access this workshop'
+            )
+            pages_cta_url = '/pricing'
 
     recording_cta_message = ''
     recording_cta_url = ''
@@ -166,11 +204,15 @@ def _build_landing_context(workshop, user):
         'landing_cta_url': landing_cta_url,
         'pages_cta_message': pages_cta_message,
         'pages_cta_url': pages_cta_url,
+        'pages_cta_label': pages_cta_label,
+        'pages_gated_description': pages_gated_description,
+        'pages_required_tier_name': pages_required_tier_name,
+        'pages_signup_cta_url': pages_signup_cta_url,
+        'pages_signup_cta_label': pages_signup_cta_label,
         'recording_cta_message': recording_cta_message,
         'recording_cta_url': recording_cta_url,
         'current_user_state': current_user_state,
         'landing_cta_label': 'View Pricing',
-        'pages_cta_label': 'View Pricing',
         'recording_cta_label': f'Upgrade to {recording_tier_name}',
     }
 
@@ -481,7 +523,16 @@ def workshop_page_detail(request, slug, page_slug):
     next_page = pages[idx + 1] if idx + 1 < len(pages) else None
 
     context = _build_landing_context(workshop, request.user)
-    is_gated = not context['can_access_pages']
+    # Issue #571: per-page override beats the workshop-wide pages gate.
+    # Compute page-level access and drive ``is_gated`` and the watch-bar
+    # branch off it so an ``access: open`` page lets anonymous visitors
+    # read the body even when ``pages_required_level`` is registered or
+    # basic+. ``can_access_pages`` in the shared context still reflects
+    # the workshop-wide gate (consumed by templates that care about the
+    # workshop as a whole, not this specific page).
+    page_can_access = workshop.user_can_access_pages(request.user, page=page)
+    context['can_access_pages'] = page_can_access
+    is_gated = not page_can_access
 
     # Show the "Watch this section" bar above the H1 only when:
     # - the page has a video_start timestamp, AND
@@ -582,7 +633,11 @@ def _build_page_gated_context(request, workshop, page):
     """
     user = request.user
     page_url = page.get_absolute_url()
-    gated_reason = _gated_reason_for_level(user, workshop.pages_required_level)
+    # Issue #571: use the page's effective level (override beats workshop
+    # default) so a registered-wall page on a Basic-default workshop still
+    # surfaces the "sign in" CTA, not the upgrade CTA.
+    effective_level = page.effective_required_level
+    gated_reason = _gated_reason_for_level(user, effective_level)
 
     if gated_reason == 'unverified_email':
         return (
@@ -611,7 +666,7 @@ def _build_page_gated_context(request, workshop, page):
             has_video = True
             video_thumbnail_url = thumb
 
-    pages_tier_name = get_required_tier_name(workshop.pages_required_level)
+    pages_tier_name = get_required_tier_name(effective_level)
     next_qs = urlencode({'next': page_url})
 
     if gated_reason == 'authentication_required':
@@ -715,7 +770,11 @@ def api_workshop_page_complete(request, slug, page_slug):
     page = get_object_or_404(WorkshopPage, workshop=workshop, slug=page_slug)
     user = request.user
 
-    if not workshop.user_can_access_pages(user):
+    # Issue #571: gate against the page's effective level (per-page override
+    # wins over the workshop default) so a free user can mark an
+    # ``access: open`` page complete even when the workshop-wide gate is
+    # higher.
+    if not workshop.user_can_access_pages(user, page=page):
         return JsonResponse({'error': 'Access denied'}, status=403)
 
     if completion_service.is_completed(user, page):

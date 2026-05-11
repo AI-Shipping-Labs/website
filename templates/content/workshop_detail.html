@@ -199,9 +199,13 @@
 
       <!-- Pages-level paywall (only when pages are gated). Surfaces a
            single, prominent CTA so the visitor doesn't have to click into
-           a page to learn that they need to upgrade. -->
+           a page to learn that they need to upgrade. Issue #571 fix:
+           when the gated reason is "authentication_required" (anonymous
+           on a registered wall) the view emits Sign-In-shaped context —
+           the partial below renders Sign In + Create-a-free-account
+           CTAs and no tier-required pill. -->
       {% if not can_access_pages %}
-      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-pages-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description="The workshop overview and page list are visible now; membership unlocks the step-by-step tutorial." required_tier_name=pages_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="workshop-pages-upgrade-cta" %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-pages-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description=pages_gated_description required_tier_name=pages_required_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="workshop-pages-upgrade-cta" signup_cta_url=pages_signup_cta_url signup_cta_label=pages_signup_cta_label %}
       {% endif %}
 
       <!-- Cross-link back to the linked event (if any) -->

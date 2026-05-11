@@ -131,12 +131,14 @@ class Workshop(
         ),
     )
     pages_required_level = models.IntegerField(
-        default=10,
+        default=LEVEL_REGISTERED,
         choices=UNIT_VISIBILITY_CHOICES,
         help_text=(
             'Minimum tier level required to view workshop pages. Accepts '
             'LEVEL_REGISTERED (5) so authors can require a free account '
-            'without requiring payment.'
+            'without requiring payment. Issue #571 changed the default '
+            'from LEVEL_BASIC (10) to LEVEL_REGISTERED (5); existing rows '
+            'keep their stored value.'
         ),
     )
     recording_required_level = models.IntegerField(
@@ -234,14 +236,27 @@ class Workshop(
         """Return True when ``user`` may view the workshop landing."""
         return _can_access_level(user, self.landing_required_level)
 
-    def user_can_access_pages(self, user):
+    def user_can_access_pages(self, user, page=None):
         """Return True when ``user`` may view the workshop tutorial pages.
 
         Honours ``LEVEL_REGISTERED``: anonymous visitors are denied, any
         authenticated user is allowed if their email is verified or they
         already hold a paid tier.
+
+        Issue #571: when ``page`` is supplied and the page has a non-null
+        ``required_level`` override, gating is against
+        ``page.effective_required_level`` instead of the workshop's
+        ``pages_required_level``. A page-level ``LEVEL_OPEN`` (0) override
+        therefore lets anonymous visitors read the first page even when
+        the workshop's default pages gate is registered/basic+. When
+        ``page`` is None or ``page.required_level`` is None, this falls
+        back to the workshop-wide gate (legacy callers — recording-chain
+        check and the API endpoint when no page is in scope — continue
+        to work unchanged).
         """
-        return _can_access_level(user, self.pages_required_level)
+        if page is None:
+            return _can_access_level(user, self.pages_required_level)
+        return _can_access_level(user, page.effective_required_level)
 
     def user_can_access_recording(self, user):
         """Return True when ``user`` may watch the workshop recording."""
@@ -279,6 +294,17 @@ class WorkshopPage(
             'with recording access.'
         ),
     )
+    required_level = models.IntegerField(
+        null=True, blank=True,
+        choices=UNIT_VISIBILITY_CHOICES,
+        help_text=(
+            'Per-page override of the workshop default. When null the '
+            'page inherits Workshop.pages_required_level. Must be '
+            '>= Workshop.landing_required_level so a page is never more '
+            'accessible than the workshop landing it lives under. '
+            'Issue #571.'
+        ),
+    )
     class Meta:
         ordering = ['sort_order']
         unique_together = [('workshop', 'slug')]
@@ -290,12 +316,76 @@ class WorkshopPage(
         """Public URL for this tutorial page within its workshop."""
         return f'/workshops/{self.workshop.slug}/tutorial/{self.slug}'
 
+    @property
+    def effective_required_level(self):
+        """Resolve the access level for this page (issue #571).
+
+        Returns ``self.required_level`` when set, otherwise
+        ``self.workshop.pages_required_level``. Mirrors the
+        ``Unit.effective_required_level`` shape from issue #465 so
+        callers can treat workshop pages and course units consistently.
+        """
+        if self.required_level is not None:
+            return self.required_level
+        return self.workshop.pages_required_level
+
+    def clean(self):
+        """Validate the per-page override against the workshop landing gate.
+
+        A per-page ``required_level`` cannot drop below
+        ``workshop.landing_required_level`` — otherwise the page would be
+        more accessible than the workshop landing it lives under, which
+        would let anonymous visitors reach a tutorial page on a workshop
+        whose landing they shouldn't be able to see at all. The recording
+        gate is intentionally not constrained here: per-page overrides
+        may be looser than the recording (that is the whole point of
+        this feature). Issue #571.
+        """
+        super().clean()
+        if self.required_level is None:
+            return
+        # ``workshop`` is a FK — guard against the rare case where the
+        # caller is mid-construction and the relation isn't materialised.
+        workshop = getattr(self, 'workshop', None)
+        if workshop is None:
+            return
+        if self.required_level < workshop.landing_required_level:
+            raise ValidationError({
+                'required_level': (
+                    f'Page required_level ({self.required_level}) must be '
+                    f'>= workshop landing_required_level '
+                    f'({workshop.landing_required_level}). A page must '
+                    'not be more accessible than the workshop landing.'
+                ),
+            })
+
     def save(self, *args, **kwargs):
-        """Render body markdown to HTML on save."""
+        """Render body markdown to HTML on save and validate the override.
+
+        The landing-invariant check from :meth:`clean` is re-run here so
+        admin and sync paths that bypass ``full_clean()`` still fail
+        closed on a bad override (matches the belt-and-braces pattern
+        used by :meth:`Workshop.save`).
+        """
         if self.body:
             self.body_html = render_markdown(self.body)
         else:
             self.body_html = ''
+
+        # Belt-and-braces invariant check: clean() may have been bypassed.
+        if self.required_level is not None:
+            workshop = getattr(self, 'workshop', None)
+            if (
+                workshop is not None
+                and self.required_level < workshop.landing_required_level
+            ):
+                raise ValidationError({
+                    'required_level': (
+                        f'Page required_level ({self.required_level}) must '
+                        f'be >= workshop landing_required_level '
+                        f'({workshop.landing_required_level}).'
+                    ),
+                })
 
         # Honour update_fields (some sync paths use it).
         update_fields = kwargs.get('update_fields')

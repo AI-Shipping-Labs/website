@@ -1,0 +1,67 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Edit experiment{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_crm_detail' crm_id=record.pk %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to CRM record
+  </a>
+</div>
+
+<h1 class="text-2xl font-semibold text-foreground mb-2">Edit experiment</h1>
+<p class="text-sm text-muted-foreground mb-6">
+  Member: <span class="font-mono">{{ record.user.email }}</span>
+</p>
+
+<form method="post" action="{{ form_action }}" class="space-y-4 max-w-2xl bg-card border border-border rounded-lg p-6">
+  {% csrf_token %}
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1" for="exp-title">Title</label>
+    <input id="exp-title"
+           type="text"
+           name="title"
+           value="{{ experiment.title }}"
+           maxlength="200"
+           required
+           data-testid="crm-experiment-edit-title"
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full">
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1" for="exp-hypothesis">Hypothesis</label>
+    <textarea id="exp-hypothesis"
+              name="hypothesis"
+              rows="3"
+              data-testid="crm-experiment-edit-hypothesis"
+              class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full">{{ experiment.hypothesis }}</textarea>
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1" for="exp-result">Result</label>
+    <textarea id="exp-result"
+              name="result"
+              rows="3"
+              data-testid="crm-experiment-edit-result"
+              class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full">{{ experiment.result }}</textarea>
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1" for="exp-status">Status</label>
+    <select id="exp-status"
+            name="status"
+            data-testid="crm-experiment-edit-status"
+            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full">
+      {% for value, label in experiment_status_choices %}
+      <option value="{{ value }}" {% if value == experiment.status %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="flex items-center gap-3">
+    <button type="submit"
+            data-testid="crm-experiment-edit-save"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+      Save
+    </button>
+    <a href="{% url 'studio_crm_detail' crm_id=record.pk %}"
+       class="text-sm text-muted-foreground hover:text-foreground">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -45,9 +45,9 @@ from accounts.utils.tags import (
 from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
+from crm.models import CRMRecord
 from integrations.config import get_config
 from payments.services.backfill_tiers import backfill_user_from_stripe
-from plans.models import InterviewNote, Plan
 from studio.decorators import staff_required, superuser_required
 
 User = get_user_model()
@@ -651,26 +651,16 @@ def _active_override_for_user(user):
 
 @staff_required
 def user_detail(request, user_id):
-    """Staff-only user detail page with contact tags and member notes.
+    """Staff-only user detail page focused on account-level data.
 
-    Reads from the same effective-tier helpers as the list view so the
-    displayed tier matches what operators see in the table (including any
-    active override).
+    Issue #560 trimmed the page to account context only (profile,
+    membership, tags) plus a single CRM card that links to or creates
+    a :class:`crm.CRMRecord`. Plans, sprints, member notes, and
+    experiments live on the CRM record page now.
     """
     user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
     override = _active_override_for_user(user)
-    note_queryset = (
-        InterviewNote.objects
-        .filter(member=user)
-        .select_related('plan__sprint', 'created_by')
-        .order_by('-created_at')
-    )
-    member_plans = list(
-        Plan.objects
-        .filter(member=user)
-        .select_related('sprint')
-        .order_by('-created_at')
-    )
+    crm_record = CRMRecord.objects.filter(user=user).first()
 
     context = {
         'detail_user': user,
@@ -680,10 +670,7 @@ def user_detail(request, user_id):
         'tags': list(user.tags or []),
         'known_tags': _all_known_contact_tags(),
         'status': _user_status(user),
-        'internal_notes': note_queryset.internal(),
-        'external_notes': note_queryset.external(),
-        'current_plan': None,
-        'member_plans': member_plans,
+        'crm_record': crm_record,
         # /admin/accounts/user/<id>/change/ is the canonical destructive
         # surface for users (delete, password reset, full ORM edits).
         # Linking it from the Studio overview keeps Studio focused on

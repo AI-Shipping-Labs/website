@@ -54,22 +54,16 @@ class MemberNotesTestBase(TestCase):
 
 
 class UserDetailMemberNotesTest(MemberNotesTestBase):
-    def test_user_detail_empty_state_is_safe(self):
-        response = self.client.get(f'/studio/users/{self.member.pk}/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Member notes')
-        self.assertContains(
-            response,
-            'No member notes yet. Add one to capture intake answers, '
-            'persona observations, or staff comments.',
-        )
-        self.assertContains(
-            response,
-            f'href="/studio/users/{self.member.pk}/notes/new"',
-        )
+    """After issue #560 the user profile no longer renders member notes inline.
 
-    def test_user_detail_splits_all_member_notes_and_shows_plan_badge(self):
-        spring_note = InterviewNote.objects.create(
+    Notes live on the CRM record now. These tests pin the absence so a
+    regression that reintroduces the section gets caught.
+    """
+
+    def test_user_detail_does_not_render_member_notes_section(self):
+        # Even with notes attached, the user profile must not surface
+        # them — they belong on the CRM record now.
+        InterviewNote.objects.create(
             plan=self.spring_plan,
             member=self.member,
             visibility='internal',
@@ -85,35 +79,12 @@ class UserDetailMemberNotesTest(MemberNotesTestBase):
             body='Share weekly progress',
             created_by=self.staff,
         )
-        InterviewNote.objects.create(
-            plan=self.other_plan,
-            member=self.other,
-            visibility='internal',
-            body='Other member note',
-            created_by=self.staff,
-        )
-
         response = self.client.get(f'/studio/users/{self.member.pk}/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Internal notes (staff only)')
-        self.assertContains(response, 'External notes (shareable with member)')
-        self.assertContains(response, 'Meeting Notes')
-        self.assertContains(response, 'staff@test.com')
-        self.assertContains(response, 'Discussed pivot from RAG to agents')
-        self.assertContains(response, 'Share weekly progress')
-        self.assertNotContains(response, 'Other member note')
-        self.assertContains(
-            response,
-            f'href="/studio/plans/{self.spring_plan.pk}/"',
-        )
-        self.assertContains(
-            response,
-            'From sprint: Spring 2026',
-        )
-        self.assertContains(
-            response,
-            f'href="/studio/users/{self.member.pk}/notes/{spring_note.pk}/edit"',
-        )
+        self.assertNotContains(response, 'data-testid="member-notes-section"')
+        # The body text of the notes must not leak inline either.
+        self.assertNotContains(response, 'Discussed pivot from RAG to agents')
+        self.assertNotContains(response, 'Share weekly progress')
 
 
 class MemberNoteCreateEditDeleteTest(MemberNotesTestBase):

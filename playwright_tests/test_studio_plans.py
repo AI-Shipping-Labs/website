@@ -182,7 +182,16 @@ class TestStaffCapturesInterviewNotes:
             "Member is changing jobs in 6 weeks - keep plan light",
         )
         page.locator('button[type="submit"]').click()
+        # The member-note form still redirects to the legacy user-profile
+        # anchor, but the profile no longer renders the notes section
+        # (issue #560). The plan detail page still includes the
+        # ``_member_notes.html`` partial, so we navigate back there — the
+        # natural surface for this plan-driven narrative.
         page.wait_for_url(f"{django_server}/studio/users/{member.pk}/#member-notes")
+        page.goto(
+            f"{django_server}/studio/plans/{plan.pk}/",
+            wait_until="domcontentloaded",
+        )
 
         # Internal section now has the note; external is still empty.
         page.locator(
@@ -193,10 +202,13 @@ class TestStaffCapturesInterviewNotes:
             '[data-testid="external-notes"] >> text=No external notes yet.'
         ).wait_for(state="visible")
 
-        # Add an external note.
+        # Add an external note. The ``Add member note`` CTA on a plan
+        # detail page pre-fills ``?plan_id=<pk>`` (the plan partial's
+        # context-aware behaviour). The plan_id select is then set
+        # explicitly below to be robust either way.
         page.get_by_test_id("member-notes-add").click()
         page.wait_for_url(
-            f"{django_server}/studio/users/{member.pk}/notes/new",
+            f"{django_server}/studio/users/{member.pk}/notes/new?plan_id={plan.pk}",
         )
         page.locator('select[name="visibility"]').select_option("external")
         page.locator('select[name="plan_id"]').select_option(str(plan.pk))
@@ -205,6 +217,10 @@ class TestStaffCapturesInterviewNotes:
         )
         page.locator('button[type="submit"]').click()
         page.wait_for_url(f"{django_server}/studio/users/{member.pk}/#member-notes")
+        page.goto(
+            f"{django_server}/studio/plans/{plan.pk}/",
+            wait_until="domcontentloaded",
+        )
 
         # External now has the new note; internal still has the
         # original. The two sections render independently.

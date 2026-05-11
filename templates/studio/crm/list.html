@@ -1,0 +1,124 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}CRM{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-semibold text-foreground">CRM</h1>
+  <p class="text-sm text-muted-foreground mt-1">
+    The engaged subset of members. Staff opt-in to tracking via the
+    <span class="font-mono">Track in CRM</span> button on a user profile.
+  </p>
+</div>
+
+<!-- Filter chips and search -->
+<form method="get" class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-testid="crm-list-controls">
+  <div class="flex flex-wrap items-center gap-2" data-testid="crm-filter-chips">
+    <a href="?filter={{ filter_active }}{% if search %}&q={{ search }}{% endif %}"
+       data-testid="crm-filter-active"
+       class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_active %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
+      Active ({{ counts.active }})
+    </a>
+    <a href="?filter={{ filter_archived }}{% if search %}&q={{ search }}{% endif %}"
+       data-testid="crm-filter-archived"
+       class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_archived %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
+      Archived ({{ counts.archived }})
+    </a>
+    <a href="?filter={{ filter_all }}{% if search %}&q={{ search }}{% endif %}"
+       data-testid="crm-filter-all"
+       class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_all %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
+      All ({{ counts.all }})
+    </a>
+  </div>
+  <div class="flex items-center gap-2">
+    <input type="hidden" name="filter" value="{{ active_filter }}">
+    <input type="text"
+           name="q"
+           value="{{ search }}"
+           placeholder="Search email or persona..."
+           autocomplete="off"
+           data-testid="crm-search-input"
+           class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+    <button type="submit"
+            data-testid="crm-search-submit"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+      Search
+    </button>
+  </div>
+</form>
+
+{% if rows %}
+<div class="bg-card border border-border rounded-lg overflow-hidden" data-testid="crm-list-table">
+  <table class="min-w-full divide-y divide-border">
+    <thead class="bg-secondary">
+      <tr class="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <th class="px-4 py-3">User</th>
+        <th class="px-4 py-3">Tier</th>
+        <th class="px-4 py-3">Persona</th>
+        <th class="px-4 py-3">Status</th>
+        <th class="px-4 py-3">Last updated</th>
+        <th class="px-4 py-3">Plans</th>
+        <th class="px-4 py-3">Notes</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in rows %}
+      <tr data-testid="crm-row-{{ row.pk }}" class="text-sm">
+        <td class="px-4 py-3">
+          <a href="{% url 'studio_crm_detail' crm_id=row.pk %}"
+             data-testid="crm-row-link"
+             class="text-accent hover:underline font-medium">{{ row.email }}</a>
+          {% if row.full_name %}
+          <div class="text-xs text-muted-foreground">{{ row.full_name }}</div>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-foreground">{{ row.tier_name }}</td>
+        <td class="px-4 py-3 text-foreground" data-testid="crm-row-persona">{{ row.persona|default:"—" }}</td>
+        <td class="px-4 py-3">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs {% if row.status == 'active' %}bg-green-500/20 text-green-400{% else %}bg-muted text-muted-foreground{% endif %}">
+            {{ row.status_display }}
+          </span>
+        </td>
+        <td class="px-4 py-3 text-muted-foreground">{{ row.updated_at|date:"Y-m-d" }}</td>
+        <td class="px-4 py-3 text-foreground" data-testid="crm-row-plans-count">{{ row.plans_count }}</td>
+        <td class="px-4 py-3 text-foreground" data-testid="crm-row-notes-count">{{ row.notes_count }}</td>
+        <td class="px-4 py-3">
+          <a href="{% url 'studio_user_detail' user_id=row.user_pk %}"
+             data-testid="crm-row-profile-link"
+             class="text-xs text-muted-foreground hover:text-foreground hover:underline">Profile</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if paginator.num_pages > 1 %}
+<div class="mt-4 flex items-center justify-between text-sm text-muted-foreground" data-testid="crm-pager">
+  <span>Showing {{ page.start_index }}-{{ page.end_index }} of {{ paginator.count }}</span>
+  <div class="flex items-center gap-2">
+    {% if page.has_previous %}
+    <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}&page={{ page.previous_page_number }}"
+       class="px-3 py-1 rounded border border-border hover:bg-secondary">Previous</a>
+    {% endif %}
+    <span>Page {{ page.number }} of {{ paginator.num_pages }}</span>
+    {% if page.has_next %}
+    <a href="?filter={{ active_filter }}{% if search %}&q={{ search }}{% endif %}&page={{ page.next_page_number }}"
+       class="px-3 py-1 rounded border border-border hover:bg-secondary">Next</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% else %}
+<div class="bg-card border border-border rounded-lg p-8 text-center" data-testid="crm-empty-state">
+  {% if search or active_filter == filter_archived %}
+  <p class="text-sm text-muted-foreground">No CRM records match the current filter.</p>
+  {% else %}
+  <p class="text-sm text-muted-foreground">
+    No CRM records yet. Open a user profile and click &ldquo;Track in CRM&rdquo; to start.
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

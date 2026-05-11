@@ -149,6 +149,7 @@ INSTALLED_APPS = [
     'community',
     'notifications',
     'plans.apps.PlansConfig',
+    'crm.apps.CRMConfig',
     'studio',
     'comments',
     'analytics',

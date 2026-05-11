@@ -193,36 +193,33 @@
   </p>
 </section>
 
-<!-- Sprint / plan context -->
-<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-plans-section">
-  <h2 class="text-lg font-semibold text-foreground mb-4">Sprints &amp; plans</h2>
-  {% if member_plans %}
-  <ul class="divide-y divide-border" data-testid="user-detail-plans-list">
-    {% for member_plan in member_plans %}
-    <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
-        data-testid="user-detail-plan-item">
-      <div class="min-w-0">
-        <a href="{% url 'studio_plan_detail' plan_id=member_plan.pk %}"
-           data-testid="user-detail-plan-link"
-           class="text-sm font-medium text-accent hover:underline">{{ member_plan.sprint.name }}</a>
-        <p class="text-xs text-muted-foreground">
-          Status: {{ member_plan.get_status_display }}
-          {% if member_plan.shared_at %}&middot; Shared {{ member_plan.shared_at|date:"Y-m-d" }}{% endif %}
-        </p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <a href="{% url 'studio_sprint_detail' sprint_id=member_plan.sprint.pk %}"
-           class="text-xs text-muted-foreground hover:text-foreground hover:underline">Sprint</a>
-        <a href="{% url 'studio_plan_edit' plan_id=member_plan.pk %}"
-           class="text-xs text-muted-foreground hover:text-foreground hover:underline">Edit plan</a>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+<!-- CRM section (issue #560).
+     The profile renders only a CTA — all relationship-rich data
+     (plans, notes, experiments, persona, summary, next steps) lives
+     on the CRM record page. -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-crm-section">
+  <h2 class="text-lg font-semibold text-foreground mb-2">CRM</h2>
+  {% if crm_record %}
+  <p class="text-sm text-muted-foreground mb-4" data-testid="user-crm-tracked-since">
+    Tracked since {{ crm_record.created_at|date:"Y-m-d" }}. View plans, notes, and engagement context on the CRM record.
+  </p>
+  <a href="{% url 'studio_crm_detail' crm_id=crm_record.pk %}"
+     data-testid="user-crm-cta-open"
+     class="inline-flex items-center justify-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    Open CRM record
+  </a>
   {% else %}
-  <p class="text-sm text-muted-foreground" data-testid="user-detail-plans-empty">No sprints or plans yet.</p>
+  <p class="text-sm text-muted-foreground mb-4">
+    Not yet tracked in CRM. Add this user to start capturing plans, notes, and engagement context.
+  </p>
+  <form method="post" action="{% url 'studio_crm_track' user_id=detail_user.pk %}" class="inline">
+    {% csrf_token %}
+    <button type="submit"
+            data-testid="user-crm-cta-track"
+            class="inline-flex items-center justify-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Track in CRM
+    </button>
+  </form>
   {% endif %}
 </section>
-
-{% include "studio/users/_member_notes.html" %}
 {% endblock %}

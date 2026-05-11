@@ -106,11 +106,11 @@ class EventInstructorInline(admin.TabularInline):
 class EventAdmin(admin.ModelAdmin):
     form = EventAdminForm
     list_display = [
-        'title', 'slug', 'platform', 'status',
+        'title', 'slug', 'platform', 'external_host', 'status',
         'start_datetime', 'required_level', 'has_recording_display',
         'registration_count_display',
     ]
-    list_filter = ['status', 'platform', 'required_level', 'published']
+    list_filter = ['status', 'platform', 'external_host', 'required_level', 'published']
     search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
     actions = [
@@ -122,7 +122,7 @@ class EventAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {
             'fields': (
-                'title', 'slug', 'description', 'platform',
+                'title', 'slug', 'description', 'platform', 'external_host',
             ),
         }),
         ('Schedule', {

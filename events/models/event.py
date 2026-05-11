@@ -234,6 +234,21 @@ class Event(
         help_text='1-indexed position within the parent event group.',
     )
 
+    # Issue #572: third-party host indicator. Empty string (the default)
+    # means the event is community-hosted (current behavior). A non-empty
+    # value flips the event to "external" mode: the listing shows a
+    # "Hosted on X" pill, and the detail page replaces the registration
+    # card with an outbound Join card. ``required_level`` no longer gates
+    # access for external events — the partner controls access on their
+    # platform.
+    external_host = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text=(
+            'Display name of the third-party host (e.g. "Maven", "Luma", '
+            '"DataTalksClub"). Leave blank for community-hosted events.'
+        ),
+    )
+
     class Meta:
         ordering = ['-start_datetime']
 
@@ -308,6 +323,17 @@ class Event(
     def get_recap_url(self):
         """Return the URL for the recap landing page."""
         return f'/events/{self.slug}/recap'
+
+    @property
+    def is_external(self):
+        """Return True when this event is hosted on a third-party platform.
+
+        Issue #572. Templates and views branch on this to render the
+        outbound "Hosted on X" pill and the external Join card instead
+        of the in-app registration card. Stripped to keep whitespace-only
+        values from accidentally flipping an event to external mode.
+        """
+        return bool((self.external_host or '').strip())
 
     @property
     def is_upcoming(self):

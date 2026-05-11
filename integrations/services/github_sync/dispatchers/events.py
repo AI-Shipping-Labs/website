@@ -59,6 +59,7 @@ def _build_synced_event_content_defaults(
     kind='standard',
     published_at=_UNSET,
     recap=_UNSET,
+    external_host='',
 ):
     """Build content fields shared by standalone and workshop event sync.
 
@@ -81,6 +82,10 @@ def _build_synced_event_content_defaults(
         'required_level': required_level,
         'related_course': related_course,
         'kind': kind,
+        # Issue #572: third-party host indicator. Empty string is the
+        # back-compat default for existing files without the frontmatter
+        # key; any non-empty value flips the event to "external" mode.
+        'external_host': (external_host or '').strip(),
         'content_id': content_id,
         # Issue #564: synced events must carry origin='github' so the
         # save-time invariant on ``Event`` (origin='github' iff
@@ -339,6 +344,7 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
                 required_level=data.get('required_level', 0),
                 related_course=data.get('related_course', ''),
                 kind=data.get('kind', 'standard') or 'standard',
+                external_host=data.get('external_host', '') or '',
                 published_at=published_at_value,
                 recap=rendered_recap,
             )

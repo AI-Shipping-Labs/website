@@ -93,10 +93,11 @@ def plan_interview_notes(request, plan_id):
 def user_interview_notes(request, email):
     """``GET /api/users/<email>/interview-notes/``.
 
-    Staff: every note for this user. Non-staff: only when ``email`` matches
-    their own and the result is filtered to ``external``. ``?plan=null``
-    preserves the old inbox-only behaviour; ``?plan=<id>`` narrows to one
-    plan.
+    Staff-only endpoint. ``@token_required`` guarantees the bearer is
+    staff (see ``accounts/auth.py``) and ``Token.clean()`` blocks
+    non-staff token rows at the model layer, so there is no non-staff
+    branch here. ``?plan=null`` preserves the old inbox-only behaviour;
+    ``?plan=<id>`` narrows to one plan.
     """
     user = User.objects.filter(email__iexact=email).first()
     if user is None:
@@ -106,17 +107,6 @@ def user_interview_notes(request, email):
             status=422,
             details={"email": "Unknown user"},
         )
-
-    # Non-staff: only allowed for the bearer's own email. We detect
-    # "non-staff" by checking whether the bearer can see internal notes
-    # for this user; if not, and the email isn't their own, deny.
-    if not bearer_sees_internal_notes(request.user):
-        if user.pk != request.user.pk:
-            return error_response(
-                "Cannot read another user's interview notes",
-                "forbidden_other_user_plan",
-                status=403,
-            )
 
     qs = visible_interview_notes_for(request.user).filter(member=user)
     plan_filter = request.GET.get("plan")

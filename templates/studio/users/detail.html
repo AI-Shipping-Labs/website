@@ -105,10 +105,35 @@
     <dl class="space-y-3 text-sm">
       <div class="flex justify-between gap-4">
         <dt class="text-muted-foreground">Tier</dt>
-        <dd class="text-foreground" data-testid="user-detail-tier">
-          {{ tier_name }}
-          {% if has_override %}
-          <span class="text-xs text-muted-foreground">(override active)</span>
+        <dd class="text-foreground text-right" data-testid="user-detail-tier">
+          <div class="flex items-center gap-2 justify-end flex-wrap">
+            <span>{{ tier_name }}</span>
+            {% if tier_source == 'override' %}
+            <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  data-testid="user-detail-tier-badge"
+                  data-tier-source="override">
+              <i data-lucide="shield-check" class="w-3 h-3"></i>
+              Override
+            </span>
+            {% elif tier_source == 'stripe' %}
+            <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
+                  data-testid="user-detail-tier-badge"
+                  data-tier-source="stripe">
+              From Stripe
+            </span>
+            {% else %}
+            <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
+                  data-testid="user-detail-tier-badge"
+                  data-tier-source="default">
+              Default
+            </span>
+            {% endif %}
+          </div>
+          {% if has_override and active_override %}
+          <p class="text-xs text-muted-foreground mt-1" data-testid="user-detail-tier-base">
+            Base: {% if detail_user.tier %}{{ detail_user.tier.name }}{% else %}Free{% endif %}
+            &middot; expires {{ active_override.expires_at|date:"M d, Y H:i" }} UTC
+          </p>
           {% endif %}
         </dd>
       </div>
@@ -139,6 +164,82 @@
         </dd>
       </div>
     </dl>
+
+    {# Inline tier-override controls (issue #562). #}
+    {# The standalone /studio/users/tier-override/ page still exists; #}
+    {# this block ADDS an in-context surface so operators can override #}
+    {# without leaving the user detail page. #}
+    <div class="mt-5 pt-5 border-t border-border" data-testid="user-detail-tier-override-block">
+      {% if has_override and active_override %}
+      <p class="text-sm text-foreground mb-3">
+        Active override to <span class="font-medium">{{ active_override.override_tier.name }}</span>
+        until {{ active_override.expires_at|date:"M d, Y H:i" }} UTC.
+      </p>
+      <form method="post"
+            action="{% url 'studio_user_tier_override_revoke' detail_user.pk %}"
+            data-testid="user-detail-tier-override-revoke-form"
+            onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
+        {% csrf_token %}
+        <input type="hidden" name="override_id" value="{{ active_override.pk }}">
+        <button type="submit"
+                data-testid="user-detail-tier-override-revoke"
+                class="inline-flex items-center text-sm text-red-400 hover:text-red-300 hover:underline">
+          Revoke override
+        </button>
+      </form>
+      {% elif is_highest_tier %}
+      <p class="text-sm text-muted-foreground" data-testid="user-detail-tier-override-highest">
+        User is already at the highest tier &mdash; no override available.
+      </p>
+      {% else %}
+      <form method="post"
+            action="{% url 'studio_user_tier_override_create' detail_user.pk %}"
+            data-testid="user-detail-tier-override-form">
+        {% csrf_token %}
+        <div class="mb-4">
+          <p class="text-sm font-medium text-foreground mb-2">Grant temporary upgrade</p>
+          <p class="text-xs text-muted-foreground mb-3">
+            Picks the lowest available tier by default. Override sits on top of the
+            user&rsquo;s real subscription tier and expires automatically.
+          </p>
+          <div class="flex flex-wrap gap-2" data-testid="user-detail-tier-override-tiers">
+            {% for tier in available_override_tiers %}
+            <label class="cursor-pointer">
+              <input type="radio" name="tier_id" value="{{ tier.pk }}"
+                     class="peer sr-only"
+                     data-testid="user-detail-tier-override-tier-option"
+                     data-tier-slug="{{ tier.slug }}"
+                     {% if forloop.first %}checked{% endif %}>
+              <span class="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:bg-secondary">
+                {{ tier.name }}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-foreground mb-2">Duration</p>
+          <div class="flex flex-wrap gap-2" data-testid="user-detail-tier-override-durations">
+            {% for label in override_duration_labels %}
+            <button type="submit" name="duration" value="{{ label }}"
+                    data-testid="user-detail-tier-override-duration"
+                    data-duration="{{ label }}"
+                    class="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground hover:border-accent">
+              {{ label }}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </form>
+      {% endif %}
+      <p class="mt-4 text-xs text-muted-foreground">
+        <a href="{% url 'studio_tier_override' %}?email={{ detail_user.email }}"
+           data-testid="user-detail-tier-override-history-link"
+           class="hover:underline">
+          View full override history &rarr;
+        </a>
+      </p>
+    </div>
   </section>
 </div>
 

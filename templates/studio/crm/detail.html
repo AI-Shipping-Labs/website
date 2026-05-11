@@ -1,0 +1,242 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}CRM: {{ detail_user.email }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_crm_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+    &larr; Back to CRM
+  </a>
+</div>
+
+<!-- Header -->
+<header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        data-testid="crm-detail-header">
+  <div class="min-w-0">
+    <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">CRM record</p>
+    <h1 class="text-2xl font-semibold text-foreground mt-1 break-all" data-testid="crm-detail-email">{{ detail_user.email }}</h1>
+    {% if detail_user.first_name or detail_user.last_name %}
+    <p class="text-sm text-muted-foreground mt-1">{{ detail_user.first_name }} {{ detail_user.last_name }}</p>
+    {% endif %}
+    <div class="mt-2 flex items-center gap-2 text-xs">
+      <span class="text-muted-foreground">Tier: {{ tier_name }}</span>
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full {% if record.status == 'active' %}bg-green-500/20 text-green-400{% else %}bg-muted text-muted-foreground{% endif %}"
+            data-testid="crm-detail-status">
+        {{ record.get_status_display }}
+      </span>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="crm-detail-actions">
+    <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="crm-detail-impersonate"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Login as user
+      </button>
+    </form>
+    <a href="{% url 'studio_user_detail' user_id=detail_user.pk %}"
+       data-testid="crm-detail-open-profile"
+       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+      Open user profile
+    </a>
+    {% if record.status == 'active' %}
+    <form method="post" action="{% url 'studio_crm_archive' crm_id=record.pk %}" class="inline-flex">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="crm-detail-archive"
+              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+        Archive CRM record
+      </button>
+    </form>
+    {% else %}
+    <form method="post" action="{% url 'studio_crm_reactivate' crm_id=record.pk %}" class="inline-flex">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="crm-detail-reactivate"
+              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+        Reactivate CRM record
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</header>
+
+<!-- Snapshot card -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-snapshot-card">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Snapshot</h2>
+  <form method="post" action="{% url 'studio_crm_edit' crm_id=record.pk %}" class="space-y-4">
+    {% csrf_token %}
+    <div>
+      <label for="crm-persona" class="block text-xs font-medium text-muted-foreground mb-1">Persona (max 120 chars)</label>
+      <input id="crm-persona"
+             type="text"
+             name="persona"
+             maxlength="120"
+             value="{{ record.persona }}"
+             placeholder="e.g. Sam — The Technical Professional Moving to AI"
+             data-testid="crm-persona-input"
+             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <div>
+      <label for="crm-summary" class="block text-xs font-medium text-muted-foreground mb-1">Summary</label>
+      <textarea id="crm-summary"
+                name="summary"
+                rows="3"
+                placeholder="Who is this person and why are we tracking them?"
+                data-testid="crm-summary-input"
+                class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">{{ record.summary }}</textarea>
+    </div>
+    <div>
+      <label for="crm-next-steps" class="block text-xs font-medium text-muted-foreground mb-1">Next steps</label>
+      <textarea id="crm-next-steps"
+                name="next_steps"
+                rows="3"
+                placeholder="What's next for this member?"
+                data-testid="crm-next-steps-input"
+                class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">{{ record.next_steps }}</textarea>
+    </div>
+    <div>
+      <button type="submit"
+              data-testid="crm-snapshot-save"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+        Save
+      </button>
+    </div>
+  </form>
+</section>
+
+<!-- Plans & sprints -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-plans-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Plans &amp; sprints</h2>
+  {% if member_plans %}
+  <ul class="divide-y divide-border" data-testid="crm-plans-list">
+    {% for member_plan in member_plans %}
+    <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="crm-plan-item">
+      <div class="min-w-0">
+        <a href="{% url 'studio_sprint_detail' sprint_id=member_plan.sprint.pk %}"
+           data-testid="crm-plan-sprint-link"
+           class="text-sm font-medium text-accent hover:underline">{{ member_plan.sprint.name }}</a>
+        <p class="text-xs text-muted-foreground">
+          Status: {{ member_plan.get_status_display }}
+          {% if member_plan.shared_at %}&middot; Shared {{ member_plan.shared_at|date:"Y-m-d" }}{% endif %}
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <a href="{% url 'studio_plan_detail' plan_id=member_plan.pk %}"
+           class="text-xs text-muted-foreground hover:text-foreground hover:underline">View plan</a>
+        <a href="{% url 'studio_plan_edit' plan_id=member_plan.pk %}"
+           data-testid="crm-plan-edit-link"
+           class="text-xs text-muted-foreground hover:text-foreground hover:underline">Edit plan</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-plans-empty">No sprint plans yet. Add the member to a sprint to create one.</p>
+  {% endif %}
+</section>
+
+<!-- Member notes (reuse the existing partial) -->
+<section class="mb-8 max-w-4xl" data-testid="crm-notes-section">
+  {% include "studio/users/_member_notes.html" %}
+</section>
+
+<!-- Experiments -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-experiments-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Experiments</h2>
+
+  {% if experiments %}
+  <ul class="divide-y divide-border mb-6" data-testid="crm-experiments-list">
+    {% for experiment in experiments %}
+    <li class="py-4" data-testid="crm-experiment-item">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-2">
+        <div class="min-w-0">
+          <h3 class="text-sm font-medium text-foreground">{{ experiment.title }}</h3>
+          <p class="text-xs text-muted-foreground">
+            Status: {{ experiment.get_status_display }} &middot; Created {{ experiment.created_at|date:"Y-m-d" }}
+          </p>
+        </div>
+        <div class="flex items-center gap-3 text-xs whitespace-nowrap">
+          <a href="{% url 'studio_crm_experiment_edit' crm_id=record.pk exp_id=experiment.pk %}"
+             data-testid="crm-experiment-edit-link"
+             class="text-accent hover:underline">Edit</a>
+          <form method="post"
+                action="{% url 'studio_crm_experiment_delete' crm_id=record.pk exp_id=experiment.pk %}"
+                class="inline"
+                onsubmit="return confirm('Delete this experiment?');">
+            {% csrf_token %}
+            <button type="submit"
+                    data-testid="crm-experiment-delete"
+                    class="text-destructive hover:underline">Delete</button>
+          </form>
+        </div>
+      </div>
+      {% if experiment.hypothesis %}
+      <p class="text-sm text-muted-foreground mt-1"><span class="text-xs uppercase tracking-wider">Hypothesis:</span> {{ experiment.hypothesis }}</p>
+      {% endif %}
+      {% if experiment.result %}
+      <p class="text-sm text-muted-foreground mt-1"><span class="text-xs uppercase tracking-wider">Result:</span> {{ experiment.result }}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground mb-4" data-testid="crm-experiments-empty">
+    No experiments tracked yet. Add one to capture what you&rsquo;re trying with this member.
+  </p>
+  {% endif %}
+
+  <details class="border border-border rounded-lg p-4">
+    <summary class="text-sm font-medium text-foreground cursor-pointer" data-testid="crm-experiment-add-toggle">Add experiment</summary>
+    <form method="post" action="{% url 'studio_crm_experiment_create' crm_id=record.pk %}" class="mt-3 space-y-3" data-testid="crm-experiment-add-form">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-medium text-muted-foreground mb-1" for="exp-title">Title</label>
+        <input id="exp-title"
+               type="text"
+               name="title"
+               maxlength="200"
+               required
+               data-testid="crm-experiment-title-input"
+               class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-muted-foreground mb-1" for="exp-hypothesis">Hypothesis</label>
+        <textarea id="exp-hypothesis"
+                  name="hypothesis"
+                  rows="2"
+                  data-testid="crm-experiment-hypothesis-input"
+                  class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-muted-foreground mb-1" for="exp-status">Status</label>
+        <select id="exp-status"
+                name="status"
+                data-testid="crm-experiment-status-input"
+                class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full">
+          {% for value, label in experiment_status_choices %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit"
+              data-testid="crm-experiment-add-submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+        Add experiment
+      </button>
+    </form>
+  </details>
+</section>
+
+<!-- Content context (read-only roll-up, v1 placeholder) -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-content-context-section">
+  <h2 class="text-lg font-semibold text-foreground mb-2">Content context</h2>
+  <p class="text-sm text-muted-foreground" data-testid="crm-content-context-placeholder">
+    Coming soon &mdash; a read-only roll-up of this member&rsquo;s course enrollments,
+    upcoming event registrations, and recent project submissions.
+  </p>
+</section>
+{% endblock %}

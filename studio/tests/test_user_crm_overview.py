@@ -170,13 +170,17 @@ class UserDetailSectionsTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_profile_membership_tags_plans_sections_present(self):
+    def test_profile_membership_tags_sections_present_no_plans_or_notes(self):
+        # Issue #560: the user profile keeps the account-data sections
+        # but no longer renders the plans or notes sections inline.
         response = self.client.get(f'/studio/users/{self.member.pk}/')
         self.assertContains(response, 'data-testid="user-detail-profile-section"')
         self.assertContains(response, 'data-testid="user-detail-membership-section"')
         self.assertContains(response, 'data-testid="user-tags-section"')
-        self.assertContains(response, 'data-testid="user-detail-plans-section"')
-        self.assertContains(response, 'data-testid="member-notes-section"')
+        self.assertNotContains(response, 'data-testid="user-detail-plans-section"')
+        self.assertNotContains(response, 'data-testid="member-notes-section"')
+        # The single CRM card replaces both removed sections.
+        self.assertContains(response, 'data-testid="user-crm-section"')
 
     def test_membership_section_shows_tier_and_newsletter_state(self):
         response = self.client.get(f'/studio/users/{self.member.pk}/')
@@ -190,8 +194,13 @@ class UserDetailSectionsTest(TestCase):
         self.assertContains(response, 'early-adopter')
 
 
-class UserDetailPlansSectionTest(TestCase):
-    """The plans section links to existing Studio plan / sprint pages."""
+class UserDetailNoPlansOrNotesInlineTest(TestCase):
+    """Issue #560: plans and notes are gone from the user profile.
+
+    All relationship-rich data now lives on the CRM record page. These
+    tests pin the absence so a regression that re-adds the inline
+    sections gets caught.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -206,102 +215,31 @@ class UserDetailPlansSectionTest(TestCase):
             slug='spring-2026',
             start_date=datetime.date(2026, 3, 1),
         )
-        cls.summer = Sprint.objects.create(
-            name='Summer 2026',
-            slug='summer-2026',
-            start_date=datetime.date(2026, 6, 1),
-        )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_no_plans_renders_empty_state_no_500(self):
+    def test_user_profile_omits_plans_section_even_when_plans_exist(self):
+        plan = Plan.objects.create(member=self.member, sprint=self.spring)
         response = self.client.get(f'/studio/users/{self.member.pk}/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="user-detail-plans-empty"')
-        self.assertContains(response, 'No sprints or plans yet.')
+        self.assertNotContains(response, 'data-testid="user-detail-plans-section"')
+        self.assertNotContains(response, 'Sprints &amp; plans')
+        # The specific plan-detail link for this member's plan must
+        # not appear on the profile (the sidebar's /studio/plans/
+        # list link does, which is fine).
+        self.assertNotContains(response, f'/studio/plans/{plan.pk}/')
 
-    def test_member_with_plans_lists_links_to_plan_and_sprint(self):
-        spring_plan = Plan.objects.create(
-            member=self.member, sprint=self.spring,
-        )
-        summer_plan = Plan.objects.create(
-            member=self.member, sprint=self.summer,
-        )
-        response = self.client.get(f'/studio/users/{self.member.pk}/')
-        self.assertContains(response, 'data-testid="user-detail-plans-list"')
-        # Each plan renders an item with a link to the plan detail.
-        self.assertContains(
-            response, f'href="/studio/plans/{spring_plan.pk}/"',
-        )
-        self.assertContains(
-            response, f'href="/studio/plans/{summer_plan.pk}/"',
-        )
-        # The sprint link points at the existing Studio sprint detail.
-        self.assertContains(
-            response, f'href="/studio/sprints/{self.spring.pk}/"',
-        )
-        # Sprint names show in the section so staff can scan.
-        self.assertContains(response, 'Spring 2026')
-        self.assertContains(response, 'Summer 2026')
-
-
-class UserDetailMemberNotesIntegrationTest(TestCase):
-    """Member-note partial keeps internal/external split + add link."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='pw', is_staff=True,
-        )
-        cls.member = User.objects.create_user(
-            email='member@test.com', password='pw',
-        )
-
-    def setUp(self):
-        self.client.login(email='staff@test.com', password='pw')
-
-    def test_internal_and_external_sections_both_visible_with_distinct_labels(self):
+    def test_user_profile_omits_member_notes_section_even_when_notes_exist(self):
         InterviewNote.objects.create(
             plan=None, member=self.member,
             visibility='internal', kind='intake',
-            body='Internal body', created_by=self.staff,
-        )
-        InterviewNote.objects.create(
-            plan=None, member=self.member,
-            visibility='external', kind='general',
-            body='External body', created_by=self.staff,
+            body='Should not appear on profile', created_by=self.staff,
         )
         response = self.client.get(f'/studio/users/{self.member.pk}/')
-        self.assertContains(response, 'data-testid="internal-notes"')
-        self.assertContains(response, 'data-testid="external-notes"')
-        self.assertContains(response, 'Internal notes (staff only)')
-        self.assertContains(response, 'External notes (shareable with member)')
-        self.assertContains(response, 'Internal body')
-        self.assertContains(response, 'External body')
-
-    def test_add_member_note_button_routes_to_existing_create_form(self):
-        response = self.client.get(f'/studio/users/{self.member.pk}/')
-        # Same href the partial used before: optional ?plan_id is absent
-        # on the user-detail context.
-        self.assertContains(response, 'data-testid="member-notes-add"')
-        self.assertContains(
-            response,
-            f'href="/studio/users/{self.member.pk}/notes/new"',
-        )
-
-    def test_external_note_edit_link_remains_discoverable(self):
-        external = InterviewNote.objects.create(
-            plan=None, member=self.member,
-            visibility='external', kind='general',
-            body='External body', created_by=self.staff,
-        )
-        response = self.client.get(f'/studio/users/{self.member.pk}/')
-        # Staff can edit external notes here; member never sees this.
-        self.assertContains(
-            response,
-            f'href="/studio/users/{self.member.pk}/notes/{external.pk}/edit"',
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-testid="member-notes-section"')
+        self.assertNotContains(response, 'Should not appear on profile')
 
 
 class UserDetailAccessControlTest(TestCase):

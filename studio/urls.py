@@ -36,6 +36,17 @@ from studio.views.courses import (
     unit_create,
     unit_edit,
 )
+from studio.views.crm import (
+    crm_archive,
+    crm_detail,
+    crm_edit,
+    crm_experiment_create,
+    crm_experiment_delete,
+    crm_experiment_edit,
+    crm_list,
+    crm_reactivate,
+    crm_track,
+)
 from studio.views.dashboard import dashboard
 from studio.views.downloads import download_edit, download_list
 from studio.views.email_templates import (
@@ -387,6 +398,42 @@ urlpatterns = [
         'users/<int:user_id>/tier-override/revoke',
         user_tier_override_revoke,
         name='studio_user_tier_override_revoke',
+    ),
+
+    # CRM (issue #560). The ``Track in CRM`` CTA on the user profile is
+    # the only POST entry; everything else lives under ``/studio/crm/``.
+    path(
+        'users/<int:user_id>/crm/track',
+        crm_track,
+        name='studio_crm_track',
+    ),
+    path('crm/', crm_list, name='studio_crm_list'),
+    path('crm/<int:crm_id>/', crm_detail, name='studio_crm_detail'),
+    path('crm/<int:crm_id>/edit', crm_edit, name='studio_crm_edit'),
+    path(
+        'crm/<int:crm_id>/archive',
+        crm_archive,
+        name='studio_crm_archive',
+    ),
+    path(
+        'crm/<int:crm_id>/reactivate',
+        crm_reactivate,
+        name='studio_crm_reactivate',
+    ),
+    path(
+        'crm/<int:crm_id>/experiments/new',
+        crm_experiment_create,
+        name='studio_crm_experiment_create',
+    ),
+    path(
+        'crm/<int:crm_id>/experiments/<int:exp_id>/edit',
+        crm_experiment_edit,
+        name='studio_crm_experiment_edit',
+    ),
+    path(
+        'crm/<int:crm_id>/experiments/<int:exp_id>/delete',
+        crm_experiment_delete,
+        name='studio_crm_experiment_delete',
     ),
 
     # Sprints (issue #432). Members section.

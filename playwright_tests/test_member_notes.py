@@ -23,17 +23,27 @@ from django.db import connection  # noqa: E402
 
 def _clear_member_note_data():
     from accounts.models import Token
+    from crm.models import CRMRecord
     from plans.models import InterviewNote, Plan, Sprint
 
     Token.objects.all().delete()
     InterviewNote.objects.all().delete()
+    CRMRecord.objects.all().delete()
     Plan.objects.all().delete()
     Sprint.objects.all().delete()
     connection.close()
 
 
 def _seed_member_with_two_plans():
+    """Seed two sprints + plans for ``member@test.com`` and a CRM record.
+
+    Issue #560 moved member-notes rendering off the user profile and onto
+    the CRM record detail page. Tests that verify the staff narrative
+    ("notes survive across sprints") assert on the CRM detail page, so we
+    seed a CRMRecord here and return its pk alongside the plan pks.
+    """
     from accounts.models import User
+    from crm.models import CRMRecord
     from plans.models import Plan, Sprint
 
     spring = Sprint.objects.create(
@@ -49,8 +59,9 @@ def _seed_member_with_two_plans():
     member = User.objects.get(email="member@test.com")
     spring_plan = Plan.objects.create(member=member, sprint=spring)
     summer_plan = Plan.objects.create(member=member, sprint=summer)
+    crm_record = CRMRecord.objects.create(user=member)
     connection.close()
-    return member.pk, spring_plan.pk, summer_plan.pk
+    return member.pk, spring_plan.pk, summer_plan.pk, crm_record.pk
 
 
 @pytest.mark.django_db(transaction=True)
@@ -62,13 +73,19 @@ class TestStaffCapturesMemberContextAcrossSprints:
         _clear_member_note_data()
         _create_staff_user("staff@test.com")
         _create_user("member@test.com", tier_slug="main", email_verified=True)
-        member_pk, _spring_plan_pk, summer_plan_pk = _seed_member_with_two_plans()
+        member_pk, _spring_plan_pk, summer_plan_pk, crm_pk = (
+            _seed_member_with_two_plans()
+        )
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
 
+        # Issue #560: the user profile no longer renders inline member
+        # notes — the CRM record detail page is the canonical home. The
+        # staff narrative starts on the CRM detail, which shows the
+        # ``Member notes`` heading and the ``Add member note`` CTA.
         page.goto(
-            f"{django_server}/studio/users/{member_pk}/",
+            f"{django_server}/studio/crm/{crm_pk}/",
             wait_until="domcontentloaded",
         )
         page.get_by_role("heading", name="Member notes").wait_for(
@@ -86,8 +103,16 @@ class TestStaffCapturesMemberContextAcrossSprints:
             "Wants to ship a RAG side project; previously a backend engineer",
         )
         page.locator('button[type="submit"]').click()
+        # The member-note form still redirects to the legacy user-profile
+        # anchor. The profile page itself no longer renders the notes
+        # section (issue #560), so we hop to the CRM detail page — the
+        # canonical surface — to assert the note rendered.
         page.wait_for_url(f"{django_server}/studio/users/{member_pk}/#member-notes")
         page.locator("text=Member note added.").wait_for(state="visible")
+        page.goto(
+            f"{django_server}/studio/crm/{crm_pk}/",
+            wait_until="domcontentloaded",
+        )
         page.locator(
             '[data-testid="internal-notes"] >> '
             'text=Wants to ship a RAG side project; previously a backend engineer'
@@ -116,7 +141,9 @@ class TestStaffRecordsSprintSpecificMemberNote:
         _clear_member_note_data()
         _create_staff_user("staff@test.com")
         _create_user("member@test.com", tier_slug="main", email_verified=True)
-        member_pk, spring_plan_pk, summer_plan_pk = _seed_member_with_two_plans()
+        member_pk, spring_plan_pk, summer_plan_pk, crm_pk = (
+            _seed_member_with_two_plans()
+        )
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
@@ -136,7 +163,14 @@ class TestStaffRecordsSprintSpecificMemberNote:
             "Discussed pivot from RAG to agents on 2026-05-10",
         )
         page.locator('button[type="submit"]').click()
+        # The form redirect lands on the legacy user-profile anchor.
+        # Member notes now live on the CRM detail page (issue #560), so
+        # we hop there to assert the origin-plan link rendered correctly.
         page.wait_for_url(f"{django_server}/studio/users/{member_pk}/#member-notes")
+        page.goto(
+            f"{django_server}/studio/crm/{crm_pk}/",
+            wait_until="domcontentloaded",
+        )
 
         row = page.locator(
             "li",
@@ -176,7 +210,9 @@ class TestMemberNotesApiPrivacy:
         _create_staff_user("staff@test.com")
         _create_user("member@test.com", tier_slug="main", email_verified=True)
         _create_user("other@test.com", tier_slug="main", email_verified=True)
-        _member_pk, spring_plan_pk, _summer_plan_pk = _seed_member_with_two_plans()
+        _member_pk, spring_plan_pk, _summer_plan_pk, _crm_pk = (
+            _seed_member_with_two_plans()
+        )
 
         staff = User.objects.get(email="staff@test.com")
         member = User.objects.get(email="member@test.com")

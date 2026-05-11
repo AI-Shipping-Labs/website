@@ -576,6 +576,7 @@ class TestSidebarNavOrder:
             "Workshops",
             "Downloads",
             "MEMBERS",
+            "CRM",
             "Sprints",
             "Plans",
             "EVENTS & OUTREACH",

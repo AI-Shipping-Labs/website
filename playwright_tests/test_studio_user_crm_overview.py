@@ -185,29 +185,22 @@ class TestStudioUserCrmOverview:
             "document.activeElement.getAttribute('data-testid')"
         ) == "user-detail-django-admin"
 
-        # Sections present: profile, membership, tags, plans, notes.
+        # Account-data sections present (issue #560): profile,
+        # membership, tags, and the new CRM card. Plans and notes are
+        # no longer rendered inline on the profile.
         for testid in [
             "user-detail-profile-section",
             "user-detail-membership-section",
             "user-tags-section",
-            "user-detail-plans-section",
-            "member-notes-section",
+            "user-crm-section",
         ]:
             assert page.locator(f'[data-testid="{testid}"]').is_visible()
-
-        # Notes split into internal / external sections.
-        assert page.locator('[data-testid="internal-notes"]').is_visible()
-        assert page.locator('[data-testid="external-notes"]').is_visible()
-        assert page.get_by_text("CRM internal note body").is_visible()
-        assert page.get_by_text("CRM external note body").is_visible()
-
-        # The Add member note action routes to the existing form.
-        add_note = page.locator('[data-testid="member-notes-add"]')
-        assert add_note.is_visible()
-        assert (
-            add_note.get_attribute("href")
-            == f"/studio/users/{member_pk}/notes/new"
-        )
+        assert page.locator(
+            '[data-testid="user-detail-plans-section"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="member-notes-section"]'
+        ).count() == 0
 
         _assert_no_horizontal_overflow(page)
         _capture_screenshot(page, "user-detail-1280px")
@@ -241,16 +234,20 @@ class TestStudioUserCrmOverview:
             f"{django_server}/studio/users/{member_pk}/",
             wait_until="domcontentloaded",
         )
-        # Header actions, tags, plan section, and note cards all render
-        # without horizontal overflow at the narrow viewport.
+        # Header actions, tags, and the new CRM card render cleanly at
+        # narrow viewport. Plans and notes sections are no longer
+        # rendered inline (issue #560).
         assert page.locator('[data-testid="user-detail-header"]').is_visible()
         assert page.locator('[data-testid="user-detail-impersonate"]').is_visible()
         assert page.locator('[data-testid="user-detail-django-admin"]').is_visible()
         assert page.locator('[data-testid="user-tags-section"]').is_visible()
-        assert page.locator('[data-testid="user-detail-plans-section"]').is_visible()
-        assert page.locator('[data-testid="member-notes-section"]').is_visible()
-        assert page.locator('[data-testid="internal-notes"]').is_visible()
-        assert page.locator('[data-testid="external-notes"]').is_visible()
+        assert page.locator('[data-testid="user-crm-section"]').is_visible()
+        assert page.locator(
+            '[data-testid="user-detail-plans-section"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="member-notes-section"]'
+        ).count() == 0
         _assert_no_horizontal_overflow(page)
         _capture_screenshot(page, "user-detail-390px")
 

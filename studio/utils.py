@@ -8,9 +8,15 @@ logger = logging.getLogger(__name__)
 def is_synced(obj):
     """Return True if the object is synced from a GitHub repo.
 
-    An object is considered synced if its source_repo field is not
-    None and not empty.
+    For models that carry an explicit ``origin`` field (issue #564, e.g.
+    ``Event``) the value of that field is authoritative — ``github``
+    means synced, ``studio`` means database-native. For every other
+    model the legacy ``source_repo`` fallback applies: an object is
+    considered synced iff its ``source_repo`` is non-empty.
     """
+    origin = getattr(obj, 'origin', None)
+    if origin in ('github', 'studio'):
+        return origin == 'github'
     return bool(getattr(obj, 'source_repo', None))
 
 

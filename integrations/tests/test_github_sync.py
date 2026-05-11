@@ -209,6 +209,7 @@ class SourceTrackingFieldsTest(TestCase):
     def test_recording_source_fields(self):
         recording = Event.objects.create(
             title='Test', slug='test-rec', start_datetime=timezone.now(),
+            origin='github',
             source_repo='AI-Shipping-Labs/resources',
             source_path='recordings/test.yaml',
             source_commit='def456',
@@ -1761,6 +1762,7 @@ class SyncResourcesTest(TestCase):
         event_source = self.source
         Event.objects.create(
             title='Stale', slug='stale-rec', start_datetime=timezone.now(),
+            origin='github',
             source_repo='AI-Shipping-Labs/resources',
             published=True,
         )

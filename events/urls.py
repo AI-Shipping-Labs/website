@@ -4,6 +4,7 @@ from events.views.api import register_for_event, unregister_from_event
 from events.views.pages import (
     event_calendar_ics,
     event_detail,
+    event_group_public,
     event_join_redirect,
     events_calendar,
     events_list,
@@ -16,6 +17,20 @@ urlpatterns = [
         'events/calendar/<int:year>/<int:month>',
         events_calendar,
         name='events_calendar_month',
+    ),
+    # Issue #564: ``events/groups/<slug>`` is registered BEFORE
+    # ``events/<slug>`` so the literal ``groups`` prefix isn't swallowed
+    # by the slug converter on the event-detail route below. Same
+    # pattern as ``workshops/resync/``.
+    path(
+        'events/groups/<slug:slug>',
+        event_group_public,
+        name='event_group_public',
+    ),
+    path(
+        'events/groups/<slug:slug>/',
+        event_group_public,
+        name='event_group_public_trailing',
     ),
     path('events/<slug:slug>/join', event_join_redirect, name='event_join'),
     path(

@@ -12,7 +12,7 @@ from content.access import (
     can_access,
     get_required_tier_name,
 )
-from events.models import Event, EventJoinClick, EventRegistration
+from events.models import Event, EventGroup, EventJoinClick, EventRegistration
 from events.services.calendar_invite import generate_ics
 from events.services.display_time import (
     build_event_time_display,
@@ -339,6 +339,28 @@ def event_detail(request, slug):
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)
+
+
+def event_group_public(request, slug):
+    """Public series index page.
+
+    Issue #564. Shows the group's metadata and every published member
+    event. Anonymous visitors see the page; per-event tier gating
+    happens on the individual event detail / registration as today.
+
+    Draft events are hidden from anonymous and non-staff visitors. Staff
+    see every member event so the page is useful for previewing a
+    series before publishing.
+    """
+    group = get_object_or_404(EventGroup, slug=slug)
+    events = group.events.all().order_by('series_position', 'start_datetime')
+    if not request.user.is_staff:
+        events = events.exclude(status='draft')
+
+    return render(request, 'events/event_group.html', {
+        'group': group,
+        'events': events,
+    })
 
 
 def event_calendar_ics(request, slug):

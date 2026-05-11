@@ -9,7 +9,14 @@
     <h1 class="text-2xl font-semibold text-foreground">Events</h1>
     <p class="text-muted-foreground mt-1">Manage event lifecycle, platform, and capacity.</p>
   </div>
-  <span class="text-sm text-muted-foreground">Events are managed in the content repo.</span>
+  <div class="flex items-center gap-3">
+    <a href="{% url 'studio_event_group_new' %}"
+       class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+       data-testid="event-series-new-button">
+      <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
+      <span>New event series</span>
+    </a>
+  </div>
 </div>
 
 {% studio_list_filter search status_filter "Search events..." "event" %}
@@ -20,6 +27,8 @@
     <thead class="{% studio_list_class 'thead' %}">
       <tr>
         <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Origin</th>
+        <th class="{% studio_list_class 'th' %}">Series</th>
         <th class="{% studio_list_class 'th' %}">Status</th>
         <th class="{% studio_list_class 'th' %}">Kind / Platform</th>
         <th class="{% studio_list_class 'th' %}">Date</th>
@@ -32,6 +41,26 @@
       <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ event.title }}</a>
+        </td>
+        <td class="px-6 py-4" data-label="Origin">
+          {% if event.origin == 'github' %}
+          <div data-testid="origin-badge" data-origin="github">
+            <span class="inline-flex items-center rounded bg-blue-500/20 px-1.5 py-0.5 text-xs font-medium text-blue-400">GitHub</span>
+          </div>
+          {% else %}
+          <div data-testid="origin-badge" data-origin="studio">
+            <span class="inline-flex items-center rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Studio</span>
+          </div>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm" data-label="Series">
+          {% if event.event_group %}
+          <a href="{% url 'studio_event_group_detail' group_id=event.event_group.pk %}"
+             class="text-accent hover:underline"
+             data-testid="event-series-link">{{ event.event_group.name }}</a>
+          {% else %}
+          <span class="text-xs text-muted-foreground">—</span>
+          {% endif %}
         </td>
         <td class="px-6 py-4" data-label="Status">
           {% studio_status_badge event.status event.get_status_display %}
@@ -52,7 +81,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">No events found.</td>
+        <td colspan="8" class="px-6 py-8 text-center text-sm text-muted-foreground">No events found.</td>
       </tr>
       {% endfor %}
     </tbody>

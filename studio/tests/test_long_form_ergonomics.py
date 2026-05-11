@@ -81,6 +81,7 @@ class StudioLongFormErgonomicsTest(StaffUserMixin, TestCase):
             slug='synced-event',
             start_datetime=datetime(2026, 6, 1, 10, 0),
             status='draft',
+            origin='github',
             source_repo='AI-Shipping-Labs/content',
             source_path='events/synced-event.md',
         )

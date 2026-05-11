@@ -250,6 +250,7 @@ class StudioEventSyncedTest(StaffUserMixin, TestCase):
             end_datetime=datetime(2026, 6, 1, 11, 0),
             status='draft',
             max_participants=100,
+            origin='github',
             source_repo='AI-Shipping-Labs/content',
             source_path='my-event.md',
         )

@@ -110,6 +110,7 @@ class StudioRecordingEditTest(TestCase):
             start_datetime=timezone.now(),
             status='completed',
             recording_url='https://youtube.com/watch?v=synced',
+            origin='github',
             source_repo='AI-Shipping-Labs/content',
             source_path='events/synced-rec.md',
             source_commit='abc123def4567890',

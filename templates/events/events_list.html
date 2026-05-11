@@ -78,6 +78,22 @@
         <div class="space-y-6">
           {% for event in upcoming_events %}
           <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
+            {% if event.event_group %}
+            {% comment %}
+            The series link lives OUTSIDE the wrapping clickable-card <a>
+            below. HTML5 forbids nested anchors — putting an <a> inside
+            another <a> causes the parser to split the outer anchor,
+            producing multiple sibling links and breaking the card's
+            click target. Same pattern as blog_list.html tag chips.
+            event.stopPropagation() is defensive in case a future
+            card-level click handler lands on the <article>.
+            {% endcomment %}
+            <p class="mb-2 text-sm" data-testid="event-card-series-link">
+              <a href="{{ event.event_group.get_absolute_url }}" class="text-accent hover:underline" onclick="event.stopPropagation();">
+                Series: {{ event.event_group.name }}
+              </a>
+            </p>
+            {% endif %}
             {# Issue #523 — keyboard-focus ring on the wrapping <a>. #}
             <a href="/events/{{ event.slug }}" class="{% include 'content/_clickable_card_classes.html' %}">
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

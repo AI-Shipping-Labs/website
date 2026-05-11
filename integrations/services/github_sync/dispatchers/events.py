@@ -82,6 +82,10 @@ def _build_synced_event_content_defaults(
         'related_course': related_course,
         'kind': kind,
         'content_id': content_id,
+        # Issue #564: synced events must carry origin='github' so the
+        # save-time invariant on ``Event`` (origin='github' iff
+        # source_repo is set) holds.
+        'origin': 'github',
         'source_repo': source.repo_name,
         'source_path': source_path,
         'source_commit': commit_sha,

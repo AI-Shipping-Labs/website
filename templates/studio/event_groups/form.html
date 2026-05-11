@@ -1,0 +1,137 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}New event series{% endblock %}
+
+{% block studio_content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<div class="mb-8">
+  <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+    <a href="{% url 'studio_event_list' %}" class="hover:text-foreground">Events</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_event_group_list' %}" class="hover:text-foreground">Event groups</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">New event series</span>
+  </div>
+  <h1 class="text-2xl font-semibold text-foreground">New event series</h1>
+  <p class="text-muted-foreground mt-1">
+    Create a weekly series and the form will generate one event per occurrence,
+    seven days apart, each as an independent draft. Edit any session later to
+    drift its time, title, or status — siblings stay untouched.
+  </p>
+</div>
+
+<div class="max-w-3xl">
+  <form method="post" class="space-y-6" data-testid="event-group-create-form">
+    {% csrf_token %}
+
+    <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="name-input">Name</label>
+        <input id="name-input" type="text" name="name" value="{{ form_values.name }}" required
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% if errors.name %}<p class="text-xs text-red-400 mt-1" data-testid="error-name">{{ errors.name }}</p>{% endif %}
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="slug-input">Slug (optional)</label>
+        <input id="slug-input" type="text" name="slug" value="{{ form_values.slug }}"
+               placeholder="auto-generated from the name"
+               class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% if errors.slug %}<p class="text-xs text-red-400 mt-1" data-testid="error-slug">{{ errors.slug }}</p>{% endif %}
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="description-input">Description (markdown, optional)</label>
+        <textarea id="description-input" name="description" rows="4"
+                  class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ form_values.description }}</textarea>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="start-date-input">Start date (dd/mm/yyyy)</label>
+          <input id="start-date-input" type="text" name="start_date" value="{{ form_values.start_date }}" required
+                 placeholder="dd/mm/yyyy"
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          {% if errors.start_date %}<p class="text-xs text-red-400 mt-1" data-testid="error-start-date">{{ errors.start_date }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="start-time-input">Start time (HH:MM)</label>
+          <input id="start-time-input" type="text" name="start_time" value="{{ form_values.start_time }}" required
+                 placeholder="18:00" pattern="[0-2][0-9]:[0-5][0-9]"
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          {% if errors.start_time %}<p class="text-xs text-red-400 mt-1" data-testid="error-start-time">{{ errors.start_time }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="duration-input">Duration (hours)</label>
+          <input id="duration-input" type="number" name="duration_hours" value="{{ form_values.duration_hours }}" step="0.5" min="0.5"
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          {% if errors.duration_hours %}<p class="text-xs text-red-400 mt-1" data-testid="error-duration">{{ errors.duration_hours }}</p>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="occurrences-input">Occurrences (1–{{ max_occurrences }})</label>
+          <input id="occurrences-input" type="number" name="occurrences" value="{{ form_values.occurrences }}" required min="1" max="{{ max_occurrences }}"
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+          {% if errors.occurrences %}<p class="text-xs text-red-400 mt-1" data-testid="error-occurrences">{{ errors.occurrences }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="timezone-input">Timezone</label>
+          <input id="timezone-input" type="text" name="timezone" value="{{ form_values.timezone }}"
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="required-level-input">Required level</label>
+          <input id="required-level-input" type="number" name="required_level" value="{{ form_values.required_level }}"
+                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="kind-input">Kind</label>
+          <select id="kind-input" name="kind" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+            <option value="standard" {% if form_values.kind == 'standard' %}selected{% endif %}>Standard</option>
+            <option value="meetup" {% if form_values.kind == 'meetup' %}selected{% endif %}>Meetup</option>
+            <option value="q_and_a" {% if form_values.kind == 'q_and_a' %}selected{% endif %}>Q&amp;A</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1" for="platform-input">Platform</label>
+          <select id="platform-input" name="platform" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+            <option value="zoom" {% if form_values.platform == 'zoom' %}selected{% endif %}>Zoom</option>
+            <option value="custom" {% if form_values.platform == 'custom' %}selected{% endif %}>Custom URL</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit"
+              class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+              data-testid="event-group-submit">
+        Create series
+      </button>
+      <a href="{% url 'studio_event_list' %}"
+         class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  flatpickr('#start-date-input', {
+    dateFormat: 'd/m/Y',
+    allowInput: true,
+    theme: 'dark'
+  });
+});
+</script>
+{% endblock %}

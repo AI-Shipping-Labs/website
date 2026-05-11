@@ -24,6 +24,7 @@ superusers.
 
 import csv
 import datetime
+import re
 import secrets
 
 from django.contrib import messages
@@ -83,6 +84,24 @@ USER_LIST_TAG_LIMIT = 3
 # spec deliberately defers operator-configurable page sizes. The CSV export
 # always exports the full filtered set, so this constant only affects HTML.
 USER_LIST_PAGE_SIZE = 50
+
+# Slack user IDs are uppercase, start with U (regular user) or W (Enterprise
+# Grid org-wide user) and contain at least 3 alphanumeric characters total.
+# Used to validate the manual edit form (issue #561) so operators cannot save
+# a typo like "u-foo" or "cus_*" that would break the deep-link silently.
+SLACK_USER_ID_PATTERN = re.compile(r'^[UW][A-Z0-9]{2,}$')
+
+
+def _build_slack_profile_url(slack_user_id, slack_team_id):
+    """Return the canonical web URL for a member's Slack profile, or ''.
+
+    Mirrors the Stripe pattern: requires BOTH the per-user ID and the
+    workspace team ID. When either is empty we return the empty string so
+    template callers can branch on truthiness alone.
+    """
+    if not slack_user_id or not slack_team_id:
+        return ''
+    return f'https://app.slack.com/client/{slack_team_id}/{slack_user_id}'
 
 
 def _normalize_filter(value):
@@ -191,14 +210,17 @@ def _matches_slack_filter(user, slack_filter):
 
 
 def _matches_search(user, search_lower, normalized_search):
-    """OR-match the search query across email, names, Stripe ID, and tags.
+    """OR-match the search query across email, names, Stripe ID, Slack ID, and tags.
 
-    Issue #438 broadened ``?q=`` from email-only to a four-field disjunction:
+    Issue #438 broadened ``?q=`` from email-only to a four-field disjunction;
+    issue #561 added the ``slack_user_id`` OR-arm so operators can paste a
+    Slack ID like ``U01ABC123`` and find the matching user.
 
     - ``email`` (case-insensitive substring; original behavior).
     - ``first_name`` / ``last_name`` (case-insensitive substring).
     - ``stripe_customer_id`` (case-insensitive substring; covers the
       "I pasted a prefix" case operators reach for first).
+    - ``slack_user_id`` (case-insensitive substring).
     - Any entry in ``tags`` (case-insensitive substring on the
       already-normalized list, after running ``normalize_tag`` on the input
       so ``AI Buildcamp`` matches ``ai-buildcamp``).
@@ -213,6 +235,8 @@ def _matches_search(user, search_lower, normalized_search):
     if user.last_name and search_lower in user.last_name.lower():
         return True
     if user.stripe_customer_id and search_lower in user.stripe_customer_id.lower():
+        return True
+    if user.slack_user_id and search_lower in user.slack_user_id.lower():
         return True
     if normalized_search:
         for tag in user.tags or []:
@@ -283,6 +307,7 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
             'slack_status': _slack_status(user),
             'slack_member': bool(user.slack_member),
             'slack_checked_at': user.slack_checked_at,
+            'slack_user_id': user.slack_user_id or '',
             'stripe_customer_id': user.stripe_customer_id or '',
         })
 
@@ -395,6 +420,9 @@ def user_list(request):
     # Single Stripe account ID per request (issue #441). When blank the
     # Stripe icon falls back to a non-clickable span with a tooltip.
     stripe_account_id = get_config('STRIPE_DASHBOARD_ACCOUNT_ID', '')
+    # Single Slack team ID per request (issue #561). When blank the
+    # Slack pill stays non-clickable, mirroring the Stripe pattern.
+    slack_team_id = get_config('SLACK_TEAM_ID', '')
 
     return render(request, 'studio/users/list.html', {
         'page': page,
@@ -429,6 +457,7 @@ def user_list(request):
         'slack_filter_yes': SLACK_FILTER_YES,
         'slack_filter_no': SLACK_FILTER_NO,
         'stripe_account_id': stripe_account_id,
+        'slack_team_id': slack_team_id,
     })
 
 
@@ -701,6 +730,15 @@ def user_detail(request, user_id):
     is_highest_tier = not available_override_tiers
     has_override = override is not None
 
+    # Slack profile deep-link inputs (issue #561). When either the user has
+    # no Slack ID or the operator hasn't configured ``SLACK_TEAM_ID`` in
+    # Studio, ``slack_profile_url`` is the empty string and the template
+    # renders a non-clickable label instead of an "Open in Slack" anchor.
+    slack_team_id = get_config('SLACK_TEAM_ID', '')
+    slack_profile_url = _build_slack_profile_url(
+        user.slack_user_id, slack_team_id,
+    )
+
     context = {
         'detail_user': user,
         'tier_name': _effective_tier_name(user, override),
@@ -720,6 +758,8 @@ def user_detail(request, user_id):
         # day-to-day CRM tasks without duplicating that surface.
         'django_admin_url': f'/admin/accounts/user/{user.pk}/change/',
         'slack_status': _slack_status(user),
+        'slack_team_id': slack_team_id,
+        'slack_profile_url': slack_profile_url,
         # Inline tier-override controls (issue #562).
         'available_override_tiers': available_override_tiers,
         'is_highest_tier': is_highest_tier,
@@ -875,4 +915,55 @@ def user_tag_remove(request, user_id):
     raw = (request.POST.get('tag') or '').strip()
     if raw:
         _remove_tag_from_user(user, raw)
+    return redirect('studio_user_detail', user_id=user.pk)
+
+
+@staff_required
+@require_POST
+def user_slack_id_set(request, user_id):
+    """POST handler: set / clear the user's ``slack_user_id`` (issue #561).
+
+    Some Slack IDs never make it onto a user row automatically — operators
+    occasionally need to wire up partner / guest accounts that never went
+    through Slack OAuth or the bulk import. This endpoint lets staff do
+    that by hand.
+
+    Input handling:
+
+    - Whitespace is trimmed and the value is uppercased before validation
+      and storage (Slack user IDs are conventionally uppercase ``U…`` /
+      ``W…``).
+    - Empty value clears the field (operators sometimes need to unlink a
+      wrongly-imported ID).
+    - Any other value must match ``^[UW][A-Z0-9]{2,}$``; otherwise the
+      submission is rejected with a flash error and the stored value is
+      left unchanged.
+
+    On a successful set OR clear, ``slack_checked_at`` is bumped to
+    ``timezone.now()`` so the membership-badge logic ("Never checked")
+    accurately reflects that staff intentionally touched the row.
+    """
+    user = get_object_or_404(User, pk=user_id)
+    raw = (request.POST.get('slack_user_id') or '').strip().upper()
+
+    if raw == '':
+        if user.slack_user_id:
+            user.slack_user_id = ''
+            user.slack_checked_at = timezone.now()
+            user.save(update_fields=['slack_user_id', 'slack_checked_at'])
+        messages.success(request, 'Slack ID cleared.')
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    if not SLACK_USER_ID_PATTERN.match(raw):
+        messages.error(
+            request,
+            'Invalid Slack ID. Must start with U or W followed by uppercase '
+            'letters or digits (for example: U01ABC123).',
+        )
+        return redirect('studio_user_detail', user_id=user.pk)
+
+    user.slack_user_id = raw
+    user.slack_checked_at = timezone.now()
+    user.save(update_fields=['slack_user_id', 'slack_checked_at'])
+    messages.success(request, f'Slack ID set to {raw}.')
     return redirect('studio_user_detail', user_id=user.pk)

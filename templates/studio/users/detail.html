@@ -163,7 +163,65 @@
           {% endif %}
         </dd>
       </div>
+      {# Slack ID row (issue #561). Always rendered so the inline edit form #}
+      {# is reachable even when the ID is not yet set. When the workspace's #}
+      {# SLACK_TEAM_ID is configured AND the user has a Slack ID, the row #}
+      {# also renders an "Open in Slack" anchor that deep-links to the #}
+      {# member's profile. Otherwise the value is plain text with a tooltip #}
+      {# explaining why the link is not clickable, mirroring the Stripe #}
+      {# indicator on the user list. #}
+      <div class="flex justify-between gap-4" data-testid="user-detail-slack-id-row">
+        <dt class="text-muted-foreground">Slack ID</dt>
+        <dd class="text-right">
+          {% if detail_user.slack_user_id %}
+            {% if slack_profile_url %}
+            <span class="text-foreground font-mono break-all" data-testid="user-detail-slack-id-value">{{ detail_user.slack_user_id }}</span>
+            <a href="{{ slack_profile_url }}"
+               target="_blank" rel="noopener"
+               data-testid="user-detail-slack-profile-link"
+               class="ml-2 inline-flex items-center text-xs text-accent hover:underline">
+              Open in Slack
+            </a>
+            {% else %}
+            <span class="text-foreground font-mono break-all"
+                  data-testid="user-detail-slack-id-value"
+                  title="Configure SLACK_TEAM_ID to enable the link">{{ detail_user.slack_user_id }}</span>
+            {% endif %}
+          {% else %}
+          <span class="text-xs text-muted-foreground" data-testid="user-detail-slack-id-empty">Not linked</span>
+          {% endif %}
+        </dd>
+      </div>
     </dl>
+    {# Inline edit form (issue #561). Always rendered so operators can #}
+    {# manually wire a Slack ID even when there isn't one yet — and can #}
+    {# clear or replace a wrongly-imported value. Validation lives in the #}
+    {# view; the placeholder mirrors the canonical Slack ID format. #}
+    <form method="post"
+          action="{% url 'studio_user_slack_id_set' detail_user.pk %}"
+          class="mt-4 flex flex-wrap items-center gap-2"
+          data-testid="user-detail-slack-id-form">
+      {% csrf_token %}
+      <label for="user-detail-slack-id-input" class="text-xs text-muted-foreground">
+        {% if detail_user.slack_user_id %}Edit Slack ID{% else %}Set Slack ID{% endif %}
+      </label>
+      <input type="text"
+             id="user-detail-slack-id-input"
+             name="slack_user_id"
+             value="{{ detail_user.slack_user_id }}"
+             placeholder="U01ABC123"
+             autocomplete="off"
+             data-testid="user-detail-slack-id-input"
+             class="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-foreground placeholder-muted-foreground w-full sm:w-44 focus:outline-none focus:ring-1 focus:ring-accent">
+      <button type="submit"
+              data-testid="user-detail-slack-id-submit"
+              class="bg-accent text-accent-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Save
+      </button>
+    </form>
+    <p class="text-xs text-muted-foreground mt-2">
+      Slack user ID (e.g. <span class="font-mono">U01ABC123</span>). Leave blank to clear.
+    </p>
 
     {# Inline tier-override controls (issue #562). #}
     {# The standalone /studio/users/tier-override/ page still exists; #}

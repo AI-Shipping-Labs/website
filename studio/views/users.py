@@ -729,6 +729,16 @@ def user_detail(request, user_id):
         user.slack_user_id, slack_team_id,
     )
 
+    # Stripe dashboard deep-link input (issue #566). Same reuse pattern as
+    # ``user_list`` above: when the operator has set
+    # ``STRIPE_DASHBOARD_ACCOUNT_ID`` in Studio, the Profile card wraps the
+    # ``cus_*`` value in an anchor pointing at
+    # ``https://dashboard.stripe.com/<account>/customers/<cus>``. When the
+    # setting is blank the value is rendered as plain text so the operator
+    # can still copy it. Test/live mode is encoded in the operator-set
+    # account ID itself — no separate flag is needed.
+    stripe_account_id = get_config('STRIPE_DASHBOARD_ACCOUNT_ID', '')
+
     context = {
         'detail_user': user,
         'tier_name': _effective_tier_name(user, override),
@@ -747,6 +757,7 @@ def user_detail(request, user_id):
         'slack_status': _slack_status(user),
         'slack_team_id': slack_team_id,
         'slack_profile_url': slack_profile_url,
+        'stripe_account_id': stripe_account_id,
         # Inline tier-override controls (issue #562).
         'available_override_tiers': available_override_tiers,
         'is_highest_tier': is_highest_tier,

@@ -81,9 +81,24 @@
       </div>
       {% endif %}
       {% if detail_user.stripe_customer_id %}
+      {# Stripe row (issue #566). When STRIPE_DASHBOARD_ACCOUNT_ID is set #}
+      {# the cus_* value is rendered as a deep-link anchor opening the    #}
+      {# matching customer in the Stripe Dashboard in a new tab; when the #}
+      {# setting is blank we fall back to plain text so the operator can  #}
+      {# still copy the ID. Test vs. live mode is encoded in the operator #}
+      {# set account ID itself — no extra flag needed.                    #}
       <div class="flex justify-between gap-4">
         <dt class="text-muted-foreground">Stripe</dt>
+        {% if stripe_account_id %}
+        <dd>
+          <a href="https://dashboard.stripe.com/{{ stripe_account_id }}/customers/{{ detail_user.stripe_customer_id }}"
+             target="_blank" rel="noopener"
+             data-testid="user-detail-stripe-link"
+             class="text-accent hover:underline font-mono break-all">{{ detail_user.stripe_customer_id }}</a>
+        </dd>
+        {% else %}
         <dd class="text-foreground font-mono break-all">{{ detail_user.stripe_customer_id }}</dd>
+        {% endif %}
       </div>
       {% endif %}
     </dl>

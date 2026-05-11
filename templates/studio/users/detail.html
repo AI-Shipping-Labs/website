@@ -150,7 +150,7 @@
     {% if tags %}
     <div class="flex flex-wrap items-center gap-2" data-testid="user-tags-chips">
       {% for tag in tags %}
-      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-accent/20 text-accent-foreground border border-accent/40" data-testid="user-tag-chip" data-tag="{{ tag }}">
+      <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-accent/10 text-accent border border-accent/30" data-testid="user-tag-chip" data-tag="{{ tag }}">
         {{ tag }}
         <form method="post" action="{% url 'studio_user_tag_remove' detail_user.pk %}" class="inline">
           {% csrf_token %}

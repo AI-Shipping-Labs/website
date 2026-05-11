@@ -77,7 +77,7 @@
   </div>
   {% if active_tag %}
   <div class="flex items-center" data-testid="active-tag-chip">
-    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-accent/20 border border-accent text-accent-foreground">
+    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-accent/10 border border-accent/30 text-accent">
       Tag: {{ active_tag }}
       <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search }}{% endif %}"
          data-testid="active-tag-clear"
@@ -210,7 +210,7 @@
           <div class="flex flex-wrap items-center gap-1" aria-label="Visible tags for {{ row.email }}">
             {% for tag in row.visible_tags %}
             <a href="?filter={{ active_filter }}&amp;slack={{ slack_filter }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;tag={{ tag|urlencode }}"
-               class="inline-flex max-w-[9rem] items-center rounded-full border border-accent/40 bg-accent/20 px-1.5 py-0.5 text-[11px] leading-4 text-accent-foreground hover:bg-accent/30"
+               class="inline-flex max-w-[9rem] items-center rounded-full border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] leading-4 text-accent hover:bg-accent/20"
                title="Filter by tag {{ tag }}">
               <span class="truncate">{{ tag }}</span>
             </a>

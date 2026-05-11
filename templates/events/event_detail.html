@@ -53,6 +53,13 @@
             {{ event.required_level|required_tier_label }}
           </span>
           {% endif %}
+          {% if event.is_external %}
+          {# Issue #572 — external host pill in the detail header badges row. #}
+          <span class="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-medium text-accent" data-testid="event-detail-external-badge">
+            <i data-lucide="external-link" class="h-3 w-3"></i>
+            Hosted on {{ event.external_host }}
+          </span>
+          {% endif %}
         </div>
 
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
@@ -131,7 +138,47 @@
       {% endif %}
 
       <!-- Registration / Action Section -->
-      {% if event.status == 'upcoming' %}
+      {% if event.status == 'upcoming' and is_external_event %}
+      {% comment %}
+        Issue #572: external (third-party-hosted) events bypass the
+        in-app registration flow entirely. The registration card, the
+        anonymous email-only form, and the upgrade paywall are all
+        replaced by a single outbound Join card. ``required_level`` is
+        intentionally ignored here — the partner controls access on
+        their platform; we are aggregating, not gating.
+      {% endcomment %}
+      <div class="mb-12 rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="event-external-join-card">
+        <div class="flex items-start gap-3">
+          <div class="rounded-full bg-accent/20 p-2">
+            <i data-lucide="external-link" class="h-5 w-5 text-accent"></i>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-lg font-semibold text-foreground">This event is hosted on {{ event.external_host }}</p>
+            <p class="mt-2 text-sm text-muted-foreground">
+              Registration and joining happen on their platform. You'll leave AI Shipping Labs to sign up.
+            </p>
+            {% if event.zoom_join_url %}
+            <a href="{{ event.zoom_join_url }}" target="_blank" rel="noopener noreferrer"
+               class="mt-5 inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+               data-testid="event-external-join-link">
+              {% if event.external_host %}Join on {{ event.external_host }}{% else %}Join external event{% endif %}
+              <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+            </a>
+            {% else %}
+            {% comment %}
+              Defensive: no join URL set yet — render a polite placeholder
+              rather than a broken button so the page does not 500 and the
+              visitor knows to come back.
+            {% endcomment %}
+            <p class="mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-3 text-sm text-muted-foreground" data-testid="event-external-join-coming-soon">
+              <i data-lucide="clock" class="h-4 w-4"></i>
+              Link coming soon
+            </p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% elif event.status == 'upcoming' %}
       <div class="mb-12 rounded-lg border border-border bg-card p-6" data-testid="event-registration-card">
         {% if anon_registered_email %}
           {% comment %}

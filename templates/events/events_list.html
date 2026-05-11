@@ -111,6 +111,13 @@
                       Registered
                     </span>
                     {% endif %}
+                    {% if event.is_external %}
+                    {# Issue #572 — pill marking a third-party-hosted event so the user knows registration happens off-platform. #}
+                    <span class="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="event-card-external-badge">
+                      <i data-lucide="external-link" class="h-3 w-3"></i>
+                      Hosted on {{ event.external_host }}
+                    </span>
+                    {% endif %}
                   </div>
                   <h3 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
                     {{ event.title }}
@@ -193,12 +200,19 @@
             {% endif %}
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2 mb-2">
+                  <div class="flex items-center gap-2 mb-2 flex-wrap">
                     <i data-lucide="video" class="h-5 w-5 text-accent"></i>
                     {% if event.kind == 'workshop' and event.workshop %}
                     <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="past-card-workshop-badge">
                       <i data-lucide="graduation-cap" class="h-3 w-3"></i>
                       Workshop
+                    </span>
+                    {% endif %}
+                    {% if event.is_external %}
+                    {# Issue #572 — external host pill on past recordings list. #}
+                    <span class="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="event-card-external-badge">
+                      <i data-lucide="external-link" class="h-3 w-3"></i>
+                      Hosted on {{ event.external_host }}
                     </span>
                     {% endif %}
                     <h2 class="text-xl font-semibold text-foreground group-hover:text-accent transition-colors">
@@ -277,6 +291,13 @@
                     {% if event.status == 'cancelled' %}
                     <span class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-400">
                       Cancelled
+                    </span>
+                    {% endif %}
+                    {% if event.is_external %}
+                    {# Issue #572 — external host pill on the compact past list rendered in the default "all" view. #}
+                    <span class="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="event-card-external-badge">
+                      <i data-lucide="external-link" class="h-3 w-3"></i>
+                      Hosted on {{ event.external_host }}
                     </span>
                     {% endif %}
                   </div>

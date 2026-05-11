@@ -272,6 +272,12 @@ def event_detail(request, slug):
 
     user = request.user
 
+    # Issue #572: external events bypass the in-app registration flow
+    # entirely. The detail page renders an outbound Join card instead
+    # of the registration card, ignoring ``required_level`` for access
+    # control (the third-party platform handles access on their side).
+    is_external = event.is_external
+
     # Check access for registration gating
     has_access = can_access(user, event)
 
@@ -304,9 +310,17 @@ def event_detail(request, slug):
     # signup form. We do NOT trust this query param to mean a row was
     # actually created — only that the JS thinks the registration
     # succeeded. The block is confirmation copy, not access control.
+    #
+    # Issue #572: external events never offer in-app registration so the
+    # ``?registered=<email>`` confirmation block is suppressed for them
+    # — there's nothing to confirm.
     anon_registered_email = ''
     anon_registered_account_created = False
-    if not user.is_authenticated and event.status == 'upcoming':
+    if (
+        not user.is_authenticated
+        and event.status == 'upcoming'
+        and not is_external
+    ):
         raw_email = (request.GET.get('registered') or '').strip()
         # Only render the confirmation when the email looks like an
         # email; ignores junk like ``?registered=1``.
@@ -336,6 +350,9 @@ def event_detail(request, slug):
         # anonymous email-only flow.
         'anon_registered_email': anon_registered_email,
         'anon_registered_account_created': anon_registered_account_created,
+        # Issue #572: pre-computed branch flag the template uses to swap
+        # the registration card for the external Join card.
+        'is_external_event': is_external,
     }
     context.update(gating)
     return render(request, 'events/event_detail.html', context)

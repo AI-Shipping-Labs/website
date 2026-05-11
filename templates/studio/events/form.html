@@ -71,6 +71,32 @@
       </div>
     </div>
 
+    {% comment %}
+      Issue #572: third-party host indicator. Free-text so staff can add new
+      partners without a code change; the datalist below offers known values
+      as suggestions, not enforced choices.
+    {% endcomment %}
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="external-host-input">External host</label>
+      <input type="text" name="external_host" id="external-host-input" list="external-host-suggestions"
+             value="{{ event.external_host|default:'' }}"
+             maxlength="100"
+             placeholder="Maven"
+             data-testid="studio-event-external-host"
+             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <datalist id="external-host-suggestions">
+        <option value="Maven"></option>
+        <option value="Luma"></option>
+        <option value="DataTalksClub"></option>
+        <option value="O'Reilly"></option>
+        <option value="Other"></option>
+      </datalist>
+      <p class="text-xs text-muted-foreground mt-1">
+        If this event is hosted on a third-party platform (Maven, Luma, DataTalksClub), enter the host name.
+        Leave blank for community-hosted events.
+      </p>
+    </div>
+
     <div id="custom-url-section" style="display: none;">
       <label class="block text-sm font-medium text-foreground mb-1">Custom URL</label>
       <input type="url" name="custom_url" id="custom-url-input"
@@ -259,23 +285,35 @@ document.addEventListener('DOMContentLoaded', function() {
   var platformSelect = document.getElementById('platform-select');
   var customUrlSection = document.getElementById('custom-url-section');
   var zoomMeetingSection = document.getElementById('zoom-meeting-section');
+  var externalHostInput = document.getElementById('external-host-input');
 
   function updatePlatformVisibility() {
     var platform = platformSelect.value;
+    // Issue #572: hide the Zoom Meeting sidebar panel whenever this event is
+    // hosted on a third-party platform (external_host is non-empty), in
+    // addition to the existing platform === 'custom' rule. The custom URL
+    // input stays only when platform === 'custom'.
+    var hasExternalHost = !!(
+      externalHostInput && (externalHostInput.value || '').trim()
+    );
     if (platform === 'custom') {
       customUrlSection.style.display = 'block';
-      if (zoomMeetingSection) {
-        zoomMeetingSection.style.display = 'none';
-      }
     } else {
       customUrlSection.style.display = 'none';
-      if (zoomMeetingSection) {
+    }
+    if (zoomMeetingSection) {
+      if (platform === 'custom' || hasExternalHost) {
+        zoomMeetingSection.style.display = 'none';
+      } else {
         zoomMeetingSection.style.display = 'block';
       }
     }
   }
 
   platformSelect.addEventListener('change', updatePlatformVisibility);
+  if (externalHostInput) {
+    externalHostInput.addEventListener('input', updatePlatformVisibility);
+  }
 
   // Initialize visibility on page load
   updatePlatformVisibility();

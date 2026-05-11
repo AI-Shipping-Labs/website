@@ -109,6 +109,13 @@ def event_edit(request, event_id):
                 event.zoom_join_url = request.POST.get('custom_url', '').strip()
                 event.zoom_meeting_id = ''
 
+            # Issue #572: external_host is a content-level attribute that
+            # staff need to edit even on synced rows (e.g. to mark an
+            # incoming Maven cohort partner before the content repo learns
+            # the new frontmatter key). Persist it unconditionally; empty
+            # string is the community-hosted default.
+            event.external_host = request.POST.get('external_host', '').strip()
+
             event.save()
         else:
             event.title = request.POST.get('title', '').strip()
@@ -126,6 +133,10 @@ def event_edit(request, event_id):
             event.status = request.POST.get('status', 'draft')
             event.required_level = int(request.POST.get('required_level', 0))
             event.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
+            # Issue #572: free-text third-party host indicator. Empty string
+            # means community-hosted (current behavior); any non-empty value
+            # flips the event into external mode.
+            event.external_host = request.POST.get('external_host', '').strip()
 
             # When platform is custom, store the external join URL in the
             # existing join URL field and clear Zoom-specific metadata.

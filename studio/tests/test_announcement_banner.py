@@ -239,18 +239,23 @@ class StudioAnnouncementCacheClearedOnSaveTest(TestCase):
 
 
 class StudioAnnouncementSidebarTest(TestCase):
-    """The Studio sidebar should expose the Announcement entry."""
+    """The Studio sidebar should expose the site banner entry.
+
+    Issue #570 renamed this nav item from ``Announcement`` to
+    ``Site banner`` and moved it under the new ``Marketing`` section.
+    The URL is unchanged.
+    """
 
     def setUp(self):
         self.client = Client()
         User.objects.create_user(email='staff@test.com', password='testpass', is_staff=True)
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_sidebar_contains_announcement_link(self):
+    def test_sidebar_contains_site_banner_link(self):
         response = self.client.get('/studio/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'href="/studio/announcement/"')
-        self.assertContains(response, '>Announcement<')
+        self.assertContains(response, '<span>Site banner</span>', html=True)
 
 
 class PublicHeaderBannerRenderingTest(TestCase):

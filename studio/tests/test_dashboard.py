@@ -125,23 +125,46 @@ class StudioDashboardTest(TestCase):
         self.assertContains(response, 'Pending Project')
 
     def test_dashboard_shows_sidebar_navigation(self):
+        """The sidebar nav exposes the core content + outreach link labels.
+
+        Issue #570 renamed ``Campaigns`` to ``Email campaigns`` and moved
+        ``Subscribers`` out of the sidebar. The remaining labels are the
+        ones every Studio operator relies on to navigate.
+        """
         response = self.client.get('/studio/')
-        self.assertContains(response, 'Courses')
-        self.assertContains(response, 'Articles')
-        self.assertContains(response, 'Events')
-        self.assertContains(response, 'Recordings')
-        self.assertContains(response, 'Campaigns')
-        self.assertContains(response, 'Subscribers')
-        self.assertContains(response, 'Downloads')
-        self.assertContains(response, 'Projects')
+        for label in [
+            'Courses',
+            'Articles',
+            'Events',
+            'Recordings',
+            'Email campaigns',
+            'Downloads',
+            'Projects',
+        ]:
+            self.assertContains(
+                response, f'<span>{label}</span>', html=True,
+            )
 
     def test_dashboard_sidebar_has_sections(self):
+        """The reorganised sidebar (issue #570) renders the five new
+        collapsible section toggles, replacing the legacy
+        ``Members``/``Events & Outreach``/``Users``/``System``/``Analytics``
+        flat sections.
+        """
         response = self.client.get('/studio/')
         content = response.content.decode()
-        self.assertIn('Content', content)
-        self.assertIn('Events & Outreach', content)
-        self.assertIn('Users', content)
-        self.assertIn('System', content)
+        for slug in (
+            'content',
+            'people',
+            'events',
+            'marketing',
+            'operations',
+        ):
+            self.assertIn(
+                f'aria-controls="studio-section-{slug}"',
+                content,
+                f'expected section toggle for {slug!r}',
+            )
 
     def test_dashboard_has_studio_title(self):
         response = self.client.get('/studio/')

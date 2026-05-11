@@ -60,7 +60,19 @@ class TestStudioUserImports:
         page = context.new_page()
 
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
-        page.get_by_text("User imports").click()
+        # Issue #570 nested Imports inside the People > Users sub-group
+        # (the old label was ``User imports``; the new label is just
+        # ``Imports``). People is collapsed by default, so expand it and
+        # then expand the Users sub-group chevron before clicking.
+        page.locator(
+            'aside#studio-sidebar [aria-controls="studio-section-people"]'
+        ).click()
+        page.locator(
+            'aside#studio-sidebar [data-studio-users-toggle]'
+        ).click()
+        page.locator(
+            '#studio-users-children a[href="/studio/imports/"]'
+        ).click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url.endswith("/studio/imports/")
         assert "Scheduled imports" in page.content()

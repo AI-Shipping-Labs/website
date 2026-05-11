@@ -451,12 +451,17 @@ class StudioSidebarTest(TestCase):
         _staff_login(self.client)
 
     def test_sidebar_shows_utm_campaigns_link_distinct_from_email_campaigns(self):
+        """Issue #570 renamed ``Campaigns`` to ``Email campaigns`` and
+        ``UTM Campaigns`` to ``UTM links``; ``User imports`` is now
+        ``Imports`` under the People > Users sub-group. All URLs are
+        unchanged."""
         response = self.client.get('/studio/utm-campaigns/')
-        # Email Campaigns link still present
+        # Email campaigns link still present.
         self.assertContains(response, 'href="/studio/campaigns/"')
-        # New UTM Campaigns link present and labeled distinctly
+        self.assertContains(response, '<span>Email campaigns</span>', html=True)
+        # The UTM link sits under a distinct label.
         self.assertContains(response, 'href="/studio/utm-campaigns/"')
-        self.assertContains(response, 'UTM Campaigns')
-        # User Imports sidebar navigation remains separate from UTM campaign import.
+        self.assertContains(response, '<span>UTM links</span>', html=True)
+        # Imports sub-group navigation remains separate from UTM campaign import.
         self.assertContains(response, 'href="/studio/imports/"')
-        self.assertContains(response, 'User imports')
+        self.assertContains(response, '<span>Imports</span>', html=True)

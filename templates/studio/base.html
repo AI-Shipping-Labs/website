@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load studio_filters %}
 
 {% block title %}Studio - {% block studio_title %}Dashboard{% endblock %} | {{ site_name }}{% endblock %}
 
@@ -129,24 +130,79 @@ select.studio-select {
         </button>
       </div>
 
+      {% comment %}
+      Compute which collapsible section contains the active page so that
+      its <ul> renders expanded server-side. This avoids a flash of a
+      collapsed section before any JS has run, and means the auto-expand
+      behavior works even with JS disabled. See issue #570.
+
+      The per-section path-matching mirrors the per-link active rules
+      below — keep them in sync.
+      {% endcomment %}
       <div class="relative -mx-6 min-h-0 flex-1 md:mx-0 md:min-h-0 md:flex-none">
-      <nav id="studio-sidebar-nav" class="h-full space-y-5 overflow-y-auto px-6 pb-10 md:h-auto md:space-y-6 md:overflow-visible md:px-0 md:pb-0">
-        <!-- Content Section -->
+      <nav id="studio-sidebar-nav" class="h-full space-y-4 overflow-y-auto px-6 pb-10 md:h-auto md:space-y-4 md:overflow-visible md:px-0 md:pb-0">
+
+        <!-- Top utility row: back to website + theme toggle -->
+        <div class="space-y-1">
+          <a href="/" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            <span>Back to website</span>
+          </a>
+          <button type="button"
+                  data-testid="theme-toggle"
+                  aria-label="Switch to light mode"
+                  onclick="window.themeToggle.toggle()"
+                  class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <svg class="theme-icon-sun w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            <svg class="theme-icon-moon w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            <span class="theme-label-dark">Light mode</span>
+            <span class="theme-label-light hidden">Dark mode</span>
+          </button>
+        </div>
+
+        <!-- Dashboard link (own item, below utility row) -->
         <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Content</p>
-          <ul class="space-y-1">
-            <li>
-              <a href="{% url 'studio_course_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'courses' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="book-open" class="w-4 h-4"></i>
-                <span>Courses</span>
-              </a>
-            </li>
+          <a href="{% url 'studio_dashboard' %}"
+             class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/' or request.path == '/studio' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            <span>Dashboard</span>
+          </a>
+        </div>
+
+        {% comment %}
+        Per-section expansion booleans, keyed off ``request.path``. See
+        ``studio.templatetags.studio_filters.studio_sidebar_state`` for
+        the rules. Keep this in lock-step with the per-link active
+        highlight rules below.
+        {% endcomment %}
+        {% studio_sidebar_state request.path as state %}
+
+        <!-- Content Section (expanded by default) -->
+        <div>
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="true"
+                  aria-controls="studio-section-content"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="book-open" class="w-4 h-4"></i>
+              <span>Content</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-content" class="space-y-1 mt-1">
             <li>
               <a href="{% url 'studio_article_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'articles' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="file-text" class="w-4 h-4"></i>
                 <span>Articles</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_course_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'courses' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="book-open" class="w-4 h-4"></i>
+                <span>Courses</span>
               </a>
             </li>
             <li>
@@ -157,17 +213,17 @@ select.studio-select {
               </a>
             </li>
             <li>
-              <a href="{% url 'studio_recording_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'recordings' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="video" class="w-4 h-4"></i>
-                <span>Recordings</span>
-              </a>
-            </li>
-            <li>
               <a href="{% url 'studio_workshop_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/workshops' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="presentation" class="w-4 h-4"></i>
                 <span>Workshops</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_recording_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'recordings' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="video" class="w-4 h-4"></i>
+                <span>Recordings</span>
               </a>
             </li>
             <li>
@@ -180,10 +236,62 @@ select.studio-select {
           </ul>
         </div>
 
-        <!-- Members Section (issue #432) -->
+        <!-- People Section -->
         <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Members</p>
-          <ul class="space-y-1">
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="{% if state.people_active %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-people"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="users" class="w-4 h-4"></i>
+              <span>People</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-people" class="space-y-1 mt-1{% if not state.people_active %} hidden{% endif %}">
+            <li>
+              <div class="flex items-stretch rounded-lg {% if state.users_row_active %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <a href="{% url 'studio_user_list' %}"
+                   class="flex flex-1 items-center space-x-3 px-3 py-2 rounded-l-lg text-sm">
+                  <i data-lucide="users" class="w-4 h-4"></i>
+                  <span>Users</span>
+                </a>
+                <button type="button"
+                        data-studio-users-toggle
+                        aria-expanded="{% if state.users_expanded %}true{% else %}false{% endif %}"
+                        aria-controls="studio-users-children"
+                        aria-label="Toggle Users sub-menu"
+                        class="flex items-center justify-center px-2 rounded-r-lg hover:bg-secondary/80">
+                  <i data-lucide="chevron-down" class="studio-users-chevron w-4 h-4 transition-transform"></i>
+                </button>
+              </div>
+              <ul id="studio-users-children" class="ml-6 mt-1 space-y-1{% if not state.users_expanded %} hidden{% endif %}">
+                <li>
+                  <a href="{% url 'studio_import_batch_list' %}"
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/imports/' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                    <span>Imports</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="{% url 'studio_tier_override' %}"
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'tier-override' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                    <i data-lucide="shield" class="w-4 h-4"></i>
+                    <span>Tier overrides</span>
+                  </a>
+                </li>
+                {% if request.user.is_superuser %}
+                <li>
+                  <a href="{% url 'studio_user_create' %}"
+                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/new' in request.path or '/users/created' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                    <i data-lucide="user-plus" class="w-4 h-4"></i>
+                    <span>New user</span>
+                  </a>
+                </li>
+                {% endif %}
+              </ul>
+            </li>
             <li>
               <a href="{% url 'studio_crm_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/crm' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -208,10 +316,20 @@ select.studio-select {
           </ul>
         </div>
 
-        <!-- Events & Outreach Section -->
+        <!-- Events Section -->
         <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Events & Outreach</p>
-          <ul class="space-y-1">
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="{% if state.events_active %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-events"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="calendar" class="w-4 h-4"></i>
+              <span>Events</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-events" class="space-y-1 mt-1{% if not state.events_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_event_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/events/' in request.path or request.path == '/studio/events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -228,13 +346,6 @@ select.studio-select {
               </a>
             </li>
             <li>
-              <a href="{% url 'studio_campaign_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/campaigns' in request.path and 'utm-campaigns' not in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="mail" class="w-4 h-4"></i>
-                <span>Campaigns</span>
-              </a>
-            </li>
-            <li>
               <a href="{% url 'studio_notification_log' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="bell" class="w-4 h-4"></i>
@@ -244,73 +355,77 @@ select.studio-select {
           </ul>
         </div>
 
-        <!-- Analytics Section -->
+        <!-- Marketing Section -->
         <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Analytics</p>
-          <ul class="space-y-1">
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="{% if state.marketing_active %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-marketing"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="megaphone" class="w-4 h-4"></i>
+              <span>Marketing</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-marketing" class="space-y-1 mt-1{% if not state.marketing_active %} hidden{% endif %}">
+            <li>
+              <a href="{% url 'studio_campaign_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/campaigns' in request.path and 'utm-campaigns' not in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="mail" class="w-4 h-4"></i>
+                <span>Email campaigns</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_email_template_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/email-templates' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="mail" class="w-4 h-4"></i>
+                <span>Email templates</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_announcement_banner' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/announcement' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="megaphone" class="w-4 h-4"></i>
+                <span>Site banner</span>
+              </a>
+            </li>
             <li>
               <a href="{% url 'studio_utm_campaign_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-campaigns' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="link" class="w-4 h-4"></i>
-                <span>UTM Campaigns</span>
+                <span>UTM links</span>
               </a>
             </li>
             <li>
               <a href="{% url 'studio_utm_dashboard' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'utm-analytics' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
-                <span>UTM Analytics</span>
+                <span>UTM analytics</span>
               </a>
             </li>
           </ul>
         </div>
 
-        <!-- Users Section -->
+        <!-- Operations Section -->
         <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Users</p>
-          <ul class="space-y-1">
-            <li>
-              <a href="{% url 'studio_user_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/users/' or request.path == '/studio/users/export' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="users" class="w-4 h-4"></i>
-                <span>Users</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_tier_override' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'tier-override' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="shield" class="w-4 h-4"></i>
-                <span>Tier Overrides</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_import_batch_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/imports/' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="upload-cloud" class="w-4 h-4"></i>
-                <span>User imports</span>
-              </a>
-            </li>
-            {% if request.user.is_superuser %}
-            <li>
-              <a href="{% url 'studio_user_create' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/new' in request.path or '/users/created' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="user-plus" class="w-4 h-4"></i>
-                <span>New User</span>
-              </a>
-            </li>
-            {% endif %}
-          </ul>
-        </div>
-
-        <!-- System Section -->
-        <div>
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">System</p>
-          <ul class="space-y-1">
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="{% if state.operations_active %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-operations"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="settings" class="w-4 h-4"></i>
+              <span>Operations</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-operations" class="space-y-1 mt-1{% if not state.operations_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_sync_dashboard' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/sync' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                <span>Content Sync</span>
+                <span>Content sync</span>
               </a>
             </li>
             <li>
@@ -325,20 +440,6 @@ select.studio-select {
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'redirects' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="arrow-right-left" class="w-4 h-4"></i>
                 <span>Redirects</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_announcement_banner' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/announcement' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="megaphone" class="w-4 h-4"></i>
-                <span>Announcement</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_email_template_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/email-templates' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="mail" class="w-4 h-4"></i>
-                <span>Email templates</span>
               </a>
             </li>
             <li>
@@ -361,24 +462,7 @@ select.studio-select {
           </ul>
         </div>
 
-        <!-- Back to site -->
-        <div class="pt-4 border-t border-border">
-          <a href="/" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-            <i data-lucide="arrow-left" class="w-4 h-4"></i>
-            <span>Back to site</span>
-          </a>
-          <button type="button"
-                  data-testid="theme-toggle"
-                  aria-label="Switch to light mode"
-                  onclick="window.themeToggle.toggle()"
-                  class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-            <svg class="theme-icon-sun w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-            <svg class="theme-icon-moon w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-            <span class="theme-label-dark">Light mode</span>
-            <span class="theme-label-light hidden">Dark mode</span>
-          </button>
-          <p class="px-3 mt-3 text-xs text-muted-foreground">v{{ VERSION }}</p>
-        </div>
+        <p class="px-3 mt-3 text-xs text-muted-foreground">v{{ VERSION }}</p>
       </nav>
       <div id="studio-sidebar-scroll-affordance" class="pointer-events-none absolute inset-x-0 bottom-0 hidden h-14 bg-gradient-to-t from-card via-card/95 to-transparent md:hidden" aria-hidden="true">
         <span class="absolute bottom-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-muted-foreground/35"></span>
@@ -497,6 +581,59 @@ select.studio-select {
       if (window.innerWidth < 768 && isStudioSidebarOpen()) {
         closeStudioSidebar({ returnFocus: false });
       }
+    });
+  });
+})();
+
+// Sidebar section collapse/expand (issue #570). The initial expanded /
+// collapsed state is rendered server-side via ``studio_sidebar_state`` so
+// the right sections are visible without any JS. This script only flips
+// state when the user clicks a section header or the Users sub-group
+// chevron. Section-header <button>s never navigate, and the mobile-drawer
+// click handler above is scoped to <a> elements, so toggling a section in
+// the open mobile drawer does not close the drawer.
+(function() {
+  function rotateChevron(chevron, expanded) {
+    if (!chevron) { return; }
+    // Tailwind's ``rotate-180`` class flips the chevron when the section
+    // is collapsed. We start at 0deg (open / pointing down) and rotate
+    // to -90deg when collapsed.
+    chevron.classList.toggle('-rotate-90', !expanded);
+  }
+
+  function toggleControlled(button, listSelector, chevronSelector) {
+    var controlsId = button.getAttribute('aria-controls');
+    var list = controlsId ? document.getElementById(controlsId) : null;
+    if (!list) { return; }
+    var expanded = button.getAttribute('aria-expanded') === 'true';
+    var next = !expanded;
+    button.setAttribute('aria-expanded', next ? 'true' : 'false');
+    list.classList.toggle('hidden', !next);
+    rotateChevron(button.querySelector(chevronSelector), next);
+  }
+
+  document.querySelectorAll('[data-studio-section-toggle]').forEach(function(button) {
+    // Set initial chevron rotation to match server-rendered state.
+    rotateChevron(
+      button.querySelector('.studio-section-chevron'),
+      button.getAttribute('aria-expanded') === 'true'
+    );
+    button.addEventListener('click', function(event) {
+      event.preventDefault();
+      toggleControlled(button, null, '.studio-section-chevron');
+    });
+  });
+
+  document.querySelectorAll('[data-studio-users-toggle]').forEach(function(button) {
+    rotateChevron(
+      button.querySelector('.studio-users-chevron'),
+      button.getAttribute('aria-expanded') === 'true'
+    );
+    button.addEventListener('click', function(event) {
+      // Don't bubble to the parent flex wrapper / anchor sibling.
+      event.preventDefault();
+      event.stopPropagation();
+      toggleControlled(button, null, '.studio-users-chevron');
     });
   });
 })();

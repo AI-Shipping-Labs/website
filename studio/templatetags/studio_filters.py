@@ -274,6 +274,87 @@ def sync_status_pill(status, error_count=0, size='sm'):
     }
 
 
+@register.simple_tag
+def studio_sidebar_state(path):
+    """Compute which collapsible sidebar section contains the active page.
+
+    Issue #570 reorganised the Studio sidebar into five collapsible
+    sections (Content, People, Events, Marketing, Operations) plus a
+    nested Users sub-group inside People. To avoid a flash of
+    collapsed-then-expanded on first paint, the section containing the
+    active page must render expanded server-side — that means the
+    template needs to know which section is active before any JS runs.
+
+    Django's ``{% with %}`` tag does not accept boolean expressions with
+    mixed precedence (``a or b in c`` errors at parse time), so we
+    compute the booleans here and return them as a dict the template can
+    look up with ``{{ state.people_active }}`` etc. Keep these rules in
+    lock-step with the per-link ``{% if ... in request.path %}`` checks
+    inside ``templates/studio/base.html``.
+    """
+    p = path or ''
+
+    content_active = (
+        'articles' in p
+        or 'courses' in p
+        or 'projects' in p
+        or '/workshops' in p
+        or 'recordings' in p
+        or 'downloads' in p
+    )
+    # Users sub-group children: Imports, Tier overrides, New user.
+    users_children_active = (
+        '/studio/imports/' in p
+        or 'tier-override' in p
+        or '/users/new' in p
+        or '/users/created' in p
+    )
+    # Users row itself is the leaf for /studio/users/ and /studio/users/export.
+    users_row_active = (
+        p == '/studio/users/' or p == '/studio/users/export'
+    )
+    people_active = (
+        users_row_active
+        or users_children_active
+        or '/crm' in p
+        or '/sprints' in p
+        or '/plans' in p
+    )
+    events_active = (
+        '/events/' in p
+        or p == '/studio/events'
+        or 'event-groups' in p
+        or 'notifications' in p
+    )
+    marketing_active = (
+        ('/campaigns' in p and 'utm-campaigns' not in p)
+        or '/email-templates' in p
+        or '/announcement' in p
+        or 'utm-campaigns' in p
+        or 'utm-analytics' in p
+    )
+    operations_active = (
+        '/sync' in p
+        or '/worker' in p
+        or 'redirects' in p
+        or '/settings' in p
+        or '/api-tokens' in p
+    )
+
+    return {
+        'content_active': content_active,
+        'people_active': people_active,
+        'events_active': events_active,
+        'marketing_active': marketing_active,
+        'operations_active': operations_active,
+        'users_row_active': users_row_active,
+        'users_children_active': users_children_active,
+        # The Users sub-group also auto-expands when Users itself is active
+        # — the spec calls for the friendlier expanded default.
+        'users_expanded': users_row_active or users_children_active,
+    }
+
+
 @register.inclusion_tag('studio/includes/worker_status_inline.html')
 def worker_status_inline():
     """Render the subtle inline worker-status indicator.

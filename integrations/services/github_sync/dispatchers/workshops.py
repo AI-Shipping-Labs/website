@@ -34,7 +34,7 @@ from integrations.services.github_sync.dispatchers.events import (
     _build_synced_event_content_defaults,
     _upsert_synced_event_content,
 )
-from integrations.services.github_sync.dispatchers.courses import _build_workshop_page_lookup, _resolve_workshop_landing_copy
+from integrations.services.github_sync.dispatchers.courses import _build_workshop_page_lookup, _parse_access_value, _resolve_workshop_landing_copy
 
 def _coerce_workshop_date(value):
     """Parse a workshop ``date:`` frontmatter value into a ``datetime.date``.
@@ -537,14 +537,48 @@ def _sync_workshop_pages(
             )
             slug = metadata.get('slug', derive_slug(filename))
 
+            # Mark the file as seen up front so a downstream validation
+            # failure (e.g. an ``access:`` override that violates the
+            # landing invariant) does not cause the existing row to be
+            # swept up by the stale-page cleanup at the end of the
+            # function. The intent is "skip mutation, keep the row" —
+            # cleaning it up would corrupt user-visible state on a
+            # repository edit error.
+            seen_paths.add(rel_path)
+
+            # Issue #571: per-page ``access:`` override. Absent = NULL
+            # column = inherit Workshop.pages_required_level. When the
+            # override drops below the workshop landing gate the page
+            # would be more accessible than the landing it lives under
+            # — fail closed and skip the page (no row mutation) so the
+            # invariant is preserved exactly like the page-level
+            # validation in WorkshopPage.clean().
+            page_access_raw = metadata.get('access')
+            if page_access_raw is not None:
+                page_required_level = _parse_access_value(
+                    page_access_raw,
+                    field_name='access',
+                    rel_path=rel_path,
+                )
+                if page_required_level < workshop.landing_required_level:
+                    stats['errors'].append({
+                        'file': rel_path,
+                        'error': (
+                            f'Page access ({page_required_level}) must be '
+                            f'>= workshop landing_required_level '
+                            f'({workshop.landing_required_level}). Skipped.'
+                        ),
+                    })
+                    continue
+            else:
+                page_required_level = None
+
             # content_id: explicit in frontmatter, or derive stable UUID.
             content_id = metadata.get('content_id')
             if not content_id:
                 content_id = _derive_workshop_page_content_id(
                     repo_name, rel_path,
                 )
-
-            seen_paths.add(rel_path)
 
             # Rewrite relative image URLs and flag broken references so the
             # sync report surfaces them (same pattern as articles/units).
@@ -613,6 +647,7 @@ def _sync_workshop_pages(
                 'sort_order': sort_order,
                 'body': body,
                 'video_start': video_start,
+                'required_level': page_required_level,
                 'source_repo': repo_name,
                 'source_path': rel_path,
                 'source_commit': commit_sha,

@@ -271,6 +271,63 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Basic+ required')
         self.assertNotContains(response, 'data-testid="gated-current-state"')
 
+    def test_landing_anon_on_registered_default_sees_signin_paywall(self):
+        """Issue #571 PM fix: anonymous on a workshop using the new
+        ``pages_required_level=LEVEL_REGISTERED`` (5) default must see
+        Sign-In-shaped copy on the landing pages paywall — not the
+        nonsensical "Upgrade to Free" / "/pricing" combo.
+        """
+        ws = _make_workshop(
+            slug='reg-ws', title='Registered Workshop',
+            landing=0, pages=5, recording=20,
+        )
+        _make_page(ws, 'intro', 'Intro', 1)
+        response = self.client.get(f'/workshops/{ws.slug}')
+        self.assertEqual(response.status_code, 200)
+        # Card still renders — the paywall is just reshaped.
+        self.assertContains(response, 'data-testid="workshop-pages-paywall"')
+        # Sign-In-shaped heading and CTAs.
+        self.assertContains(response, 'Sign in to access this workshop')
+        self.assertContains(
+            response,
+            '/accounts/login/?next=%2Fworkshops%2Freg-ws',
+        )
+        self.assertContains(response, 'Sign In')
+        self.assertContains(response, 'Create a free account')
+        self.assertContains(
+            response,
+            '/accounts/signup/?next=%2Fworkshops%2Freg-ws',
+        )
+        self.assertContains(response, 'data-testid="teaser-signup-cta"')
+        # The broken "Upgrade to Free" copy and the /pricing CTA must be
+        # gone on this surface (the regression the PM rejected). The
+        # tier pill is also dropped — there's no tier to display when
+        # the visitor just needs to authenticate. The /pricing href on
+        # the header chrome is unrelated; the assertion below scopes to
+        # the paywall card's upgrade CTA by data-testid.
+        self.assertNotContains(response, 'Upgrade to Free')
+        body = response.content.decode()
+        # Locate the paywall card and assert the primary CTA is NOT a
+        # /pricing link (it must be /accounts/login/). Scoping the slice
+        # to the next HTML comment (the partial is followed by the
+        # workshop cross-link comment) avoids matching the unrelated
+        # /pricing links in the header / footer chrome.
+        card_start = body.index('data-testid="workshop-pages-paywall"')
+        card_end_marker = '<!--'
+        rel_end = body[card_start:].index(card_end_marker)
+        card_slice = body[card_start:card_start + rel_end]
+        self.assertIn('data-testid="workshop-pages-upgrade-cta"', card_slice)
+        self.assertIn('/accounts/login/?next=', card_slice)
+        self.assertNotIn(
+            'href="/pricing"', card_slice,
+            'pages paywall must not link to /pricing for anonymous '
+            'visitors on the registered-default wall',
+        )
+        self.assertNotContains(response, 'Free required')
+        self.assertNotContains(
+            response, 'data-testid="gated-required-tier"',
+        )
+
     def test_landing_basic_user_does_not_see_pages_paywall(self):
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/ws')
@@ -671,6 +728,124 @@ class LegacyWorkshopPageRedirectTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/legacy-ws/missing-page')
         self.assertEqual(response.status_code, 404)
         self.assertNotIn('Location', response)
+
+
+class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
+    """View-level tests for the per-page ``required_level`` override (#571).
+
+    Each test exercises one acceptance-criterion path end-to-end through
+    ``workshop_page_detail`` / ``api_workshop_page_complete`` so the
+    override actually drives the rendered template and API gate. Model
+    semantics are covered separately in ``test_workshops.py``.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Workshop default is LEVEL_REGISTERED (5) so unauthenticated
+        # visitors are blocked from inheriting pages, but a free verified
+        # user passes.
+        cls.workshop = _make_workshop(
+            slug='gated-ws', title='Gated Workshop',
+            landing=0, pages=5, recording=20,
+        )
+        cls.page_open = _make_page(
+            cls.workshop, 'intro', 'Intro', 1,
+            body='# Intro\n\nOpen body content.',
+        )
+        cls.page_open.required_level = 0  # open override
+        cls.page_open.save()
+        cls.page_inherited = _make_page(
+            cls.workshop, 'deep-dive', 'Deep Dive', 2,
+            body='# Deep Dive\n\nInherited body content.',
+        )
+        # Basic-gated workshop for the "free member on paid wall" path.
+        cls.workshop_basic = _make_workshop(
+            slug='basic-ws', title='Basic Workshop',
+            landing=0, pages=10, recording=20,
+        )
+        cls.page_basic_inherits = _make_page(
+            cls.workshop_basic, 'lesson', 'Lesson', 1,
+            body='# Lesson\n\nBasic-required body.',
+        )
+        cls.user_free = User.objects.create_user(
+            email='per-page-free@example.com', password='pw',
+            tier=cls.free_tier, email_verified=True,
+        )
+
+    def test_anonymous_on_open_override_sees_full_body(self):
+        # Page-level open override beats the workshop-default LEVEL_REGISTERED.
+        response = self.client.get('/workshops/gated-ws/tutorial/intro')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="page-body"')
+        self.assertContains(response, 'Open body content.')
+        self.assertNotContains(response, 'data-testid="page-paywall"')
+
+    def test_anonymous_on_inherited_page_sees_signin_paywall(self):
+        # No override → inherits workshop's pages_required_level=5 →
+        # anonymous gets the registration wall (Sign In CTA).
+        response = self.client.get('/workshops/gated-ws/tutorial/deep-dive')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="page-paywall"', status_code=403,
+        )
+        self.assertContains(response, 'Sign In', status_code=403)
+        # CTA preserves the return URL (URL-encoded in href).
+        self.assertContains(
+            response,
+            '/accounts/login/?next=%2Fworkshops%2Fgated-ws%2Ftutorial'
+            '%2Fdeep-dive',
+            status_code=403,
+        )
+        # Anonymous on a registration wall also gets the "Create a free
+        # account" companion link.
+        self.assertContains(
+            response, 'Create a free account', status_code=403,
+        )
+
+    def test_free_member_on_registered_inherited_page_sees_body(self):
+        # Workshop default 5 (registered) — a verified free user passes.
+        self.client.force_login(self.user_free)
+        response = self.client.get('/workshops/gated-ws/tutorial/deep-dive')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="page-body"')
+        self.assertContains(response, 'Inherited body content.')
+
+    def test_free_member_on_basic_inherited_page_sees_upgrade(self):
+        # Workshop default 10 (Basic) and no override → free user gets
+        # the upgrade-to-Basic CTA.
+        self.client.force_login(self.user_free)
+        response = self.client.get('/workshops/basic-ws/tutorial/lesson')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'Upgrade to Basic to access this workshop',
+            status_code=403,
+        )
+
+    def test_api_complete_anonymous_returns_401(self):
+        # Anonymous never reaches the access check — the 401 path runs first.
+        response = self.client.post(
+            '/api/workshops/gated-ws/pages/intro/complete',
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_api_complete_free_user_on_open_page_returns_200(self):
+        # Free user on a page with required_level=0 succeeds — the per-page
+        # override beats the workshop-wide gate (which is 5/registered).
+        self.client.force_login(self.user_free)
+        response = self.client.post(
+            '/api/workshops/gated-ws/pages/intro/complete',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'completed': True})
+
+    def test_landing_unchanged_for_anonymous(self):
+        # Per-page gating must not bleed into the landing page; anonymous
+        # still sees the landing (since landing_required_level=0).
+        response = self.client.get('/workshops/gated-ws')
+        self.assertEqual(response.status_code, 200)
+        # Description and pages list rendered as usual.
+        self.assertContains(response, 'Gated Workshop')
 
     def test_draft_workshop_page_stays_404(self):
         draft = _make_workshop(

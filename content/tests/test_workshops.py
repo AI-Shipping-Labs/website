@@ -302,3 +302,198 @@ class WorkshopAdminSmokeTest(TierSetupMixin, TestCase):
         response = client.get('/admin/content/workshoppage/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Overview')
+
+
+class WorkshopPageRequiredLevelTest(TierSetupMixin, TestCase):
+    """Per-page ``required_level`` override (issue #571).
+
+    Covers:
+    - ``effective_required_level`` returns the override or falls back to
+      the workshop default.
+    - ``Workshop.user_can_access_pages(user, page=...)`` honours the
+      override when set and matches the no-arg result otherwise.
+    - ``WorkshopPage.clean()`` rejects an override below the workshop
+      landing gate.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.workshop = Workshop.objects.create(
+            slug='page-overrides',
+            title='Page Overrides',
+            date=date(2026, 4, 21),
+            landing_required_level=0,
+            pages_required_level=10,  # Basic by default
+            recording_required_level=20,
+        )
+        cls.page_inherits = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            slug='deep-dive',
+            title='Deep Dive',
+            sort_order=2,
+            body='Body.',
+        )
+        cls.page_open = WorkshopPage.objects.create(
+            workshop=cls.workshop,
+            slug='intro',
+            title='Intro',
+            sort_order=1,
+            body='Body.',
+            required_level=0,  # open override
+        )
+        cls.user_free = User.objects.create_user(
+            email='free-page@example.com', password='pw',
+            tier=cls.free_tier, email_verified=True,
+        )
+
+    def test_effective_level_inherits_when_null(self):
+        # Page without an override resolves to the workshop default.
+        self.assertIsNone(self.page_inherits.required_level)
+        self.assertEqual(
+            self.page_inherits.effective_required_level,
+            self.workshop.pages_required_level,
+        )
+
+    def test_effective_level_uses_override_when_set(self):
+        # Override beats the workshop default.
+        self.assertEqual(self.page_open.required_level, 0)
+        self.assertEqual(self.page_open.effective_required_level, 0)
+
+    def test_user_can_access_pages_with_page_matches_noarg_when_null(self):
+        # No-arg form gates against the workshop default; passing a page
+        # that inherits must return the same result.
+        no_arg = self.workshop.user_can_access_pages(self.user_free)
+        with_page = self.workshop.user_can_access_pages(
+            self.user_free, page=self.page_inherits,
+        )
+        self.assertEqual(no_arg, with_page)
+        # And no-arg form again matches when page=None is passed.
+        self.assertEqual(
+            no_arg,
+            self.workshop.user_can_access_pages(self.user_free, page=None),
+        )
+
+    def test_user_can_access_pages_honours_override(self):
+        # Free user is blocked by the workshop-wide Basic gate.
+        self.assertFalse(
+            self.workshop.user_can_access_pages(self.user_free),
+        )
+        # But the open page lets them through.
+        self.assertTrue(
+            self.workshop.user_can_access_pages(
+                self.user_free, page=self.page_open,
+            ),
+        )
+
+    def test_anonymous_passes_open_override_but_blocked_on_default(self):
+        # AnonymousUser is delivered as None.is_authenticated=False; the
+        # easiest way to model it here is to call the helper with None.
+        self.assertTrue(
+            self.workshop.user_can_access_pages(None, page=self.page_open),
+        )
+        self.assertFalse(
+            self.workshop.user_can_access_pages(
+                None, page=self.page_inherits,
+            ),
+        )
+
+    def test_clean_rejects_override_below_landing(self):
+        # Workshop with landing=5 (registered); a page-level open (0)
+        # would be more accessible than the landing → reject.
+        ws = Workshop.objects.create(
+            slug='strict-landing',
+            title='Strict Landing',
+            date=date(2026, 4, 21),
+            landing_required_level=5,
+            pages_required_level=5,
+            recording_required_level=20,
+        )
+        page = WorkshopPage(
+            workshop=ws,
+            slug='intro',
+            title='Intro',
+            sort_order=1,
+            body='Body.',
+            required_level=0,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            page.full_clean()
+        self.assertIn('required_level', ctx.exception.error_dict)
+
+    def test_save_rejects_override_below_landing(self):
+        # Belt-and-braces: save() also enforces the invariant when
+        # full_clean() is bypassed.
+        ws = Workshop.objects.create(
+            slug='save-strict',
+            title='Save Strict',
+            date=date(2026, 4, 21),
+            landing_required_level=5,
+            pages_required_level=5,
+            recording_required_level=20,
+        )
+        page = WorkshopPage(
+            workshop=ws,
+            slug='intro',
+            title='Intro',
+            sort_order=1,
+            body='Body.',
+            required_level=0,
+        )
+        with self.assertRaises(ValidationError):
+            page.save()
+        self.assertFalse(
+            WorkshopPage.objects.filter(workshop=ws, slug='intro').exists(),
+            'Page with override below landing must not be persisted.',
+        )
+
+    def test_clean_accepts_override_equal_to_landing(self):
+        # Equal is fine — landing == page == 5.
+        ws = Workshop.objects.create(
+            slug='equal-landing',
+            title='Equal Landing',
+            date=date(2026, 4, 21),
+            landing_required_level=5,
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        page = WorkshopPage(
+            workshop=ws,
+            slug='intro',
+            title='Intro',
+            sort_order=1,
+            body='Body.',
+            required_level=5,
+        )
+        page.full_clean()  # must not raise
+
+
+class WorkshopPagesDefaultRequiredLevelTest(TierSetupMixin, TestCase):
+    """Issue #571: default pages_required_level dropped to LEVEL_REGISTERED (5).
+
+    Existing rows keep their stored value; newly-created rows pick up the
+    new default.
+    """
+
+    def test_new_workshop_defaults_to_registered(self):
+        ws = Workshop.objects.create(
+            slug='new-defaults',
+            title='New Defaults',
+            date=date(2026, 4, 21),
+            recording_required_level=20,
+        )
+        # Default came from the field, not from kwargs — must be 5.
+        self.assertEqual(ws.pages_required_level, 5)
+
+    def test_existing_row_with_explicit_basic_unchanged(self):
+        # A workshop created (or migrated) with the legacy Basic gate
+        # must keep its value — no data drift.
+        ws = Workshop.objects.create(
+            slug='legacy-basic',
+            title='Legacy Basic',
+            date=date(2026, 4, 21),
+            pages_required_level=10,
+            recording_required_level=20,
+        )
+        ws.refresh_from_db()
+        self.assertEqual(ws.pages_required_level, 10)

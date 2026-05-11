@@ -25,6 +25,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
+from content.access import get_required_tier_label
 from content.models import Workshop
 from integrations.models import ContentSource
 from studio.decorators import staff_required
@@ -106,10 +107,18 @@ def workshop_detail(request, workshop_id):
     pages = list(workshop.pages.order_by('sort_order'))
 
     # Pre-compute GitHub URLs server-side so the template stays declarative.
+    # Issue #571: surface the per-page ``required_level`` override as a
+    # human-readable label so staff can audit overrides without clicking
+    # through to the Django admin. Empty string when the page inherits.
     pages_with_urls = [
         {
             'page': page,
             'github_url': _build_page_github_url(workshop, page),
+            'required_level_label': (
+                get_required_tier_label(page.required_level)
+                if page.required_level is not None
+                else ''
+            ),
         }
         for page in pages
     ]

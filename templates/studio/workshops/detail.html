@@ -197,7 +197,16 @@
           {% for entry in pages_with_urls %}
           <tr>
             <td class="px-3 py-3 text-muted-foreground">{{ entry.page.sort_order }}</td>
-            <td class="px-3 py-3 text-foreground">{{ entry.page.title }}</td>
+            <td class="px-3 py-3 text-foreground">
+              {{ entry.page.title }}
+              {% if entry.required_level_label %}
+              <span class="ml-2 inline-block text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300"
+                    data-testid="page-required-level-badge"
+                    title="Per-page access override (issue #571)">
+                {{ entry.required_level_label }}
+              </span>
+              {% endif %}
+            </td>
             <td class="px-3 py-3 text-muted-foreground font-mono text-xs">{{ entry.page.slug }}</td>
             <td class="px-3 py-3">{% studio_origin_badge entry.page %}</td>
             <td class="px-3 py-3 text-muted-foreground font-mono text-xs">

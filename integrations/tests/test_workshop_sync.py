@@ -1665,3 +1665,166 @@ class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
             'href="/workshops/end-to-end-agent-deployment"',
             source.description_html,
         )
+
+
+class WorkshopPageAccessOverrideSyncTest(_WorkshopSyncFixtureBase):
+    """Sync tests for the per-page ``access:`` frontmatter key (issue #571).
+
+    Covers all four shapes the dispatcher must handle:
+    - ``access: open`` produces ``required_level=0``.
+    - ``access: registered`` produces ``required_level=5``.
+    - Missing ``access:`` produces ``required_level=None`` (inherit).
+    - Invalid string and landing-invariant violations land in
+      ``stats['errors']`` without mutating rows.
+    """
+
+    def test_access_open_registered_and_inherit(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            pages_required_level=10,  # Basic by default
+            landing_required_level=0,
+        )
+        self._write_page(
+            folder, '01-overview.md', title='Overview',
+            extra_frontmatter='access: open\n',
+            body='Body.\n',
+        )
+        self._write_page(
+            folder, '02-deep-dive.md', title='Deep Dive',
+            body='Body.\n',
+        )
+        self._write_page(
+            folder, '03-wrap-up.md', title='Wrap Up',
+            extra_frontmatter='access: registered\n',
+            body='Body.\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        # No errors for these three files.
+        error_files = {e.get('file') for e in (sync_log.errors or [])}
+        self.assertNotIn(f'{folder}/01-overview.md', error_files)
+        self.assertNotIn(f'{folder}/02-deep-dive.md', error_files)
+        self.assertNotIn(f'{folder}/03-wrap-up.md', error_files)
+
+        overview = WorkshopPage.objects.get(slug='overview')
+        deep_dive = WorkshopPage.objects.get(slug='deep-dive')
+        wrap_up = WorkshopPage.objects.get(slug='wrap-up')
+
+        self.assertEqual(overview.required_level, 0)
+        self.assertIsNone(deep_dive.required_level)
+        self.assertEqual(wrap_up.required_level, 5)
+
+    def test_invalid_access_value_logs_error_and_skips_page(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder, pages_required_level=10)
+        self._write_page(
+            folder, '01-overview.md', title='Overview',
+            extra_frontmatter='access: invalid-name\n',
+            body='Body.\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        # A per-file error entry must mention the offending file.
+        bad_entries = [
+            e for e in (sync_log.errors or [])
+            if e.get('file') == f'{folder}/01-overview.md'
+        ]
+        self.assertTrue(
+            bad_entries,
+            f'Expected a sync error for the bad access value, got: '
+            f'{sync_log.errors}',
+        )
+        # The error message references the invalid value.
+        self.assertIn('invalid-name', bad_entries[0]['error'])
+        # No WorkshopPage row was created for the bad file.
+        self.assertFalse(
+            WorkshopPage.objects.filter(slug='overview').exists(),
+            'Workshop page must not be created when access value is invalid.',
+        )
+
+    def test_override_below_landing_logs_error_and_skips(self):
+        folder = '2026/2026-04-21-demo'
+        # Workshop landing gate is 10 (Basic); ``access: open`` (0) on a
+        # page would be more accessible than the landing → reject.
+        self._write_workshop_yaml(
+            folder=folder, pages_required_level=10,
+            landing_required_level=10,
+        )
+        self._write_page(
+            folder, '01-overview.md', title='Overview',
+            extra_frontmatter='access: open\n',
+            body='Body.\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        bad_entries = [
+            e for e in (sync_log.errors or [])
+            if e.get('file') == f'{folder}/01-overview.md'
+        ]
+        self.assertTrue(
+            bad_entries,
+            f'Expected a sync error for the landing-invariant violation, '
+            f'got: {sync_log.errors}',
+        )
+        # The error message names the violation.
+        self.assertIn(
+            'landing_required_level', bad_entries[0]['error'],
+        )
+        # No row created for the rejected page.
+        self.assertFalse(
+            WorkshopPage.objects.filter(slug='overview').exists(),
+        )
+
+    def test_resync_preserves_existing_row_when_override_invalid(self):
+        """A previously-valid row must not be mutated when its frontmatter
+        becomes invalid on a re-sync — landing-invariant violations skip
+        the page rather than corrupting the stored value."""
+        folder = '2026/2026-04-21-demo'
+        # First sync: valid open override against landing=0.
+        self._write_workshop_yaml(
+            folder=folder, pages_required_level=10,
+            landing_required_level=0,
+        )
+        self._write_page(
+            folder, '01-overview.md', title='Overview',
+            extra_frontmatter='access: open\n',
+            body='Body.\n',
+        )
+        sync_repo(self.source, self.repo)
+        page = WorkshopPage.objects.get(slug='overview')
+        self.assertEqual(page.required_level, 0)
+        page_pk = page.pk
+
+        # Re-sync with a stricter landing: ``access: open`` now violates
+        # the invariant. The dispatcher records an error and skips the
+        # page so the stored row is left alone (idempotency / fail-safe).
+        # Rewrite the yaml with a new landing level.
+        from pathlib import Path
+
+        yaml_text = (
+            'content_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\n'
+            'slug: demo\n'
+            'title: Demo Workshop\n'
+            'date: 2026-04-21\n'
+            'pages_required_level: 10\n'
+            'landing_required_level: 10\n'
+            'instructors: [alexey-grigorev]\n'
+        )
+        Path(self.temp_dir, folder, 'workshop.yaml').write_text(yaml_text)
+        sync_log = sync_repo(self.source, self.repo)
+
+        bad_entries = [
+            e for e in (sync_log.errors or [])
+            if e.get('file') == f'{folder}/01-overview.md'
+        ]
+        self.assertTrue(
+            bad_entries,
+            'Re-sync must record a landing-invariant error for the bad page.',
+        )
+        # Row still exists, with its original required_level untouched.
+        page_reloaded = WorkshopPage.objects.get(pk=page_pk)
+        self.assertEqual(page_reloaded.required_level, 0)

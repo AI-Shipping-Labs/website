@@ -566,7 +566,12 @@ class TestStandalonePageUnchanged:
         # No <h2>Active Override</h2> visible yet (the HTML COMMENT
         # ``<!-- Active Override -->`` is always present in the template
         # markup, so we look for the heading element specifically).
-        assert page.locator('h2', has_text='Active Override').count() == 0
+        # Use exact match: the standalone page renders an "Active overrides"
+        # h2 (plural, lowercase) listing the per-user table, which would
+        # match a case-insensitive substring filter.
+        assert page.get_by_role(
+            'heading', name='Active Override', exact=True,
+        ).count() == 0
         # Pick Basic radio and click 1 month duration. The standalone
         # form re-uses the same DURATION_CHOICES so the button label
         # is the same.
@@ -587,8 +592,12 @@ class TestStandalonePageUnchanged:
 
         # Active override card visible with Revoke Override button.
         # Look for the heading element so we don't match the HTML
-        # comment marker in the template source.
-        assert page.locator('h2', has_text='Active Override').count() == 1
+        # comment marker in the template source. Use exact match so the
+        # "Active overrides" (plural, lowercase) heading on the standalone
+        # page doesn't also count.
+        assert page.get_by_role(
+            'heading', name='Active Override', exact=True,
+        ).count() == 1
         assert page.locator(
             'button[type="submit"]', has_text='Revoke Override',
         ).count() == 1

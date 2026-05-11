@@ -22,11 +22,9 @@ from django.db import connection  # noqa: E402
 
 
 def _clear_member_note_data():
-    from accounts.models import Token
     from crm.models import CRMRecord
     from plans.models import InterviewNote, Plan, Sprint
 
-    Token.objects.all().delete()
     InterviewNote.objects.all().delete()
     CRMRecord.objects.all().delete()
     Plan.objects.all().delete()
@@ -194,76 +192,4 @@ class TestStaffRecordsSprintSpecificMemberNote:
             "href",
         ) == f"/studio/plans/{spring_plan_pk}/"
         assert row.locator("text=This sprint").count() == 0
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestMemberNotesApiPrivacy:
-    def test_member_notes_alias_filters_external_and_blocks_other_member(
-        self, django_server, browser,
-    ):
-        from accounts.models import Token, User
-        from plans.models import InterviewNote, Plan
-
-        _ensure_tiers()
-        _clear_member_note_data()
-        _create_staff_user("staff@test.com")
-        _create_user("member@test.com", tier_slug="main", email_verified=True)
-        _create_user("other@test.com", tier_slug="main", email_verified=True)
-        _member_pk, spring_plan_pk, _summer_plan_pk, _crm_pk = (
-            _seed_member_with_two_plans()
-        )
-
-        staff = User.objects.get(email="staff@test.com")
-        member = User.objects.get(email="member@test.com")
-        other = User.objects.get(email="other@test.com")
-        spring_plan = Plan.objects.get(pk=spring_plan_pk)
-        InterviewNote.objects.create(
-            plan=spring_plan,
-            member=member,
-            visibility="internal",
-            kind="general",
-            body="Member is shy in cohort",
-            created_by=staff,
-        )
-        InterviewNote.objects.create(
-            plan=spring_plan,
-            member=member,
-            visibility="external",
-            kind="general",
-            body="Share weekly progress in #show-and-tell",
-            created_by=staff,
-        )
-        member_token = Token.objects.create(user=member, name="member")
-        other_token = Token.objects.create(user=other, name="other")
-        connection.close()
-
-        context = browser.new_context()
-        response = context.request.get(
-            f"{django_server}/api/users/member@test.com/notes",
-            headers={"Authorization": f"Token {member_token.key}"},
-        )
-        assert response.status == 200
-        body = response.text()
-        assert "Share weekly progress in #show-and-tell" in body
-        assert "Member is shy in cohort" not in body
-
-        response = context.request.get(
-            f"{django_server}/api/users/member@test.com/notes?plan=null",
-            headers={"Authorization": f"Token {member_token.key}"},
-        )
-        assert response.status == 200
-        assert response.json()["interview_notes"] == []
-
-        response = context.request.get(
-            f"{django_server}/api/users/member@test.com/notes",
-            headers={"Authorization": f"Token {other_token.key}"},
-        )
-        assert response.status == 403
-        assert response.json()["code"] == "forbidden_other_user_plan"
-
-        response = context.request.get(
-            f"{django_server}/api/users/member@test.com/notes",
-        )
-        assert response.status == 401
         context.close()

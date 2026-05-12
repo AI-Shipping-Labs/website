@@ -39,6 +39,14 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS('Registered: event-reminders (every 15 min)'))
 
+        # Flip finished events from upcoming to completed every 5 minutes (issue #573)
+        schedule(
+            'events.tasks.complete_finished_events.complete_finished_events',
+            cron='*/5 * * * *',
+            name='complete-finished-events',
+        )
+        self.stdout.write(self.style.SUCCESS('Registered: complete-finished-events (every 5 min)'))
+
         # Expire tier overrides every 15 minutes
         schedule(
             'jobs.tasks.expire_overrides.expire_tier_overrides',

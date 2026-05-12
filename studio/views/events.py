@@ -10,12 +10,25 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from events.models import Event
+from events.models.event import EXTERNAL_HOST_CHOICES
 from integrations.services.zoom import create_meeting
 from studio.decorators import staff_required
 from studio.utils import get_github_edit_url, is_synced
 from studio.views.form_helpers import parse_comma_separated_tags
 
 logger = logging.getLogger(__name__)
+
+_VALID_EXTERNAL_HOSTS = {value for value, _ in EXTERNAL_HOST_CHOICES}
+
+
+def _coerce_external_host(raw):
+    """Issue #579. POSTs from the Studio dropdown are constrained, but
+    a tampered or stale form post could land here with an arbitrary
+    string. Coerce anything outside the canonical list to '' so we
+    never persist a non-canonical value.
+    """
+    value = (raw or '').strip()
+    return value if value in _VALID_EXTERNAL_HOSTS else ''
 
 
 def _parse_event_datetime(post_data):
@@ -132,7 +145,8 @@ def event_create(request):
         platform = form_values['platform'] or 'zoom'
         status = form_values['status'] or 'draft'
         location = form_values['location']
-        external_host = form_values['external_host']
+        external_host = _coerce_external_host(form_values['external_host'])
+        form_values['external_host'] = external_host
         custom_url = form_values['custom_url']
 
         if not title:
@@ -197,6 +211,7 @@ def event_create(request):
         'event_date': form_values['event_date'],
         'event_time': form_values['event_time'],
         'duration_hours': form_values['duration_hours'] or '1',
+        'external_host_choices': EXTERNAL_HOST_CHOICES,
     }
     return render(request, 'studio/events/form.html', context)
 
@@ -225,7 +240,9 @@ def event_edit(request, event_id):
             # incoming Maven cohort partner before the content repo learns
             # the new frontmatter key). Persist it unconditionally; empty
             # string is the community-hosted default.
-            event.external_host = request.POST.get('external_host', '').strip()
+            event.external_host = _coerce_external_host(
+                request.POST.get('external_host', ''),
+            )
 
             event.save()
         else:
@@ -244,10 +261,13 @@ def event_edit(request, event_id):
             event.status = request.POST.get('status', 'draft')
             event.required_level = int(request.POST.get('required_level', 0))
             event.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
-            # Issue #572: free-text third-party host indicator. Empty string
-            # means community-hosted (current behavior); any non-empty value
-            # flips the event into external mode.
-            event.external_host = request.POST.get('external_host', '').strip()
+            # Issue #579: external_host is constrained to the canonical
+            # partner list. Empty string means community-hosted; any
+            # non-empty canonical value flips the event into external
+            # mode. Tampered/unknown POST values coerce to ''.
+            event.external_host = _coerce_external_host(
+                request.POST.get('external_host', ''),
+            )
 
             # When platform is custom, store the external join URL in the
             # existing join URL field and clear Zoom-specific metadata.
@@ -269,6 +289,7 @@ def event_edit(request, event_id):
     # ``form_values.foo`` lookups resolve cleanly when rendering edit.
     context['form_values'] = {}
     context['errors'] = {}
+    context['external_host_choices'] = EXTERNAL_HOST_CHOICES
     return render(request, 'studio/events/form.html', context)
 
 

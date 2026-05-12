@@ -302,10 +302,11 @@ class TestStaffAddsExternalEventViaStudio:
             wait_until="domcontentloaded",
         )
 
-        # Fill the External host input and the Custom URL field.
-        page.locator('[data-testid="studio-event-external-host"]').fill(
-            "Luma",
-        )
+        # Issue #579: external host is a <select> constrained to the
+        # canonical partner list — pick Luma from the dropdown.
+        page.locator(
+            '[data-testid="studio-event-external-host"]',
+        ).select_option("Luma")
         # Switch platform to Custom URL so the custom URL section
         # surfaces.
         page.locator('#platform-select').select_option("custom")
@@ -321,7 +322,9 @@ class TestStaffAddsExternalEventViaStudio:
         with page.expect_navigation(wait_until="domcontentloaded"):
             page.locator('button[type="submit"]').first.click()
 
-        # After save the form reloads with Luma populated.
+        # After save the form reloads with Luma populated. The host
+        # control is a <select> (issue #579), so input_value() returns
+        # the selected option's value.
         host_input = page.locator(
             '[data-testid="studio-event-external-host"]',
         )
@@ -378,8 +381,11 @@ class TestClearingExternalHostRevertsToCommunityFlow:
             wait_until="domcontentloaded",
         )
 
-        # Clear the External host field.
-        page.locator('[data-testid="studio-event-external-host"]').fill("")
+        # Issue #579: clearing the external host now means selecting the
+        # blank-value "Community-hosted" option from the dropdown.
+        page.locator(
+            '[data-testid="studio-event-external-host"]',
+        ).select_option("")
 
         # Submit the form via the sticky save button.
         with page.expect_navigation(wait_until="domcontentloaded"):
@@ -547,3 +553,245 @@ class TestExternalAnonymousNoEmailRegistrationForm:
         # back to the listing.
         body_text = page.locator("body").inner_text()
         assert "Sign in to register" not in body_text
+
+
+# --- Issue #579 scenarios ---------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffAssignsPartnerHostViaDropdown:
+    """Issue #579 scenario 1: staff member opens the new event form,
+    sees a 4-option <select>, picks Maven, saves, and the public detail
+    page surfaces the canonical "Hosted on Maven" pill.
+    """
+
+    def test_dropdown_has_four_options_and_persists(
+        self, django_server, browser,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_staff_user("staff579a@test.com")
+        event = _create_event(
+            slug="cohort-579a",
+            title="Cohort 579a",
+            status="draft",
+        )
+
+        ctx = _auth_context(browser, "staff579a@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/events/{event.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+
+        select = page.locator('[data-testid="studio-event-external-host"]')
+        assert select.evaluate("el => el.tagName") == "SELECT"
+        option_values = select.locator("option").evaluate_all(
+            "options => options.map(o => o.value)",
+        )
+        assert option_values == ["", "Maven", "Luma", "DataTalksClub"]
+        option_labels = select.locator("option").evaluate_all(
+            "options => options.map(o => o.textContent.trim())",
+        )
+        assert option_labels == [
+            "Community-hosted", "Maven", "Luma", "DataTalksClub",
+        ]
+
+        select.select_option("Maven")
+        page.locator('select[name="status"]').select_option("upcoming")
+
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.locator('button[type="submit"]').first.click()
+
+        assert page.locator(
+            '[data-testid="studio-event-external-host"]',
+        ).input_value() == "Maven"
+
+        page.goto(
+            f"{django_server}/events/cohort-579a",
+            wait_until="domcontentloaded",
+        )
+        pill = page.locator('[data-testid="event-detail-external-badge"]')
+        assert pill.count() == 1
+        assert "Hosted on Maven" in pill.inner_text()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffSwitchesEventBackToCommunity:
+    """Issue #579 scenario 2: staff opens an event with external_host
+    Luma, picks "Community-hosted" from the dropdown, saves, and the
+    public detail page renders the in-app registration card again
+    (no pill, no external Join card).
+    """
+
+    def test_select_community_hosted_clears_external_state(
+        self, django_server, browser,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_staff_user("staff579b@test.com")
+        event = _create_event(
+            slug="was-luma-579",
+            title="Was Luma 579",
+            external_host="Luma",
+            zoom_join_url="https://lu.ma/old",
+        )
+
+        ctx = _auth_context(browser, "staff579b@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/events/{event.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+
+        select = page.locator('[data-testid="studio-event-external-host"]')
+        assert select.input_value() == "Luma"
+        select.select_option("")
+
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.locator('button[type="submit"]').first.click()
+
+        assert page.locator(
+            '[data-testid="studio-event-external-host"]',
+        ).input_value() == ""
+
+        page.goto(
+            f"{django_server}/events/was-luma-579",
+            wait_until="domcontentloaded",
+        )
+        assert page.locator(
+            '[data-testid="event-detail-external-badge"]',
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="event-external-join-card"]',
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="event-registration-card"]',
+        ).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStaffCannotTypeArbitraryHost:
+    """Issue #579 scenario 3: the host control is a <select>, not a
+    free-text input. The legacy datalist is gone, and there are no
+    options outside the four canonical entries.
+    """
+
+    def test_no_text_input_or_datalist_for_external_host(
+        self, django_server, browser,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_staff_user("staff579c@test.com")
+        event = _create_event(slug="any-579c", title="Any 579c")
+
+        ctx = _auth_context(browser, "staff579c@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/events/{event.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+
+        host = page.locator('[data-testid="studio-event-external-host"]')
+        assert host.evaluate("el => el.tagName") == "SELECT"
+        assert page.locator("#external-host-suggestions").count() == 0
+        assert page.locator(
+            'input[type="text"][name="external_host"]',
+        ).count() == 0
+        option_values = set(
+            host.locator("option").evaluate_all(
+                "options => options.map(o => o.value)",
+            ),
+        )
+        assert option_values == {"", "Maven", "Luma", "DataTalksClub"}
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPartnerLabelsAreConsistentAcrossSite:
+    """Issue #579 scenario 4: anonymous visitor browsing /events sees
+    canonical "Hosted on Maven" / "Hosted on DataTalksClub" labels and
+    no pill on a community-hosted card. Drilling into the Maven event
+    shows the same canonical label on the detail page.
+    """
+
+    def test_pill_labels_match_canonical_casing(
+        self, django_server, page,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_event(
+            slug="maven-579d",
+            title="Maven cohort 579d",
+            external_host="Maven",
+            zoom_join_url="https://maven.com/579d",
+        )
+        _create_event(
+            slug="dtc-579d",
+            title="DTC live 579d",
+            external_host="DataTalksClub",
+            zoom_join_url="https://datatalksclub.com/579d",
+        )
+        _create_event(
+            slug="community-579d", title="Community session 579d",
+        )
+
+        page.goto(
+            f"{django_server}/events?filter=upcoming",
+            wait_until="domcontentloaded",
+        )
+
+        pills = page.locator('[data-testid="event-card-external-badge"]')
+        assert pills.count() == 2
+        pill_texts = sorted(
+            pills.nth(i).inner_text().strip() for i in range(pills.count())
+        )
+        assert pill_texts == [
+            "Hosted on DataTalksClub", "Hosted on Maven",
+        ]
+
+        page.goto(
+            f"{django_server}/events/maven-579d",
+            wait_until="domcontentloaded",
+        )
+        detail_pill = page.locator(
+            '[data-testid="event-detail-external-badge"]',
+        )
+        assert detail_pill.count() == 1
+        assert "Hosted on Maven" in detail_pill.inner_text()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestStudioSelectsShareStylingClasses:
+    """Issue #579 scenario 5 (cross-issue regression check): the new
+    external host <select> uses the same ``studio-select`` Tailwind
+    classes as the Status and Platform selects above it. This issue
+    does not improve the visual styling — that work lives in #596.
+    """
+
+    def test_external_host_select_shares_studio_select_classes(
+        self, django_server, browser,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_staff_user("staff579e@test.com")
+        event = _create_event(slug="styled-579e", title="Styled 579e")
+
+        ctx = _auth_context(browser, "staff579e@test.com")
+        page = ctx.new_page()
+        page.goto(
+            f"{django_server}/studio/events/{event.pk}/edit",
+            wait_until="domcontentloaded",
+        )
+
+        external = page.locator(
+            '[data-testid="studio-event-external-host"]',
+        )
+        platform = page.locator('#platform-select')
+        status = page.locator('select[name="status"]')
+
+        for select in (external, platform, status):
+            class_attr = select.get_attribute("class") or ""
+            assert "studio-select" in class_attr
+            assert "bg-secondary" in class_attr
+            assert "border-border" in class_attr
+            assert "rounded-lg" in class_attr

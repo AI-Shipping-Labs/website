@@ -1,4 +1,4 @@
-"""Tests for external-event support — issue #572.
+"""Tests for external-event support — issues #572 and #579.
 
 Covers:
 
@@ -15,17 +15,22 @@ Covers:
   non-synced paths; the field appears in the form HTML.
 - GitHub sync dispatcher: reads ``external_host`` from frontmatter and
   defaults to empty when absent.
+- Issue #579: ``EXTERNAL_HOST_CHOICES`` constrains the field; the
+  studio view coerces unknown POSTs to ''; the sync dispatcher coerces
+  unknown frontmatter values to '' with a warning.
 """
 
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN
 from events.models import Event
+from events.models.event import EXTERNAL_HOST_CHOICES
 from integrations.services.github_sync.dispatchers.events import (
     _build_synced_event_content_defaults,
 )
@@ -365,8 +370,9 @@ class StudioExternalHostFormTest(TierSetupMixin, TestCase):
         return payload
 
     def test_form_renders_external_host_input(self):
-        """The form template must include the new external_host input
-        and the datalist of suggestions.
+        """Issue #579: the form template renders a <select> for
+        external_host with the canonical partner list (no datalist, no
+        text input).
         """
         url = reverse('studio_event_edit', kwargs={'event_id': self.event.pk})
         response = self.client.get(url)
@@ -374,12 +380,15 @@ class StudioExternalHostFormTest(TierSetupMixin, TestCase):
         html = response.content.decode()
         self.assertIn('name="external_host"', html)
         self.assertIn('id="external-host-input"', html)
-        # Suggestion list should be present with at least a few known
-        # hosts.
-        self.assertIn('id="external-host-suggestions"', html)
+        self.assertIn('data-testid="studio-event-external-host"', html)
         self.assertIn('Maven', html)
         self.assertIn('Luma', html)
         self.assertIn('DataTalksClub', html)
+        # Issue #579: no free-text input or datalist for external_host.
+        self.assertNotIn('id="external-host-suggestions"', html)
+        self.assertNotIn(
+            '<input type="text" name="external_host"', html,
+        )
         # Guard against template comment leaks (regression: {# #} is single-line
         # only and multi-line {# ... #} blocks render their raw text to HTML).
         self.assertNotIn('third-party host indicator', html)
@@ -451,3 +460,130 @@ class SyncDispatcherExternalHostTest(TestCase):
             external_host='  Maven  ', **self._common_kwargs(),
         )
         self.assertEqual(defaults['external_host'], 'Maven')
+
+
+# --- Issue #579: choices constraint ------------------------------------
+
+
+class ExternalHostChoicesConstantTest(TestCase):
+    """The canonical partner list lives in
+    ``events.models.event.EXTERNAL_HOST_CHOICES`` and is referenced from
+    the model field, the studio view, the form template, and the sync
+    dispatcher. This test pins the contents and order so accidental
+    reorderings or additions surface here, not in production.
+    """
+
+    def test_external_host_choices_constant(self):
+        self.assertEqual(
+            EXTERNAL_HOST_CHOICES,
+            [
+                ('', 'Community-hosted'),
+                ('Maven', 'Maven'),
+                ('Luma', 'Luma'),
+                ('DataTalksClub', 'DataTalksClub'),
+            ],
+        )
+
+
+class ExternalHostFullCleanTest(TierSetupMixin, TestCase):
+    """``Event.full_clean()`` enforces the ``choices`` whitelist. The
+    studio view skips ``full_clean`` today (it relies on the dropdown
+    plus a defensive coerce), but admin/CLI paths and any future caller
+    that runs validators must reject non-canonical values.
+    """
+
+    def test_external_host_clean_rejects_unknown_value(self):
+        event = Event(
+            title='Bad host',
+            slug='bad-host',
+            start_datetime=timezone.now() + timedelta(days=1),
+            external_host='InvalidHost',
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            event.full_clean()
+        self.assertIn('external_host', ctx.exception.error_dict)
+
+    def test_external_host_clean_accepts_each_canonical_value(self):
+        for value, _ in EXTERNAL_HOST_CHOICES:
+            with self.subTest(value=value):
+                event = Event(
+                    title=f'Event for {value or "blank"}',
+                    slug=f'evt-{value or "blank"}',
+                    start_datetime=timezone.now() + timedelta(days=1),
+                    external_host=value,
+                )
+                event.full_clean()
+
+
+class StudioViewCoercesUnknownExternalHostTest(TierSetupMixin, TestCase):
+    """A POST with a non-canonical ``external_host`` (form tampering or
+    a stale browser cache) must be coerced to '' before save, never
+    persisted as-is.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.staff = User.objects.create_user(
+            email='staff579@test.com', password='pw', is_staff=True,
+        )
+
+    def setUp(self):
+        self.event = _make_event(
+            slug='studio-579', title='Studio 579 event',
+        )
+        self.client.force_login(self.staff)
+
+    def test_studio_view_coerces_unknown_post_to_blank(self):
+        url = reverse('studio_event_edit', kwargs={'event_id': self.event.pk})
+        payload = {
+            'title': self.event.title,
+            'slug': self.event.slug,
+            'description': self.event.description,
+            'platform': 'zoom',
+            'event_date': self.event.start_datetime.strftime('%d/%m/%Y'),
+            'event_time': self.event.start_datetime.strftime('%H:%M'),
+            'duration_hours': '1',
+            'timezone': 'Europe/Berlin',
+            'location': '',
+            'max_participants': '',
+            'status': 'upcoming',
+            'required_level': '0',
+            'tags': '',
+            'external_host': 'DataTalks Club',
+        }
+        response = self.client.post(url, payload)
+        self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.external_host, '')
+
+
+class SyncDispatcherCoercesUnknownExternalHostTest(TestCase):
+    """Issue #579: the sync dispatcher must coerce non-canonical
+    ``external_host`` frontmatter values to '' (with a warning) instead
+    of letting bad data slip through ``Event.save()``, which skips
+    field validators.
+    """
+
+    def _common_kwargs(self, **overrides):
+        kwargs = {
+            'source': type('S', (), {'repo_name': 'AI-Shipping-Labs/content'})(),
+            'source_path': 'events/sample.yaml',
+            'commit_sha': 'abc123',
+            'content_id': 'event-sample',
+            'title': 'Sample',
+        }
+        kwargs.update(overrides)
+        return kwargs
+
+    def test_github_sync_dispatcher_coerces_unknown_frontmatter(self):
+        with self.assertLogs(
+            'integrations.services.github', level='WARNING',
+        ) as captured:
+            defaults = _build_synced_event_content_defaults(
+                external_host='maven', **self._common_kwargs(),
+            )
+        self.assertEqual(defaults['external_host'], '')
+        joined = '\n'.join(captured.output)
+        self.assertIn('external_host', joined)
+        self.assertIn('maven', joined)

@@ -188,12 +188,46 @@ class VisibilityToggleTest(TestCase):
         self.plan.refresh_from_db()
         self.assertEqual(self.plan.visibility, 'private')  # unchanged
 
-    def test_visibility_toggle_success_message_rendered_on_redirect(self):
+    def test_visibility_toggle_no_flash_message_added(self):
+        """Issue #583: the toggle now shows inline feedback via JS, so the
+        server no longer pushes a one-shot ``messages.success`` flash on
+        success. Rendering both would re-introduce the "notifications top
+        and bottom" duplicate the issue was filed to fix.
+        """
         self.client.force_login(self.owner)
         response = self.client.post(
             self._toggle_url(), {'visibility': 'cohort'}, follow=True,
         )
         self.assertEqual(response.status_code, 200)
         messages = list(response.context['messages'])
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(str(messages[0]), 'Plan visibility updated.')
+        self.assertEqual(len(messages), 0)
+
+    def test_visibility_toggle_returns_json_when_accept_json(self):
+        """JS toggle path: ``Accept: application/json`` -> JSON body.
+
+        The new inline switch fetches with ``Accept: application/json``
+        so it can react to success/failure without following a redirect.
+        """
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self._toggle_url(),
+            {'visibility': 'cohort'},
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/json')
+        self.assertEqual(response.json(), {'visibility': 'cohort'})
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.visibility, 'cohort')
+
+    def test_visibility_toggle_json_invalid_value_returns_400(self):
+        """JS path rejects invalid values the same way the HTML path does."""
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self._toggle_url(),
+            {'visibility': 'public'},
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.visibility, 'private')

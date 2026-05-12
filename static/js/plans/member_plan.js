@@ -156,6 +156,110 @@
     return blocks.join('');
   }
 
+  // Issue #583: visibility toggle. Replaces the legacy <select> + Save
+  // form. Clicking the switch POSTs to update_plan_visibility with
+  // ``Accept: application/json`` so the server returns JSON instead of
+  // redirecting; on success we flip the toggle, update the helper text
+  // and the visible label, and show a short "Saved" indicator. On
+  // failure we revert the toggle and show an inline error.
+  const visibilityControl = document.querySelector(
+    '[data-plan-visibility-control]'
+  );
+  if (visibilityControl) {
+    const toggle = visibilityControl.querySelector(
+      '[data-testid="plan-visibility-toggle"]'
+    );
+    const status = visibilityControl.querySelector('[data-toggle-status]');
+    const thumb = visibilityControl.querySelector('[data-toggle-thumb]');
+    const label = document.querySelector(
+      '[data-testid="plan-visibility-label"]'
+    );
+    const helper = document.querySelector(
+      '[data-testid="plan-visibility-helper"]'
+    );
+    const updateUrl = visibilityControl.dataset.updateUrl;
+    let statusTimer = null;
+
+    function setToggleState(isCohort) {
+      toggle.setAttribute('aria-checked', isCohort ? 'true' : 'false');
+      toggle.classList.toggle('bg-accent', isCohort);
+      toggle.classList.toggle('bg-secondary', !isCohort);
+      thumb.classList.toggle('translate-x-5', isCohort);
+      thumb.classList.toggle('translate-x-0.5', !isCohort);
+      if (label) {
+        label.textContent = isCohort ? 'Shared with cohort' : 'Private';
+      }
+      if (helper) {
+        helper.textContent = isCohort
+          ? 'Visible to other members of the same sprint on the cohort board.'
+          : 'Only you and the team can see this plan.';
+      }
+    }
+
+    function setStatusText(text, state) {
+      if (!status) { return; }
+      if (statusTimer) {
+        clearTimeout(statusTimer);
+        statusTimer = null;
+      }
+      status.textContent = text || '';
+      status.classList.remove('text-destructive', 'text-muted-foreground');
+      status.classList.add(
+        state === 'error' ? 'text-destructive' : 'text-muted-foreground'
+      );
+      status.style.opacity = '1';
+    }
+
+    function fadeStatusAfter(ms) {
+      if (statusTimer) { clearTimeout(statusTimer); }
+      statusTimer = setTimeout(function () {
+        if (status) {
+          status.textContent = '';
+          status.style.opacity = '';
+        }
+      }, ms);
+    }
+
+    toggle.addEventListener('click', function () {
+      const wasCohort = toggle.getAttribute('aria-checked') === 'true';
+      const nextValue = wasCohort ? 'private' : 'cohort';
+      const willBeCohort = !wasCohort;
+
+      // Optimistic flip so the UI feels instant; we revert on error.
+      setToggleState(willBeCohort);
+      setStatusText('Saving...', 'saving');
+      toggle.disabled = true;
+
+      const formData = new FormData();
+      formData.append('visibility', nextValue);
+
+      fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: formData,
+        credentials: 'same-origin',
+      })
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+          }
+          setStatusText('Saved', 'saved');
+          fadeStatusAfter(1500);
+        })
+        .catch(function () {
+          setToggleState(wasCohort);
+          setStatusText("Couldn't save — try again.", 'error');
+        })
+        .finally(function () {
+          toggle.disabled = false;
+        });
+    });
+  }
+
   root.querySelectorAll('[data-plan-item]').forEach(function (item) {
     const checkbox = item.querySelector('[data-done-toggle]');
     if (checkbox) {

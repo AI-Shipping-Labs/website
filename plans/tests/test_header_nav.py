@@ -92,9 +92,7 @@ class HeaderPlanLinkTest(TestCase):
         )
         self.assertContains(response, f'href="{cohort_url}"')
         self.assertContains(response, 'data-testid="view-cohort-board-cta"')
-        edit_url = reverse(
-            'my_plan_edit',
-            kwargs={'sprint_slug': self.sprint.slug, 'plan_id': plan.pk},
-        )
-        self.assertContains(response, f'href="{edit_url}"')
-        self.assertContains(response, 'data-testid="my-plan-edit-cta"')
+        # Issue #583: the legacy "Edit workspace" CTA was removed because
+        # the workspace itself is the editor (inline edits live below).
+        # The old /edit URL still resolves but only via a 301 redirect.
+        self.assertNotContains(response, 'data-testid="my-plan-edit-cta"')

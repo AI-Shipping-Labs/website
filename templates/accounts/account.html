@@ -273,6 +273,7 @@
               value="{{ preferred_timezone_label }}"
               placeholder="Use browser timezone"
               autocomplete="off"
+              data-has-preference="{% if user.preferred_timezone %}true{% else %}false{% endif %}"
               class="w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground placeholder-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
             <datalist id="timezone-preference-options" data-testid="account-timezone-options">
@@ -302,6 +303,7 @@
           <p class="text-sm text-foreground mt-4" id="timezone-preference-status" data-testid="timezone-preference-status">
             {% if user.preferred_timezone %}Current timezone: {{ preferred_timezone_label }}{% else %}Using browser timezone.{% endif %}
           </p>
+          <p class="text-sm text-muted-foreground mt-2 hidden" id="timezone-detected-hint" data-testid="timezone-detected-hint"></p>
           <p class="text-sm text-red-400 mt-2 hidden" id="timezone-preference-error" data-testid="timezone-preference-error"></p>
         </div>
       </div>
@@ -679,16 +681,130 @@ function resolveTimezoneInputValue() {
   return parts[parts.length - 1];
 }
 
+function detectBrowserTimezone() {
+  // Issue #582: read the IANA timezone the browser resolved. Returns
+  // an empty string if the Intl API is missing, throws, or yields a
+  // falsy value, so callers can fall back to the existing placeholder
+  // behaviour without breaking the page.
+  try {
+    if (typeof Intl === 'undefined' || typeof Intl.DateTimeFormat !== 'function') {
+      return '';
+    }
+    var resolved = Intl.DateTimeFormat().resolvedOptions();
+    return (resolved && resolved.timeZone) ? resolved.timeZone : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function setSaveButtonDisabled(disabled) {
+  var btn = document.getElementById('save-timezone-btn');
+  if (!btn) return;
+  if (disabled) {
+    btn.setAttribute('aria-disabled', 'true');
+    btn.classList.add('opacity-50', 'cursor-not-allowed');
+    btn.classList.remove('hover:bg-accent/90');
+  } else {
+    btn.removeAttribute('aria-disabled');
+    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    btn.classList.add('hover:bg-accent/90');
+  }
+}
+
+function showDetectedHint(detectedName) {
+  var hint = document.getElementById('timezone-detected-hint');
+  if (!hint) return;
+  if (detectedName) {
+    hint.textContent = 'Detected: ' + detectedName;
+    hint.classList.remove('hidden');
+  } else {
+    hint.textContent = '';
+    hint.classList.add('hidden');
+  }
+}
+
+function hideDetectedHint() {
+  var hint = document.getElementById('timezone-detected-hint');
+  if (hint) {
+    hint.classList.add('hidden');
+  }
+}
+
+function updateSaveButtonForDetection() {
+  // Disable Save when the input value still equals the auto-detected
+  // name AND the user has no saved preference. Saving an unchanged
+  // auto-detection is a no-op at the API level anyway. The Playwright
+  // scenario in spec #582 calls out the toggle behaviour: Save becomes
+  // enabled as soon as the value differs from the detected name and
+  // re-disables when the user backspaces back to it.
+  var input = document.getElementById('timezone-preference-input');
+  if (!input) return;
+  var detected = input.dataset.detectedTimezone || '';
+  var hasPreference = input.dataset.hasPreference === 'true';
+  if (!hasPreference && detected && input.value === detected) {
+    setSaveButtonDisabled(true);
+  } else {
+    setSaveButtonDisabled(false);
+  }
+}
+
+function applyDetectedTimezone() {
+  var input = document.getElementById('timezone-preference-input');
+  var status = document.getElementById('timezone-preference-status');
+  if (!input || !status) return;
+
+  // If the user has a saved preference, do not overwrite the formatted
+  // label that came from the server.
+  if (input.dataset.hasPreference === 'true' || input.value) {
+    return;
+  }
+
+  var detected = detectBrowserTimezone();
+  if (!detected) {
+    // Detection failed -- leave the placeholder/empty input alone and
+    // fall back to the existing status copy.
+    return;
+  }
+
+  input.dataset.detectedTimezone = detected;
+  input.value = detected;
+  status.textContent = 'Showing your browser timezone: ' + detected
+    + '. Click Save to remember this.';
+  showDetectedHint(detected);
+  setSaveButtonDisabled(true);
+}
+
 function setTimezonePreferenceStatus(timezoneName, label) {
   var input = document.getElementById('timezone-preference-input');
   var status = document.getElementById('timezone-preference-status');
   if (!input || !status) return;
   if (timezoneName) {
+    // A preference has been saved -- show the formatted label, hide the
+    // detected hint, and re-enable Save (it will toggle off again only
+    // when the value matches a fresh detection with no preference).
     input.value = label || timezoneName;
+    input.dataset.hasPreference = 'true';
     status.textContent = 'Current timezone: ' + (label || timezoneName);
+    hideDetectedHint();
+    setSaveButtonDisabled(false);
   } else {
-    input.value = '';
-    status.textContent = 'Using browser timezone.';
+    // The preference was cleared -- reset to the detected value if we
+    // have one, otherwise fall back to the empty/placeholder state.
+    input.dataset.hasPreference = 'false';
+    var detected = detectBrowserTimezone();
+    if (detected) {
+      input.dataset.detectedTimezone = detected;
+      input.value = detected;
+      status.textContent = 'Showing your browser timezone: ' + detected
+        + '. Click Save to remember this.';
+      showDetectedHint(detected);
+      setSaveButtonDisabled(true);
+    } else {
+      input.value = '';
+      status.textContent = 'Using browser timezone.';
+      hideDetectedHint();
+      setSaveButtonDisabled(false);
+    }
   }
 }
 
@@ -729,12 +845,40 @@ function submitTimezonePreference(timezoneName) {
 }
 
 function saveTimezonePreference() {
+  var btn = document.getElementById('save-timezone-btn');
+  if (btn && btn.getAttribute('aria-disabled') === 'true') {
+    return;
+  }
   submitTimezonePreference(resolveTimezoneInputValue());
 }
 
 function clearTimezonePreference() {
   submitTimezonePreference('');
 }
+
+// Issue #582: detect the browser timezone, populate the input when the
+// user has no saved preference, and gate the Save button so an
+// unmodified auto-detection is a no-op. Wire up the input listener so
+// typing reveals the Save button and hides the detected hint.
+(function initTimezoneDetection() {
+  function init() {
+    applyDetectedTimezone();
+    var input = document.getElementById('timezone-preference-input');
+    if (!input) return;
+    input.addEventListener('input', function() {
+      // The user typed something -- hide the detected hint immediately
+      // and let updateSaveButtonForDetection decide if Save stays
+      // disabled (only when value == unmodified detection).
+      hideDetectedHint();
+      updateSaveButtonForDetection();
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
 
 // Close modals when clicking backdrop
 document.querySelectorAll('#upgrade-modal, #downgrade-modal, #cancel-modal').forEach(function(modal) {

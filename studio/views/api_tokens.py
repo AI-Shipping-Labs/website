@@ -1,21 +1,20 @@
-"""Studio API token management (issue #431).
+"""Studio API token management (issue #431, simplified per issue #619).
 
-Superusers issue tokens to other admins so scripts can hit ``/api/contacts/...``
+Superusers issue tokens to themselves so scripts can hit ``/api/contacts/...``
 without a session cookie. The plaintext key is shown to the operator exactly
 once on the ``/created/`` page (one-shot session stash, identical pattern to
 ``user_create_done``); afterwards the Studio surfaces only the ``key_prefix``.
 
 All views are gated by ``superuser_required`` -- staff alone is not enough.
-The user dropdown on the create form is filtered to admin accounts so tokens
-can only be issued to ``is_staff`` or ``is_superuser`` users; minting a token
-for a Free / Basic / Main / Premium contact is rejected at form-validation
-time.
+Tokens are always bound to ``request.user``: the create form no longer asks
+the admin to pick a recipient, since each admin can sign in to Studio and
+mint their own. ``Token.clean()`` still rejects non-staff users as defence
+in depth at the model layer.
 """
 
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -40,23 +39,8 @@ SESSION_KEY = "studio_api_token_create_result"
 
 
 class TokenCreateForm(forms.Form):
-    """Create-token form. The user dropdown is restricted to admin accounts."""
+    """Create-token form. Token is implicitly owned by the signed-in admin."""
 
-    user = forms.ModelChoiceField(
-        queryset=User.objects.none(),
-        empty_label="Select a user...",
-        widget=forms.Select(
-            attrs={
-                "class": (
-                    "w-full bg-secondary border border-border rounded-lg "
-                    "px-4 py-2 text-sm text-foreground focus:outline-none "
-                    "focus:ring-1 focus:ring-accent"
-                ),
-                "data-testid": "token-user-select",
-                "autocomplete": "off",
-            }
-        ),
-    )
     name = forms.CharField(
         max_length=100,
         required=False,
@@ -73,23 +57,6 @@ class TokenCreateForm(forms.Form):
             }
         ),
     )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Filter to admin accounts -- regular members must NOT appear in the
-        # dropdown. Order by email so the list is predictable for operators.
-        self.fields["user"].queryset = (
-            User.objects.filter(Q(is_superuser=True) | Q(is_staff=True))
-            .order_by("email")
-        )
-
-    def clean_user(self):
-        user = self.cleaned_data["user"]
-        if not user.is_staff:
-            raise forms.ValidationError(
-                "API tokens can only be created for staff or admin users."
-            )
-        return user
 
     def clean_name(self):
         name = (self.cleaned_data.get("name") or "").strip()
@@ -126,7 +93,7 @@ def studio_api_token_create(request):
         form = TokenCreateForm(request.POST)
         if form.is_valid():
             token = Token.objects.create(
-                user=form.cleaned_data["user"],
+                user=request.user,
                 name=form.cleaned_data.get("name") or "",
             )
             request.session[SESSION_KEY] = {

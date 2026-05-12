@@ -122,7 +122,7 @@ class ApiTokenListViewTest(TestCase):
 
 
 class ApiTokenCreateFormTest(TestCase):
-    """User dropdown is restricted to admin accounts."""
+    """Create form binds the new token to the signed-in admin."""
 
     @classmethod
     def setUpTestData(cls):
@@ -132,50 +132,28 @@ class ApiTokenCreateFormTest(TestCase):
             is_staff=True,
             is_superuser=True,
         )
-        cls.staff_only = User.objects.create_user(
-            email="staff@test.com",
-            password="testpass",
-            is_staff=True,
-        )
-        cls.member = User.objects.create_user(
-            email="member@test.com",
-            password="testpass",
-        )
 
     def setUp(self):
         self.client = Client()
         self.client.login(email="super@test.com", password="testpass")
 
-    def test_create_form_user_dropdown_only_shows_admins(self):
+    def test_create_form_has_no_user_field_and_shows_admin_email(self):
         response = self.client.get("/studio/api-tokens/new/")
         self.assertEqual(response.status_code, 200)
 
         form = response.context["form"]
-        queryset = form.fields["user"].queryset
-        emails = set(queryset.values_list("email", flat=True))
-        self.assertIn(self.superuser.email, emails)
-        self.assertIn(self.staff_only.email, emails)
-        self.assertNotIn(self.member.email, emails)
-
-    def test_create_form_rejects_member_via_post(self):
-        """Defense in depth: even if the dropdown is bypassed, POST rejects."""
-        response = self.client.post(
-            "/studio/api-tokens/new/",
-            {"user": str(self.member.pk), "name": "sneak"},
-        )
-        # Form invalidates, no token created.
-        self.assertEqual(response.status_code, 200)
-        self.assertFormError(
-            response.context["form"],
-            "user",
-            "Select a valid choice. That choice is not one of the available choices.",
-        )
-        self.assertFalse(Token.objects.filter(name="sneak").exists())
+        self.assertNotIn("user", form.fields)
+        # The signed-in admin's email is rendered so the operator can see
+        # whose token they are about to mint.
+        self.assertContains(response, 'data-testid="token-owner-note"')
+        self.assertContains(response, "super@test.com")
+        # The user dropdown element must be gone entirely.
+        self.assertNotContains(response, 'data-testid="token-user-select"')
 
     def test_create_form_rejects_reserved_system_name(self):
         response = self.client.post(
             "/studio/api-tokens/new/",
-            {"user": str(self.staff_only.pk), "name": "studio-plan-editor"},
+            {"name": "studio-plan-editor"},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -189,16 +167,30 @@ class ApiTokenCreateFormTest(TestCase):
     def test_create_token_redirects_to_one_shot_view(self):
         response = self.client.post(
             "/studio/api-tokens/new/",
-            {"user": str(self.staff_only.pk), "name": "import-script"},
+            {"name": "import-script"},
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], "/studio/api-tokens/created/")
 
         token = Token.objects.get(name="import-script")
+        # Token is owned by the signed-in superuser.
+        self.assertEqual(token.user, self.superuser)
         followed = self.client.get("/studio/api-tokens/created/")
         self.assertEqual(followed.status_code, 200)
         # The plaintext key appears exactly once on the page.
         self.assertContains(followed, token.key, count=1)
+        # The owner email shown on the created page is the current admin.
+        self.assertContains(followed, "super@test.com")
+
+    def test_create_token_with_empty_name_succeeds(self):
+        response = self.client.post(
+            "/studio/api-tokens/new/",
+            {"name": ""},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/studio/api-tokens/created/")
+        token = Token.objects.get(user=self.superuser)
+        self.assertEqual(token.name, "")
 
 
 class ApiTokenOneShotViewTest(TestCase):
@@ -219,7 +211,7 @@ class ApiTokenOneShotViewTest(TestCase):
         # Mint a token via the form so the session stash is populated.
         self.client.post(
             "/studio/api-tokens/new/",
-            {"user": str(self.superuser.pk), "name": "one-shot"},
+            {"name": "one-shot"},
         )
         self.assertIn(SESSION_KEY, self.client.session)
 

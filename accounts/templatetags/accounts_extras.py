@@ -1,8 +1,11 @@
 """Template tags for the accounts app (issue #440).
 
-Provides the ``display_name`` filter used on cohort-facing pages and
-the ``logout_url`` simple tag used by the header to keep users on the
-same page after sign-out (issue #519).
+Provides the ``display_name`` filter used on cohort-facing pages, the
+``logout_url`` simple tag used by the header to keep users on the
+same page after sign-out (issue #519), and the symmetric ``login_url``
+simple tag that captures the current path as ``?next=`` so a user who
+clicks Sign in from a deep page returns to that page after auth
+(issue #594).
 """
 
 from django import template
@@ -46,6 +49,45 @@ def logout_url(context):
         return base
     current = request.get_full_path()
     # Bare ``/`` is the default logout target — skip the round-trip.
+    if current == "/" or should_skip_logout_redirect(current):
+        return base
+    return append_next(base, current)
+
+
+@register.simple_tag(takes_context=True)
+def login_url(context):
+    """Return the ``Sign in`` link target with a safe ``?next=`` appended.
+
+    Mirrors :func:`logout_url`. The header renders the same Sign-in link
+    on every page; this tag computes the appropriate ``next`` value so
+    that a visitor who clicks Sign in from a public detail page
+    (``/blog/<slug>``, ``/courses/<slug>``, ``/events/<slug>``, etc.)
+    lands back on that page after successful authentication. Returns
+    the plain login URL with no query string when the current path is
+    ``/`` (round-trip is pointless), or when the current path is on the
+    auth/member/staff exclusion list — see
+    :func:`accounts.return_context.should_skip_logout_redirect`. The
+    same exclusion list is reused intentionally: setting ``next`` to a
+    path whose anonymous variant is meaningless (the login page itself,
+    member-only settings, Studio, Django admin, the notifications feed)
+    would either bounce the user back through auth or land them on a
+    page they cannot view.
+
+    Open-redirect safety: ``append_next`` runs the candidate through
+    :func:`accounts.return_context.sanitize_next_url`, which is stricter
+    than Django's ``url_has_allowed_host_and_scheme`` — it requires a
+    leading ``/``, rejects protocol-relative ``//`` URLs, rejects
+    backslashes and control characters, and rejects any URL with a
+    scheme or netloc. We deliberately do NOT loosen this to
+    ``url_has_allowed_host_and_scheme`` because absolute URLs to the
+    site's own host broaden the attack surface unnecessarily — local
+    paths are sufficient for this flow. Issue #594.
+    """
+    base = reverse("account_login")
+    request = context.get("request")
+    if request is None:
+        return base
+    current = request.get_full_path()
     if current == "/" or should_skip_logout_redirect(current):
         return base
     return append_next(base, current)

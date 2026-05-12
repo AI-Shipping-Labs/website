@@ -19,7 +19,8 @@ What to expect next:
 
 - The join link above unlocks on the event page about 15 minutes before the start time.
 - We'll send a short reminder closer to the event.
-- Need to cancel? Open the event page and click "Cancel registration".
+- Need to cancel? Use this one-click link: [Cancel my registration]({{ cancel_url }})
+  (or open the event page and use the cancel button there).
 
 See you there!
 

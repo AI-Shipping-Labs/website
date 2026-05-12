@@ -14,6 +14,11 @@ from content.access import (
 )
 from events.models import Event, EventGroup, EventJoinClick, EventRegistration
 from events.services.calendar_invite import generate_ics
+from events.services.cancel_token import (
+    CancelTokenExpired,
+    CancelTokenInvalid,
+    decode_cancel_token,
+)
 from events.services.display_time import (
     build_event_time_display,
     should_display_event_location,
@@ -378,6 +383,108 @@ def event_group_public(request, slug):
         'group': group,
         'events': events,
     })
+
+
+def _resolve_cancel_state(slug, token):
+    """Decode the token and load the registration row.
+
+    Returns a tuple ``(state, context)`` where ``state`` is one of
+    ``"confirm"``, ``"invalid"``, ``"expired"``, ``"already_cancelled"``,
+    or ``"event_finished"`` and ``context`` is a dict of template
+    variables. The view layer wraps the result in either the confirm or
+    the result template.
+
+    The same logic backs both the GET confirmation page and the POST
+    action so the user sees consistent messaging across the two-step
+    flow.
+    """
+    event_url = f'/events/{slug}'
+
+    if not token:
+        return 'invalid', {
+            'message': 'This cancellation link is incomplete.',
+            'event_url': event_url,
+        }
+
+    try:
+        payload = decode_cancel_token(token)
+    except CancelTokenExpired:
+        return 'expired', {
+            'message': (
+                'This cancellation link has expired. Open the event '
+                'page to manage your registration.'
+            ),
+            'event_url': event_url,
+        }
+    except CancelTokenInvalid:
+        return 'invalid', {
+            'message': 'This cancellation link is invalid.',
+            'event_url': event_url,
+        }
+
+    try:
+        event = Event.objects.get(slug=slug)
+    except Event.DoesNotExist:
+        return 'invalid', {
+            'message': 'This cancellation link is invalid.',
+            'event_url': event_url,
+        }
+
+    if payload['event_id'] != event.pk:
+        return 'invalid', {
+            'message': 'This cancellation link is invalid.',
+            'event_url': event_url,
+        }
+
+    registration = EventRegistration.objects.filter(
+        pk=payload['registration_id'],
+        event_id=payload['event_id'],
+        user_id=payload['user_id'],
+    ).first()
+
+    if registration is None:
+        return 'already_cancelled', {
+            'event': event,
+            'event_url': event_url,
+            'message': "You're not registered for this event. No action needed.",
+        }
+
+    if event.status != 'upcoming':
+        return 'event_finished', {
+            'event': event,
+            'event_url': event_url,
+            'registration': registration,
+            'message': (
+                'This event has already started or finished. '
+                'Cancellation is no longer available.'
+            ),
+        }
+
+    return 'confirm', {
+        'event': event,
+        'event_url': event_url,
+        'registration': registration,
+        'event_datetime': event.formatted_start(),
+    }
+
+
+def cancel_registration_page(request, slug):
+    """Render the cancel-registration confirmation page (GET).
+
+    The signed token in the URL is the authorization, so the user does
+    NOT need to be signed in. A two-step GET-then-POST flow defeats
+    email-prefetch auto-cancellation: the GET is read-only and only
+    renders the form; the POST (issued by the visible button) performs
+    the actual cancellation.
+    """
+    token = request.GET.get('token', '')
+    state, ctx = _resolve_cancel_state(slug, token)
+    ctx['state'] = state
+    if state == 'confirm':
+        ctx['action_url'] = (
+            f'/api/events/{slug}/cancel-registration?token={token}'
+        )
+    return render(request, 'events/cancel_registration_confirm.html', ctx)
 
 
 def event_calendar_ics(request, slug):

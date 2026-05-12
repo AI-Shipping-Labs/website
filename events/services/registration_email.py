@@ -15,6 +15,7 @@ from email_app.services.email_classification import (
 from email_app.services.email_service import EmailService
 from events.services.calendar_invite import generate_ics
 from events.services.calendar_links import build_calendar_links
+from events.services.cancel_token import generate_cancel_token
 from integrations.config import get_config, site_base_url
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,10 @@ def send_registration_confirmation(registration):
 
     site_url = site_base_url()
     join_url = f'{site_url}/events/{event.slug}/join'
+    cancel_token = generate_cancel_token(registration)
+    cancel_url = (
+        f'{site_url}/events/{event.slug}/cancel-registration?token={cancel_token}'
+    )
 
     calendar_links = build_calendar_links(event)
 
@@ -46,6 +51,7 @@ def send_registration_confirmation(registration):
             'event_title': event.title,
             'event_datetime': event.formatted_start(),
             'join_url': join_url,
+            'cancel_url': cancel_url,
             'google_calendar_url': calendar_links['google'],
             'outlook_calendar_url': calendar_links['outlook'],
             'office365_calendar_url': calendar_links['office365'],

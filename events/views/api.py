@@ -4,13 +4,15 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.services.verification import resolve_unverified_ttl_days
 from content.access import LEVEL_OPEN, can_access
 from events.models import Event, EventRegistration
+from events.views.pages import _resolve_cancel_state
 
 logger = logging.getLogger(__name__)
 
@@ -305,3 +307,34 @@ def unregister_from_event(request, slug):
         'status': 'unregistered',
         'event_slug': event.slug,
     })
+
+
+@csrf_exempt
+@require_POST
+def cancel_registration_action(request, slug):
+    """Cancel an event registration via signed URL token (POST).
+
+    Sister of ``events.views.pages.cancel_registration_page``. The token
+    in the URL IS the authorization, mirroring the existing
+    ``unsubscribe_api`` pattern, so CSRF is not required and the user
+    does not need to be signed in. Always returns an HTML response —
+    this is a user-facing page reached from the inbox, not an SPA API.
+    """
+    token = request.GET.get('token', '')
+    state, ctx = _resolve_cancel_state(slug, token)
+
+    if state == 'confirm':
+        registration = ctx['registration']
+        event = ctx['event']
+        registration.delete()
+        ctx = {
+            'event': event,
+            'event_url': ctx['event_url'],
+            'message': (
+                f'Your registration for {event.title} has been cancelled.'
+            ),
+        }
+        state = 'success'
+
+    ctx['state'] = state
+    return render(request, 'events/cancel_registration_result.html', ctx)

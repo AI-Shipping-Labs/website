@@ -341,10 +341,19 @@ def studio_sidebar_state(path):
         or '/api-tokens' in p
     )
 
+    # Events is the dashboard default (#576) — when no other section is
+    # active, Events renders expanded so the admin lands on its primary
+    # surface. Once any other section is active, Events collapses back.
+    any_other_section_active = (
+        content_active or people_active or marketing_active or operations_active
+    )
+    events_expanded = events_active or not any_other_section_active
+
     return {
         'content_active': content_active,
         'people_active': people_active,
         'events_active': events_active,
+        'events_expanded': events_expanded,
         'marketing_active': marketing_active,
         'operations_active': operations_active,
         'users_row_active': users_row_active,

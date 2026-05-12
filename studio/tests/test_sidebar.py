@@ -54,14 +54,14 @@ class StudioSidebarStructureTest(TestCase):
         back_idx = body.find('<span>Back to website</span>')
         theme_idx = body.find('data-testid="theme-toggle"')
         # Section group buttons share the ``data-studio-section-toggle``
-        # marker — the first one is the Content header.
-        content_section_idx = body.find('data-studio-section-toggle')
+        # marker — the first one is now the Events header.
+        first_section_idx = body.find('data-studio-section-toggle')
 
         self.assertGreater(back_idx, -1, '"Back to website" link must render')
         self.assertGreater(theme_idx, -1, 'theme toggle button must render')
-        self.assertGreater(content_section_idx, -1, 'section toggles must render')
+        self.assertGreater(first_section_idx, -1, 'section toggles must render')
         self.assertLess(back_idx, theme_idx, 'Back to website must precede theme toggle')
-        self.assertLess(theme_idx, content_section_idx, 'utility row must precede section groups')
+        self.assertLess(theme_idx, first_section_idx, 'utility row must precede section groups')
 
     def test_back_to_website_link_label_and_href(self):
         response = self._get_studio_dashboard()
@@ -86,10 +86,10 @@ class StudioSidebarStructureTest(TestCase):
 
         theme_idx = body.find('data-testid="theme-toggle"')
         dashboard_link_idx = body.find('<span>Dashboard</span>')
-        content_section_idx = body.find('data-studio-section-toggle')
+        first_section_idx = body.find('data-studio-section-toggle')
 
         self.assertGreater(dashboard_link_idx, theme_idx)
-        self.assertLess(dashboard_link_idx, content_section_idx)
+        self.assertLess(dashboard_link_idx, first_section_idx)
 
     # ------------------------------------------------------------------
     # Section order + labels
@@ -103,9 +103,9 @@ class StudioSidebarStructureTest(TestCase):
         # Use exact ``<span>X</span>`` to avoid matching the nested ``Users``
         # link inside the People sub-group.
         expected_order = [
+            'aria-controls="studio-section-events"',
             'aria-controls="studio-section-content"',
             'aria-controls="studio-section-people"',
-            'aria-controls="studio-section-events"',
             'aria-controls="studio-section-marketing"',
             'aria-controls="studio-section-operations"',
         ]
@@ -248,18 +248,18 @@ class StudioSidebarStructureTest(TestCase):
         self.assertNotContains(response, '<span>Content Sync</span>', html=True)
 
     # ------------------------------------------------------------------
-    # Default expansion state — only Content open on the dashboard
+    # Default expansion state — only Events open on the dashboard
     # ------------------------------------------------------------------
 
-    def test_dashboard_only_expands_content_section(self):
+    def test_dashboard_only_expands_events_section(self):
         response = self._get_studio_dashboard()
         body = response.content.decode()
 
-        # Content's <ul> is never ``hidden`` (always expanded).
-        self.assertIn('id="studio-section-content" class="space-y-1 mt-1"', body)
+        # Events' <ul> is un-hidden on the dashboard (default open section).
+        self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
         # The other four sections render with the ``hidden`` class on
         # /studio/ (which is not in any section's deep path).
-        for slug in ('people', 'events', 'marketing', 'operations'):
+        for slug in ('content', 'people', 'marketing', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -270,13 +270,13 @@ class StudioSidebarStructureTest(TestCase):
         response = self._get_studio_dashboard()
         body = response.content.decode()
 
-        # The Content button is always aria-expanded="true".
+        # The Events button is aria-expanded="true" on the dashboard.
         self.assertIn(
-            'aria-expanded="true"\n                  aria-controls="studio-section-content"',
+            'aria-expanded="true"\n                  aria-controls="studio-section-events"',
             body,
         )
         # The four collapsed sections render aria-expanded="false".
-        for slug in ('people', 'events', 'marketing', 'operations'):
+        for slug in ('content', 'people', 'marketing', 'operations'):
             self.assertIn(
                 f'aria-expanded="false"\n                  aria-controls="studio-section-{slug}"',
                 body,
@@ -295,8 +295,41 @@ class StudioSidebarStructureTest(TestCase):
 
         # People <ul> is NOT hidden — section auto-expanded server-side.
         self.assertIn('id="studio-section-people" class="space-y-1 mt-1"', body)
-        # Events / Marketing / Operations remain collapsed.
-        for slug in ('events', 'marketing', 'operations'):
+        # Content / Events / Marketing / Operations remain collapsed —
+        # Events no longer stays open once another section is active.
+        for slug in ('content', 'events', 'marketing', 'operations'):
+            self.assertIn(
+                f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
+                body,
+            )
+
+    def test_visiting_articles_auto_expands_content_section(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/articles/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        # Content <ul> is un-hidden — section auto-expanded server-side.
+        self.assertIn('id="studio-section-content" class="space-y-1 mt-1"', body)
+        # Events collapses back to hidden because Content is the active
+        # section now (Events is only the dashboard default).
+        for slug in ('events', 'people', 'marketing', 'operations'):
+            self.assertIn(
+                f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
+                body,
+            )
+
+    def test_visiting_event_groups_keeps_events_section_expanded(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self.client.get('/studio/event-groups/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+
+        # Events <ul> is un-hidden because /studio/event-groups/ is in
+        # the Events section's deep path.
+        self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
+        # All other sections are collapsed.
+        for slug in ('content', 'people', 'marketing', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,
@@ -325,7 +358,7 @@ class StudioSidebarStructureTest(TestCase):
         body = response.content.decode()
 
         self.assertIn('id="studio-section-marketing" class="space-y-1 mt-1"', body)
-        for slug in ('people', 'events', 'operations'):
+        for slug in ('content', 'people', 'events', 'operations'):
             self.assertIn(
                 f'id="studio-section-{slug}" class="space-y-1 mt-1 hidden"',
                 body,

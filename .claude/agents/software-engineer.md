@@ -55,7 +55,9 @@ Every issue must include tests.
   - Model tests: create objects, verify fields, check constraints, test custom methods (e.g. markdown rendering)
   - View tests: use `self.client.get()/post()`, check status codes, check template used, check context data
   - Access control tests: verify anonymous/free/paid users see correct content or get correct gating
-- Run tests and make sure they all pass: `uv run python manage.py test`
+- Run tests in two phases to keep the inner loop fast:
+  - Inner loop (during edit-test-edit iteration): `uv run make test-core` (tagged subset, ~45s) plus `uv run python manage.py test {touched_app} --parallel` (focused, ~10-30s). This is what you should be running every time you change code.
+  - Final check (once before reporting done): `uv run python manage.py test --parallel` (full suite, ~3 min). Always run this once at the end to catch cross-module regressions before handoff.
 - Run lint and fix any issues before declaring done: `uv run ruff check --fix .`. Re-run `uv run ruff check .` to confirm zero remaining errors. CI will fail on lint, so this MUST be clean before commit.
 
 Example:
@@ -124,7 +126,7 @@ Do NOT commit or push. Wait for tester review first.
 When you receive feedback from the tester:
 1. Read the feedback carefully
 2. Fix each issue
-3. Run tests again: `uv run python manage.py test`
+3. Run tests again — inner loop (`uv run make test-core` + `uv run python manage.py test {touched_app} --parallel`), then full suite once before reporting back (`uv run python manage.py test --parallel`)
 4. Report the fixes back
 
 Repeat until the tester confirms all acceptance criteria pass.

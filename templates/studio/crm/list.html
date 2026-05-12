@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load tag_filters %}
 
 {% block studio_title %}CRM{% endblock %}
 
@@ -17,17 +18,17 @@
     <a href="?filter={{ filter_active }}{% if search %}&q={{ search }}{% endif %}"
        data-testid="crm-filter-active"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_active %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
-      Active ({{ counts.active }})
+      Active{{ counts.active|paren_count }}
     </a>
     <a href="?filter={{ filter_archived }}{% if search %}&q={{ search }}{% endif %}"
        data-testid="crm-filter-archived"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_archived %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
-      Archived ({{ counts.archived }})
+      Archived{{ counts.archived|paren_count }}
     </a>
     <a href="?filter={{ filter_all }}{% if search %}&q={{ search }}{% endif %}"
        data-testid="crm-filter-all"
        class="px-3 py-1.5 rounded-full text-xs font-medium border {% if active_filter == filter_all %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">
-      All ({{ counts.all }})
+      All{{ counts.all|paren_count }}
     </a>
   </div>
   <div class="flex items-center gap-2">

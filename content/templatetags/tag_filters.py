@@ -5,6 +5,36 @@ from django import template
 register = template.Library()
 
 
+@register.filter
+def paren_count(value):
+    """Render a parenthesized count suffix only when the count is positive.
+
+    Used to keep counter labels clean in the UI (issue #597). The rule:
+
+    - ``{{ 0|paren_count }}``    -> ``""`` (no parens, no trailing space)
+    - ``{{ 3|paren_count }}``    -> ``" (3)"`` (note the leading space)
+    - ``{{ None|paren_count }}`` -> ``""``
+    - Non-numeric input          -> ``""`` (safe default; never raises)
+
+    Typical usage in a template:
+
+        <h3>Enrolled{{ results.enrolled|length|paren_count }}</h3>
+
+    renders as ``Enrolled`` when the list is empty and ``Enrolled (4)``
+    when it contains four entries. The leading space lives inside the
+    filter so the template stays clean.
+    """
+    if value is None:
+        return ""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return ""
+    if n <= 0:
+        return ""
+    return f" ({n})"
+
+
 @register.simple_tag
 def tag_add_url(base_path, selected_tags, tag, extra_params=None):
     """Build URL that adds a tag to the current selection.

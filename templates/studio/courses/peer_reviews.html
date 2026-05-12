@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load tag_filters %}
 
 {% block studio_title %}Peer Reviews - {{ course.title }}{% endblock %}
 
@@ -133,15 +134,15 @@ studio/base.html (issue #347), so we deliberately do not render them here.
   <a href="{% url 'studio_peer_review_management' course_id=course.pk %}"
      data-testid="status-filter-all"
      class="px-3 py-1 rounded-lg {% if not status_filter %}bg-accent text-accent-foreground{% else %}bg-secondary text-foreground hover:bg-muted{% endif %} transition-colors">
-    All
-    <span class="ml-1 text-xs opacity-75">({{ total_submissions }})</span>
+    All{% if total_submissions %}
+    <span class="ml-1 text-xs opacity-75">({{ total_submissions }})</span>{% endif %}
   </a>
   {% for f in status_filters %}
   <a href="{% url 'studio_peer_review_management' course_id=course.pk %}?status={{ f.value }}"
      data-testid="status-filter-{{ f.value }}"
      class="px-3 py-1 rounded-lg {% if f.active %}bg-accent text-accent-foreground{% else %}bg-secondary text-foreground hover:bg-muted{% endif %} transition-colors">
-    {{ f.label }}
-    <span class="ml-1 text-xs opacity-75">({{ f.count }})</span>
+    {{ f.label }}{% if f.count %}
+    <span class="ml-1 text-xs opacity-75">({{ f.count }})</span>{% endif %}
   </a>
   {% endfor %}
 </div>

@@ -31,7 +31,7 @@ Parameters:
 <div class="mt-12 mb-12" id="qa-section" data-content-id="{{ content_id }}">
   <h2 class="mb-6 flex items-center gap-2 text-xl font-semibold tracking-tight">
     <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
-    {% if section_heading %}{{ section_heading }}{% else %}Questions &amp; Answers{% endif %} (<span id="qa-count">0</span>)
+    {% if section_heading %}{{ section_heading }}{% else %}Questions &amp; Answers{% endif %}<span id="qa-count-wrapper" hidden> (<span id="qa-count">0</span>)</span>
   </h2>
 
   {% if user_authenticated %}

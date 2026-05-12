@@ -7,6 +7,7 @@
     var contentId = section.dataset.contentId;
     var listEl = document.getElementById('qa-list');
     var countEl = document.getElementById('qa-count');
+    var countWrapperEl = document.getElementById('qa-count-wrapper');
     var postBtn = document.getElementById('qa-post-btn');
     var textarea = document.getElementById('qa-new-question');
 
@@ -89,6 +90,17 @@
         .then(function(data) {
           var comments = data.comments || [];
           countEl.textContent = comments.length;
+          // Hide the parenthesized count entirely when the thread is
+          // empty so the heading reads "Comments" rather than
+          // "Comments (0)" (issue #597). The #qa-count span itself is
+          // kept in the DOM so existing tests/scripts still find it.
+          if (countWrapperEl) {
+            if (comments.length > 0) {
+              countWrapperEl.removeAttribute('hidden');
+            } else {
+              countWrapperEl.setAttribute('hidden', '');
+            }
+          }
           if (comments.length === 0) {
             listEl.innerHTML = '';
             return;

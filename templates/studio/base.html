@@ -177,11 +177,50 @@ select.studio-select {
         {% endcomment %}
         {% studio_sidebar_state request.path as state %}
 
-        <!-- Content Section (expanded by default) -->
+        <!-- Events Section (expanded by default on dashboard) -->
         <div>
           <button type="button"
                   data-studio-section-toggle
-                  aria-expanded="true"
+                  aria-expanded="{% if state.events_expanded %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-events"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="calendar" class="w-4 h-4"></i>
+              <span>Events</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-events" class="space-y-1 mt-1{% if not state.events_expanded %} hidden{% endif %}">
+            <li>
+              <a href="{% url 'studio_event_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/events/' in request.path or request.path == '/studio/events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="calendar" class="w-4 h-4"></i>
+                <span>Events</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_event_group_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'event-groups' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
+                 data-testid="sidebar-event-groups-link">
+                <i data-lucide="layers" class="w-4 h-4"></i>
+                <span>Event groups</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_notification_log' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="bell" class="w-4 h-4"></i>
+                <span>Notifications</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Content Section -->
+        <div>
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="{% if state.content_active %}true{% else %}false{% endif %}"
                   aria-controls="studio-section-content"
                   class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
             <span class="flex items-center space-x-3">
@@ -190,7 +229,7 @@ select.studio-select {
             </span>
             <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
           </button>
-          <ul id="studio-section-content" class="space-y-1 mt-1">
+          <ul id="studio-section-content" class="space-y-1 mt-1{% if not state.content_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_article_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'articles' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -311,45 +350,6 @@ select.studio-select {
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/plans' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="clipboard-list" class="w-4 h-4"></i>
                 <span>Plans</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Events Section -->
-        <div>
-          <button type="button"
-                  data-studio-section-toggle
-                  aria-expanded="{% if state.events_active %}true{% else %}false{% endif %}"
-                  aria-controls="studio-section-events"
-                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-            <span class="flex items-center space-x-3">
-              <i data-lucide="calendar" class="w-4 h-4"></i>
-              <span>Events</span>
-            </span>
-            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
-          </button>
-          <ul id="studio-section-events" class="space-y-1 mt-1{% if not state.events_active %} hidden{% endif %}">
-            <li>
-              <a href="{% url 'studio_event_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/events/' in request.path or request.path == '/studio/events' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="calendar" class="w-4 h-4"></i>
-                <span>Events</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_event_group_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'event-groups' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors"
-                 data-testid="sidebar-event-groups-link">
-                <i data-lucide="layers" class="w-4 h-4"></i>
-                <span>Event groups</span>
-              </a>
-            </li>
-            <li>
-              <a href="{% url 'studio_notification_log' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'notifications' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <i data-lucide="bell" class="w-4 h-4"></i>
-                <span>Notifications</span>
               </a>
             </li>
           </ul>

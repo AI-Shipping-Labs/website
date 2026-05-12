@@ -1,12 +1,13 @@
-"""End-to-end tests for the reorganised Studio sidebar (issue #570).
+"""End-to-end tests for the reorganised Studio sidebar (issues #570, #576).
 
 The Studio sidebar is split into a small top utility row
 (``Back to website`` + theme toggle), a Dashboard link, and five
-collapsible sections — Content, People, Events, Marketing, Operations.
+collapsible sections — Events, Content, People, Marketing, Operations.
 The section that contains the current page auto-expands server-side; on
-the dashboard only Content is open.
+the dashboard only Events is open (#576 moved Events to the top and
+flipped the dashboard default from Content to Events).
 
-Coverage mirrors the 11 Playwright scenarios in the issue body. Per the
+Coverage mirrors the Playwright scenarios in the issue bodies. Per the
 project testing guidelines we assert on specific elements (visible
 buttons, links, aria attributes) rather than full HTML substring
 matches.
@@ -93,7 +94,7 @@ class TestStaffLandsInStudio:
             'aside#studio-sidebar a[href="/"]:has(span:text-is("Back to website"))'
         )
         theme = page.locator('aside#studio-sidebar [data-testid="theme-toggle"]')
-        first_section = _section_button(page, "content")
+        first_section = _section_button(page, "events")
 
         assert back.count() == 1
         assert theme.count() == 1
@@ -107,23 +108,27 @@ class TestStaffLandsInStudio:
             f"y={back_y}, {theme_y}, {section_y}"
         )
 
-        # Content is expanded — its six child links are visible.
-        for label in [
-            "Articles",
-            "Courses",
-            "Projects",
-            "Workshops",
-            "Recordings",
-            "Downloads",
-        ]:
+        # Section toggles render in the order: Events, Content, People,
+        # Marketing, Operations. Bounding-box y-positions are strictly
+        # increasing.
+        section_ys = [
+            _section_button(page, slug).bounding_box()["y"]
+            for slug in ("events", "content", "people", "marketing", "operations")
+        ]
+        assert section_ys == sorted(section_ys), (
+            f"Sections out of order; y-positions: {section_ys}"
+        )
+
+        # Events is expanded — its three child links are visible.
+        for label in ["Events", "Event groups", "Notifications"]:
             link = page.locator(
-                f'#studio-section-content a:has(span:text-is("{label}"))'
+                f'#studio-section-events a:has(span:text-is("{label}"))'
             )
             assert link.count() == 1
-            assert link.is_visible(), f"{label!r} should be visible in expanded Content"
+            assert link.is_visible(), f"{label!r} should be visible in expanded Events"
 
         # The other four sections are collapsed — their <ul> bodies are not visible.
-        for slug in ("people", "events", "marketing", "operations"):
+        for slug in ("content", "people", "marketing", "operations"):
             ul = _section_list(page, slug)
             assert ul.count() == 1
             assert not ul.is_visible(), (
@@ -229,9 +234,9 @@ class TestPeopleAutoExpands:
         )
         assert "bg-secondary" in (crm_link.get_attribute("class") or "")
 
-        # Content is also expanded (default); other sections collapsed.
-        assert _section_list(page, "content").is_visible()
-        for slug in ("events", "marketing", "operations"):
+        # All other sections collapsed — Events also collapses now that
+        # another section is active (#576).
+        for slug in ("content", "events", "marketing", "operations"):
             assert not _section_list(page, slug).is_visible()
 
 
@@ -418,7 +423,7 @@ class TestThemeToggleAtTop:
 
         # Theme toggle is positioned above the first section group.
         toggle_y = toggle.bounding_box()["y"]
-        first_section_y = _section_button(page, "content").bounding_box()["y"]
+        first_section_y = _section_button(page, "events").bounding_box()["y"]
         assert toggle_y < first_section_y
 
         # Read initial theme, click toggle, confirm it changed.
@@ -444,7 +449,7 @@ class TestThemeToggleAtTop:
             'aside#studio-sidebar [data-testid="theme-toggle"]'
         )
         assert toggle_after.bounding_box()["y"] < _section_button(
-            page, "content"
+            page, "events"
         ).bounding_box()["y"]
 
 
@@ -608,25 +613,244 @@ class TestKeyboardSectionToggle:
         page.set_viewport_size({"width": 1280, "height": 800})
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
-        events_button = _section_button(page, "events")
-        events_ul = _section_list(page, "events")
+        # Use Content for keyboard toggling — Events is the dashboard
+        # default and starts expanded after #576, so a "press Enter to
+        # expand" test against it would assert the wrong initial state.
+        content_button = _section_button(page, "content")
+        content_ul = _section_list(page, "content")
 
         # Focus the button and press Enter to expand.
-        events_button.focus()
-        assert events_button.get_attribute("aria-expanded") == "false"
+        content_button.focus()
+        assert content_button.get_attribute("aria-expanded") == "false"
         page.keyboard.press("Enter")
-        assert events_button.get_attribute("aria-expanded") == "true"
-        assert events_ul.is_visible()
-        # The three children are in the tab order (visible + focusable).
-        for label in ["Events", "Event groups", "Notifications"]:
+        assert content_button.get_attribute("aria-expanded") == "true"
+        assert content_ul.is_visible()
+        # The six children are in the tab order (visible + focusable).
+        for label in ["Articles", "Courses", "Projects", "Workshops", "Recordings", "Downloads"]:
             link = page.locator(
-                f'#studio-section-events a:has(span:text-is("{label}"))'
+                f'#studio-section-content a:has(span:text-is("{label}"))'
             )
             assert link.count() >= 1
             assert link.first.is_visible()
 
         # Press Space to collapse.
-        events_button.focus()
+        content_button.focus()
         page.keyboard.press("Space")
+        assert content_button.get_attribute("aria-expanded") == "false"
+        assert not content_ul.is_visible()
+
+
+# ---------------------------------------------------------------------------
+# #576 Scenario: admin uses Events as their default landing surface
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestEventsAsDashboardDefault:
+    """The Events section opens by default on /studio/ and the admin
+    can click straight through to /studio/events/."""
+
+    def test_dashboard_opens_to_events_then_navigates(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        events_button = _section_button(page, "events")
+        events_ul = _section_list(page, "events")
+        assert events_button.get_attribute("aria-expanded") == "true"
+        assert events_ul.is_visible()
+
+        # Click the Events link inside the open Events section.
+        page.locator(
+            '#studio-section-events a[href="/studio/events/"]'
+        ).click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/studio/events/" in page.url
+
+        # Events section is still expanded on /studio/events/.
+        assert _section_button(page, "events").get_attribute(
+            "aria-expanded"
+        ) == "true"
+        assert _section_list(page, "events").is_visible()
+
+        # Return to /studio/; Events is again the only open section.
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+        assert _section_button(page, "events").get_attribute(
+            "aria-expanded"
+        ) == "true"
+        for slug in ("content", "people", "marketing", "operations"):
+            assert _section_button(page, slug).get_attribute(
+                "aria-expanded"
+            ) == "false"
+            assert not _section_list(page, slug).is_visible()
+
+
+# ---------------------------------------------------------------------------
+# #576 Scenario: visiting Content auto-expands Content and collapses Events
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestContentPageCollapsesEvents:
+    """Deep-linking to a Content page expands Content and pulls Events
+    closed — Events only stays open on the dashboard or its own pages."""
+
+    def test_articles_page_expands_content_and_collapses_events(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(
+            f"{django_server}/studio/articles/", wait_until="domcontentloaded"
+        )
+
+        # Content is expanded; Articles is reachable without clicking.
+        content_button = _section_button(page, "content")
+        assert content_button.get_attribute("aria-expanded") == "true"
+        assert page.locator(
+            '#studio-section-content a:has(span:text-is("Articles"))'
+        ).is_visible()
+
+        # Events is now collapsed — its <ul> has the hidden class and the
+        # Events link inside it is not visible until the toggle is clicked.
+        events_button = _section_button(page, "events")
         assert events_button.get_attribute("aria-expanded") == "false"
-        assert not events_ul.is_visible()
+        assert not _section_list(page, "events").is_visible()
+        assert not page.locator(
+            '#studio-section-events a[href="/studio/events/"]'
+        ).is_visible()
+
+        # People, Marketing, Operations are also collapsed.
+        for slug in ("people", "marketing", "operations"):
+            assert not _section_list(page, slug).is_visible()
+
+
+# ---------------------------------------------------------------------------
+# #576 Scenario: visiting an Events page keeps the Events section expanded
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestEventsPageKeepsEventsExpanded:
+    """When the active page is inside the Events section, Events stays
+    expanded and the Event groups link is highlighted."""
+
+    def test_event_groups_page_keeps_events_open(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(
+            f"{django_server}/studio/event-groups/",
+            wait_until="domcontentloaded",
+        )
+
+        events_button = _section_button(page, "events")
+        assert events_button.get_attribute("aria-expanded") == "true"
+        assert _section_list(page, "events").is_visible()
+
+        event_groups_link = page.locator(
+            '#studio-section-events a[href="/studio/event-groups/"]'
+        )
+        assert event_groups_link.count() == 1
+        assert "bg-secondary" in (
+            event_groups_link.get_attribute("class") or ""
+        )
+
+        for slug in ("content", "people", "marketing", "operations"):
+            assert not _section_list(page, slug).is_visible()
+
+
+# ---------------------------------------------------------------------------
+# #576 Scenario: sections are independent toggles
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestSectionsAreIndependentTogglesAfterReorder:
+    """Opening Content while Events is already expanded does not collapse
+    Events; collapsing Events leaves Content open."""
+
+    def test_open_content_then_collapse_events(
+        self, django_server, browser
+    ):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        events_button = _section_button(page, "events")
+        content_button = _section_button(page, "content")
+        assert events_button.get_attribute("aria-expanded") == "true"
+        assert content_button.get_attribute("aria-expanded") == "false"
+
+        # Click Content header — Content opens, Events stays open.
+        content_button.click()
+        assert content_button.get_attribute("aria-expanded") == "true"
+        assert _section_list(page, "content").is_visible()
+        assert page.locator(
+            '#studio-section-content a:has(span:text-is("Articles"))'
+        ).is_visible()
+        assert events_button.get_attribute("aria-expanded") == "true"
+        assert _section_list(page, "events").is_visible()
+
+        # Click Events header — Events collapses, Content stays open.
+        events_button.click()
+        assert events_button.get_attribute("aria-expanded") == "false"
+        assert not _section_list(page, "events").is_visible()
+        assert content_button.get_attribute("aria-expanded") == "true"
+        assert _section_list(page, "content").is_visible()
+
+
+# ---------------------------------------------------------------------------
+# #576 Scenario: Event groups link still reachable via its preserved test hook
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestEventGroupsTestidPreserved:
+    """The ``data-testid="sidebar-event-groups-link"`` hook still resolves
+    to a single link inside the Events section and still navigates."""
+
+    def test_event_groups_testid_navigates(self, django_server, browser):
+        _ensure_tiers()
+        _create_staff_user("admin@test.com")
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+
+        link = page.locator('[data-testid="sidebar-event-groups-link"]')
+        assert link.count() == 1
+        # Lives inside the Events section.
+        events_link = page.locator(
+            '#studio-section-events [data-testid="sidebar-event-groups-link"]'
+        )
+        assert events_link.count() == 1
+        assert events_link.get_attribute("href") == "/studio/event-groups/"
+        assert "Event groups" in (events_link.inner_text() or "")
+
+        events_link.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/studio/event-groups/" in page.url
+        assert _section_button(page, "events").get_attribute(
+            "aria-expanded"
+        ) == "true"

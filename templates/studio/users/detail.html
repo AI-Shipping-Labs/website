@@ -10,321 +10,296 @@
 </div>
 
 {% comment %}
-  CRM-style header: identity on the left, operator action area on the
-  right. Keeps the page anchor (h1 with detail_user.email) for tests
-  while bringing key actions (Login as, View as user, Django Admin)
-  onto the same row so staff don't have to scroll for them.
+  Identity-only header (issue #586). Email/name + visibility hint live
+  here; operator action buttons moved to a dedicated row directly
+  below so the header stays scannable and so every Studio detail
+  surface uses the same "header -> action row -> content cards"
+  rhythm.
 {% endcomment %}
-<header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
-        data-testid="user-detail-header">
-  <div class="min-w-0">
-    <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Member</p>
-    <h1 class="text-2xl font-semibold text-foreground mt-1 break-all" data-testid="user-detail-email">{{ detail_user.email }}</h1>
-    {% if detail_user.first_name or detail_user.last_name %}
-    <p class="text-sm text-muted-foreground mt-1" data-testid="user-detail-name">{{ detail_user.first_name }} {{ detail_user.last_name }}</p>
-    {% endif %}
-    <p class="text-xs text-muted-foreground mt-2">Visible to staff only.</p>
-  </div>
-
-  <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-testid="user-detail-actions">
-    <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
-      {% csrf_token %}
-      <button type="submit"
-              data-testid="user-detail-impersonate"
-              title="Impersonate this user (your admin session is preserved)"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Login as user
-      </button>
-    </form>
-    <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
-      {% csrf_token %}
-      <button type="submit"
-              data-testid="user-detail-view-as"
-              title="See the site as this user via impersonation"
-              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-        View as user
-      </button>
-    </form>
-    <a href="{{ django_admin_url }}"
-       data-testid="user-detail-django-admin"
-       title="Open Django Admin for destructive or admin-only edits"
-       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-      Django Admin
-    </a>
-  </div>
+<header class="mb-4 max-w-4xl" data-testid="user-detail-header">
+  <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Member</p>
+  <h1 class="text-2xl font-semibold text-foreground mt-1 break-all" data-testid="user-detail-email">{{ detail_user.email }}</h1>
+  {% if detail_user.first_name or detail_user.last_name %}
+  <p class="text-sm text-muted-foreground mt-1" data-testid="user-detail-name">{{ detail_user.first_name }} {{ detail_user.last_name }}</p>
+  {% endif %}
+  <p class="text-xs text-muted-foreground mt-2">Visible to staff only.</p>
 </header>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mb-8">
+{% comment %}
+  Consolidated action row (issue #586). Two buttons only:
+  - Login as user (POST to studio_impersonate). Primary accent.
+  - View in Django admin (link). Secondary bordered.
+  The previous "View as user" button POSTed to the same impersonate
+  endpoint as Login as user; it was a duplicate action with no
+  distinct behavior and has been removed.
+{% endcomment %}
+<div class="flex flex-wrap items-center gap-2 mb-8 max-w-4xl" data-testid="user-detail-actions">
+  <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}" class="inline-flex">
+    {% csrf_token %}
+    <button type="submit"
+            data-testid="user-detail-impersonate"
+            title="Impersonate this user (your admin session is preserved)"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Login as user
+    </button>
+  </form>
+  <a href="{{ django_admin_url }}"
+     data-testid="user-detail-django-admin"
+     title="Open Django Admin for destructive or admin-only edits"
+     class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+    View in Django admin
+  </a>
+</div>
 
-  <!-- Profile / contact context -->
-  <section class="bg-card border border-border rounded-lg p-6" data-testid="user-detail-profile-section">
-    <h2 class="text-lg font-semibold text-foreground mb-4">Profile</h2>
-    <dl class="space-y-3 text-sm">
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Email</dt>
-        <dd class="text-foreground font-mono break-all">{{ detail_user.email }}</dd>
-      </div>
-      {% if detail_user.first_name or detail_user.last_name %}
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Name</dt>
-        <dd class="text-foreground">{{ detail_user.first_name }} {{ detail_user.last_name }}</dd>
-      </div>
-      {% endif %}
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Joined</dt>
-        <dd class="text-foreground">{{ detail_user.date_joined|date:"M d, Y" }}</dd>
-      </div>
-      {% if detail_user.last_login %}
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Last login</dt>
-        <dd class="text-foreground">{{ detail_user.last_login|date:"M d, Y" }}</dd>
-      </div>
-      {% endif %}
-      {% if detail_user.stripe_customer_id %}
-      {# Stripe row (issue #566). When STRIPE_DASHBOARD_ACCOUNT_ID is set #}
-      {# the cus_* value is rendered as a deep-link anchor opening the    #}
-      {# matching customer in the Stripe Dashboard in a new tab; when the #}
-      {# setting is blank we fall back to plain text so the operator can  #}
-      {# still copy the ID. Test vs. live mode is encoded in the operator #}
-      {# set account ID itself — no extra flag needed.                    #}
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Stripe</dt>
-        {% if stripe_account_id %}
-        <dd>
-          <a href="https://dashboard.stripe.com/{{ stripe_account_id }}/customers/{{ detail_user.stripe_customer_id }}"
-             target="_blank" rel="noopener"
-             data-testid="user-detail-stripe-link"
-             class="text-accent hover:underline font-mono break-all">{{ detail_user.stripe_customer_id }}</a>
-        </dd>
-        {% else %}
-        <dd class="text-foreground font-mono break-all">{{ detail_user.stripe_customer_id }}</dd>
-        {% endif %}
-      </div>
-      {% endif %}
-    </dl>
+<!-- Profile / contact context -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-profile-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Profile</h2>
+  <dl class="space-y-3 text-sm">
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Email</dt>
+      <dd class="text-foreground font-mono break-all">{{ detail_user.email }}</dd>
+    </div>
+    {% if detail_user.first_name or detail_user.last_name %}
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Name</dt>
+      <dd class="text-foreground">{{ detail_user.first_name }} {{ detail_user.last_name }}</dd>
+    </div>
+    {% endif %}
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Joined</dt>
+      <dd class="text-foreground">{{ detail_user.date_joined|date:"M d, Y" }}</dd>
+    </div>
+    {% if detail_user.last_login %}
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Last login</dt>
+      <dd class="text-foreground">{{ detail_user.last_login|date:"M d, Y" }}</dd>
+    </div>
+    {% endif %}
     {% if detail_user.stripe_customer_id %}
-    <form method="post" action="{% url 'studio_user_sync_from_stripe' detail_user.pk %}" class="mt-5">
+    {# Stripe row (issue #566). When STRIPE_DASHBOARD_ACCOUNT_ID is set #}
+    {# the cus_* value is rendered as a deep-link anchor opening the    #}
+    {# matching customer in the Stripe Dashboard in a new tab; when the #}
+    {# setting is blank we fall back to plain text so the operator can  #}
+    {# still copy the ID. Test vs. live mode is encoded in the operator #}
+    {# set account ID itself — no extra flag needed.                    #}
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Stripe</dt>
+      {% if stripe_account_id %}
+      <dd>
+        <a href="https://dashboard.stripe.com/{{ stripe_account_id }}/customers/{{ detail_user.stripe_customer_id }}"
+           target="_blank" rel="noopener"
+           data-testid="user-detail-stripe-link"
+           class="text-accent hover:underline font-mono break-all">{{ detail_user.stripe_customer_id }}</a>
+      </dd>
+      {% else %}
+      <dd class="text-foreground font-mono break-all">{{ detail_user.stripe_customer_id }}</dd>
+      {% endif %}
+    </div>
+    {% endif %}
+  </dl>
+  {% if detail_user.stripe_customer_id %}
+  <form method="post" action="{% url 'studio_user_sync_from_stripe' detail_user.pk %}" class="mt-5">
+    {% csrf_token %}
+    <button type="submit"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            data-testid="sync-from-stripe">
+      Sync from Stripe
+    </button>
+  </form>
+  {% endif %}
+</section>
+
+<!-- Membership / community status -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-detail-membership-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Membership &amp; community</h2>
+  <dl class="space-y-3 text-sm">
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Tier</dt>
+      <dd class="text-foreground text-right" data-testid="user-detail-tier">
+        <div class="flex items-center gap-2 justify-end flex-wrap">
+          <span>{{ tier_name }}</span>
+          {% if tier_source == 'override' %}
+          {# Issue #568: the Override badge is a clickable shortcut to the #}
+          {# existing per-user overrides surface at /studio/users/tier-override/. #}
+          {# The inner <span> keeps its testid and data-tier-source so the #}
+          {# badge tests from #562 still target it. |urlencode is required #}
+          {# so emails with '+' / '@' round-trip as %2B / %40 in the href. #}
+          <a href="{% url 'studio_tier_override' %}?email={{ detail_user.email|urlencode }}"
+             title="View this user's tier overrides"
+             data-testid="user-detail-tier-badge-link"
+             class="inline-flex">
+            <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  data-testid="user-detail-tier-badge"
+                  data-tier-source="override">
+              <i data-lucide="shield-check" class="w-3 h-3"></i>
+              Override
+            </span>
+          </a>
+          {% elif tier_source == 'stripe' %}
+          <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
+                data-testid="user-detail-tier-badge"
+                data-tier-source="stripe">
+            From Stripe
+          </span>
+          {% else %}
+          <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
+                data-testid="user-detail-tier-badge"
+                data-tier-source="default">
+            Default
+          </span>
+          {% endif %}
+        </div>
+        {% if has_override and active_override %}
+        <p class="text-xs text-muted-foreground mt-1" data-testid="user-detail-tier-base">
+          Base: {% if detail_user.tier %}{{ detail_user.tier.name }}{% else %}Free{% endif %}
+          &middot; expires {{ active_override.expires_at|date:"M d, Y H:i" }} UTC
+        </p>
+        {% endif %}
+      </dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Status</dt>
+      <dd class="text-foreground">{{ status }}</dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Newsletter</dt>
+      <dd>
+        {% if is_subscribed %}
+        <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Subscribed</span>
+        {% else %}
+        <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Unsubscribed</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-muted-foreground">Slack</dt>
+      <dd>
+        {% if slack_status == 'Member' %}
+        <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300">Member</span>
+        {% elif slack_status == 'Not in Slack' %}
+        <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Not in Slack</span>
+        {% else %}
+        <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Never checked</span>
+        {% endif %}
+      </dd>
+    </div>
+    {# Slack ID row (issue #561, simplified in #586). Read-only here; #}
+    {# the inline edit form has been removed because Slack IDs are #}
+    {# rarely edited and the form added persistent visual weight to a #}
+    {# row that, in practice, is set once during Slack OAuth signup. #}
+    {# When the ID is missing we still surface a path forward via the #}
+    {# Django admin change page so operators are not stranded. The #}
+    {# studio_user_slack_id_set route stays defined for non-template #}
+    {# surfaces (Django admin / scripts). #}
+    <div class="flex justify-between gap-4" data-testid="user-detail-slack-id-row">
+      <dt class="text-muted-foreground">Slack ID</dt>
+      <dd class="text-right">
+        {% if detail_user.slack_user_id %}
+          {% if slack_profile_url %}
+          <span class="text-foreground font-mono break-all" data-testid="user-detail-slack-id-value">{{ detail_user.slack_user_id }}</span>
+          <a href="{{ slack_profile_url }}"
+             target="_blank" rel="noopener"
+             data-testid="user-detail-slack-profile-link"
+             class="ml-2 inline-flex items-center text-xs text-accent hover:underline">
+            Open in Slack
+          </a>
+          {% else %}
+          <span class="text-foreground font-mono break-all"
+                data-testid="user-detail-slack-id-value"
+                title="Configure SLACK_TEAM_ID to enable the link">{{ detail_user.slack_user_id }}</span>
+          {% endif %}
+        {% else %}
+        <span class="text-xs text-muted-foreground" data-testid="user-detail-slack-id-empty">Not linked</span>
+        <a href="{{ django_admin_url }}"
+           data-testid="user-detail-slack-id-admin-link"
+           class="ml-2 inline-flex items-center text-xs text-accent hover:underline">
+          Edit in Django admin
+        </a>
+        {% endif %}
+      </dd>
+    </div>
+  </dl>
+</section>
+
+{# Grant temporary upgrade (issue #586). Promoted out of the Membership #}
+{# card into its own top-level section so the most important Studio #}
+{# action on this page sits flush with Tags / CRM. Keeps every #}
+{# data-testid from the previous inline block (#562) so existing tests #}
+{# continue to target the same controls. #}
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl"
+         data-testid="user-detail-tier-override-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Grant temporary upgrade</h2>
+  <div data-testid="user-detail-tier-override-block">
+    {% if has_override and active_override %}
+    <p class="text-sm text-foreground mb-3">
+      Active override to <span class="font-medium">{{ active_override.override_tier.name }}</span>
+      until {{ active_override.expires_at|date:"M d, Y H:i" }} UTC.
+    </p>
+    <form method="post"
+          action="{% url 'studio_user_tier_override_revoke' detail_user.pk %}"
+          data-testid="user-detail-tier-override-revoke-form"
+          onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
       {% csrf_token %}
+      <input type="hidden" name="override_id" value="{{ active_override.pk }}">
       <button type="submit"
-              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-              data-testid="sync-from-stripe">
-        Sync from Stripe
+              data-testid="user-detail-tier-override-revoke"
+              class="inline-flex items-center text-sm text-red-400 hover:text-red-300 hover:underline">
+        Revoke override
       </button>
+    </form>
+    {% elif is_highest_tier %}
+    <p class="text-sm text-muted-foreground" data-testid="user-detail-tier-override-highest">
+      User is already at the highest tier &mdash; no override available.
+    </p>
+    {% else %}
+    <form method="post"
+          action="{% url 'studio_user_tier_override_create' detail_user.pk %}"
+          data-testid="user-detail-tier-override-form">
+      {% csrf_token %}
+      <div class="mb-4">
+        <p class="text-xs text-muted-foreground mb-3">
+          Picks the lowest available tier by default. Override sits on top of the
+          user&rsquo;s real subscription tier and expires automatically.
+        </p>
+        <div class="flex flex-wrap gap-2" data-testid="user-detail-tier-override-tiers">
+          {% for tier in available_override_tiers %}
+          <label class="cursor-pointer">
+            <input type="radio" name="tier_id" value="{{ tier.pk }}"
+                   class="peer sr-only"
+                   data-testid="user-detail-tier-override-tier-option"
+                   data-tier-slug="{{ tier.slug }}"
+                   {% if forloop.first %}checked{% endif %}>
+            <span class="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:bg-secondary">
+              {{ tier.name }}
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-foreground mb-2">Duration</p>
+        <div class="flex flex-wrap gap-2" data-testid="user-detail-tier-override-durations">
+          {% for label in override_duration_labels %}
+          <button type="submit" name="duration" value="{{ label }}"
+                  data-testid="user-detail-tier-override-duration"
+                  data-duration="{{ label }}"
+                  class="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground hover:border-accent">
+            {{ label }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
     </form>
     {% endif %}
-  </section>
-
-  <!-- Membership / community status -->
-  <section class="bg-card border border-border rounded-lg p-6" data-testid="user-detail-membership-section">
-    <h2 class="text-lg font-semibold text-foreground mb-4">Membership &amp; community</h2>
-    <dl class="space-y-3 text-sm">
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Tier</dt>
-        <dd class="text-foreground text-right" data-testid="user-detail-tier">
-          <div class="flex items-center gap-2 justify-end flex-wrap">
-            <span>{{ tier_name }}</span>
-            {% if tier_source == 'override' %}
-            {# Issue #568: the Override badge is a clickable shortcut to the #}
-            {# existing per-user overrides surface at /studio/users/tier-override/. #}
-            {# The inner <span> keeps its testid and data-tier-source so the #}
-            {# badge tests from #562 still target it. |urlencode is required #}
-            {# so emails with '+' / '@' round-trip as %2B / %40 in the href. #}
-            <a href="{% url 'studio_tier_override' %}?email={{ detail_user.email|urlencode }}"
-               title="View this user's tier overrides"
-               data-testid="user-detail-tier-badge-link"
-               class="inline-flex">
-              <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                    data-testid="user-detail-tier-badge"
-                    data-tier-source="override">
-                <i data-lucide="shield-check" class="w-3 h-3"></i>
-                Override
-              </span>
-            </a>
-            {% elif tier_source == 'stripe' %}
-            <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
-                  data-testid="user-detail-tier-badge"
-                  data-tier-source="stripe">
-              From Stripe
-            </span>
-            {% else %}
-            <span class="inline-flex items-center text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"
-                  data-testid="user-detail-tier-badge"
-                  data-tier-source="default">
-              Default
-            </span>
-            {% endif %}
-          </div>
-          {% if has_override and active_override %}
-          <p class="text-xs text-muted-foreground mt-1" data-testid="user-detail-tier-base">
-            Base: {% if detail_user.tier %}{{ detail_user.tier.name }}{% else %}Free{% endif %}
-            &middot; expires {{ active_override.expires_at|date:"M d, Y H:i" }} UTC
-          </p>
-          {% endif %}
-        </dd>
-      </div>
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Status</dt>
-        <dd class="text-foreground">{{ status }}</dd>
-      </div>
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Newsletter</dt>
-        <dd>
-          {% if is_subscribed %}
-          <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">Subscribed</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Unsubscribed</span>
-          {% endif %}
-        </dd>
-      </div>
-      <div class="flex justify-between gap-4">
-        <dt class="text-muted-foreground">Slack</dt>
-        <dd>
-          {% if slack_status == 'Member' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300">Member</span>
-          {% elif slack_status == 'Not in Slack' %}
-          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Not in Slack</span>
-          {% else %}
-          <span class="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">Never checked</span>
-          {% endif %}
-        </dd>
-      </div>
-      {# Slack ID row (issue #561). Always rendered so the inline edit form #}
-      {# is reachable even when the ID is not yet set. When the workspace's #}
-      {# SLACK_TEAM_ID is configured AND the user has a Slack ID, the row #}
-      {# also renders an "Open in Slack" anchor that deep-links to the #}
-      {# member's profile. Otherwise the value is plain text with a tooltip #}
-      {# explaining why the link is not clickable, mirroring the Stripe #}
-      {# indicator on the user list. #}
-      <div class="flex justify-between gap-4" data-testid="user-detail-slack-id-row">
-        <dt class="text-muted-foreground">Slack ID</dt>
-        <dd class="text-right">
-          {% if detail_user.slack_user_id %}
-            {% if slack_profile_url %}
-            <span class="text-foreground font-mono break-all" data-testid="user-detail-slack-id-value">{{ detail_user.slack_user_id }}</span>
-            <a href="{{ slack_profile_url }}"
-               target="_blank" rel="noopener"
-               data-testid="user-detail-slack-profile-link"
-               class="ml-2 inline-flex items-center text-xs text-accent hover:underline">
-              Open in Slack
-            </a>
-            {% else %}
-            <span class="text-foreground font-mono break-all"
-                  data-testid="user-detail-slack-id-value"
-                  title="Configure SLACK_TEAM_ID to enable the link">{{ detail_user.slack_user_id }}</span>
-            {% endif %}
-          {% else %}
-          <span class="text-xs text-muted-foreground" data-testid="user-detail-slack-id-empty">Not linked</span>
-          {% endif %}
-        </dd>
-      </div>
-    </dl>
-    {# Inline edit form (issue #561). Always rendered so operators can #}
-    {# manually wire a Slack ID even when there isn't one yet — and can #}
-    {# clear or replace a wrongly-imported value. Validation lives in the #}
-    {# view; the placeholder mirrors the canonical Slack ID format. #}
-    <form method="post"
-          action="{% url 'studio_user_slack_id_set' detail_user.pk %}"
-          class="mt-4 flex flex-wrap items-center gap-2"
-          data-testid="user-detail-slack-id-form">
-      {% csrf_token %}
-      <label for="user-detail-slack-id-input" class="text-xs text-muted-foreground">
-        {% if detail_user.slack_user_id %}Edit Slack ID{% else %}Set Slack ID{% endif %}
-      </label>
-      <input type="text"
-             id="user-detail-slack-id-input"
-             name="slack_user_id"
-             value="{{ detail_user.slack_user_id }}"
-             placeholder="U01ABC123"
-             autocomplete="off"
-             data-testid="user-detail-slack-id-input"
-             class="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm font-mono text-foreground placeholder-muted-foreground w-full sm:w-44 focus:outline-none focus:ring-1 focus:ring-accent">
-      <button type="submit"
-              data-testid="user-detail-slack-id-submit"
-              class="bg-accent text-accent-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-        Save
-      </button>
-    </form>
-    <p class="text-xs text-muted-foreground mt-2">
-      Slack user ID (e.g. <span class="font-mono">U01ABC123</span>). Leave blank to clear.
+    <p class="mt-4 text-xs text-muted-foreground">
+      <a href="{% url 'studio_tier_override' %}?email={{ detail_user.email }}"
+         data-testid="user-detail-tier-override-history-link"
+         class="hover:underline">
+        View full override history &rarr;
+      </a>
     </p>
-
-    {# Inline tier-override controls (issue #562). #}
-    {# The standalone /studio/users/tier-override/ page still exists; #}
-    {# this block ADDS an in-context surface so operators can override #}
-    {# without leaving the user detail page. #}
-    <div class="mt-5 pt-5 border-t border-border" data-testid="user-detail-tier-override-block">
-      {% if has_override and active_override %}
-      <p class="text-sm text-foreground mb-3">
-        Active override to <span class="font-medium">{{ active_override.override_tier.name }}</span>
-        until {{ active_override.expires_at|date:"M d, Y H:i" }} UTC.
-      </p>
-      <form method="post"
-            action="{% url 'studio_user_tier_override_revoke' detail_user.pk %}"
-            data-testid="user-detail-tier-override-revoke-form"
-            onsubmit="return confirm('Revoke this override? The user will immediately lose upgraded access.');">
-        {% csrf_token %}
-        <input type="hidden" name="override_id" value="{{ active_override.pk }}">
-        <button type="submit"
-                data-testid="user-detail-tier-override-revoke"
-                class="inline-flex items-center text-sm text-red-400 hover:text-red-300 hover:underline">
-          Revoke override
-        </button>
-      </form>
-      {% elif is_highest_tier %}
-      <p class="text-sm text-muted-foreground" data-testid="user-detail-tier-override-highest">
-        User is already at the highest tier &mdash; no override available.
-      </p>
-      {% else %}
-      <form method="post"
-            action="{% url 'studio_user_tier_override_create' detail_user.pk %}"
-            data-testid="user-detail-tier-override-form">
-        {% csrf_token %}
-        <div class="mb-4">
-          <p class="text-sm font-medium text-foreground mb-2">Grant temporary upgrade</p>
-          <p class="text-xs text-muted-foreground mb-3">
-            Picks the lowest available tier by default. Override sits on top of the
-            user&rsquo;s real subscription tier and expires automatically.
-          </p>
-          <div class="flex flex-wrap gap-2" data-testid="user-detail-tier-override-tiers">
-            {% for tier in available_override_tiers %}
-            <label class="cursor-pointer">
-              <input type="radio" name="tier_id" value="{{ tier.pk }}"
-                     class="peer sr-only"
-                     data-testid="user-detail-tier-override-tier-option"
-                     data-tier-slug="{{ tier.slug }}"
-                     {% if forloop.first %}checked{% endif %}>
-              <span class="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:text-accent hover:bg-secondary">
-                {{ tier.name }}
-              </span>
-            </label>
-            {% endfor %}
-          </div>
-        </div>
-        <div>
-          <p class="text-sm font-medium text-foreground mb-2">Duration</p>
-          <div class="flex flex-wrap gap-2" data-testid="user-detail-tier-override-durations">
-            {% for label in override_duration_labels %}
-            <button type="submit" name="duration" value="{{ label }}"
-                    data-testid="user-detail-tier-override-duration"
-                    data-duration="{{ label }}"
-                    class="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground hover:border-accent">
-              {{ label }}
-            </button>
-            {% endfor %}
-          </div>
-        </div>
-      </form>
-      {% endif %}
-      <p class="mt-4 text-xs text-muted-foreground">
-        <a href="{% url 'studio_tier_override' %}?email={{ detail_user.email }}"
-           data-testid="user-detail-tier-override-history-link"
-           class="hover:underline">
-          View full override history &rarr;
-        </a>
-      </p>
-    </div>
-  </section>
-</div>
+  </div>
+</section>
 
 <!-- Tags -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="user-tags-section">

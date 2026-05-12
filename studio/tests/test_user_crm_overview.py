@@ -130,12 +130,14 @@ class UserDetailHeaderActionsTest(TestCase):
         )
         self.assertContains(response, 'csrfmiddlewaretoken')
 
-    def test_detail_header_includes_view_as_user_action(self):
-        # The "View as user" affordance reuses the impersonation flow;
-        # the UI copy makes the relationship discoverable.
+    def test_detail_action_row_drops_duplicate_view_as_user_button(self):
+        # Issue #586: the "View as user" button posted to the same
+        # impersonate endpoint as "Login as user" and was a duplicate.
+        # The action row now contains exactly Login as user + View in
+        # Django admin.
         response = self.client.get(f'/studio/users/{self.member.pk}/')
-        self.assertContains(response, 'data-testid="user-detail-view-as"')
-        self.assertContains(response, 'View as user')
+        self.assertNotContains(response, 'data-testid="user-detail-view-as"')
+        self.assertNotContains(response, 'View as user')
 
     def test_detail_header_links_to_django_admin_change_page(self):
         response = self.client.get(f'/studio/users/{self.member.pk}/')
@@ -144,6 +146,10 @@ class UserDetailHeaderActionsTest(TestCase):
             response,
             f'href="/admin/accounts/user/{self.member.pk}/change/"',
         )
+        # Issue #586 renamed the visible label from "Django Admin" to
+        # "View in Django admin" for parity with other Studio
+        # consolidated action rows.
+        self.assertContains(response, 'View in Django admin')
 
     def test_detail_does_not_add_destructive_studio_actions(self):
         # Phase 1 keeps destructive actions in Django Admin only. The

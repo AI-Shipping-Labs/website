@@ -3,8 +3,9 @@
 Covers the staff-facing flows the issue's product intent calls out:
 
 - Identity-area click on the user list navigates to the detail page.
-- The detail page surfaces ``Login as user``, ``View as user``, and
-  ``Django Admin`` from the header without scrolling to a sub-section.
+- The detail page surfaces ``Login as user`` and ``View in Django admin``
+  from a consolidated action row directly under the header (issue #586
+  removed the duplicate ``View as user`` button).
 - The detail page renders without horizontal overflow at desktop and
   mobile widths and the note cards do not collide with neighbors.
 - The plan-detail page (which reuses ``_member_notes.html``) still
@@ -161,25 +162,23 @@ class TestStudioUserCrmOverview:
         )
 
         impersonate = page.locator('[data-testid="user-detail-impersonate"]')
-        view_as = page.locator('[data-testid="user-detail-view-as"]')
         admin_link = page.locator('[data-testid="user-detail-django-admin"]')
         assert impersonate.is_visible()
-        assert view_as.is_visible()
         assert admin_link.is_visible()
         assert (
             admin_link.get_attribute("href")
             == f"/admin/accounts/user/{member_pk}/change/"
         )
+        # Issue #586: the duplicate "View as user" button is removed.
+        assert page.locator(
+            '[data-testid="user-detail-view-as"]'
+        ).count() == 0
 
         # Keyboard reachability: each action receives focus.
         impersonate.focus()
         assert page.evaluate(
             "document.activeElement.getAttribute('data-testid')"
         ) == "user-detail-impersonate"
-        view_as.focus()
-        assert page.evaluate(
-            "document.activeElement.getAttribute('data-testid')"
-        ) == "user-detail-view-as"
         admin_link.focus()
         assert page.evaluate(
             "document.activeElement.getAttribute('data-testid')"

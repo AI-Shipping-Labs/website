@@ -26,7 +26,7 @@ from django.utils.text import slugify
 
 from content.access import LEVEL_MAIN
 from content.access import VISIBILITY_CHOICES as TIER_LEVEL_CHOICES
-from events.models import EventGroup
+from events.models import EventSeries
 from plans.models import PLAN_STATUS_CHOICES, SPRINT_STATUS_CHOICES, Plan, Sprint
 from plans.services import create_plan_for_enrollment
 from studio.decorators import staff_required
@@ -52,8 +52,8 @@ def _parse_min_tier_level(raw):
     return value, ''
 
 
-def _parse_event_group(raw):
-    """Parse the ``event_group`` form field. ``(EventGroup|None, error)``.
+def _parse_event_series(raw):
+    """Parse the ``event_series`` form field. ``(EventSeries|None, error)``.
 
     Empty string / missing -> ``(None, '')`` (sprint becomes unlinked).
     A non-integer or unknown id -> ``(None, error_message)`` so the
@@ -65,11 +65,11 @@ def _parse_event_group(raw):
     try:
         value = int(raw)
     except (TypeError, ValueError):
-        return None, 'Selected event group does not exist.'
-    group = EventGroup.objects.filter(pk=value).first()
-    if group is None:
-        return None, 'Selected event group does not exist.'
-    return group, ''
+        return None, 'Selected event series does not exist.'
+    series = EventSeries.objects.filter(pk=value).first()
+    if series is None:
+        return None, 'Selected event series does not exist.'
+    return series, ''
 
 
 def _parse_duration_weeks(raw):
@@ -115,7 +115,7 @@ def _render_form(request, *, sprint, form_action, form_data, error='', status=20
         'form_data': form_data,
         'status_choices': SPRINT_STATUS_CHOICES,
         'tier_level_choices': TIER_LEVEL_CHOICES,
-        'event_groups': EventGroup.objects.all().order_by('name'),
+        'event_series_list': EventSeries.objects.all().order_by('name'),
         'error': error,
     }
     return render(request, 'studio/sprints/form.html', context, status=status)
@@ -129,7 +129,7 @@ def _form_data_from_post(request):
         'duration_weeks': (request.POST.get('duration_weeks') or '').strip(),
         'status': (request.POST.get('status') or '').strip(),
         'min_tier_level': (request.POST.get('min_tier_level') or '').strip(),
-        'event_group': (request.POST.get('event_group') or '').strip(),
+        'event_series': (request.POST.get('event_series') or '').strip(),
     }
 
 
@@ -141,8 +141,8 @@ def _form_data_from_sprint(sprint):
         'duration_weeks': str(sprint.duration_weeks),
         'status': sprint.status,
         'min_tier_level': str(sprint.min_tier_level),
-        'event_group': (
-            str(sprint.event_group_id) if sprint.event_group_id else ''
+        'event_series': (
+            str(sprint.event_series_id) if sprint.event_series_id else ''
         ),
     }
 
@@ -175,7 +175,7 @@ def sprint_create(request):
                 'duration_weeks': '6',
                 'status': 'draft',
                 'min_tier_level': str(LEVEL_MAIN),
-                'event_group': '',
+                'event_series': '',
             },
         )
 
@@ -187,7 +187,7 @@ def sprint_create(request):
     duration, duration_error = _parse_duration_weeks(form_data['duration_weeks'])
     status_value = _normalize_status(form_data['status'])
     min_tier_level, tier_error = _parse_min_tier_level(form_data['min_tier_level'])
-    event_group, event_group_error = _parse_event_group(form_data['event_group'])
+    event_series, event_series_error = _parse_event_series(form_data['event_series'])
 
     if not name:
         return _render_form(
@@ -217,10 +217,10 @@ def sprint_create(request):
             request, sprint=None, form_action='create',
             form_data=form_data, error=tier_error, status=400,
         )
-    if event_group_error:
+    if event_series_error:
         return _render_form(
             request, sprint=None, form_action='create',
-            form_data=form_data, error=event_group_error, status=400,
+            form_data=form_data, error=event_series_error, status=400,
         )
 
     if Sprint.objects.filter(slug=slug).exists():
@@ -238,7 +238,7 @@ def sprint_create(request):
         duration_weeks=duration,
         status=status_value,
         min_tier_level=min_tier_level,
-        event_group=event_group,
+        event_series=event_series,
     )
     messages.success(request, f'Sprint "{sprint.name}" created.')
     return redirect('studio_sprint_detail', sprint_id=sprint.pk)
@@ -248,7 +248,7 @@ def sprint_create(request):
 def sprint_detail(request, sprint_id):
     """Sprint metadata + list of plans in that sprint."""
     sprint = get_object_or_404(
-        Sprint.objects.select_related('event_group'),
+        Sprint.objects.select_related('event_series'),
         pk=sprint_id,
     )
     plans = (
@@ -257,17 +257,17 @@ def sprint_detail(request, sprint_id):
         .order_by('-created_at')
     )
     enrollment_count = sprint.enrollments.count()
-    event_group = sprint.event_group
-    event_group_events = (
-        list(event_group.events.all().order_by('start_datetime'))
-        if event_group else []
+    event_series = sprint.event_series
+    event_series_events = (
+        list(event_series.events.all().order_by('start_datetime'))
+        if event_series else []
     )
     return render(request, 'studio/sprints/detail.html', {
         'sprint': sprint,
         'plans': plans,
         'enrollment_count': enrollment_count,
-        'event_group': event_group,
-        'event_group_events': event_group_events,
+        'event_series': event_series,
+        'event_series_events': event_series_events,
     })
 
 
@@ -291,7 +291,7 @@ def sprint_edit(request, sprint_id):
     duration, duration_error = _parse_duration_weeks(form_data['duration_weeks'])
     status_value = _normalize_status(form_data['status'])
     min_tier_level, tier_error = _parse_min_tier_level(form_data['min_tier_level'])
-    event_group, event_group_error = _parse_event_group(form_data['event_group'])
+    event_series, event_series_error = _parse_event_series(form_data['event_series'])
 
     if not name:
         return _render_form(
@@ -321,10 +321,10 @@ def sprint_edit(request, sprint_id):
             request, sprint=sprint, form_action='edit',
             form_data=form_data, error=tier_error, status=400,
         )
-    if event_group_error:
+    if event_series_error:
         return _render_form(
             request, sprint=sprint, form_action='edit',
-            form_data=form_data, error=event_group_error, status=400,
+            form_data=form_data, error=event_series_error, status=400,
         )
 
     if Sprint.objects.filter(slug=slug).exclude(pk=sprint.pk).exists():
@@ -341,7 +341,7 @@ def sprint_edit(request, sprint_id):
     sprint.duration_weeks = duration
     sprint.status = status_value
     sprint.min_tier_level = min_tier_level
-    sprint.event_group = event_group
+    sprint.event_series = event_series
     sprint.save()
 
     messages.success(request, f'Sprint "{sprint.name}" updated.')

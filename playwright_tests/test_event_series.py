@@ -1,11 +1,12 @@
-"""Playwright E2E tests for Event groups (issue #564).
+"""Playwright E2E tests for Event series (issue #564, renamed from
+event-group in #575).
 
 Nine scenarios covering the Studio create/edit/delete flow, the origin
 gate, the sync-isolation guarantee, the add-occurrence form, the
 validation guard, and the two public-surface flows.
 
 Usage:
-    uv run pytest playwright_tests/test_event_groups.py -v
+    uv run pytest playwright_tests/test_event_series.py -v
 """
 
 import os
@@ -25,14 +26,14 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
 def _reset_event_state():
-    """Delete all event-group state for a clean slate."""
+    """Delete all event-series state for a clean slate."""
     from django.db import connection
 
-    from events.models import Event, EventGroup, EventRegistration
+    from events.models import Event, EventRegistration, EventSeries
 
     EventRegistration.objects.all().delete()
     Event.objects.all().delete()
-    EventGroup.objects.all().delete()
+    EventSeries.objects.all().delete()
     connection.close()
 
 
@@ -62,7 +63,7 @@ class TestScenario1CreateSeries:
         # The list page shows the New event series button.
         assert page.locator('[data-testid="event-series-new-button"]').is_visible()
         page.locator('[data-testid="event-series-new-button"]').click()
-        page.wait_for_url(re.compile(r".*/studio/event-groups/new$"))
+        page.wait_for_url(re.compile(r".*/studio/event-series/new$"))
 
         start = _next_weekday(2)  # Wednesday
         page.fill('input[name="name"]', "Spring Workshop Series")
@@ -72,10 +73,10 @@ class TestScenario1CreateSeries:
         page.fill('input[name="occurrences"]', "6")
         page.fill('input[name="timezone"]', "Europe/Berlin")
 
-        page.locator('[data-testid="event-group-submit"]').click()
-        page.wait_for_url(re.compile(r".*/studio/event-groups/\d+/$"))
+        page.locator('[data-testid="event-series-submit"]').click()
+        page.wait_for_url(re.compile(r".*/studio/event-series/\d+/$"))
 
-        rows = page.locator('[data-testid="event-group-member-row"]')
+        rows = page.locator('[data-testid="event-series-member-row"]')
         assert rows.count() == 6
         # Every row has a Draft status badge.
         draft_count = page.get_by_text("Draft", exact=False).count()
@@ -94,17 +95,17 @@ class TestScenario2StudioEditable:
     def test_studio_event_full_edit(self, django_server, browser):
         from django.db import connection
 
-        from events.models import Event, EventGroup
+        from events.models import Event, EventSeries
 
         _reset_event_state()
         _create_staff_user("staff-eg2@test.com")
 
-        group = EventGroup(
+        series = EventSeries(
             name="Spring Workshop Series",
             slug="spring-workshop-series-2",
             start_time=datetime(2026, 1, 1, 18, 0).time(),
         )
-        group.save()
+        series.save()
         events = []
         base_dt = datetime(2026, 6, 3, 18, 0)
         for i in range(1, 7):
@@ -115,7 +116,7 @@ class TestScenario2StudioEditable:
                 end_datetime=base_dt + timedelta(days=7 * (i - 1), hours=1, minutes=30),
                 status="draft",
                 origin="studio",
-                event_group=group,
+                event_series=series,
                 series_position=i,
             )
             ev.save()
@@ -127,7 +128,7 @@ class TestScenario2StudioEditable:
         page = ctx.new_page()
 
         page.goto(
-            f"{django_server}/studio/event-groups/{group.pk}/",
+            f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
         # Click Edit on Session 3
@@ -277,23 +278,23 @@ class TestScenario5AddOccurrence:
         from django.db import connection
         from django.utils import timezone
 
-        from events.models import Event, EventGroup
+        from events.models import Event, EventSeries
 
         _reset_event_state()
         _create_staff_user("staff-eg5@test.com")
-        group = EventGroup(
+        series = EventSeries(
             name="Add Series",
             slug="add-series-pw",
             start_time=datetime(2026, 1, 1, 18, 0).time(),
         )
-        group.save()
+        series.save()
         for i in range(1, 7):
             Event(
                 title=f"Session {i}",
                 slug=f"add-series-pw-session-{i}",
                 start_datetime=timezone.now() + timedelta(days=7 * i),
                 origin="studio",
-                event_group=group,
+                event_series=series,
                 series_position=i,
             ).save()
         connection.close()
@@ -301,21 +302,21 @@ class TestScenario5AddOccurrence:
         ctx = _auth_context(browser, "staff-eg5@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/studio/event-groups/{group.pk}/",
+            f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
         future = date.today() + timedelta(days=80)
         page.fill('input[name="start_date"]', future.strftime("%d/%m/%Y"))
         page.locator('[data-testid="add-occurrence-submit"]').click()
-        page.wait_for_url(re.compile(rf".*/studio/event-groups/{group.pk}/$"))
+        page.wait_for_url(re.compile(rf".*/studio/event-series/{series.pk}/$"))
 
-        rows = page.locator('[data-testid="event-group-member-row"]')
+        rows = page.locator('[data-testid="event-series-member-row"]')
         assert rows.count() == 7
 
-        new_event = group.events.order_by("-series_position").first()
+        new_event = series.events.order_by("-series_position").first()
         assert new_event.series_position == 7
         assert new_event.origin == "studio"
-        assert new_event.event_group_id == group.pk
+        assert new_event.event_series_id == series.pk
 
         ctx.close()
 
@@ -332,7 +333,7 @@ class TestScenario6DeleteSeries:
         from django.utils import timezone
 
         from accounts.models import User
-        from events.models import Event, EventGroup, EventRegistration
+        from events.models import Event, EventRegistration, EventSeries
 
         _reset_event_state()
         _create_staff_user("staff-eg6@test.com")
@@ -340,12 +341,12 @@ class TestScenario6DeleteSeries:
             email="viewer-eg6@test.com",
             defaults={"email_verified": True},
         )
-        group = EventGroup(
+        series = EventSeries(
             name="Doomed Series",
             slug="doomed-series",
             start_time=datetime(2026, 1, 1, 18, 0).time(),
         )
-        group.save()
+        series.save()
         events = []
         for i in range(1, 7):
             ev = Event(
@@ -353,7 +354,7 @@ class TestScenario6DeleteSeries:
                 slug=f"doomed-session-{i}",
                 start_datetime=timezone.now() + timedelta(days=7 * i),
                 origin="studio",
-                event_group=group,
+                event_series=series,
                 series_position=i,
             )
             ev.save()
@@ -364,16 +365,16 @@ class TestScenario6DeleteSeries:
         ctx = _auth_context(browser, "staff-eg6@test.com")
         page = ctx.new_page()
         page.goto(
-            f"{django_server}/studio/event-groups/{group.pk}/",
+            f"{django_server}/studio/event-series/{series.pk}/",
             wait_until="domcontentloaded",
         )
         # Bypass the JS confirm() dialog.
         page.on("dialog", lambda d: d.accept())
-        page.locator('[data-testid="event-group-delete-submit"]').click()
+        page.locator('[data-testid="event-series-delete-submit"]').click()
         page.wait_for_url(re.compile(r".*/studio/events/$"))
 
-        # Group is gone; the events remain in place with no series label.
-        assert EventGroup.objects.filter(pk=group.pk).count() == 0
+        # Series is gone; the events remain in place with no series label.
+        assert EventSeries.objects.filter(pk=series.pk).count() == 0
         assert Event.objects.filter(slug__startswith="doomed-session-").count() == 6
         # The registration row survives (DB not destroyed).
         assert (
@@ -392,7 +393,7 @@ class TestScenario6DeleteSeries:
 @pytest.mark.django_db(transaction=True)
 class TestScenario7ValidationGuard:
     def test_zero_occurrences_rejected(self, django_server, browser):
-        from events.models import Event, EventGroup
+        from events.models import Event, EventSeries
 
         _reset_event_state()
         _create_staff_user("staff-eg7@test.com")
@@ -401,7 +402,7 @@ class TestScenario7ValidationGuard:
 
         # Zero is rejected.
         page.goto(
-            f"{django_server}/studio/event-groups/new",
+            f"{django_server}/studio/event-series/new",
             wait_until="domcontentloaded",
         )
         start = _next_weekday(2)
@@ -415,12 +416,12 @@ class TestScenario7ValidationGuard:
             "document.querySelector('input[name=\"occurrences\"]').removeAttribute('min')"
         )
         page.fill('input[name="occurrences"]', "0")
-        page.locator('[data-testid="event-group-submit"]').click()
+        page.locator('[data-testid="event-series-submit"]').click()
         # Stay on /new, error rendered, no rows created.
         page.wait_for_load_state("domcontentloaded")
-        assert "/studio/event-groups/new" in page.url
+        assert "/studio/event-series/new" in page.url
         assert page.locator('[data-testid="error-occurrences"]').is_visible()
-        assert EventGroup.objects.count() == 0
+        assert EventSeries.objects.count() == 0
         assert Event.objects.count() == 0
 
         # 27 is rejected.
@@ -432,11 +433,11 @@ class TestScenario7ValidationGuard:
             "document.querySelector('input[name=\"occurrences\"]').removeAttribute('max')"
         )
         page.fill('input[name="occurrences"]', "27")
-        page.locator('[data-testid="event-group-submit"]').click()
+        page.locator('[data-testid="event-series-submit"]').click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/studio/event-groups/new" in page.url
+        assert "/studio/event-series/new" in page.url
         assert page.locator('[data-testid="error-occurrences"]').is_visible()
-        assert EventGroup.objects.count() == 0
+        assert EventSeries.objects.count() == 0
         assert Event.objects.count() == 0
 
         ctx.close()
@@ -453,15 +454,15 @@ class TestScenario8PublicSeriesPage:
         from django.db import connection
         from django.utils import timezone
 
-        from events.models import Event, EventGroup
+        from events.models import Event, EventSeries
 
         _reset_event_state()
-        group = EventGroup(
+        series = EventSeries(
             name="Public Series",
             slug="public-series",
             start_time=datetime(2026, 1, 1, 18, 0).time(),
         )
-        group.save()
+        series.save()
         for i in range(1, 7):
             Event(
                 title=f"Public Session {i}",
@@ -469,7 +470,7 @@ class TestScenario8PublicSeriesPage:
                 start_datetime=timezone.now() + timedelta(days=7 * i),
                 status="upcoming",
                 origin="studio",
-                event_group=group,
+                event_series=series,
                 series_position=i,
             ).save()
         connection.close()
@@ -503,22 +504,22 @@ class TestScenario9ListingShowsSeriesLink:
         from django.db import connection
         from django.utils import timezone
 
-        from events.models import Event, EventGroup
+        from events.models import Event, EventSeries
 
         _reset_event_state()
-        group = EventGroup(
+        series = EventSeries(
             name="Listed Public Series",
             slug="listed-public-series",
             start_time=datetime(2026, 1, 1, 18, 0).time(),
         )
-        group.save()
+        series.save()
         Event(
             title="Grouped Event",
             slug="listed-grouped-event",
             start_datetime=timezone.now() + timedelta(days=7),
             status="upcoming",
             origin="studio",
-            event_group=group,
+            event_series=series,
             series_position=1,
         ).save()
         Event(
@@ -536,7 +537,7 @@ class TestScenario9ListingShowsSeriesLink:
             f"{django_server}/events?filter=upcoming",
             wait_until="domcontentloaded",
         )
-        # The grouped event shows the series link, the standalone does not.
+        # The series-linked event shows the series link, the standalone does not.
         series_link = page.locator('[data-testid="event-card-series-link"]')
         assert series_link.count() == 1
         assert "Listed Public Series" in series_link.first.inner_text()

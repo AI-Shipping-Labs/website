@@ -1,6 +1,6 @@
-"""Tests for the Studio event-group create/detail/edit/delete views.
+"""Tests for the Studio event-series create/detail/edit/delete views.
 
-Issue #564.
+Issue #564 (renamed from event-group in #575).
 """
 
 from datetime import date, time, timedelta
@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from events.models import Event, EventGroup
+from events.models import Event, EventSeries
 
 User = get_user_model()
 
@@ -27,29 +27,29 @@ class StaffMixin:
         self.client.login(email='staff@test.com', password='pass')
 
 
-class StudioEventGroupAccessTest(StaffMixin, TestCase):
-    """Access control on the studio event-group endpoints."""
+class StudioEventSeriesAccessTest(StaffMixin, TestCase):
+    """Access control on the studio event-series endpoints."""
 
     def test_anonymous_redirected_from_new(self):
         client = Client()
-        response = client.get('/studio/event-groups/new')
+        response = client.get('/studio/event-series/new')
         self.assertEqual(response.status_code, 302)
 
     def test_non_staff_forbidden(self):
         User.objects.create_user(email='plain@test.com', password='pass')
         client = Client()
         client.login(email='plain@test.com', password='pass')
-        response = client.get('/studio/event-groups/new')
+        response = client.get('/studio/event-series/new')
         self.assertEqual(response.status_code, 403)
 
     def test_staff_get_new_returns_200(self):
-        response = self.client.get('/studio/event-groups/new')
+        response = self.client.get('/studio/event-series/new')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'event-group-submit')
+        self.assertContains(response, 'event-series-submit')
 
 
-class StudioEventGroupCreateTest(StaffMixin, TestCase):
-    """``POST /studio/event-groups/new`` creates a group + N events."""
+class StudioEventSeriesCreateTest(StaffMixin, TestCase):
+    """``POST /studio/event-series/new`` creates a series + N events."""
 
     def _post_valid(self, **overrides):
         # Use a future date so we don't bump into past-date guards.
@@ -68,39 +68,39 @@ class StudioEventGroupCreateTest(StaffMixin, TestCase):
             'platform': 'zoom',
         }
         payload.update(overrides)
-        return self.client.post('/studio/event-groups/new', payload)
+        return self.client.post('/studio/event-series/new', payload)
 
-    def test_creates_one_group_and_six_events(self):
+    def test_creates_one_series_and_six_events(self):
         response = self._post_valid()
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(EventGroup.objects.count(), 1)
-        group = EventGroup.objects.get()
-        self.assertEqual(group.events.count(), 6)
-        self.assertEqual(group.slug, 'spring-workshop-series')
+        self.assertEqual(EventSeries.objects.count(), 1)
+        series = EventSeries.objects.get()
+        self.assertEqual(series.events.count(), 6)
+        self.assertEqual(series.slug, 'spring-workshop-series')
 
-    def test_events_are_studio_origin_and_linked_to_group(self):
+    def test_events_are_studio_origin_and_linked_to_series(self):
         self._post_valid()
-        group = EventGroup.objects.get()
-        events = list(group.events.all().order_by('series_position'))
+        series = EventSeries.objects.get()
+        events = list(series.events.all().order_by('series_position'))
         for i, event in enumerate(events, start=1):
             self.assertEqual(event.origin, 'studio')
             self.assertIn(event.source_repo, (None, ''))
-            self.assertEqual(event.event_group_id, group.pk)
+            self.assertEqual(event.event_series_id, series.pk)
             self.assertEqual(event.series_position, i)
             self.assertEqual(event.status, 'draft')
 
     def test_events_spaced_seven_days_apart(self):
         self._post_valid()
-        group = EventGroup.objects.get()
-        events = list(group.events.all().order_by('series_position'))
+        series = EventSeries.objects.get()
+        events = list(series.events.all().order_by('series_position'))
         for i in range(1, len(events)):
             delta = events[i].start_datetime - events[i - 1].start_datetime
             self.assertEqual(delta, timedelta(days=7))
 
     def test_end_datetime_equals_start_plus_duration(self):
         self._post_valid(duration_hours='1.5')
-        group = EventGroup.objects.get()
-        for event in group.events.all():
+        series = EventSeries.objects.get()
+        for event in series.events.all():
             self.assertEqual(
                 event.end_datetime - event.start_datetime,
                 timedelta(hours=1.5),
@@ -109,14 +109,14 @@ class StudioEventGroupCreateTest(StaffMixin, TestCase):
     def test_occurrences_zero_re_renders_form_and_creates_nothing(self):
         response = self._post_valid(occurrences='0')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(EventGroup.objects.count(), 0)
+        self.assertEqual(EventSeries.objects.count(), 0)
         self.assertEqual(Event.objects.count(), 0)
         self.assertContains(response, 'error-occurrences')
 
     def test_occurrences_too_high_re_renders_form_and_creates_nothing(self):
         response = self._post_valid(occurrences='27')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(EventGroup.objects.count(), 0)
+        self.assertEqual(EventSeries.objects.count(), 0)
         self.assertEqual(Event.objects.count(), 0)
         self.assertContains(response, 'error-occurrences')
 
@@ -126,21 +126,21 @@ class StudioEventGroupCreateTest(StaffMixin, TestCase):
             start_datetime=timezone.now(), origin='studio',
         )
         self._post_valid()
-        group = EventGroup.objects.get()
-        first = group.events.get(series_position=1)
+        series = EventSeries.objects.get()
+        first = series.events.get(series_position=1)
         # The auto-derived ``spring-workshop-series-session-1`` is taken,
         # so the generator picks ``...-1-2`` for this session.
         self.assertNotEqual(first.slug, 'spring-workshop-series-session-1')
         self.assertTrue(first.slug.startswith('spring-workshop-series-session-1'))
 
 
-class StudioEventGroupDetailTest(StaffMixin, TestCase):
+class StudioEventSeriesDetailTest(StaffMixin, TestCase):
     """Detail page shows member events with edit links."""
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.group = EventGroup.objects.create(
+        cls.series = EventSeries.objects.create(
             name='Detail Series', start_time=time(18, 0),
         )
         for i in range(1, 4):
@@ -148,46 +148,46 @@ class StudioEventGroupDetailTest(StaffMixin, TestCase):
                 title=f'Session {i}',
                 slug=f'detail-session-{i}',
                 start_datetime=timezone.now() + timedelta(days=7 * i),
-                event_group=cls.group, series_position=i,
+                event_series=cls.series, series_position=i,
                 origin='studio',
             )
 
     def test_detail_renders_member_events(self):
-        response = self.client.get(f'/studio/event-groups/{self.group.pk}/')
+        response = self.client.get(f'/studio/event-series/{self.series.pk}/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Session 1')
         self.assertContains(response, 'Session 2')
         self.assertContains(response, 'Session 3')
 
     def test_edit_links_point_to_event_edit(self):
-        response = self.client.get(f'/studio/event-groups/{self.group.pk}/')
-        event = self.group.events.get(series_position=1)
+        response = self.client.get(f'/studio/event-series/{self.series.pk}/')
+        event = self.series.events.get(series_position=1)
         self.assertContains(
             response, f'/studio/events/{event.pk}/edit',
         )
 
-    def test_metadata_post_updates_group(self):
+    def test_metadata_post_updates_series(self):
         response = self.client.post(
-            f'/studio/event-groups/{self.group.pk}/',
+            f'/studio/event-series/{self.series.pk}/',
             {
                 'name': 'Renamed Series',
-                'slug': self.group.slug,
+                'slug': self.series.slug,
                 'description': 'Now with a description.',
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.group.refresh_from_db()
-        self.assertEqual(self.group.name, 'Renamed Series')
-        self.assertIn('description', self.group.description)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.name, 'Renamed Series')
+        self.assertIn('description', self.series.description)
 
 
-class StudioEventGroupAddOccurrenceTest(StaffMixin, TestCase):
+class StudioEventSeriesAddOccurrenceTest(StaffMixin, TestCase):
     """``POST .../add-occurrence`` appends one more event."""
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.group = EventGroup.objects.create(
+        cls.series = EventSeries.objects.create(
             name='Add Series', slug='add-series', start_time=time(18, 0),
         )
         for i in range(1, 4):
@@ -195,58 +195,58 @@ class StudioEventGroupAddOccurrenceTest(StaffMixin, TestCase):
                 title=f'Add Session {i}',
                 slug=f'add-series-session-{i}',
                 start_datetime=timezone.now() + timedelta(days=7 * i),
-                event_group=cls.group, series_position=i, origin='studio',
+                event_series=cls.series, series_position=i, origin='studio',
             )
 
     def test_add_occurrence_creates_one_event_and_advances_position(self):
         start = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
         response = self.client.post(
-            f'/studio/event-groups/{self.group.pk}/add-occurrence',
+            f'/studio/event-series/{self.series.pk}/add-occurrence',
             {'start_date': start, 'duration_hours': '1'},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(self.group.events.count(), 4)
-        new_event = self.group.events.order_by('-series_position').first()
+        self.assertEqual(self.series.events.count(), 4)
+        new_event = self.series.events.order_by('-series_position').first()
         self.assertEqual(new_event.series_position, 4)
         self.assertEqual(new_event.origin, 'studio')
-        self.assertEqual(new_event.event_group_id, self.group.pk)
+        self.assertEqual(new_event.event_series_id, self.series.pk)
 
 
-class StudioEventGroupDeleteTest(StaffMixin, TestCase):
-    """Deleting the group preserves the events and unlinks them."""
+class StudioEventSeriesDeleteTest(StaffMixin, TestCase):
+    """Deleting the series preserves the events and unlinks them."""
 
     def test_delete_unlinks_events(self):
-        group = EventGroup.objects.create(
+        series = EventSeries.objects.create(
             name='To Delete', start_time=time(18, 0),
         )
         Event.objects.create(
             title='Sticky', slug='sticky-event',
             start_datetime=timezone.now(),
-            event_group=group, series_position=1, origin='studio',
+            event_series=series, series_position=1, origin='studio',
         )
         response = self.client.post(
-            f'/studio/event-groups/{group.pk}/delete',
+            f'/studio/event-series/{series.pk}/delete',
         )
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(EventGroup.objects.filter(pk=group.pk).exists())
+        self.assertFalse(EventSeries.objects.filter(pk=series.pk).exists())
         # Event still exists, just unlinked.
         event = Event.objects.get(slug='sticky-event')
-        self.assertIsNone(event.event_group_id)
+        self.assertIsNone(event.event_series_id)
 
 
-class StudioEventListSurfacesGroupsTest(StaffMixin, TestCase):
-    """``/studio/events/`` shows origin badges, group column, new-series button."""
+class StudioEventListSurfacesSeriesTest(StaffMixin, TestCase):
+    """``/studio/events/`` shows origin badges, series column, new-series button."""
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.group = EventGroup.objects.create(
+        cls.series = EventSeries.objects.create(
             name='Listed Series', start_time=time(18, 0),
         )
         cls.studio_event = Event.objects.create(
             title='Studio Member', slug='studio-member',
             start_datetime=timezone.now(),
-            event_group=cls.group, series_position=1, origin='studio',
+            event_series=cls.series, series_position=1, origin='studio',
         )
         cls.github_event = Event.objects.create(
             title='GitHub Event', slug='github-event',
@@ -263,17 +263,17 @@ class StudioEventListSurfacesGroupsTest(StaffMixin, TestCase):
         response = self.client.get('/studio/events/')
         self.assertContains(response, 'data-origin="github"')
 
-    def test_series_column_links_to_group(self):
+    def test_series_column_links_to_series(self):
         response = self.client.get('/studio/events/')
         self.assertContains(
-            response, f'/studio/event-groups/{self.group.pk}/',
+            response, f'/studio/event-series/{self.series.pk}/',
         )
         self.assertContains(response, 'data-testid="event-series-link"')
 
     def test_new_event_series_button_present(self):
         response = self.client.get('/studio/events/')
         self.assertContains(response, 'data-testid="event-series-new-button"')
-        self.assertContains(response, '/studio/event-groups/new')
+        self.assertContains(response, '/studio/event-series/new')
 
     def test_new_event_button_present(self):
         """Issue #574 added the ``New event`` button next to the series one."""
@@ -370,27 +370,68 @@ class StudioEventEditOriginGatingTest(StaffMixin, TestCase):
         # Operational fields (status) still update.
         self.assertEqual(event.status, 'upcoming')
 
-    def test_event_with_parent_group_renders_group_link(self):
-        group = EventGroup.objects.create(
-            name='Parent Group', start_time=time(18, 0),
+    def test_event_with_parent_series_renders_series_link(self):
+        series = EventSeries.objects.create(
+            name='Parent Series', start_time=time(18, 0),
         )
         event = Event.objects.create(
             title='Has Parent', slug='has-parent',
             start_datetime=timezone.now(),
             origin='studio',
-            event_group=group, series_position=1,
+            event_series=series, series_position=1,
         )
         response = self.client.get(f'/studio/events/{event.pk}/edit')
-        self.assertContains(response, 'data-testid="event-parent-group"')
+        self.assertContains(response, 'data-testid="event-parent-series"')
         self.assertContains(
-            response, f'/studio/event-groups/{group.pk}/',
+            response, f'/studio/event-series/{series.pk}/',
         )
 
 
-class StudioEventGroupSidebarTest(StaffMixin, TestCase):
-    """Studio sidebar surfaces the new Event groups link."""
+class StudioEventSeriesSidebarTest(StaffMixin, TestCase):
+    """Studio sidebar surfaces the new Event series link."""
 
-    def test_dashboard_sidebar_includes_event_groups_link(self):
+    def test_dashboard_sidebar_includes_event_series_link(self):
         response = self.client.get('/studio/')
-        self.assertContains(response, 'data-testid="sidebar-event-groups-link"')
-        self.assertContains(response, '/studio/event-groups/')
+        self.assertContains(response, 'data-testid="sidebar-event-series-link"')
+        self.assertContains(response, '/studio/event-series/')
+
+
+class StudioEventGroupsRedirectTest(StaffMixin, TestCase):
+    """Issue #575: legacy ``/studio/event-groups/...`` URLs return 301
+    redirects to the new ``/studio/event-series/...`` URLs so external
+    Studio bookmarks keep working through the rename.
+    """
+
+    def test_list_redirects_to_event_series_list(self):
+        response = self.client.get('/studio/event-groups/', follow=False)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/studio/event-series/')
+
+    def test_new_redirects_to_event_series_new(self):
+        response = self.client.get('/studio/event-groups/new', follow=False)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/studio/event-series/new')
+
+    def test_detail_redirects_preserves_id(self):
+        response = self.client.get('/studio/event-groups/7/', follow=False)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/studio/event-series/7/')
+
+    def test_add_occurrence_redirects_preserves_id(self):
+        response = self.client.post(
+            '/studio/event-groups/7/add-occurrence', follow=False,
+        )
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response['Location'],
+            '/studio/event-series/7/add-occurrence',
+        )
+
+    def test_delete_redirects_preserves_id(self):
+        response = self.client.post(
+            '/studio/event-groups/7/delete', follow=False,
+        )
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response['Location'], '/studio/event-series/7/delete',
+        )

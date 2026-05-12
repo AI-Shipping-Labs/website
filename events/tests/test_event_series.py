@@ -1,13 +1,13 @@
-"""Tests for the EventGroup model and origin invariant on Event.
+"""Tests for the EventSeries model and origin invariant on Event.
 
-Issue #564.
+Issue #564 (renamed from EventGroup in #575).
 
 Covers:
-- ``EventGroup`` model: slug auto-derivation, description markdown.
+- ``EventSeries`` model: slug auto-derivation, description markdown.
 - ``Event.origin`` invariant: github iff source_repo is set.
 - ``studio.utils.is_synced`` branching on ``origin``.
-- Public ``/events/groups/<slug>`` view.
-- Public events list shows series link when an event belongs to a group.
+- Public ``/events/groups/<slug>`` view (URL kept for back-compat).
+- Public events list shows series link when an event belongs to a series.
 """
 
 from datetime import time
@@ -16,48 +16,48 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from events.models import Event, EventGroup
+from events.models import Event, EventSeries
 from studio.utils import is_synced
 
 User = get_user_model()
 
 
-class EventGroupModelTest(TestCase):
-    """EventGroup save behavior and computed properties."""
+class EventSeriesModelTest(TestCase):
+    """EventSeries save behavior and computed properties."""
 
     def test_slug_auto_derived_from_name(self):
-        group = EventGroup.objects.create(
+        series = EventSeries.objects.create(
             name='Spring Workshop Series',
             start_time=time(18, 0),
         )
-        self.assertEqual(group.slug, 'spring-workshop-series')
+        self.assertEqual(series.slug, 'spring-workshop-series')
 
     def test_explicit_slug_preserved(self):
-        group = EventGroup.objects.create(
+        series = EventSeries.objects.create(
             name='Spring Workshop Series',
             slug='custom-slug',
             start_time=time(18, 0),
         )
-        self.assertEqual(group.slug, 'custom-slug')
+        self.assertEqual(series.slug, 'custom-slug')
 
     def test_description_renders_to_html(self):
-        group = EventGroup.objects.create(
+        series = EventSeries.objects.create(
             name='Markdown Series',
             description='# Heading\n\nA paragraph.',
             start_time=time(18, 0),
         )
-        self.assertIn('<h1>Heading</h1>', group.description_html)
+        self.assertIn('<h1>Heading</h1>', series.description_html)
 
     def test_event_count_reflects_member_events(self):
-        group = EventGroup.objects.create(
+        series = EventSeries.objects.create(
             name='Counted', start_time=time(18, 0),
         )
         Event.objects.create(
             title='Session 1', slug='counted-session-1',
             start_datetime=timezone.now(),
-            event_group=group, series_position=1, origin='studio',
+            event_series=series, series_position=1, origin='studio',
         )
-        self.assertEqual(group.event_count, 1)
+        self.assertEqual(series.event_count, 1)
 
 
 class EventOriginInvariantTest(TestCase):
@@ -135,34 +135,34 @@ class IsSyncedHelperTest(TestCase):
         self.assertFalse(is_synced(LegacyEmpty()))
 
 
-class PublicEventGroupViewTest(TestCase):
+class PublicEventSeriesViewTest(TestCase):
     """Public ``/events/groups/<slug>`` page."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.group = EventGroup.objects.create(
+        cls.series = EventSeries.objects.create(
             name='Spring Series', start_time=time(18, 0),
         )
         cls.published_event = Event.objects.create(
             title='Series Session 1', slug='series-session-1',
             start_datetime=timezone.now(),
             status='upcoming',
-            event_group=cls.group, series_position=1, origin='studio',
+            event_series=cls.series, series_position=1, origin='studio',
         )
         cls.draft_event = Event.objects.create(
             title='Series Session 2', slug='series-session-2',
             start_datetime=timezone.now(),
             status='draft',
-            event_group=cls.group, series_position=2, origin='studio',
+            event_series=cls.series, series_position=2, origin='studio',
         )
 
     def test_anonymous_visitor_sees_published_events(self):
-        response = self.client.get(f'/events/groups/{self.group.slug}')
+        response = self.client.get(f'/events/groups/{self.series.slug}')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Series Session 1')
 
     def test_anonymous_visitor_does_not_see_drafts(self):
-        response = self.client.get(f'/events/groups/{self.group.slug}')
+        response = self.client.get(f'/events/groups/{self.series.slug}')
         self.assertNotContains(response, 'Series Session 2')
 
     def test_unknown_slug_returns_404(self):
@@ -174,7 +174,7 @@ class PublicEventGroupViewTest(TestCase):
             email='staff@test.com', password='pass', is_staff=True,
         )
         self.client.force_login(staff)
-        response = self.client.get(f'/events/groups/{self.group.slug}')
+        response = self.client.get(f'/events/groups/{self.series.slug}')
         self.assertContains(response, 'Series Session 2')
 
     def test_event_detail_url_still_resolves_after_groups_route(self):
@@ -184,11 +184,11 @@ class PublicEventGroupViewTest(TestCase):
 
 
 class PublicEventsListSeriesLinkTest(TestCase):
-    """Public events listing surfaces a series link for grouped events."""
+    """Public events listing surfaces a series link for series-linked events."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.group = EventGroup.objects.create(
+        cls.series = EventSeries.objects.create(
             name='Grouped Series', slug='grouped-series',
             start_time=time(18, 0),
         )
@@ -196,7 +196,7 @@ class PublicEventsListSeriesLinkTest(TestCase):
             title='Grouped Event', slug='grouped-event',
             start_datetime=timezone.now() + timezone.timedelta(days=1),
             status='upcoming',
-            event_group=cls.group, series_position=1, origin='studio',
+            event_series=cls.series, series_position=1, origin='studio',
         )
         cls.standalone = Event.objects.create(
             title='Standalone Event', slug='standalone-event',
@@ -216,7 +216,7 @@ class PublicEventsListSeriesLinkTest(TestCase):
         # is rendered for it.
         self.assertContains(response, 'Standalone Event')
         # The total "Series: " occurrences must equal the number of
-        # grouped events on the page (1).
+        # series-linked events on the page (1).
         self.assertEqual(
             response.content.decode().count('Series:'), 1,
         )

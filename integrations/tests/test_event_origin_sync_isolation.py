@@ -12,7 +12,7 @@ from datetime import datetime
 from django.test import TestCase
 from django.utils import timezone
 
-from events.models import Event, EventGroup
+from events.models import Event, EventSeries
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 
@@ -55,7 +55,7 @@ class EventSyncStudioOriginIsolationTest(TestCase):
         a unique-slug collision); either way the studio row is
         unchanged.
         """
-        group = EventGroup.objects.create(
+        series = EventSeries.objects.create(
             name='Series',
             slug='series',
             start_time=datetime(2026, 1, 1, 18, 0).time(),
@@ -66,7 +66,7 @@ class EventSyncStudioOriginIsolationTest(TestCase):
             description='Studio body',
             start_datetime=timezone.now(),
             origin='studio',
-            event_group=group,
+            event_series=series,
             series_position=1,
         )
 
@@ -90,4 +90,4 @@ class EventSyncStudioOriginIsolationTest(TestCase):
         self.assertEqual(studio_event.origin, 'studio')
         self.assertEqual(studio_event.title, 'Studio Title')
         self.assertEqual(studio_event.description, 'Studio body')
-        self.assertEqual(studio_event.event_group_id, group.pk)
+        self.assertEqual(studio_event.event_series_id, series.pk)

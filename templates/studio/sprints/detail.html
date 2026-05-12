@@ -60,21 +60,21 @@
   </dl>
 </div>
 
-<h2 class="text-lg font-semibold text-foreground mb-4">Event group</h2>
-<div class="bg-card border border-border rounded-lg p-6 mb-8" data-testid="sprint-event-group-section">
-  {% if event_group %}
+<h2 class="text-lg font-semibold text-foreground mb-4">Event series</h2>
+<div class="bg-card border border-border rounded-lg p-6 mb-8" data-testid="sprint-event-series-section">
+  {% if event_series %}
     <div class="flex items-start justify-between mb-4">
       <div>
-        <a href="{% url 'studio_event_group_detail' group_id=event_group.pk %}"
+        <a href="{% url 'studio_event_series_detail' series_id=event_series.pk %}"
            class="text-accent hover:underline text-base font-medium"
-           data-testid="sprint-event-group-link">{{ event_group.name }}</a>
-        <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-event-group-count">
-          {{ event_group_events|length }} occurrence{{ event_group_events|length|pluralize }}
+           data-testid="sprint-event-series-link">{{ event_series.name }}</a>
+        <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-event-series-count">
+          {{ event_series_events|length }} occurrence{{ event_series_events|length|pluralize }}
         </p>
       </div>
     </div>
-    {% if event_group_events %}
-    <table class="w-full text-sm" data-testid="sprint-event-group-table">
+    {% if event_series_events %}
+    <table class="w-full text-sm" data-testid="sprint-event-series-table">
       <thead class="text-xs uppercase tracking-wider text-muted-foreground">
         <tr>
           <th class="text-left py-2 pr-4 font-medium">Date / time</th>
@@ -83,8 +83,8 @@
         </tr>
       </thead>
       <tbody class="divide-y divide-border">
-        {% for ev in event_group_events %}
-        <tr data-testid="sprint-event-group-row">
+        {% for ev in event_series_events %}
+        <tr data-testid="sprint-event-series-row">
           <td class="py-2 pr-4 text-muted-foreground whitespace-nowrap">{{ ev.start_datetime|date:"Y-m-d H:i" }}</td>
           <td class="py-2 pr-4">
             <a href="{% url 'studio_event_edit' event_id=ev.pk %}"
@@ -96,18 +96,18 @@
       </tbody>
     </table>
     {% else %}
-    <p class="text-sm text-muted-foreground" data-testid="sprint-event-group-empty-events">
-      This event group has no events yet.
+    <p class="text-sm text-muted-foreground" data-testid="sprint-event-series-empty-events">
+      This event series has no events yet.
     </p>
     {% endif %}
   {% else %}
-    <p class="text-sm text-muted-foreground mb-4" data-testid="sprint-event-group-empty">
-      No event group linked.
+    <p class="text-sm text-muted-foreground mb-4" data-testid="sprint-event-series-empty">
+      No event series linked.
     </p>
-    <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}#event-group-field"
+    <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}#event-series-field"
        class="inline-flex items-center bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-       data-testid="sprint-event-group-link-cta">
-      Link an event group
+       data-testid="sprint-event-series-link-cta">
+      Link an event series
     </a>
   {% endif %}
 </div>

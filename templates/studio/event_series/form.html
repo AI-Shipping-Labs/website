@@ -12,7 +12,7 @@
   <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
     <a href="{% url 'studio_event_list' %}" class="hover:text-foreground">Events</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <a href="{% url 'studio_event_group_list' %}" class="hover:text-foreground">Event groups</a>
+    <a href="{% url 'studio_event_series_list' %}" class="hover:text-foreground">Event series</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
     <span class="text-foreground">New event series</span>
   </div>
@@ -25,7 +25,7 @@
 </div>
 
 <div class="max-w-3xl">
-  <form method="post" class="space-y-6" data-testid="event-group-create-form">
+  <form method="post" class="space-y-6" data-testid="event-series-create-form">
     {% csrf_token %}
 
     <div class="bg-card border border-border rounded-lg p-6 space-y-4">
@@ -114,7 +114,7 @@
     <div class="flex items-center gap-3">
       <button type="submit"
               class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
-              data-testid="event-group-submit">
+              data-testid="event-series-submit">
         Create series
       </button>
       <a href="{% url 'studio_event_list' %}"

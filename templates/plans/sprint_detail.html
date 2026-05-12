@@ -36,11 +36,11 @@
       </div>
       {% endif %}
 
-      {% if event_group and event_group_events %}
+      {% if event_series and event_series_events %}
       <section class="mb-6 rounded-2xl border border-border bg-card p-6" data-testid="sprint-meeting-schedule">
         <h2 class="text-lg font-semibold text-foreground mb-3">Meeting schedule</h2>
         <ul class="divide-y divide-border" data-testid="sprint-meeting-schedule-list">
-          {% for ev in event_group_events %}
+          {% for ev in event_series_events %}
           <li class="py-3" data-testid="sprint-meeting-schedule-row">
             <a href="{% url 'event_detail' slug=ev.slug %}"
                class="block hover:bg-secondary/50 -mx-2 px-2 rounded-md transition-colors {% if ev.is_past %}text-muted-foreground{% else %}text-foreground{% endif %}"

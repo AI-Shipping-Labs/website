@@ -78,7 +78,7 @@
         <div class="space-y-6">
           {% for event in upcoming_events %}
           <article class="group rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50">
-            {% if event.event_group %}
+            {% if event.event_series %}
             {% comment %}
             The series link lives OUTSIDE the wrapping clickable-card <a>
             below. HTML5 forbids nested anchors — putting an <a> inside
@@ -89,8 +89,8 @@
             card-level click handler lands on the <article>.
             {% endcomment %}
             <p class="mb-2 text-sm" data-testid="event-card-series-link">
-              <a href="{{ event.event_group.get_absolute_url }}" class="text-accent hover:underline" onclick="event.stopPropagation();">
-                Series: {{ event.event_group.name }}
+              <a href="{{ event.event_series.get_absolute_url }}" class="text-accent hover:underline" onclick="event.stopPropagation();">
+                Series: {{ event.event_series.name }}
               </a>
             </p>
             {% endif %}

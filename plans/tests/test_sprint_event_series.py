@@ -1,10 +1,11 @@
-"""Tests for the Sprint -> EventGroup link (issue #565).
+"""Tests for the Sprint -> EventSeries link (issue #565, renamed from
+event-group in #575).
 
 Covers the model-level relationship (FK direction, ``SET_NULL`` semantics,
-one-group-many-sprints) and the public sprint detail page's "Meeting
+one-series-many-sprints) and the public sprint detail page's "Meeting
 schedule" section (visible, hidden empty, hidden unlinked, single extra
 query). Studio form / detail surfaces are covered by
-``studio.tests.test_sprint_event_group``.
+``studio.tests.test_sprint_event_series``.
 """
 
 import datetime
@@ -13,14 +14,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from events.models import Event, EventGroup
+from events.models import Event, EventSeries
 from plans.models import Sprint
 
 User = get_user_model()
 
 
-def _make_event_group(name='Weekly office hours', slug='weekly-oh'):
-    return EventGroup.objects.create(
+def _make_event_series(name='Weekly office hours', slug='weekly-oh'):
+    return EventSeries.objects.create(
         name=name,
         slug=slug,
         cadence='weekly',
@@ -31,12 +32,12 @@ def _make_event_group(name='Weekly office hours', slug='weekly-oh'):
     )
 
 
-def _make_event(group, *, position, status='upcoming', location=''):
+def _make_event(series, *, position, status='upcoming', location=''):
     base = datetime.datetime(2026, 5, 6, 18, 0, tzinfo=datetime.timezone.utc)
     start = base + datetime.timedelta(days=7 * (position - 1))
-    slug = f'{group.slug}-session-{position}'
+    slug = f'{series.slug}-session-{position}'
     return Event.objects.create(
-        title=f'{group.name} — Session {position}',
+        title=f'{series.name} — Session {position}',
         slug=slug,
         description='',
         kind='standard',
@@ -45,67 +46,67 @@ def _make_event(group, *, position, status='upcoming', location=''):
         timezone='Europe/Berlin',
         status=status,
         origin='studio',
-        event_group=group,
+        event_series=series,
         series_position=position,
         location=location,
         published=True,
     )
 
 
-class SprintEventGroupRelationTest(TestCase):
-    """Model-level FK semantics: ``SET_NULL`` + many-sprints-per-group."""
+class SprintEventSeriesRelationTest(TestCase):
+    """Model-level FK semantics: ``SET_NULL`` + many-sprints-per-series."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.group = _make_event_group()
+        cls.series = _make_event_series()
         cls.s1 = Sprint.objects.create(
             name='May cohort', slug='may-cohort',
             start_date=datetime.date(2026, 5, 1),
-            event_group=cls.group,
+            event_series=cls.series,
         )
         cls.s2 = Sprint.objects.create(
             name='June cohort', slug='june-cohort',
             start_date=datetime.date(2026, 6, 1),
-            event_group=cls.group,
+            event_series=cls.series,
         )
 
-    def test_one_event_group_can_back_multiple_sprints(self):
-        # Both sprints reference the same group; no uniqueness constraint
+    def test_one_event_series_can_back_multiple_sprints(self):
+        # Both sprints reference the same series; no uniqueness constraint
         # blocks the second assignment.
-        self.assertEqual(self.s1.event_group_id, self.group.pk)
-        self.assertEqual(self.s2.event_group_id, self.group.pk)
-        self.assertEqual(self.group.sprints.count(), 2)
+        self.assertEqual(self.s1.event_series_id, self.series.pk)
+        self.assertEqual(self.s2.event_series_id, self.series.pk)
+        self.assertEqual(self.series.sprints.count(), 2)
 
-    def test_deleting_event_group_unlinks_sprints_but_keeps_them(self):
-        event = _make_event(self.group, position=1)
+    def test_deleting_event_series_unlinks_sprints_but_keeps_them(self):
+        event = _make_event(self.series, position=1)
         # SET_NULL: the sprint and the event should both survive deletion
-        # of the group, with the FK cleared. The event has its own SET_NULL
-        # back-link to the group (issue #564) so it stays alive too.
-        self.group.delete()
+        # of the series, with the FK cleared. The event has its own SET_NULL
+        # back-link to the series (issue #564) so it stays alive too.
+        self.series.delete()
 
         self.s1.refresh_from_db()
         self.s2.refresh_from_db()
-        self.assertIsNone(self.s1.event_group)
-        self.assertIsNone(self.s2.event_group)
-        # The Event row survives -- only its event_group FK is cleared.
+        self.assertIsNone(self.s1.event_series)
+        self.assertIsNone(self.s2.event_series)
+        # The Event row survives -- only its event_series FK is cleared.
         event.refresh_from_db()
-        self.assertIsNone(event.event_group)
+        self.assertIsNone(event.event_series)
         # Sprints are NOT cascaded.
         self.assertTrue(Sprint.objects.filter(pk=self.s1.pk).exists())
         self.assertTrue(Sprint.objects.filter(pk=self.s2.pk).exists())
 
-    def test_event_group_unlink_does_not_delete_group(self):
-        # Clearing the FK on a sprint must not touch the group or its events.
-        event = _make_event(self.group, position=1)
-        self.s1.event_group = None
+    def test_event_series_unlink_does_not_delete_series(self):
+        # Clearing the FK on a sprint must not touch the series or its events.
+        event = _make_event(self.series, position=1)
+        self.s1.event_series = None
         self.s1.save()
 
-        self.assertTrue(EventGroup.objects.filter(pk=self.group.pk).exists())
+        self.assertTrue(EventSeries.objects.filter(pk=self.series.pk).exists())
         event.refresh_from_db()
-        self.assertEqual(event.event_group_id, self.group.pk)
+        self.assertEqual(event.event_series_id, self.series.pk)
         # The other sprint's link is untouched.
         self.s2.refresh_from_db()
-        self.assertEqual(self.s2.event_group_id, self.group.pk)
+        self.assertEqual(self.s2.event_series_id, self.series.pk)
 
 
 class PublicSprintDetailMeetingScheduleTest(TestCase):
@@ -113,16 +114,16 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.group = _make_event_group(name='Wed OH', slug='wed-oh')
-        cls.event_1 = _make_event(cls.group, position=1, location='Zoom')
-        cls.event_2 = _make_event(cls.group, position=2, location='Zoom')
-        cls.event_3 = _make_event(cls.group, position=3, location='Zoom')
+        cls.series = _make_event_series(name='Wed OH', slug='wed-oh')
+        cls.event_1 = _make_event(cls.series, position=1, location='Zoom')
+        cls.event_2 = _make_event(cls.series, position=2, location='Zoom')
+        cls.event_3 = _make_event(cls.series, position=3, location='Zoom')
         cls.linked_sprint = Sprint.objects.create(
             name='May 2026 sprint', slug='may-2026-sprint',
             start_date=datetime.date(2026, 5, 1),
             status='active',
             min_tier_level=0,
-            event_group=cls.group,
+            event_series=cls.series,
         )
         cls.unlinked_sprint = Sprint.objects.create(
             name='Solo sprint', slug='solo-sprint',
@@ -130,15 +131,15 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
             status='active',
             min_tier_level=0,
         )
-        cls.empty_group = _make_event_group(
-            name='Empty group', slug='empty-group',
+        cls.empty_series = _make_event_series(
+            name='Empty series', slug='empty-series',
         )
-        cls.empty_group_sprint = Sprint.objects.create(
+        cls.empty_series_sprint = Sprint.objects.create(
             name='Empty sprint', slug='empty-sprint',
             start_date=datetime.date(2026, 5, 1),
             status='active',
             min_tier_level=0,
-            event_group=cls.empty_group,
+            event_series=cls.empty_series,
         )
 
     def test_section_renders_for_linked_sprint_with_events(self):
@@ -162,7 +163,7 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         # Heading appears.
         self.assertContains(response, 'Meeting schedule')
 
-    def test_section_hidden_when_sprint_has_no_event_group(self):
+    def test_section_hidden_when_sprint_has_no_event_series(self):
         url = reverse(
             'sprint_detail',
             kwargs={'sprint_slug': self.unlinked_sprint.slug},
@@ -174,14 +175,14 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         )
         self.assertNotContains(response, 'Meeting schedule')
 
-    def test_section_hidden_when_linked_group_has_no_events(self):
+    def test_section_hidden_when_linked_series_has_no_events(self):
         url = reverse(
             'sprint_detail',
-            kwargs={'sprint_slug': self.empty_group_sprint.slug},
+            kwargs={'sprint_slug': self.empty_series_sprint.slug},
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        # The section must be hidden entirely when the group is empty
+        # The section must be hidden entirely when the series is empty
         # (no "no meetings yet" copy leaks to the public).
         self.assertNotContains(
             response, 'data-testid="sprint-meeting-schedule"',
@@ -204,7 +205,7 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
             timezone='Europe/Berlin',
             status='upcoming',
             origin='studio',
-            event_group=self.group,
+            event_series=self.series,
             series_position=99,
             published=True,
         )
@@ -220,10 +221,10 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         self.assertLess(pos_earliest, pos_session_1)
 
     def test_query_count_is_bounded(self):
-        # ``select_related('event_group')`` collapses the group lookup
+        # ``select_related('event_series')`` collapses the series lookup
         # into the sprint query; ``prefetch_related`` adds a second
         # query for the events. For an anonymous viewer the only
-        # database hits are the sprint+group join and the events
+        # database hits are the sprint+series join and the events
         # prefetch -- exactly two queries. A regression to N+1 (one
         # query per event) would blow past this immediately as more
         # occurrences are added.
@@ -238,30 +239,30 @@ class PublicSprintDetailMeetingScheduleTest(TestCase):
         # Adding more events MUST NOT increase the query count -- the
         # prefetch should still cover the whole set.
         for i in range(4, 10):
-            _make_event(self.group, position=i)
+            _make_event(self.series, position=i)
         with self.assertNumQueries(2):
             self.client.get(url)
 
 
-class SprintEventGroupFKDirectionTest(TestCase):
+class SprintEventSeriesFKDirectionTest(TestCase):
     """The FK lives on Sprint and is optional on both ends."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.group = _make_event_group()
+        cls.series = _make_event_series()
 
-    def test_sprint_can_be_created_without_event_group(self):
+    def test_sprint_can_be_created_without_event_series(self):
         # blank=True / null=True default behavior: no value required.
         sprint = Sprint.objects.create(
             name='Lone', slug='lone',
             start_date=datetime.date(2026, 5, 1),
         )
-        self.assertIsNone(sprint.event_group)
+        self.assertIsNone(sprint.event_series)
 
-    def test_related_name_sprints_resolves_from_group(self):
+    def test_related_name_sprints_resolves_from_series(self):
         s = Sprint.objects.create(
             name='S', slug='s',
             start_date=datetime.date(2026, 5, 1),
-            event_group=self.group,
+            event_series=self.series,
         )
-        self.assertIn(s, list(self.group.sprints.all()))
+        self.assertIn(s, list(self.series.sprints.all()))

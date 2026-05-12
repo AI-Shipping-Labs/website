@@ -25,14 +25,14 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 
 def _reset_event_state():
-    """Delete event/group/registration rows for a clean slate."""
+    """Delete event/series/registration rows for a clean slate."""
     from django.db import connection
 
-    from events.models import Event, EventGroup, EventRegistration
+    from events.models import Event, EventRegistration, EventSeries
 
     EventRegistration.objects.all().delete()
     Event.objects.all().delete()
-    EventGroup.objects.all().delete()
+    EventSeries.objects.all().delete()
     connection.close()
 
 

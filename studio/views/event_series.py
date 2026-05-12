@@ -1,15 +1,20 @@
-"""Studio views for event-group CRUD.
+"""Studio views for event-series CRUD.
 
-Issue #564. An ``EventGroup`` lets staff create a weekly recurring series
-in one form submission. Once created the group's only role is to keep
-the events linked together — every member event is an independent row.
+Issue #564. An ``EventSeries`` lets staff create a weekly recurring
+series in one form submission. Once created the series' only role is to
+keep the events linked together — every member event is an independent
+row.
 
 The create form generates N ``Event`` rows 7 days apart and atomically
-commits the group + events in a single transaction. Validation errors
+commits the series + events in a single transaction. Validation errors
 roll back the whole flow so the database never holds a partial series.
 
-Deleting the group leaves the member events alive (FK is
+Deleting the series leaves the member events alive (FK is
 ``on_delete=SET_NULL``); staff must delete each event explicitly.
+
+Issue #575 renamed ``EventGroup`` to ``EventSeries`` everywhere; this
+file moved from ``studio/views/event_groups.py`` to
+``studio/views/event_series.py`` as part of that rename.
 """
 
 import logging
@@ -20,7 +25,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
-from events.models import Event, EventGroup
+from events.models import Event, EventSeries
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
@@ -56,17 +61,17 @@ def _generate_unique_slug(base, used=None):
 
 
 @staff_required
-def event_group_list(request):
-    """List all event groups."""
-    groups = EventGroup.objects.all().order_by('-created_at')
-    return render(request, 'studio/event_groups/list.html', {
-        'groups': groups,
+def event_series_list(request):
+    """List all event series."""
+    series_list = EventSeries.objects.all().order_by('-created_at')
+    return render(request, 'studio/event_series/list.html', {
+        'series_list': series_list,
     })
 
 
 @staff_required
-def event_group_create(request):
-    """Create an EventGroup + N Event rows in one transaction.
+def event_series_create(request):
+    """Create an EventSeries + N Event rows in one transaction.
 
     On validation failure the whole submission is rolled back so the
     database never holds a partial series — staff see the form again
@@ -151,12 +156,12 @@ def event_group_create(request):
         except ValueError:
             required_level = 0
 
-        if slug and EventGroup.objects.filter(slug=slug).exists():
+        if slug and EventSeries.objects.filter(slug=slug).exists():
             errors['slug'] = 'A series with this slug already exists.'
 
         if not errors:
             with transaction.atomic():
-                group = EventGroup(
+                series = EventSeries(
                     name=name,
                     slug=slug,
                     description=description,
@@ -166,7 +171,7 @@ def event_group_create(request):
                     start_time=start_time,
                     timezone=timezone_value,
                 )
-                group.save()
+                series.save()
 
                 used_slugs = set()
                 for i in range(1, occurrences + 1):
@@ -176,12 +181,12 @@ def event_group_create(request):
                     )
                     event_end = event_start + timedelta(hours=duration_hours)
 
-                    base_slug = f'{group.slug}-session-{i}'
+                    base_slug = f'{series.slug}-session-{i}'
                     event_slug = _generate_unique_slug(base_slug, used_slugs)
                     used_slugs.add(event_slug)
 
                     Event.objects.create(
-                        title=f'{group.name} — Session {i}',
+                        title=f'{series.name} — Session {i}',
                         slug=event_slug,
                         description='',
                         kind=kind,
@@ -192,13 +197,13 @@ def event_group_create(request):
                         status='draft',
                         required_level=required_level,
                         origin='studio',
-                        event_group=group,
+                        event_series=series,
                         series_position=i,
                         published=True,
                     )
-            return redirect('studio_event_group_detail', group_id=group.pk)
+            return redirect('studio_event_series_detail', series_id=series.pk)
 
-    return render(request, 'studio/event_groups/form.html', {
+    return render(request, 'studio/event_series/form.html', {
         'form_values': form_values,
         'errors': errors,
         'max_occurrences': MAX_OCCURRENCES,
@@ -206,36 +211,36 @@ def event_group_create(request):
 
 
 @staff_required
-def event_group_detail(request, group_id):
+def event_series_detail(request, series_id):
     """Detail page: lists every member event with edit/delete links."""
-    group = get_object_or_404(EventGroup, pk=group_id)
+    series = get_object_or_404(EventSeries, pk=series_id)
 
     if request.method == 'POST':
-        # Inline edit of group metadata only — schedule fields stay
-        # immutable on the group (per-event edits handle drift).
-        group.name = request.POST.get('name', group.name).strip() or group.name
-        new_slug = request.POST.get('slug', group.slug).strip()
-        if new_slug and new_slug != group.slug:
-            if not EventGroup.objects.filter(slug=new_slug).exclude(pk=group.pk).exists():
-                group.slug = new_slug
-        group.description = request.POST.get('description', group.description)
-        group.save()
-        return redirect('studio_event_group_detail', group_id=group.pk)
+        # Inline edit of series metadata only — schedule fields stay
+        # immutable on the series (per-event edits handle drift).
+        series.name = request.POST.get('name', series.name).strip() or series.name
+        new_slug = request.POST.get('slug', series.slug).strip()
+        if new_slug and new_slug != series.slug:
+            if not EventSeries.objects.filter(slug=new_slug).exclude(pk=series.pk).exists():
+                series.slug = new_slug
+        series.description = request.POST.get('description', series.description)
+        series.save()
+        return redirect('studio_event_series_detail', series_id=series.pk)
 
-    events = group.events.all().order_by(
+    events = series.events.all().order_by(
         'series_position', 'start_datetime',
     )
-    return render(request, 'studio/event_groups/detail.html', {
-        'group': group,
+    return render(request, 'studio/event_series/detail.html', {
+        'series': series,
         'events': events,
     })
 
 
 @staff_required
 @require_POST
-def event_group_add_occurrence(request, group_id):
-    """Append one more event to the group with the next series_position."""
-    group = get_object_or_404(EventGroup, pk=group_id)
+def event_series_add_occurrence(request, series_id):
+    """Append one more event to the series with the next series_position."""
+    series = get_object_or_404(EventSeries, pk=series_id)
     start_date_str = request.POST.get('start_date', '').strip()
     duration_str = request.POST.get('duration_hours', '').strip() or '1'
 
@@ -243,9 +248,9 @@ def event_group_add_occurrence(request, group_id):
         start_date = _parse_date_str(start_date_str)
     except (ValueError, AttributeError):
         # Re-render the detail page with a flash-style error.
-        events = group.events.all().order_by('series_position', 'start_datetime')
-        return render(request, 'studio/event_groups/detail.html', {
-            'group': group,
+        events = series.events.all().order_by('series_position', 'start_datetime')
+        return render(request, 'studio/event_series/detail.html', {
+            'series': series,
             'events': events,
             'add_error': 'Start date is required (dd/mm/yyyy).',
         }, status=400)
@@ -258,41 +263,41 @@ def event_group_add_occurrence(request, group_id):
         duration_hours = 1.0
 
     max_pos = (
-        group.events.exclude(series_position__isnull=True)
+        series.events.exclude(series_position__isnull=True)
         .order_by('-series_position').values_list('series_position', flat=True)
         .first()
     )
     next_pos = (max_pos or 0) + 1
 
-    event_start = datetime.combine(start_date, group.start_time)
+    event_start = datetime.combine(start_date, series.start_time)
     event_end = event_start + timedelta(hours=duration_hours)
 
-    base_slug = f'{group.slug}-session-{next_pos}'
+    base_slug = f'{series.slug}-session-{next_pos}'
     event_slug = _generate_unique_slug(base_slug)
 
     Event.objects.create(
-        title=f'{group.name} — Session {next_pos}',
+        title=f'{series.name} — Session {next_pos}',
         slug=event_slug,
         description='',
         kind='standard',
         platform='zoom',
         start_datetime=event_start,
         end_datetime=event_end,
-        timezone=group.timezone,
+        timezone=series.timezone,
         status='draft',
         required_level=0,
         origin='studio',
-        event_group=group,
+        event_series=series,
         series_position=next_pos,
         published=True,
     )
-    return redirect('studio_event_group_detail', group_id=group.pk)
+    return redirect('studio_event_series_detail', series_id=series.pk)
 
 
 @staff_required
 @require_POST
-def event_group_delete(request, group_id):
-    """Delete the group; ``SET_NULL`` preserves the member events."""
-    group = get_object_or_404(EventGroup, pk=group_id)
-    group.delete()
+def event_series_delete(request, series_id):
+    """Delete the series; ``SET_NULL`` preserves the member events."""
+    series = get_object_or_404(EventSeries, pk=series_id)
+    series.delete()
     return redirect('studio_event_list')

@@ -9,8 +9,8 @@ from events.views.pages import (
     cancel_registration_page,
     event_calendar_ics,
     event_detail,
-    event_group_public,
     event_join_redirect,
+    event_series_public,
     events_calendar,
     events_list,
 )
@@ -27,15 +27,21 @@ urlpatterns = [
     # ``events/<slug>`` so the literal ``groups`` prefix isn't swallowed
     # by the slug converter on the event-detail route below. Same
     # pattern as ``workshops/resync/``.
+    #
+    # TODO(#575): the public URL still uses ``/events/groups/<slug>`` to
+    # avoid breaking external bookmarks during the EventGroup ->
+    # EventSeries rename. A follow-up issue can flip this to
+    # ``/events/series/<slug>`` once we have data on whether external
+    # links to the old path exist.
     path(
         'events/groups/<slug:slug>',
-        event_group_public,
-        name='event_group_public',
+        event_series_public,
+        name='event_series_public',
     ),
     path(
         'events/groups/<slug:slug>/',
-        event_group_public,
-        name='event_group_public_trailing',
+        event_series_public,
+        name='event_series_public_trailing',
     ),
     path('events/<slug:slug>/join', event_join_redirect, name='event_join'),
     path(

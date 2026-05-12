@@ -218,7 +218,7 @@ class Event(
 
     # Issue #564: explicit origin gate. ``github`` means the row is synced
     # from a content repo and ``source_repo`` must be non-empty; ``studio``
-    # means the row was authored in Studio (e.g. via the event-group flow)
+    # means the row was authored in Studio (e.g. via the event-series flow)
     # and ``source_repo`` must be empty. The invariant is enforced in
     # ``Event.save()`` so a future code path cannot silently mix the two.
     origin = models.CharField(
@@ -231,19 +231,19 @@ class Event(
             'in Studio and never touched by sync.'
         ),
     )
-    event_group = models.ForeignKey(
-        'events.EventGroup',
+    event_series = models.ForeignKey(
+        'events.EventSeries',
         null=True, blank=True,
         on_delete=models.SET_NULL,
         related_name='events',
         help_text=(
-            'Optional parent series. Deleting the group preserves the '
+            'Optional parent series. Deleting the series preserves the '
             'events but unlinks them.'
         ),
     )
     series_position = models.PositiveIntegerField(
         null=True, blank=True,
-        help_text='1-indexed position within the parent event group.',
+        help_text='1-indexed position within the parent event series.',
     )
 
     # Issue #572: third-party host indicator. Empty string (the default)

@@ -68,7 +68,7 @@ from studio.views.event_groups import (
     event_group_detail,
     event_group_list,
 )
-from studio.views.events import event_create_zoom, event_edit, event_list
+from studio.views.events import event_create, event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.member_notes import (
     member_note_create,
@@ -239,8 +239,10 @@ urlpatterns = [
     path('articles/<int:article_id>/notify', article_notify, name='studio_article_notify'),
     path('articles/<int:article_id>/announce-slack', article_announce_slack, name='studio_article_announce_slack'),
 
-    # Events
+    # Events. The literal ``new`` route is registered before the
+    # ``<int:event_id>`` routes so the slug is not swallowed (issue #574).
     path('events/', event_list, name='studio_event_list'),
+    path('events/new', event_create, name='studio_event_new'),
     path('events/<int:event_id>/edit', event_edit, name='studio_event_edit'),
     path('events/<int:event_id>/create-zoom', event_create_zoom, name='studio_event_create_zoom'),
     path('events/<int:event_id>/notify', event_notify, name='studio_event_notify'),

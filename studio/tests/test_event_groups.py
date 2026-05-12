@@ -275,14 +275,16 @@ class StudioEventListSurfacesGroupsTest(StaffMixin, TestCase):
         self.assertContains(response, 'data-testid="event-series-new-button"')
         self.assertContains(response, '/studio/event-groups/new')
 
-    def test_no_new_single_event_button(self):
-        """The legacy expectation: no ``New Event`` button on the list."""
+    def test_new_event_button_present(self):
+        """Issue #574 added the ``New event`` button next to the series one."""
         response = self.client.get('/studio/events/')
-        self.assertNotContains(response, '>New Event<')
+        self.assertContains(response, 'data-testid="event-new-button"')
+        self.assertContains(response, '>New event<')
 
-    def test_event_create_url_still_returns_404(self):
+    def test_event_create_url_returns_200(self):
+        """Issue #574: ``/studio/events/new`` renders the create form."""
         response = self.client.get('/studio/events/new')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
 
 
 class StudioEventEditOriginGatingTest(StaffMixin, TestCase):

@@ -425,8 +425,12 @@ class SyncedProjectReadOnlyTest(TestCase):
         self.assertNotContains(response, 'Reject')
 
 
-class EventNoCreateTest(TestCase):
-    """Test that events no longer have a create button or URL (managed via content repo)."""
+class EventCreateButtonTest(TestCase):
+    """Issue #574 reinstated the ``New event`` button and create URL.
+
+    These assertions guard against accidental regression to the
+    GitHub-only-managed era when the button and URL were removed.
+    """
 
     def setUp(self):
         self.client = Client()
@@ -435,13 +439,14 @@ class EventNoCreateTest(TestCase):
         )
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_event_list_has_no_new_button(self):
+    def test_event_list_has_new_event_button(self):
         response = self.client.get('/studio/events/')
-        self.assertNotContains(response, 'New Event')
+        self.assertContains(response, 'data-testid="event-new-button"')
+        self.assertContains(response, '>New event<')
 
-    def test_event_create_url_returns_404(self):
+    def test_event_create_url_returns_200(self):
         response = self.client.get('/studio/events/new')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
 
 
 class DashboardSyncSectionTest(TestCase):

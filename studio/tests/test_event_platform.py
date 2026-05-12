@@ -44,8 +44,13 @@ class EventPlatformModelTest(TestCase):
         self.assertEqual(event.platform, 'zoom')
 
 
-class StudioEventCreatePlatformURLRemovedTest(TestCase):
-    """Test that event creation URL is removed (events come from content repo)."""
+class StudioEventCreatePlatformURLTest(TestCase):
+    """Issue #574 added back the ``/studio/events/new`` create flow.
+
+    These assertions confirm the route is wired and produces a
+    ``origin='studio'`` row (the broader behavior is exercised in
+    ``StudioEventCreateTest`` in ``test_events.py``).
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -57,18 +62,21 @@ class StudioEventCreatePlatformURLRemovedTest(TestCase):
         self.client = Client()
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_create_url_returns_404(self):
+    def test_create_url_returns_200(self):
         response = self.client.get('/studio/events/new')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
 
-    def test_create_post_returns_404(self):
+    def test_create_post_creates_studio_event(self):
         response = self.client.post('/studio/events/new', {
-            'title': 'Test', 'slug': 'test',
+            'title': 'Test Create', 'slug': 'test-create',
             'event_date': '15/03/2026', 'event_time': '14:00',
             'duration_hours': '1', 'timezone': 'Europe/Berlin',
             'status': 'draft', 'required_level': '0',
         })
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(slug='test-create')
+        self.assertEqual(event.origin, 'studio')
+        self.assertFalse(bool(event.source_repo))
 
 
 class StudioEventEditPlatformTest(TestCase):

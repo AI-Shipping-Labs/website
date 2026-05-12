@@ -50,43 +50,59 @@
             <i data-lucide="users" class="h-4 w-4"></i>
             Cohort board
           </a>
-          <a href="{% url 'my_plan_edit' sprint_slug=sprint.slug plan_id=plan.pk %}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="my-plan-edit-cta">
-            <i data-lucide="square-pen" class="h-4 w-4"></i>
-            Edit workspace
-          </a>
         </nav>
       </header>
 
-      {% if messages %}
-      <div class="mb-6 space-y-2" data-testid="plan-messages">
-        {% for message in messages %}
-        <div class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" data-testid="plan-message">
-          {{ message }}
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
+      {% comment %}
+      The in-page messages region (data-testid="plan-messages") was removed
+      in issue #583. base.html already renders the Django messages queue
+      once via data-testid="messages-region", so the duplicate block here
+      caused users to see notifications "top and bottom" after server-side
+      actions.
+      {% endcomment %}
 
+      {% comment %}
+      Visibility toggle (issue #583). The legacy <select> + Save form was
+      replaced with a single binary switch (private vs cohort) that POSTs
+      to update_plan_visibility on toggle via static/js/plans/member_plan.js.
+      The stored value 'cohort' renders as "Shared with cohort"; the
+      reserved 'public' enum value is intentionally NOT exposed here.
+      The control is a real <button role="switch"> for keyboard a11y.
+      {% endcomment %}
       <section class="mb-6 rounded-lg border border-border bg-card p-4" data-testid="plan-visibility-form">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0">
             <h2 class="text-base font-semibold text-foreground">Visibility</h2>
-            <p class="mt-1 text-sm text-muted-foreground">
-              Choose whether this plan appears to enrolled teammates on the cohort board.
+            <p class="mt-1 text-sm text-muted-foreground" data-testid="plan-visibility-helper">
+              {% if plan.visibility == 'cohort' %}
+                Visible to other members of the same sprint on the cohort board.
+              {% else %}
+                Only you and the team can see this plan.
+              {% endif %}
             </p>
           </div>
-          <form method="post" action="{% url 'update_plan_visibility' sprint_slug=sprint.slug plan_id=plan.pk %}" class="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
+          <div class="flex flex-col items-start gap-2 sm:flex-row sm:items-center"
+               data-plan-visibility-control
+               data-update-url="{% url 'update_plan_visibility' sprint_slug=sprint.slug plan_id=plan.pk %}">
             {% csrf_token %}
-            <label for="id_visibility" class="text-sm text-foreground">Who can see this plan?</label>
-            <select id="id_visibility" name="visibility" class="w-full min-w-0 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-auto" data-testid="visibility-select">
-              {% for value, label in visibility_choices %}
-              <option value="{{ value }}" {% if plan.visibility == value %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-            <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:w-auto" data-testid="visibility-save">
-              Save
+            <span class="text-sm text-foreground" data-testid="plan-visibility-label">
+              {% if plan.visibility == 'cohort' %}Shared with cohort{% else %}Private{% endif %}
+            </span>
+            <button type="button"
+                    role="switch"
+                    aria-checked="{% if plan.visibility == 'cohort' %}true{% else %}false{% endif %}"
+                    aria-label="Share this plan with the cohort"
+                    data-testid="plan-visibility-toggle"
+                    class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent {% if plan.visibility == 'cohort' %}bg-accent{% else %}bg-secondary{% endif %}">
+              <span aria-hidden="true"
+                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow ring-0 transition-transform {% if plan.visibility == 'cohort' %}translate-x-5{% else %}translate-x-0.5{% endif %}"
+                    data-toggle-thumb></span>
             </button>
-          </form>
+            <span class="text-xs text-muted-foreground"
+                  data-toggle-status
+                  data-testid="plan-visibility-status"
+                  aria-live="polite"></span>
+          </div>
         </div>
       </section>
 

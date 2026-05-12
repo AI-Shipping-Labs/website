@@ -14,10 +14,14 @@ Internal interview notes never render on member-facing pages in this
 issue. The interview-note model is deliberately NOT imported here.
 """
 
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
-from django.http import Http404, HttpResponseBadRequest
+from django.http import (
+    Http404,
+    HttpResponseBadRequest,
+    HttpResponsePermanentRedirect,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -240,15 +244,36 @@ def my_plan_detail(request, sprint_slug, plan_id):
     )
 
 
-@login_required
-def my_plan_edit(request, sprint_slug, plan_id):
-    """Owner edit route under the sprint namespace.
+def my_plan_edit_redirect(request, sprint_slug, plan_id):
+    """Permanently redirect the legacy /edit URL to the unified workspace.
 
-    The member workspace already supports checkbox, item, note, and
-    visibility edits, so this route renders the same member workspace
-    instead of the Studio editor shell.
+    Issue #583 unified the owner workspace and the old "Edit workspace"
+    page -- inline edit is now available directly on
+    :func:`my_plan_detail`. The /edit URL stays mounted so any old
+    bookmark, email link, or external reference still lands somewhere
+    sensible; HTTP 301 lets browsers and crawlers update the address
+    automatically. ``login_required`` is intentionally omitted: an
+    anonymous user who hits a stale link should be redirected to the
+    canonical URL, which itself enforces auth and will then send them
+    through the login flow.
     """
-    return my_plan_detail(request, sprint_slug=sprint_slug, plan_id=plan_id)
+    target = reverse(
+        'my_plan_detail',
+        kwargs={'sprint_slug': sprint_slug, 'plan_id': plan_id},
+    )
+    return HttpResponsePermanentRedirect(target)
+
+
+def _wants_json(request):
+    """Return True when the client explicitly asked for JSON.
+
+    Issue #583's toggle uses ``fetch`` with ``Accept: application/json``
+    so the inline "Saving..." / "Saved" indicator can react without a
+    full page reload. Older form posts (no Accept header set, or
+    ``Accept: text/html``) still get a redirect back to the workspace.
+    """
+    accept = request.META.get('HTTP_ACCEPT', '')
+    return 'application/json' in accept
 
 
 @login_required
@@ -261,6 +286,15 @@ def update_plan_visibility(request, sprint_slug, plan_id):
     HTTP 400 and the row is left unchanged. Non-owners get 404 and the
     row is unchanged. Anonymous users are redirected to login by the
     ``login_required`` decorator before any side effect.
+
+    Issue #583 added a JSON branch: when ``Accept: application/json`` is
+    sent, success returns ``{"visibility": "..."}`` and failure returns
+    the same 400 (plain text body) so the new inline toggle can drive
+    the UI without a page reload. The legacy redirect branch is kept
+    for any HTML form fallback. The previous ``messages.success(...)``
+    flash was removed: the JS now shows an inline "Saved" indicator on
+    the toggle, and rendering a full-page flash on top would be the
+    same "notifications top and bottom" UX problem this issue fixes.
     """
     plan = get_object_or_404(
         Plan.objects.filter(
@@ -278,10 +312,8 @@ def update_plan_visibility(request, sprint_slug, plan_id):
 
     plan.visibility = raw
     plan.save(update_fields=['visibility', 'updated_at'])
-    messages.success(
-        request,
-        'Plan visibility updated.',
-    )
+    if _wants_json(request):
+        return JsonResponse({'visibility': plan.visibility})
     return redirect(
         reverse(
             'my_plan_detail',

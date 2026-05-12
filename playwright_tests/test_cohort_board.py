@@ -166,21 +166,24 @@ class TestMemberOptsInToCohortVisibility:
                 f'{django_server}/sprints/{sprint.slug}/plan/{viewer_plan.pk}',
             )
 
-            # Step 3: switch the visibility selector to ``cohort`` and save.
-            select = page.locator('[data-testid="visibility-select"]')
-            select.select_option('cohort')
-            page.locator('[data-testid="visibility-save"]').click()
-            page.wait_for_url(
-                f'{django_server}/sprints/{sprint.slug}/plan/{viewer_plan.pk}',
-            )
+            # Step 3: click the new toggle switch (issue #583 replaced
+            # the legacy <select> + Save button with a single switch
+            # that POSTs on click via the member_plan.js handler).
+            toggle = page.locator('[data-testid="plan-visibility-toggle"]')
+            assert toggle.get_attribute('aria-checked') == 'false'
+            with page.expect_response('**/visibility') as resp_info:
+                toggle.click()
+            assert resp_info.value.ok
 
-            # Step 4: success message rendered, selector now reads cohort.
-            messages = page.locator('[data-testid="plan-message"]')
-            messages.first.wait_for(state='visible')
-            assert 'updated' in messages.first.inner_text().lower()
+            # Step 4: the toggle now reflects cohort state and the
+            # inline status shows "Saved". The success message used to
+            # come via a server-side flash on a redirect; #583 replaced
+            # that with the inline indicator next to the toggle.
+            from playwright.sync_api import expect as _expect
+            _expect(toggle).to_have_attribute('aria-checked', 'true')
             assert page.locator(
-                '[data-testid="visibility-select"]',
-            ).input_value() == 'cohort'
+                '[data-testid="plan-visibility-label"]',
+            ).inner_text().strip() == 'Shared with cohort'
 
             # Step 5: navigate back to the board. The viewer's row now
             # renders as a cohort kind too, so there are two cohort

@@ -46,30 +46,58 @@ class MemberPlanEditAccessControlTest(TestCase):
             },
         )
 
-    def test_anonymous_redirects_to_login_with_next(self):
+    def test_anonymous_following_legacy_edit_url_lands_on_login(self):
+        """Issue #583: ``/edit`` is now a 301 to the unified workspace,
+        which is itself ``@login_required``. An anonymous user therefore
+        ends up at the login page with ``next=`` pointing at the
+        canonical workspace URL (not the legacy /edit URL)."""
         url = self._edit_url()
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response['Location'])
-        self.assertIn(f'next={url}', response['Location'])
-
-    def test_owner_can_open_sprint_scoped_edit_workspace(self):
-        self.client.login(email='alice@test.com', password='pw')
-        response = self.client.get(self._edit_url())
+        canonical = reverse(
+            'my_plan_detail',
+            kwargs={
+                'sprint_slug': self.sprint.slug,
+                'plan_id': self.alice_plan.pk,
+            },
+        )
+        response = self.client.get(url, follow=True)
+        # The final hop is the login page.
         self.assertEqual(response.status_code, 200)
+        # The intermediate hop is the 301.
+        self.assertEqual(response.redirect_chain[0][1], 301)
+        self.assertEqual(response.redirect_chain[0][0], canonical)
+        self.assertIn('/accounts/login/', response.redirect_chain[-1][0])
+        self.assertIn(f'next={canonical}', response.redirect_chain[-1][0])
+
+    def test_owner_following_legacy_edit_url_lands_on_workspace(self):
+        """Issue #583: legacy ``/edit`` URL is a 301 to the unified
+        workspace. Following the redirect lands on the same template the
+        new workspace serves, with the inline-edit markup intact."""
+        self.client.login(email='alice@test.com', password='pw')
+        response = self.client.get(self._edit_url(), follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[0][1], 301)
         self.assertTemplateUsed(response, 'plans/my_plan_detail.html')
         self.assertContains(response, 'data-testid="member-plan"')
         self.assertContains(response, 'data-testid="plan-weeks"')
 
-    def test_non_owner_returns_404_not_403(self):
+    def test_non_owner_following_legacy_edit_url_returns_404(self):
+        """Issue #583: the 301 lands on ``my_plan_detail`` which still
+        enforces owner-only access -- a non-owner gets 404 after the
+        redirect, not 200 or 403."""
         self.client.login(email='bob@test.com', password='pw')
-        response = self.client.get(self._edit_url())
+        response = self.client.get(self._edit_url(), follow=True)
         self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.redirect_chain[0][1], 301)
 
-    def test_wrong_sprint_slug_returns_404(self):
+    def test_wrong_sprint_slug_following_redirect_returns_404(self):
+        """Issue #583: the 301 keeps the same (mismatched) sprint slug,
+        and the unified workspace then rejects the wrong-sprint combo."""
         self.client.login(email='alice@test.com', password='pw')
-        response = self.client.get(self._edit_url(self.other_sprint))
+        response = self.client.get(
+            self._edit_url(self.other_sprint), follow=True,
+        )
         self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.redirect_chain[0][1], 301)
 
     def test_old_account_edit_url_is_not_compatible(self):
         self.client.login(email='alice@test.com', password='pw')
@@ -101,7 +129,9 @@ class MemberPlanEditTokenTest(TestCase):
         )
 
     def test_member_workspace_does_not_mint_or_expose_api_token(self):
-        response = self.client.get(self._edit_url())
+        # Issue #583: /edit is a 301 to the unified workspace; follow
+        # the redirect so we exercise the same render path.
+        response = self.client.get(self._edit_url(), follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-api-token=')
         self.assertEqual(
@@ -112,9 +142,9 @@ class MemberPlanEditTokenTest(TestCase):
         )
 
     def test_reloads_do_not_create_member_plan_editor_token(self):
-        self.client.get(self._edit_url())
-        self.client.get(self._edit_url())
-        self.client.get(self._edit_url())
+        self.client.get(self._edit_url(), follow=True)
+        self.client.get(self._edit_url(), follow=True)
+        self.client.get(self._edit_url(), follow=True)
         self.assertEqual(
             Token.objects.filter(
                 user=self.member, name='member-plan-editor',
@@ -123,7 +153,7 @@ class MemberPlanEditTokenTest(TestCase):
         )
 
     def test_does_not_mint_studio_plan_editor_token_for_member(self):
-        self.client.get(self._edit_url())
+        self.client.get(self._edit_url(), follow=True)
         self.assertEqual(
             Token.objects.filter(
                 user=self.member, name='studio-plan-editor',
@@ -179,11 +209,14 @@ class MemberPlanEditSessionWriteTest(TestCase):
     def test_member_session_write_with_csrf_updates_owned_plan(self):
         client = Client(enforce_csrf_checks=True)
         client.login(email='member@test.com', password='pw')
+        # Issue #583: /edit is a 301 -- follow it so the workspace
+        # actually renders and sets the csrftoken cookie.
         page = client.get(
             reverse(
                 'my_plan_edit',
                 kwargs={'sprint_slug': self.sprint.slug, 'plan_id': self.plan.pk},
             ),
+            follow=True,
         )
         csrf_token = page.cookies['csrftoken'].value
 

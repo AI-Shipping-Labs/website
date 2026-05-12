@@ -128,9 +128,8 @@ class TestMemberPlanPolish:
         assert page.locator('[data-testid="mobile-header-plan-link"]').get_attribute("href") == (
             f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}"
         )
-        assert page.locator('[data-testid="my-plan-edit-cta"]').get_attribute("href") == (
-            f"/sprints/{data['sprint_slug']}/plan/{data['plan_id']}/edit"
-        )
+        # Issue #583 removed the "Edit workspace" CTA -- the page IS the editor.
+        assert page.locator('[data-testid="my-plan-edit-cta"]').count() == 0
 
         item = page.locator('[data-testid="plan-checkpoint"]').first
         with page.expect_response("**/api/checkpoints/*") as checkpoint_response:
@@ -221,10 +220,12 @@ class TestMemberPlanPolish:
             " <= document.documentElement.clientWidth"
         )
         viewport_width = page.viewport_size["width"]
+        # Issue #583: the legacy <select> + Save button were replaced by a
+        # single toggle switch. Assert the new control still fits inside
+        # the mobile viewport (the regression this test originally fixed).
         for selector in [
             '[data-testid="plan-visibility-form"]',
-            '[data-testid="visibility-select"]',
-            '[data-testid="visibility-save"]',
+            '[data-testid="plan-visibility-toggle"]',
         ]:
             box = page.locator(selector).bounding_box()
             assert box is not None

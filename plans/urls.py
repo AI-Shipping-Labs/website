@@ -11,7 +11,7 @@ from plans.views.cohort import (
     cohort_board,
     member_plan_detail,
     my_plan_detail,
-    my_plan_edit,
+    my_plan_edit_redirect,
     update_plan_visibility,
 )
 from plans.views.notes import (
@@ -56,9 +56,13 @@ urlpatterns = [
         my_plan_detail,
         name='my_plan_detail',
     ),
+    # Issue #583: the unified workspace at my_plan_detail handles both
+    # view and inline edit, so the dedicated /edit URL now permanently
+    # redirects to the workspace. Keep the route + name so old bookmarks
+    # and template ``{% url 'my_plan_edit' %}`` references still resolve.
     path(
         'sprints/<slug:sprint_slug>/plan/<int:plan_id>/edit',
-        my_plan_edit,
+        my_plan_edit_redirect,
         name='my_plan_edit',
     ),
     path(

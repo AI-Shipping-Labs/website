@@ -414,6 +414,21 @@ def _dispatch_events(source, repo_dir, file_list, commit_sha, stats,
             if result.created:
                 _maybe_create_zoom_meeting_for_synced_event(event, data)
 
+            # Issue #595: warn (don't block) when the rendered description
+            # or recap HTML still links to a retired URL prefix
+            # (e.g. /event-recordings/...). Only check on a write —
+            # unchanged rows already passed this gate during their own
+            # sync. Both ``description_html`` and ``recap_html`` are
+            # author-supplied markdown so both are scanned.
+            if result.changed:
+                from content.utils.legacy_urls import detect_legacy_urls
+                detect_legacy_urls(
+                    event.description_html, rel_path, stats['errors'],
+                )
+                detect_legacy_urls(
+                    event.recap_html, rel_path, stats['errors'],
+                )
+
             # Resolve instructors: list and attach M2M (post-save).
             # Runs on both newly-created and existing events so a yaml
             # edit that adds/removes instructors flows through on every

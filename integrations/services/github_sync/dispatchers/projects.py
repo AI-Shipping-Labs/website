@@ -150,6 +150,16 @@ def _dispatch_projects(source, repo_dir, file_list, commit_sha, stats,
                     created = False
                     changed = False
 
+            # Issue #595: warn (don't block) when the rendered HTML still
+            # links to a retired URL prefix (e.g. /event-recordings/...).
+            # Only check on a write — unchanged rows already passed this
+            # gate during their own sync.
+            if changed:
+                from content.utils.legacy_urls import detect_legacy_urls
+                detect_legacy_urls(
+                    project.content_html, rel_path, stats['errors'],
+                )
+
             if not changed:
                 stats['unchanged'] += 1
                 continue

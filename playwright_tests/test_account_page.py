@@ -284,10 +284,10 @@ class TestScenarioAnonymousRedirectToLogin:
 class TestScenarioFreeMemberAccountPage:
     """Free member visits account page and sees upgrade options."""
 
-    def test_free_tier_name_and_level(
+    def test_free_tier_name_and_no_level_pill(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Page shows tier name Free and level Level 0."""
+        """Issue #581: page shows tier name Free with no Level pill."""
         ctx = _auth_context(
             browser, "free@test.com", django_db_blocker
         )
@@ -295,7 +295,7 @@ class TestScenarioFreeMemberAccountPage:
         _go_to_account(page, django_server)
 
         assert page.locator("#tier-name").inner_text().strip() == "Free"
-        assert "Level 0" in page.locator("#tier-badge").inner_text()
+        assert page.locator("#tier-badge").count() == 0
         ctx.close()
     def test_no_billing_period_for_free(
         self, django_server, test_users, django_db_blocker
@@ -359,11 +359,11 @@ class TestScenarioBasicMemberSubscription:
     """Basic member views subscription details and explores upgrade
     options."""
 
-    def test_basic_tier_name_level_and_billing(
+    def test_basic_tier_name_and_billing_no_level_pill(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Page shows Basic, Level 10, and billing period end
-        March 15, 2026."""
+        """Issue #581: page shows Basic and billing period end
+        March 15, 2026 with no Level pill."""
         ctx = _auth_context(
             browser, "basic@test.com", django_db_blocker
         )
@@ -371,7 +371,7 @@ class TestScenarioBasicMemberSubscription:
         _go_to_account(page, django_server)
 
         assert page.locator("#tier-name").inner_text().strip() == "Basic"
-        assert "Level 10" in page.locator("#tier-badge").inner_text()
+        assert page.locator("#tier-badge").count() == 0
 
         billing = page.locator("#billing-period-end")
         assert billing.is_visible()
@@ -445,10 +445,10 @@ class TestScenarioBasicMemberSubscription:
 class TestScenarioMainMemberDowngrade:
     """Main member initiates a downgrade to Basic."""
 
-    def test_main_tier_name_and_level(
+    def test_main_tier_name_no_level_pill(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Page shows Main and Level 20."""
+        """Issue #581: page shows Main with no Level pill."""
         ctx = _auth_context(
             browser, "main@test.com", django_db_blocker
         )
@@ -456,7 +456,7 @@ class TestScenarioMainMemberDowngrade:
         _go_to_account(page, django_server)
 
         assert page.locator("#tier-name").inner_text().strip() == "Main"
-        assert "Level 20" in page.locator("#tier-badge").inner_text()
+        assert page.locator("#tier-badge").count() == 0
         ctx.close()
     def test_main_has_all_three_actions(
         self, django_server, test_users, django_db_blocker
@@ -504,10 +504,10 @@ class TestScenarioMainMemberDowngrade:
 class TestScenarioPremiumMemberHighestTier:
     """Premium member sees they are at the highest tier."""
 
-    def test_premium_tier_name_and_level(
+    def test_premium_tier_name_no_level_pill(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Page shows Premium and Level 30."""
+        """Issue #581: page shows Premium with no Level pill."""
         ctx = _auth_context(
             browser, "premium@test.com", django_db_blocker
         )
@@ -515,7 +515,7 @@ class TestScenarioPremiumMemberHighestTier:
         _go_to_account(page, django_server)
 
         assert page.locator("#tier-name").inner_text().strip() == "Premium"
-        assert "Level 30" in page.locator("#tier-badge").inner_text()
+        assert page.locator("#tier-badge").count() == 0
         ctx.close()
     def test_premium_no_upgrade_has_downgrade_and_cancel(
         self, django_server, test_users, django_db_blocker

@@ -214,7 +214,10 @@ def test_account_primary_action_matches_current_plan_state(
         assert page.locator("#tier-name").inner_text().strip() == expected_plan
         assert page.locator("#upgrade-btn").count() == (1 if upgrade_visible else 0)
         if expected_plan == "Premium":
-            assert "Current plan" in page.locator("#account-plan-state").inner_text()
+            # Issue #581: the steady-state ``Current plan`` frame is
+            # suppressed on /account/ (pricing page is unaffected). The
+            # tier name and Downgrade CTA together convey the state.
+            assert page.locator("#account-plan-state").count() == 0
             assert page.locator("#downgrade-btn").is_visible()
     finally:
         context.close()
@@ -255,8 +258,15 @@ def test_account_pending_and_temporary_states_do_not_show_normal_upgrade(
         browser, django_server, django_db_blocker, "pricing-pending@test.com"
     )
     try:
-        pending_text = pending_page.locator("#account-plan-state").inner_text()
-        assert "changes to Basic on May 29, 2026" in pending_text
+        # Issue #581: the duplicate plan-state frame on /account/ was
+        # suppressed for pending downgrade users; the dedicated amber
+        # pending-downgrade notice now carries the change message.
+        assert pending_page.locator("#account-plan-state").count() == 0
+        pending_notice_text = pending_page.locator(
+            "#pending-downgrade-notice"
+        ).inner_text()
+        assert "Basic" in pending_notice_text
+        assert "29/05/2026" in pending_notice_text
         assert pending_page.locator("#upgrade-btn").count() == 0
     finally:
         pending_context.close()

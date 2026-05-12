@@ -36,7 +36,52 @@ from email_app.models import EmailLog
 from integrations.config import get_config, is_enabled
 from payments.models import Tier
 from payments.tier_state import build_tier_state
-from plans.dashboard import build_sprint_plan_card_context
+
+# Issue #581: ``build_tier_state`` is shared with the pricing page where the
+# steady-state badges and the duplicate "your plan changes" notes are useful.
+# On ``/account/`` we only want the frame to fire when it carries information
+# the user cannot already read off the rest of the membership card. The
+# dedicated amber/red notices below already cover pending downgrade and
+# pending cancellation, and the tier name itself already communicates the
+# steady-state Free / Current-plan case.
+#
+# A (badge, note) pair is "steady-state" when it matches one of these exact
+# tuples. Anything else (override-active note, stale-subscription warning,
+# scheduled-change badge) carries new information and is rendered as-is.
+_STEADY_STATE_PAIRS = frozenset({
+    ("Current free plan", "You are on the free membership."),
+    ("Current plan", ""),
+})
+
+
+def _suppress_steady_state_plan_state(
+    state, *, is_pending_downgrade, is_pending_cancellation
+):
+    """Return ``{}`` for steady-state plan-state frames, else ``state``.
+
+    The frame is suppressed when:
+
+    - There is a pending downgrade or pending cancellation -- the
+      dedicated amber/red notice below already shows the same message,
+      so echoing it in the plan-state frame is duplicate noise.
+    - The (badge, note) pair is one of the steady-state tuples in
+      :data:`_STEADY_STATE_PAIRS`. The tier name in the Membership
+      section already communicates this.
+
+    Override messages (badge ``"Current plan"`` with a non-empty note
+    such as ``"Base subscription. Temporary X access is active."``),
+    stale-subscription warnings, and scheduled-future-change badges all
+    fall outside the steady-state set, so they still pass through.
+    """
+    if not state:
+        return state
+    if is_pending_downgrade or is_pending_cancellation:
+        return {}
+    badge = state.get("badge", "")
+    note = state.get("note", "")
+    if (badge, note) in _STEADY_STATE_PAIRS:
+        return {}
+    return state
 
 
 def _render_account_page(
@@ -109,6 +154,14 @@ def _render_account_page(
     account_plan_state = (
         build_tier_state(state_tier, user, active_override)
         if state_tier else {}
+    )
+    # Issue #581: drop the frame for steady-state Free / Current-plan
+    # users and for pending downgrade / pending cancellation cases (the
+    # dedicated amber/red notice already carries that message).
+    account_plan_state = _suppress_steady_state_plan_state(
+        account_plan_state,
+        is_pending_downgrade=is_pending_downgrade,
+        is_pending_cancellation=is_pending_cancellation,
     )
 
     portal_available = bool(stripe_customer_portal_url)
@@ -189,9 +242,9 @@ def _render_account_page(
         ),
     }
 
-    # Sprint plan card (issue #442). The helper handles the empty case
-    # (no plan -> ``plan`` is ``None`` and the template omits the card).
-    context.update(build_sprint_plan_card_context(user))
+    # Issue #581: the Sprint plan card was removed from /account/. The
+    # plan stays reachable from the dashboard and ``/sprints/``; the
+    # helper still backs the dashboard surface (``plans.dashboard``).
 
     return render(request, "accounts/account.html", context, status=status)
 

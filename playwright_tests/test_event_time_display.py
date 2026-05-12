@@ -237,8 +237,13 @@ def test_member_clears_timezone_and_uses_browser_timezone(
     _stub_browser_timezone(page, 'Europe/Berlin')
     page.goto(f'{django_server}/account/', wait_until='domcontentloaded')
     page.get_by_test_id('clear-timezone-btn').click()
+    # After #582, clearing the preference auto-detects the browser timezone
+    # and surfaces it in the status copy (with a Save hint). The legacy
+    # "Using browser timezone." string only appears as a fallback when
+    # detection fails; here detection is stubbed to Europe/Berlin so the
+    # detected variant is the expected one.
     expect(page.get_by_test_id('timezone-preference-status')).to_contain_text(
-        'Using browser timezone.'
+        'Showing your browser timezone: Europe/Berlin'
     )
 
     page.goto(f'{django_server}/events/local-time-event', wait_until='domcontentloaded')

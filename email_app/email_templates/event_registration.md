@@ -10,10 +10,10 @@ When: {{ event_datetime }}
 
 Join link: {{ join_url }}
 
-A calendar invite (`.ics`) is attached to this email -- open it to add the
-event to your calendar. If the attachment doesn't open, you can also
-re-download the invite from the event page using the "Add to calendar"
-button.
+Add to your calendar:
+[Google Calendar]({{ google_calendar_url }}) · [Outlook.com]({{ outlook_calendar_url }}) · [Microsoft 365]({{ office365_calendar_url }})
+
+Or use the attached `.ics` file for Apple Calendar and other clients.
 
 What to expect next:
 

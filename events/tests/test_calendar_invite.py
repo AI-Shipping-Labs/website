@@ -1,6 +1,8 @@
 """Tests for calendar invite generation and registration email sending."""
 
+import datetime
 import email
+import re
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
@@ -309,6 +311,107 @@ class SendRegistrationConfirmationTest(TestCase):
 
         html_body = parts.get('text/html', '')
         self.assertIn('/events/test-event/join', html_body)
+
+    @patch('events.services.registration_email.boto3')
+    def test_send_email_html_body_contains_three_calendar_links(self, mock_boto3):
+        """The rendered HTML must carry Google, Outlook.com, and M365 anchors."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'msg-cal-links'}
+        mock_boto3.client.return_value = mock_client
+
+        registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+        send_registration_confirmation(registration)
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        raw_data = call_kwargs['Content']['Raw']['Data']
+        msg = self._parse_raw_email(raw_data)
+        parts = self._get_parts(msg)
+        html = parts['text/html']
+
+        # Google: anchor to calendar.google.com with the event title encoded
+        # in the ``text=`` parameter so we know the URL was built from this
+        # event (not just hard-coded in the template).
+        google_match = re.search(
+            r'href="(https://calendar\.google\.com/calendar/render\?[^"]+)"',
+            html,
+        )
+        self.assertIsNotNone(
+            google_match, 'Google Calendar link not found in HTML body',
+        )
+        self.assertIn('text=Test%20Event', google_match.group(1))
+
+        self.assertRegex(
+            html,
+            r'href="https://outlook\.live\.com/calendar/[^"]+"',
+        )
+        self.assertRegex(
+            html,
+            r'href="https://outlook\.office\.com/calendar/[^"]+"',
+        )
+
+    @patch('events.services.registration_email.boto3')
+    def test_send_email_html_body_mentions_ics_fallback(self, mock_boto3):
+        """The .ics paragraph should now position itself as a fallback."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'msg-ics-copy'}
+        mock_boto3.client.return_value = mock_client
+
+        registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+        send_registration_confirmation(registration)
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        raw_data = call_kwargs['Content']['Raw']['Data']
+        msg = self._parse_raw_email(raw_data)
+        parts = self._get_parts(msg)
+        html = parts['text/html']
+
+        self.assertIn('.ics', html)
+        self.assertIn('Apple Calendar', html)
+
+    @patch('events.services.registration_email.boto3')
+    def test_send_email_default_end_time_in_google_url(self, mock_boto3):
+        """An event without ``end_datetime`` must render dates=start/start+1h."""
+        mock_client = MagicMock()
+        mock_client.send_email.return_value = {'MessageId': 'msg-default-end'}
+        mock_boto3.client.return_value = mock_client
+
+        event_no_end = Event.objects.create(
+            slug='no-end-event',
+            title='No End Event',
+            start_datetime=datetime.datetime(
+                2026, 9, 1, 14, 0, tzinfo=datetime.timezone.utc,
+            ),
+            end_datetime=None,
+            status='upcoming',
+        )
+        registration = EventRegistration.objects.create(
+            event=event_no_end, user=self.user,
+        )
+        send_registration_confirmation(registration)
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        raw_data = call_kwargs['Content']['Raw']['Data']
+        msg = self._parse_raw_email(raw_data)
+        parts = self._get_parts(msg)
+        html = parts['text/html']
+
+        google_match = re.search(
+            r'href="(https://calendar\.google\.com/calendar/render\?[^"]+)"',
+            html,
+        )
+        self.assertIsNotNone(google_match)
+        href = google_match.group(1)
+        # Markdown emits ``&amp;`` separators inside href; the ``/`` inside
+        # ``dates`` is percent-encoded as ``%2F`` because the URL builder
+        # uses ``quote(..., safe='')``.
+        self.assertIn(
+            'dates=20260901T140000Z%2F20260901T150000Z',
+            href,
+        )
 
     @patch('events.services.registration_email.boto3')
     def test_send_email_delivers_to_unsubscribed_user(self, mock_boto3):

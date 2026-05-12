@@ -1,8 +1,10 @@
 """Tests for studio event views.
 
 Verifies:
-- Event list with search and status filter (no create button)
-- Event create URL returns 404
+- Event list with search and status filter
+- Event list renders ``New event`` and ``New event series`` create buttons
+- Event create form (GET and POST) creates a Studio-origin row (issue #574)
+- Event create validation: missing title, missing date, duplicate slug
 - Event edit form (GET and POST) with pre-populated date/time/duration
 - Synced events: description read-only, operational fields editable, GitHub link shown
 - Status transitions
@@ -56,9 +58,18 @@ class StudioEventListTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'Workshop')
         self.assertContains(response, 'Custom URL')
 
-    def test_list_has_no_create_button(self):
+    def test_list_renders_create_buttons(self):
+        """Both ``New event`` and ``New event series`` buttons are present."""
         response = self.client.get('/studio/events/')
-        self.assertNotContains(response, 'New Event')
+        self.assertContains(response, 'data-testid="event-new-button"')
+        self.assertContains(response, '>New event<')
+        self.assertContains(response, 'data-testid="event-series-new-button"')
+        self.assertContains(response, '>New event series<')
+
+    def test_list_new_event_button_links_to_create_url(self):
+        """The new button routes to /studio/events/new."""
+        response = self.client.get('/studio/events/')
+        self.assertContains(response, 'href="/studio/events/new"')
 
     def test_list_filter_by_status(self):
         Event.objects.create(
@@ -87,28 +98,191 @@ class StudioEventListTest(StaffUserMixin, TestCase):
         self.assertNotContains(response, 'Java Workshop')
 
 
-class StudioEventCreateURLTest(StaffUserMixin, TestCase):
-    """Test that the event create URL returns 404."""
+class StudioEventCreateTest(StaffUserMixin, TestCase):
+    """Test the studio event create flow (issue #574).
+
+    A POST to ``/studio/events/new`` creates a ``origin='studio'`` Event
+    and redirects the admin to the new event's edit page. Validation
+    errors re-render the form with the submitted values preserved.
+    """
 
     def setUp(self):
         self.client.login(**self.staff_credentials)
 
-    def test_create_url_get_returns_404(self):
+    def test_create_form_get_returns_200(self):
         response = self.client.get('/studio/events/new')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
 
-    def test_create_url_post_returns_404(self):
+    def test_create_form_uses_form_template(self):
+        response = self.client.get('/studio/events/new')
+        self.assertTemplateUsed(response, 'studio/events/form.html')
+
+    def test_create_form_has_no_event_in_context(self):
+        response = self.client.get('/studio/events/new')
+        self.assertIsNone(response.context['event'])
+
+    def test_create_form_renders_new_event_heading(self):
+        response = self.client.get('/studio/events/new')
+        self.assertContains(response, 'New Event')
+
+    def test_create_form_hides_sidebar_panels(self):
+        """The right-hand sidebar only renders when an event exists."""
+        response = self.client.get('/studio/events/new')
+        self.assertNotContains(response, 'data-testid="event-state-panel"')
+        self.assertNotContains(response, 'data-testid="zoom-meeting-panel"')
+
+    def test_create_form_anonymous_redirects_to_login(self):
+        self.client.logout()
+        response = self.client.get('/studio/events/new')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+
+    def test_create_form_non_staff_forbidden(self):
+        from accounts.models import User
+        self.client.logout()
+        user = User.objects.create_user(
+            email='member-574@test.com', password='pw',
+            is_staff=False,
+        )
+        user.email_verified = True
+        user.save()
+        self.client.login(email='member-574@test.com', password='pw')
+        response = self.client.get('/studio/events/new')
+        self.assertEqual(response.status_code, 403)
+
+    def test_post_with_valid_data_creates_event(self):
         response = self.client.post('/studio/events/new', {
-            'title': 'New Event',
-            'slug': 'new-event',
-            'event_date': '01/12/2024',
-            'event_time': '10:00',
-            'duration_hours': '2',
-            'timezone': 'Europe/Berlin',
-            'status': 'draft',
-            'required_level': '0',
+            'title': 'Office Hours May 21',
+            'slug': '',
+            'event_date': '21/05/2026',
+            'event_time': '18:00',
+            'duration_hours': '',
         })
-        self.assertEqual(response.status_code, 404)
+        events = Event.objects.filter(title='Office Hours May 21')
+        self.assertEqual(events.count(), 1)
+        event = events.get()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], f'/studio/events/{event.pk}/edit')
+
+    def test_post_created_event_has_studio_origin(self):
+        self.client.post('/studio/events/new', {
+            'title': 'Origin Check',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+        event = Event.objects.get(title='Origin Check')
+        self.assertEqual(event.origin, 'studio')
+        # The origin invariant treats None and '' as equivalent
+        # (both falsy per ``bool(source_repo)``); we accept either.
+        self.assertFalse(bool(event.source_repo))
+
+    def test_post_created_event_uses_defaults(self):
+        """Status defaults to draft; required_level to 0; timezone to Berlin."""
+        self.client.post('/studio/events/new', {
+            'title': 'Defaults Check',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+        event = Event.objects.get(title='Defaults Check')
+        self.assertEqual(event.status, 'draft')
+        self.assertEqual(event.required_level, 0)
+        self.assertEqual(event.timezone, 'Europe/Berlin')
+        self.assertEqual(event.platform, 'zoom')
+        self.assertEqual(event.kind, 'standard')
+        self.assertTrue(event.published)
+
+    def test_post_blank_slug_is_derived_from_title(self):
+        self.client.post('/studio/events/new', {
+            'title': 'Hello World Event',
+            'slug': '',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+        event = Event.objects.get(title='Hello World Event')
+        self.assertEqual(event.slug, 'hello-world-event')
+
+    def test_post_blank_duration_defaults_to_one_hour(self):
+        self.client.post('/studio/events/new', {
+            'title': 'Default Duration',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+            'duration_hours': '',
+        })
+        event = Event.objects.get(title='Default Duration')
+        delta = event.end_datetime - event.start_datetime
+        self.assertEqual(delta.total_seconds(), 3600)
+
+    def test_post_empty_title_rerenders_with_error(self):
+        response = self.client.post('/studio/events/new', {
+            'title': '',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="error-title"')
+        self.assertEqual(Event.objects.count(), 0)
+
+    def test_post_empty_title_preserves_other_inputs(self):
+        response = self.client.post('/studio/events/new', {
+            'title': '',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+        # Date field is repopulated
+        self.assertContains(response, 'value="10/06/2026"')
+
+    def test_post_invalid_date_rerenders_with_error(self):
+        response = self.client.post('/studio/events/new', {
+            'title': 'Bad Date',
+            'event_date': 'not-a-date',
+            'event_time': '10:00',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="error-event-date"')
+        self.assertEqual(Event.objects.count(), 0)
+
+    def test_post_invalid_date_preserves_title(self):
+        response = self.client.post('/studio/events/new', {
+            'title': 'Quick Demo',
+            'event_date': '',
+            'event_time': '10:00',
+        })
+        self.assertContains(response, 'value="Quick Demo"')
+
+    def test_post_duplicate_slug_rerenders_with_error(self):
+        Event.objects.create(
+            title='Existing', slug='office-hours',
+            start_datetime=datetime(2026, 6, 1, 10, 0),
+        )
+        response = self.client.post('/studio/events/new', {
+            'title': 'Office Hours',
+            'slug': 'office-hours',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="error-slug"')
+        # Only the pre-existing row exists
+        self.assertEqual(Event.objects.filter(slug='office-hours').count(), 1)
+
+    def test_post_saves_explicit_status(self):
+        self.client.post('/studio/events/new', {
+            'title': 'Upcoming Talk',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+            'status': 'upcoming',
+        })
+        event = Event.objects.get(title='Upcoming Talk')
+        self.assertEqual(event.status, 'upcoming')
+
+    def test_created_event_appears_on_list(self):
+        self.client.post('/studio/events/new', {
+            'title': 'Visible On List',
+            'event_date': '10/06/2026',
+            'event_time': '10:00',
+        })
+        response = self.client.get('/studio/events/')
+        self.assertContains(response, 'Visible On List')
 
 
 class StudioEventEditTest(StaffUserMixin, TestCase):

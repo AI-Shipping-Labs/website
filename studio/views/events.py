@@ -91,6 +91,117 @@ def event_list(request):
 
 
 @staff_required
+def event_create(request):
+    """Create a single one-off Studio event.
+
+    GET renders the create form (reusing ``templates/studio/events/form.html``
+    with no ``event`` in context). POST validates input, creates an ``Event``
+    row with ``origin='studio'`` and an empty ``source_repo``, then redirects
+    to ``studio_event_edit`` so staff land on the full edit form (with
+    sidebar panels) for the new event.
+
+    Issue #574.
+    """
+    errors = {}
+    form_values = {
+        'title': '',
+        'slug': '',
+        'description': '',
+        'event_date': '',
+        'event_time': '',
+        'duration_hours': '1',
+        'timezone': 'Europe/Berlin',
+        'platform': 'zoom',
+        'status': 'draft',
+        'required_level': '0',
+        'location': '',
+        'tags': '',
+        'max_participants': '',
+        'external_host': '',
+        'custom_url': '',
+    }
+
+    if request.method == 'POST':
+        for key in form_values:
+            form_values[key] = request.POST.get(key, form_values[key]).strip()
+
+        title = form_values['title']
+        slug = form_values['slug'] or slugify(title)
+        description = form_values['description']
+        timezone_value = form_values['timezone'] or 'Europe/Berlin'
+        platform = form_values['platform'] or 'zoom'
+        status = form_values['status'] or 'draft'
+        location = form_values['location']
+        external_host = form_values['external_host']
+        custom_url = form_values['custom_url']
+
+        if not title:
+            errors['title'] = 'Title is required.'
+
+        start_dt = None
+        end_dt = None
+        try:
+            start_dt, end_dt = _parse_event_datetime(request.POST)
+        except (ValueError, AttributeError):
+            if not form_values['event_date']:
+                errors['event_date'] = 'Date is required (dd/mm/yyyy).'
+            else:
+                errors['event_date'] = 'Date must be in dd/mm/yyyy format.'
+            if not form_values['event_time']:
+                errors['event_time'] = 'Time is required (HH:MM, 24h).'
+
+        try:
+            required_level = int(form_values['required_level'] or '0')
+        except ValueError:
+            required_level = 0
+
+        max_p_raw = form_values['max_participants']
+        try:
+            max_participants = int(max_p_raw) if max_p_raw else None
+        except ValueError:
+            max_participants = None
+
+        if title and slug and Event.objects.filter(slug=slug).exists():
+            errors['slug'] = 'An event with this slug already exists.'
+
+        if not errors:
+            event = Event(
+                title=title,
+                slug=slug,
+                description=description,
+                kind='standard',
+                platform=platform,
+                start_datetime=start_dt,
+                end_datetime=end_dt,
+                timezone=timezone_value,
+                location=location,
+                tags=parse_comma_separated_tags(form_values['tags']),
+                required_level=required_level,
+                max_participants=max_participants,
+                status=status,
+                external_host=external_host,
+                origin='studio',
+                published=True,
+            )
+            if platform == 'custom':
+                event.zoom_join_url = custom_url
+            event.save()
+            return redirect('studio_event_edit', event_id=event.pk)
+
+    context = {
+        'event': None,
+        'is_synced': False,
+        'form_action': 'create',
+        'errors': errors,
+        'form_values': form_values,
+        'event_date': form_values['event_date'],
+        'event_time': form_values['event_time'],
+        'duration_hours': form_values['duration_hours'] or '1',
+    }
+    return render(request, 'studio/events/form.html', context)
+
+
+@staff_required
 def event_edit(request, event_id):
     """Edit an existing event (read-only for synced content fields)."""
     event = get_object_or_404(Event, pk=event_id)
@@ -153,6 +264,11 @@ def event_edit(request, event_id):
     context['github_edit_url'] = get_github_edit_url(event)
     context['notify_url'] = reverse('studio_event_notify', kwargs={'event_id': event.pk})
     context['announce_url'] = reverse('studio_event_announce_slack', kwargs={'event_id': event.pk})
+    # ``form_values`` and ``errors`` are only meaningful on the create flow
+    # (issue #574). Provide empty defaults here so the shared template's
+    # ``form_values.foo`` lookups resolve cleanly when rendering edit.
+    context['form_values'] = {}
+    context['errors'] = {}
     return render(request, 'studio/events/form.html', context)
 
 

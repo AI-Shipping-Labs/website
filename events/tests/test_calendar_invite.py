@@ -51,9 +51,25 @@ class GenerateIcsTest(TestCase):
 
         vevent = vevents[0]
         self.assertEqual(str(vevent.get('summary')), 'AI Agents Workshop')
-        self.assertEqual(str(vevent.get('description')), 'Learn about AI agents.')
-        self.assertIn('/events/ai-workshop/join', str(vevent.get('url')))
-        self.assertIn('/events/ai-workshop/join', str(vevent.get('location')))
+        # Issue #578: DESCRIPTION now includes a trailing "Join: <url>"
+        # line so the join URL survives clients that hide URL/LOCATION.
+        description = str(vevent.get('description'))
+        self.assertIn('Learn about AI agents.', description)
+        self.assertIn(
+            'Join: https://aishippinglabs.com/events/ai-workshop',
+            description,
+        )
+        # Issue #578: URL/LOCATION now point at the public detail page,
+        # not the /join redirect (which requires login and would 302
+        # subscriber clients).
+        self.assertEqual(
+            str(vevent.get('url')),
+            'https://aishippinglabs.com/events/ai-workshop',
+        )
+        self.assertEqual(
+            str(vevent.get('location')),
+            'https://aishippinglabs.com/events/ai-workshop',
+        )
 
     def test_generate_ics_has_correct_start_end(self):
         ics_bytes = generate_ics(self.event)
@@ -130,7 +146,12 @@ class GenerateIcsTest(TestCase):
         self.assertIn('noreply@aishippinglabs.com', str(organizer))
 
     def test_generate_ics_join_url_not_zoom(self):
-        """Join URL uses the site join path, not direct Zoom URL."""
+        """URL/LOCATION point at the public detail page, not Zoom.
+
+        Issue #578: the per-event invite now uses the detail page URL
+        (matching the feed). The raw Zoom URL must never end up in the
+        .ics file regardless.
+        """
         event = Event.objects.create(
             slug='zoom-event',
             title='Zoom Workshop',
@@ -141,7 +162,7 @@ class GenerateIcsTest(TestCase):
         ics_bytes = generate_ics(event)
         ics_str = ics_bytes.decode('utf-8')
 
-        self.assertIn('/events/zoom-event/join', ics_str)
+        self.assertIn('/events/zoom-event', ics_str)
         self.assertNotIn('zoom.us', ics_str)
 
 

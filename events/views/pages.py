@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import (
@@ -13,7 +14,11 @@ from content.access import (
     get_required_tier_name,
 )
 from events.models import Event, EventGroup, EventJoinClick, EventRegistration
-from events.services.calendar_invite import generate_ics
+from events.services.calendar_feed import (
+    build_subscribe_urls,
+    feed_events_queryset,
+)
+from events.services.calendar_invite import generate_feed_ics, generate_ics
 from events.services.cancel_token import (
     CancelTokenExpired,
     CancelTokenInvalid,
@@ -206,6 +211,12 @@ def events_list(request):
             ).values_list('event_id', flat=True)
         )
 
+    # Issue #578: "Subscribe to all events" CTA on the view-toggle row.
+    # Three options resolved server-side so the template stays free of
+    # URL-encoding logic: Google deep-link, Apple webcal://, and the
+    # canonical https:// URL exposed for copy-paste into Outlook etc.
+    subscribe_urls = build_subscribe_urls()
+
     context = {
         'filter_mode': filter_mode,
         'show_upcoming': filter_mode in ('all', 'upcoming'),
@@ -219,6 +230,7 @@ def events_list(request):
         'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
         'registered_event_ids': registered_event_ids,
         'base_path': '/events',
+        'subscribe_urls': subscribe_urls,
     }
     return render(request, 'events/events_list.html', context)
 
@@ -508,4 +520,122 @@ def event_calendar_ics(request, slug):
     response['Content-Disposition'] = (
         f'attachment; filename="{event.slug}.ics"'
     )
+    return response
+
+
+def _format_http_date(dt):
+    """Format ``dt`` as an RFC 7231 IMF-fixdate string (UTC, GMT suffix).
+
+    Django ships ``http_date`` which expects an epoch float; we keep the
+    datetime native to avoid a tz conversion round-trip and to make the
+    output deterministic across Python versions.
+    """
+    from django.utils.http import http_date
+    return http_date(dt.timestamp())
+
+
+def _parse_http_date(value):
+    """Parse an HTTP-date string into a tz-aware UTC datetime, or None."""
+    import datetime
+    from email.utils import parsedate_to_datetime
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def _build_feed_etag(last_modified, count):
+    """Build a weak ETag for the feed.
+
+    Weak (``W/"..."``) because the body is regenerated on each request
+    (timestamps in ``DTSTAMP`` change every call) — byte-for-byte
+    equality is not guaranteed even when no event row has changed. The
+    semantic equivalence the client cares about is captured by
+    ``(last_modified, event_count)``.
+
+    Microsecond precision keeps two edits within the same wall-clock
+    second from colliding on the same ETag, which would otherwise
+    silently 304 the second edit out of subscriber clients.
+    """
+    if last_modified is None:
+        marker = 'empty'
+    else:
+        # Microseconds since epoch — single integer, monotonic for
+        # any later save() and stable for a given (row, save) pair.
+        marker = str(int(last_modified.timestamp() * 1_000_000))
+    return f'W/"feed-{marker}-{count}"'
+
+
+def events_calendar_feed(request):
+    """Return the subscribable platform-wide events feed.
+
+    Issue #578. Includes published, non-cancelled, non-gated events
+    from the last 30 days through all future. Subscribers (Apple
+    Calendar, Google Calendar, Outlook) refresh on their own polling
+    cycle; we set short cache headers and honor ``If-None-Match`` /
+    ``If-Modified-Since`` so a CDN in front can serve 304s when
+    nothing has changed.
+
+    No login required — the feed contains only ``required_level=0``
+    events. A signed-token per-user feed for gated events is a
+    deferred follow-up (see issue body).
+    """
+    events_qs = feed_events_queryset()
+    events = list(events_qs)
+    count = len(events)
+
+    # ``Last-Modified`` is the latest ``updated_at`` across included
+    # events; falls back to "now" for an empty queryset so the header
+    # is always present and conditional requests still work.
+    if events:
+        last_modified = max(e.updated_at for e in events)
+    else:
+        last_modified = timezone.now()
+
+    etag = _build_feed_etag(last_modified, count)
+
+    # Honor conditional requests. ``If-None-Match`` takes precedence
+    # over ``If-Modified-Since`` per RFC 7232.
+    if_none_match = request.META.get('HTTP_IF_NONE_MATCH', '').strip()
+    if if_none_match and if_none_match == etag:
+        not_modified = HttpResponse(status=304)
+        not_modified['ETag'] = etag
+        not_modified['Last-Modified'] = _format_http_date(last_modified)
+        not_modified['Cache-Control'] = 'public, max-age=300'
+        return not_modified
+
+    if_modified_since = request.META.get('HTTP_IF_MODIFIED_SINCE', '').strip()
+    if if_modified_since:
+        client_dt = _parse_http_date(if_modified_since)
+        if client_dt is not None:
+            # Compare at second granularity — HTTP-date has no
+            # sub-second component, so anything finer would loop.
+            last_modified_floor = last_modified.replace(microsecond=0)
+            if client_dt >= last_modified_floor:
+                not_modified = HttpResponse(status=304)
+                not_modified['ETag'] = etag
+                not_modified['Last-Modified'] = _format_http_date(
+                    last_modified,
+                )
+                not_modified['Cache-Control'] = 'public, max-age=300'
+                return not_modified
+
+    ics_bytes = generate_feed_ics(events)
+    response = HttpResponse(
+        ics_bytes, content_type='text/calendar; charset=utf-8',
+    )
+    # Inline filename hint — subscriber clients fetch this URL on
+    # their own schedule, never as a download. ``inline`` keeps
+    # browsers from prompting "Save as".
+    response['Content-Disposition'] = (
+        'inline; filename="ai-shipping-labs.ics"'
+    )
+    response['Cache-Control'] = 'public, max-age=300'
+    response['Last-Modified'] = _format_http_date(last_modified)
+    response['ETag'] = etag
     return response

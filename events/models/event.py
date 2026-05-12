@@ -34,6 +34,18 @@ EVENT_ORIGIN_CHOICES = [
     ('studio', 'Studio'),
 ]
 
+# Issue #579: canonical list of supported third-party hosts for the
+# "Hosted on X" pill. Adding a new partner is a one-line code change
+# here plus a Studio dropdown re-render. The display label is what
+# renders in the pill, so the value column must be exactly the casing
+# we want shown on the public site.
+EXTERNAL_HOST_CHOICES = [
+    ('', 'Community-hosted'),
+    ('Maven', 'Maven'),
+    ('Luma', 'Luma'),
+    ('DataTalksClub', 'DataTalksClub'),
+]
+
 
 class Event(
     SyncedContentIdentityMixin,
@@ -243,9 +255,11 @@ class Event(
     # platform.
     external_host = models.CharField(
         max_length=100, blank=True, default='',
+        choices=EXTERNAL_HOST_CHOICES,
         help_text=(
-            'Display name of the third-party host (e.g. "Maven", "Luma", '
-            '"DataTalksClub"). Leave blank for community-hosted events.'
+            'Third-party host shown as a "Hosted on X" pill. Supported: '
+            'Maven, Luma, DataTalksClub. Leave blank for community-hosted '
+            'events.'
         ),
     )
 

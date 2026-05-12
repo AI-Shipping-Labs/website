@@ -36,6 +36,28 @@ from integrations.services.github_sync.dispatchers.instructors import _attach_in
 _UNSET = object()
 
 
+def _coerce_external_host_for_sync(raw, *, slug=''):
+    """Issue #579. ``Event.save()`` skips field validators, so a
+    content-repo author who types ``DataTalks Club`` in frontmatter
+    would still land a non-canonical value in the DB. Coerce anything
+    outside ``EXTERNAL_HOST_CHOICES`` to '' and emit a sync warning so
+    the bad frontmatter is visible in logs.
+    """
+    # Inline import: matches the existing dispatcher pattern (see Event
+    # imports below) to defer ``events`` app loading until call time.
+    from events.models.event import EXTERNAL_HOST_CHOICES
+
+    valid = {value for value, _ in EXTERNAL_HOST_CHOICES}
+    value = (raw or '').strip()
+    if value in valid:
+        return value
+    logger.warning(
+        'Sync: unknown external_host %r on event slug=%r — coercing to ""',
+        value, slug,
+    )
+    return ''
+
+
 def _build_synced_event_content_defaults(
     *,
     source,
@@ -82,10 +104,14 @@ def _build_synced_event_content_defaults(
         'required_level': required_level,
         'related_course': related_course,
         'kind': kind,
-        # Issue #572: third-party host indicator. Empty string is the
-        # back-compat default for existing files without the frontmatter
-        # key; any non-empty value flips the event to "external" mode.
-        'external_host': (external_host or '').strip(),
+        # Issue #572 / #579: third-party host indicator. Empty string is
+        # the back-compat default for existing files without the
+        # frontmatter key. Issue #579 constrains the value to a known
+        # partner list; non-canonical values coerce to '' (with a sync
+        # warning) so save() never lands bad data.
+        'external_host': _coerce_external_host_for_sync(
+            external_host, slug=source_path,
+        ),
         'content_id': content_id,
         # Issue #564: synced events must carry origin='github' so the
         # save-time invariant on ``Event`` (origin='github' iff

@@ -88,28 +88,22 @@
     </div>
 
     {% comment %}
-      Issue #572: third-party host indicator. Free-text so staff can add new
-      partners without a code change; the datalist below offers known values
-      as suggestions, not enforced choices.
+      Issue #579: external_host is constrained to a small set of known
+      partners via choices on the model. Render a select so staff cannot
+      type free text. The list of options comes from
+      events.models.event.EXTERNAL_HOST_CHOICES.
     {% endcomment %}
     <div>
       <label class="block text-sm font-medium text-foreground mb-1" for="external-host-input">External host</label>
-      <input type="text" name="external_host" id="external-host-input" list="external-host-suggestions"
-             value="{% if event %}{{ event.external_host|default:'' }}{% else %}{{ form_values.external_host|default:'' }}{% endif %}"
-             maxlength="100"
-             placeholder="Maven"
-             data-testid="studio-event-external-host"
-             class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
-      <datalist id="external-host-suggestions">
-        <option value="Maven"></option>
-        <option value="Luma"></option>
-        <option value="DataTalksClub"></option>
-        <option value="O'Reilly"></option>
-        <option value="Other"></option>
-      </datalist>
+      <select name="external_host" id="external-host-input"
+              data-testid="studio-event-external-host"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        {% for value, label in external_host_choices %}
+        <option value="{{ value }}"{% if event and event.external_host == value %} selected{% elif not event and form_values.external_host == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
       <p class="text-xs text-muted-foreground mt-1">
-        If this event is hosted on a third-party platform (Maven, Luma, DataTalksClub), enter the host name.
-        Leave blank for community-hosted events.
+        If this event is hosted on a partner platform, select the host. Leave blank for community-hosted events.
       </p>
     </div>
 
@@ -355,7 +349,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   platformSelect.addEventListener('change', updatePlatformVisibility);
   if (externalHostInput) {
-    externalHostInput.addEventListener('input', updatePlatformVisibility);
+    externalHostInput.addEventListener('change', updatePlatformVisibility);
   }
 
   // Initialize visibility on page load

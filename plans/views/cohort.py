@@ -14,17 +14,31 @@ Internal interview notes never render on member-facing pages in this
 issue. The interview-note model is deliberately NOT imported here.
 """
 
+import datetime
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from plans.cohort_rows import build_progress_rows
 from plans.comments_permissions import composer_state_for_owner_view
-from plans.models import PLAN_VISIBILITY_CHOICES, Plan, Sprint, SprintEnrollment
+from plans.models import (
+    PLAN_VISIBILITY_CHOICES,
+    Plan,
+    PlanRequest,
+    Sprint,
+    SprintEnrollment,
+)
+
+# Mirrors plans.views.sprints.PLAN_REQUEST_RATE_LIMIT. Imported as a
+# constant rather than from the sister module to avoid creating a
+# views-to-views import cycle when either file grows.
+_PLAN_REQUEST_RATE_LIMIT_HOURS = 24
 
 # Tuple of valid visibility values posted by the toggle form. We accept
 # only the active enum members from ``PLAN_VISIBILITY_CHOICES`` -- a
@@ -121,6 +135,20 @@ def cohort_board(request, sprint_slug):
             Plan.objects.filter(pk=viewer_plan.pk),
         ).select_related('sprint').first()
 
+    # Whether the viewer has an unexpired "Ask the team" ping in the
+    # last 24h -- drives the disabled state of the ping button. Only
+    # meaningful when the viewer has no plan; the cheap query is fine
+    # either way.
+    cutoff = timezone.now() - datetime.timedelta(
+        hours=_PLAN_REQUEST_RATE_LIMIT_HOURS,
+    )
+    viewer_pinged_recently = (
+        viewer_plan is None
+        and PlanRequest.objects.filter(
+            sprint=sprint, member=request.user, created_at__gte=cutoff,
+        ).exists()
+    )
+
     return render(
         request,
         'plans/cohort_board.html',
@@ -128,6 +156,7 @@ def cohort_board(request, sprint_slug):
             'sprint': sprint,
             'progress_rows': progress_rows,
             'viewer_plan': viewer_plan,
+            'viewer_pinged_recently': viewer_pinged_recently,
         },
     )
 

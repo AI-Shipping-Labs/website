@@ -93,7 +93,7 @@
               Your plan is being prepared
             </a>
             {% endif %}
-            <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block">
+            <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
               {% csrf_token %}
               <button type="submit"
                       class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"

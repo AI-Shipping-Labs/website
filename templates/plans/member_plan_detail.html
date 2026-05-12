@@ -38,6 +38,12 @@
             <i data-lucide="users" class="h-4 w-4"></i>
             Cohort board
           </a>
+          {% if request.user.is_staff %}
+          <a href="/admin/plans/plan/{{ plan.pk }}/change/" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary" data-testid="plan-admin-link">
+            <i data-lucide="external-link" class="h-4 w-4"></i>
+            Open in Django admin
+          </a>
+          {% endif %}
         </nav>
       </header>
 

@@ -58,6 +58,10 @@ from api.views.plans import (
 )
 from api.views.ses_events import ses_events
 from api.views.sprints import sprint_detail, sprints_collection
+from api.views.tier_reconcile import (
+    tier_reconcile_apply,
+    tier_reconcile_diagnostics,
+)
 from api.views.weeks import plan_weeks_collection, week_detail
 
 urlpatterns = [
@@ -252,6 +256,19 @@ urlpatterns = [
     path(
         "member-notes/<int:note_id>/",
         interview_note_detail,
+    ),
+    # ---- Tier reconciliation (issue #621) -----------------------------
+    # Diagnostics is registered BEFORE the apply route so the
+    # ``diagnostics`` literal does not collide with the apply path.
+    path(
+        "payments/tier-reconcile/diagnostics",
+        tier_reconcile_diagnostics,
+        name="api_tier_reconcile_diagnostics",
+    ),
+    path(
+        "payments/tier-reconcile",
+        tier_reconcile_apply,
+        name="api_tier_reconcile_apply",
     ),
     # ---- SES bounce / complaint webhook (issue #453) ------------------
     # SNS POSTs notifications here. Auth is the SNS signature, not a

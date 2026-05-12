@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Cancel registration{% if event %} - {{ event.title }}{% endif %} | AI Shipping Labs{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-lg px-6 lg:px-8 text-center">
+      <div class="rounded-2xl border border-border bg-card p-8">
+        {% if state == "confirm" %}
+          <div class="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-500/20">
+            <i data-lucide="alert-triangle" class="h-8 w-8 text-yellow-400"></i>
+          </div>
+          <h1 class="text-2xl font-semibold tracking-tight mb-4">Cancel your registration?</h1>
+          <p class="text-muted-foreground mb-2">You are about to cancel your registration for:</p>
+          <p class="text-lg text-foreground font-medium mb-1">{{ event.title }}</p>
+          <p class="text-sm text-muted-foreground mb-6">{{ event_datetime }}</p>
+
+          <form method="post" action="{{ action_url }}" class="space-y-3">
+            {% csrf_token %}
+            <button
+              type="submit"
+              class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-red-500/90 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-red-500"
+            >
+              <i data-lucide="x-circle" class="h-4 w-4"></i>
+              Cancel my registration
+            </button>
+            <a
+              href="{{ event_url }}"
+              class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              Keep my registration
+            </a>
+          </form>
+        {% elif state == "expired" %}
+          <div class="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-500/20">
+            <i data-lucide="clock" class="h-8 w-8 text-yellow-400"></i>
+          </div>
+          <h1 class="text-2xl font-semibold tracking-tight mb-4">Link expired</h1>
+          <p class="text-muted-foreground mb-6">{{ message }}</p>
+          <a
+            href="{{ event_url|default:'/events' }}"
+            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+          >
+            Go to event page
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        {% elif state == "invalid" %}
+          <div class="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20">
+            <i data-lucide="x-circle" class="h-8 w-8 text-red-400"></i>
+          </div>
+          <h1 class="text-2xl font-semibold tracking-tight mb-4">Link not valid</h1>
+          <p class="text-muted-foreground mb-6">{{ message }}</p>
+          <a
+            href="/events"
+            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+          >
+            Browse events
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        {% elif state == "already_cancelled" %}
+          <div class="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/20">
+            <i data-lucide="info" class="h-8 w-8 text-blue-400"></i>
+          </div>
+          <h1 class="text-2xl font-semibold tracking-tight mb-4">Nothing to cancel</h1>
+          <p class="text-muted-foreground mb-6">{{ message }}</p>
+          <a
+            href="{{ event_url|default:'/events' }}"
+            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+          >
+            Go to event page
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        {% elif state == "event_finished" %}
+          <div class="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/20">
+            <i data-lucide="info" class="h-8 w-8 text-blue-400"></i>
+          </div>
+          <h1 class="text-2xl font-semibold tracking-tight mb-4">Event already finished</h1>
+          <p class="text-muted-foreground mb-6">{{ message }}</p>
+          <a
+            href="{{ event_url|default:'/events' }}"
+            class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+          >
+            Go to event page
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

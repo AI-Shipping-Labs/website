@@ -47,6 +47,13 @@ PREVIEW_CONTEXTS = {
         'event_datetime': 'March 21, 2026 at 6:00 PM UTC',
         # Match the real send shape: {site}/events/{slug}/join.
         'join_url': 'https://aishippinglabs.com/events/community-lunch/join',
+        # Issue #588: real send mints a JWT-signed cancel URL. The
+        # preview URL must be a real URL shape so operators can hover
+        # the link in the Studio preview and confirm the wiring.
+        'cancel_url': (
+            'https://aishippinglabs.com/events/community-lunch/'
+            'cancel-registration?token=preview-token'
+        ),
         # Representative one-click "Add to Calendar" URLs. Shape mirrors
         # what events.services.calendar_links.build_calendar_links emits so
         # operators can hover the preview and confirm the wiring.

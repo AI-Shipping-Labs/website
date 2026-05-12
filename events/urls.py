@@ -1,7 +1,12 @@
 from django.urls import path
 
-from events.views.api import register_for_event, unregister_from_event
+from events.views.api import (
+    cancel_registration_action,
+    register_for_event,
+    unregister_from_event,
+)
 from events.views.pages import (
+    cancel_registration_page,
     event_calendar_ics,
     event_detail,
     event_group_public,
@@ -38,6 +43,11 @@ urlpatterns = [
         event_calendar_ics,
         name='event_calendar_ics',
     ),
+    path(
+        'events/<slug:slug>/cancel-registration',
+        cancel_registration_page,
+        name='event_cancel_registration',
+    ),
     path('events/<slug:slug>', event_detail, name='event_detail'),
     # API endpoints for registration
     path(
@@ -49,5 +59,10 @@ urlpatterns = [
         'api/events/<slug:slug>/unregister',
         unregister_from_event,
         name='event_unregister',
+    ),
+    path(
+        'api/events/<slug:slug>/cancel-registration',
+        cancel_registration_action,
+        name='event_cancel_registration_action',
     ),
 ]

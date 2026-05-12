@@ -21,9 +21,6 @@ from playwright_tests.conftest import (
     create_staff_user as _create_staff_user,
 )
 from playwright_tests.conftest import (
-    create_user as _create_user,
-)
-from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
 
@@ -63,55 +60,64 @@ def _delete_all_tokens():
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSuperuserIssuesToken:
-    """Superuser issues a token, sees it once, then only sees the prefix."""
+    """Superuser mints a token in two clicks without picking a user.
+
+    Covers two spec scenarios:
+      - "Superuser mints a token in two clicks without picking a user"
+      - "New token appears in the listing owned by the creating admin"
+    """
 
     def test_superuser_creates_token_and_views_it_once(
         self, django_server, browser
     ):
         admin_email = "admin-token@test.com"
-        staff_email = "staff-token@test.com"
         _create_staff_user(admin_email)
-        _create_staff_only_user(staff_email)
         _delete_all_tokens()
 
         context = _auth_context(browser, admin_email)
         page = context.new_page()
 
-        # 1. Sidebar link is visible.
+        # 1. Empty state on the list page.
         page.goto(
-            f"{django_server}/studio/", wait_until="domcontentloaded"
+            f"{django_server}/studio/api-tokens/",
+            wait_until="domcontentloaded",
         )
-        expect(page.locator('[data-testid="api-tokens-nav-link"]')).to_be_visible()
-
-        # 2. Empty state on the list page.
-        page.locator('[data-testid="api-tokens-nav-link"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "/studio/api-tokens/" in page.url
         expect(
             page.locator('[data-testid="api-tokens-empty"]')
         ).to_be_visible()
 
-        # 3. Click "Create token" button.
+        # 2. Click "Create token" button.
         page.locator('[data-testid="api-token-create-link"]').click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/api-tokens/new/" in page.url
 
-        # 4. Fill name + select staff user, submit.
+        # The form shows a Name input and confirms the token will be issued
+        # to the signed-in admin. There is no user dropdown.
+        expect(page.locator('[data-testid="token-name-input"]')).to_be_visible()
+        owner_note = page.locator(
+            '[data-testid="token-owner-note"]'
+        ).inner_text()
+        assert admin_email in owner_note
+        expect(
+            page.locator('[data-testid="token-user-select"]')
+        ).to_have_count(0)
+
+        # 3. Type the name and click Create.
         page.locator('[data-testid="token-name-input"]').fill("import script")
-        page.locator('[data-testid="token-user-select"]').select_option(
-            label=staff_email,
-        )
         page.locator('[data-testid="api-token-create-submit"]').click()
         page.wait_for_load_state("domcontentloaded")
 
-        # 5. Landed on /created/. Plaintext key visible exactly once.
+        # 4. Landed on /created/. Plaintext key visible exactly once and the
+        #    owner email shown is the signed-in admin.
         assert "/studio/api-tokens/created/" in page.url
         token_value = page.locator('[data-testid="api-token-value"]').inner_text()
         assert len(token_value) > 30
         warning = page.locator('[data-testid="api-token-warning"]').inner_text()
         assert "only time this token will be shown" in warning
+        created_body = page.content()
+        assert admin_email in created_body
 
-        # 6. Back to list -- masked prefix only, full key absent from
+        # 5. Back to list -- masked prefix only, full key absent from
         #    visible cells. (The revoke form's action URL legitimately
         #    contains the key as a path parameter; that's not a "display"
         #    of the key.)
@@ -123,16 +129,16 @@ class TestSuperuserIssuesToken:
             '[data-testid="api-token-prefix"]'
         ).inner_text().strip()
         assert prefix_cell_text == f"{token_value[:8]}..."
-        # The visible row carries the name and assigned user.
+        # The visible row carries the name and the creating admin's email.
         row_text = page.locator(
             '[data-testid="api-token-row"]'
         ).first.inner_text()
         assert "import script" in row_text
-        assert staff_email in row_text
+        assert admin_email in row_text
         # And the full key is NOT rendered as visible text in the cell.
         assert token_value not in row_text
 
-        # 7. Navigating back to /created/ redirects to the list (one-shot).
+        # 6. Navigating back to /created/ redirects to the list (one-shot).
         page.goto(
             f"{django_server}/studio/api-tokens/created/",
             wait_until="domcontentloaded",
@@ -216,16 +222,72 @@ class TestSuperuserRevokesToken:
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-class TestCreateFormRejectsNonAdmins:
-    """Free / Basic / Main / Premium contacts must NOT appear in the dropdown."""
+class TestListingSurfacesOwnership:
+    """Listing shows each token's owner so a superuser can tell them apart.
 
-    def test_dropdown_excludes_regular_member(self, django_server, browser):
-        admin_email = "admin-dropdown@test.com"
-        staff_email = "staff-dropdown@test.com"
-        member_email = "member-dropdown@test.com"
+    Two superusers seeded with one token each (created directly via the ORM
+    to simulate prior history). Signing in as one of them shows both rows
+    with their respective owner emails in the User column.
+    """
+
+    def test_listing_shows_owner_for_each_row(self, django_server, browser):
+        from accounts.models import Token, User
+
+        admin_a = "admin-a@test.com"
+        admin_b = "admin-b@test.com"
+        _create_staff_user(admin_a)
+        _create_staff_user(admin_b)
+        _delete_all_tokens()
+        user_a = User.objects.get(email=admin_a)
+        user_b = User.objects.get(email=admin_b)
+        Token.objects.create(user=user_a, name="token-a")
+        Token.objects.create(user=user_b, name="token-b")
+        connection.close()
+
+        context = _auth_context(browser, admin_a)
+        page = context.new_page()
+
+        page.goto(
+            f"{django_server}/studio/api-tokens/",
+            wait_until="domcontentloaded",
+        )
+
+        rows = page.locator('[data-testid="api-token-row"]')
+        expect(rows).to_have_count(2)
+
+        # Collect every row's text and confirm each token name is paired
+        # with the expected owner email in the same row.
+        row_texts = rows.all_inner_texts()
+        token_a_row = next(
+            (t for t in row_texts if "token-a" in t), None
+        )
+        token_b_row = next(
+            (t for t in row_texts if "token-b" in t), None
+        )
+        assert token_a_row is not None, f"token-a row missing: {row_texts}"
+        assert token_b_row is not None, f"token-b row missing: {row_texts}"
+        assert admin_a in token_a_row, (
+            f"admin-a should own token-a, row text: {token_a_row}"
+        )
+        assert admin_b in token_b_row, (
+            f"admin-b should own token-b, row text: {token_b_row}"
+        )
+
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestReservedNameStillRejected:
+    """Reserved system names are still rejected after the field is removed."""
+
+    def test_reserved_system_name_blocks_creation(
+        self, django_server, browser
+    ):
+        from accounts.models import Token
+
+        admin_email = "admin-reserved@test.com"
         _create_staff_user(admin_email)
-        _create_staff_only_user(staff_email)
-        _create_user(member_email, tier_slug="free")
+        _delete_all_tokens()
 
         context = _auth_context(browser, admin_email)
         page = context.new_page()
@@ -234,14 +296,21 @@ class TestCreateFormRejectsNonAdmins:
             f"{django_server}/studio/api-tokens/new/",
             wait_until="domcontentloaded",
         )
-        # Read the option list off the dropdown.
-        select = page.locator('[data-testid="token-user-select"]')
-        options = select.locator("option").all_inner_texts()
-        assert any(staff_email in o for o in options), (
-            f"Staff user must appear in dropdown, got {options}"
-        )
-        assert not any(member_email in o for o in options), (
-            f"Free member must not appear in dropdown, got {options}"
-        )
+        page.locator(
+            '[data-testid="token-name-input"]'
+        ).fill("studio-plan-editor")
+        page.locator('[data-testid="api-token-create-submit"]').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        # No redirect to /created/.
+        assert "/studio/api-tokens/created/" not in page.url
+        # The form re-renders with the reserved-name error.
+        error_text = page.locator(
+            '[data-testid="form-error-name"]'
+        ).inner_text()
+        assert "reserved" in error_text.lower()
+        # No token was created.
+        assert Token.objects.filter(name="studio-plan-editor").count() == 0
+        connection.close()
 
         context.close()

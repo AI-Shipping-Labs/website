@@ -66,12 +66,6 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
             password='pw',
             is_staff=True,
         )
-        cls.superuser = User.objects.create_user(
-            email='super@test.com',
-            password='pw',
-            is_staff=True,
-            is_superuser=True,
-        )
         cls.member = User.objects.create_user(
             email='member@test.com',
             password='pw',
@@ -170,15 +164,6 @@ class StudioUserAutocompleteSuppressionTest(TestCase):
         for response in (access, enrollments, tier_override):
             email = _find_control(response, 'input', name='email')
             self.assertEqual(email.get('autocomplete'), 'off')
-
-    def test_api_token_user_selector_suppresses_credential_autocomplete(self):
-        self.client.login(email='super@test.com', password='pw')
-        response = self.client.get('/studio/api-tokens/new/')
-
-        user = _find_control(response, 'select', name='user')
-        self.assertEqual(user.get('autocomplete'), 'off')
-        self.assertEqual(user.get('data-testid'), 'token-user-select')
-
 
 class PublicAuthAutocompleteGuardTest(TestCase):
     """Public auth forms must not inherit Studio autocomplete suppression."""

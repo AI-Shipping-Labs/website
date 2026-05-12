@@ -73,16 +73,21 @@ class TestMobileMenuHitTarget:
         page.wait_for_selector("#mobile-menu:not(.hidden)", timeout=2000)
         assert btn.get_attribute("aria-label") == "Close menu"
 
-        public_links = [
-            "About",
-            "Membership",
-            "Community",
-            "Resources",
-            "FAQ",
-            "Sign in",
+        public_test_ids = [
+            "mobile-nav-about-trigger",
+            "mobile-nav-membership",
+            "mobile-nav-community-trigger",
+            "mobile-nav-sprints",
+            "mobile-nav-events",
+            "mobile-nav-resources-trigger",
         ]
-        for label in public_links:
-            assert page.locator("#mobile-menu").get_by_text(label, exact=True).is_visible()
+        for test_id in public_test_ids:
+            assert page.locator(
+                f'#mobile-menu [data-testid="{test_id}"]'
+            ).is_visible()
+        assert page.locator("#mobile-menu").get_by_text(
+            "Sign in", exact=True
+        ).is_visible()
 
         btn.click()
         page.wait_for_function(
@@ -99,12 +104,21 @@ class TestMobileMenuHitTarget:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         assert not page.locator("#mobile-menu-btn").is_visible()
-        assert page.locator('[data-testid="desktop-primary-nav"]').get_by_role(
-            "link", name="About"
-        ).is_visible()
-        assert page.locator('[data-testid="desktop-primary-nav"]').get_by_role(
-            "link", name="Membership"
-        ).is_visible()
+        desktop_nav = page.locator('[data-testid="desktop-primary-nav"]')
+        # About / Community / Resources are dropdown trigger buttons; the
+        # rest are direct links.
+        for trigger_test_id in [
+            "nav-about-trigger",
+            "nav-community-trigger",
+            "nav-resources-trigger",
+        ]:
+            assert desktop_nav.locator(
+                f'[data-testid="{trigger_test_id}"]'
+            ).is_visible()
+        for link_test_id in ["nav-membership", "nav-sprints", "nav-events"]:
+            assert desktop_nav.locator(
+                f'[data-testid="{link_test_id}"]'
+            ).is_visible()
         assert page.locator("#community-dropdown-btn").is_visible()
         assert page.locator("#resources-dropdown-btn").is_visible()
         assert page.locator("#learn-dropdown-btn").count() == 0
@@ -128,7 +142,7 @@ class TestMobileMenuTextNavAccordion:
 
         _open_mobile_menu(page)
 
-        for section in ["community", "resources"]:
+        for section in ["about", "community", "resources"]:
             section_list = page.locator(f"#mobile-{section}-list")
             assert section_list.count() == 1
             assert "hidden" in (section_list.get_attribute("class") or "")
@@ -149,17 +163,23 @@ class TestMobileMenuTextNavAccordion:
         _open_mobile_menu(page)
 
         expected = {
+            "about": [
+                "About",
+                "Team",
+                "FAQ",
+            ],
             "community": [
+                "Membership",
                 "Community Sprints",
                 "Events",
             ],
             "resources": [
+                "Blog",
                 "Courses",
                 "Workshops",
-                "Learning Path",
+                "Learning Paths",
                 "Project Ideas",
                 "Interview Prep",
-                "Blog",
                 "Curated Links",
             ],
         }
@@ -187,6 +207,7 @@ class TestMobileMenuTextNavAccordion:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
+        page.locator("#mobile-about-toggle").click()
         page.locator("#mobile-community-toggle").click()
         page.locator("#mobile-resources-toggle").click()
 
@@ -253,6 +274,7 @@ class TestMobileMenuAuthenticatedItemsReachable:
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
         _open_mobile_menu(page)
+        page.locator("#mobile-about-toggle").click()
         page.locator("#mobile-community-toggle").click()
         page.locator("#mobile-resources-toggle").click()
 

@@ -15,29 +15,34 @@ class ActivitiesSprintHubTest(TestCase):
     def test_global_nav_keeps_expected_order(self):
         response = self.client.get('/activities')
         content = response.content.decode()
+        header = content[:content.index('</header>')]
+        # Slice the desktop primary nav to assert top-level ordering
+        # without confusing nested dropdown links with top-level ones.
+        primary = content[
+            content.index('data-testid="desktop-primary-nav"'):
+            content.index('<div class="hidden md:flex md:items-center md:gap-4">')
+        ]
 
-        about_index = content.index('href="/about"')
-        membership_index = content.index('href="/pricing"')
-        community_index = content.index('id="community-dropdown-btn"')
-        resources_index = content.index('id="resources-dropdown-btn"')
-        faq_index = content.index('href="/faq"')
+        about_trigger = primary.index('id="about-dropdown-btn"')
+        membership_index = primary.index('data-testid="nav-membership"')
+        community_index = primary.index('id="community-dropdown-btn"')
+        sprints_index = primary.index('data-testid="nav-sprints"')
+        events_index = primary.index('data-testid="nav-events"')
+        resources_index = primary.index('id="resources-dropdown-btn"')
 
-        self.assertLess(about_index, membership_index)
+        self.assertLess(about_trigger, membership_index)
         self.assertLess(membership_index, community_index)
-        self.assertLess(community_index, resources_index)
-        self.assertLess(resources_index, faq_index)
-        header_end = content.index('</header>')
-        header = content[:header_end]
+        self.assertLess(community_index, sprints_index)
+        self.assertLess(sprints_index, events_index)
+        self.assertLess(events_index, resources_index)
+
         self.assertIn('href="/about"', header)
         self.assertIn('href="/pricing"', header)
         self.assertIn('href="/courses"', header)
         self.assertIn('href="/sprints"', header)
         self.assertIn('href="/resources"', header)
-        self.assertIn('Resources', header)
-        self.assertIn('>Membership</a>', header)
-        self.assertIn('>About</a>', header)
         self.assertIn('href="/faq"', header)
-        self.assertIn('>FAQ</a>', header)
+        self.assertIn('>Membership</a>', primary)
         self.assertNotIn('href="/activities"', header)
         self.assertNotIn('>Activities</a>', header)
 

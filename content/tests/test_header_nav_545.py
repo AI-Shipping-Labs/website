@@ -10,22 +10,30 @@ from plans.models import Plan, Sprint
 User = get_user_model()
 
 
-RESOURCES_LINKS = [
-    ('Courses', '/courses'),
-    ('Workshops', '/workshops'),
-    ('Learning Path', '/learning-path/ai-engineer'),
-    ('Project Ideas', '/projects'),
-    ('Interview Prep', '/interview'),
-    ('Blog', '/blog'),
+ABOUT_LINKS = [
+    ('About', '/about'),
+    ('Team', '/about#team'),
+    ('FAQ', '/faq'),
 ]
 
 COMMUNITY_LINKS = [
+    ('Membership', '/pricing'),
     ('Community Sprints', '/sprints'),
     ('Events', '/events'),
 ]
 
+RESOURCES_LINKS = [
+    ('Blog', '/blog'),
+    ('Courses', '/courses'),
+    ('Workshops', '/workshops'),
+    ('Learning Paths', '/learning-path/ai-engineer'),
+    ('Project Ideas', '/projects'),
+    ('Interview Prep', '/interview'),
+    ('Curated Links', '/resources'),
+]
 
-class HeaderTextNavigationIssue545Test(TestCase):
+
+class HeaderTextNavigationIssue580Test(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.sprint = Sprint.objects.create(
@@ -42,48 +50,134 @@ class HeaderTextNavigationIssue545Test(TestCase):
         html = response.content.decode()
         return html[:html.index('</header>')]
 
-    def assert_public_navigation_ia(self, header):
-        self.assertIn('href="/about"', header)
-        self.assertIn('>About</a>', header)
-        self.assertIn('href="/pricing"', header)
-        self.assertIn('>Membership</a>', header)
-        self.assertIn('id="community-dropdown-btn"', header)
-        self.assertIn('id="resources-dropdown-btn"', header)
-        self.assertIn('href="/faq"', header)
-        self.assertIn('>FAQ</a>', header)
-        self.assertIn('id="mobile-community-toggle"', header)
-        self.assertIn('id="mobile-resources-toggle"', header)
-        self.assertNotIn('id="learn-dropdown-btn"', header)
-        self.assertNotIn('id="mobile-learn-toggle"', header)
-
-        primary = header[
+    def _primary_nav(self, header):
+        return header[
             header.index('data-testid="desktop-primary-nav"'):
             header.index('<div class="hidden md:flex md:items-center md:gap-4">')
         ]
+
+    def assert_public_navigation_ia(self, header):
+        # Three desktop dropdown triggers in the new order: about, community, resources.
+        primary = self._primary_nav(header)
         self.assertEqual(
             re.findall(r'id="([^"]+-dropdown-btn)"', primary),
-            ['community-dropdown-btn', 'resources-dropdown-btn'],
+            ['about-dropdown-btn', 'community-dropdown-btn', 'resources-dropdown-btn'],
         )
-        for label in ['About', 'Membership', 'Community', 'Resources', 'FAQ']:
-            self.assertIn(label, primary)
 
-        self.assertLess(primary.index('>About</a>'), primary.index('>Membership</a>'))
-        self.assertLess(
-            primary.index('>Membership</a>'),
-            primary.index('id="community-dropdown-btn"'),
+        # Top-level test ids in left-to-right order.
+        top_level_ids = re.findall(
+            r'data-testid="(nav-about-trigger|nav-membership|nav-community-trigger|nav-sprints|nav-events|nav-resources-trigger)"',
+            primary,
         )
-        self.assertLess(
-            primary.index('id="community-dropdown-btn"'),
-            primary.index('id="resources-dropdown-btn"'),
+        self.assertEqual(
+            top_level_ids,
+            [
+                'nav-about-trigger',
+                'nav-membership',
+                'nav-community-trigger',
+                'nav-sprints',
+                'nav-events',
+                'nav-resources-trigger',
+            ],
         )
-        self.assertLess(primary.index('id="resources-dropdown-btn"'), primary.index('>FAQ</a>'))
 
+        # FAQ is no longer a top-level link — it only appears inside the
+        # About dropdown, never as a sibling of the trigger buttons.
+        self.assertNotIn('data-testid="nav-faq"', primary)
+        faq_occurrences = re.findall(r'href="/faq"', primary)
+        self.assertEqual(len(faq_occurrences), 1)
+        about_start = primary.index('id="about-dropdown"')
+        about_end = primary.index('id="community-dropdown-btn"')
+        self.assertIn('href="/faq"', primary[about_start:about_end])
+
+        # Activities is not in top-level nav (regression check from #555).
         self.assertNotIn('>Activities</a>', primary)
         self.assertNotIn('href="/activities"', primary)
 
-        for label, href in COMMUNITY_LINKS + RESOURCES_LINKS + [('Curated Links', '/resources')]:
-            self.assertIn(f'href="{href}"', header)
-            self.assertIn(label, header)
+        # About dropdown contents and order.
+        about_panel = self._slice_block(primary, 'about-dropdown')
+        about_link_ids = re.findall(r'data-testid="(nav-about-link-[^"]+)"', about_panel)
+        self.assertEqual(
+            about_link_ids,
+            ['nav-about-link-about', 'nav-about-link-team', 'nav-about-link-faq'],
+        )
+        for label, href in ABOUT_LINKS:
+            self.assertIn(f'href="{href}"', about_panel)
+            self.assertIn(label, about_panel)
+
+        # Community dropdown contents and order.
+        community_panel = self._slice_block(primary, 'community-dropdown')
+        community_link_ids = re.findall(
+            r'data-testid="(nav-community-link-[^"]+)"', community_panel
+        )
+        self.assertEqual(
+            community_link_ids,
+            [
+                'nav-community-link-membership',
+                'nav-community-link-sprints',
+                'nav-community-link-events',
+            ],
+        )
+        for label, href in COMMUNITY_LINKS:
+            self.assertIn(f'href="{href}"', community_panel)
+            self.assertIn(label, community_panel)
+
+        # Resources dropdown contents and order — Blog is first, label is `Learning Paths`.
+        resources_panel = self._slice_block(primary, 'resources-dropdown')
+        resources_link_ids = re.findall(
+            r'data-testid="(nav-resources-link-[^"]+)"', resources_panel
+        )
+        self.assertEqual(
+            resources_link_ids,
+            [
+                'nav-resources-link-blog',
+                'nav-resources-link-courses',
+                'nav-resources-link-workshops',
+                'nav-resources-link-learning-paths',
+                'nav-resources-link-projects',
+                'nav-resources-link-interview',
+                'nav-resources-link-curated-links',
+            ],
+        )
+        for label, href in RESOURCES_LINKS:
+            self.assertIn(f'href="{href}"', resources_panel)
+            self.assertIn(label, resources_panel)
+
+        # Mobile accordions: about, community, resources — in that order.
+        mobile_section = header[header.index('id="mobile-menu"'):]
+        mobile_toggle_ids = re.findall(
+            r'id="(mobile-(?:about|community|resources)-toggle)"', mobile_section
+        )
+        self.assertEqual(
+            mobile_toggle_ids,
+            ['mobile-about-toggle', 'mobile-community-toggle', 'mobile-resources-toggle'],
+        )
+
+        # Mobile order between accordions: Membership, then Community accordion,
+        # then Sprints + Events as direct top-level links, then Resources accordion.
+        idx_membership = mobile_section.index('data-testid="mobile-nav-membership"')
+        idx_community = mobile_section.index('id="mobile-community-toggle"')
+        idx_sprints = mobile_section.index('data-testid="mobile-nav-sprints"')
+        idx_events = mobile_section.index('data-testid="mobile-nav-events"')
+        idx_resources = mobile_section.index('id="mobile-resources-toggle"')
+        self.assertLess(idx_membership, idx_community)
+        self.assertLess(idx_community, idx_sprints)
+        self.assertLess(idx_sprints, idx_events)
+        self.assertLess(idx_events, idx_resources)
+
+    @staticmethod
+    def _slice_block(html, dropdown_id):
+        """Return the HTML slice for a single dropdown panel by id."""
+        start = html.index(f'id="{dropdown_id}"')
+        # End at the next dropdown-btn or end of primary nav.
+        next_ids = [
+            html.find('id="about-dropdown-btn"', start + 1),
+            html.find('id="community-dropdown-btn"', start + 1),
+            html.find('id="resources-dropdown-btn"', start + 1),
+        ]
+        candidates = [i for i in next_ids if i != -1]
+        end = min(candidates) if candidates else len(html)
+        return html[start:end]
 
     def test_anonymous_header_exposes_groomed_public_navigation_ia(self):
         header = self._header_html()
@@ -95,7 +189,7 @@ class HeaderTextNavigationIssue545Test(TestCase):
 
     def test_authenticated_header_preserves_existing_account_controls(self):
         user = User.objects.create_user(
-            email='member545@example.com',
+            email='member580@example.com',
             password='pw',
             first_name='Member',
         )
@@ -122,7 +216,7 @@ class HeaderTextNavigationIssue545Test(TestCase):
 
     def test_staff_header_keeps_studio_inside_account_controls(self):
         staff = User.objects.create_user(
-            email='staff545@example.com',
+            email='staff580@example.com',
             password='pw',
             is_staff=True,
         )
@@ -132,10 +226,7 @@ class HeaderTextNavigationIssue545Test(TestCase):
         self.assert_public_navigation_ia(header)
         self.assertIn(reverse('studio_dashboard'), header)
         self.assertIn('data-testid="header-admin-role-badge"', header)
-        primary = header[
-            header.index('data-testid="desktop-primary-nav"'):
-            header.index('<div class="hidden md:flex md:items-center md:gap-4">')
-        ]
+        primary = self._primary_nav(header)
         self.assertNotIn(reverse('studio_dashboard'), primary)
 
     def test_public_nav_destinations_continue_to_resolve(self):

@@ -77,9 +77,11 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('min-w-0', content)
 
     def test_mobile_nav_sections_have_chevron_indicators(self):
-        """The Community and Resources sections should have chevron SVG indicators."""
+        """The About, Community, and Resources sections should have chevron SVG indicators."""
         response = self.client.get("/")
         content = response.content.decode()
+        self.assertIn('id="mobile-about-chevron"', content)
+        self.assertIn('id="mobile-about-toggle"', content)
         self.assertIn('id="mobile-community-chevron"', content)
         self.assertIn('id="mobile-community-toggle"', content)
         self.assertIn('id="mobile-resources-chevron"', content)
@@ -87,10 +89,14 @@ class HeaderMobileMenuTest(TestCase):
         self.assertNotIn('id="mobile-learn-toggle"', content)
 
     def test_mobile_nav_toggles_are_buttons(self):
-        """The Community and Resources headings should be buttons."""
+        """The About, Community, and Resources headings should be buttons."""
         response = self.client.get("/")
         content = response.content.decode()
-        for toggle_id in ['mobile-community-toggle', 'mobile-resources-toggle']:
+        for toggle_id in [
+            'mobile-about-toggle',
+            'mobile-community-toggle',
+            'mobile-resources-toggle',
+        ]:
             toggle_pos = content.index(f'id="{toggle_id}"')
             tag_start = content.rfind("<", 0, toggle_pos)
             tag_name = content[tag_start:tag_start + 10]
@@ -101,8 +107,10 @@ class HeaderMobileMenuTest(TestCase):
         response = self.client.get("/")
         content = response.content.decode()
         self.assertIn('href="/about"', content)
+        self.assertIn('href="/about#team"', content)
         self.assertIn('href="/pricing"', content)
         self.assertIn('href="/faq"', content)
+        self.assertIn('id="about-dropdown-btn"', content)
         self.assertIn('id="community-dropdown-btn"', content)
         self.assertIn('id="resources-dropdown-btn"', content)
         self.assertNotIn('id="learn-dropdown-btn"', content)

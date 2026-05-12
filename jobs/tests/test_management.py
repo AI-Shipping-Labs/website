@@ -34,6 +34,17 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(schedule.func, 'notifications.services.event_reminders.check_event_reminders')
         self.assertEqual(schedule.cron, '*/15 * * * *')
 
+    def test_creates_complete_finished_events_schedule(self):
+        """Command creates complete-finished-events schedule (issue #573)."""
+        call_command('setup_schedules', stdout=StringIO())
+        schedule = Schedule.objects.get(name='complete-finished-events')
+        self.assertEqual(
+            schedule.func,
+            'events.tasks.complete_finished_events.complete_finished_events',
+        )
+        self.assertEqual(schedule.cron, '*/5 * * * *')
+        self.assertEqual(schedule.schedule_type, Schedule.CRON)
+
     def test_creates_expire_tier_overrides_schedule(self):
         """Command creates expire-tier-overrides schedule."""
         call_command('setup_schedules', stdout=StringIO())
@@ -80,6 +91,7 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(Schedule.objects.filter(name='health-check').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='cleanup-webhook-logs').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='event-reminders').count(), 1)
+        self.assertEqual(Schedule.objects.filter(name='complete-finished-events').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='expire-tier-overrides').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='slack-membership-refresh').count(), 1)
         self.assertEqual(Schedule.objects.filter(name='import-slack-daily').count(), 1)
@@ -95,6 +107,7 @@ class SetupSchedulesCommandTest(TestCase):
             'health-check',
             'cleanup-webhook-logs',
             'event-reminders',
+            'complete-finished-events',
             'expire-tier-overrides',
             'slack-membership-refresh',
             'import-slack-daily',

@@ -2,6 +2,7 @@
 {% load accounts_extras %}
 {% current_user_latest_plan as user_latest_plan %}
 {% logout_url as header_logout_url %}
+{% login_url as header_login_url %}
 <header id="site-header" class="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
   {% include "includes/announcement_banner.html" %}
   <nav class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4 lg:px-8">
@@ -141,7 +142,7 @@
         </div>
       </div>
       {% else %}
-      <a href="{% url 'account_login' %}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+      <a href="{{ header_login_url }}" class="inline-flex items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
       </a>
       {% endif %}
@@ -249,7 +250,7 @@
         </a>
       </div>
       {% else %}
-      <a href="{% url 'account_login' %}" class="mt-4 block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+      <a href="{{ header_login_url }}" class="mt-4 block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
         Sign in
       </a>
       {% endif %}

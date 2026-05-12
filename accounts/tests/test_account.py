@@ -907,6 +907,42 @@ class AccountPageTimezonePreferenceDisplayTest(TestCase):
         self.assertContains(response, 'value="GMT+02:00 Europe/Berlin"')
         self.assertContains(response, "Current timezone: GMT+02:00 Europe/Berlin")
 
+    def test_no_saved_preference_marks_input_for_browser_detection(self):
+        """Issue #582: the input needs a ``data-has-preference=false``
+        marker so the inline detection script knows it may overwrite the
+        empty value with the resolved browser timezone."""
+        user = User.objects.create_user(email="tz-empty@example.com")
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'data-has-preference="false"')
+        # The detected-hint placeholder element ships hidden; the script
+        # toggles it visible after detection succeeds.
+        self.assertContains(
+            response, 'data-testid="timezone-detected-hint"'
+        )
+        self.assertContains(response, 'id="timezone-detected-hint"')
+        # The "Use browser timezone" string is still allowed as the
+        # placeholder attribute, but it must NEVER appear as the rendered
+        # input value -- the value attribute is empty until the JS
+        # writes the detected name in.
+        self.assertNotContains(response, 'value="Use browser timezone"')
+
+    def test_saved_preference_marks_input_has_preference_true(self):
+        """Issue #582: when a preference is saved, the marker flips to
+        ``true`` so the inline script will not overwrite the formatted
+        label with the raw IANA name from the browser."""
+        user = User.objects.create_user(
+            email="tz-marked@example.com",
+            preferred_timezone="America/New_York",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/account/")
+
+        self.assertContains(response, 'data-has-preference="true"')
+
     def test_timezone_options_are_sorted_by_offset_then_name(self):
         options = build_timezone_options()
         sort_keys = [(option.offset_minutes, option.value) for option in options]

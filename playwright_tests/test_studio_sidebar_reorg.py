@@ -743,9 +743,9 @@ class TestContentPageCollapsesEvents:
 @pytest.mark.django_db(transaction=True)
 class TestEventsPageKeepsEventsExpanded:
     """When the active page is inside the Events section, Events stays
-    expanded and the Event groups link is highlighted."""
+    expanded and the Event series link is highlighted."""
 
-    def test_event_groups_page_keeps_events_open(
+    def test_event_series_page_keeps_events_open(
         self, django_server, browser
     ):
         _ensure_tiers()
@@ -755,7 +755,7 @@ class TestEventsPageKeepsEventsExpanded:
         page = context.new_page()
         page.set_viewport_size({"width": 1280, "height": 800})
         page.goto(
-            f"{django_server}/studio/event-groups/",
+            f"{django_server}/studio/event-series/",
             wait_until="domcontentloaded",
         )
 
@@ -763,12 +763,12 @@ class TestEventsPageKeepsEventsExpanded:
         assert events_button.get_attribute("aria-expanded") == "true"
         assert _section_list(page, "events").is_visible()
 
-        event_groups_link = page.locator(
-            '#studio-section-events a[href="/studio/event-groups/"]'
+        event_series_link = page.locator(
+            '#studio-section-events a[href="/studio/event-series/"]'
         )
-        assert event_groups_link.count() == 1
+        assert event_series_link.count() == 1
         assert "bg-secondary" in (
-            event_groups_link.get_attribute("class") or ""
+            event_series_link.get_attribute("class") or ""
         )
 
         for slug in ("content", "people", "marketing", "operations"):
@@ -820,16 +820,16 @@ class TestSectionsAreIndependentTogglesAfterReorder:
 
 
 # ---------------------------------------------------------------------------
-# #576 Scenario: Event groups link still reachable via its preserved test hook
+# #576 Scenario: Event series link still reachable via its preserved test hook
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestEventGroupsTestidPreserved:
-    """The ``data-testid="sidebar-event-groups-link"`` hook still resolves
+class TestEventSeriesTestidPreserved:
+    """The ``data-testid="sidebar-event-series-link"`` hook still resolves
     to a single link inside the Events section and still navigates."""
 
-    def test_event_groups_testid_navigates(self, django_server, browser):
+    def test_event_series_testid_navigates(self, django_server, browser):
         _ensure_tiers()
         _create_staff_user("admin@test.com")
 
@@ -838,19 +838,19 @@ class TestEventGroupsTestidPreserved:
         page.set_viewport_size({"width": 1280, "height": 800})
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
-        link = page.locator('[data-testid="sidebar-event-groups-link"]')
+        link = page.locator('[data-testid="sidebar-event-series-link"]')
         assert link.count() == 1
         # Lives inside the Events section.
         events_link = page.locator(
-            '#studio-section-events [data-testid="sidebar-event-groups-link"]'
+            '#studio-section-events [data-testid="sidebar-event-series-link"]'
         )
         assert events_link.count() == 1
-        assert events_link.get_attribute("href") == "/studio/event-groups/"
-        assert "Event groups" in (events_link.inner_text() or "")
+        assert events_link.get_attribute("href") == "/studio/event-series/"
+        assert "Event series" in (events_link.inner_text() or "")
 
         events_link.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/studio/event-groups/" in page.url
+        assert "/studio/event-series/" in page.url
         assert _section_button(page, "events").get_attribute(
             "aria-expanded"
         ) == "true"

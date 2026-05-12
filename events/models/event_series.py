@@ -1,12 +1,14 @@
-"""EventGroup model: a recurring series of events created in one Studio action.
+"""EventSeries model: a recurring series of events created in one Studio action.
 
-The group's job is purely to generate ``Event`` rows at creation time and
+The series' job is purely to generate ``Event`` rows at creation time and
 provide a UI surface for managing them together. There is no recurrence
 engine; once the events are created they are independent rows linked back
-to the group via a nullable FK. Deleting the group leaves the events in
-place (``on_delete=SET_NULL`` on ``Event.event_group``).
+to the series via a nullable FK. Deleting the series leaves the events in
+place (``on_delete=SET_NULL`` on ``Event.event_series``).
 
-Issue #564.
+Issue #564 introduced the model under the old name ``EventGroup``;
+issue #575 renamed it to ``EventSeries`` everywhere to match the product
+term.
 """
 
 from django.db import models
@@ -15,7 +17,7 @@ from django.utils.text import slugify
 from content.models.mixins import TimestampedModelMixin
 from content.utils.markdown import render_markdown
 
-EVENT_GROUP_CADENCE_CHOICES = [
+EVENT_SERIES_CADENCE_CHOICES = [
     ('weekly', 'Weekly'),
 ]
 
@@ -31,7 +33,7 @@ DAY_OF_WEEK_CHOICES = [
 ]
 
 
-class EventGroup(TimestampedModelMixin, models.Model):
+class EventSeries(TimestampedModelMixin, models.Model):
     """A series of related events created together as a weekly cadence."""
 
     name = models.CharField(max_length=300)
@@ -46,7 +48,7 @@ class EventGroup(TimestampedModelMixin, models.Model):
     )
     cadence = models.CharField(
         max_length=20,
-        choices=EVENT_GROUP_CADENCE_CHOICES,
+        choices=EVENT_SERIES_CADENCE_CHOICES,
         default='weekly',
         help_text='Cadence label. v1 supports weekly only.',
     )
@@ -89,6 +91,9 @@ class EventGroup(TimestampedModelMixin, models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
+        # Note: the public URL path stays ``/events/groups/<slug>`` even
+        # after the rename (issue #575) so external bookmarks keep working.
+        # A follow-up issue may flip the public path to ``/events/series/``.
         return f'/events/groups/{self.slug}'
 
     @property

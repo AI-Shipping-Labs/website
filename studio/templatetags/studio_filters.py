@@ -323,7 +323,7 @@ def studio_sidebar_state(path):
     events_active = (
         '/events/' in p
         or p == '/studio/events'
-        or 'event-groups' in p
+        or 'event-series' in p
         or 'notifications' in p
     )
     marketing_active = (

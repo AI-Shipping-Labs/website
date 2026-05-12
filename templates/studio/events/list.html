@@ -16,7 +16,7 @@
       <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
       <span>New event</span>
     </a>
-    <a href="{% url 'studio_event_group_new' %}"
+    <a href="{% url 'studio_event_series_new' %}"
        class="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
        data-testid="event-series-new-button">
       <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
@@ -60,10 +60,10 @@
           {% endif %}
         </td>
         <td class="px-6 py-4 text-sm" data-label="Series">
-          {% if event.event_group %}
-          <a href="{% url 'studio_event_group_detail' group_id=event.event_group.pk %}"
+          {% if event.event_series %}
+          <a href="{% url 'studio_event_series_detail' series_id=event.event_series.pk %}"
              class="text-accent hover:underline"
-             data-testid="event-series-link">{{ event.event_group.name }}</a>
+             data-testid="event-series-link">{{ event.event_series.name }}</a>
           {% else %}
           <span class="text-xs text-muted-foreground">—</span>
           {% endif %}

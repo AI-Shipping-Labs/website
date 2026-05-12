@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from studio.views.announcement import announcement_banner_edit
 from studio.views.api_tokens import (
@@ -61,12 +62,12 @@ from studio.views.enrollments import (
     enrollment_list,
     enrollment_unenroll,
 )
-from studio.views.event_groups import (
-    event_group_add_occurrence,
-    event_group_create,
-    event_group_delete,
-    event_group_detail,
-    event_group_list,
+from studio.views.event_series import (
+    event_series_add_occurrence,
+    event_series_create,
+    event_series_delete,
+    event_series_detail,
+    event_series_list,
 )
 from studio.views.events import event_create, event_create_zoom, event_edit, event_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
@@ -248,24 +249,57 @@ urlpatterns = [
     path('events/<int:event_id>/notify', event_notify, name='studio_event_notify'),
     path('events/<int:event_id>/announce-slack', event_announce_slack, name='studio_event_announce_slack'),
 
-    # Event groups (issue #564). The literal ``new`` route is registered
-    # before the ``<int:group_id>`` routes so the slug is not swallowed.
-    path('event-groups/', event_group_list, name='studio_event_group_list'),
-    path('event-groups/new', event_group_create, name='studio_event_group_new'),
+    # Event series (issue #564, renamed from event-groups in #575). The
+    # literal ``new`` route is registered before the ``<int:series_id>``
+    # routes so the slug is not swallowed.
+    path('event-series/', event_series_list, name='studio_event_series_list'),
+    path('event-series/new', event_series_create, name='studio_event_series_new'),
     path(
-        'event-groups/<int:group_id>/',
-        event_group_detail,
-        name='studio_event_group_detail',
+        'event-series/<int:series_id>/',
+        event_series_detail,
+        name='studio_event_series_detail',
     ),
     path(
-        'event-groups/<int:group_id>/add-occurrence',
-        event_group_add_occurrence,
-        name='studio_event_group_add_occurrence',
+        'event-series/<int:series_id>/add-occurrence',
+        event_series_add_occurrence,
+        name='studio_event_series_add_occurrence',
     ),
     path(
-        'event-groups/<int:group_id>/delete',
-        event_group_delete,
-        name='studio_event_group_delete',
+        'event-series/<int:series_id>/delete',
+        event_series_delete,
+        name='studio_event_series_delete',
+    ),
+
+    # Backward-compat 301 redirects from the old ``/studio/event-groups/``
+    # URLs to the new ``/studio/event-series/`` URLs (issue #575). External
+    # Studio bookmarks keep working through the rename. These five
+    # patterns mirror the new routes above one-to-one.
+    path(
+        'event-groups/',
+        RedirectView.as_view(url='/studio/event-series/', permanent=True),
+    ),
+    path(
+        'event-groups/new',
+        RedirectView.as_view(url='/studio/event-series/new', permanent=True),
+    ),
+    path(
+        'event-groups/<int:series_id>/',
+        RedirectView.as_view(
+            url='/studio/event-series/%(series_id)s/', permanent=True,
+        ),
+    ),
+    path(
+        'event-groups/<int:series_id>/add-occurrence',
+        RedirectView.as_view(
+            url='/studio/event-series/%(series_id)s/add-occurrence',
+            permanent=True,
+        ),
+    ),
+    path(
+        'event-groups/<int:series_id>/delete',
+        RedirectView.as_view(
+            url='/studio/event-series/%(series_id)s/delete', permanent=True,
+        ),
     ),
 
     # Workshops (issue #297)

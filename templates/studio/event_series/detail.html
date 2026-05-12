@@ -1,7 +1,7 @@
 {% extends "studio/base.html" %}
 {% load studio_filters %}
 
-{% block studio_title %}{{ group.name }}{% endblock %}
+{% block studio_title %}{{ series.name }}{% endblock %}
 
 {% block studio_content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -12,20 +12,20 @@
   <div class="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
     <a href="{% url 'studio_event_list' %}" class="hover:text-foreground">Events</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <a href="{% url 'studio_event_group_list' %}" class="hover:text-foreground">Event groups</a>
+    <a href="{% url 'studio_event_series_list' %}" class="hover:text-foreground">Event series</a>
     <i data-lucide="chevron-right" class="w-4 h-4"></i>
-    <span class="text-foreground">{{ group.name }}</span>
+    <span class="text-foreground">{{ series.name }}</span>
   </div>
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-semibold text-foreground" data-testid="event-group-name">{{ group.name }}</h1>
-      <p class="text-muted-foreground mt-1" data-testid="event-group-cadence">
-        {{ group.get_cadence_display }} on {{ group.get_day_of_week_display }} at {{ group.start_time|time:"H:i" }} {{ group.timezone }}
+      <h1 class="text-2xl font-semibold text-foreground" data-testid="event-series-name">{{ series.name }}</h1>
+      <p class="text-muted-foreground mt-1" data-testid="event-series-cadence">
+        {{ series.get_cadence_display }} on {{ series.get_day_of_week_display }} at {{ series.start_time|time:"H:i" }} {{ series.timezone }}
         — {{ events|length }} occurrence{{ events|length|pluralize }}
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <a href="{{ group.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
+      <a href="{{ series.get_absolute_url }}" target="_blank" rel="noopener noreferrer"
          class="inline-flex items-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted">
         <i data-lucide="external-link" class="mr-2 h-4 w-4"></i>
         <span>View public series page</span>
@@ -59,7 +59,7 @@
         </thead>
         <tbody class="divide-y divide-border">
           {% for event in events %}
-          <tr data-testid="event-group-member-row">
+          <tr data-testid="event-series-member-row">
             <td class="px-4 py-3 text-sm text-muted-foreground" data-testid="series-position">{{ event.series_position|default:"—" }}</td>
             <td class="px-4 py-3 text-sm text-foreground">
               <a href="{% url 'studio_event_edit' event_id=event.pk %}" class="hover:text-accent">{{ event.title }}</a>
@@ -82,7 +82,7 @@
     </div>
 
     <!-- Add another occurrence -->
-    <form method="post" action="{% url 'studio_event_group_add_occurrence' group_id=group.pk %}"
+    <form method="post" action="{% url 'studio_event_series_add_occurrence' series_id=series.pk %}"
           class="bg-card border border-border rounded-lg p-4 space-y-3"
           data-testid="add-occurrence-form">
       {% csrf_token %}
@@ -113,7 +113,7 @@
   <!-- Sidebar: metadata edit + delete -->
   <aside class="space-y-4 lg:sticky lg:top-8">
     <form method="post" class="bg-card border border-border rounded-lg p-4 space-y-3"
-          data-testid="event-group-metadata-form">
+          data-testid="event-series-metadata-form">
       {% csrf_token %}
       <h2 class="text-sm font-medium text-foreground">Series metadata</h2>
       <p class="text-xs text-muted-foreground">
@@ -122,40 +122,40 @@
       </p>
       <div>
         <label class="block text-xs font-medium text-foreground mb-1" for="meta-name">Name</label>
-        <input id="meta-name" type="text" name="name" value="{{ group.name }}" required
+        <input id="meta-name" type="text" name="name" value="{{ series.name }}" required
                class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
       </div>
       <div>
         <label class="block text-xs font-medium text-foreground mb-1" for="meta-slug">Slug</label>
-        <input id="meta-slug" type="text" name="slug" value="{{ group.slug }}"
+        <input id="meta-slug" type="text" name="slug" value="{{ series.slug }}"
                class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
       </div>
       <div>
         <label class="block text-xs font-medium text-foreground mb-1" for="meta-description">Description (markdown)</label>
         <textarea id="meta-description" name="description" rows="4"
-                  class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono">{{ group.description }}</textarea>
+                  class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono">{{ series.description }}</textarea>
       </div>
       <button type="submit"
               class="inline-flex w-full items-center justify-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
-              data-testid="event-group-metadata-save">
+              data-testid="event-series-metadata-save">
         Save metadata
       </button>
     </form>
 
-    <div class="bg-card border border-red-500/30 rounded-lg p-4 space-y-3" data-testid="event-group-delete-panel">
+    <div class="bg-card border border-red-500/30 rounded-lg p-4 space-y-3" data-testid="event-series-delete-panel">
       <h2 class="text-sm font-medium text-red-300">Delete series</h2>
       <p class="text-xs text-muted-foreground">
         Deleting the series will leave the {{ events|length }} member event{{ events|length|pluralize }}
         in place but unlink them from the series. To delete the events themselves,
         delete each event from the events list.
       </p>
-      <form method="post" action="{% url 'studio_event_group_delete' group_id=group.pk %}"
-            data-testid="event-group-delete-form"
+      <form method="post" action="{% url 'studio_event_series_delete' series_id=series.pk %}"
+            data-testid="event-series-delete-form"
             onsubmit="return confirm('Delete this series? The member events will remain.');">
         {% csrf_token %}
         <button type="submit"
                 class="inline-flex w-full items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 hover:bg-red-500/20"
-                data-testid="event-group-delete-submit">
+                data-testid="event-series-delete-submit">
           Delete series
         </button>
       </form>

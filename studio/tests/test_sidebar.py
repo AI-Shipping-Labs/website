@@ -164,7 +164,7 @@ class StudioSidebarStructureTest(TestCase):
         ('/studio/plans/', 'Plans'),
         # Events
         ('/studio/events/', 'Events'),
-        ('/studio/event-groups/', 'Event groups'),
+        ('/studio/event-series/', 'Event series'),
         ('/studio/notifications/', 'Notifications'),
         # Marketing
         ('/studio/campaigns/', 'Email campaigns'),
@@ -215,9 +215,9 @@ class StudioSidebarStructureTest(TestCase):
     # Preserved test-id hooks
     # ------------------------------------------------------------------
 
-    def test_event_groups_testid_preserved(self):
+    def test_event_series_testid_preserved(self):
         response = self._get_studio_dashboard()
-        self.assertContains(response, 'data-testid="sidebar-event-groups-link"')
+        self.assertContains(response, 'data-testid="sidebar-event-series-link"')
 
     def test_api_tokens_testid_preserved_for_superuser(self):
         response = self._get_studio_dashboard(superuser=True)
@@ -319,13 +319,13 @@ class StudioSidebarStructureTest(TestCase):
                 body,
             )
 
-    def test_visiting_event_groups_keeps_events_section_expanded(self):
+    def test_visiting_event_series_keeps_events_section_expanded(self):
         self.client.login(email='staff@test.com', password='pw')
-        response = self.client.get('/studio/event-groups/')
+        response = self.client.get('/studio/event-series/')
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
 
-        # Events <ul> is un-hidden because /studio/event-groups/ is in
+        # Events <ul> is un-hidden because /studio/event-series/ is in
         # the Events section's deep path.
         self.assertIn('id="studio-section-events" class="space-y-1 mt-1"', body)
         # All other sections are collapsed.

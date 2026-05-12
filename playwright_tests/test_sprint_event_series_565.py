@@ -1,22 +1,23 @@
-"""Playwright E2E for the Sprint <-> EventGroup link (issue #565).
+"""Playwright E2E for the Sprint <-> EventSeries link (issue #565,
+renamed from event-group in #575).
 
 Covers the eight BDD scenarios from the spec:
 
-1. Staff links an existing event group to an existing sprint.
-2. Staff unlinks an event group and the group survives.
-3. One event group backs two different sprints at the same time.
+1. Staff links an existing event series to an existing sprint.
+2. Staff unlinks an event series and the series survives.
+3. One event series backs two different sprints at the same time.
 4. Member discovers the meeting schedule on a sprint's public page.
-5. Sprint with no event group hides the meeting schedule section.
-6. Sprint linked to an empty event group also hides the schedule.
-7. Staff edits the sprint form and the invalid event group is rejected.
+5. Sprint with no event series hides the meeting schedule section.
+6. Sprint linked to an empty event series also hides the schedule.
+7. Staff edits the sprint form and the invalid event series is rejected.
 8. Anonymous visitor can see the meeting schedule without logging in.
 9. (Bonus, from the spec) Staff jumps from sprint detail straight into
-   linking a group via the "Link an event group" CTA.
+   linking a series via the "Link an event series" CTA.
 
 Server-side artefact assertions (FK persistence, ``SET_NULL`` semantics,
 query count) live in the Django ``TestCase`` suites
-``plans.tests.test_sprint_event_group`` and
-``studio.tests.test_sprint_event_group`` -- per Rule 15 those are NOT
+``plans.tests.test_sprint_event_series`` and
+``studio.tests.test_sprint_event_series`` -- per Rule 15 those are NOT
 duplicated here. These tests assert the user-visible flow only.
 """
 
@@ -43,7 +44,7 @@ from django.db import connection  # noqa: E402
 
 
 def _clear_data():
-    from events.models import Event, EventGroup
+    from events.models import Event, EventSeries
     from plans.models import (
         Checkpoint,
         Deliverable,
@@ -66,14 +67,14 @@ def _clear_data():
     SprintEnrollment.objects.all().delete()
     Sprint.objects.all().delete()
     Event.objects.all().delete()
-    EventGroup.objects.all().delete()
+    EventSeries.objects.all().delete()
     connection.close()
 
 
-def _make_event_group(name, slug, *, events=0):
-    from events.models import Event, EventGroup
+def _make_event_series(name, slug, *, events=0):
+    from events.models import Event, EventSeries
 
-    group = EventGroup.objects.create(
+    series = EventSeries.objects.create(
         name=name,
         slug=slug,
         cadence='weekly',
@@ -97,16 +98,16 @@ def _make_event_group(name, slug, *, events=0):
             timezone='Europe/Berlin',
             status='upcoming',
             origin='studio',
-            event_group=group,
+            event_series=series,
             series_position=i,
             location='Zoom',
             published=True,
         )
     connection.close()
-    return group
+    return series
 
 
-def _make_sprint(name, slug, *, event_group=None, min_tier_level=0):
+def _make_sprint(name, slug, *, event_series=None, min_tier_level=0):
     from plans.models import Sprint
 
     sprint = Sprint.objects.create(
@@ -115,26 +116,26 @@ def _make_sprint(name, slug, *, event_group=None, min_tier_level=0):
         start_date=datetime.date(2026, 5, 1),
         status='active',
         min_tier_level=min_tier_level,
-        event_group=event_group,
+        event_series=event_series,
     )
     connection.close()
     return sprint
 
 
 # ---------------------------------------------------------------------------
-# Scenario 1: Staff links an existing event group to an existing sprint.
+# Scenario 1: Staff links an existing event series to an existing sprint.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestStaffLinksEventGroup:
-    def test_staff_picks_event_group_and_sees_occurrences(
+class TestStaffLinksEventSeries:
+    def test_staff_picks_event_series_and_sees_occurrences(
         self, django_server, browser,
     ):
         _ensure_tiers()
         _clear_data()
         _create_staff_user("staff@test.com")
-        group = _make_event_group(
+        series = _make_event_series(
             "Wednesday office hours, May 2026",
             "wed-oh-may-2026",
             events=6,
@@ -149,39 +150,39 @@ class TestStaffLinksEventGroup:
             wait_until="domcontentloaded",
         )
 
-        # The Event group select renders with "— None —" pre-selected.
-        select = page.locator('[data-testid="sprint-event-group"]')
+        # The Event series select renders with "— None —" pre-selected.
+        select = page.locator('[data-testid="sprint-event-series"]')
         select.wait_for(state="visible")
         selected_value = page.evaluate(
             """() => {
                 const sel = document.querySelector(
-                    '[data-testid="sprint-event-group"]'
+                    '[data-testid="sprint-event-series"]'
                 );
                 return sel ? sel.value : null;
             }"""
         )
         assert selected_value == ""
 
-        # Pick the group by id and submit.
-        select.select_option(str(group.pk))
+        # Pick the series by id and submit.
+        select.select_option(str(series.pk))
         page.locator('button[type="submit"]').click()
 
         # Lands on the detail page with a success flash.
         page.wait_for_url(
             f"{django_server}/studio/sprints/{sprint.pk}/",
         )
-        # The event-group section now shows the group name + 6 rows.
+        # The event-series section now shows the series name + 6 rows.
         page.locator(
-            '[data-testid="sprint-event-group-link"]'
+            '[data-testid="sprint-event-series-link"]'
         ).wait_for(state="visible")
         rows = page.locator(
-            '[data-testid="sprint-event-group-row"]'
+            '[data-testid="sprint-event-series-row"]'
         )
         assert rows.count() == 6
 
         # The count text mentions 6 occurrences.
         count_text = page.locator(
-            '[data-testid="sprint-event-group-count"]'
+            '[data-testid="sprint-event-series-count"]'
         ).inner_text()
         assert "6" in count_text
 
@@ -189,25 +190,25 @@ class TestStaffLinksEventGroup:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2: Staff unlinks an event group and the group survives.
+# Scenario 2: Staff unlinks an event series and the series survives.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestStaffUnlinksEventGroup:
-    def test_unlinking_preserves_group_and_events(
+class TestStaffUnlinksEventSeries:
+    def test_unlinking_preserves_series_and_events(
         self, django_server, browser,
     ):
-        from events.models import Event, EventGroup
+        from events.models import Event, EventSeries
 
         _ensure_tiers()
         _clear_data()
         _create_staff_user("staff@test.com")
-        group = _make_event_group(
+        series = _make_event_series(
             "Wednesday office hours", "wed-oh", events=6,
         )
         sprint = _make_sprint(
-            "May 2026", "may-2026", event_group=group,
+            "May 2026", "may-2026", event_series=series,
         )
 
         context = _auth_context(browser, "staff@test.com")
@@ -218,17 +219,17 @@ class TestStaffUnlinksEventGroup:
             wait_until="domcontentloaded",
         )
 
-        # The group is pre-selected.
+        # The series is pre-selected.
         selected_value = page.evaluate(
             """() => document.querySelector(
-                '[data-testid="sprint-event-group"]'
+                '[data-testid="sprint-event-series"]'
             ).value"""
         )
-        assert selected_value == str(group.pk)
+        assert selected_value == str(series.pk)
 
         # Switch to "— None —" and save.
         page.locator(
-            '[data-testid="sprint-event-group"]'
+            '[data-testid="sprint-event-series"]'
         ).select_option("")
         page.locator('button[type="submit"]').click()
 
@@ -238,34 +239,34 @@ class TestStaffUnlinksEventGroup:
 
         # Empty-state copy + CTA are visible.
         page.locator(
-            '[data-testid="sprint-event-group-empty"]'
+            '[data-testid="sprint-event-series-empty"]'
         ).wait_for(state="visible")
         page.locator(
-            '[data-testid="sprint-event-group-link-cta"]'
+            '[data-testid="sprint-event-series-link-cta"]'
         ).wait_for(state="visible")
 
-        # The group and all 6 events still exist.
-        assert EventGroup.objects.filter(pk=group.pk).exists()
-        assert Event.objects.filter(event_group=group).count() == 6
+        # The series and all 6 events still exist.
+        assert EventSeries.objects.filter(pk=series.pk).exists()
+        assert Event.objects.filter(event_series=series).count() == 6
         connection.close()
 
         context.close()
 
 
 # ---------------------------------------------------------------------------
-# Scenario 3: One group backs two different sprints at the same time.
+# Scenario 3: One series backs two different sprints at the same time.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestOneGroupBacksTwoSprints:
-    def test_same_group_assignable_to_two_sprints(
+class TestOneSeriesBacksTwoSprints:
+    def test_same_series_assignable_to_two_sprints(
         self, django_server, browser,
     ):
         _ensure_tiers()
         _clear_data()
         _create_staff_user("staff@test.com")
-        group = _make_event_group(
+        series = _make_event_series(
             "Wednesday office hours, Q2 2026", "wed-oh-q2", events=6,
         )
         may = _make_sprint("May cohort", "may-cohort")
@@ -280,8 +281,8 @@ class TestOneGroupBacksTwoSprints:
                 wait_until="domcontentloaded",
             )
             page.locator(
-                '[data-testid="sprint-event-group"]'
-            ).select_option(str(group.pk))
+                '[data-testid="sprint-event-series"]'
+            ).select_option(str(series.pk))
             page.locator('button[type="submit"]').click()
             page.wait_for_url(
                 f"{django_server}/studio/sprints/{sprint_pk}/",
@@ -290,12 +291,12 @@ class TestOneGroupBacksTwoSprints:
             assert page.locator(
                 '.bg-destructive\\/10'
             ).count() == 0
-            # The group is displayed for this sprint.
+            # The series is displayed for this sprint.
             page.locator(
-                '[data-testid="sprint-event-group-link"]'
+                '[data-testid="sprint-event-series-link"]'
             ).wait_for(state="visible")
             rows = page.locator(
-                '[data-testid="sprint-event-group-row"]'
+                '[data-testid="sprint-event-series-row"]'
             )
             assert rows.count() == 6
 
@@ -317,11 +318,11 @@ class TestMemberSeesMeetingSchedule:
         _create_user(
             "main@test.com", tier_slug="main", email_verified=True,
         )
-        group = _make_event_group(
+        series = _make_event_series(
             "May office hours", "may-oh", events=6,
         )
         _make_sprint(
-            "May 2026 sprint", "may-2026-sprint", event_group=group,
+            "May 2026 sprint", "may-2026-sprint", event_series=series,
         )
 
         context = _auth_context(browser, "main@test.com")
@@ -364,12 +365,12 @@ class TestMemberSeesMeetingSchedule:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 5: No event group -> meeting schedule section hidden.
+# Scenario 5: No event series -> meeting schedule section hidden.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestNoEventGroupHidesSchedule:
+class TestNoEventSeriesHidesSchedule:
     def test_unlinked_sprint_hides_section(
         self, django_server, browser,
     ):
@@ -402,13 +403,13 @@ class TestNoEventGroupHidesSchedule:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 6: Linked but empty event group -> section also hidden.
+# Scenario 6: Linked but empty event series -> section also hidden.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestEmptyEventGroupHidesSchedule:
-    def test_linked_but_empty_group_hides_section(
+class TestEmptyEventSeriesHidesSchedule:
+    def test_linked_but_empty_series_hides_section(
         self, django_server, browser,
     ):
         _ensure_tiers()
@@ -416,9 +417,9 @@ class TestEmptyEventGroupHidesSchedule:
         _create_user(
             "main@test.com", tier_slug="main", email_verified=True,
         )
-        empty_group = _make_event_group("Empty", "empty", events=0)
+        empty_series = _make_event_series("Empty", "empty", events=0)
         _make_sprint(
-            "Empty sprint", "empty-sprint", event_group=empty_group,
+            "Empty sprint", "empty-sprint", event_series=empty_series,
         )
 
         context = _auth_context(browser, "main@test.com")
@@ -441,22 +442,22 @@ class TestEmptyEventGroupHidesSchedule:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 7: Crafted POST with an invalid event_group id is rejected.
+# Scenario 7: Crafted POST with an invalid event_series id is rejected.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestInvalidEventGroupRejected:
-    def test_invalid_event_group_post_returns_400_and_preserves_fk(
+class TestInvalidEventSeriesRejected:
+    def test_invalid_event_series_post_returns_400_and_preserves_fk(
         self, django_server, browser,
     ):
 
         _ensure_tiers()
         _clear_data()
         _create_staff_user("staff@test.com")
-        group = _make_event_group("Original", "original", events=1)
+        series = _make_event_series("Original", "original", events=1)
         sprint = _make_sprint(
-            "May sprint", "may", event_group=group,
+            "May sprint", "may", event_series=series,
         )
 
         context = _auth_context(browser, "staff@test.com")
@@ -475,11 +476,11 @@ class TestInvalidEventGroupRejected:
         page.evaluate(
             """(badId) => {
                 const sel = document.querySelector(
-                    '[data-testid="sprint-event-group"]'
+                    '[data-testid="sprint-event-series"]'
                 );
                 const opt = document.createElement('option');
                 opt.value = badId;
-                opt.text = 'Bogus group';
+                opt.text = 'Bogus series';
                 sel.appendChild(opt);
                 sel.value = badId;
             }""",
@@ -490,12 +491,12 @@ class TestInvalidEventGroupRejected:
 
         # The error message renders inline (HTTP 400 from the view).
         page.wait_for_selector(
-            'text=Selected event group does not exist.'
+            'text=Selected event series does not exist.'
         )
 
         # The sprint's FK is unchanged in the database.
         sprint.refresh_from_db()
-        assert sprint.event_group_id == group.pk
+        assert sprint.event_series_id == series.pk
         connection.close()
 
         context.close()
@@ -513,11 +514,11 @@ class TestAnonymousSeesSchedule:
     ):
         _ensure_tiers()
         _clear_data()
-        group = _make_event_group(
+        series = _make_event_series(
             "May office hours", "may-oh", events=6,
         )
         _make_sprint(
-            "May 2026 sprint", "may-2026-sprint", event_group=group,
+            "May 2026 sprint", "may-2026-sprint", event_series=series,
         )
 
         page = browser.new_context().new_page()
@@ -557,14 +558,14 @@ class TestAnonymousSeesSchedule:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestSprintDetailLinkAnEventGroupCTA:
+class TestSprintDetailLinkAnEventSeriesCTA:
     def test_empty_state_cta_routes_to_edit_with_anchor(
         self, django_server, browser,
     ):
         _ensure_tiers()
         _clear_data()
         _create_staff_user("staff@test.com")
-        group = _make_event_group(
+        series = _make_event_series(
             "Wednesday office hours", "wed-oh", events=2,
         )
         sprint = _make_sprint("Solo sprint", "solo-sprint")
@@ -579,37 +580,37 @@ class TestSprintDetailLinkAnEventGroupCTA:
 
         # Empty-state CTA is the entry point.
         cta = page.locator(
-            '[data-testid="sprint-event-group-link-cta"]'
+            '[data-testid="sprint-event-series-link-cta"]'
         )
         cta.wait_for(state="visible")
         href = cta.get_attribute("href")
         assert href is not None
-        assert href.endswith("#event-group-field")
+        assert href.endswith("#event-series-field")
 
         # Click it -> the form loads with the anchored field present.
         cta.click()
         page.wait_for_url(
             f"{django_server}/studio/sprints/{sprint.pk}/edit"
-            "#event-group-field",
+            "#event-series-field",
         )
         page.locator(
-            '[data-testid="sprint-event-group"]'
+            '[data-testid="sprint-event-series"]'
         ).wait_for(state="visible")
 
-        # Pick the group and save -> the detail page now shows the
+        # Pick the series and save -> the detail page now shows the
         # link and the 2 occurrences.
         page.locator(
-            '[data-testid="sprint-event-group"]'
-        ).select_option(str(group.pk))
+            '[data-testid="sprint-event-series"]'
+        ).select_option(str(series.pk))
         page.locator('button[type="submit"]').click()
         page.wait_for_url(
             f"{django_server}/studio/sprints/{sprint.pk}/",
         )
         page.locator(
-            '[data-testid="sprint-event-group-link"]'
+            '[data-testid="sprint-event-series-link"]'
         ).wait_for(state="visible")
         assert page.locator(
-            '[data-testid="sprint-event-group-row"]'
+            '[data-testid="sprint-event-series-row"]'
         ).count() == 2
 
         context.close()

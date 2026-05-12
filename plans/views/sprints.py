@@ -42,22 +42,22 @@ def _is_enrolled(sprint, user):
     return SprintEnrollment.objects.filter(sprint=sprint, user=user).exists()
 
 
-def _resolve_sprint_or_404(slug, user, *, with_event_group=False):
+def _resolve_sprint_or_404(slug, user, *, with_event_series=False):
     """Look up a sprint by slug, hiding draft sprints from non-staff.
 
     Mirrors the events surface: a sprint with status=draft is invisible
     to anonymous and non-staff users. Staff can preview the page.
 
-    When ``with_event_group=True`` the lookup pulls the linked
-    ``EventGroup`` (one extra row) and prefetches its events ordered by
+    When ``with_event_series=True`` the lookup pulls the linked
+    ``EventSeries`` (one extra row) and prefetches its events ordered by
     start datetime so the public sprint detail page can render the
     "Meeting schedule" section without N+1 queries (issue #565).
     """
     qs = Sprint.objects.all()
-    if with_event_group:
-        qs = qs.select_related('event_group').prefetch_related(
+    if with_event_series:
+        qs = qs.select_related('event_series').prefetch_related(
             Prefetch(
-                'event_group__events',
+                'event_series__events',
                 queryset=Event.objects.order_by('start_datetime'),
                 to_attr='ordered_events',
             ),
@@ -72,7 +72,7 @@ def _resolve_sprint_or_404(slug, user, *, with_event_group=False):
 def sprint_detail(request, sprint_slug):
     """Public detail page for a sprint with a tier-aware Join CTA."""
     sprint = _resolve_sprint_or_404(
-        sprint_slug, request.user, with_event_group=True,
+        sprint_slug, request.user, with_event_series=True,
     )
 
     user = request.user
@@ -83,9 +83,9 @@ def sprint_detail(request, sprint_slug):
     viewer_plan = _viewer_plan(sprint, user)
     required_tier_name = LEVEL_TO_TIER_NAME.get(sprint.min_tier_level, 'Premium')
 
-    event_group = sprint.event_group
-    event_group_events = (
-        getattr(event_group, 'ordered_events', []) if event_group else []
+    event_series = sprint.event_series
+    event_series_events = (
+        getattr(event_series, 'ordered_events', []) if event_series else []
     )
 
     return render(
@@ -98,8 +98,8 @@ def sprint_detail(request, sprint_slug):
             'eligible': eligible,
             'viewer_plan': viewer_plan,
             'required_tier_name': required_tier_name,
-            'event_group': event_group,
-            'event_group_events': event_group_events,
+            'event_series': event_series,
+            'event_series_events': event_series_events,
         },
     )
 

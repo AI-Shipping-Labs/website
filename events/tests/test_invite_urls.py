@@ -54,21 +54,25 @@ class IcsJoinUrlOverrideTest(TestCase):
         clear_config_cache()
 
     def test_ics_join_url_uses_db_override(self):
+        # Issue #578: the .ics URL line now points at the public
+        # detail page rather than the /join redirect, so subscriber
+        # clients (which don't follow login redirects) can resolve it.
         _set_override('https://override.example.com')
         ics_bytes = generate_ics(self.event)
         url_line = _join_url_line(ics_bytes)
         self.assertIn(
-            'https://override.example.com/events/override-event/join',
+            'https://override.example.com/events/override-event',
             url_line,
         )
         self.assertNotIn('https://env.example.com', url_line)
 
     def test_ics_join_url_falls_back_to_settings(self):
         # No override row => env value used. Regression guard.
+        # Issue #578: detail-page URL, not /join.
         ics_bytes = generate_ics(self.event)
         url_line = _join_url_line(ics_bytes)
         self.assertIn(
-            'https://env.example.com/events/override-event/join',
+            'https://env.example.com/events/override-event',
             url_line,
         )
 

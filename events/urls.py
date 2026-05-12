@@ -12,11 +12,21 @@ from events.views.pages import (
     event_join_redirect,
     event_series_public,
     events_calendar,
+    events_calendar_feed,
     events_list,
 )
 
 urlpatterns = [
     path('events', events_list, name='events_list'),
+    # Issue #578: ``events/calendar.ics`` is registered BEFORE the
+    # ``events/<slug>`` route below so the literal ``calendar.ics``
+    # isn't swallowed by the slug converter. Same pattern as
+    # ``events/groups/<slug>``.
+    path(
+        'events/calendar.ics',
+        events_calendar_feed,
+        name='events_calendar_feed',
+    ),
     path('events/calendar', events_calendar, name='events_calendar'),
     path(
         'events/calendar/<int:year>/<int:month>',

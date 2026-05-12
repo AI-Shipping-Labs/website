@@ -19,10 +19,63 @@
         </p>
       </div>
 
-      <!-- View Toggle (List / Calendar) -->
-      <div class="flex gap-2 mb-6">
+      <!-- View Toggle (List / Calendar) + Subscribe CTA (issue #578) -->
+      <div class="flex flex-wrap items-center gap-2 mb-6" data-testid="events-view-toggle-row">
         <a href="{% url 'events_list' %}" class="px-3 py-1 rounded bg-accent text-accent-foreground text-sm">List</a>
         <a href="{% url 'events_calendar' %}" class="px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors">Calendar</a>
+
+        {% comment %}
+        Issue #578 — subscribe-to-all-events popover.
+        Pure HTML/CSS (uses <details>/<summary>) so the affordance
+        works without JS. The Copy button below has a tiny inline
+        handler that calls navigator.clipboard.writeText; the input
+        below it is a readonly text input the user can also
+        triple-click and copy by hand.
+        {% endcomment %}
+        <details class="relative" data-testid="events-subscribe-popover">
+          <summary class="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-secondary text-muted-foreground text-sm hover:bg-secondary/80 transition-colors cursor-pointer list-none" data-testid="events-subscribe-trigger">
+            <i data-lucide="calendar-plus" class="h-4 w-4"></i>
+            Subscribe to all events
+          </summary>
+          <div class="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-border bg-card p-3 shadow-lg" data-testid="events-subscribe-menu">
+            <a href="{{ subscribe_urls.google }}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="flex items-center gap-2 rounded px-3 py-2 text-sm text-foreground hover:bg-secondary/60 transition-colors"
+               data-testid="events-subscribe-google">
+              <i data-lucide="external-link" class="h-4 w-4 text-accent"></i>
+              Add to Google Calendar
+            </a>
+            <a href="{{ subscribe_urls.apple }}"
+               class="flex items-center gap-2 rounded px-3 py-2 text-sm text-foreground hover:bg-secondary/60 transition-colors"
+               data-testid="events-subscribe-apple">
+              <i data-lucide="external-link" class="h-4 w-4 text-accent"></i>
+              Add to Apple Calendar
+            </a>
+            <div class="mt-2 border-t border-border pt-2">
+              <label for="events-subscribe-feed-url" class="block text-xs font-medium text-muted-foreground mb-1">
+                Copy feed URL
+              </label>
+              <div class="flex items-center gap-2">
+                <input id="events-subscribe-feed-url"
+                       type="text"
+                       readonly
+                       value="{{ subscribe_urls.feed_https }}"
+                       class="flex-1 rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                       data-testid="events-subscribe-feed-input"
+                       onclick="this.select();">
+                <button type="button"
+                        class="inline-flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs font-medium text-accent-foreground hover:bg-accent/90 transition-colors"
+                        data-testid="events-subscribe-copy-button"
+                        data-feed-url="{{ subscribe_urls.feed_https }}"
+                        onclick="(function(btn){var url=btn.getAttribute('data-feed-url');var done=function(){var orig=btn.innerText;btn.innerText='Copied';setTimeout(function(){btn.innerText=orig;},2000);};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(done).catch(function(){var i=document.getElementById('events-subscribe-feed-url');i.select();document.execCommand('copy');done();});}else{var i=document.getElementById('events-subscribe-feed-url');i.select();document.execCommand('copy');done();}})(this)">
+                  Copy
+                </button>
+              </div>
+              <p class="mt-1 text-xs text-muted-foreground">Use this URL in Outlook or any calendar app.</p>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- Filter segmented control -->

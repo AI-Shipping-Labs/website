@@ -229,9 +229,14 @@ class TestStudioUserSlackId:
 
     # ---------------- Scenario 4 --------------------------------------------
 
-    def test_manual_link_set_then_replay_invalid(
+    def test_unlinked_row_offers_django_admin_path(
         self, django_server, browser,
     ):
+        # Issue #586 removed the inline edit form from the user detail
+        # page. When the Slack ID is missing, the row now shows
+        # "Not linked" plus an "Edit in Django admin" link so operators
+        # still have a one-click path forward. The slack-id POST
+        # endpoint stays callable from Django admin / scripts.
         staff_email = "slack-manual-admin@test.com"
         _create_staff_user(staff_email)
         _reset_users_and_settings(staff_email)
@@ -245,56 +250,53 @@ class TestStudioUserSlackId:
             wait_until="domcontentloaded",
         )
 
-        # 1. Empty state: "Not linked" + a "Set Slack ID" labelled form.
+        # Empty state: "Not linked" pill + "Edit in Django admin" link
+        # pointing at the canonical change page.
         assert page.locator(
             '[data-testid="user-detail-slack-id-empty"]'
         ).is_visible()
-        assert "Set Slack ID" in page.content()
-
-        # 2. Type a valid ID and submit.
-        page.locator(
-            '[data-testid="user-detail-slack-id-input"]'
-        ).fill("U09PARTNER")
-        page.locator(
-            '[data-testid="user-detail-slack-id-submit"]'
-        ).click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Then: green flash, ID visible, "Open in Slack" link visible.
-        assert "Slack ID set to U09PARTNER" in page.content()
-        value_el = page.locator('[data-testid="user-detail-slack-id-value"]')
-        assert value_el.is_visible()
-        assert "U09PARTNER" in value_el.inner_text()
-        assert page.locator(
-            '[data-testid="user-detail-slack-profile-link"]'
-        ).is_visible()
-
-        # 3. Re-submit an invalid value. The stored value must NOT change.
-        page.locator(
-            '[data-testid="user-detail-slack-id-input"]'
-        ).fill("not-a-slack-id")
-        page.locator(
-            '[data-testid="user-detail-slack-id-submit"]'
-        ).click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Red flash mentions the expected format.
-        assert "Invalid Slack ID" in page.content()
-        # Stored ID is still U09PARTNER (the bad submission was rejected).
-        value_el = page.locator('[data-testid="user-detail-slack-id-value"]')
-        assert "U09PARTNER" in value_el.inner_text()
-        assert (
-            _read_user_field("partner@example.com", "slack_user_id")
-            == "U09PARTNER"
+        admin_link = page.locator(
+            '[data-testid="user-detail-slack-id-admin-link"]'
         )
+        assert admin_link.is_visible()
+        assert (
+            admin_link.get_attribute("href")
+            == f"/admin/accounts/user/{member_pk}/change/"
+        )
+
+        # The inline edit form, input, and submit must all be gone.
+        assert page.locator(
+            '[data-testid="user-detail-slack-id-form"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="user-detail-slack-id-input"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="user-detail-slack-id-submit"]'
+        ).count() == 0
+        # Helper copy about the expected ID format also gone.
+        assert "Set Slack ID" not in page.content()
+
+        # The slack-id POST endpoint contract (route stays defined +
+        # writes the new value when called from Django admin / scripts)
+        # is covered by the Django unit test
+        # ``SlackIdSetEndpointStillCallableTest.test_post_writes_value_through_endpoint``
+        # in ``studio/tests/test_user_detail_layout_586.py``. Playwright
+        # focuses on the rendered detail page only.
         context.close()
 
     # ---------------- Scenario 5 --------------------------------------------
 
-    def test_clear_wrongly_linked_slack_id(self, django_server, browser):
+    def test_linked_row_renders_value_with_no_inline_edit_controls(
+        self, django_server, browser,
+    ):
+        # Issue #586: when a Slack ID is already set, the row renders
+        # the value (and "Open in Slack" anchor when configured) but no
+        # input, no save button, no admin-edit link.
         staff_email = "slack-clear-admin@test.com"
         _create_staff_user(staff_email)
         _reset_users_and_settings(staff_email)
+        _set_team_id("T01TEAM123")
         member_pk = _create_member("ghost@example.com", slack_user_id="U99WRONG")
 
         context = _auth_context(browser, staff_email)
@@ -304,29 +306,22 @@ class TestStudioUserSlackId:
             wait_until="domcontentloaded",
         )
 
-        # Pre-state: ID is U99WRONG.
+        # ID renders with the Open in Slack anchor.
         value_el = page.locator('[data-testid="user-detail-slack-id-value"]')
         assert "U99WRONG" in value_el.inner_text()
-
-        # Empty the input and submit.
-        page.locator(
-            '[data-testid="user-detail-slack-id-input"]'
-        ).fill("")
-        page.locator(
-            '[data-testid="user-detail-slack-id-submit"]'
-        ).click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Flash confirms the clear.
-        assert "Slack ID cleared." in page.content()
-        # Row flips to "Not linked".
         assert page.locator(
-            '[data-testid="user-detail-slack-id-empty"]'
+            '[data-testid="user-detail-slack-profile-link"]'
         ).is_visible()
-        # Form labelled "Set Slack ID" again.
-        assert "Set Slack ID" in page.content()
-        # Storage actually cleared.
-        assert _read_user_field("ghost@example.com", "slack_user_id") == ""
+
+        # Inline edit controls and the admin-edit link (which only shows
+        # when the row is empty) are absent.
+        for testid in (
+            "user-detail-slack-id-form",
+            "user-detail-slack-id-input",
+            "user-detail-slack-id-submit",
+            "user-detail-slack-id-admin-link",
+        ):
+            assert page.locator(f'[data-testid="{testid}"]').count() == 0
         context.close()
 
     # ---------------- Scenario 6 --------------------------------------------

@@ -165,9 +165,12 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
         )
         self.assertContains(response, 'Not linked')
 
-    def test_inline_edit_form_always_rendered(self):
-        # Form is reachable in both states (linked + unlinked) — that's
-        # the only way to clear or replace a wrongly-set ID.
+    def test_inline_edit_form_removed_from_detail_template(self):
+        # Issue #586: the Slack ID row is read-only on the user detail
+        # page. The form, input, and submit button must all be gone.
+        # The studio_user_slack_id_set route stays defined (callable
+        # from Django admin / scripts) but is no longer surfaced from
+        # the template.
         linked_html = self.client.get(
             f'/studio/users/{self.linked.pk}/'
         ).content.decode()
@@ -175,30 +178,50 @@ class StudioUserDetailSlackIdRowTest(_SlackTeamIdSettingMixin, TestCase):
             f'/studio/users/{self.unlinked.pk}/'
         ).content.decode()
         for html in (linked_html, unlinked_html):
-            self.assertIn('data-testid="user-detail-slack-id-form"', html)
-            self.assertIn('data-testid="user-detail-slack-id-input"', html)
-            self.assertIn('data-testid="user-detail-slack-id-submit"', html)
-        # Form action posts to the new endpoint on each user.
-        self.assertIn(
+            self.assertNotIn('data-testid="user-detail-slack-id-form"', html)
+            self.assertNotIn('data-testid="user-detail-slack-id-input"', html)
+            self.assertNotIn('data-testid="user-detail-slack-id-submit"', html)
+            # The submit button labelled Save / Edit Slack ID / Set
+            # Slack ID copy must also be gone — those phrases only
+            # belonged to the inline edit form.
+            self.assertNotIn('name="slack_user_id"', html)
+        self.assertNotIn('Set Slack ID', unlinked_html)
+        self.assertNotIn('Edit Slack ID', linked_html)
+        # The form action URL specifically must not appear in either
+        # rendered template (it lives only on the Django admin path now).
+        self.assertNotIn(
             f'action="/studio/users/{self.linked.pk}/slack-id/"', linked_html,
         )
-        self.assertIn(
+        self.assertNotIn(
             f'action="/studio/users/{self.unlinked.pk}/slack-id/"',
             unlinked_html,
         )
 
-    def test_form_label_branches_on_current_state(self):
-        # The label flips between "Edit Slack ID" and "Set Slack ID" so
-        # operators see the right call-to-action.
-        linked_html = self.client.get(
-            f'/studio/users/{self.linked.pk}/'
-        ).content.decode()
-        self.assertIn('Edit Slack ID', linked_html)
+    def test_unlinked_row_offers_django_admin_path(self):
+        # Issue #586: when the user has no Slack ID, the row shows
+        # "Not linked" plus an "Edit in Django admin" link so operators
+        # still have a one-click route to fix it.
+        response = self.client.get(f'/studio/users/{self.unlinked.pk}/')
+        self.assertContains(response, 'data-testid="user-detail-slack-id-empty"')
+        self.assertContains(
+            response, 'data-testid="user-detail-slack-id-admin-link"',
+        )
+        self.assertContains(response, 'Edit in Django admin')
+        # The link points at the user's Django admin change page.
+        self.assertContains(
+            response,
+            f'href="/admin/accounts/user/{self.unlinked.pk}/change/"',
+        )
 
-        unlinked_html = self.client.get(
-            f'/studio/users/{self.unlinked.pk}/'
-        ).content.decode()
-        self.assertIn('Set Slack ID', unlinked_html)
+    def test_linked_row_does_not_render_admin_edit_link(self):
+        # The "Edit in Django admin" link only appears when the row is
+        # missing a Slack ID. A linked user already shows the value (and
+        # optionally an "Open in Slack" anchor); the admin edit link
+        # would be redundant chrome there.
+        response = self.client.get(f'/studio/users/{self.linked.pk}/')
+        self.assertNotContains(
+            response, 'data-testid="user-detail-slack-id-admin-link"',
+        )
 
 
 class StudioUserSlackIdSetEndpointTest(TestCase):

@@ -125,23 +125,27 @@ class UserDetailTierOverrideTemplateTest(_InlineOverrideTestBase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
 
-    def test_inline_block_rendered_inside_membership_section(self):
+    def test_override_section_sits_between_membership_and_tags(self):
+        # Issue #586 promoted the override block out of the Membership
+        # card into its own top-level section. The override section must
+        # appear AFTER the membership section opens and BEFORE the tags
+        # section opens. The inner ``-block`` testid is preserved so
+        # other tests / selectors keep working.
         member = self._make_member('inline@test.com', tier=self.free)
         response = self.client.get(f'/studio/users/{member.pk}/')
         body = response.content.decode()
-        # The override block must appear AFTER the membership card opens
-        # and BEFORE that section closes (i.e. nested inside it).
         membership_open = body.index(
             'data-testid="user-detail-membership-section"',
+        )
+        override_section = body.index(
+            'data-testid="user-detail-tier-override-section"',
         )
         override_block = body.index(
             'data-testid="user-detail-tier-override-block"',
         )
-        # The closing </section> we care about is the next </section> after
-        # the membership section opens; both markers should appear before
-        # any later sections (tags, plans, notes).
         tags_section = body.index('data-testid="user-tags-section"')
-        self.assertLess(membership_open, override_block)
+        self.assertLess(membership_open, override_section)
+        self.assertLess(override_section, override_block)
         self.assertLess(override_block, tags_section)
 
     def test_default_badge_for_free_user_without_stripe(self):

@@ -526,6 +526,43 @@ class WeekNote(TimestampedModelMixin, models.Model):
         return f'Note on week {self.week_id}'
 
 
+class PlanRequest(TimestampedModelMixin, models.Model):
+    """Audit row for a "ping the team to plan with me" request (issue #585).
+
+    Recorded each time an enrolled sprint member without a plan asks
+    the team to prepare one. Multiple rows are kept on purpose so we
+    have a full audit history; the rate limit (one ping per 24 hours
+    per ``(sprint, member)`` pair) is enforced in the view layer via
+    ``PlanRequest.objects.filter(sprint=..., member=...,
+    created_at__gte=now-24h).exists()`` rather than via a unique
+    constraint.
+
+    ``on_delete=CASCADE`` on both FKs is intentional: this is audit
+    data scoped to the (sprint, member) pair; if either side is hard
+    deleted the audit row is no longer reachable and can go too.
+    """
+
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.CASCADE,
+        related_name='plan_requests',
+    )
+    member = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='plan_requests',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['sprint', 'member', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f'PlanRequest({self.member} in {self.sprint})'
+
+
 class InterviewNoteQuerySet(models.QuerySet):
     """Visibility-aware queryset for :class:`InterviewNote`.
 

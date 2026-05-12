@@ -5,6 +5,10 @@ NOTIFICATION_TYPE_CHOICES = [
     ('new_content', 'New Content'),
     ('event_reminder', 'Event Reminder'),
     ('announcement', 'Announcement'),
+    # Plan request from a sprint member who has no plan yet (issue #585).
+    # Created for every active staff user when an enrolled member with
+    # no plan clicks "Ask the team to plan with me" on the cohort board.
+    ('plan_request', 'Plan Request'),
 ]
 
 

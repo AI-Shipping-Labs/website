@@ -19,7 +19,12 @@ from plans.views.notes import (
     week_note_delete,
     week_note_update,
 )
-from plans.views.sprints import sprint_detail, sprint_join, sprint_leave
+from plans.views.sprints import (
+    sprint_ask_team,
+    sprint_detail,
+    sprint_join,
+    sprint_leave,
+)
 
 urlpatterns = [
     # ``/sprints/...`` paths are NOT in
@@ -45,6 +50,15 @@ urlpatterns = [
         'sprints/<slug:sprint_slug>/leave',
         sprint_leave,
         name='sprint_leave',
+    ),
+    # "Ask the team to plan with me" ping (issue #585). Same ordering
+    # rule as ``join`` / ``leave`` -- registered BEFORE the generic
+    # ``<slug:sprint_slug>`` detail route so the literal ``ask-team``
+    # segment is not swallowed by the slug capture.
+    path(
+        'sprints/<slug:sprint_slug>/ask-team',
+        sprint_ask_team,
+        name='sprint_ask_team',
     ),
     path(
         'sprints/<slug:sprint_slug>/plans/<int:plan_id>',

@@ -24,25 +24,75 @@
         </p>
       </header>
 
+      {% if messages %}
+      <div class="mb-6 space-y-2" data-testid="cohort-board-messages">
+        {% for message in messages %}
+        <div class="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" data-testid="cohort-board-message">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       {% if viewer_plan %}
       <aside class="mb-8 rounded-2xl border border-border bg-card p-5" data-testid="viewer-plan-callout">
-        {% if viewer_plan.visibility == "cohort" %}
-        <p class="text-sm text-foreground">
-          Your plan is shared with the cohort.
-          <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
-        </p>
-        {% else %}
-        <p class="text-sm text-foreground">
-          Your plan is private &mdash; share it with your cohort to appear on the board.
-          <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
-        </p>
-        {% endif %}
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            {% if viewer_plan.visibility == "cohort" %}
+            <p class="text-sm text-foreground">
+              Your plan is shared with the cohort.
+              <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
+            </p>
+            {% else %}
+            <p class="text-sm text-foreground">
+              Your plan is private &mdash; share it with your cohort to appear on the board.
+              <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=viewer_plan.pk %}" class="text-accent hover:underline ml-1">Manage visibility</a>
+            </p>
+            {% endif %}
+          </div>
+          <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
+            {% csrf_token %}
+            <button type="submit"
+                    class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                    data-testid="cohort-board-leave-sprint">
+              Leave sprint
+            </button>
+          </form>
+        </div>
       </aside>
       {% else %}
       <aside class="mb-8 rounded-2xl border border-border bg-card p-5" data-testid="viewer-plan-pending">
-        <p class="text-sm text-foreground">
-          Your plan is being prepared. You can still see other members' plans here.
-        </p>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-foreground">
+            Your plan is being prepared. You can still see other members' plans here.
+          </p>
+          <div class="flex flex-wrap items-center gap-3">
+            {% if viewer_pinged_recently %}
+            <button type="button" disabled
+                    class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-4 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed"
+                    data-testid="ask-team-button">
+              Pinged the team &mdash; they will be in touch soon
+            </button>
+            {% else %}
+            <form method="post" action="{% url 'sprint_ask_team' sprint_slug=sprint.slug %}" class="inline-block">
+              {% csrf_token %}
+              <button type="submit"
+                      class="inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+                      data-testid="ask-team-button">
+                Ask the team to plan with me
+              </button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'sprint_leave' sprint_slug=sprint.slug %}" class="inline-block" onsubmit="return confirm('Leave {{ sprint.name|escapejs }}? Your plan stays but is set to private and you’ll no longer see the cohort board.');">
+              {% csrf_token %}
+              <button type="submit"
+                      class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                      data-testid="cohort-board-leave-sprint">
+                Leave sprint
+              </button>
+            </form>
+          </div>
+        </div>
       </aside>
       {% endif %}
 
@@ -65,19 +115,30 @@
                 data-progress-row-kind="{{ row.kind }}">
               <td class="px-4 py-4 align-top sm:px-5">
                 <span class="hidden" data-testid="progress-row-kind-{{ row.member.pk }}">{{ row.kind }}</span>
-                {% if row.kind == 'cohort' %}
-                  {% if row.is_self %}
-                  <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
+                <div class="flex flex-wrap items-center gap-2">
+                  {% if row.kind == 'cohort' %}
+                    {% if row.is_self %}
+                    <a href="{% url 'my_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
+                    {% else %}
+                    <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
+                    {% endif %}
+                      <span data-testid="cohort-plan-name">{{ row.member|display_name }}{% if row.is_self %} (you){% endif %}</span>
+                    </a>
                   {% else %}
-                  <a href="{% url 'member_plan_detail' sprint_slug=sprint.slug plan_id=row.plan.pk %}" class="font-semibold text-foreground hover:text-accent hover:underline" data-testid="progress-row-link-{{ row.member.pk }}">
+                  <h2 class="text-sm font-semibold text-foreground" data-testid="cohort-plan-name">
+                    {{ row.member|display_name }}{% if row.is_self %} (you){% endif %}
+                  </h2>
                   {% endif %}
-                    <span data-testid="cohort-plan-name">{{ row.member|display_name }}{% if row.is_self %} (you){% endif %}</span>
+                  {% if request.user.is_staff and row.plan %}
+                  <a href="/admin/plans/plan/{{ row.plan.pk }}/change/"
+                     class="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/40 px-2 py-0.5 text-xs font-medium text-muted-foreground hover:bg-secondary"
+                     title="Open in Django admin"
+                     data-testid="cohort-row-admin-link-{{ row.member.pk }}">
+                    <i data-lucide="external-link" class="h-3 w-3"></i>
+                    Admin
                   </a>
-                {% else %}
-                <h2 class="text-sm font-semibold text-foreground" data-testid="cohort-plan-name">
-                  {{ row.member|display_name }}{% if row.is_self %} (you){% endif %}
-                </h2>
-                {% endif %}
+                  {% endif %}
+                </div>
               </td>
               <td class="px-4 py-4 align-top sm:px-5">
                 {% if row.kind == 'no_plan' %}
@@ -115,7 +176,26 @@
                 <p class="text-sm text-muted-foreground">Progress only; plan details are private.</p>
                 {% else %}
                 <div data-testid="progress-row-no-plan-{{ row.member.pk }}">
+                  {% if row.is_self %}
+                    {% if viewer_pinged_recently %}
+                    <button type="button" disabled
+                            class="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1 text-xs font-medium text-muted-foreground cursor-not-allowed"
+                            data-testid="ask-team-button">
+                      Pinged the team &mdash; they will be in touch soon
+                    </button>
+                    {% else %}
+                    <form method="post" action="{% url 'sprint_ask_team' sprint_slug=sprint.slug %}" class="inline-block">
+                      {% csrf_token %}
+                      <button type="submit"
+                              class="inline-flex items-center gap-2 rounded-md bg-accent text-accent-foreground px-3 py-1 text-xs font-medium hover:opacity-90 transition-opacity"
+                              data-testid="ask-team-button">
+                        Ask the team to plan with me
+                      </button>
+                    </form>
+                    {% endif %}
+                  {% else %}
                   <span class="text-sm text-muted-foreground" data-testid="no-plan-caption-{{ row.member.pk }}">No plan yet</span>
+                  {% endif %}
                 </div>
                 {% endif %}
               </td>

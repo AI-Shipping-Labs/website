@@ -48,6 +48,7 @@ CANCELLED_TEXT = "Checkout was cancelled. You can try again anytime."
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSuccessBannerOnDashboard:
     EMAIL = "checkout-success@test.com"
@@ -91,6 +92,7 @@ class TestSuccessBannerOnDashboard:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCancelledBannerOnPricing:
     def test_banner_visible_and_url_cleaned(self, django_server, page):
@@ -117,6 +119,7 @@ class TestCancelledBannerOnPricing:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNoBannerWithoutQueryParam:
     EMAIL = "no-banner@test.com"

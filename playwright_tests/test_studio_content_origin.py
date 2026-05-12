@@ -207,6 +207,7 @@ def _create_workshop_pair():
     return synced, local
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioCourseOrigin:
     def test_staff_can_scan_courses_and_trace_unit_source(
@@ -258,6 +259,7 @@ class TestStudioCourseOrigin:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioWorkshopOrigin:
     def test_staff_can_trace_workshop_and_page_sources(
@@ -303,6 +305,7 @@ class TestStudioWorkshopOrigin:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioSyncedContentOriginSurfaces:
     def test_staff_can_inspect_article_download_event_project_sources(
@@ -369,6 +372,7 @@ class TestStudioSyncedContentOriginSurfaces:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioOriginAccess:
     def test_non_staff_cannot_inspect_source_metadata(

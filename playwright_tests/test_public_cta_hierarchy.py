@@ -13,6 +13,7 @@ def _goto(page, django_server, path):
     expect(page.locator("body")).not_to_contain_text("Not Found")
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_homepage_browse_first_hierarchy(django_server, page):
     ensure_tiers()
@@ -31,6 +32,7 @@ def test_homepage_browse_first_hierarchy(django_server, page):
     assert page.locator("form.subscribe-form").count() == 1
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_pricing_focuses_on_tier_comparison(django_server, page):
     ensure_tiers()
@@ -45,6 +47,7 @@ def test_pricing_focuses_on_tier_comparison(django_server, page):
     assert before_grid_newsletter.count() == 0
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_resources_courses_and_workshops_start_with_browse_content(
     django_server, page

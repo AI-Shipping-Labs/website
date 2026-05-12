@@ -344,6 +344,7 @@ def _create_notification(
 #              homepage
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1AnonymousVisitorSeesPublicHomepage:
     """Anonymous visitor still sees the public marketing homepage."""
@@ -411,6 +412,7 @@ class TestScenario1AnonymousVisitorSeesPublicHomepage:
 #              badge after login
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2FreeMemberSeesDashboard:
     """Free member sees personalized dashboard with tier badge
@@ -472,6 +474,7 @@ class TestScenario2FreeMemberSeesDashboard:
 #              that guide next steps
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3EmptyStatesGuideNextSteps:
     """Free member with no activity sees helpful empty states that
@@ -537,6 +540,7 @@ class TestScenario3EmptyStatesGuideNextSteps:
 #              dashboard
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4BasicMemberResumesCourse:
     """Basic member resumes an in-progress course from the dashboard."""
@@ -623,6 +627,7 @@ class TestScenario4BasicMemberResumesCourse:
 #              navigates to event detail
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5MainMemberSeesUpcomingEvents:
     """Main member sees upcoming registered events and navigates
@@ -701,6 +706,7 @@ class TestScenario5MainMemberSeesUpcomingEvents:
 # Scenario 6: Members see valid high-value quick actions
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6DashboardQuickActions:
     """Members see valid dashboard quick actions."""
@@ -762,6 +768,7 @@ class TestScenario6DashboardQuickActions:
 #              and finds the upgrade path
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7GatedContentInRecentContent:
     """Free member discovers gated content in recent content and
@@ -893,6 +900,7 @@ class TestScenario7GatedContentInRecentContent:
 # Scenario 8: Premium member sees active polls and navigates to vote
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8PremiumMemberSeesActivePolls:
     """Premium member sees active polls and navigates to vote."""
@@ -978,6 +986,7 @@ class TestScenario8PremiumMemberSeesActivePolls:
 #              and follows it
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9MemberReadsNotificationFromDashboard:
     """Member reads an unread notification from the dashboard and
@@ -1048,6 +1057,7 @@ class TestScenario9MemberReadsNotificationFromDashboard:
 
         # Then: Navigates to /notifications
         assert "/notifications" in page.url
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10CompletedUnitsWithoutEnrollment:
     """Completed units alone do not populate Continue Learning."""
@@ -1084,6 +1094,7 @@ class TestScenario10CompletedUnitsWithoutEnrollment:
 #               banner to explore paid tiers
 # -------------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11FreeMemberUpgradeLink:
     """Free member uses the Upgrade link in the welcome banner to

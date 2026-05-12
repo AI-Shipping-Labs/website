@@ -136,6 +136,7 @@ def _offset_minutes(label):
     return sign * (int(match.group(2)) * 60 + int(match.group(3)))
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_member_finds_saves_and_reloads_timezone(
     django_server, django_db_blocker, browser
@@ -163,6 +164,7 @@ def test_member_finds_saves_and_reloads_timezone(
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_account_timezone_options_have_offsets_and_are_ordered(
     django_server, django_db_blocker, browser
@@ -195,6 +197,7 @@ def test_account_timezone_options_have_offsets_and_are_ordered(
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_logged_in_preference_wins_over_browser_timezone(
     django_server, django_db_blocker, browser
@@ -219,6 +222,7 @@ def test_logged_in_preference_wins_over_browser_timezone(
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_member_clears_timezone_and_uses_browser_timezone(
     django_server, django_db_blocker, browser
@@ -250,6 +254,7 @@ def test_member_clears_timezone_and_uses_browser_timezone(
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_invalid_account_timezone_does_not_change_preference(
     django_server, django_db_blocker, browser
@@ -277,6 +282,7 @@ def test_invalid_account_timezone_does_not_change_preference(
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_anonymous_berlin_visitor_sees_browser_local_time_without_controls(
     django_server, django_db_blocker, page
@@ -296,6 +302,7 @@ def test_anonymous_berlin_visitor_sees_browser_local_time_without_controls(
     assert 'event-display-timezone' not in page.content()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_anonymous_new_york_visitor_sees_browser_local_time(
     django_server, django_db_blocker, page
@@ -312,6 +319,7 @@ def test_anonymous_new_york_visitor_sees_browser_local_time(
     assert 'Europe/Berlin' not in time_text
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_unavailable_browser_timezone_uses_studio_default(
     django_server, django_db_blocker, page
@@ -334,6 +342,7 @@ def test_unavailable_browser_timezone_uses_studio_default(
     assert page.get_by_test_id('event-timezone-select').count() == 0
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_completed_zoom_location_hidden_but_upcoming_zoom_kept(
     django_server, django_db_blocker, page
@@ -358,6 +367,7 @@ def test_completed_zoom_location_hidden_but_upcoming_zoom_kept(
     assert 'Zoom' in page.locator('article header').inner_text()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_registered_member_keeps_upcoming_zoom_attendance_flow(
     django_server, django_db_blocker, browser

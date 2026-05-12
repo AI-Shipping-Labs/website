@@ -170,6 +170,7 @@ def _studio_summary_metric(page, label):
 # Scenario 1: Non-staff member is denied access to the Studio
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1NonStaffDenied:
     """Non-staff member is denied access to the Studio."""
@@ -206,6 +207,7 @@ class TestScenario1NonStaffDenied:
 # Scenario 2: Anonymous visitor is redirected to login
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2AnonymousRedirectedToLogin:
     """Anonymous visitor is redirected to login when attempting to reach the Studio."""
@@ -262,6 +264,7 @@ class TestScenario2AnonymousRedirectedToLogin:
 # Scenario 3: Staff member reviews the dashboard
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3StaffReviewsDashboard:
     """Staff member reviews the dashboard to understand content status at a glance."""
@@ -344,6 +347,7 @@ class TestScenario3StaffReviewsDashboard:
 # Scenario 4: Staff member creates a new article and publishes it
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4StaffCreatesArticle:
     """Staff member creates a new article and publishes it to the blog."""
@@ -392,6 +396,7 @@ class TestScenario4StaffCreatesArticle:
 #              to draft
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5StaffEditsArticleStatus:
     """Staff member edits an existing article and changes its status from published to draft."""
@@ -460,6 +465,7 @@ class TestScenario5StaffEditsArticleStatus:
 # Scenario 6: Staff member creates a course with modules and units
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6StaffCreatesCourse:
     """Staff member creates a course with modules and units for structured learning content."""
@@ -547,6 +553,7 @@ class TestScenario6StaffCreatesCourse:
 #              content
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7StaffFiltersArticles:
     """Staff member filters the article list to find draft content that needs review."""
@@ -620,6 +627,7 @@ class TestScenario7StaffFiltersArticles:
 # Scenario 8: Staff member moderates a community-submitted project
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8StaffModeratesProject:
     """Staff member moderates a community-submitted project by approving it."""
@@ -697,6 +705,7 @@ class TestScenario8StaffModeratesProject:
 #              specific audience
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9StaffCreatesCampaign:
     """Staff member creates an email campaign targeting a specific audience."""
@@ -772,6 +781,7 @@ class TestScenario9StaffCreatesCampaign:
 # Scenario 10: Staff member exports subscriber data as CSV
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10StaffExportsSubscribers:
     """Staff member exports user/subscriber data as CSV for external analysis.
@@ -878,6 +888,7 @@ class TestScenario10StaffExportsSubscribers:
 #               using the sidebar
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11SidebarNavigation:
     """Staff member navigates between Studio sections using the sidebar."""

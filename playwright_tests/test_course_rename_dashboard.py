@@ -78,6 +78,7 @@ def _seed_in_progress_course(user, slug):
     return course
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCourseRenameDashboardLink:
     """Dashboard's Continue link tracks the live slug after rename."""

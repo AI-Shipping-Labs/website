@@ -41,6 +41,7 @@ def _reset_event_state():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1CreateOneOff:
     def test_create_one_off_event(self, django_server, browser):
@@ -102,6 +103,7 @@ class TestScenario1CreateOneOff:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2PublishAndView:
     def test_publish_then_view_publicly(self, django_server, browser):
@@ -156,6 +158,7 @@ class TestScenario2PublishAndView:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3Validation:
     def test_required_field_validation(self, django_server, browser):
@@ -213,6 +216,7 @@ class TestScenario3Validation:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4DuplicateSlug:
     def test_duplicate_slug_rejected(self, django_server, browser):
@@ -257,6 +261,7 @@ class TestScenario4DuplicateSlug:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5OriginEditGate:
     def test_studio_editable_github_readonly(self, django_server, browser):

@@ -48,6 +48,7 @@ def _ensure_tiers(db_blocker):
         ensure_tiers()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSharedAuthJourneys:
     def test_login_success_shows_immediate_feedback(

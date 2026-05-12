@@ -107,6 +107,7 @@ def _capture_responsive(page, basename):
     page.set_viewport_size({"width": 1280, "height": 720})
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestGatedContentMessaging:
     def test_course_gate_and_sufficient_tier(self, browser, django_server):

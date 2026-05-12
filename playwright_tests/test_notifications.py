@@ -137,6 +137,7 @@ def _create_article(
 #              via the bell icon
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1CheckUnreadNotificationsViaBell:
     """Authenticated member checks unread notifications via the bell icon."""
@@ -251,6 +252,7 @@ class TestScenario1CheckUnreadNotificationsViaBell:
 #              dropdown
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2MarkAllReadFromDropdown:
     """Member marks all notifications as read from the dropdown."""
@@ -340,6 +342,7 @@ class TestScenario2MarkAllReadFromDropdown:
 #              page
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4MarkAllReadOnNotificationsPage:
     """Member uses 'Mark all as read' on the notifications page."""

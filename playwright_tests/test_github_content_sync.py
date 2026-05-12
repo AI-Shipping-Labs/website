@@ -335,6 +335,7 @@ def _create_article(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1AdminTriggersSingleSync:
     """Admin triggers a sync for a single content source and sees updated status.
@@ -412,6 +413,7 @@ class TestScenario1AdminTriggersSingleSync:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2AdminTriggersSyncAll:
     """Admin triggers Sync All to update every content source at once.
@@ -493,6 +495,7 @@ class TestScenario2AdminTriggersSyncAll:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3AdminReviewsSyncHistory:
     """Admin reviews sync history to investigate past sync results."""
@@ -562,6 +565,7 @@ class TestScenario3AdminReviewsSyncHistory:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4AdminReviewsErrorDetails:
     """Admin reviews error details for a sync that had parsing failures."""
@@ -624,6 +628,7 @@ class TestScenario4AdminReviewsErrorDetails:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5SyncedArticlesAppearOnBlog:
     """Admin verifies that synced articles appear on the public blog listing."""
@@ -710,6 +715,7 @@ class TestScenario5SyncedArticlesAppearOnBlog:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6SoftDeleteOnFileRemoval:
     """Admin verifies that removing a file from repo soft-deletes the article."""
@@ -780,6 +786,7 @@ class TestScenario6SoftDeleteOnFileRemoval:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7StudioArticleCoexistsWithSynced:
     """Admin creates an article in Studio; it coexists with synced content."""
@@ -865,6 +872,7 @@ class TestScenario7StudioArticleCoexistsWithSynced:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8SyncOverwritesManualArticle:
     """Synced content overwrites a manually-created article when slugs match."""
@@ -930,6 +938,7 @@ class TestScenario8SyncOverwritesManualArticle:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9NonStaffCannotAccessSyncDashboard:
     """Non-staff user cannot access the sync dashboard."""
@@ -961,6 +970,7 @@ class TestScenario9NonStaffCannotAccessSyncDashboard:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10SyncedCoursesWithModulesAndUnits:
     """Admin verifies synced courses include modules and units."""
@@ -1030,6 +1040,7 @@ class TestScenario10SyncedCoursesWithModulesAndUnits:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11AnonymousReadsOpenSyncedArticle:
     """Anonymous visitor reads an open synced article without restriction."""
@@ -1095,6 +1106,7 @@ class TestScenario11AnonymousReadsOpenSyncedArticle:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario12AdminViewsSeededSources:
     """Admin views all four seeded content sources on the sync dashboard."""
@@ -1160,6 +1172,7 @@ class TestScenario12AdminViewsSeededSources:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario13SyncQueuedButtonConfirmation:
     """Sync buttons briefly flash 'Sync queued ✓' then revert (no spinner)."""
@@ -1381,6 +1394,7 @@ class TestScenario13SyncQueuedButtonConfirmation:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario14SyncDashboardAutoRefresh:
     """Sync dashboard polls itself while a row is 'running' and flips the

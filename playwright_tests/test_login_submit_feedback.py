@@ -46,6 +46,7 @@ def _delay_login_fetch(page, delay_ms=500):
     page.evaluate(script)
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestLoginSubmitFeedback:
     def test_valid_login_shows_immediate_busy_disabled_state(

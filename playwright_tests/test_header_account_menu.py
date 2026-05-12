@@ -43,6 +43,7 @@ def _seed_user_with_plan(db_blocker, email, **kwargs):
         return user, plan
 
 
+@pytest.mark.core
 def test_desktop_account_menu_opens_and_closes_by_keyboard(
     django_server, browser, django_db_blocker
 ):
@@ -76,6 +77,7 @@ def test_desktop_account_menu_opens_and_closes_by_keyboard(
     context.close()
 
 
+@pytest.mark.core
 def test_desktop_header_dropdowns_are_mutually_exclusive(
     django_server, browser, django_db_blocker
 ):
@@ -133,6 +135,7 @@ def test_desktop_header_dropdowns_are_mutually_exclusive(
     context.close()
 
 
+@pytest.mark.core
 def test_staff_desktop_account_menu_includes_studio_link(
     django_server, browser, django_db_blocker
 ):
@@ -152,6 +155,7 @@ def test_staff_desktop_account_menu_includes_studio_link(
     context.close()
 
 
+@pytest.mark.core
 def test_member_with_plan_desktop_account_menu_includes_plan_link(
     django_server, browser, django_db_blocker
 ):
@@ -173,6 +177,7 @@ def test_member_with_plan_desktop_account_menu_includes_plan_link(
     context.close()
 
 
+@pytest.mark.core
 def test_anonymous_header_has_sign_in_without_account_menu(django_server, page):
     page.goto(f"{django_server}/", wait_until="domcontentloaded")
 
@@ -181,6 +186,7 @@ def test_anonymous_header_has_sign_in_without_account_menu(django_server, page):
     assert page.locator("#account-menu-dropdown").count() == 0
 
 
+@pytest.mark.core
 def test_mobile_account_section_and_text_nav_coexist_without_overflow(
     django_server, browser, django_db_blocker
 ):

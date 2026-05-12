@@ -183,6 +183,7 @@ def _enroll_user_in_cohort(user, cohort):
 #              from the course page
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1MainMemberDiscoversCohortAndEnrolls:
     """Main member discovers an upcoming cohort and enrolls from the course page."""
@@ -268,6 +269,7 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
 # Scenario 2: Enrolled member unenrolls from a cohort
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2EnrolledMemberUnenrolls:
     """Enrolled member unenrolls from a cohort."""
@@ -333,6 +335,7 @@ class TestScenario2EnrolledMemberUnenrolls:
 # Scenario 3: Member cannot enroll when a cohort is full
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3CohortFullCannotEnroll:
     """Member cannot enroll when a cohort is full."""
@@ -388,6 +391,7 @@ class TestScenario3CohortFullCannotEnroll:
 #              due to tier restriction
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4FreeMemberCannotEnroll:
     """Free member sees the cohort but cannot enroll due to tier restriction."""
@@ -448,6 +452,7 @@ class TestScenario4FreeMemberCannotEnroll:
 #              sees the sign-up path
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5AnonymousVisitorSeesCohortAndPricing:
     """Anonymous visitor browses a course with cohorts and sees the sign-up path."""
@@ -510,6 +515,7 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
 #              and sees the unlock date
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6DripLockedUnit:
     """Enrolled cohort member accesses a drip-locked unit and sees the unlock date."""
@@ -591,6 +597,7 @@ class TestScenario6DripLockedUnit:
 #              drip date has passed
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7DripUnlockedUnit:
     """Enrolled cohort member accesses a unit after the drip date has passed."""
@@ -659,6 +666,7 @@ class TestScenario7DripUnlockedUnit:
 #              without restriction
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8NonCohortMemberAccessesDripUnit:
     """Non-cohort member accesses a drip-scheduled unit without restriction."""
@@ -732,6 +740,7 @@ class TestScenario8NonCohortMemberAccessesDripUnit:
 #              without tier issues
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9FreeCourseEnrollment:
     """Main member enrolls in a free course cohort without tier issues."""
@@ -798,6 +807,7 @@ class TestScenario9FreeCourseEnrollment:
 #               without cohort section
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10NoCohortsSyllabus:
     """Course with no active cohorts shows the syllabus without cohort section."""
@@ -867,6 +877,7 @@ class TestScenario10NoCohortsSyllabus:
 #               Django admin
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11AdminCreatesCohort:
     """Admin creates a new cohort for a course through Django admin."""

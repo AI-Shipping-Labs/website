@@ -97,6 +97,7 @@ def _seed_plan(
     }
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestParticipantNotes:
     def test_owner_adds_edits_and_deletes_a_note(self, django_server, browser):
@@ -190,6 +191,7 @@ class TestParticipantNotes:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPlanCommentsThread:
     def test_cohort_plan_owner_posts_a_comment(self, django_server, browser):
@@ -266,6 +268,7 @@ class TestPlanCommentsThread:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioPlanRendersNotesAndComments:
     def test_studio_plan_detail_shows_notes_read_only_and_comments_section(

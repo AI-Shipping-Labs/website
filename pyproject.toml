@@ -32,6 +32,9 @@ dependencies = [
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "website.settings"
 pythonpath = ["."]
+markers = [
+    "core: critical user-path Playwright tests run on every push (see _docs/testing-guidelines.md)",
+]
 
 [tool.coverage.run]
 source = [

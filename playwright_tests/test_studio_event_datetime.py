@@ -66,6 +66,7 @@ def _create_event(title, slug, start_datetime=None, end_datetime=None, **kwargs)
 #              date/time fields
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2StaffEditsEventPrePopulated:
     """Staff edits an existing event and sees pre-populated date/time fields."""
@@ -142,6 +143,7 @@ class TestScenario2StaffEditsEventPrePopulated:
 #              from the old raw input
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4NoDatetimeLocalInput:
     """Staff cannot accidentally save an ambiguous datetime from the old raw input.

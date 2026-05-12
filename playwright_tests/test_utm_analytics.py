@@ -70,6 +70,7 @@ def _seed_launch_campaign():
     return campaign, link
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_staff_reviews_dashboard_drills_down_and_edits_campaign(django_server, browser):
     _clear_analytics_data()
@@ -104,6 +105,7 @@ def test_staff_reviews_dashboard_drills_down_and_edits_campaign(django_server, b
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_staff_inspects_campaign_links_and_unminted_rows(django_server, browser):
     _clear_analytics_data()
@@ -140,6 +142,7 @@ def test_staff_inspects_campaign_links_and_unminted_rows(django_server, browser)
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_staff_sees_conversion_columns_only_when_conversion_data_is_available(django_server, browser):
     from accounts.models import User
@@ -202,6 +205,7 @@ def test_staff_sees_conversion_columns_only_when_conversion_data_is_available(dj
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_staff_sees_empty_states_on_dashboard_and_campaign_detail(django_server, browser):
     _clear_analytics_data()

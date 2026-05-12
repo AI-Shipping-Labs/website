@@ -84,6 +84,7 @@ def _read_secrets():
     return out
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestContentSourcesDownloadAndUpload:
     """Bootstrap a fresh environment by exporting then importing."""
@@ -155,6 +156,7 @@ class TestContentSourcesDownloadAndUpload:
         assert secrets.get("AI-Shipping-Labs/courses") == "secret-2"
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestContentSourcesFormatVersionMismatch:
     """An unsupported ``format_version`` is rejected without DB writes."""

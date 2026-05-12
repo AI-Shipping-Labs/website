@@ -153,6 +153,7 @@ def _seed_users_and_data():
     return pks
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioCRM:
     """All ten Playwright scenarios for issue #560."""

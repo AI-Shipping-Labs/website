@@ -1,0 +1,82 @@
+name: Scheduled Playwright (full suite)
+
+on:
+  schedule:
+    # Every 3 hours. The skip-if-unchanged guard below makes the tighter
+    # cadence cost-free during idle periods (issue #617 user update).
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-playwright
+  cancel-in-progress: true
+
+jobs:
+  playwright-full:
+    name: Playwright Full Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Skip if no new commits since last successful run
+        id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # workflow_dispatch always runs the full suite (manual override).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch — running full suite regardless of SHA."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Find the most recent successful run of THIS workflow (excluding
+          # the current run, which is already 'in_progress').
+          PREVIOUS_SHA=$(gh run list \
+            --workflow scheduled-playwright.yml \
+            --status success \
+            --limit 1 \
+            --json headSha,conclusion \
+            --jq '.[0].headSha // ""')
+
+          if [ -z "${PREVIOUS_SHA}" ]; then
+            echo "No prior successful run found (first-ever run) — proceeding."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${PREVIOUS_SHA}" = "${GITHUB_SHA}" ]; then
+            echo "::notice::No new commits since last successful run (${PREVIOUS_SHA}); skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Previous successful SHA: ${PREVIOUS_SHA}; current: ${GITHUB_SHA}; proceeding."
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout code
+        if: steps.changed.outputs.skip != 'true'
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        if: steps.changed.outputs.skip != 'true'
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        if: steps.changed.outputs.skip != 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        if: steps.changed.outputs.skip != 'true'
+        run: uv sync
+
+      - name: Install Playwright browsers
+        if: steps.changed.outputs.skip != 'true'
+        run: uv run playwright install --with-deps chromium
+
+      - name: Run full Playwright suite
+        if: steps.changed.outputs.skip != 'true'
+        run: uv run pytest playwright_tests/ -v

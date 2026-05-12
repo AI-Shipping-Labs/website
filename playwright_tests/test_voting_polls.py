@@ -107,6 +107,7 @@ def _create_vote(poll, option, user):
 #              topic
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1MainMemberBrowsesAndVotes:
     """Main member browses active polls and votes on a topic."""
@@ -223,6 +224,7 @@ class TestScenario1MainMemberBrowsesAndVotes:
 # Scenario 2: Main member changes their mind and unvotes an option
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2MainMemberUnvotes:
     """Main member changes their mind and unvotes an option."""
@@ -303,6 +305,7 @@ class TestScenario2MainMemberUnvotes:
 # Scenario 3: Main member hits the maximum votes limit on a poll
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3MaxVotesLimit:
     """Main member hits the maximum votes limit on a poll."""
@@ -398,6 +401,7 @@ class TestScenario3MaxVotesLimit:
 #              accepts proposals
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4ProposeNewOption:
     """Main member proposes a new option on a poll that accepts
@@ -495,6 +499,7 @@ class TestScenario4ProposeNewOption:
 # Scenario 7: Premium member votes on a course poll
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7PremiumMemberVotesOnCoursePoll:
     """Premium member votes on a course poll."""
@@ -585,6 +590,7 @@ class TestScenario7PremiumMemberVotesOnCoursePoll:
 # Scenario 10: Main member navigates to polls from the dashboard
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10NavigateFromDashboard:
     """Main member navigates to polls from the dashboard."""
@@ -651,6 +657,7 @@ class TestScenario10NavigateFromDashboard:
 #               gets validation feedback
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11ProposalMissingTitle:
     """Member submits a proposal with missing title and gets
@@ -730,6 +737,7 @@ class TestScenario11ProposalMissingTitle:
 #               encourages proposals
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario12EmptyPollEncouragesProposals:
     """Poll with no options yet shows empty state and encourages

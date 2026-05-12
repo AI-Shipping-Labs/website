@@ -62,8 +62,8 @@ Verify against the spec:
 - [ ] Access control tests (if gating is involved): anonymous, free, and paid users
 - [ ] All Django tests pass: `make test`
 - [ ] Django coverage passes: `make coverage` (85% minimum under the configured runtime-code scope)
-- [ ] Playwright E2E tests pass: `make playwright`
-- [ ] Report test counts by type: unit, integration, E2E (Playwright)
+- [ ] Playwright E2E tests pass: `make test-playwright-core` (default per-issue) or `make test-playwright` (full, when escalated)
+- [ ] Report test counts by type: unit, integration, E2E (Playwright) — and which Playwright subset (`core` vs `full`) ran
 
 #### Security
 - [ ] No hardcoded secrets
@@ -90,12 +90,26 @@ make test
 # Coverage (must be 85%+)
 make coverage
 
-# Playwright E2E tests
-make playwright
+# Playwright E2E tests — core subset (default for per-issue work)
+make test-playwright-core
+
+# Playwright E2E tests — full suite (escalate when the diff touches
+# playwright_tests/conftest.py, tests/fixtures.py, the access-control
+# matrix, payments wiring, or shared template fragments — the orchestrator
+# will tell you when to escalate)
+make test-playwright
 
 # All tests
 make test-all
 ```
+
+Default to `make test-playwright-core` for per-issue runs. The core subset
+runs in under 5 minutes and covers auth, tier-based access control, Stripe
+checkout, course/event/sprint/plan happy paths, Studio CRUD, and navigation
+gating. The full suite runs every 3 hours via the
+`scheduled-playwright.yml` workflow, so escalating to `make test-playwright`
+locally is only needed when the diff plausibly affects long-tail tests
+(shared fixtures, conftest, access matrix, payments).
 
 `make coverage` is the authoritative Django coverage gate. It erases stale
 coverage data, runs the full Django unit/integration suite under Coverage.py,
@@ -162,7 +176,7 @@ gh issue comment {NUMBER} --repo AI-Shipping-Labs/website --body "$(cat <<'COMME
 
 ### Test Summary
 - Unit tests: X passed / Y failed
-- Playwright E2E tests: X passed / Y failed
+- Playwright E2E tests (core / full): X passed / Y failed
 - Coverage: X%
 
 ### Acceptance Criteria
@@ -265,7 +279,7 @@ All acceptance criteria verified:
 ### Test Summary
 - Unit tests: X passed / 0 failed
 - Integration tests: X passed / 0 failed
-- Playwright E2E tests: X passed / 0 failed
+- Playwright E2E tests (core / full): X passed / 0 failed
 - Coverage: X%
 
 IF all tests pass => Approved. Software engineer should commit and push.

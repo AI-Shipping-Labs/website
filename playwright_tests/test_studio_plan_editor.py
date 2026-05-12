@@ -168,6 +168,7 @@ def _checkpoint_descriptions(page, week_number):
     )
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNonStaffBlockedFromEditor:
     """Non-staff user cannot reach the editor and no markup leaks."""
@@ -197,6 +198,7 @@ class TestNonStaffBlockedFromEditor:
         assert "plan-editor-data" not in body
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEditorRendersWithoutErrors:
     """A fresh editor page loads cleanly with the bundle and bootstrap."""
@@ -259,6 +261,7 @@ class TestEditorRendersWithoutErrors:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffDragsCheckpointAcrossWeeks:
     def test_drag_persists_across_reload(self, django_server, browser):
@@ -308,6 +311,7 @@ class TestStaffDragsCheckpointAcrossWeeks:
         ]
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffReordersWithinWeekViaDrag:
     def test_reorder_within_week_persists(self, django_server, browser):
@@ -348,6 +352,7 @@ class TestStaffReordersWithinWeekViaDrag:
         assert _checkpoint_descriptions(page, 1) == ["C", "A", "B"]
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffReordersByKeyboard:
     def test_keyboard_reorder_within_week_persists(self, django_server, browser):
@@ -412,6 +417,7 @@ class TestStaffReordersByKeyboard:
         assert _checkpoint_descriptions(page, 1) == ["C", "A", "B"]
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffMovesCheckpointAcrossWeeksByKeyboard:
     def test_alt_arrow_down_moves_to_next_week(self, django_server, browser):
@@ -458,6 +464,7 @@ class TestStaffMovesCheckpointAcrossWeeksByKeyboard:
         assert _checkpoint_descriptions(page, 2) == ["A", "B"]
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffEditsSummaryInline:
     def test_summary_textarea_autosaves(self, django_server, browser):
@@ -495,6 +502,7 @@ class TestStaffEditsSummaryInline:
         assert ta.input_value() == "Ship two projects in six weeks"
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffAddsAndDeletesCheckpoint:
     def test_add_then_delete_checkpoint(self, django_server, browser):
@@ -549,6 +557,7 @@ class TestStaffAddsAndDeletesCheckpoint:
         assert _checkpoint_descriptions(page, 1) == ["New checkpoint"]
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffSeesRevertOnApiFailure:
     def test_drag_reverts_when_api_returns_422(self, django_server, browser):
@@ -606,6 +615,7 @@ class TestStaffSeesRevertOnApiFailure:
         assert _checkpoint_descriptions(page, 1) == ["A", "B"]
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffTogglesCheckpointDone:
     def test_done_toggle_persists_via_api(self, django_server, browser):
@@ -641,6 +651,7 @@ class TestStaffTogglesCheckpointDone:
         assert chip.get_attribute("data-done") == "true"
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEditorSurfacesNoErrorsDuringSession:
     def test_full_session_records_only_2xx(self, django_server, browser):

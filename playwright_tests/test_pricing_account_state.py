@@ -140,6 +140,7 @@ def _tier_card(page, tier_name):
     raise AssertionError(f"Tier card {tier_name!r} not found")
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_free_member_sees_current_free_and_paid_upgrades(
     django_server, browser, django_db_blocker, pricing_users
@@ -157,6 +158,7 @@ def test_free_member_sees_current_free_and_paid_upgrades(
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_main_member_sees_current_plan_downgrade_and_upgrade(
     django_server, browser, django_db_blocker, pricing_users
@@ -175,6 +177,7 @@ def test_main_member_sees_current_plan_downgrade_and_upgrade(
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_premium_member_does_not_see_join_for_lower_paid_tiers(
     django_server, browser, django_db_blocker, pricing_users
@@ -200,6 +203,7 @@ def test_premium_member_does_not_see_join_for_lower_paid_tiers(
         ("pricing-premium@test.com", "Premium", False),
     ],
 )
+@pytest.mark.core
 def test_account_primary_action_matches_current_plan_state(
     django_server,
     browser,
@@ -223,6 +227,7 @@ def test_account_primary_action_matches_current_plan_state(
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_pending_downgrade_and_cancellation_copy_is_visible(
     django_server, browser, django_db_blocker, pricing_users
@@ -250,6 +255,7 @@ def test_pending_downgrade_and_cancellation_copy_is_visible(
         cancel_context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_account_pending_and_temporary_states_do_not_show_normal_upgrade(
     django_server, browser, django_db_blocker, pricing_users
@@ -283,6 +289,7 @@ def test_account_pending_and_temporary_states_do_not_show_normal_upgrade(
         override_context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_override_and_stale_subscription_use_non_join_copy(
     django_server, browser, django_db_blocker, pricing_users

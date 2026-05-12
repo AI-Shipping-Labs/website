@@ -73,6 +73,7 @@ def _seed_one_eligible_recipient(email="recipient@test.com"):
 # Scenario 1: Staff author aborts a risky send — campaign stays draft
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffAbortsSend:
     """Clicking Cancel on the Send confirm dialog keeps the campaign as draft."""
@@ -112,6 +113,7 @@ class TestStaffAbortsSend:
 # Scenario 2: Staff author confirms a send — navigates to worker
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffConfirmsSend:
     """Clicking OK on the Send confirm dialog queues the send."""
@@ -148,6 +150,7 @@ class TestStaffConfirmsSend:
 # Scenario 3: Staff author aborts a draft delete
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffAbortsDelete:
     """Clicking Cancel on the Delete confirm dialog keeps the campaign."""
@@ -181,6 +184,7 @@ class TestStaffAbortsDelete:
 # Scenario 4: Staff author confirms a draft delete
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffConfirmsDelete:
     """Clicking OK on the Delete confirm dialog removes the campaign and

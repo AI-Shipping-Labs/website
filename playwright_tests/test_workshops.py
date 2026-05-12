@@ -127,6 +127,7 @@ def _create_workshop(
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestVisitorBrowsesCatalog:
     def test_visitor_sees_catalog_and_lands_on_paywalled_landing(
@@ -259,6 +260,7 @@ class TestVisitorBrowsesCatalog:
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestBasicUserReadsPagesButNotRecording:
     def test_basic_user_legacy_link_redirects_to_canonical_tutorial(
@@ -378,6 +380,7 @@ class TestBasicUserReadsPagesButNotRecording:
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMainUserHasFullAccess:
     def test_main_user_sees_recording_and_pages(
@@ -422,6 +425,7 @@ class TestMainUserHasFullAccess:
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEventsPastCardLinksToWorkshop:
     def test_past_event_card_links_to_workshop(
@@ -453,6 +457,7 @@ class TestEventsPastCardLinksToWorkshop:
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopSitemap:
     def test_sitemap_lists_workshop_urls(self, django_server, page):
@@ -476,6 +481,7 @@ class TestWorkshopSitemap:
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopActionButtonsAboveDescription:
     def test_action_buttons_render_above_description_and_pages_list(
@@ -542,6 +548,7 @@ class TestWorkshopActionButtonsAboveDescription:
         ctx.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopWithoutCodeRepoNoEmptySlot:
     def test_no_code_repo_no_empty_button_row(
@@ -606,6 +613,7 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestDraftWorkshopHidden:
     def test_draft_not_in_catalog_and_404_on_detail(

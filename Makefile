@@ -1,4 +1,4 @@
-.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright lint lint-fix clean
+.PHONY: run run2 worker dev migrate qcache sync seed test test-core coverage playwright test-playwright test-playwright-core lint lint-fix clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running
@@ -61,12 +61,23 @@ coverage:
 	uv run coverage run manage.py test
 	uv run coverage report --fail-under=85
 
-# Run Playwright end-to-end tests
-playwright:
+# Run the full Playwright end-to-end suite.
+test-playwright:
 	uv run pytest playwright_tests/ -v
 
+# Run only the core subset of Playwright tests (auth, access control, payments,
+# happy paths for events/courses/sprints/plans, Studio CRUD, navigation gating).
+# Targeted at <5 min wall time on CI; runs on every push to main via Deploy Dev.
+# See _docs/testing-guidelines.md ("Core Playwright subset") for the tagging policy.
+test-playwright-core:
+	uv run pytest -m core playwright_tests/ -v
+
+# Backwards-compat alias for older muscle-memory: `make playwright` runs the
+# full Playwright suite (same as `make test-playwright`).
+playwright: test-playwright
+
 # Run all tests (Django + Playwright)
-test-all: test playwright
+test-all: test test-playwright
 
 # Initial setup: .env, content repo, deps, migrate, sync
 setup:

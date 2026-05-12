@@ -70,6 +70,7 @@ def _desktop_text_nav(page):
     return page.locator('[data-testid="desktop-primary-nav"]')
 
 
+@pytest.mark.core
 def test_anonymous_desktop_navigation_groups_and_sprints_link(
     django_server, page
 ):
@@ -91,6 +92,7 @@ def test_anonymous_desktop_navigation_groups_and_sprints_link(
     _shot(page, "01-anonymous-desktop-nav")
 
 
+@pytest.mark.core
 def test_anonymous_mobile_navigation_groups(django_server, browser):
     context = browser.new_context(viewport={"width": 390, "height": 844})
     page = context.new_page()
@@ -127,6 +129,7 @@ def test_anonymous_mobile_navigation_groups(django_server, browser):
     context.close()
 
 
+@pytest.mark.core
 def test_authenticated_member_navigation_preserves_account_controls(
     django_server, browser, django_db_blocker
 ):
@@ -153,6 +156,7 @@ def test_authenticated_member_navigation_preserves_account_controls(
     context.close()
 
 
+@pytest.mark.core
 def test_staff_navigation_preserves_studio_in_account_controls(
     django_server, browser, django_db_blocker
 ):
@@ -172,6 +176,7 @@ def test_staff_navigation_preserves_studio_in_account_controls(
     context.close()
 
 
+@pytest.mark.core
 def test_sprints_page_lists_active_sprint(django_server, page, django_db_blocker):
     with django_db_blocker.unblock():
         _clear_sprints()
@@ -191,6 +196,7 @@ def test_sprints_page_lists_active_sprint(django_server, page, django_db_blocker
     _shot(page, "05-sprints-active")
 
 
+@pytest.mark.core
 def test_sprints_page_empty_state(django_server, page, django_db_blocker):
     with django_db_blocker.unblock():
         _clear_sprints()
@@ -204,6 +210,7 @@ def test_sprints_page_empty_state(django_server, page, django_db_blocker):
     _shot(page, "06-sprints-empty")
 
 
+@pytest.mark.core
 def test_sprints_draft_visibility(django_server, browser, page, django_db_blocker):
     staff_email = _email("staff-draft-545")
     member_email = _email("member-draft-545")
@@ -232,6 +239,7 @@ def test_sprints_draft_visibility(django_server, browser, page, django_db_blocke
     staff_context.close()
 
 
+@pytest.mark.core
 def test_existing_activities_page_still_loads(django_server, page):
     page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 

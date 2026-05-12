@@ -87,6 +87,7 @@ def _billing_control_metrics(page):
     }
 
 
+@pytest.mark.core
 def test_pricing_billing_toggle_defaults_to_annual(django_server, page):
     _goto_pricing(page, django_server)
 
@@ -111,6 +112,7 @@ def test_pricing_billing_toggle_defaults_to_annual(django_server, page):
         )
 
 
+@pytest.mark.core
 def test_pricing_billing_toggle_keyboard_switches_monthly_and_back(
     django_server, page
 ):
@@ -138,6 +140,7 @@ def test_pricing_billing_toggle_keyboard_switches_monthly_and_back(
     assert _paid_prices(page)["main"] == "€500"
 
 
+@pytest.mark.core
 @pytest.mark.parametrize("width", [320, 393, 768, 1024, 1280])
 def test_pricing_billing_toggle_stays_centered_without_body_overflow(
     django_server, page, width
@@ -174,6 +177,7 @@ def test_pricing_billing_toggle_stays_centered_without_body_overflow(
     assert toggle["x"] + toggle["width"] < annual_label["x"]
 
 
+@pytest.mark.core
 @pytest.mark.parametrize("width,height", [(1280, 900), (393, 851)])
 def test_home_and_pricing_use_matching_billing_toggle_pattern(
     django_server, page, width, height

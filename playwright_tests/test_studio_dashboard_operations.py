@@ -58,6 +58,7 @@ def _seed_dashboard_data():
     connection.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_studio_dashboard_operational_sections_and_links(django_server, browser):
     _reset_dashboard_data()
@@ -90,6 +91,7 @@ def test_studio_dashboard_operational_sections_and_links(django_server, browser)
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_studio_dashboard_mobile_no_horizontal_overflow(django_server, browser):
     _reset_dashboard_data()

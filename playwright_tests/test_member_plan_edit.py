@@ -98,6 +98,7 @@ def _seed_plan_with_two_checkpoints(member_email, sprint=None):
     return plan_pk
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMemberOpensOwnPlan:
     """Member opens their own plan and the workspace renders fully."""
@@ -129,6 +130,7 @@ class TestMemberOpensOwnPlan:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMemberCannotViewOtherMembersPlan:
     """Bob navigating to Alice's plan id gets 404 and no leak."""
@@ -181,6 +183,7 @@ class TestMemberCannotViewOtherMembersPlan:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousRedirectedToLogin:
     """An anonymous browser hitting the member URL gets login redirect."""
@@ -221,6 +224,7 @@ class TestAnonymousRedirectedToLogin:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffEditorRegression:
     """Staff path still renders the editor after the partial extraction."""

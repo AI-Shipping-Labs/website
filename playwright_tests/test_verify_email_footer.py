@@ -75,6 +75,7 @@ def _extract_verify_url(html):
     return match.group(1) if match else None
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestVerifyEmailFooterRoundTrip:
     """The verify URL embedded in an email footer actually verifies the user."""

@@ -131,7 +131,8 @@ Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → t
 
 - Every issue goes through ALL stages: PM groom → SWE implement → Tester review → PM acceptance → Commit → Local merge → Push → Oncall CI check
 - Tester must run the full workflow from `.claude/agents/tester.md` including Step 7 (capture screenshots). Screenshots are used by agents to verify pages rendered correctly, not just for human review
-- Tester must actually run all tests — not just review code. Test report must include counts by type
+- Tester runs `make test-playwright-core` by default for per-issue work. Escalate to `make test-playwright` (full suite) when the diff touches `playwright_tests/conftest.py`, `tests/fixtures.py`, the access-control matrix, payments wiring, or shared template fragments. The full suite also runs automatically every 3 hours via `.github/workflows/scheduled-playwright.yml`. See `_docs/testing-guidelines.md` ("Core Playwright subset") for the tagging policy
+- Tester must actually run all tests — not just review code. Test report must include counts by type and which Playwright subset (`core` vs `full`) ran
 - Tester must capture screenshots of every changed page and read each one to verify it is not a 404, error, or broken layout
 - SWE and tester must update acceptance criteria checkboxes in the issue body (`- [ ]` → `- [x]`)
 - Never commit directly without tester review, even for "simple" changes

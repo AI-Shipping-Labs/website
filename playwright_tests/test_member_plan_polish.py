@@ -106,6 +106,7 @@ def _seed_polish_plan(owner_email="member@test.com", teammate_email="teammate@te
     }
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMemberPlanPolish:
     def test_owner_toggles_and_edits_from_readable_plan(self, django_server, browser):

@@ -36,6 +36,7 @@ def _reset_state():
     connection.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_staff_adds_content_source_and_first_sync_is_queued(
         django_server, browser):

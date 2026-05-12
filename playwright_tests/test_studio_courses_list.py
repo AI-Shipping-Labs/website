@@ -79,6 +79,7 @@ def _assert_no_horizontal_overflow(page):
     assert overflow <= 2
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_studio_courses_list_desktop_metadata_and_actions(django_server, browser):
     _ensure_tiers()
@@ -132,6 +133,7 @@ def test_studio_courses_list_desktop_metadata_and_actions(django_server, browser
     context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_studio_courses_list_mobile_cards_wrap_without_overflow(django_server, browser):
     _ensure_tiers()

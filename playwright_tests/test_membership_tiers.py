@@ -52,6 +52,7 @@ def _get_tier_card_by_name(page, tier_name):
     raise ValueError(f"Tier card '{tier_name}' not found")
 
 
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario1AnonymousBrowsesFreeSubscribe:
     """
@@ -120,6 +121,7 @@ class TestScenario1AnonymousBrowsesFreeSubscribe:
         assert "/#newsletter" in page.url or page.url.endswith(
             "/#newsletter"
         )
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario2CompareAllFourTiers:
     """
@@ -227,6 +229,7 @@ class TestScenario2CompareAllFourTiers:
             card = _get_tier_card_by_name(page, tier_name)
             cta = card.locator("a.tier-cta-link")
             assert cta.inner_text().strip() == "Join"
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario3BillingToggle:
     """
@@ -364,6 +367,7 @@ class TestScenario3BillingToggle:
         assert "/year" in premium_card.locator(
             ".tier-period"
         ).inner_text()
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario4MainMonthlyStripeLink:
     """
@@ -400,6 +404,7 @@ class TestScenario4MainMonthlyStripeLink:
         main_card = _get_tier_card_by_name(page, "Main")
         join_button = main_card.locator("a.tier-cta-link")
         assert join_button.get_attribute("data-tier") == "main"
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario5AnnualStripeLinksSwap:
     """
@@ -469,6 +474,7 @@ class TestScenario5AnnualStripeLinksSwap:
                 f"{tier_name} href {href} does not match "
                 f"data-link-monthly {monthly_attr}"
             )
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario6PremiumAnnualStripeLink:
     """
@@ -511,6 +517,7 @@ class TestScenario6PremiumAnnualStripeLink:
         monthly_link = cta.get_attribute("data-link-monthly")
         annual_link = cta.get_attribute("data-link-annual")
         assert monthly_link != annual_link
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario7FreeSubscribeFlow:
     """
@@ -560,6 +567,7 @@ class TestScenario7FreeSubscribeFlow:
         subscribe_link.click()
         page.wait_for_load_state("domcontentloaded")
         assert "newsletter" in page.url
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario8MainTierVisualDistinction:
     """
@@ -615,6 +623,7 @@ class TestScenario8MainTierVisualDistinction:
             cta = card.locator("a.tier-cta-link")
             cta_classes = cta.get_attribute("class")
             assert "bg-secondary" in cta_classes
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario9CumulativeFeatureLists:
     """
@@ -695,6 +704,7 @@ class TestScenario9CumulativeFeatureLists:
             assert expected in features_text, (
                 f"Premium tier missing feature: {expected}"
             )
+@pytest.mark.core
 @pytest.mark.django_db
 class TestScenario10RapidToggleStressTest:
     """

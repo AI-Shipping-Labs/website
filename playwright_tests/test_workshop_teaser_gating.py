@@ -150,6 +150,7 @@ def _create_workshop(
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonRegisteredTutorial:
     def test_anon_finds_signup_path(self, django_server, page):
@@ -202,6 +203,7 @@ class TestAnonRegisteredTutorial:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestFreeMemberOnBasicTutorial:
     def test_free_member_sees_upgrade_cta(
@@ -246,6 +248,7 @@ class TestFreeMemberOnBasicTutorial:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMainMemberFullBody:
     def test_main_member_reads_full_body(self, django_server, browser):
@@ -281,6 +284,7 @@ class TestMainMemberFullBody:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonOnPaidRecording:
     def test_anon_sees_locked_thumbnail_and_signup(
@@ -316,6 +320,7 @@ class TestAnonOnPaidRecording:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestFreeMemberOnMainRecording:
     def test_free_member_sees_view_pricing(self, django_server, browser):
@@ -355,6 +360,7 @@ class TestFreeMemberOnMainRecording:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPremiumMemberFullVideo:
     def test_premium_member_watches_recording(
@@ -394,6 +400,7 @@ class TestPremiumMemberFullVideo:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEmptyBodyFallback:
     def test_empty_body_renders_bare_paywall(self, django_server, browser):
@@ -430,6 +437,7 @@ class TestEmptyBodyFallback:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSignInReturnsToTutorial:
     def test_signin_round_trip_lands_on_tutorial(
@@ -475,6 +483,7 @@ class TestSignInReturnsToTutorial:
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestUnverifiedEmailCard:
     def test_unverified_user_sees_verify_card(

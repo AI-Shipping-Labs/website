@@ -111,6 +111,7 @@ def _logout_via_header(page):
     page.click('[data-testid="account-menu-dropdown"] a:has-text("Log out")')
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestLogoutReturnContext:
     def test_logout_from_event_detail_stays_on_event(

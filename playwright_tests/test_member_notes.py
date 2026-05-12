@@ -62,6 +62,7 @@ def _seed_member_with_two_plans():
     return member.pk, spring_plan.pk, summer_plan.pk, crm_record.pk
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffCapturesMemberContextAcrossSprints:
     def test_member_level_note_created_once_is_visible_in_next_sprint(
@@ -130,6 +131,7 @@ class TestStaffCapturesMemberContextAcrossSprints:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffRecordsSprintSpecificMemberNote:
     def test_sprint_specific_note_links_to_origin_plan_from_other_sprint(

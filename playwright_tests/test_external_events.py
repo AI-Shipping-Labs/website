@@ -98,6 +98,7 @@ def _create_event(
 # --- Scenario 1 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousSpotsMavenAndRegistersOffPlatform:
     """Anonymous visitor browses /events, identifies the Maven cohort by
@@ -172,6 +173,7 @@ class TestAnonymousSpotsMavenAndRegistersOffPlatform:
 # --- Scenario 2 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestFreeMemberSeesNoPaywallOnExternalEvent:
     """A free-tier member visiting an external event marked Main+ must
@@ -227,6 +229,7 @@ class TestFreeMemberSeesNoPaywallOnExternalEvent:
 # --- Scenario 3 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPastListDistinguishesExternalAndCommunity:
     """The past-recordings list shows the external pill only on the
@@ -277,6 +280,7 @@ class TestPastListDistinguishesExternalAndCommunity:
 # --- Scenario 4 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffAddsExternalEventViaStudio:
     """A staff user types a new host into the Studio form, saves, and
@@ -352,6 +356,7 @@ class TestStaffAddsExternalEventViaStudio:
 # --- Scenario 5 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestClearingExternalHostRevertsToCommunityFlow:
     """Clearing the External host in Studio puts the event back on the
@@ -405,6 +410,7 @@ class TestClearingExternalHostRevertsToCommunityFlow:
 # --- Scenario 6 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestExternalEventWithoutJoinUrlShowsComingSoon:
     """An external event with an empty ``zoom_join_url`` must render a
@@ -446,6 +452,7 @@ class TestExternalEventWithoutJoinUrlShowsComingSoon:
 # --- Scenario 7 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPastTagFilterKeepsMatchingExternalEvents:
     """Filtering /events?filter=past by ``tag=python`` keeps the
@@ -503,6 +510,7 @@ class TestPastTagFilterKeepsMatchingExternalEvents:
 # --- Scenario 8 ---------------------------------------------------------
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestExternalAnonymousNoEmailRegistrationForm:
     """An anonymous visitor on a free upcoming external event must see

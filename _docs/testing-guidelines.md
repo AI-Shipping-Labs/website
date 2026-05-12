@@ -679,3 +679,98 @@ selection is auditable at a glance.
 If you add a new feature to a critical path, tag the test class. If you remove
 one, the tag travels with the deletion. There is no separate registry to
 maintain -- the tag IS the registry.
+
+---
+
+## Core Playwright subset (`make test-playwright-core`)
+
+The full Playwright suite has 800+ tests across 130+ files and takes 25-40
+minutes on the CI runner. To get real Playwright coverage on every push to
+`main` (Deploy Dev) without blowing the deploy budget, we maintain a `core`
+subset that runs in well under 5 minutes.
+
+```bash
+make test-playwright-core    # ~450-560 tests in <5 min, runs on every push
+make test-playwright         # full suite, runs on schedule (every 3h)
+```
+
+`make test-playwright-core` runs `pytest -m core playwright_tests/ -v`. The
+Deploy Dev workflow runs the same command in a parallel `playwright-core`
+job; a failure blocks the deploy. The full suite runs on the
+`scheduled-playwright.yml` workflow every 3 hours (skipped if no commits
+have landed since the last successful run) and via `workflow_dispatch`.
+
+### What belongs in `core`
+
+A test should be tagged `@pytest.mark.core` if it covers any of:
+
+- Authentication flows (login success/failure, signup, email verification,
+  password reset, logout, OAuth happy paths).
+- Tier-based access control matrix (anonymous/free/basic/main/premium gating
+  on each major content type — articles, recordings, projects, tutorials,
+  courses, downloads, events).
+- Stripe checkout redirects, billing toggle, account state after checkout.
+- Course enrollment + unit completion happy path.
+- Event registration happy path.
+- Member plan create / edit / delete.
+- Sprint join / leave.
+- Tier override admin lifecycle.
+- Studio CRUD happy paths for every content type (courses, events, plans,
+  content sources, sync, workshops).
+- Workshop reader access + per-page gating.
+- Notifications happy path.
+- Voting / polls submit.
+- Newsletter signup.
+- Navigation gating (sidebar, header account menu).
+- Public homepage / dashboard happy path.
+- Content render happy path for each major content type (one per file).
+
+Aim for 50-65% of test functions tagged. The criterion is "is this a path
+the product depends on?", not "does it run fast?". Slow tests on critical
+paths still belong in `core`.
+
+### What does not belong in `core`
+
+Leave untagged (these run only on the scheduled job):
+
+- Visual / typography / layout regression tests.
+- Mobile-only / responsive smoke tests.
+- Issue-specific cosmetic fixes (single-issue polish files like
+  `test_clickable_cards_523.py`).
+- Edge cases: empty states, malformed input, niche error pages.
+- Studio polish / scanability files.
+- Niche admin actions used rarely (contacts import, peer reviews).
+- Theme toggle, env-mismatch banner, code copy widgets, foldable sidebar.
+
+### How to tag
+
+Apply the marker at the function level (Playwright tests are mostly
+function-style, so per-function is the norm):
+
+```python
+import pytest
+
+@pytest.mark.core
+def test_free_member_hits_paywall_on_basic_article(page, live_server, ...):
+    ...
+```
+
+Class-level tagging works too if every method in the class belongs in core:
+
+```python
+@pytest.mark.core
+class TestAccessControlMatrix:
+    def test_anonymous_user_blocked(self, page, ...):
+        ...
+```
+
+If you add a new feature on a critical path, tag the test. If you remove the
+feature, the marker travels with the deletion. The marker IS the registry.
+
+### Local concurrency caveat
+
+The Playwright server fixture in `playwright_tests/conftest.py` binds port
+`8765`. Running `make test-playwright` (or `make test-playwright-core`) from
+two worktrees concurrently produces port-collision failures. Run one suite
+at a time locally; CI runs each job in an isolated runner so this is only a
+local-development concern.

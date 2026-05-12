@@ -399,6 +399,7 @@ def _clear_all_content():
 # Scenario 449: Newly signed-up reader hits a free article
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario449UnverifiedSignupFreeArticle:
     """New email/password signups must verify before reading free details."""
@@ -489,6 +490,7 @@ class TestScenario449UnverifiedSignupFreeArticle:
 # Scenario 1: Anonymous visitor reads open content freely
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1AnonymousReadsOpenContent:
     """Anonymous visitor reads open content freely without encountering
@@ -612,6 +614,7 @@ class TestScenario1AnonymousReadsOpenContent:
 # Scenario 2: Free member hits a Basic-gated article
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2FreeMemberHitsBasicGatedArticle:
     """Free member hits a Basic-gated article and follows the upgrade
@@ -684,6 +687,7 @@ class TestScenario2FreeMemberHitsBasicGatedArticle:
 # Scenario 3: Basic member reads Basic, blocked on Main
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3BasicMemberReadsBasicBlockedOnMain:
     """Basic member reads Basic content but cannot access a Main-gated
@@ -760,6 +764,7 @@ class TestScenario3BasicMemberReadsBasicBlockedOnMain:
 # Scenario 4: Main member reads all up to their level, blocked on Premium
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4MainMemberReadsUpToLevelBlockedOnPremium:
     """Main member reads all content up to their level but gets blocked
@@ -858,6 +863,7 @@ class TestScenario4MainMemberReadsUpToLevelBlockedOnPremium:
 # Scenario 5: Premium member has unrestricted access
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5PremiumMemberUnrestrictedAccess:
     """Premium member has unrestricted access across all content types
@@ -949,6 +955,7 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
 # Scenario 6: Anonymous visitor lands on gated article via shared link
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6AnonymousGatedArticleViaSharedLink:
     """Anonymous visitor lands on a gated article via shared link and
@@ -1004,6 +1011,7 @@ class TestScenario6AnonymousGatedArticleViaSharedLink:
 # video URL never leaked
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7BasicMemberBlockedFromMainRecording:
     """Basic member is blocked from a Main-gated recording and the video
@@ -1064,6 +1072,7 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
 # Scenario 8: Anonymous visitor evaluates gated course syllabus
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
     """Anonymous visitor evaluates a gated course syllabus and finds
@@ -1131,6 +1140,7 @@ class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
 # Scenario 9: Main member navigates a course, reads a unit, marks complete
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9MainMemberNavigatesCourseReadsUnit:
     """Main member navigates a course, reads a unit, and marks it
@@ -1193,6 +1203,7 @@ class TestScenario9MainMemberNavigatesCourseReadsUnit:
 # Scenario 10: Staff changes article visibility in Studio
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10StaffChangesVisibilityInStudio:
     """Staff member changes an article's visibility in Studio and the
@@ -1273,6 +1284,7 @@ class TestScenario10StaffChangesVisibilityInStudio:
 # Scenario 11: Free member encounters gated downloads
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11FreeMemberGatedDownloads:
     """Free member encounters gated downloads and follows the upgrade
@@ -1332,6 +1344,7 @@ class TestScenario11FreeMemberGatedDownloads:
 # Scenario 12: Free member tries to register for Main-gated event
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario12FreeMemberGatedEvent:
     """Free member tries to register for a Main-gated event and sees

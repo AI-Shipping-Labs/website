@@ -145,6 +145,7 @@ def _assert_slack_join_panel(page, expected_href):
 #              their dashboard
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1MainMemberSeesCommunityQuickAction:
     """Main member discovers Slack access on their dashboard."""
@@ -174,6 +175,7 @@ class TestScenario1MainMemberSeesCommunityQuickAction:
 # Scenario 2: Basic member does not see the Community quick action
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2BasicMemberNoCommunityAction:
     """Basic member does not see the Community quick action."""
@@ -221,6 +223,7 @@ class TestScenario2BasicMemberNoCommunityAction:
 #              tier benefit on the activities page
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3FreeMemberDiscoversCommunityOnActivities:
     """Free member discovers community access is a Main tier benefit
@@ -288,6 +291,7 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
 #              in the Main tier on the pricing page
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
     """Anonymous visitor sees community access highlighted in the
@@ -360,6 +364,7 @@ class TestScenario4AnonymousVisitorSeesSlackOnPricingPage:
 # Scenario 5: Premium member also sees the Community quick action
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5PremiumMemberSeesCommunityAction:
     """Premium member also discovers Slack access on their dashboard."""
@@ -388,6 +393,7 @@ class TestScenario5PremiumMemberSeesCommunityAction:
 # Scenario 10: Admin reviews community audit log in Django admin
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10AdminReviewsAuditLog:
     """Admin reviews community audit log in Django admin."""
@@ -481,6 +487,7 @@ class TestScenario10AdminReviewsAuditLog:
 # community/tests/test_services.py.
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11DashboardAfterDeletion:
     """Subscription deletion -- dashboard no longer shows Community."""
@@ -522,6 +529,7 @@ class TestScenario11DashboardAfterDeletion:
 # flicker, no race condition between the page render and any JS).
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestIssue358SlackMemberHidesCTA:
     """Verified Slack member sees the connected panel, not the join CTA."""

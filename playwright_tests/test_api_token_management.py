@@ -60,6 +60,7 @@ def _delete_all_tokens():
     connection.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSuperuserIssuesToken:
     """Superuser issues a token, sees it once, then only sees the prefix."""
@@ -141,6 +142,7 @@ class TestSuperuserIssuesToken:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNonSuperuserStaffCannotReachTokens:
     """Staff (not superuser) cannot see the link or reach the page."""
@@ -171,6 +173,7 @@ class TestNonSuperuserStaffCannotReachTokens:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSuperuserRevokesToken:
     """Superuser revokes a token via the list page."""
@@ -211,6 +214,7 @@ class TestSuperuserRevokesToken:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCreateFormRejectsNonAdmins:
     """Free / Basic / Main / Premium contacts must NOT appear in the dropdown."""

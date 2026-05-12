@@ -46,6 +46,7 @@ def _clear_plans_data():
     connection.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffCreatesSprintAndPlanFromSidebar:
     """Sidebar navigation + create flow for sprints and plans."""
@@ -129,6 +130,7 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         empty_external.wait_for(state="visible")
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStaffCapturesInterviewNotes:
     """Add internal then external member notes; confirm UI separation."""
@@ -234,6 +236,7 @@ class TestStaffCapturesInterviewNotes:
         ).wait_for(state="visible")
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNonStaffBlockedFromPlansPages:
     """Non-staff cannot reach the plans/sprints pages."""

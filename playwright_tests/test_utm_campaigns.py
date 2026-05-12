@@ -69,6 +69,7 @@ def _clear_utm():
 # Scenario 1: Marketer creates a campaign and adds first link
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1CreateCampaignAndLink:
     def test_create_campaign_and_add_link(self, django_server, browser):
@@ -121,6 +122,7 @@ class TestScenario1CreateCampaignAndLink:
 # Scenario 2: Marketer copies a generated URL
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2CopyGeneratedUrl:
     def test_copy_button_changes_text_and_url_matches(self, django_server, browser):
@@ -161,6 +163,7 @@ class TestScenario2CopyGeneratedUrl:
 # Scenario 3: Marketer prevents duplicate audience tag
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3DuplicateUtmContent:
     def test_duplicate_utm_content_rejected(self, django_server, browser):
@@ -200,6 +203,7 @@ class TestScenario3DuplicateUtmContent:
 # Scenario 4: Operator imports three launch URLs
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4ImportLaunchUrls:
     def test_import_three_urls_yields_one_campaign_three_links(self, django_server, browser):
@@ -245,6 +249,7 @@ class TestScenario4ImportLaunchUrls:
 # Scenario 5: Re-running importer is idempotent
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5ImporterIdempotent:
     def test_second_run_creates_nothing(self, django_server, browser):
@@ -288,6 +293,7 @@ class TestScenario5ImporterIdempotent:
 # Scenario 6: Malformed URL reported as error
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6MalformedUrl:
     def test_malformed_url_reported(self, django_server, browser):
@@ -327,6 +333,7 @@ class TestScenario6MalformedUrl:
 # Scenario 7: Archive a campaign hides it from default view
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7ArchiveCampaign:
     def test_archive_disappears_from_default(self, django_server, browser):
@@ -366,6 +373,7 @@ class TestScenario7ArchiveCampaign:
 # Scenario 8: Slug locked when links exist
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8SlugLockedWhenLinksExist:
     def test_slug_locked(self, django_server, browser):
@@ -414,6 +422,7 @@ class TestScenario8SlugLockedWhenLinksExist:
 # Scenario 9: Non-staff denied
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9NonStaffDenied:
     def test_non_staff_403(self, django_server, browser):
@@ -435,6 +444,7 @@ class TestScenario9NonStaffDenied:
 # Scenario 10: Sidebar entry leads to UTM Campaigns; email Campaigns still present
 # ---------------------------------------------------------------
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10SidebarEntry:
     def test_sidebar_navigation_to_utm_campaigns(self, django_server, browser):

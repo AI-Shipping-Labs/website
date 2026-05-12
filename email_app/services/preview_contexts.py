@@ -45,7 +45,45 @@ PREVIEW_CONTEXTS = {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',
         'event_datetime': 'March 21, 2026 at 6:00 PM UTC',
-        'join_url': 'https://zoom.us/j/123',
+        # Match the real send shape: {site}/events/{slug}/join.
+        'join_url': 'https://aishippinglabs.com/events/community-lunch/join',
+        # Representative one-click "Add to Calendar" URLs. Shape mirrors
+        # what events.services.calendar_links.build_calendar_links emits so
+        # operators can hover the preview and confirm the wiring.
+        'google_calendar_url': (
+            'https://calendar.google.com/calendar/render'
+            '?action=TEMPLATE'
+            '&text=AI%20Shipping%20Workshop'
+            '&dates=20260321T180000Z%2F20260321T190000Z'
+            '&details=Join%3A%20https%3A%2F%2Faishippinglabs.com'
+            '%2Fevents%2Fcommunity-lunch%2Fjoin'
+            '&location=https%3A%2F%2Faishippinglabs.com'
+            '%2Fevents%2Fcommunity-lunch%2Fjoin'
+        ),
+        'outlook_calendar_url': (
+            'https://outlook.live.com/calendar/0/deeplink/compose'
+            '?path=%2Fcalendar%2Faction%2Fcompose'
+            '&rru=addevent'
+            '&subject=AI%20Shipping%20Workshop'
+            '&startdt=2026-03-21T18%3A00%3A00Z'
+            '&enddt=2026-03-21T19%3A00%3A00Z'
+            '&body=Join%3A%20https%3A%2F%2Faishippinglabs.com'
+            '%2Fevents%2Fcommunity-lunch%2Fjoin'
+            '&location=https%3A%2F%2Faishippinglabs.com'
+            '%2Fevents%2Fcommunity-lunch%2Fjoin'
+        ),
+        'office365_calendar_url': (
+            'https://outlook.office.com/calendar/0/deeplink/compose'
+            '?path=%2Fcalendar%2Faction%2Fcompose'
+            '&rru=addevent'
+            '&subject=AI%20Shipping%20Workshop'
+            '&startdt=2026-03-21T18%3A00%3A00Z'
+            '&enddt=2026-03-21T19%3A00%3A00Z'
+            '&body=Join%3A%20https%3A%2F%2Faishippinglabs.com'
+            '%2Fevents%2Fcommunity-lunch%2Fjoin'
+            '&location=https%3A%2F%2Faishippinglabs.com'
+            '%2Fevents%2Fcommunity-lunch%2Fjoin'
+        ),
     },
     'event_reminder': {
         'user_name': 'Ada',

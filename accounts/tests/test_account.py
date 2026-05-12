@@ -54,11 +54,12 @@ class AccountPageFreeUserTest(TestCase):
         # Verify the tier-name span is rendered
         self.assertContains(response, 'id="tier-name"')
 
-    def test_shows_tier_level_badge(self):
-        """Free users see their tier level badge."""
+    def test_no_tier_level_badge(self):
+        """Issue #581: the Level pill was removed; the tier name is the
+        only tier identifier in the Membership section."""
         response = self.client.get("/account/")
-        self.assertContains(response, 'id="tier-badge"')
-        self.assertContains(response, "Level 0")
+        self.assertNotContains(response, 'id="tier-badge"')
+        self.assertNotContains(response, "Level 0")
 
     def test_shows_upgrade_button(self):
         """Free users see 'Upgrade' button linking to /pricing."""
@@ -138,8 +139,9 @@ class AccountPageAdminRoleTest(TestCase):
         self.assertContains(response, "Admin")
         self.assertContains(response, 'id="tier-name"')
         self.assertContains(response, "Free")
-        self.assertContains(response, 'id="tier-badge"')
-        self.assertContains(response, "Level 0")
+        # Issue #581: the Level pill was removed.
+        self.assertNotContains(response, 'id="tier-badge"')
+        self.assertNotContains(response, "Level 0")
 
     def test_superuser_shows_admin_role_without_replacing_paid_tier(self):
         main_tier = Tier.objects.get(slug="main")
@@ -158,7 +160,9 @@ class AccountPageAdminRoleTest(TestCase):
         self.assertContains(response, 'data-testid="header-admin-role-badge"')
         self.assertContains(response, "Admin")
         self.assertContains(response, "Main")
-        self.assertContains(response, "Level 20")
+        # Issue #581: the Level pill was removed.
+        self.assertNotContains(response, "Level 20")
+        self.assertNotContains(response, 'id="tier-badge"')
 
 
 class AccountPagePaidUserTest(TestCase):
@@ -182,11 +186,11 @@ class AccountPagePaidUserTest(TestCase):
         self.assertEqual(response.context["tier"].name, "Main")
         self.assertContains(response, 'id="tier-name"')
 
-    def test_shows_tier_level_badge(self):
-        """Paid users see their tier level badge."""
+    def test_no_tier_level_badge(self):
+        """Issue #581: the Level pill was removed for paid users too."""
         response = self.client.get("/account/")
-        self.assertContains(response, 'id="tier-badge"')
-        self.assertContains(response, "Level 20")
+        self.assertNotContains(response, 'id="tier-badge"')
+        self.assertNotContains(response, "Level 20")
 
     def test_shows_billing_period_end(self):
         """Paid users see formatted billing period end date."""
@@ -456,7 +460,10 @@ class AccountPageMembershipActionStateTest(TestCase):
             self._user("free-action@example.com", self.free_tier)
         )
 
-        self.assertContains(response, "Current free plan")
+        # Issue #581: the steady-state ``Current free plan`` frame was
+        # suppressed; the upgrade CTA still points to /pricing.
+        self.assertNotContains(response, "Current free plan")
+        self.assertNotContains(response, 'id="account-plan-state"')
         self.assertContains(response, 'id="upgrade-btn"')
         self.assertContains(response, 'href="/pricing"')
         self.assertNotContains(response, 'id="manage-subscription-btn"')
@@ -466,7 +473,9 @@ class AccountPageMembershipActionStateTest(TestCase):
             self._user("premium-action@example.com", self.premium_tier, "sub_premium")
         )
 
-        self.assertContains(response, "Current plan")
+        # Issue #581: the steady-state ``Current plan`` frame was
+        # suppressed; the action buttons still reflect the highest tier.
+        self.assertNotContains(response, 'id="account-plan-state"')
         self.assertNotContains(response, 'id="upgrade-btn"')
         self.assertContains(response, 'id="downgrade-btn"')
         self.assertContains(response, 'id="cancel-btn"')
@@ -481,8 +490,13 @@ class AccountPageMembershipActionStateTest(TestCase):
             )
         )
 
-        self.assertContains(response, "Your plan changes to Basic on May 29, 2026.")
+        # Issue #581: the duplicate plan-state frame is suppressed; the
+        # dedicated amber pending-downgrade notice still carries the
+        # change date and target tier.
+        self.assertNotContains(response, 'id="account-plan-state"')
         self.assertContains(response, 'id="pending-downgrade-notice"')
+        self.assertContains(response, 'Basic')
+        self.assertContains(response, '29/05/2026')
         self.assertNotContains(response, 'id="upgrade-btn"')
         self.assertNotContains(response, 'id="downgrade-btn"')
         self.assertContains(response, 'id="manage-subscription-btn"')
@@ -497,8 +511,13 @@ class AccountPageMembershipActionStateTest(TestCase):
             )
         )
 
-        self.assertContains(response, "Access ending")
-        self.assertContains(response, "Access ends on May 29, 2026.")
+        # Issue #581: the duplicate plan-state frame is suppressed; the
+        # dedicated red pending-cancellation notice still carries the
+        # current tier name and end date.
+        self.assertNotContains(response, 'id="account-plan-state"')
+        self.assertContains(response, 'id="pending-cancellation-notice"')
+        self.assertContains(response, 'Basic')
+        self.assertContains(response, '29/05/2026')
         self.assertNotContains(response, 'id="cancel-btn"')
         self.assertNotContains(response, 'id="upgrade-btn"')
         self.assertContains(response, 'id="manage-subscription-btn"')

@@ -40,9 +40,6 @@ from studio.views.crm import (
     crm_archive,
     crm_detail,
     crm_edit,
-    crm_experiment_create,
-    crm_experiment_delete,
-    crm_experiment_edit,
     crm_list,
     crm_reactivate,
     crm_track,
@@ -448,21 +445,6 @@ urlpatterns = [
         'crm/<int:crm_id>/reactivate',
         crm_reactivate,
         name='studio_crm_reactivate',
-    ),
-    path(
-        'crm/<int:crm_id>/experiments/new',
-        crm_experiment_create,
-        name='studio_crm_experiment_create',
-    ),
-    path(
-        'crm/<int:crm_id>/experiments/<int:exp_id>/edit',
-        crm_experiment_edit,
-        name='studio_crm_experiment_edit',
-    ),
-    path(
-        'crm/<int:crm_id>/experiments/<int:exp_id>/delete',
-        crm_experiment_delete,
-        name='studio_crm_experiment_delete',
     ),
 
     # Sprints (issue #432). Members section.

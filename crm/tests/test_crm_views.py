@@ -1,7 +1,7 @@
 """Studio CRM view tests (issue #560).
 
-Covers the list, detail, edit (snapshot), archive/reactivate, and
-experiments CRUD endpoints, plus staff-only access control.
+Covers the list, detail, edit (snapshot), and archive/reactivate
+endpoints, plus staff-only access control.
 """
 
 import datetime
@@ -9,7 +9,7 @@ import datetime
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from crm.models import CRMExperiment, CRMRecord
+from crm.models import CRMRecord
 from plans.models import InterviewNote, Plan, Sprint
 
 User = get_user_model()
@@ -143,7 +143,6 @@ class CRMDetailViewTest(CRMViewsBase):
         self.assertContains(response, 'data-testid="crm-snapshot-card"')
         self.assertContains(response, 'data-testid="crm-plans-section"')
         self.assertContains(response, 'data-testid="crm-notes-section"')
-        self.assertContains(response, 'data-testid="crm-experiments-section"')
         self.assertContains(response, 'data-testid="crm-content-context-section"')
 
     def test_detail_header_links_back_to_user_profile(self):
@@ -265,106 +264,6 @@ class CRMArchiveReactivateTest(CRMViewsBase):
         self.assertNotContains(response, f'data-testid="crm-row-{record.pk}"')
 
 
-class CRMExperimentTest(CRMViewsBase):
-    def test_create_experiment(self):
-        record = CRMRecord.objects.create(user=self.member)
-        response = self.client.post(
-            f'/studio/crm/{record.pk}/experiments/new',
-            {
-                'title': 'Pair-program 1h/week',
-                'hypothesis': 'Will increase shipping cadence',
-                'status': 'running',
-            },
-        )
-        self.assertRedirects(
-            response, f'/studio/crm/{record.pk}/',
-            fetch_redirect_response=False,
-        )
-        experiments = list(record.experiments.all())
-        self.assertEqual(len(experiments), 1)
-        self.assertEqual(experiments[0].title, 'Pair-program 1h/week')
-        self.assertEqual(experiments[0].status, 'running')
-
-    def test_create_experiment_requires_title(self):
-        record = CRMRecord.objects.create(user=self.member)
-        before = CRMExperiment.objects.count()
-        self.client.post(
-            f'/studio/crm/{record.pk}/experiments/new',
-            {'title': '   ', 'hypothesis': 'x'},
-        )
-        self.assertEqual(CRMExperiment.objects.count(), before)
-
-    def test_edit_experiment_updates_fields(self):
-        record = CRMRecord.objects.create(user=self.member)
-        exp = CRMExperiment.objects.create(
-            crm_record=record,
-            title='Initial',
-            status='running',
-        )
-        response = self.client.post(
-            f'/studio/crm/{record.pk}/experiments/{exp.pk}/edit',
-            {
-                'title': 'Updated title',
-                'hypothesis': 'New hypothesis',
-                'result': 'Cadence increased',
-                'status': 'completed',
-            },
-        )
-        self.assertRedirects(
-            response, f'/studio/crm/{record.pk}/',
-            fetch_redirect_response=False,
-        )
-        exp.refresh_from_db()
-        self.assertEqual(exp.title, 'Updated title')
-        self.assertEqual(exp.result, 'Cadence increased')
-        self.assertEqual(exp.status, 'completed')
-
-    def test_edit_experiment_get_renders_form(self):
-        record = CRMRecord.objects.create(user=self.member)
-        exp = CRMExperiment.objects.create(
-            crm_record=record, title='Initial', status='running',
-        )
-        response = self.client.get(
-            f'/studio/crm/{record.pk}/experiments/{exp.pk}/edit',
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="crm-experiment-edit-title"')
-        self.assertContains(response, 'value="Initial"')
-
-    def test_delete_experiment_removes_row(self):
-        record = CRMRecord.objects.create(user=self.member)
-        exp = CRMExperiment.objects.create(
-            crm_record=record, title='To delete',
-        )
-        response = self.client.post(
-            f'/studio/crm/{record.pk}/experiments/{exp.pk}/delete',
-        )
-        self.assertRedirects(
-            response, f'/studio/crm/{record.pk}/',
-            fetch_redirect_response=False,
-        )
-        self.assertFalse(
-            CRMExperiment.objects.filter(pk=exp.pk).exists(),
-        )
-
-    def test_delete_post_only(self):
-        record = CRMRecord.objects.create(user=self.member)
-        exp = CRMExperiment.objects.create(crm_record=record, title='X')
-        response = self.client.get(
-            f'/studio/crm/{record.pk}/experiments/{exp.pk}/delete',
-        )
-        self.assertEqual(response.status_code, 405)
-
-    def test_experiment_404_when_crm_id_mismatches(self):
-        record = CRMRecord.objects.create(user=self.member)
-        other_record = CRMRecord.objects.create(user=self.other)
-        exp = CRMExperiment.objects.create(crm_record=record, title='X')
-        response = self.client.get(
-            f'/studio/crm/{other_record.pk}/experiments/{exp.pk}/edit',
-        )
-        self.assertEqual(response.status_code, 404)
-
-
 class CRMAccessControlTest(TestCase):
     """Anonymous redirects to login; non-staff returns 403."""
 
@@ -374,9 +273,6 @@ class CRMAccessControlTest(TestCase):
             email='member@test.com', password='pw',
         )
         cls.record = CRMRecord.objects.create(user=cls.member)
-        cls.experiment = CRMExperiment.objects.create(
-            crm_record=cls.record, title='Exp',
-        )
 
     def test_list_redirects_anonymous_to_login(self):
         response = self.client.get('/studio/crm/')
@@ -410,14 +306,6 @@ class CRMAccessControlTest(TestCase):
         self.client.login(email='member@test.com', password='pw')
         response = self.client.post(
             f'/studio/crm/{self.record.pk}/archive',
-        )
-        self.assertEqual(response.status_code, 403)
-
-    def test_experiment_create_returns_403_for_non_staff(self):
-        self.client.login(email='member@test.com', password='pw')
-        response = self.client.post(
-            f'/studio/crm/{self.record.pk}/experiments/new',
-            {'title': 'x'},
         )
         self.assertEqual(response.status_code, 403)
 
@@ -504,12 +392,6 @@ class CRMStaffOnlyFieldsNotInMemberSurfacesTest(TestCase):
             summary='Backend engineer pivoting to LLM tooling',
             next_steps='Pair on agents lesson; review eval framework',
         )
-        CRMExperiment.objects.create(
-            crm_record=cls.record,
-            title='Pair-program 1h/week',
-            hypothesis='Will increase shipping cadence',
-            result='cadence up 3x',
-        )
 
     def test_account_page_does_not_leak_staff_crm_fields(self):
         self.client.login(email='member@test.com', password='pw')
@@ -517,5 +399,3 @@ class CRMStaffOnlyFieldsNotInMemberSurfacesTest(TestCase):
         self.assertNotContains(response, 'Sam — The Technical Professional')
         self.assertNotContains(response, 'Backend engineer pivoting')
         self.assertNotContains(response, 'Pair on agents lesson')
-        self.assertNotContains(response, 'Pair-program 1h/week')
-        self.assertNotContains(response, 'cadence up 3x')

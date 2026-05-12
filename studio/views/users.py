@@ -701,8 +701,8 @@ def user_detail(request, user_id):
 
     Issue #560 trimmed the page to account context only (profile,
     membership, tags) plus a single CRM card that links to or creates
-    a :class:`crm.CRMRecord`. Plans, sprints, member notes, and
-    experiments live on the CRM record page now.
+    a :class:`crm.CRMRecord`. Plans, sprints, and member notes live on
+    the CRM record page now.
     """
     user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
     override = _active_override_for_user(user)

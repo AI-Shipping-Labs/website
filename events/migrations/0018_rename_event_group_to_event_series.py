@@ -19,11 +19,14 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0016_event_external_host'),
+        # Depend on ``0017_external_host_choices`` (the other 0017 leaf that
+        # landed concurrently on main while this rename was in review) so
+        # this rename is the new sole leaf node for the events app graph.
+        ('events', '0017_external_host_choices'),
         # Force ``plans.0008_sprint_event_group`` to run BEFORE the rename so
         # that the historical migration sees the original ``EventGroup``
         # model name when adding the FK column. Without this dep, Django's
-        # graph would happily run events 0017 first (renaming the model)
+        # graph would happily run events 0018 first (renaming the model)
         # and then plans 0008's ``to='events.eventgroup'`` reference would
         # fail to resolve. See issue #575.
         ('plans', '0008_sprint_event_group'),

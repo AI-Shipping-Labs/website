@@ -16,8 +16,11 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0017_rename_event_group_to_event_series'),
-        ('plans', '0008_sprint_event_group'),
+        ('events', '0018_rename_event_group_to_event_series'),
+        # Depend on ``0009_planrequest`` (the other 0009 leaf that landed
+        # concurrently on main while this rename was in review) so this
+        # rename is the new sole leaf node for the plans app graph.
+        ('plans', '0009_planrequest'),
     ]
 
     operations = [

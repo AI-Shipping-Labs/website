@@ -1,9 +1,8 @@
 """Studio CRM views (issue #560).
 
 The CRM surface is the canonical, staff-only place where relationship
-context lives: plans, member notes, experiments, persona, summary, next
-steps. Member-facing surfaces must NOT render any field on
-:class:`CRMRecord` or any :class:`CRMExperiment`.
+context lives: plans, member notes, persona, summary, next steps.
+Member-facing surfaces must NOT render any field on :class:`CRMRecord`.
 
 The CRM is opt-in: a user is in the CRM iff a :class:`CRMRecord` row
 exists for them. Staff create the row via the ``Track in CRM`` button on
@@ -15,14 +14,11 @@ from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from accounts.models import TierOverride
 from crm.models import (
-    EXPERIMENT_STATUS_CHOICES,
     STATUS_CHOICES,
-    CRMExperiment,
     CRMRecord,
 )
 from plans.models import InterviewNote, Plan
@@ -189,7 +185,6 @@ def _record_detail_context(record):
         .select_related('sprint')
         .order_by('-sprint__start_date', '-created_at')
     )
-    experiments = list(record.experiments.all().order_by('-created_at'))
 
     return {
         'record': record,
@@ -203,11 +198,9 @@ def _record_detail_context(record):
         # note" button needs a plan prefill. The CRM record is
         # member-scoped, not plan-scoped, so we pass ``None``.
         'current_plan': None,
-        'experiments': experiments,
         'django_admin_url': (
             f'/admin/accounts/user/{record.user.pk}/change/'
         ),
-        'experiment_status_choices': EXPERIMENT_STATUS_CHOICES,
         'record_status_choices': STATUS_CHOICES,
     }
 
@@ -255,90 +248,4 @@ def crm_reactivate(request, crm_id):
     record.status = 'active'
     record.save(update_fields=['status', 'updated_at'])
     messages.success(request, 'CRM record reactivated.')
-    return redirect('studio_crm_detail', crm_id=record.pk)
-
-
-# ---------------------------------------------------------------------------
-# Experiments CRUD
-# ---------------------------------------------------------------------------
-
-
-def _normalize_experiment_status(raw, default='running'):
-    valid = {choice[0] for choice in EXPERIMENT_STATUS_CHOICES}
-    if raw in valid:
-        return raw
-    return default
-
-
-@staff_required
-@require_POST
-def crm_experiment_create(request, crm_id):
-    """Create an experiment on the CRM record."""
-    record = _get_record(crm_id)
-    title = (request.POST.get('title') or '').strip()[:200]
-    if not title:
-        messages.error(request, 'Experiment title is required.')
-        return redirect('studio_crm_detail', crm_id=record.pk)
-
-    CRMExperiment.objects.create(
-        crm_record=record,
-        title=title,
-        hypothesis=(request.POST.get('hypothesis') or '').strip(),
-        result=(request.POST.get('result') or '').strip(),
-        status=_normalize_experiment_status(
-            request.POST.get('status', ''),
-        ),
-    )
-    messages.success(request, 'Experiment added.')
-    return redirect('studio_crm_detail', crm_id=record.pk)
-
-
-@staff_required
-def crm_experiment_edit(request, crm_id, exp_id):
-    """Edit an experiment. GET renders the form, POST saves."""
-    record = _get_record(crm_id)
-    experiment = get_object_or_404(
-        CRMExperiment, pk=exp_id, crm_record=record,
-    )
-    if request.method != 'POST':
-        return render(request, 'studio/crm/experiment_form.html', {
-            'record': record,
-            'experiment': experiment,
-            'form_action': reverse(
-                'studio_crm_experiment_edit',
-                kwargs={'crm_id': record.pk, 'exp_id': experiment.pk},
-            ),
-            'experiment_status_choices': EXPERIMENT_STATUS_CHOICES,
-        })
-
-    title = (request.POST.get('title') or '').strip()[:200]
-    if not title:
-        messages.error(request, 'Experiment title is required.')
-        return redirect(
-            'studio_crm_experiment_edit',
-            crm_id=record.pk, exp_id=experiment.pk,
-        )
-
-    experiment.title = title
-    experiment.hypothesis = (request.POST.get('hypothesis') or '').strip()
-    experiment.result = (request.POST.get('result') or '').strip()
-    experiment.status = _normalize_experiment_status(
-        request.POST.get('status', ''),
-        default=experiment.status,
-    )
-    experiment.save()
-    messages.success(request, 'Experiment updated.')
-    return redirect('studio_crm_detail', crm_id=record.pk)
-
-
-@staff_required
-@require_POST
-def crm_experiment_delete(request, crm_id, exp_id):
-    """Delete an experiment."""
-    record = _get_record(crm_id)
-    experiment = get_object_or_404(
-        CRMExperiment, pk=exp_id, crm_record=record,
-    )
-    experiment.delete()
-    messages.success(request, 'Experiment deleted.')
     return redirect('studio_crm_detail', crm_id=record.pk)

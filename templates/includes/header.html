@@ -12,38 +12,52 @@
     </a>
 
     <div class="hidden md:flex md:items-center md:gap-5 lg:gap-8" data-testid="desktop-primary-nav">
-      <a href="/about" class="text-sm text-muted-foreground transition-colors hover:text-foreground">About</a>
-      <a href="/pricing" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Membership</a>
       <div class="relative group">
-        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="community-dropdown-btn">
+        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="about-dropdown-btn" data-testid="nav-about-trigger">
+          About
+          <i data-lucide="chevron-down" class="h-4 w-4"></i>
+        </button>
+        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="about-dropdown" data-testid="nav-about-menu">
+        <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
+          <a href="/about" data-testid="nav-about-link-about" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">About</a>
+          <a href="/about#team" data-testid="nav-about-link-team" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Team</a>
+          <a href="/faq" data-testid="nav-about-link-faq" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">FAQ</a>
+        </div>
+        </div>
+      </div>
+      <a href="/pricing" data-testid="nav-membership" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Membership</a>
+      <div class="relative group">
+        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="community-dropdown-btn" data-testid="nav-community-trigger">
           Community
           <i data-lucide="chevron-down" class="h-4 w-4"></i>
         </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="community-dropdown">
+        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="community-dropdown" data-testid="nav-community-menu">
         <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/sprints" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Community Sprints</a>
-          <a href="/events" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Events</a>
+          <a href="/pricing" data-testid="nav-community-link-membership" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Membership</a>
+          <a href="/sprints" data-testid="nav-community-link-sprints" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Community Sprints</a>
+          <a href="/events" data-testid="nav-community-link-events" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Events</a>
         </div>
         </div>
       </div>
+      <a href="/sprints" data-testid="nav-sprints" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Sprints</a>
+      <a href="/events" data-testid="nav-events" class="text-sm text-muted-foreground transition-colors hover:text-foreground">Events</a>
       <div class="relative group">
-        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="resources-dropdown-btn">
+        <button type="button" class="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-1 outline-none" id="resources-dropdown-btn" data-testid="nav-resources-trigger">
           Resources
           <i data-lucide="chevron-down" class="h-4 w-4"></i>
         </button>
-        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="resources-dropdown">
+        <div class="absolute left-0 top-full w-56 pt-2 hidden group-hover:block" id="resources-dropdown" data-testid="nav-resources-menu">
         <div class="rounded-md border border-border bg-popover p-1 shadow-lg">
-          <a href="/courses" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Courses</a>
-          <a href="/workshops" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Workshops</a>
-          <a href="/learning-path/ai-engineer" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Learning Path</a>
-          <a href="/projects" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Project Ideas</a>
-          <a href="/interview" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Interview Prep</a>
-          <a href="/blog" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Blog</a>
-          <a href="/resources" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Curated Links</a>
+          <a href="/blog" data-testid="nav-resources-link-blog" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Blog</a>
+          <a href="/courses" data-testid="nav-resources-link-courses" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Courses</a>
+          <a href="/workshops" data-testid="nav-resources-link-workshops" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Workshops</a>
+          <a href="/learning-path/ai-engineer" data-testid="nav-resources-link-learning-paths" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Learning Paths</a>
+          <a href="/projects" data-testid="nav-resources-link-projects" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Project Ideas</a>
+          <a href="/interview" data-testid="nav-resources-link-interview" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Interview Prep</a>
+          <a href="/resources" data-testid="nav-resources-link-curated-links" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary cursor-pointer">Curated Links</a>
         </div>
         </div>
       </div>
-      <a href="/faq" class="text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
     </div>
 
     <div class="hidden md:flex md:items-center md:gap-4">
@@ -169,34 +183,46 @@
         </button>
       </div>
       {% endif %}
-      <a href="/about" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">About</a>
-      <a href="/pricing" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">Membership</a>
       <div class="py-2">
-        <button type="button" id="mobile-community-toggle" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
+        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
+          About
+          <svg class="h-4 w-4 transition-transform" id="mobile-about-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="pl-4 space-y-1 hidden" id="mobile-about-list" data-testid="mobile-nav-about-menu">
+          <a href="/about" data-testid="mobile-nav-about-link-about" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">About</a>
+          <a href="/about#team" data-testid="mobile-nav-about-link-team" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Team</a>
+          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+        </div>
+      </div>
+      <a href="/pricing" data-testid="mobile-nav-membership" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">Membership</a>
+      <div class="py-2">
+        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
           Community
           <svg class="h-4 w-4 transition-transform" id="mobile-community-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="pl-4 space-y-1 hidden" id="mobile-community-list">
-          <a href="/sprints" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Community Sprints</a>
-          <a href="/events" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Events</a>
+        <div class="pl-4 space-y-1 hidden" id="mobile-community-list" data-testid="mobile-nav-community-menu">
+          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Membership</a>
+          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Community Sprints</a>
+          <a href="/events" data-testid="mobile-nav-community-link-events" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Events</a>
         </div>
       </div>
+      <a href="/sprints" data-testid="mobile-nav-sprints" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">Sprints</a>
+      <a href="/events" data-testid="mobile-nav-events" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">Events</a>
       <div class="py-2">
-        <button type="button" id="mobile-resources-toggle" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
+        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
           Resources
           <svg class="h-4 w-4 transition-transform" id="mobile-resources-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="pl-4 space-y-1 hidden" id="mobile-resources-list">
-          <a href="/courses" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Courses</a>
-          <a href="/workshops" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Workshops</a>
-          <a href="/learning-path/ai-engineer" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Learning Path</a>
-          <a href="/projects" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Project Ideas</a>
-          <a href="/interview" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Interview Prep</a>
-          <a href="/blog" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Blog</a>
-          <a href="/resources" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Curated Links</a>
+        <div class="pl-4 space-y-1 hidden" id="mobile-resources-list" data-testid="mobile-nav-resources-menu">
+          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Blog</a>
+          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Courses</a>
+          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Workshops</a>
+          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Learning Paths</a>
+          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Project Ideas</a>
+          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Interview Prep</a>
+          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Curated Links</a>
         </div>
       </div>
-      <a href="/faq" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">FAQ</a>
       {% if user.is_authenticated %}
       <div class="mt-4 border-t border-border pt-4">
         <div class="mb-3" data-testid="mobile-account-section">
@@ -311,6 +337,7 @@
 
     // Mobile nav accordions
     [
+      ['mobile-about-toggle', 'mobile-about-list', 'mobile-about-chevron'],
       ['mobile-community-toggle', 'mobile-community-list', 'mobile-community-chevron'],
       ['mobile-resources-toggle', 'mobile-resources-list', 'mobile-resources-chevron']
     ].forEach(function(ids) {

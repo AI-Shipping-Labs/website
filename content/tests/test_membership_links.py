@@ -39,10 +39,13 @@ class HeaderLinksAnonymousTest(TestCase):
         response = self.client.get("/")
         header = _extract_header(response.content.decode())
         primary = _extract_desktop_primary_nav(header)
+        # Membership appears as a top-level link AND inside the Community
+        # dropdown (per #580 grooming). Both must point at /pricing.
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
-        self.assertEqual(membership_links, ["/pricing"])
+        self.assertTrue(membership_links)
+        self.assertTrue(all(href == "/pricing" for href in membership_links))
         self.assertNotIn('id="learn-dropdown-btn"', primary)
         self.assertIn('id="community-dropdown-btn"', primary)
         self.assertIn('id="resources-dropdown-btn"', primary)
@@ -77,10 +80,13 @@ class HeaderLinksAuthenticatedTest(TestCase):
         response = self.client.get("/about")
         header = _extract_header(response.content.decode())
         primary = _extract_desktop_primary_nav(header)
+        # Membership appears as a top-level link AND inside the Community
+        # dropdown (per #580 grooming). Both must point at /pricing.
         membership_links = re.findall(
             r'<a[^>]*href="([^"]+)"[^>]*>\s*Membership\s*</a>', primary
         )
-        self.assertEqual(membership_links, ["/pricing"])
+        self.assertTrue(membership_links)
+        self.assertTrue(all(href == "/pricing" for href in membership_links))
         self.assertNotIn('id="learn-dropdown-btn"', primary)
         self.assertIn('id="community-dropdown-btn"', primary)
         self.assertIn('id="resources-dropdown-btn"', primary)

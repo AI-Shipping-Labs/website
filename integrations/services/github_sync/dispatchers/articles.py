@@ -188,6 +188,17 @@ def _dispatch_articles(source, repo_dir, file_list, commit_sha, stats,
                 from content.utils.widgets import expand_widgets
                 expanded = expand_widgets(article.content_html, article.data_json)
                 Article.objects.filter(pk=article.pk).update(content_html=expanded)
+                article.content_html = expanded
+
+            # Issue #595: warn (don't block) when the rendered HTML still
+            # links to a retired URL prefix (e.g. /event-recordings/...).
+            # Only check on a write — unchanged rows already passed this
+            # gate during their own sync.
+            if changed:
+                from content.utils.legacy_urls import detect_legacy_urls
+                detect_legacy_urls(
+                    article.content_html, rel_path, stats['errors'],
+                )
 
             if not changed:
                 stats['unchanged'] += 1

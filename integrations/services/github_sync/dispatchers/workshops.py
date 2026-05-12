@@ -331,6 +331,16 @@ def _sync_single_workshop(
         )
         workshop = result.instance
 
+        # Issue #595: warn (don't block) when the rendered workshop
+        # landing description still links to a retired URL prefix
+        # (e.g. /event-recordings/...). Only check on a write — unchanged
+        # rows already passed this gate during their own sync.
+        if result.changed:
+            from content.utils.legacy_urls import detect_legacy_urls
+            detect_legacy_urls(
+                workshop.description_html, rel_path, stats['errors'],
+            )
+
         # Resolve instructors: list and attach M2M (post-save).
         resolved_instructors = _resolve_instructors_for_yaml(
             data, yaml_rel_path, stats,
@@ -667,7 +677,7 @@ def _sync_workshop_pages(
                 ).first(),
             ))
 
-            upsert_synced_object(
+            page_result = upsert_synced_object(
                 model=WorkshopPage,
                 lookup=lambda: page,
                 defaults=defaults,
@@ -680,6 +690,16 @@ def _sync_workshop_pages(
                     'content_type': 'workshop_page',
                 },
             )
+
+            # Issue #595: warn (don't block) when the rendered page HTML
+            # still links to a retired URL prefix (e.g. /event-recordings/).
+            # Only check on a write — unchanged rows already passed this
+            # gate during their own sync.
+            if page_result.changed:
+                from content.utils.legacy_urls import detect_legacy_urls
+                detect_legacy_urls(
+                    page_result.instance.body_html, rel_path, stats['errors'],
+                )
 
         except Exception as e:
             stats['errors'].append({'file': rel_path, 'error': str(e)})

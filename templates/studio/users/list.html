@@ -7,7 +7,7 @@
 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-8">
   <div>
     <h1 class="text-2xl font-semibold text-foreground">Users</h1>
-    <p class="text-muted-foreground mt-1">All platform users. Filter by effective tier or newsletter subscription.</p>
+    <p class="text-muted-foreground mt-1 hidden md:block">All platform users. Filter by effective tier or newsletter subscription.</p>
   </div>
   <div class="flex items-center gap-2 shrink-0">
     <a href="{% url 'studio_user_import' %}" data-testid="user-import-link" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">Import contacts</a>

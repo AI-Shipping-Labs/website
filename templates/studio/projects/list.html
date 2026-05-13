@@ -32,34 +32,39 @@
 </div>
 
 <!-- Project List -->
-<div class="bg-card border border-border rounded-lg overflow-hidden">
-  <table class="w-full">
-    <thead class="bg-secondary">
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
       <tr>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Author</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-        <th class="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Author</th>
+        <th class="{% studio_list_class 'th' %}">Date</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border">
+    <tbody class="{% studio_list_class 'tbody' %}">
       {% for project in projects %}
-      <tr class="hover:bg-secondary/50 transition-colors">
+      <tr class="{% studio_list_class 'row' %}">
         <td class="px-6 py-4">
           <a href="{% url 'studio_project_review' project_id=project.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ project.title }}</a>
           {% studio_origin_badge project show_path=False %}
         </td>
-        <td class="px-6 py-4">
-          <span class="text-xs px-2 py-1 rounded-full {% if project.status == 'published' %}bg-green-500/20 text-green-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
-            {{ project.get_status_display }}
-          </span>
+        <td class="px-6 py-4" data-label="Status">
+          {% studio_status_badge project.status project.get_status_display %}
         </td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ project.author|default:"-" }}</td>
-        <td class="px-6 py-4 text-sm text-muted-foreground">{{ project.date|date:"M d, Y" }}</td>
-        <td class="px-6 py-4 text-right space-x-3">
-          <a href="{{ project.get_absolute_url }}" target="_blank" class="text-sm text-muted-foreground hover:text-foreground" data-testid="view-on-site">View on site</a>
-          <a href="{% url 'studio_project_review' project_id=project.pk %}" class="text-sm text-accent hover:underline">{% if project.source_repo %}View{% else %}Review{% endif %}</a>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Author">{{ project.author|default:"-" }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Date">{{ project.date|date:"M d, Y" }}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          {% url 'studio_project_review' project_id=project.pk as project_review_url %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% if project.source_repo %}
+            {% studio_list_action project_review_url 'View' 'primary' %}
+            {% else %}
+            {% studio_list_action project_review_url 'Review' 'primary' %}
+            {% endif %}
+            {% studio_list_action project.get_absolute_url 'View on site' 'secondary' True %}
+          </div>
         </td>
       </tr>
       {% empty %}

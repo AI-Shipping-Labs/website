@@ -30,7 +30,8 @@ import secrets
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
-from django.db.models import Count, Max
+from django.db.models import Case, Count, F, IntegerField, Max, OuterRef, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -167,14 +168,6 @@ def _active_override_map(users):
     return override_map
 
 
-def _effective_tier_level(user, override=None):
-    """Return the effective level used for Studio filtering/display."""
-    base_level = _base_tier_level(user)
-    if override is None:
-        return base_level
-    return max(base_level, override.override_tier.level)
-
-
 def _effective_tier_name(user, override=None):
     """Return the effective tier label without provenance suffixes."""
     base_name = user.tier.name if user.tier_id else 'Free'
@@ -201,100 +194,150 @@ def _effective_tier_slug(user, override=None):
     return override.override_tier.slug
 
 
-def _matches_filter(user, active_filter, override=None):
-    """Check whether a user belongs in the active Studio chip."""
-    if active_filter == FILTER_SUBSCRIBERS:
-        return not user.unsubscribed
-
-    effective_level = _effective_tier_level(user, override)
-    if active_filter == FILTER_PAID:
-        return effective_level > 0
-    if active_filter == FILTER_MAIN_PLUS:
-        return effective_level >= 20
-    if active_filter == FILTER_PREMIUM:
-        return effective_level >= 30
-    return True
+def _active_override_subquery(now):
+    """Return the latest active non-expired override subquery for users."""
+    return (
+        TierOverride.objects
+        .filter(
+            user_id=OuterRef('pk'),
+            is_active=True,
+            expires_at__gt=now,
+        )
+        .order_by('-created_at')
+    )
 
 
-def _matches_slack_filter(user, slack_filter):
-    """Apply the Slack-membership filter on top of the tier filter."""
-    if slack_filter == SLACK_FILTER_YES:
-        return bool(user.slack_member)
-    if slack_filter == SLACK_FILTER_NO:
-        return not user.slack_member
-    return True
+def _annotated_user_queryset():
+    """Base queryset for the Studio user list/export with effective tier data."""
+    active_override = _active_override_subquery(timezone.now())
+    return (
+        User.objects
+        .select_related('tier')
+        .annotate(
+            base_tier_level=Coalesce(
+                'tier__level',
+                Value(0),
+                output_field=IntegerField(),
+            ),
+            active_override_id=Subquery(active_override.values('pk')[:1]),
+            active_override_level=Subquery(
+                active_override.values('override_tier__level')[:1],
+                output_field=IntegerField(),
+            ),
+        )
+        .annotate(
+            effective_tier_level=Case(
+                When(
+                    active_override_level__gt=F('base_tier_level'),
+                    then=F('active_override_level'),
+                ),
+                default=F('base_tier_level'),
+                output_field=IntegerField(),
+            ),
+        )
+    )
 
 
-def _matches_search(user, search_lower, normalized_search):
-    """OR-match the search query across email, names, Stripe ID, Slack ID, and tags.
+def _user_ids_matching_tag_search(normalized_search):
+    """Return user IDs whose normalized contact tags contain the search text.
 
-    Issue #438 broadened ``?q=`` from email-only to a four-field disjunction;
-    issue #561 added the ``slack_user_id`` OR-arm so operators can paste a
-    Slack ID like ``U01ABC123`` and find the matching user.
-
-    - ``email`` (case-insensitive substring; original behavior).
-    - ``first_name`` / ``last_name`` (case-insensitive substring).
-    - ``stripe_customer_id`` (case-insensitive substring; covers the
-      "I pasted a prefix" case operators reach for first).
-    - ``slack_user_id`` (case-insensitive substring).
-    - Any entry in ``tags`` (case-insensitive substring on the
-      already-normalized list, after running ``normalize_tag`` on the input
-      so ``AI Buildcamp`` matches ``ai-buildcamp``).
-
-    A user is included if ANY of these match. Empty search is handled by the
-    caller (skip this filter entirely).
+    ``User.tags`` is a JSON list and the search contract is substring
+    matching inside each normalized tag. Keep that awkward piece in Python,
+    but only read ``id`` and ``tags`` instead of materializing full users.
     """
-    if search_lower in user.email.lower():
-        return True
-    if user.first_name and search_lower in user.first_name.lower():
-        return True
-    if user.last_name and search_lower in user.last_name.lower():
-        return True
-    if user.stripe_customer_id and search_lower in user.stripe_customer_id.lower():
-        return True
-    if user.slack_user_id and search_lower in user.slack_user_id.lower():
-        return True
-    if normalized_search:
-        for tag in user.tags or []:
+    if not normalized_search:
+        return []
+
+    user_ids = []
+    for user_id, tags in User.objects.values_list('pk', 'tags').iterator():
+        if not isinstance(tags, list):
+            continue
+        for tag in tags:
             if normalized_search in tag.lower():
-                return True
-    return False
+                user_ids.append(user_id)
+                break
+    return user_ids
 
 
-def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER):
-    """Build filtered rows plus aggregate counts for the users page/export.
+def _user_ids_matching_exact_tag(normalized_tag):
+    """Return user IDs whose contact tags include ``normalized_tag`` exactly."""
+    if not normalized_tag:
+        return []
 
-    ``tag_filter`` is the raw ``?tag=`` query value; we normalize it
-    server-side so ``?tag=Early%20Adopter`` matches ``early-adopter``. An
-    empty / whitespace tag filter is treated as "no tag filter".
+    user_ids = []
+    for user_id, tags in User.objects.values_list('pk', 'tags').iterator():
+        if isinstance(tags, list) and normalized_tag in tags:
+            user_ids.append(user_id)
+    return user_ids
 
-    ``slack_filter`` is the tri-state Slack-membership filter (issue
-    #358). It ANDs with the tier and tag filters.
 
-    The full filtered list is returned (unpaginated). Pagination for the
-    HTML view happens in ``user_list``; the CSV export uses the full list.
-    """
-    all_users = list(User.objects.select_related('tier').all())
-    override_map = _active_override_map(all_users)
-    search_lower = search.lower()
-    normalized_search = normalize_tag(search) if search else ''
+def _apply_user_listing_filters(qs, active_filter, search, tag_filter, slack_filter):
+    """Apply the Studio list/export filters to an annotated user queryset."""
+    if search:
+        normalized_search = normalize_tag(search)
+        scalar_search = (
+            Q(email__icontains=search)
+            | Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(stripe_customer_id__icontains=search)
+            | Q(slack_user_id__icontains=search)
+        )
+        tag_user_ids = _user_ids_matching_tag_search(normalized_search)
+        qs = qs.filter(scalar_search | Q(pk__in=tag_user_ids))
+
+    if active_filter == FILTER_SUBSCRIBERS:
+        qs = qs.filter(unsubscribed=False)
+    elif active_filter == FILTER_PAID:
+        qs = qs.filter(effective_tier_level__gt=0)
+    elif active_filter == FILTER_MAIN_PLUS:
+        qs = qs.filter(effective_tier_level__gte=20)
+    elif active_filter == FILTER_PREMIUM:
+        qs = qs.filter(effective_tier_level__gte=30)
+
     normalized_tag = normalize_tag(tag_filter) if tag_filter else ''
+    if normalized_tag:
+        qs = qs.filter(pk__in=_user_ids_matching_exact_tag(normalized_tag))
+
+    if slack_filter == SLACK_FILTER_YES:
+        qs = qs.filter(slack_member=True)
+    elif slack_filter == SLACK_FILTER_NO:
+        qs = qs.filter(slack_member=False)
+
+    return qs
+
+
+def _filtered_user_queryset(active_filter, search, tag_filter, slack_filter):
+    """Return the filtered, annotated queryset backing list and export."""
+    return _apply_user_listing_filters(
+        _annotated_user_queryset(),
+        active_filter,
+        search,
+        tag_filter,
+        slack_filter,
+    )
+
+
+def _user_listing_counts():
+    """Return aggregate counts for the Studio user filter chips."""
+    counts = _annotated_user_queryset().aggregate(
+        total_users=Count('pk'),
+        paid_count=Count('pk', filter=Q(effective_tier_level__gt=0)),
+        main_plus_count=Count('pk', filter=Q(effective_tier_level__gte=20)),
+        premium_count=Count('pk', filter=Q(effective_tier_level__gte=30)),
+        subscriber_count=Count('pk', filter=Q(unsubscribed=False)),
+        slack_member_count=Count('pk', filter=Q(slack_member=True)),
+    )
+    return {key: value or 0 for key, value in counts.items()}
+
+
+def _user_rows_from_users(users):
+    """Build Studio row dictionaries for already-filtered user objects."""
+    users = list(users)
+    override_map = _active_override_map(users)
 
     user_rows = []
-    for user in all_users:
-        if search and not _matches_search(user, search_lower, normalized_search):
-            continue
-
+    for user in users:
         override = override_map.get(user.pk)
-        if not _matches_filter(user, active_filter, override):
-            continue
-
-        if normalized_tag and normalized_tag not in (user.tags or []):
-            continue
-
-        if not _matches_slack_filter(user, slack_filter):
-            continue
-
         tags = list(user.tags or [])
         first_name = user.first_name or ''
         last_name = user.last_name or ''
@@ -328,33 +371,26 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
             'slack_user_id': user.slack_user_id or '',
             'stripe_customer_id': user.stripe_customer_id or '',
         })
+    return user_rows
 
-    counts = {
-        'total_users': len(all_users),
-        'paid_count': sum(
-            1
-            for user in all_users
-            if _effective_tier_level(user, override_map.get(user.pk)) > 0
-        ),
-        'main_plus_count': sum(
-            1
-            for user in all_users
-            if _effective_tier_level(user, override_map.get(user.pk)) >= 20
-        ),
-        'premium_count': sum(
-            1
-            for user in all_users
-            if _effective_tier_level(user, override_map.get(user.pk)) >= 30
-        ),
-        'subscriber_count': sum(
-            1 for user in all_users if not user.unsubscribed
-        ),
-        'slack_member_count': sum(
-            1 for user in all_users if user.slack_member
-        ),
-    }
 
-    return user_rows, counts
+def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAULT_SLACK_FILTER):
+    """Build filtered rows plus aggregate counts for the users page/export.
+
+    ``tag_filter`` is the raw ``?tag=`` query value; we normalize it
+    server-side so ``?tag=Early%20Adopter`` matches ``early-adopter``. An
+    empty / whitespace tag filter is treated as "no tag filter".
+
+    ``slack_filter`` is the tri-state Slack-membership filter (issue
+    #358). It ANDs with the tier and tag filters.
+
+    The full filtered list is returned (unpaginated). Pagination for the
+    HTML view happens in ``user_list``; the CSV export uses the full list.
+    """
+    users = list(
+        _filtered_user_queryset(active_filter, search, tag_filter, slack_filter)
+    )
+    return _user_rows_from_users(users), _user_listing_counts()
 
 
 def _user_status(user):
@@ -407,13 +443,15 @@ def user_list(request):
     raw_tag = request.GET.get('tag', '')
     active_tag = normalize_tag(raw_tag) if raw_tag else ''
 
-    user_rows, counts = _build_user_listing(
+    user_queryset = _filtered_user_queryset(
         active_filter, search, tag_filter=raw_tag, slack_filter=slack_filter,
     )
+    counts = _user_listing_counts()
 
-    paginator = Paginator(user_rows, USER_LIST_PAGE_SIZE)
+    paginator = Paginator(user_queryset, USER_LIST_PAGE_SIZE)
     page_number = _coerce_page_number(request.GET.get('page'), paginator.num_pages)
     page = paginator.page(page_number)
+    page.object_list = _user_rows_from_users(page.object_list)
 
     # Pre-build pager link URLs so the template stays simple and the
     # query-param-preservation rule has one obvious home.

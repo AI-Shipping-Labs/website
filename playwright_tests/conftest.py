@@ -5,6 +5,7 @@ Provides fixtures to start the Django dev server in a background thread
 for Playwright tests to run against.
 """
 
+import os
 import threading
 import time
 from pathlib import Path
@@ -15,8 +16,10 @@ from playwright.sync_api import sync_playwright
 
 from website.test_database_guard import assert_playwright_database_is_safe
 
+os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+
 DJANGO_HOST = "127.0.0.1"
-DJANGO_PORT = 8765
+DJANGO_PORT = int(os.environ.get("PLAYWRIGHT_DJANGO_PORT", "8765"))
 DJANGO_BASE_URL = f"http://{DJANGO_HOST}:{DJANGO_PORT}"
 
 

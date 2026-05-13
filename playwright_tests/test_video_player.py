@@ -310,61 +310,45 @@ class TestScenario1YouTubeRecordingTimestamps:
         )
         assert "AI Workshop" in page.content()
 
-        # The past-card links to /workshops/<slug>; from the workshop
-        # landing the visitor follows "Watch the recording" to /video.
+        # The past-card links to /workshops/<slug>. Issue #618 retired the
+        # standalone /video sub-route; the recording lives in the player
+        # pane on the workshop landing itself.
         page.locator(
             'a[data-testid="past-card-workshop-link"]'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
         assert "/workshops/ai-workshop" in page.url
 
-        page.locator('a:has-text("Watch the recording")').first.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/ai-workshop/video" in page.url
+        # Player shell carries the YouTube source on data-source so the
+        # JS module knows what to mount on first interaction.
+        shell = page.locator("#workshop-player-shell")
+        expect(shell).to_be_visible()
+        assert shell.get_attribute("data-source") == "youtube"
+        assert shell.get_attribute("data-video-id") == "dQw4w9WgXcQ"
 
-        # Verify YouTube embed is present
-        body = page.content()
-        assert 'data-source="youtube"' in body
-        assert "video-player" in body
+        # Chapter rows render in the outline as click-to-seek buttons.
+        # All three timestamps are listed (issue #618 puts the chapters
+        # in the outline pane, not behind a collapsed disclosure).
+        chapter_rows = page.locator('[data-testid="workshop-chapter-row"]')
+        expect(chapter_rows).to_have_count(3)
 
-        # Wait for the chapters disclosure node before forcing it open;
-        # the inner buttons render once the disclosure is in the DOM, and
-        # waiting here avoids a render-timing flake under CI load.
-        chapters = page.locator('details[data-testid="video-chapters"]')
-        expect(chapters).to_be_visible()
-        page.evaluate(
-            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        rows_text = " ".join(chapter_rows.all_inner_texts())
+        assert "[00:00]" in rows_text
+        assert "Introduction" in rows_text
+        assert "[05:00]" in rows_text
+        assert "Main Content" in rows_text
+        assert "[13:00]" in rows_text
+        assert "Wrap-up" in rows_text
+
+        # The [05:00] row is a click-to-seek button with the right
+        # data-time-seconds. Clicking it is wired by workshop_player.js
+        # to mount the iframe on first interaction; we verify the button
+        # exists with the right attribute and is clickable without errors.
+        seek_btn = page.locator(
+            '[data-testid="workshop-chapter-row"][data-time-seconds="300"]'
         )
-
-        # Verify three timestamps are listed (auto-wait until the chapter
-        # buttons have populated rather than asserting immediately).
-        timestamps = page.locator(".video-timestamp")
-        expect(timestamps).to_have_count(3)
-
-        # Verify timestamp labels
-        ts_text = page.locator(
-            ".video-timestamp"
-        ).all_inner_texts()
-        combined = " ".join(ts_text)
-        assert "[00:00]" in combined
-        assert "Introduction" in combined
-        assert "[05:00]" in combined
-        assert "Main Content" in combined
-        assert "[13:00]" in combined
-        assert "Wrap-up" in combined
-
-        # Click the [05:00] Main Content timestamp
-        # Verify the button has the correct data attributes
-        ts_btn = page.locator(
-            '.video-timestamp[data-time-seconds="300"]'
-        )
-        assert ts_btn.count() == 1
-        assert ts_btn.get_attribute("data-source") == "youtube"
-        ts_btn.click()
-
-        # We cannot verify the actual YouTube seekTo call in E2E,
-        # but we verify the button exists with correct data attrs
-        # and is clickable without errors.
+        assert seek_btn.count() == 1
+        seek_btn.click()
 # ---------------------------------------------------------------
 # Scenario 2: Free member watches a Loom recording
 # ---------------------------------------------------------------
@@ -392,50 +376,49 @@ class TestScenario2LoomRecordingTimestamps:
 
         context = _auth_context(browser, "free-loom@test.com")
         page = context.new_page()
-        # Recording lives on the workshop video page (issue #426).
+        # Issue #618: the recording lives in the player pane on the
+        # workshop landing; the legacy /video sub-route 301-redirects
+        # to the landing.
         page.goto(
-            f"{django_server}/workshops/product-demo/video",
+            f"{django_server}/workshops/product-demo",
             wait_until="domcontentloaded",
         )
 
-        body = page.content()
+        # Player shell declares the Loom source. Iframe is lazy-mounted
+        # by workshop_player.js on first interaction (chapter click or
+        # the play overlay tap) — initially the iframe is absent.
+        shell = page.locator("#workshop-player-shell")
+        expect(shell).to_be_visible()
+        assert shell.get_attribute("data-source") == "loom"
+        assert page.locator(
+            'iframe[id^="workshop-loom-player-"]'
+        ).count() == 0
 
-        # Verify Loom embed is present
-        assert 'data-source="loom"' in body
-        iframe = page.locator(
-            'iframe[id^="loom-player-"]'
+        # Chapter rows render in the outline as click-to-seek buttons.
+        chapter_rows = page.locator('[data-testid="workshop-chapter-row"]')
+        expect(chapter_rows).to_have_count(2)
+
+        rows_text = " ".join(chapter_rows.all_inner_texts())
+        assert "[00:00]" in rows_text
+        assert "Overview" in rows_text
+        assert "[02:30]" in rows_text
+        assert "Feature Tour" in rows_text
+
+        # Click the [02:30] Feature Tour chapter — the JS module mounts
+        # the Loom iframe with ?t=150 so the player starts at the seek.
+        seek_btn = page.locator(
+            '[data-testid="workshop-chapter-row"][data-time-seconds="150"]'
         )
-        assert iframe.count() == 1
+        seek_btn.click()
 
-        # Initial iframe src should be the loom embed URL
-        initial_src = iframe.get_attribute("src")
-        assert "loom.com/embed/" in initial_src
-
-        # Expand the collapsed Chapters disclosure (#361)
-        page.evaluate(
-            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
+        loom_iframe = page.locator(
+            'iframe[id^="workshop-loom-player-"]'
         )
-
-        # Verify timestamps
-        timestamps = page.locator(".video-timestamp")
-        assert timestamps.count() == 2
-
-        ts_text = " ".join(timestamps.all_inner_texts())
-        assert "[00:00]" in ts_text
-        assert "Overview" in ts_text
-        assert "[02:30]" in ts_text
-        assert "Feature Tour" in ts_text
-
-        # Click the [02:30] Feature Tour timestamp
-        ts_btn = page.locator(
-            '.video-timestamp[data-time-seconds="150"]'
-        )
-        ts_btn.click()
-        page.wait_for_load_state("domcontentloaded")
-
-        # Verify the iframe src was updated with ?t=150
-        updated_src = iframe.get_attribute("src")
-        assert "?t=150" in updated_src
+        expect(loom_iframe).to_have_count(1)
+        # The seek param ends up on the iframe src so Loom resumes there.
+        src = loom_iframe.get_attribute("src")
+        assert "loom.com/embed/" in src
+        assert "t=150" in src
 
         context.close()
 # ---------------------------------------------------------------
@@ -582,8 +565,8 @@ class TestScenario6RecordingWithoutVideoURL:
 
     def test_no_video_url_shows_content_without_player(self, django_server, page):
         """Given a workshop with no recording URL on its linked event, the
-        workshop video page shows the "Recording not available yet" fallback
-        without an embedded player.
+        workshop landing renders cleanly without a player pane and without
+        any iframe markup.
         """
         _clear_recordings()
         _create_recording(
@@ -601,9 +584,10 @@ class TestScenario6RecordingWithoutVideoURL:
             required_level=0,
         )
 
-        # Workshop video page is the canonical recording surface.
+        # Issue #618: the workshop landing is the canonical surface.
+        # Legacy /video 301s to the landing for compatibility.
         response = page.goto(
-            f"{django_server}/workshops/community-qa/video",
+            f"{django_server}/workshops/community-qa",
             wait_until="domcontentloaded",
         )
         assert response.status == 200
@@ -613,20 +597,25 @@ class TestScenario6RecordingWithoutVideoURL:
         # Title is visible.
         assert "Community Q&A" in body
 
-        # No video player or broken embed
-        assert 'data-source="youtube"' not in body
-        assert 'data-source="loom"' not in body
-        assert 'data-source="self_hosted"' not in body
+        # No player pane and no recording outline section when the linked
+        # event has no recording_url.
+        assert page.locator(
+            '[data-testid="workshop-player-pane"]'
+        ).count() == 0
+        assert page.locator(
+            '#workshop-player-shell'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="workshop-outline-recording"]'
+        ).count() == 0
 
-        # No iframes for video
+        # No iframes for video.
         video_iframes = page.locator(
             'iframe[src*="youtube"], iframe[src*="loom"]'
         )
         assert video_iframes.count() == 0
-
-        # The workshop video page renders the "missing recording" fallback.
-        missing = page.locator('[data-testid="video-missing"]')
-        assert missing.count() == 1
+        assert "youtube.com/embed" not in body
+        assert "loom.com/embed" not in body
 # ---------------------------------------------------------------
 # Scenario 7: Hour-long timestamps formatted correctly
 # ---------------------------------------------------------------
@@ -653,39 +642,36 @@ class TestScenario7HourLongTimestamps:
         )
 
         page.goto(
-            f"{django_server}/workshops/full-day-workshop/video",
+            f"{django_server}/workshops/full-day-workshop",
             wait_until="domcontentloaded",
         )
 
-        # Expand the collapsed Chapters disclosure (#361)
-        page.evaluate(
-            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
-        )
+        # Issue #618: chapters live in the workshop outline pane as
+        # click-to-seek buttons; no <details> wrapper to expand.
+        chapter_rows = page.locator('[data-testid="workshop-chapter-row"]')
+        expect(chapter_rows).to_have_count(3)
 
-        # Verify all timestamps are present
-        timestamps = page.locator(".video-timestamp")
-        assert timestamps.count() == 3
-
-        ts_text = " ".join(timestamps.all_inner_texts())
+        rows_text = " ".join(chapter_rows.all_inner_texts())
 
         # First timestamp: [MM:SS] format (under 1 hour)
-        assert "[00:00]" in ts_text
-        assert "Start" in ts_text
+        assert "[00:00]" in rows_text
+        assert "Start" in rows_text
 
         # Second timestamp: [H:MM:SS] format (exactly 1 hour)
-        assert "[1:00:00]" in ts_text
-        assert "Hour Mark" in ts_text
+        assert "[1:00:00]" in rows_text
+        assert "Hour Mark" in rows_text
 
         # Third timestamp: [H:MM:SS] format (1 hour 13 min)
-        assert "[1:13:00]" in ts_text
-        assert "Advanced Topics" in ts_text
+        assert "[1:13:00]" in rows_text
+        assert "Advanced Topics" in rows_text
 
-        # Click the [1:13:00] timestamp and verify data attr
-        ts_btn = page.locator(
-            '.video-timestamp[data-time-seconds="4380"]'
+        # The [1:13:00] row carries the canonical data-time-seconds
+        # attribute the JS module reads to seek the player.
+        seek_btn = page.locator(
+            '[data-testid="workshop-chapter-row"][data-time-seconds="4380"]'
         )
-        assert ts_btn.count() == 1
-        ts_btn.click()
+        assert seek_btn.count() == 1
+        seek_btn.click()
 # ---------------------------------------------------------------
 # Scenario 8: Removed -- duplicate of gating tests in
 #   content/tests/test_course_units.py (CourseUnitAccessControlTest)
@@ -813,28 +799,23 @@ class TestScenario10AdminTimestampEditor:
         page.click('input[name="_save"]')
         page.wait_for_load_state("domcontentloaded")
 
-        # Navigate to the public recording page (workshop video, issue #426)
+        # Navigate to the public workshop landing — the player layout
+        # owns the recording surface (issue #618).
         page.goto(
-            f"{django_server}/workshops/workshop-demo/video",
+            f"{django_server}/workshops/workshop-demo",
             wait_until="domcontentloaded",
         )
 
-        body = page.content()
+        # Chapter rows are rendered in the outline pane (no disclosure
+        # to expand in the new layout).
+        chapter_rows = page.locator('[data-testid="workshop-chapter-row"]')
+        expect(chapter_rows).to_have_count(2)
 
-        # Expand the collapsed Chapters disclosure (#361)
-        page.evaluate(
-            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
-        )
-
-        # Verify timestamps appear
-        timestamps = page.locator(".video-timestamp")
-        assert timestamps.count() == 2
-
-        ts_text = " ".join(timestamps.all_inner_texts())
-        assert "[02:30]" in ts_text
-        assert "Setup walkthrough" in ts_text
-        assert "[10:00]" in ts_text
-        assert "Live coding" in ts_text
+        rows_text = " ".join(chapter_rows.all_inner_texts())
+        assert "[02:30]" in rows_text
+        assert "Setup walkthrough" in rows_text
+        assert "[10:00]" in rows_text
+        assert "Live coding" in rows_text
 # ---------------------------------------------------------------
 # Scenario 11: Removed -- duplicate of unit completion toggling
 #   tests in content/tests/test_course_units.py
@@ -848,11 +829,13 @@ class TestScenario10AdminTimestampEditor:
 
 @pytest.mark.django_db(transaction=True)
 class TestChaptersDisclosureExpandSeekCollapse:
-    """Visitor on an event with chapters: expand, seek, collapse.
+    """Visitor on a workshop with chapters can see the outline and seek.
 
-    Regression test for Issue #361: the chapters list now lives inside
-    a collapsed `<details>` so it does not push the rest of the page
-    down for visitors who did not ask for chapter navigation.
+    Originally a regression for issue #361 (collapsed chapters disclosure);
+    issue #618 retired the disclosure pattern in favour of the always-on
+    outline pane next to the player. The test now verifies that the
+    outline pane renders all chapters as visible click-to-seek rows and
+    that clicking a row does not raise a console error.
     """
 
     def test_visitor_expands_seeks_and_collapses_chapters(
@@ -874,86 +857,52 @@ class TestChaptersDisclosureExpandSeekCollapse:
             required_level=0,
         )
 
-        # Workshop video page is the canonical recording surface (issue #426).
+        # Workshop landing is the canonical recording surface (issue #618).
         page.goto(
-            f"{django_server}/workshops/chapters-disclosure-demo/video",
+            f"{django_server}/workshops/chapters-disclosure-demo",
             wait_until="domcontentloaded",
         )
 
-        # Video embed is visible
-        yt_player = page.locator('[id^="yt-player-"]')
-        assert yt_player.count() >= 1
+        # Player shell is visible (iframe is lazy-mounted on first
+        # interaction so it isn't present yet).
+        shell = page.locator("#workshop-player-shell")
+        expect(shell).to_be_visible()
+        assert shell.get_attribute("data-source") == "youtube"
+        assert shell.get_attribute("data-video-id") == "chapdemo01"
 
-        # Chapters disclosure renders, collapsed (no `open` attribute)
-        chapters = page.locator('details[data-testid="video-chapters"]')
-        assert chapters.count() == 1
-        assert (
-            chapters.first.evaluate("el => el.hasAttribute('open')")
-            is False
+        # Recording outline pane is always visible (no disclosure to
+        # expand). All 5 chapter rows render as click-to-seek buttons.
+        outline = page.locator(
+            '[data-testid="workshop-outline-recording"]'
         )
+        assert outline.count() == 1
 
-        # Summary line shows "Chapters (5)" -- the visible text is
-        # uppercased via the `uppercase` Tailwind class but the underlying
-        # source text is "Chapters (5)".  Assert against the source text
-        # via textContent so the test matches the literal markup.
-        summary = chapters.locator("summary")
-        summary_source = summary.first.evaluate("el => el.textContent.trim()")
-        assert "Chapters (5)" in summary_source
-
-        # Individual chapter rows are not visible while collapsed.
-        first_chapter_btn = chapters.locator(".video-timestamp").first
-        assert first_chapter_btn.is_visible() is False
-
-        # Step: click summary to expand
-        summary.first.click()
-        page.wait_for_function(
-            "el => el.hasAttribute('open')",
-            arg=chapters.first.element_handle(),
-        )
-        assert (
-            chapters.first.evaluate("el => el.hasAttribute('open')")
-            is True
-        )
+        chapter_rows = page.locator('[data-testid="workshop-chapter-row"]')
+        assert chapter_rows.count() == 5
+        first_chapter_btn = chapter_rows.first
         assert first_chapter_btn.is_visible() is True
 
-        # All 5 chapter rows are present and labelled correctly
-        chapter_buttons = chapters.locator(".video-timestamp")
-        assert chapter_buttons.count() == 5
-        rows_text = chapters.first.inner_text()
+        rows_text = outline.first.inner_text()
         assert "[00:00]" in rows_text
         assert "Welcome" in rows_text
         assert "[01:00]" in rows_text
         assert "Setup" in rows_text
 
-        # Step: click the first chapter row -- existing seek handler
-        # should be wired up unchanged.  We assert via data attributes
-        # and a clean click that no console errors fire.
-        first_btn = chapter_buttons.first
-        assert first_btn.get_attribute("data-time-seconds") == "0"
-        assert first_btn.get_attribute("data-source") == "youtube"
-        assert first_btn.get_attribute("data-video-id") == "chapdemo01"
+        # Click the first chapter row — the JS module wires this to
+        # seek the player and (since the iframe isn't mounted yet)
+        # mounts the YouTube embed at second 0. We just assert no
+        # console error fires.
+        assert first_chapter_btn.get_attribute("data-time-seconds") == "0"
 
         errors = []
         page.on("pageerror", lambda exc: errors.append(str(exc)))
-        first_btn.click()
+        first_chapter_btn.click()
         assert errors == []
-
-        # Step: click summary again to collapse
-        summary.first.click()
-        page.wait_for_function(
-            "el => !el.hasAttribute('open')",
-            arg=chapters.first.element_handle(),
-        )
-        assert (
-            chapters.first.evaluate("el => el.hasAttribute('open')")
-            is False
-        )
-        assert first_chapter_btn.is_visible() is False
 
 
 @pytest.mark.django_db(transaction=True)
 class TestNoChaptersWhenTimestampsEmpty:
-    """Visitor on an event recording without chapters sees a clean page."""
+    """Visitor on a workshop recording without chapters sees a clean page."""
 
     def test_no_chapters_disclosure_when_timestamps_empty(
         self, django_server, page
@@ -968,26 +917,33 @@ class TestNoChaptersWhenTimestampsEmpty:
             required_level=0,
         )
 
-        # Workshop video page is the canonical recording surface (issue #426).
+        # Workshop landing is the canonical recording surface (issue #618).
         page.goto(
-            f"{django_server}/workshops/no-chapters-recording/video",
+            f"{django_server}/workshops/no-chapters-recording",
             wait_until="domcontentloaded",
         )
 
-        # Video embed is visible
-        yt_player = page.locator('[id^="yt-player-"]')
-        assert yt_player.count() >= 1
+        # Player shell is rendered (the workshop has a recording_url).
+        shell = page.locator("#workshop-player-shell")
+        expect(shell).to_be_visible()
+        assert shell.get_attribute("data-video-id") == "nochap0001"
 
-        # No chapters details element renders at all
-        chapters = page.locator('details[data-testid="video-chapters"]')
-        assert chapters.count() == 0
+        # Recording outline section is omitted entirely when the linked
+        # event has no chapter timestamps.
+        outline = page.locator(
+            '[data-testid="workshop-outline-recording"]'
+        )
+        assert outline.count() == 0
 
-        # No "Chapters (" summary text appears anywhere on the page
+        # No chapter rows of either kind render.
+        assert page.locator(
+            '[data-testid="workshop-chapter-row"]'
+        ).count() == 0
+        assert page.locator(
+            '[data-testid="workshop-chapter-row-locked"]'
+        ).count() == 0
+
         body = page.content()
+        # No leftover legacy "Chapters (" summary or "Timestamps" header.
         assert "Chapters (" not in body
-
-        # No leftover legacy "Timestamps" header card either
         assert ">Timestamps<" not in body
-
-        # No timestamp buttons rendered
-        assert page.locator(".video-timestamp").count() == 0

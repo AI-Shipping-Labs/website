@@ -283,9 +283,13 @@ class TestMainMemberFullBody:
 
 @pytest.mark.django_db(transaction=True)
 class TestAnonOnPaidRecording:
-    def test_anon_sees_locked_thumbnail_and_signup(
+    def test_anon_redirected_to_player_layout_locked_variant(
         self, django_server, page,
     ):
+        # Issue #618: /video 301-redirects to /workshops/<slug>. The
+        # locked variant on the new player layout shows the discreet
+        # header link, no iframe markup, and the chapter outline as
+        # an informational syllabus.
         _clear_workshops()
         _create_workshop(
             slug='reg-vid',
@@ -297,18 +301,18 @@ class TestAnonOnPaidRecording:
             f'{django_server}/workshops/reg-vid/video',
             wait_until='domcontentloaded',
         )
+        # Final URL is the new player layout.
+        assert page.url == f'{django_server}/workshops/reg-vid'
         body = page.content()
-        # Locked thumbnail shows; iframe does NOT load.
-        assert 'data-testid="teaser-video-thumbnail"' in body
-        assert 'data-testid="video-player"' not in body
-        # Description teaser with early marker, late marker hidden.
-        assert 'WORKSHOPVIDEODESCMARKER' in body
-        assert 'WORKSHOPVIDEODESCHIDDEN' not in body
-        # Anonymous gets a "Create a free account" companion link.
-        signup = page.locator('[data-testid="teaser-signup-cta"]')
-        assert signup.count() == 1
-        signup_href = signup.get_attribute('href')
-        assert 'next=%2Fworkshops%2Freg-vid%2Fvideo' in signup_href
+        # No iframe markup.
+        assert 'youtube.com/embed' not in body
+        assert 'workshop_player.js' not in body
+        # Discreet locked header link present, pointing at /pricing.
+        link = page.locator(
+            '[data-testid="workshop-recording-locked-header-link"]',
+        )
+        assert link.count() == 1
+        assert link.get_attribute('href') == '/pricing'
 
 
 # ---------------------------------------------------------------------
@@ -318,7 +322,12 @@ class TestAnonOnPaidRecording:
 
 @pytest.mark.django_db(transaction=True)
 class TestFreeMemberOnMainRecording:
-    def test_free_member_sees_view_pricing(self, django_server, browser):
+    def test_free_member_sees_locked_header_link_on_player_layout(
+        self, django_server, browser,
+    ):
+        # Issue #618: free user on a Main-gated recording lands on the
+        # new player layout (the /video URL 301s) with the locked
+        # variant — discreet header link, no iframe markup.
         _clear_workshops()
         _create_workshop(
             slug='main-vid',
@@ -337,15 +346,13 @@ class TestFreeMemberOnMainRecording:
                 f'{django_server}/workshops/main-vid/video',
                 wait_until='domcontentloaded',
             )
-            body = page.content()
-            # Locked thumbnail + teaser fade.
-            assert 'data-testid="teaser-video-thumbnail"' in body
-            assert 'data-testid="teaser-body-wrapper"' in body
-            # Tier badge + upgrade copy.
-            assert 'Main or above required' in body
-            assert 'Upgrade to Main to watch the recording' in body
-            cta = page.locator('[data-testid="video-upgrade-cta"]')
-            assert cta.get_attribute('href') == '/pricing'
+            assert page.url == f'{django_server}/workshops/main-vid'
+            link = page.locator(
+                '[data-testid="workshop-recording-locked-header-link"]',
+            )
+            assert link.count() == 1
+            assert 'Get Main' in link.inner_text()
+            assert link.get_attribute('href') == '/pricing'
         finally:
             ctx.close()
 
@@ -357,9 +364,11 @@ class TestFreeMemberOnMainRecording:
 
 @pytest.mark.django_db(transaction=True)
 class TestPremiumMemberFullVideo:
-    def test_premium_member_watches_recording(
+    def test_premium_member_lands_on_player_layout_with_iframe(
         self, django_server, browser,
     ):
+        # Issue #618: premium user on /video gets 301'd to the player
+        # layout, which renders the player pane + the JS module.
         _clear_workshops()
         _create_workshop(
             slug='prem-vid',
@@ -374,17 +383,19 @@ class TestPremiumMemberFullVideo:
         ctx = _auth_context(browser, 'premium@test.com')
         try:
             page = ctx.new_page()
-            response = page.goto(
+            page.goto(
                 f'{django_server}/workshops/prem-vid/video',
                 wait_until='domcontentloaded',
             )
-            assert response.status == 200
+            assert page.url == f'{django_server}/workshops/prem-vid'
             body = page.content()
-            assert 'data-testid="video-player"' in body
-            # No teaser, no locked thumbnail, no upgrade card.
-            assert 'data-testid="teaser-video-thumbnail"' not in body
-            assert 'data-testid="teaser-body-wrapper"' not in body
-            assert 'data-testid="video-paywall"' not in body
+            assert 'data-testid="workshop-player-pane"' in body
+            assert 'data-testid="workshop-player-script"' in body
+            # No locked variant artefacts.
+            assert (
+                'data-testid="workshop-recording-locked-header-link"'
+                not in body
+            )
         finally:
             ctx.close()
 

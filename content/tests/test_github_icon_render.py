@@ -87,7 +87,13 @@ def _isolate_repo_button(html, testid):
 
 class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
     """The public workshop landing page must render the GitHub icon as an
-    inline ``<svg>`` server-side."""
+    inline ``<svg>`` server-side.
+
+    Issue #618: the standalone "View code on GitHub" button is folded
+    into the outline's Materials section as a "Code repository" row.
+    The icon-rendering invariant (server-side SVG, ``currentColor``
+    stroke) still applies in the new location.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -98,9 +104,9 @@ class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/ws')
         self.assertEqual(response.status_code, 200)
         button = _isolate_repo_button(
-            response.content.decode(), 'workshop-code-repo-link',
+            response.content.decode(), 'workshop-outline-material-row',
         )
-        # The button's icon is an SVG, not the unhydrated <i> placeholder.
+        # The row's icon is an SVG, not the unhydrated <i> placeholder.
         self.assertIn('<svg', button)
         self.assertIn('data-icon="github"', button)
         self.assertNotIn('data-lucide="github"', button)
@@ -108,7 +114,7 @@ class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
     def test_github_icon_uses_currentcolor_for_theme_inheritance(self):
         response = self.client.get('/workshops/ws')
         button = _isolate_repo_button(
-            response.content.decode(), 'workshop-code-repo-link',
+            response.content.decode(), 'workshop-outline-material-row',
         )
         # The icon stroke is currentColor so it inherits the foreground
         # in both light and dark mode without needing a dark: variant.
@@ -116,7 +122,9 @@ class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
 
     def test_button_label_unchanged(self):
         response = self.client.get('/workshops/ws')
-        self.assertContains(response, 'View code on GitHub')
+        # Issue #618: relabelled to "Code repository" in the Materials
+        # outline row (consistent with the other materials format).
+        self.assertContains(response, 'Code repository')
 
     def test_sibling_lucide_icons_still_use_placeholder(self):
         """The fix is scoped to the GitHub glyph. The trailing
@@ -124,7 +132,7 @@ class WorkshopDetailGitHubIconTest(TierSetupMixin, TestCase):
         client-side hydration, so its placeholder must remain."""
         response = self.client.get('/workshops/ws')
         button = _isolate_repo_button(
-            response.content.decode(), 'workshop-code-repo-link',
+            response.content.decode(), 'workshop-outline-material-row',
         )
         self.assertIn('data-lucide="external-link"', button)
 

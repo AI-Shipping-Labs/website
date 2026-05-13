@@ -173,10 +173,10 @@ class TestLandingAndDrawerRowsMatchAnonymous:
             # Read landing row computed style.
             landing_style = _row_style(
                 page,
-                '[data-testid="workshop-page-row"]',
+                '[data-testid="workshop-outline-page-row"]',
             )
             assert landing_style is not None, (
-                "workshop-page-row anchor not found on the landing"
+                "workshop-outline-page-row anchor not found on the landing"
             )
             assert landing_style["fontSize"] == "14px"
             assert landing_style["fontWeight"] == "400"
@@ -519,13 +519,13 @@ class TestWalkthroughProseListInSameFamily:
             # gap). Prose <li> margin 4px stacked between baselines is
             # within the 4px tolerance the issue requested.
             row_style = _row_style(
-                page, '[data-testid="workshop-page-row"]',
+                page, '[data-testid="workshop-outline-page-row"]',
             )
             assert row_style is not None
             row_lh = page.evaluate(
                 """() => {
                     const a = document.querySelector(
-                        '[data-testid="workshop-page-row"]'
+                        '[data-testid="workshop-outline-page-row"]'
                     );
                     return getComputedStyle(a).lineHeight;
                 }"""
@@ -719,22 +719,24 @@ class TestRhythmTighterButTapTargetPreserved:
                 """() => {
                     return Array.from(
                         document.querySelectorAll(
-                            '[data-testid="workshop-page-row"]'
+                            '[data-testid="workshop-outline-page-row"]'
                         )
                     ).map(a => a.getBoundingClientRect().height);
                 }"""
             )
-            assert heights, "no workshop-page-row anchors found"
+            assert heights, "no workshop-outline-page-row anchors found"
             for i, h in enumerate(heights):
                 assert h >= 44, (
                     f"row {i} height {h} < 44px (tap target violated)"
                 )
 
             # Inter-row gap on the landing matches `space-y-0.5` (2px).
+            # Issue #618: the tutorial-pages list now lives inside the
+            # outline at testid `workshop-outline-tutorial-pages`.
             sibling_margin = page.evaluate(
                 """() => {
                     const ol = document.querySelector(
-                        '[data-testid="workshop-pages-list"] ol'
+                        '[data-testid="workshop-outline-tutorial-pages"] ol'
                     );
                     if (!ol) return null;
                     const items = ol.querySelectorAll('li');
@@ -749,64 +751,9 @@ class TestRhythmTighterButTapTargetPreserved:
             ctx.close()
 
 
-# ----------------------------------------------------------------------
-# Scenario 8: No regression on summary-style accordions from #516
-# ----------------------------------------------------------------------
-
-
-@pytest.mark.django_db(transaction=True)
-class TestNoRegressionOn516Summaries:
-    def test_workshop_video_chapter_and_transcript_summary_unchanged(
-        self, browser, django_server,
-    ):
-        # Seed a workshop with a recording so the video page renders
-        # (workshop_video URL is /workshops/<slug>/video).
-        _clear_workshops()
-        _create_workshop(
-            slug="video-527",
-            title="Video Workshop",
-            landing=0,
-            pages=0,
-            recording=0,
-            recording_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            description="Video workshop description.",
-            pages_data=[
-                ("intro", "Intro", "# Intro\n\nIntro body."),
-            ],
-        )
-
-        ctx = _mobile_anon_context(browser)
-        page = ctx.new_page()
-        try:
-            page.goto(
-                f"{django_server}/workshops/video-527/video",
-                wait_until="domcontentloaded",
-            )
-            # Find the first <details><summary> on the page (Chapters or
-            # transcript). The #516 contract is that the summary text
-            # span computes to text-base (16px) font-medium (500).
-            summary = page.evaluate(
-                """() => {
-                    const sum = document.querySelector(
-                        'details > summary'
-                    );
-                    if (!sum) return null;
-                    const span = sum.querySelector('span') || sum;
-                    const cs = getComputedStyle(span);
-                    return {
-                        fontSize: cs.fontSize,
-                        fontWeight: cs.fontWeight,
-                    };
-                }"""
-            )
-            if summary is not None:
-                assert summary["fontSize"] == "16px", (
-                    f"#516 video-page summary font-size regressed: "
-                    f"{summary['fontSize']}"
-                )
-                assert summary["fontWeight"] == "500", (
-                    f"#516 video-page summary font-weight regressed: "
-                    f"{summary['fontWeight']}"
-                )
-        finally:
-            ctx.close()
+# Issue #618: scenario 8 (workshop /video page chapter+transcript
+# accordion typography parity from #516) is obsolete — the standalone
+# /workshops/<slug>/video page is retired and the new course-player
+# layout renders chapter rows as plain elements, not <details>. The
+# #516 typography contract still applies to the FAQ + events transcript
+# accordions which use the same section-header partial.

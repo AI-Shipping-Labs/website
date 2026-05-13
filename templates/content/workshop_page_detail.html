@@ -67,6 +67,18 @@
           </a>
           {% endif %}
 
+          {% if not is_gated and view_in_player_url %}
+          {# Issue #618: discreet bridge into the new course-player #}
+          {# layout. Always rendered when the user can read the body, #}
+          {# regardless of recording access — the player layout adapts. #}
+          <a href="{{ view_in_player_url }}"
+             class="mb-4 ml-2 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+             data-testid="view-in-player">
+            <i data-lucide="layout" class="h-3.5 w-3.5"></i>
+            View in player
+          </a>
+          {% endif %}
+
           {% if not is_gated %}
           {% include "content/reader/_top_nav.html" %}
           {% endif %}

@@ -1,0 +1,159 @@
+{% load access_tags %}
+{% comment %}
+Active tutorial body for the right pane of the course-player layout
+(issue #618).
+
+Renders:
+- The tutorial page title with an inline `📽 HH:MM:SS` badge that
+  anchors the page to its position in the recording. Same markup for
+  locked and unlocked users — for unlocked the badge is wrapped in a
+  <button class="workshop-section-badge"> with `data-time-seconds`; for
+  locked it's a plain <span> (no anchor, no handler).
+- The page body HTML.
+- A "▶ Watch this section in the video" button at the bottom of the
+  body. UNLOCKED users only — the spec explicitly omits this for
+  locked users (the inline 📽 badges already serve as the "this maps
+  to the video" signal, no upgrade noise in the body).
+- Prev/next nav rails.
+- Empty state when the workshop has no tutorial pages.
+
+The whole partial is also returned standalone for the JS-driven swap
+on the player layout (request param `?_partial=1`).
+
+Required context:
+- workshop, page (active page or None), prev_page, next_page.
+- can_access_pages, can_access_recording, is_gated.
+- active_page_badges: {primary, extras} dict (primary == ts dict).
+- show_watch_bar_player_shell: True when the bottom button should render.
+- page_video_start_seconds: integer seconds for the bottom button.
+{% endcomment %}
+<article id="workshop-tutorial-pane"
+         class="min-w-0 flex-1"
+         data-testid="workshop-tutorial-pane"
+         {% if page %}data-page-slug="{{ page.slug }}"{% endif %}>
+  {% if page %}
+    <header class="mb-6">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 class="text-2xl font-semibold tracking-tight"
+            data-testid="workshop-tutorial-title">
+          {{ page.title }}
+        </h2>
+        {% if active_page_badges.primary %}
+          {% if can_access_recording %}
+          <button type="button"
+                  class="workshop-section-badge inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
+                  data-time-seconds="{{ active_page_badges.primary.time_seconds }}"
+                  data-testid="workshop-section-badge">
+            <i data-lucide="play" class="h-3 w-3"></i>
+            {{ active_page_badges.primary.formatted_time }}
+          </button>
+          {% else %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                data-testid="workshop-section-badge-locked">
+            <i data-lucide="play" class="h-3 w-3"></i>
+            {{ active_page_badges.primary.formatted_time }}
+          </span>
+          {% endif %}
+        {% endif %}
+      </div>
+    </header>
+
+    {% if is_gated %}
+      {# Per-page gate — the workshop's pages level OR a per-page #}
+      {# override blocks this user. Render the existing teaser pattern #}
+      {# inline so the layout doesn't fork into a separate template. #}
+      <div class="rounded-lg border border-border bg-card p-6"
+           data-testid="workshop-tutorial-locked">
+        <p class="mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <i data-lucide="lock" class="h-4 w-4"></i>
+          Tutorial locked
+        </p>
+        <p class="mb-4 text-foreground">
+          Upgrade to {{ workshop.pages_required_level|required_tier_label }} to read this tutorial.
+        </p>
+        <a href="/pricing"
+           class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+           data-testid="workshop-tutorial-locked-cta">
+          View Pricing
+        </a>
+      </div>
+    {% else %}
+      {% if page.body_html %}
+      <div class="prose prose-tight" data-testid="workshop-tutorial-body">
+        {{ page.body_html|safe }}
+      </div>
+      {% endif %}
+
+      {% if active_page_badges.extras %}
+      <div class="mt-6 rounded-lg border border-border bg-card p-4"
+           data-testid="workshop-tutorial-section-extras">
+        <h3 class="mb-2 text-sm font-semibold text-foreground">In this section</h3>
+        <ul class="flex flex-wrap gap-2">
+          {% for ts in active_page_badges.extras %}
+          <li>
+            {% if can_access_recording %}
+            <button type="button"
+                    class="workshop-section-badge inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
+                    data-time-seconds="{{ ts.time_seconds }}"
+                    data-testid="workshop-section-badge">
+              <i data-lucide="play" class="h-3 w-3"></i>
+              {{ ts.formatted_time }} {{ ts.label }}
+            </button>
+            {% else %}
+            <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                  data-testid="workshop-section-badge-locked">
+              <i data-lucide="play" class="h-3 w-3"></i>
+              {{ ts.formatted_time }} {{ ts.label }}
+            </span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if show_watch_bar_player_shell %}
+      <div class="mt-8">
+        <button type="button"
+                class="workshop-section-badge inline-flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
+                data-time-seconds="{{ page_video_start_seconds }}"
+                data-testid="workshop-watch-this-section-btn">
+          <i data-lucide="play" class="h-4 w-4"></i>
+          Watch this section in the video
+        </button>
+      </div>
+      {% endif %}
+
+      <nav class="mt-10 flex items-center justify-between gap-4 border-t border-border pt-6"
+           aria-label="Tutorial navigation">
+        <div>
+          {% if prev_page %}
+          <a href="{{ workshop.get_absolute_url }}?page={{ prev_page.slug }}"
+             class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+             data-testid="workshop-tutorial-prev">
+            <i data-lucide="arrow-left" class="h-4 w-4"></i>
+            <span class="truncate">Previous: {{ prev_page.title }}</span>
+          </a>
+          {% endif %}
+        </div>
+        <div>
+          {% if next_page %}
+          <a href="{{ workshop.get_absolute_url }}?page={{ next_page.slug }}"
+             class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+             data-testid="workshop-tutorial-next">
+            <span class="truncate">Next: {{ next_page.title }}</span>
+            <i data-lucide="arrow-right" class="h-4 w-4"></i>
+          </a>
+          {% endif %}
+        </div>
+      </nav>
+    {% endif %}
+  {% else %}
+    {# Workshop has zero tutorial pages — friendly empty state per spec. #}
+    <div class="rounded-lg border border-dashed border-border bg-card/50 p-8 text-center"
+         data-testid="workshop-tutorial-empty">
+      <i data-lucide="book-open" class="mx-auto h-10 w-10 text-muted-foreground"></i>
+      <p class="mt-4 text-muted-foreground">No written tutorial for this workshop yet.</p>
+    </div>
+  {% endif %}
+</article>

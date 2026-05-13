@@ -1,0 +1,20 @@
+{% load access_tags %}
+{% comment %}
+Single discreet "🔒 Recording · Get {tier}" link in the header strip
+of the course-player layout (issue #618).
+
+Renders only for users without recording access (template branch in
+`workshop_detail.html`). The whole upsell surface for the locked variant
+is intentionally just this link — no big CTA card, no value-prop block,
+no per-section upgrade buttons. The link goes to /pricing.
+
+Required context:
+- workshop: the Workshop instance (used to derive the required tier
+  label via `recording_required_level`).
+{% endcomment %}
+<a href="/pricing"
+   class="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
+   data-testid="workshop-recording-locked-header-link">
+  <i data-lucide="lock" class="h-3 w-3"></i>
+  Recording &middot; Get {{ workshop.recording_required_level|required_tier_label }}
+</a>

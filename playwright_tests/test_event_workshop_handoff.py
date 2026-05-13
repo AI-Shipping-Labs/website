@@ -230,19 +230,13 @@ class TestWorkshopLinkedEventHandsOff:
         page.wait_for_load_state('domcontentloaded')
         assert '/workshops/linked-workshop' in page.url
 
-        # Step 3: From the workshop landing, click "Watch the recording".
-        watch = page.locator('a:has-text("Watch the recording")')
-        assert watch.count() >= 1
-        watch.first.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        # The recording lives on the workshop video page, not the event.
-        assert '/workshops/linked-workshop/video' in page.url
+        # Step 3: Issue #618 — the recording is now embedded directly on
+        # the workshop landing page (the player-shell layout). No extra
+        # click is needed. Verify the player pane + data-source attr on
+        # the same page.
         video_html = page.locator('main').inner_html()
-        assert (
-            'data-source="youtube"' in video_html
-            or '<iframe' in video_html.lower()
-        )
+        assert 'data-testid="workshop-player-pane"' in video_html
+        assert 'data-source="youtube"' in video_html
 
         ctx.close()
 

@@ -186,10 +186,10 @@ def test_workshop_landing_light_mode_1280(django_server, browser):
     )
     assert is_dark is False
 
-    repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
+    repo_link = page.locator('[data-testid="workshop-outline-material-row"]:has(svg[data-icon="github"])')
     assert repo_link.count() == 1
     assert repo_link.is_visible()
-    assert "View code on GitHub" in repo_link.inner_text()
+    assert "Code repository" in repo_link.inner_text()
 
     # The GitHub icon must be a real SVG with non-zero size.
     icon = repo_link.locator('svg[data-icon="github"]').first
@@ -236,7 +236,7 @@ def test_workshop_landing_dark_mode_1280(django_server, browser):
     )
     assert is_dark is True
 
-    repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
+    repo_link = page.locator('[data-testid="workshop-outline-material-row"]:has(svg[data-icon="github"])')
     icon = repo_link.locator('svg[data-icon="github"]').first
     assert icon.count() == 1
 
@@ -253,7 +253,7 @@ def test_workshop_landing_dark_mode_1280(django_server, browser):
     parent_color = page.evaluate(
         """() => {
             const a = document.querySelector(
-                '[data-testid="workshop-code-repo-link"]'
+                '[data-testid="workshop-outline-material-row"]:has(svg[data-icon="github"])'
             );
             return getComputedStyle(a).color;
         }""",
@@ -290,7 +290,7 @@ def test_workshop_landing_mobile_light_and_dark(django_server, browser):
     _set_theme(page, "light")
     _wait_for_lucide(page)
 
-    repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
+    repo_link = page.locator('[data-testid="workshop-outline-material-row"]:has(svg[data-icon="github"])')
     repo_link.scroll_into_view_if_needed()
     assert repo_link.is_visible()
     icon = repo_link.locator('svg[data-icon="github"]').first
@@ -316,7 +316,7 @@ def test_workshop_landing_mobile_light_and_dark(django_server, browser):
     _set_theme(page, "dark")
     _wait_for_lucide(page)
 
-    repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
+    repo_link = page.locator('[data-testid="workshop-outline-material-row"]:has(svg[data-icon="github"])')
     repo_link.scroll_into_view_if_needed()
     icon = repo_link.locator('svg[data-icon="github"]').first
     assert icon.count() == 1

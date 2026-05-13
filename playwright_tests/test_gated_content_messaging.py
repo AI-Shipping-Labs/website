@@ -179,16 +179,20 @@ class TestGatedContentMessaging:
         assert 'data-testid="page-paywall"' not in body
         assert 'data-testid="page-body"' in body
 
+        # Issue #618: /video 301-redirects to the player layout. Basic
+        # user fails recording gate -> sees the discreet locked header
+        # link on /workshops/<slug>.
         page.goto(
             f"{django_server}/workshops/gated-workshop/video",
             wait_until="domcontentloaded",
         )
+        assert page.url == f"{django_server}/workshops/gated-workshop"
         body = page.content()
-        # Issue #481: paywall pill reads "Main or above required".
-        assert "Main or above required" in body
-        assert "Main+ required" not in body
-        assert "Current access: Basic member" in body
-        assert body.count('data-testid="video-upgrade-cta"') == 1
+        assert (
+            'data-testid="workshop-recording-locked-header-link"' in body
+        )
+        # No iframe markup at all.
+        assert "youtube.com/embed" not in body
         _capture_responsive(page, "workshop_recording_gate")
         basic_ctx.close()
 
@@ -198,7 +202,11 @@ class TestGatedContentMessaging:
             f"{django_server}/workshops/gated-workshop/video",
             wait_until="domcontentloaded",
         )
+        assert page.url == f"{django_server}/workshops/gated-workshop"
         body = page.content()
-        assert 'data-testid="video-paywall"' not in body
-        assert 'data-testid="video-player"' in body
+        assert (
+            'data-testid="workshop-recording-locked-header-link"'
+            not in body
+        )
+        assert 'data-testid="workshop-player-pane"' in body
         main_ctx.close()

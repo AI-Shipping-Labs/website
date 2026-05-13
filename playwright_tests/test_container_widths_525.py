@@ -305,7 +305,11 @@ LISTINGS_WIDE = [
 DETAIL_MEDIUM = [
     ('/courses/{course_slug}', 'max-w-5xl'),
     ('/courses/{course_slug}/{module_slug}', 'max-w-5xl'),
-    ('/workshops/{workshop_slug}', 'max-w-5xl'),
+    # Issue #618: the workshop landing now hosts the two-pane course-player
+    # layout (20rem outline + tutorial body) and uses ``max-w-7xl`` so the
+    # player has room to breathe. The detail-page parametrization keeps it
+    # listed (with the wider frame) so a future regression is still caught.
+    ('/workshops/{workshop_slug}', 'max-w-7xl'),
     ('/events/{event_slug}', 'max-w-5xl'),
     ('/vote/{poll_uuid}', 'max-w-5xl'),
 ]

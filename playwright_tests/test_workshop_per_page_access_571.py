@@ -412,20 +412,15 @@ class TestVideoGateUnchanged:
             )
             assert r.status == 200
 
-            # Issue #618: /video 301-redirects to the player layout. The
-            # locked variant on /workshops/<slug> shows the discreet
-            # header link and no iframe markup.
+            # Video page — recording paywall present, no player.
             r = p.goto(
                 f'{django_server}/workshops/video-gate/video',
                 wait_until='domcontentloaded',
             )
-            # Final URL is the player layout (301-followed by Playwright).
-            assert p.url == f'{django_server}/workshops/video-gate'
+            assert r.status == 403
             body = p.content()
-            assert (
-                'data-testid="workshop-recording-locked-header-link"' in body
-            )
-            assert 'youtube.com/embed' not in body
+            assert 'Upgrade to Main to watch the recording' in body
+            assert 'data-testid="video-player"' not in body
         finally:
             ctx.close()
 

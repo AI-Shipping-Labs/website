@@ -224,17 +224,13 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.assertContains(response, '<h1>Hello</h1>')
 
     def test_landing_shows_cover_image_when_set(self):
-        # Issue #618: the course-player layout no longer renders the
-        # giant cover-image hero. The cover_image_url is still emitted
-        # in OG meta tags so SEO / social cards keep working — assert on
-        # that surface instead of the in-page hero.
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'https://cdn.example/cover.png')
+        self.assertContains(response, 'alt="Cover image for Production Agents"')
+        self.assertContains(response, 'data-testid="workshop-detail-preview-image"')
+        self.assertNotContains(response, 'data-testid="workshop-detail-preview-fallback"')
 
     def test_landing_missing_cover_uses_decorative_preview(self):
-        # Issue #618: cover preview hero is removed from the player
-        # shell. Verify the page still renders without the legacy
-        # decorative fallback partial.
         ws = _make_workshop(
             slug='no-cover',
             title='No Cover Workshop',
@@ -242,55 +238,44 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             tags=['agents'],
         )
         response = self.client.get(f'/workshops/{ws.slug}')
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="workshop-detail-preview-fallback"')
         self.assertNotContains(
-            response, 'data-testid="workshop-detail-preview-fallback"',
+            response,
+            '<h3 class="line-clamp-2 break-words text-base font-semibold '
+            'leading-snug text-foreground sm:text-lg">No Cover Workshop</h3>',
+            html=True,
         )
-        self.assertNotContains(
-            response, 'data-testid="workshop-detail-preview-image"',
-        )
+        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
 
     def test_landing_shows_instructor_and_date(self):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'Alice')
         self.assertContains(response, 'April 21, 2026')
 
-    def test_landing_shows_code_repo_in_outline_materials(self):
-        # Issue #618: the standalone "View code on GitHub" button is
-        # folded into the outline's Materials section as a regular row.
+    def test_landing_shows_code_repo_button(self):
         response = self.client.get('/workshops/ws')
-        self.assertContains(
-            response, 'data-testid="workshop-outline-material-row"',
-        )
+        self.assertContains(response, 'data-testid="workshop-code-repo-link"')
         self.assertContains(response, 'https://github.com/org/repo')
 
-    def test_landing_hides_code_repo_row_when_empty(self):
-        # Workshop with no code_repo_url and no event materials emits
-        # no Materials section at all (no empty container).
-        ws = _make_workshop(slug='no-repo', title='No Repo', code_repo_url='')
+    def test_landing_hides_code_repo_button_when_empty(self):
+        ws = _make_workshop(slug='no-repo', title='No Repo')
         response = self.client.get(f'/workshops/{ws.slug}')
-        # The legacy testid is gone.
         self.assertNotContains(response, 'data-testid="workshop-code-repo-link"')
 
-    def test_landing_anon_below_pages_gate_sees_inline_locked_pane(self):
-        # Issue #618: the wholesale "workshop-pages-paywall" card is
-        # gone from the landing — the per-page gate now renders inside
-        # the right pane (`workshop-tutorial-locked`) so anonymous /
-        # below-tier visitors still see the outline + chapter list as
-        # informational syllabus alongside the locked-tutorial card.
+    def test_landing_anon_below_pages_gate_sees_paywall(self):
         response = self.client.get('/workshops/ws')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="workshop-tutorial-locked"')
-        self.assertContains(response, 'Upgrade to Basic')
-        # The legacy wholesale paywall card must NOT render anywhere.
-        self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertContains(response, 'Upgrade to Basic to access this workshop')
+        # Issue #481: paywall pill reads "Basic or above required".
+        self.assertContains(response, 'Basic or above required')
+        self.assertNotContains(response, 'Basic+ required')
+        self.assertNotContains(response, 'data-testid="gated-current-state"')
 
-    def test_landing_anon_on_registered_default_pages_still_loads(self):
-        """Issue #618: the wholesale pages paywall is gone — anonymous
-        visitors on a registered-default workshop now see the player
-        layout with a locked tutorial card in the right pane (and the
-        existing standalone tutorial route, which the spec keeps live
-        for SEO, still emits the Sign-In-shaped paywall).
+    def test_landing_anon_on_registered_default_sees_signin_paywall(self):
+        """Issue #571 PM fix: anonymous on a workshop using the new
+        ``pages_required_level=LEVEL_REGISTERED`` (5) default must see
+        Sign-In-shaped copy on the landing pages paywall — not the
+        nonsensical "Upgrade to Free" / "/pricing" combo.
         """
         ws = _make_workshop(
             slug='reg-ws', title='Registered Workshop',
@@ -299,13 +284,49 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         _make_page(ws, 'intro', 'Intro', 1)
         response = self.client.get(f'/workshops/{ws.slug}')
         self.assertEqual(response.status_code, 200)
-        # The wholesale paywall card MUST NOT render — locked tutorial
-        # body lives in the right pane now.
-        self.assertNotContains(
-            response, 'data-testid="workshop-pages-paywall"',
+        # Card still renders — the paywall is just reshaped.
+        self.assertContains(response, 'data-testid="workshop-pages-paywall"')
+        # Sign-In-shaped heading and CTAs.
+        self.assertContains(response, 'Sign in to access this workshop')
+        self.assertContains(
+            response,
+            '/accounts/login/?next=%2Fworkshops%2Freg-ws',
         )
-        # The right pane still surfaces the lock state.
-        self.assertContains(response, 'data-testid="workshop-tutorial-locked"')
+        self.assertContains(response, 'Sign In')
+        self.assertContains(response, 'Create a free account')
+        self.assertContains(
+            response,
+            '/accounts/signup/?next=%2Fworkshops%2Freg-ws',
+        )
+        self.assertContains(response, 'data-testid="teaser-signup-cta"')
+        # The broken "Upgrade to Free" copy and the /pricing CTA must be
+        # gone on this surface (the regression the PM rejected). The
+        # tier pill is also dropped — there's no tier to display when
+        # the visitor just needs to authenticate. The /pricing href on
+        # the header chrome is unrelated; the assertion below scopes to
+        # the paywall card's upgrade CTA by data-testid.
+        self.assertNotContains(response, 'Upgrade to Free')
+        body = response.content.decode()
+        # Locate the paywall card and assert the primary CTA is NOT a
+        # /pricing link (it must be /accounts/login/). Scoping the slice
+        # to the next HTML comment (the partial is followed by the
+        # workshop cross-link comment) avoids matching the unrelated
+        # /pricing links in the header / footer chrome.
+        card_start = body.index('data-testid="workshop-pages-paywall"')
+        card_end_marker = '<!--'
+        rel_end = body[card_start:].index(card_end_marker)
+        card_slice = body[card_start:card_start + rel_end]
+        self.assertIn('data-testid="workshop-pages-upgrade-cta"', card_slice)
+        self.assertIn('/accounts/login/?next=', card_slice)
+        self.assertNotIn(
+            'href="/pricing"', card_slice,
+            'pages paywall must not link to /pricing for anonymous '
+            'visitors on the registered-default wall',
+        )
+        self.assertNotContains(response, 'Free required')
+        self.assertNotContains(
+            response, 'data-testid="gated-required-tier"',
+        )
 
     def test_landing_basic_user_does_not_see_pages_paywall(self):
         self.client.force_login(self.user_basic)
@@ -321,35 +342,24 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.assertLess(i_intro, i_setup)
         self.assertLess(i_setup, i_deploy)
 
-    def test_landing_outline_page_rows_show_lock_when_tutorials_gated(self):
-        # Issue #618: lock icons appear on the outline tutorial-page
-        # rows ONLY when the tutorial gate trips (independent of the
-        # recording gate). Anonymous user on a Basic-tier workshop sees
-        # one lock icon per tutorial row in the outline.
+    def test_landing_page_rows_show_lock_when_gated(self):
         response = self.client.get('/workshops/ws')
         self.assertContains(
-            response, 'data-testid="workshop-outline-page-lock"', count=3,
+            response, 'data-testid="workshop-page-lock-icon"', count=3,
         )
 
-    def test_landing_outline_page_rows_link_to_tutorial(self):
+    def test_landing_page_rows_link_to_tutorial(self):
         response = self.client.get('/workshops/ws')
         self.assertContains(response, '/workshops/ws/tutorial/intro')
         self.assertContains(response, '/workshops/ws/tutorial/setup')
-        self.assertContains(response, 'data-testid="workshop-outline-page-row"')
+        self.assertContains(response, 'min-h-[44px]')
+        self.assertContains(response, 'focus-visible:ring-2')
 
-    def test_landing_basic_user_sees_recording_locked_header_link(self):
-        # Issue #618: Basic user passes pages gate but fails recording
-        # gate. The discreet "🔒 Recording · Get Main" link sits in the
-        # header strip — that's the ONLY upsell surface for the locked
-        # variant. No big card, no per-section upgrade noise.
+    def test_landing_video_card_shows_recording_tier_when_gated(self):
+        # Basic user passes pages but not recording (level 20)
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/ws')
-        self.assertContains(
-            response, 'data-testid="workshop-recording-locked-header-link"',
-        )
-        # Old card-shaped surfaces must NOT render.
-        self.assertNotContains(response, 'data-testid="workshop-video-locked"')
-        self.assertNotContains(response, 'data-testid="workshop-video-link"')
+        self.assertContains(response, 'data-testid="workshop-video-locked"')
 
     def test_landing_event_cross_link_renders_when_event_exists(self):
         response = self.client.get('/workshops/ws')
@@ -382,10 +392,12 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         # Pages list is hidden
         self.assertNotContains(response, 'data-testid="workshop-pages-list"')
 
-    def test_landing_premium_pages_locked_pane_shows_premium_copy(self):
-        """Issue #618: a Premium-tier workshop renders the locked
-        tutorial card in the right pane with "Upgrade to Premium" copy.
-        The legacy wholesale paywall card no longer renders.
+    def test_landing_premium_pages_paywall_drops_or_above(self):
+        """Issue #481 AC: Premium-only paywall says "Premium required".
+
+        Premium is the highest public tier so the paywall pill must NOT
+        say "Premium or above required" — there is no higher public tier
+        to upgrade to.
         """
         ws = _make_workshop(
             slug='premium-ws', title='Premium Only',
@@ -394,9 +406,10 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         _make_page(ws, 'one', 'One', 1)
         response = self.client.get(f'/workshops/{ws.slug}')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="workshop-tutorial-locked"')
-        self.assertContains(response, 'Upgrade to Premium')
-        self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertContains(response, 'data-testid="workshop-pages-paywall"')
+        self.assertContains(response, 'Premium required')
+        self.assertNotContains(response, 'Premium or above required')
+        self.assertNotContains(response, 'Premium+')
 
     def test_landing_emits_workshop_jsonld(self):
         response = self.client.get('/workshops/ws')
@@ -442,54 +455,66 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         response = self.client.get(f'/workshops/{ws.slug}/video')
         self.assertEqual(response.status_code, 404)
 
-    def test_video_route_redirects_to_player_layout(self):
-        # Issue #618: the standalone /video page is retired. Visiting
-        # /workshops/<slug>/video 301-redirects to the new course-player
-        # layout regardless of the user's access tier.
+    def test_video_anon_below_pages_sees_recording_paywall(self):
+        # Default workshop: landing=0, pages=10, recording=20.
+        # Anon (level 0) passes landing only — so the recording-tier
+        # paywall renders (anon is below pages too, but the recording
+        # gate is what matters on the video page). Issue #515 returns 403
+        # to mirror the course-unit teaser pattern.
         response = self.client.get('/workshops/ws/video')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/workshops/ws')
-
-    def test_video_route_preserves_t_query_param_on_redirect(self):
-        response = self.client.get('/workshops/ws/video?t=754')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/workshops/ws?t=754')
-
-    def test_video_route_redirects_for_authed_user_too(self):
-        self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/ws/video')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/workshops/ws')
-
-    def test_video_route_404_on_draft_workshop(self):
-        # Even though it's a redirect, an unknown / draft slug must
-        # 404 — never 301 into a 404 (bad SEO).
-        Workshop.objects.create(
-            slug='dft-vid', title='dft', status='draft',
-            date=date(2026, 4, 21),
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="video-paywall"', status_code=403,
         )
-        response = self.client.get('/workshops/dft-vid/video')
-        self.assertEqual(response.status_code, 404)
+        self.assertContains(
+            response, 'Upgrade to Main to watch the recording',
+            status_code=403,
+        )
 
-    def test_player_layout_main_user_renders_player(self):
-        # The recording iframe is mounted lazily — what we assert here is
-        # the player shell + the script tag + the data-source attribute
-        # that the JS module consumes.
+    def test_video_basic_below_recording_sees_paywall(self):
+        self.client.force_login(self.user_basic)
+        response = self.client.get('/workshops/ws/video')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(
+            response, 'data-testid="video-paywall"', status_code=403,
+        )
+        # Issue #481: pill reads "Main or above required".
+        self.assertContains(
+            response, 'Main or above required', status_code=403,
+        )
+        self.assertNotContains(
+            response, 'Main+ required', status_code=403,
+        )
+        self.assertContains(
+            response, 'Current access: Basic member', status_code=403,
+        )
+
+    def test_video_main_renders_player(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/ws')
-        self.assertContains(response, 'data-testid="workshop-player-pane"')
-        self.assertContains(response, 'data-testid="workshop-player-script"')
+        response = self.client.get('/workshops/ws/video')
+        self.assertNotContains(response, 'data-testid="video-paywall"')
+        self.assertContains(response, 'data-testid="video-player"')
+        self.assertTemplateUsed(response, 'events/_recording_embed.html')
+        self.assertContains(response, 'data-testid="video-chapters"')
+        self.assertContains(response, 'class="video-timestamp')
+        self.assertContains(response, 'data-time-seconds="0"')
         self.assertContains(response, 'data-source="youtube"')
 
-    def test_player_layout_main_user_renders_materials_in_outline(self):
+    def test_video_main_renders_materials(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/ws')
-        self.assertContains(
-            response, 'data-testid="workshop-outline-materials"',
-        )
+        response = self.client.get('/workshops/ws/video')
+        self.assertTemplateUsed(response, 'events/_recording_materials.html')
+        self.assertContains(response, 'data-testid="video-materials"')
         self.assertContains(response, 'Slides')
 
-    def test_player_layout_landing_paywall_when_landing_gated(self):
+    def test_video_main_renders_transcript(self):
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/ws/video')
+        self.assertTemplateUsed(response, 'events/_recording_transcript.html')
+        self.assertContains(response, 'data-testid="video-transcript"')
+        self.assertContains(response, 'Workshop transcript text.')
+
+    def test_video_landing_paywall_when_landing_gated(self):
         ws = _make_workshop(
             slug='lg', title='Landing gated',
             landing=20, pages=20, recording=20, with_event=True,
@@ -499,8 +524,9 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
             email='b2@x.com', password='pw', tier=self.basic_tier,
         )
         self.client.force_login(u)
-        response = self.client.get(f'/workshops/{ws.slug}')
-        self.assertContains(response, 'data-testid="workshop-landing-paywall"')
+        response = self.client.get(f'/workshops/{ws.slug}/video')
+        self.assertContains(response, 'data-testid="video-landing-paywall"')
+        self.assertContains(response, 'Current access: Basic member')
 
 
 class WorkshopPageDetailTest(TierSetupMixin, TestCase):
@@ -685,13 +711,11 @@ class LegacyWorkshopPageRedirectTest(TierSetupMixin, TestCase):
         self.assertNotIn('Location', response)
 
     def test_video_route_is_not_captured_by_legacy_redirect(self):
-        # Issue #618: the /video route now 301-redirects to the new
-        # course-player layout for ALL users (locked or unlocked) —
-        # the redirect is independent of the recording gate. The
-        # legacy-page-redirect URL pattern below must NOT swallow it.
+        # Anonymous fails the default recording gate (Main+) so the gated
+        # paywall render returns 403 (not a redirect).
         response = self.client.get('/workshops/legacy-ws/video')
-        self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'], '/workshops/legacy-ws')
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn('Location', response)
 
     def test_unknown_workshop_stays_404(self):
         response = self.client.get(

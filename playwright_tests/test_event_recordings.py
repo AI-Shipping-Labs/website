@@ -179,33 +179,34 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
         assert agents_pos < rag_pos
 
         # Step 2: Click the past-recording card link — past events with a
-        # linked Workshop send users straight to the workshop landing.
+        # linked Workshop send users straight to the workshop landing
+        # (issue #426).
         page.locator(
             'a[data-testid="past-card-workshop-link"]:has-text("Building AI Agents")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
         assert "/workshops/building-ai-agents" in page.url
 
-        # Step 3: Issue #618 — the recording is embedded inline on the
-        # workshop landing (no extra click). The player pane + outline
-        # render directly on the same page for users with access.
+        # Step 3: Follow "Watch the recording" to the canonical video page.
+        page.locator('a:has-text("Watch the recording")').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/workshops/building-ai-agents/video" in page.url
+
         body = page.content()
 
-        # Title in the heading.
+        # Title in the heading
         assert "Building AI Agents" in body
 
-        # Player pane + chapter outline rendered on the same page.
-        assert 'data-testid="workshop-player-pane"' in body
-        assert 'data-source="youtube"' in body
-        assert 'data-testid="workshop-outline-recording"' in body
+        # YouTube iframe present (video player)
+        assert "youtube" in body.lower() or "iframe" in body.lower()
 
-        # Three chapter rows render with their labels.
-        chapters_html = page.locator(
-            '[data-testid="workshop-outline-recording"]',
-        ).inner_html()
-        assert "Introduction" in chapters_html
-        assert "Architecture" in chapters_html
-        assert "Implementation" in chapters_html
+        # Timestamps are listed as clickable elements
+        assert "[00:00]" in body
+        assert "Introduction" in body
+        assert "[05:00]" in body
+        assert "Architecture" in body
+        assert "[15:00]" in body
+        assert "Implementation" in body
 
         # Materials section shows links
         assert "Workshop Slides" in body
@@ -358,37 +359,45 @@ class TestScenario3FreeUserSeesUpgradePath:
         lock_icon = recording_card.locator('[data-lucide="lock"]')
         assert lock_icon.count() >= 1
 
-        # Step 2: Click the past-card link. Issue #618 lands the user
-        # directly on the new course-player layout — the recording is
-        # embedded inline (or, when locked, the discreet header link
-        # surfaces the upgrade target).
+        # Step 2: Click the past-card link — issue #426 routes past
+        # recordings through the workshop video page where the paywall
+        # lives.
         page.locator(
             'a[data-testid="past-card-workshop-link"]:has-text('
             '"Premium Workshop on Fine-Tuning")'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
-        assert "/workshops/premium-workshop-fine-tuning" in page.url
+        # Workshop landing -> follow to video page, which is gated.
+        page.locator('a:has-text("Watch the recording")').first.click()
+        page.wait_for_load_state("domcontentloaded")
+        assert "/workshops/premium-workshop-fine-tuning/video" in page.url
 
         body = page.content()
 
-        # Title visible.
+        # Title visible
         assert "Premium Workshop on Fine-Tuning" in body
 
-        # Defense-in-depth: no iframe markup at all on the locked variant.
+        # No video player or YouTube iframe shown — only the locked
+        # teaser thumbnail (issue #515) is allowed.
         main_element = page.locator("main")
         main_html = main_element.inner_html()
         assert 'data-source="youtube"' not in main_html
+        # No iframe embed for the gated recording.
         assert "youtube.com/embed" not in main_html
+        # The locked-video teaser thumbnail IS rendered (per #515 spec:
+        # "Show a locked-video thumbnail (YouTube hqdefault.jpg from
+        # event.recording_url)").
+        assert "img.youtube.com/vi/ft999" in main_html
 
-        # Discreet locked header link present.
-        link = page.locator(
-            '[data-testid="workshop-recording-locked-header-link"]',
-        )
-        assert link.count() == 1
-        assert link.get_attribute('href') == '/pricing'
+        # Workshop video paywall card and CTA visible.
+        paywall = page.locator('[data-testid="video-paywall"]')
+        assert paywall.count() == 1
+        assert "Upgrade to Basic to watch the recording" in body
 
-        # Step 3: Follow the upgrade link to /pricing.
-        link.first.click()
+        # Step 3: Click the upgrade CTA, which goes to /pricing.
+        pricing_link = page.locator('[data-testid="video-upgrade-cta"]')
+        assert pricing_link.count() >= 1
+        pricing_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
         # User lands on /pricing
@@ -431,39 +440,39 @@ class TestScenario4BasicMemberWatchesBasicRecording:
 
         context = _auth_context(browser, "basic-rec@test.com")
         page = context.new_page()
-        # Issue #618: /video 301-redirects to the player layout. Basic
-        # user has access to a Basic-gated recording, so the player
-        # pane and JS module render.
+        # Recording lives on the workshop video page (issue #426).
         page.goto(
             f"{django_server}/workshops/ai-tool-breakdown-cursor/video",
             wait_until="domcontentloaded",
         )
-        assert page.url == (
-            f"{django_server}/workshops/ai-tool-breakdown-cursor"
-        )
 
         body = page.content()
-        # Player pane + JS module render.
-        assert 'data-testid="workshop-player-pane"' in body
-        assert 'data-testid="workshop-player-script"' in body
-        # No upgrade copy.
+
+        # Full video player is visible with YouTube embed
+        assert "youtube" in body.lower() or "iframe" in body.lower()
+
+        # No upgrade message or blurred overlay
         assert "Upgrade to" not in body
 
-        # Chapter outline renders the two timestamps as buttons.
-        chapters = page.locator('[data-testid="workshop-chapter-row"]')
-        assert chapters.count() == 2
-        # Labels visible.
-        assert "Overview" in page.locator(
-            '[data-testid="workshop-outline-recording"]',
-        ).inner_text()
-
-        # Materials lives in the outline now.
-        materials = page.locator('[data-testid="workshop-outline-materials"]')
-        assert materials.count() == 1
-        slides_link = materials.locator('a:has-text("Slides")').first
-        assert slides_link.get_attribute("href") == (
-            "https://example.com/slides.pdf"
+        # Expand the collapsed Chapters disclosure so timestamps show.
+        page.evaluate(
+            "document.querySelectorAll('details[data-testid=\"video-chapters\"]').forEach(d => d.open = true)"
         )
+
+        # Timestamps are listed
+        assert "[00:00]" in body
+        assert "Overview" in body
+
+        # Verify timestamps are clickable elements
+        timestamps = page.locator(".video-timestamp")
+        assert timestamps.count() == 2
+
+        # Materials section shows a "Slides" link
+        assert "Slides" in body
+        slides_link = page.locator(
+            'a:has-text("Slides")'
+        ).first
+        assert slides_link.get_attribute("href") == "https://example.com/slides.pdf"
 # ---------------------------------------------------------------
 # Scenario 5: Reader navigates from detail back to filtered listing
 # ---------------------------------------------------------------
@@ -821,22 +830,11 @@ class TestScenario10InsufficientTierSeesCTAWithCorrectName:
         assert "Main-Only Deep Dive" in body
         assert "exclusive deep dive" in body
 
-        # Issue #618: the recording-tier upsell on the workshop landing is a
-        # single discreet "Recording · Get <tier>" link in the header strip
-        # (the legacy "Recording available with <tier> or above" copy block
-        # was retired). The link must mention Main, not Basic.
-        locked_link = page.locator(
-            '[data-testid="workshop-recording-locked-header-link"]'
-        )
-        assert locked_link.count() == 1
-        link_text = locked_link.inner_text()
-        assert "Main" in link_text
-        assert "Basic" not in link_text
+        # The workshop landing surfaces the recording-tier requirement on
+        # the "Watch the recording" card -- it must mention Main, not Basic.
+        assert "Recording available with Main or above" in body
+        assert "Recording available with Basic or above" not in body
 
-        # No player iframe / pane is rendered for users below the
-        # recording gate.
-        assert page.locator(
-            '[data-testid="workshop-player-pane"]'
-        ).count() == 0
-        assert "youtube.com/embed" not in body
-        assert "loom.com/embed" not in body
+        # The video locked badge is rendered on the recording card.
+        locked_badge = page.locator('[data-testid="workshop-video-locked"]')
+        assert locked_badge.count() >= 1

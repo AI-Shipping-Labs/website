@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% load access_tags %}
 {% load seo_tags %}
-{% load static %}
 
 {% block title %}{{ workshop.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{{ workshop.description|truncatechars:160 }}{% endblock %}
@@ -11,124 +10,205 @@
 
 {% block body %}
 {% include "includes/header.html" %}
-<main class="min-h-screen pt-24" data-testid="workshop-player-shell">
-  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+<main class="min-h-screen pt-24">
+  <article class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+      <a href="/workshops" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="back-to-workshops">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Workshops
+      </a>
 
-    {# Back link — keeps a discrete way back to the catalog. #}
-    <a href="/workshops"
-       class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-       data-testid="back-to-workshops">
-      <i data-lucide="arrow-left" class="h-4 w-4"></i>
-      Back to Workshops
-    </a>
-
-    {# Header strip: title + meta + (when locked) the discreet 🔒 link. #}
-    <header class="mb-6">
-      <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div class="min-w-0 flex-1">
-          <div class="mb-2 flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs text-accent">
-              <i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i>
-              Workshop
-            </span>
-            {% if workshop.pages_required_level >= 10 %}
-            <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
-              <i data-lucide="lock" class="h-3 w-3"></i>
-              {{ workshop.pages_required_level|required_tier_label }}
-            </span>
-            {% else %}
-            <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="workshop-free-badge">
-              <i data-lucide="badge-check" class="h-3 w-3"></i>
-              Free
-            </span>
-            {% endif %}
-          </div>
-
-          <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl"
-              style="text-wrap: balance;"
-              data-testid="workshop-title">
-            {{ workshop.title }}
-          </h1>
-
-          <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span class="flex min-w-0 max-w-full items-center gap-1.5">
-              <i data-lucide="calendar" class="h-4 w-4"></i>
-              {{ workshop.date|date:"F j, Y" }}
-            </span>
-            {% for instructor in workshop.ordered_instructors %}
-            <span class="flex min-w-0 max-w-full items-center gap-1.5" data-testid="workshop-instructor">
-              <i data-lucide="user" class="h-4 w-4"></i>
-              <span class="min-w-0 truncate">{{ instructor.name }}</span>
-            </span>
-            {% endfor %}
-          </div>
-        </div>
-
-        {# Discreet upsell link — locked variant only. #}
-        {% if has_recording and not can_access_recording %}
-          {% include "content/_workshop_locked_header_link.html" %}
+      {% with workshop_primary_instructor=workshop.primary_instructor %}
+      <div class="mb-8 overflow-hidden rounded-lg">
+        {% if workshop.pages_required_level >= 10 %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" preview_decorative_fallback=True %}
+        {% else %}
+          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" preview_decorative_fallback=True %}
         {% endif %}
       </div>
-    </header>
 
-    {# Landing-level paywall: every section is gated. Keep the legacy #}
-    {# behaviour so a Workshop with `landing_required_level > 0` still #}
-    {# renders the wholesale paywall card and nothing else. #}
-    {% if not can_access_landing %}
+      <header class="mb-12">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
+            <i data-lucide="graduation-cap" class="h-4 w-4"></i>
+            Workshop
+          </span>
+          {% if workshop.pages_required_level >= 10 %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="workshop-tier-badge">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            {{ workshop.pages_required_level|required_tier_label }}
+          </span>
+          {% else %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent" data-testid="workshop-free-badge">
+            <i data-lucide="badge-check" class="h-3 w-3"></i>
+            Free
+          </span>
+          {% endif %}
+        </div>
+
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;" data-testid="workshop-title">
+          {{ workshop.title }}
+        </h1>
+
+        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          <span class="flex min-w-0 max-w-full items-center gap-1.5">
+            <i data-lucide="calendar" class="h-4 w-4"></i>
+            {{ workshop.date|date:"F j, Y" }}
+          </span>
+          {% for instructor in workshop.ordered_instructors %}
+          <span class="flex min-w-0 max-w-full items-center gap-1.5" data-testid="workshop-instructor">
+            <i data-lucide="user" class="h-4 w-4"></i>
+            <span class="min-w-0 truncate">{{ instructor.name }}</span>
+          </span>
+          {% endfor %}
+        </div>
+
+        {% if workshop.tags %}
+        <div class="mt-4 flex flex-wrap gap-2">
+          {% for tag in workshop.tags %}
+          <span class="max-w-full truncate rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </header>
+
+      {% if not can_access_landing %}
+      <!-- Landing-level paywall: every section is gated. Show only the
+           upgrade card so the visitor sees a single, clear CTA. -->
       {% include "content/_gated_access_card.html" with gated_card_testid="workshop-landing-paywall" gated_icon="lock" gated_heading=landing_cta_message gated_description="The public metadata stays visible; membership unlocks the workshop details." required_tier_name=landing_tier_name gated_cta_url=landing_cta_url gated_cta_label=landing_cta_label gated_cta_testid="workshop-landing-upgrade-cta" %}
-    {% else %}
-      {# Two-pane player shell. On `<lg` viewports the cells stack in #}
-      {# DOM order — player → outline drawer trigger → tutorial body → #}
-      {# outline panel — so the spec's "player on top" rule holds #}
-      {# without `order-` tricks. On `lg+` the right pane (tutorial #}
-      {# body) is fixed in col 2 spanning both rows; the player and #}
-      {# outline auto-flow into col 1 in DOM order. The drawer trigger #}
-      {# cell vanishes (`lg:hidden`) so it doesn't reserve a grid row. #}
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-[20rem_1fr] lg:gap-8"
-           data-testid="workshop-player-grid">
+      {% else %}
 
-        {# Player pane — first on mobile, top-left on desktop. Omitted #}
-        {# entirely when the recording is missing or locked. #}
-        {% if has_recording and can_access_recording %}
-          <div class="min-w-0" data-testid="workshop-player-pane-cell">
-            {% include "content/_workshop_player_pane.html" %}
+      <!-- Action buttons block: video + tutorial cards and the GitHub
+           code repo button render immediately under the header so
+           returning visitors can jump into the content without scrolling
+           past the description. -->
+      <!-- Section nav: video + tutorial cards link out to the dedicated
+           pages. Each one shows its own access state so the visitor knows
+           up-front what they would be unlocking. -->
+      <div class="grid gap-4 sm:grid-cols-2 mb-12">
+        <!-- Video card -->
+        <a href="{% url 'workshop_video' workshop.slug %}"
+           class="group flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
+           data-testid="workshop-video-link">
+          <div class="mb-3 flex items-center gap-3">
+            <div class="rounded-lg bg-accent/10 p-2">
+              <i data-lucide="play" class="h-5 w-5 text-accent"></i>
+            </div>
+            <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">Watch the recording</h2>
           </div>
+          <p class="text-sm text-muted-foreground flex-1">
+            {% if can_access_recording %}
+              Full workshop video with timestamps and downloadable materials.
+            {% else %}
+              Recording available with {{ workshop.recording_required_level|required_tier_label }}.
+            {% endif %}
+          </p>
+          {% if not can_access_recording %}
+          <span class="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="workshop-video-locked">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            {{ workshop.recording_required_level|required_tier_label }}
+          </span>
+          {% endif %}
+        </a>
+
+        <!-- Tutorial card -->
+        {% if first_page %}
+        <a href="{{ first_page.get_absolute_url }}"
+           class="group flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
+           data-testid="workshop-tutorial-link">
+          <div class="mb-3 flex items-center gap-3">
+            <div class="rounded-lg bg-accent/10 p-2">
+              <i data-lucide="book-open" class="h-5 w-5 text-accent"></i>
+            </div>
+            <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">Follow the tutorial</h2>
+          </div>
+          {% comment %}
+            Issue #483: avoid the "0 pages" string when no pages exist
+            yet (the empty-state branch above handles that case but the
+            defensive check keeps the copy grammatical if a workshop
+            has the tutorial card forced on without pages).
+          {% endcomment %}
+          <p class="text-sm text-muted-foreground flex-1">
+            {% if pages|length %}{{ pages|length }} page{{ pages|length|pluralize }} of step-by-step instructions you can work through at your own pace.{% else %}Step-by-step instructions you can work through at your own pace.{% endif %}
+          </p>
+          {% if not can_access_pages %}
+          <span class="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="workshop-tutorial-locked">
+            <i data-lucide="lock" class="h-3 w-3"></i>
+            {{ workshop.pages_required_level|required_tier_label }}
+          </span>
+          {% endif %}
+        </a>
+        {% else %}
+        <div class="flex flex-col rounded-lg border border-dashed border-border bg-card/50 p-6">
+          <div class="mb-3 flex items-center gap-3">
+            <div class="rounded-lg bg-muted p-2">
+              <i data-lucide="book-open" class="h-5 w-5 text-muted-foreground"></i>
+            </div>
+            <h2 class="text-lg font-semibold text-muted-foreground">Lessons publishing soon</h2>
+          </div>
+          <p class="text-sm text-muted-foreground">Pages for this workshop are still being written. The newsletter announces each release.</p>
+        </div>
         {% endif %}
-
-        {# Outline drawer trigger + overlay — mobile only. The trigger #}
-        {# sits BETWEEN the player and the tutorial body in DOM order #}
-        {# so a tap-to-open is reachable without scroll past the body. #}
-        {# `lg:hidden` removes it from the grid on desktop. #}
-        <div class="lg:hidden" data-testid="workshop-outline-trigger-cell">
-          {% include "content/_workshop_outline_drawer_trigger.html" %}
-        </div>
-
-        {# Tutorial body — second on mobile, right column on desktop. #}
-        {# Spans both rows so it sits next to the player AND extends #}
-        {# down past the outline that auto-flows below it on the left. #}
-        <div class="min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2">
-          {% include "content/_workshop_tutorial_pane.html" %}
-        </div>
-
-        {# Outline panel — auto-placed into col 1 row 2 on desktop #}
-        {# (or row 1 col 1 when there's no player). On mobile the #}
-        {# panel itself is `hidden` (display:none) until the trigger #}
-        {# above pops it open as an off-canvas drawer; the surrounding #}
-        {# grid skips it so no empty row is reserved on mobile. #}
-        {% include "content/_workshop_outline_drawer_panel.html" %}
       </div>
 
-      {# Description — kept on the page below the player shell so the #}
-      {# SEO body is still indexable. Hidden when the workshop has no #}
-      {# tutorial pages and no description (avoids a stray empty block). #}
+      <!-- Code repo button -->
+      {% if workshop.code_repo_url %}
+      <div class="mb-12">
+        <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent"
+           data-testid="workshop-code-repo-link">
+          {% include 'includes/_icon_github.html' with css='h-4 w-4' %}
+          View code on GitHub
+          <i data-lucide="external-link" class="h-3 w-3"></i>
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- Description (always shown when landing is accessible) -->
       {% if workshop.description_html %}
-      <div class="prose prose-tight mt-12" data-testid="workshop-description">
+      <div class="prose prose-tight mb-12" data-testid="workshop-description">
         {{ workshop.description_html|safe }}
       </div>
       {% endif %}
 
-      {# Cross-link back to the linked event (if any) — preserved for #}
-      {# search-driven traffic that lands on the player surface. #}
+      <!-- Pages list (issue #296 ACs require this on the landing page). When
+           the user is below the pages gate the rows still render but link
+           into the page detail view, which shows the upgrade card. -->
+      {% if pages %}
+      <div class="mb-12" data-testid="workshop-pages-list">
+        <h2 class="text-2xl font-semibold tracking-tight mb-4">Tutorial pages</h2>
+        {% comment %}
+          Issue #527: list rows use the shared `_list_row.html` partial so
+          this card matches the reader sidebar drawer rows in
+          font-size, weight, color, padding, and inter-row gap. The
+          numbered marker variant keeps the existing accent badge.
+        {% endcomment %}
+        <ol class="space-y-0.5 rounded-lg border border-border bg-card p-1">
+          {% for page in pages %}
+          <li>
+            {% if not can_access_pages %}
+              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="number" marker_number=forloop.counter trailing_icon="lock" trailing_icon_testid="workshop-page-lock-icon" testid="workshop-page-row" %}
+            {% else %}
+              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="number" marker_number=forloop.counter testid="workshop-page-row" %}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+
+      <!-- Pages-level paywall (only when pages are gated). Surfaces a
+           single, prominent CTA so the visitor doesn't have to click into
+           a page to learn that they need to upgrade. Issue #571 fix:
+           when the gated reason is "authentication_required" (anonymous
+           on a registered wall) the view emits Sign-In-shaped context —
+           the partial below renders Sign In + Create-a-free-account
+           CTAs and no tier-required pill. -->
+      {% if not can_access_pages %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="workshop-pages-paywall" gated_icon="book-open" gated_heading=pages_cta_message gated_description=pages_gated_description required_tier_name=pages_required_tier_name gated_cta_url=pages_cta_url gated_cta_label=pages_cta_label gated_cta_testid="workshop-pages-upgrade-cta" signup_cta_url=pages_signup_cta_url signup_cta_label=pages_signup_cta_label %}
+      {% endif %}
+
+      <!-- Cross-link back to the linked event (if any) -->
       {% if event %}
       <div class="mt-12 rounded-lg border border-border bg-card p-5" data-testid="workshop-event-cross-link">
         <a href="{{ event.get_absolute_url }}"
@@ -141,18 +221,15 @@
         </a>
       </div>
       {% endif %}
-    {% endif %}
-  </div>
+
+      {% endif %}
+      {% endwith %}
+    </div>
+  </article>
 </main>
 {% include "includes/footer.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
 {% include "_partials/mermaid_script.html" %}
-{# Player JS — ONLY emitted when the user can play the recording. #}
-{# Locked users get zero player markup AND zero player JS, by design. #}
-{% if has_recording and can_access_recording %}
-<script src="{% static 'js/content/workshop_player.js' %}" defer
-        data-testid="workshop-player-script"></script>
-{% endif %}
 {% endblock %}

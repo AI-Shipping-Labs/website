@@ -124,57 +124,50 @@ class TestWatchBarRoundTrip:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
 
-        # Step 1: Land on Page C; expect the watch bar pointing at the
-        # new course-player layout (issue #618).
+        # Step 1: Land on Page C; expect the watch bar.
         page.goto(
             f'{django_server}/workshops/ws/tutorial/page-c',
             wait_until='domcontentloaded',
         )
         bar = page.locator('[data-testid="watch-this-section"]')
         assert bar.count() == 1, 'Watch bar should be visible on page C'
-        # Watch bar links into the new player layout (?page= + ?t=).
-        assert bar.get_attribute('href') == (
-            '/workshops/ws?page=page-c&t=16:00'
-        )
+        assert bar.get_attribute('href') == '/workshops/ws/video?t=16:00'
         assert 'Watch this section (16:00)' in bar.inner_text()
 
-        # Step 2: Click the watch bar; lands on the player layout with
-        # data-start-seconds=960 on the player shell.
+        # Step 2: Click the watch bar; assert URL + start=960 propagation.
         bar.click()
         page.wait_for_load_state('domcontentloaded')
-        assert page.url == (
-            f'{django_server}/workshops/ws?page=page-c&t=16:00'
-        )
-        shell = page.locator('#workshop-player-shell')
-        assert shell.get_attribute('data-start-seconds') == '960'
-        # Active tutorial in the right pane is page-c.
-        active_pane = page.locator('[data-testid="workshop-tutorial-pane"]')
-        assert active_pane.get_attribute('data-page-slug') == 'page-c'
+        assert page.url.endswith('/workshops/ws/video?t=16:00')
 
-        # Step 3: The chapter outline lists ALL chapter timestamps from the
-        # recording (3 in our fixture: 0:00, 8:30, 16:00). Rows whose
-        # seconds match a tutorial page's video_start carry a
-        # ``data-tutorial-slug`` attribute that the player JS uses to
-        # swap the right pane on click; the unmatched 8:30 row is a
-        # plain seek-only chapter button (no tutorial slug attribute).
-        chapters = page.locator('[data-testid="workshop-chapter-row"]')
-        assert chapters.count() == 3
-        page_b_chapter = page.locator(
-            '[data-testid="workshop-chapter-row"]'
-            '[data-tutorial-slug="page-b"]'
+        body = page.content()
+        # YouTube playerVars.start is rendered with the parsed seconds.
+        assert 'start: 960' in body, (
+            'Expected start: 960 in playerVars when ?t=16:00'
         )
-        page_c_chapter = page.locator(
-            '[data-testid="workshop-chapter-row"]'
-            '[data-tutorial-slug="page-c"]'
+
+        # Step 3: The timestamps panel renders inverse links for matched rows.
+        ts_panel = page.locator('[data-testid="video-chapters"]')
+        assert ts_panel.count() == 1
+        ts_panel.locator('summary').click()
+        # Two tutorial sub-links (0:00 -> page B, 16:00 -> page C).
+        tutorial_links = page.locator(
+            '[data-testid="timestamp-tutorial-link"]'
         )
-        assert page_b_chapter.count() == 1
-        assert page_c_chapter.count() == 1
-        # The unmatched 8:30 row is rendered without a tutorial slug.
-        unmapped_chapter = page.locator(
-            '[data-testid="workshop-chapter-row"][data-time-seconds="510"]'
+        assert tutorial_links.count() == 2
+
+        # Step 4: Click the Page B sub-link (the 0:00 chapter) and land
+        # on Page B with the watch bar reading "0:00".
+        page_b_link = page.locator(
+            '[data-testid="timestamp-tutorial-link"]'
+            '[href="/workshops/ws/tutorial/page-b"]'
         )
-        assert unmapped_chapter.count() == 1
-        assert unmapped_chapter.get_attribute('data-tutorial-slug') is None
+        assert page_b_link.count() == 1
+        page_b_link.click()
+        page.wait_for_load_state('domcontentloaded')
+        assert page.url.endswith('/workshops/ws/tutorial/page-b')
+        bar = page.locator('[data-testid="watch-this-section"]')
+        assert bar.count() == 1
+        assert 'Watch this section (0:00)' in bar.inner_text()
 
         ctx.close()
 
@@ -234,27 +227,16 @@ class TestVideoDeepLink:
 
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
-        # Issue #618: /video?t= 301-redirects to the player layout
-        # preserving the ?t= param.
         page.goto(
             f'{django_server}/workshops/ws/video?t=16:00',
             wait_until='domcontentloaded',
         )
-        # End URL is the new player layout with ?t=16:00. The view uses
-        # urllib.parse.urlencode which is standards-conformant and
-        # percent-encodes the ``:`` in the value, so accept both the
-        # literal and the encoded form.
-        assert page.url in (
-            f'{django_server}/workshops/ws?t=16:00',
-            f'{django_server}/workshops/ws?t=16%3A00',
-        )
-        # Player shell carries data-start-seconds=960.
-        shell = page.locator('#workshop-player-shell')
-        assert shell.get_attribute('data-start-seconds') == '960'
-        # Recording outline still renders.
-        assert page.locator(
-            '[data-testid="workshop-outline-recording"]',
-        ).count() == 1
+        body = page.content()
+        # YouTube playerVars.start carries the parsed seconds.
+        assert 'start: 960' in body
+        # The timestamps panel still renders (?t= doesn't suppress it).
+        assert 'data-testid="video-chapters"' in body
+
         ctx.close()
 
     def test_malformed_t_does_not_break_page(
@@ -266,14 +248,13 @@ class TestVideoDeepLink:
 
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
-        # The redirect strips known-bad input; the player layout falls
-        # back to no start position.
         response = page.goto(
             f'{django_server}/workshops/ws/video?t=not-a-time',
             wait_until='domcontentloaded',
         )
         assert response is not None and response.status == 200
-        # No data-start-seconds attribute when ?t= was unparseable.
-        shell = page.locator('#workshop-player-shell')
-        assert shell.get_attribute('data-start-seconds') is None
+        body = page.content()
+        # No start parameter rendered when ?t= was unparseable.
+        assert 'start:' not in body
+
         ctx.close()

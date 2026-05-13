@@ -36,6 +36,7 @@ from content.access import (
 from content.models import Workshop, WorkshopPage
 from content.services import completion as completion_service
 from content.templatetags.video_utils import (
+    append_query_param,
     detect_video_source,
     format_timestamp,
     get_video_thumbnail_url,
@@ -217,296 +218,25 @@ def _build_landing_context(workshop, user):
 
 
 def workshop_detail(request, slug):
-    """Course-player layout (issue #618).
+    """Landing page: description, metadata, links to video and tutorial.
 
-    Replaces the legacy three-route layout (landing card -> video page ->
-    tutorial page) with a single unified player shell:
-
-    - Left pane: chapter outline ("Recording outline"), tutorial pages
-      TOC, and materials. Same component for locked and unlocked.
-    - Right pane: the active tutorial page body, plus the per-section
-      ``📽`` badges that anchor to the recording chapter timestamps.
-    - Player iframe: rendered ONLY when the user can access the recording.
-      Locked users get the same outline + tutorial pane but no player and
-      no JS module — the only upsell surface is a discreet
-      ``🔒 Recording · Get Premium`` link in the header strip.
-
-    URL contract:
-    - ``?page=<slug>`` selects the active tutorial (default = first).
-    - ``?t=<seconds>`` is forwarded to the player as the start position.
-    - ``?_partial=1`` returns only the tutorial-pane body so the JS
-      module can swap the right pane without a full reload.
+    The landing is always rendered for SEO — anonymous visitors see title
+    and description even when ``landing_required_level > 0``, with the
+    body replaced by an upgrade card.
     """
     workshop = _resolve_workshop(slug)
     user = request.user
-    event = workshop.event
 
     pages = list(workshop.pages.all().order_by('sort_order'))
     first_page = pages[0] if pages else None
 
-    # Resolve the active page from ?page=<slug>; fall back to the first
-    # tutorial. Unknown slugs silently fall back too — better UX than
-    # 404'ing on a stale deep link.
-    active_slug = (request.GET.get('page') or '').strip()
-    active_page = None
-    if active_slug:
-        active_page = next(
-            (p for p in pages if p.slug == active_slug), None,
-        )
-    if active_page is None:
-        active_page = first_page
-
     context = _build_landing_context(workshop, user)
-    can_access_recording = context['can_access_recording']
-
-    # Player config: only built when we'll actually render the iframe.
-    # For locked users every value below stays at its default (empty /
-    # None) so the template branches cleanly omit the script tag and
-    # the iframe markup.
-    player_start_seconds = None
-    video_id = None
-    video_source_type = None
-    embed_url = None
-    timestamps_with_pages = []
-    has_recording = bool(event and event.has_recording)
-
-    if event and event.timestamps:
-        timestamps_with_pages = _build_timestamps_with_pages(event, workshop)
-
-    if can_access_recording and event and event.recording_url:
-        raw_t = request.GET.get('t', '')
-        if raw_t:
-            try:
-                player_start_seconds = parse_video_timestamp(raw_t)
-            except ValueError:
-                # Plain integer fallback ("?t=754") — the player_pane JS
-                # accepts both shapes and we want both to work for deep
-                # links from external sources.
-                try:
-                    player_start_seconds = int(raw_t)
-                    if player_start_seconds < 0:
-                        player_start_seconds = None
-                except (TypeError, ValueError):
-                    player_start_seconds = None
-
-        video_source_type, video_id = detect_video_source(
-            event.recording_url,
-        )
-        # Build a plain (non-API) embed URL so the template can lazy-load
-        # the iframe via the JS module rather than mounting it on initial
-        # paint. The JS module hydrates the YouTube IFrame API on first
-        # interaction (saves a third-party request for read-only visits).
-        if video_source_type == 'youtube' and video_id:
-            embed_url = (
-                f'https://www.youtube.com/embed/{video_id}?enablejsapi=1'
-            )
-            if player_start_seconds:
-                embed_url = (
-                    f'{embed_url}&start={player_start_seconds}'
-                )
-        elif video_source_type == 'loom' and video_id:
-            embed_url = f'https://www.loom.com/embed/{video_id}'
-            if player_start_seconds:
-                embed_url = f'{embed_url}?t={player_start_seconds}'
-
-    # Per-tutorial-page chapter badge map. For each page, find the
-    # chapter timestamp(s) that fall in the page's video window
-    # ``[page.video_start, next_page.video_start)``. The first matching
-    # chapter becomes the page's primary ``📽 HH:MM:SS`` badge; the rest
-    # render as inline badges next to a "In this section" footer.
-    page_badges = _build_page_badges(pages, timestamps_with_pages)
-
-    # Tutorial body for the right pane. ``_build_tutorial_pane_context``
-    # mirrors the per-page state ``workshop_page_detail`` already builds
-    # so the partial branches the same way for locked tutorials, the
-    # bottom prev/next nav, and the per-page lock indicators.
-    tutorial_pane_ctx = _build_tutorial_pane_context(
-        request, workshop, pages, active_page,
-    )
-
-    # Active chapter selection. Used by the outline partial to render the
-    # "now playing" highlight on the chapter row that lines up with the
-    # active tutorial page (server-side default; the JS module updates
-    # the highlight as the player advances).
-    active_chapter_seconds = None
-    if active_page and active_page.video_start:
-        try:
-            active_chapter_seconds = parse_video_timestamp(
-                active_page.video_start,
-            )
-        except ValueError:
-            active_chapter_seconds = None
-
-    has_tutorials = bool(pages)
-
     context.update({
         'pages': pages,
         'first_page': first_page,
-        'active_page': active_page,
-        'event': event,
-        'has_recording': has_recording,
-        'has_tutorials': has_tutorials,
-        # Player config (empty when locked or when no recording).
-        'player_video_id': video_id,
-        'player_source_type': video_source_type,
-        'player_embed_url': embed_url,
-        'player_start_seconds': player_start_seconds,
-        'recording_timestamps': timestamps_with_pages,
-        'timestamps_with_pages': timestamps_with_pages,
-        'active_chapter_seconds': active_chapter_seconds,
-        # Per-page badge map: {page_slug: {primary, extras}}.
-        'page_badges': page_badges,
-        'active_page_badges': page_badges.get(
-            active_page.slug, {'primary': None, 'extras': []},
-        ) if active_page else {'primary': None, 'extras': []},
-        # Tutorial pane context (gated body, prev/next, etc.).
-        **tutorial_pane_ctx,
+        'event': workshop.event,
     })
-
-    # ?_partial=1: return the tutorial pane body block only so the JS
-    # module can swap ``#workshop-tutorial-pane.innerHTML`` without a
-    # full page reload. Used by chapter-click and tutorial-page-click
-    # handlers in ``workshop_player.js``.
-    if request.GET.get('_partial') == '1':
-        return render(
-            request, 'content/_workshop_tutorial_pane.html', context,
-        )
-
     return render(request, 'content/workshop_detail.html', context)
-
-
-def _build_page_badges(pages, timestamps_with_pages):
-    """Compute the ``📽`` badge for each tutorial page.
-
-    Each page's badge is the chapter timestamp that exact-matches the
-    page's ``video_start`` (the canonical anchor). When multiple chapter
-    timestamps fall inside the page's video window
-    ``[page.video_start, next_page.video_start)``, the first match is the
-    primary badge and the rest render as inline ``extras`` next to an
-    "In this section" footer in the tutorial pane.
-    """
-    if not pages or not timestamps_with_pages:
-        return {}
-
-    # Pre-parse each page's start in seconds so we don't reparse on every
-    # chapter row. Pages without a video_start get a ``None`` start — they
-    # don't anchor a window and only their exact-matching chapter (if
-    # any) becomes their primary badge.
-    page_starts = []
-    for p in pages:
-        secs = None
-        if p.video_start:
-            try:
-                secs = parse_video_timestamp(p.video_start)
-            except ValueError:
-                secs = None
-        page_starts.append(secs)
-
-    badges = {}
-    for idx, page in enumerate(pages):
-        start = page_starts[idx]
-        end = None
-        # Walk forward to find the next page that has a parsed start.
-        # That forms the upper bound (exclusive) of this page's window.
-        for nxt in page_starts[idx + 1:]:
-            if nxt is not None:
-                end = nxt
-                break
-
-        primary = None
-        extras = []
-        if start is None:
-            # Without a window the page only owns chapters that explicitly
-            # link to it via _build_timestamps_with_pages's exact-match.
-            for ts in timestamps_with_pages:
-                tp = ts.get('tutorial_page')
-                if tp is not None and tp.pk == page.pk:
-                    if primary is None:
-                        primary = ts
-                    else:
-                        extras.append(ts)
-        else:
-            for ts in timestamps_with_pages:
-                tsec = ts['time_seconds']
-                if tsec < start:
-                    continue
-                if end is not None and tsec >= end:
-                    continue
-                if primary is None:
-                    primary = ts
-                else:
-                    extras.append(ts)
-
-        badges[page.slug] = {'primary': primary, 'extras': extras}
-    return badges
-
-
-def _build_tutorial_pane_context(request, workshop, pages, active_page):
-    """Build the right-pane context for the player-shell layout.
-
-    Mirrors the per-page state ``workshop_page_detail`` already produces
-    (gating, prev/next, completion, watch-bar) so the new partial can be
-    reused on both surfaces. ``active_page`` may be ``None`` when the
-    workshop has zero tutorial pages — the partial then renders an empty
-    state rather than a body.
-    """
-    if active_page is None:
-        return {
-            'page': None,
-            'prev_page': None,
-            'next_page': None,
-            'is_gated': False,
-            'is_completed': False,
-            'completed_page_ids': set(),
-            'show_watch_bar_player_shell': False,
-            'page_video_start_seconds': None,
-        }
-
-    idx = pages.index(active_page)
-    prev_page = pages[idx - 1] if idx > 0 else None
-    next_page = pages[idx + 1] if idx + 1 < len(pages) else None
-
-    page_can_access = workshop.user_can_access_pages(
-        request.user, page=active_page,
-    )
-    is_gated = not page_can_access
-
-    can_access_recording = workshop.user_can_access_recording(request.user)
-    show_watch_bar_player_shell = (
-        bool(active_page.video_start)
-        and can_access_recording
-        and not is_gated
-    )
-    page_video_start_seconds = None
-    if active_page.video_start:
-        try:
-            page_video_start_seconds = parse_video_timestamp(
-                active_page.video_start,
-            )
-        except ValueError:
-            page_video_start_seconds = None
-
-    is_completed = (
-        request.user.is_authenticated
-        and not is_gated
-        and completion_service.is_completed(request.user, active_page)
-    )
-    completed_page_ids = (
-        completion_service.completed_ids_for(request.user, pages)
-        if request.user.is_authenticated and not is_gated
-        else set()
-    )
-
-    return {
-        'page': active_page,
-        'prev_page': prev_page,
-        'next_page': next_page,
-        'is_gated': is_gated,
-        'is_completed': is_completed,
-        'completed_page_ids': completed_page_ids,
-        'show_watch_bar_player_shell': show_watch_bar_player_shell,
-        'page_video_start_seconds': page_video_start_seconds,
-    }
 
 
 def _build_timestamps_with_pages(event, workshop):
@@ -575,23 +305,200 @@ def _build_timestamps_with_pages(event, workshop):
 
 
 def workshop_video(request, slug):
-    """Issue #618 — legacy ``/workshops/<slug>/video`` 301 redirects to
-    the new course-player layout at ``/workshops/<slug>``.
+    """Video page: embedded recording + materials, gated by recording level.
 
-    Preserves the ``?t=`` deep link so old chapter-link emails / shared
-    URLs land on the right timestamp inside the new player. The legacy
-    body below is dead code retained only to keep the imports stable;
-    the function returns the redirect before reaching it.
+    Lifted from the recording panel in ``templates/events/event_detail.html``
+    so the video, timestamps, and materials render with the same player
+    component used everywhere else on the site.
+
+    When loaded with a ``?t=MM:SS`` query string and the user has access
+    to the recording, the embed is initialised at that offset. Each
+    timestamp on the page that exact-matches a tutorial page's
+    ``video_start`` shows a "-> Tutorial: <title>" sub-link.
     """
-    # Resolve the workshop first so an unknown slug or a draft still
-    # 404s — we never want a 301 chain that ends in a 404 (bad SEO and
-    # bad UX for the visitor who sees a flash of redirect then nothing).
     workshop = _resolve_workshop(slug)
-    target_url = workshop.get_absolute_url()
-    raw_t = (request.GET.get('t') or '').strip()
-    if raw_t:
-        target_url = f'{target_url}?{urlencode({"t": raw_t})}'
-    return HttpResponsePermanentRedirect(target_url)
+    user = request.user
+
+    context = _build_landing_context(workshop, user)
+    event = workshop.event
+    context['event'] = event
+
+    # Only parse ?t= and build the inverse-link map when the user can
+    # actually watch the recording. Below the gate the player isn't
+    # rendered, so any work here is wasted (and the spec calls this out
+    # explicitly: "no ?t= parsing happens" when the paywall renders).
+    embed_start_seconds = None
+    timestamps_with_pages = []
+    video_id = None
+    video_source_type = None
+    recording_embed_url_with_start = ''
+
+    if context['can_access_recording'] and event:
+        raw_t = request.GET.get('t', '')
+        if raw_t:
+            try:
+                embed_start_seconds = parse_video_timestamp(raw_t)
+            except ValueError:
+                # Malformed ?t= silently ignored — the page still
+                # renders 200 and the embed plays from 0.
+                embed_start_seconds = None
+
+        timestamps_with_pages = _build_timestamps_with_pages(event, workshop)
+
+        if event.recording_url:
+            video_source_type, video_id = detect_video_source(
+                event.recording_url,
+            )
+
+        # Build the start-augmented embed URL for the legacy iframe path.
+        if event.recording_embed_url:
+            recording_embed_url_with_start = append_query_param(
+                event.recording_embed_url,
+                'start',
+                embed_start_seconds,
+            )
+
+    context.update({
+        'embed_start_seconds': embed_start_seconds,
+        'recording_timestamps': timestamps_with_pages,
+        'timestamps_with_pages': timestamps_with_pages,
+        'video_id': video_id,
+        'video_source_type': video_source_type,
+        'recording_embed_url_with_start': recording_embed_url_with_start,
+    })
+
+    status = 200
+    # Build teaser context only when the recording gate trips and the
+    # landing gate didn't (a landing-failed visitor sees a wholesale
+    # paywall, not a teaser). Mirrors the workshop_page_detail logic.
+    is_recording_gated = (
+        context['can_access_landing'] and not context['can_access_recording']
+    )
+    if is_recording_gated:
+        gated_extras, gated_status = _build_video_gated_context(
+            request, workshop, event,
+        )
+        context.update(gated_extras)
+        status = gated_status
+
+    return render(
+        request, 'content/workshop_video.html', context, status=status,
+    )
+
+
+def _build_video_gated_context(request, workshop, event):
+    """Build the teaser / sign-in context for a recording-gated workshop.
+
+    Returns ``(context_extras, http_status)``. Status is 200 for the
+    unverified-email path and 403 otherwise.
+    """
+    user = request.user
+    video_url = f'{workshop.get_absolute_url()}/video'
+    gated_reason = _gated_reason_for_level(
+        user, workshop.recording_required_level,
+    )
+
+    if gated_reason == 'unverified_email':
+        return (
+            {
+                'gated_reason': 'unverified_email',
+                **build_verify_email_context(user),
+            },
+            200,
+        )
+
+    # Locked-video thumbnail. Skip when there's no recording yet — the
+    # template falls back to the existing "Recording not available yet"
+    # card so we don't tease something that doesn't exist.
+    has_video = False
+    video_thumbnail_url = None
+    if event and event.recording_url:
+        thumb = get_video_thumbnail_url(event.recording_url)
+        if thumb:
+            has_video = True
+            video_thumbnail_url = thumb
+
+    # Description-driven teaser body (workshop has no separate longer
+    # body; the description is the source). Empty descriptions fall
+    # through to the bare paywall card.
+    teaser_body_html = None
+    if workshop.description_html:
+        teaser_body_html = truncate_to_words(
+            workshop.description_html, TEASER_WORD_LIMIT,
+        )
+
+    # First three timestamp labels as a teaser list (no clickable links
+    # — teaser only). The legacy timestamps may be ``{time, label}`` or
+    # ``{time_seconds, label}``; tolerate both shapes.
+    teaser_timestamps = []
+    if event and event.timestamps:
+        for ts in event.timestamps[:3]:
+            if not isinstance(ts, dict):
+                continue
+            label = ts.get('label') or ts.get('title') or ''
+            if label:
+                teaser_timestamps.append(label)
+
+    recording_tier_name = get_required_tier_name(
+        workshop.recording_required_level,
+    )
+    next_qs = urlencode({'next': video_url})
+
+    if gated_reason == 'authentication_required':
+        gated_heading = 'Sign in to watch this recording'
+        gated_description = (
+            'This recording is free with a free account. Sign in or '
+            'create one in seconds.'
+        )
+        gated_cta_url = f'/accounts/login/?{next_qs}'
+        gated_cta_label = 'Sign In'
+        signup_cta_url = f'/accounts/signup/?{next_qs}'
+        signup_cta_label = 'Create a free account'
+        required_tier_name = ''
+        current_user_state = ''
+    else:
+        gated_heading = (
+            f'Upgrade to {recording_tier_name} to watch the recording'
+        )
+        gated_description = (
+            'Unlock the full recording, timestamps, and downloadable '
+            'materials with a membership.'
+        )
+        gated_cta_url = '/pricing'
+        gated_cta_label = 'View Pricing'
+        required_tier_name = recording_tier_name
+        current_user_state = ''
+        if user.is_authenticated:
+            current_user_state = (
+                f'Current access: {get_required_tier_name(get_user_level(user))} member'
+            )
+        signup_cta_url = ''
+        signup_cta_label = ''
+        if not user.is_authenticated:
+            signup_cta_url = f'/accounts/signup/?{next_qs}'
+            signup_cta_label = 'Create a free account'
+
+    return (
+        {
+            'gated_reason': gated_reason,
+            'teaser_body_html': teaser_body_html,
+            'video_thumbnail_url': video_thumbnail_url,
+            'has_video': has_video,
+            'teaser_timestamps': teaser_timestamps,
+            'signup_cta_url': signup_cta_url,
+            'signup_cta_label': signup_cta_label,
+            'gated_card_testid': 'video-paywall',
+            'gated_icon': 'play',
+            'gated_heading': gated_heading,
+            'gated_description': gated_description,
+            'required_tier_name': required_tier_name,
+            'current_user_state': current_user_state,
+            'gated_cta_url': gated_cta_url,
+            'gated_cta_label': gated_cta_label,
+            'gated_cta_testid': 'video-upgrade-cta',
+        },
+        403,
+    )
 
 
 def workshop_page_detail(request, slug, page_slug):
@@ -639,25 +546,13 @@ def workshop_page_detail(request, slug, page_slug):
         and not is_gated
     )
     if show_watch_bar:
-        # Issue #618: the standalone tutorial page links into the new
-        # course-player layout (the `/video` route is retired and 301s
-        # back to the player anyway). The ``?page=`` query selects the
-        # active tutorial in the player so the right pane lands on this
-        # exact tutorial; ``?t=`` seeks the player.
+        # Same-tab link (no target=_blank) so the user lands on the
+        # video page in the normal navigation flow.
         watch_bar_url = (
-            f'{workshop.get_absolute_url()}'
-            f'?page={page.slug}&t={page.video_start}'
+            f'{workshop.get_absolute_url()}/video?t={page.video_start}'
         )
     else:
         watch_bar_url = ''
-
-    # Issue #618: "View in player" bridge link from the standalone
-    # tutorial route to the new course-player layout. Always rendered
-    # (even when the user lacks recording access — the player layout
-    # then shows the same tutorial body without a player iframe).
-    view_in_player_url = (
-        f'{workshop.get_absolute_url()}?page={page.slug}'
-    )
 
     # Issue #365 — server-rendered completion state powers both the
     # initial button styling and the "still completed after reload"
@@ -684,7 +579,6 @@ def workshop_page_detail(request, slug, page_slug):
         'show_watch_bar': show_watch_bar,
         'watch_bar_url': watch_bar_url,
         'watch_bar_label': page.video_start,
-        'view_in_player_url': view_in_player_url,
         'is_completed': is_completed,
         'completed_page_ids': completed_page_ids,
         'user_authenticated': request.user.is_authenticated,

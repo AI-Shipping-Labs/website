@@ -3,6 +3,7 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import requests
 from django.test import TestCase, override_settings
 
 from content.models import Article
@@ -178,7 +179,7 @@ class PostSlackAnnouncementTest(TestCase):
 
     @patch('notifications.services.slack_announcements.requests.post')
     def test_returns_false_on_exception(self, mock_post):
-        mock_post.side_effect = Exception('Network error')
+        mock_post.side_effect = requests.exceptions.Timeout('Network error')
         article = Article.objects.create(
             title='Exception Article', slug='test-exception',
             date=date(2025, 1, 1),
@@ -194,6 +195,66 @@ class PostSlackAnnouncementTest(TestCase):
             result = post_slack_announcement('article', article)
 
         self.assertFalse(result)
+
+    @patch('notifications.services.slack_announcements.requests.post')
+    def test_returns_false_on_invalid_json(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.side_effect = ValueError('invalid json')
+        mock_post.return_value = mock_response
+
+        article = Article.objects.create(
+            title='Invalid Json Article',
+            slug='test-invalid-json',
+            date=date(2025, 1, 1),
+        )
+        with (
+            self.settings(
+                SLACK_ENVIRONMENT='production',
+                SLACK_BOT_TOKEN='xoxb-test',
+                SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123',
+            ),
+            self.assertLogs(
+                'notifications.services.slack_announcements',
+                level='ERROR',
+            ) as logs,
+        ):
+            result = post_slack_announcement('article', article)
+
+        self.assertFalse(result)
+        self.assertIn(
+            'Slack announcement returned invalid JSON for article',
+            '\n'.join(logs.output),
+        )
+
+    @patch('notifications.services.slack_announcements.requests.post')
+    def test_returns_false_on_malformed_json_shape(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = []
+        mock_post.return_value = mock_response
+
+        article = Article.objects.create(
+            title='Malformed Json Article',
+            slug='test-malformed-json',
+            date=date(2025, 1, 1),
+        )
+        with (
+            self.settings(
+                SLACK_ENVIRONMENT='production',
+                SLACK_BOT_TOKEN='xoxb-test',
+                SLACK_ANNOUNCEMENTS_CHANNEL_ID='C123',
+            ),
+            self.assertLogs(
+                'notifications.services.slack_announcements',
+                level='WARNING',
+            ) as logs,
+        ):
+            result = post_slack_announcement('article', article)
+
+        self.assertFalse(result)
+        self.assertIn(
+            'Slack announcement returned malformed JSON for article',
+            '\n'.join(logs.output),
+        )
 
 
 @override_settings(SITE_BASE_URL='https://env.example.com')

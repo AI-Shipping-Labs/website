@@ -128,18 +128,33 @@ def post_slack_announcement(content_type, content):
             },
             timeout=10,
         )
-
-        data = response.json()
-        if not data.get('ok'):
-            logger.warning(
-                'Slack announcement failed for %s: %s',
-                content_type, data.get('error', 'unknown'),
-            )
-            return False
-
-        logger.info('Posted Slack announcement for %s: %s', content_type, content.title)
-        return True
-
-    except Exception:
+    except requests.exceptions.RequestException:
         logger.exception('Failed to post Slack announcement for %s', content_type)
         return False
+
+    try:
+        data = response.json()
+    except ValueError:
+        logger.exception(
+            'Slack announcement returned invalid JSON for %s',
+            content_type,
+        )
+        return False
+
+    if not isinstance(data, dict):
+        logger.warning(
+            'Slack announcement returned malformed JSON for %s',
+            content_type,
+        )
+        return False
+
+    if not data.get('ok'):
+        logger.warning(
+            'Slack announcement failed for %s: %s',
+            content_type,
+            data.get('error', 'unknown'),
+        )
+        return False
+
+    logger.info('Posted Slack announcement for %s: %s', content_type, content.title)
+    return True

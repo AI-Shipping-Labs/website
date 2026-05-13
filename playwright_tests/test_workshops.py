@@ -472,12 +472,13 @@ class TestWorkshopSitemap:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestWorkshopActionButtonsBelowTutorialPages:
+class TestWorkshopActionsBelowTutorialPages:
     def test_action_buttons_render_below_description_and_pages_list(
         self, browser, django_server,
     ):
-        """Visitor with access sees video / tutorial / GitHub buttons
-        below the README description and tutorial pages list."""
+        """Visitor with access sees recording / GitHub actions below the
+        README description and tutorial pages list, without a duplicate
+        tutorial card."""
         _clear_workshops()
         _create_workshop(
             slug='ws',
@@ -500,7 +501,9 @@ class TestWorkshopActionButtonsBelowTutorialPages:
             '[data-testid="workshop-title"]',
         ).count() == 1
 
-        # All action buttons present.
+        # Recording + GitHub actions are present; the old duplicate
+        # tutorial CTA is intentionally absent because the page list is
+        # the tutorial navigation.
         video_link = page.locator('[data-testid="workshop-video-link"]')
         tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
         repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
@@ -508,20 +511,18 @@ class TestWorkshopActionButtonsBelowTutorialPages:
         pages_list = page.locator('[data-testid="workshop-pages-list"]')
 
         assert video_link.count() == 1
-        assert tutorial_link.count() == 1
+        assert tutorial_link.count() == 0
         assert repo_link.count() == 1
         assert description.count() == 1
         assert pages_list.count() == 1
 
         # Compare DOM order via vertical position.
         video_box = video_link.bounding_box()
-        tutorial_box = tutorial_link.bounding_box()
         repo_box = repo_link.bounding_box()
         description_box = description.bounding_box()
         pages_box = pages_list.bounding_box()
 
         assert video_box is not None
-        assert tutorial_box is not None
         assert repo_box is not None
         assert description_box is not None
         assert pages_box is not None
@@ -529,7 +530,6 @@ class TestWorkshopActionButtonsBelowTutorialPages:
         # Description and tutorial page list are read before action cards.
         assert description_box['y'] < pages_box['y']
         assert pages_box['y'] < video_box['y']
-        assert pages_box['y'] < tutorial_box['y']
         # The code link is grouped under the recording card.
         assert video_box['y'] < repo_box['y']
 
@@ -564,25 +564,23 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
         repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
         assert repo_link.count() == 0
 
-        # Video + tutorial cards still render below the description.
+        # Video card still renders below the description, while the
+        # duplicate tutorial card remains absent.
         video_link = page.locator('[data-testid="workshop-video-link"]')
         tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
         description = page.locator('[data-testid="workshop-description"]')
 
         assert video_link.count() == 1
-        assert tutorial_link.count() == 1
+        assert tutorial_link.count() == 0
         assert description.count() == 1
 
         video_box = video_link.bounding_box()
-        tutorial_box = tutorial_link.bounding_box()
         description_box = description.bounding_box()
 
         assert video_box is not None
-        assert tutorial_box is not None
         assert description_box is not None
 
         assert description_box['y'] < video_box['y']
-        assert description_box['y'] < tutorial_box['y']
 
         # No empty wrapper sits where the repo button used to be: the
         # template gates the entire `<div class="mb-12">…</div>` wrapper

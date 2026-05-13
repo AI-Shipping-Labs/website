@@ -180,9 +180,12 @@ class TestAdminUpgradesFreeMemberInline:
         assert 'free@test.com' in body
         assert 'Main' in body
 
-        # 6. Tier row now shows Main (override) with the Override badge.
+        # 6. Tier row now shows Main as a tier pill with a separate Override badge.
         tier_cell = page.locator('[data-testid="user-detail-tier"]')
-        assert 'Main (override)' in tier_cell.inner_text()
+        assert '(override)' not in tier_cell.inner_text()
+        tier_pill = page.locator('[data-testid="user-detail-tier-pill"]')
+        assert tier_pill.inner_text().strip() == 'Main'
+        assert tier_pill.get_attribute('data-tier') == 'main'
         badge = page.locator('[data-testid="user-detail-tier-badge"]')
         assert badge.get_attribute('data-tier-source') == 'override'
         assert 'Override' in badge.inner_text()
@@ -231,9 +234,12 @@ class TestAdminRevokesActiveOverride:
             wait_until='domcontentloaded',
         )
 
-        # Tier row shows Main (override) with the Override badge.
+        # Tier row shows Main as a tier pill with a separate Override badge.
         tier_cell = page.locator('[data-testid="user-detail-tier"]')
-        assert 'Main (override)' in tier_cell.inner_text()
+        assert '(override)' not in tier_cell.inner_text()
+        tier_pill = page.locator('[data-testid="user-detail-tier-pill"]')
+        assert tier_pill.inner_text().strip() == 'Main'
+        assert tier_pill.get_attribute('data-tier') == 'main'
         badge = page.locator('[data-testid="user-detail-tier-badge"]')
         assert badge.get_attribute('data-tier-source') == 'override'
 
@@ -404,7 +410,12 @@ class TestReplaceExistingOverride:
         )
         # Active override visible.
         tier_cell = page.locator('[data-testid="user-detail-tier"]')
-        assert 'Basic (override)' in tier_cell.inner_text()
+        assert '(override)' not in tier_cell.inner_text()
+        tier_pill = page.locator('[data-testid="user-detail-tier-pill"]')
+        assert tier_pill.inner_text().strip() == 'Basic'
+        assert tier_pill.get_attribute('data-tier') == 'basic'
+        badge = page.locator('[data-testid="user-detail-tier-badge"]')
+        assert badge.get_attribute('data-tier-source') == 'override'
         # Create form NOT rendered while an active override exists.
         assert page.locator(
             '[data-testid="user-detail-tier-override-form"]',
@@ -455,7 +466,12 @@ class TestReplaceExistingOverride:
         assert basic_rows[0].is_active is False
 
         tier_cell = page.locator('[data-testid="user-detail-tier"]')
-        assert 'Main (override)' in tier_cell.inner_text()
+        assert '(override)' not in tier_cell.inner_text()
+        tier_pill = page.locator('[data-testid="user-detail-tier-pill"]')
+        assert tier_pill.inner_text().strip() == 'Main'
+        assert tier_pill.get_attribute('data-tier') == 'main'
+        badge = page.locator('[data-testid="user-detail-tier-badge"]')
+        assert badge.get_attribute('data-tier-source') == 'override'
 
         context.close()
 

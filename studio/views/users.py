@@ -174,7 +174,7 @@ def _effective_tier_level(user, override=None):
 
 
 def _effective_tier_name(user, override=None):
-    """Return a human-readable tier label, including active overrides."""
+    """Return the effective tier label without provenance suffixes."""
     base_name = user.tier.name if user.tier_id else 'Free'
     if override is None:
         return base_name
@@ -183,7 +183,20 @@ def _effective_tier_name(user, override=None):
     override_level = override.override_tier.level
     if override_level <= base_level:
         return base_name
-    return f'{override.override_tier.name} (override)'
+    return override.override_tier.name
+
+
+def _effective_tier_slug(user, override=None):
+    """Return the effective tier slug for Studio pill colour mapping."""
+    base_slug = user.tier.slug if user.tier_id else 'free'
+    if override is None:
+        return base_slug
+
+    base_level = _base_tier_level(user)
+    override_level = override.override_tier.level
+    if override_level <= base_level:
+        return base_slug
+    return override.override_tier.slug
 
 
 def _matches_filter(user, active_filter, override=None):
@@ -300,6 +313,8 @@ def _build_user_listing(active_filter, search, tag_filter='', slack_filter=DEFAU
             'unsubscribed': user.unsubscribed,
             'email_verified': user.email_verified,
             'tier_name': _effective_tier_name(user, override),
+            'tier_slug': _effective_tier_slug(user, override),
+            'tier_source': _tier_source(user, override is not None),
             'status': _user_status(user),
             'tags': tags,
             'visible_tags': tags[:USER_LIST_TAG_LIMIT],
@@ -508,9 +523,12 @@ def user_export_csv(request):
         'slack',
     ])
     for row in user_rows:
+        tier_name = row['tier_name']
+        if row['tier_source'] == 'override':
+            tier_name = f'{tier_name} (override)'
         writer.writerow([
             row['email'],
-            row['tier_name'],
+            tier_name,
             ','.join(row['tags']),
             'Yes' if row['email_verified'] else 'No',
             'Yes' if row['unsubscribed'] else 'No',
@@ -743,6 +761,7 @@ def user_detail(request, user_id):
     context = {
         'detail_user': user,
         'tier_name': _effective_tier_name(user, override),
+        'tier_slug': _effective_tier_slug(user, override),
         'has_override': has_override,
         'active_override': override,
         'is_subscribed': not user.unsubscribed,

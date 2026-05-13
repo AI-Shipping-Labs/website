@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}User: {{ detail_user.email }}{% endblock %}
 
@@ -117,7 +118,9 @@
       <dt class="text-muted-foreground">Tier</dt>
       <dd class="text-foreground text-right" data-testid="user-detail-tier">
         <div class="flex items-center gap-2 justify-end flex-wrap">
-          <span>{{ tier_name }}</span>
+          <span class="inline-flex items-center text-xs px-2 py-1 rounded-full {{ tier_slug|studio_tier_pill_classes }}"
+                data-testid="user-detail-tier-pill"
+                data-tier="{{ tier_slug }}">{{ tier_name }}</span>
           {% if tier_source == 'override' %}
           <a href="{% url 'studio_user_tier_override_page' detail_user.pk %}"
              title="View this user's tier overrides"
@@ -154,7 +157,11 @@
     </div>
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground">Status</dt>
-      <dd class="text-foreground">{{ status }}</dd>
+      <dd>
+        <span class="inline-flex items-center text-xs px-2 py-1 rounded-full {{ status|studio_user_status_pill_classes }}"
+              data-testid="user-detail-status-pill"
+              data-status="{{ status|lower }}">{{ status }}</span>
+      </dd>
     </div>
     <div class="flex justify-between gap-4">
       <dt class="text-muted-foreground">Newsletter</dt>

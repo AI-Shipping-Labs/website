@@ -125,9 +125,15 @@ class TestOperatorImportsContactsCsv:
             f"{django_server}/studio/users/?q=existing@test.com",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-        assert "existing@test.com" in body
-        assert "Main (override)" in body
+        user_row = page.locator("tr", has_text="existing@test.com")
+        assert user_row.count() == 1
+        assert "(override)" not in user_row.inner_text()
+        tier_pill = user_row.locator('[data-testid="user-list-tier-pill"]')
+        assert tier_pill.inner_text().strip() == "Main"
+        assert tier_pill.get_attribute("data-tier") == "main"
+        assert user_row.locator(
+            '[data-testid="user-list-tier-override-pill"]'
+        ).inner_text().strip() == "Override"
 
         # 7. The newly-created user is listed.
         page.goto(

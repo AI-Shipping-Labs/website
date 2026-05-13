@@ -465,7 +465,10 @@ class TestUserDetailLayout586:
         # Membership tier row now carries the Override badge with the
         # granted tier name.
         tier_cell = page.locator('[data-testid="user-detail-tier"]')
-        assert "Basic (override)" in tier_cell.inner_text()
+        assert "(override)" not in tier_cell.inner_text()
+        tier_pill = page.locator('[data-testid="user-detail-tier-pill"]')
+        assert tier_pill.inner_text().strip() == "Basic"
+        assert tier_pill.get_attribute("data-tier") == "basic"
         badge = page.locator('[data-testid="user-detail-tier-badge"]')
         assert badge.get_attribute("data-tier-source") == "override"
         context.close()

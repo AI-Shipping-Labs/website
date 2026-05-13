@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}CRM: {{ detail_user.email }}{% endblock %}
 
@@ -18,8 +19,18 @@
     {% if detail_user.first_name or detail_user.last_name %}
     <p class="text-sm text-muted-foreground mt-1">{{ detail_user.first_name }} {{ detail_user.last_name }}</p>
     {% endif %}
-    <div class="mt-2 flex items-center gap-2 text-xs">
-      <span class="text-muted-foreground">Tier: {{ tier_name }}</span>
+    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <span class="text-muted-foreground">Tier:</span>
+      <span class="inline-flex items-center rounded-full px-2 py-0.5 font-medium {{ tier_slug|studio_tier_pill_classes }}"
+            data-testid="crm-detail-tier-pill"
+            data-tier="{{ tier_slug }}">{{ tier_name }}</span>
+      {% if tier_source == 'override' %}
+      <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 font-medium text-amber-300 border border-amber-500/30"
+            data-testid="crm-detail-tier-override-pill">
+        <i data-lucide="shield-check" class="w-3 h-3"></i>
+        Override
+      </span>
+      {% endif %}
       <span class="inline-flex items-center px-2 py-0.5 rounded-full {% if record.status == 'active' %}bg-green-500/20 text-green-400{% else %}bg-muted text-muted-foreground{% endif %}"
             data-testid="crm-detail-status">
         {{ record.get_status_display }}

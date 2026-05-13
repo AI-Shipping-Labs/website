@@ -122,34 +122,20 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
             known_images=known_images,
         )
 
-    # Edge Case 3: Exclude failed slugs from stale-content cleanup
+    _cleanup_stale_courses_for_source(
+        source, seen_course_slugs, failed_course_slugs, stats,
+    )
+
+
+def _cleanup_stale_courses_for_source(
+    source, seen_course_slugs, failed_course_slugs, stats,
+):
+    from content.models import Course
+
     stale_courses = list(Course.objects.filter(
         source_repo=source.repo_name,
         status='published',
     ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs))
-
-    def _cleanup_stale_courses(courses):
-        for course in courses:
-            # Issue #366: if a published sibling holds the same content_id
-            # (e.g. the course was renamed and re-synced earlier in this
-            # walk, or moved to another repo), reattach FKs to it and
-            # delete the orphan instead of leaving a draft behind. Without
-            # this, the dashboard's Continue Learning widget keeps building
-            # URLs against the old slug.
-            sibling = None
-            if course.content_id is not None:
-                sibling = Course.objects.filter(
-                    content_id=course.content_id,
-                    status='published',
-                ).exclude(pk=course.pk).first()
-
-            if sibling is not None:
-                _reattach_course_fks(course, sibling)
-                course.delete()
-            else:
-                course.status = 'draft'
-                course.save(update_fields=['status', 'updated_at'])
-
     cleanup_stale_synced_objects(
         stale_courses,
         stats=stats,
@@ -161,8 +147,27 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
             'course_id': course.pk,
             'course_slug': course.slug,
         },
-        cleanup=_cleanup_stale_courses,
+        cleanup=_apply_stale_course_cleanup,
     )
+
+
+def _apply_stale_course_cleanup(courses):
+    from content.models import Course
+
+    for course in courses:
+        sibling = None
+        if course.content_id is not None:
+            sibling = Course.objects.filter(
+                content_id=course.content_id,
+                status='published',
+            ).exclude(pk=course.pk).first()
+
+        if sibling is not None:
+            _reattach_course_fks(course, sibling)
+            course.delete()
+        else:
+            course.status = 'draft'
+            course.save(update_fields=['status', 'updated_at'])
 
 
 def _reattach_course_fks(orphan_course, target_course):
@@ -273,187 +278,34 @@ def _sync_single_course(
             stats['errors'].append({'file': rel_path, 'error': msg})
             return
 
-        # Edge Case 2: Slug collision across sources.
-        # Issue #366 carve-out: when the colliding row shares this course's
-        # ``content_id``, it's the same logical course moving between repos
-        # (or a stale draft from an earlier rename in a different repo) —
-        # we want to claim it, not skip. The full match-and-reattach logic
-        # below handles repointing the FKs.
-        existing_with_slug = Course.objects.filter(slug=slug).exclude(
-            source_repo=source.repo_name,
-        ).first()
-        # ``content_id`` is stored as ``UUIDField`` but YAML frontmatter
-        # parses to a string. Coerce both sides to a string before
-        # comparing so a cross-repo move with a stable ``content_id`` is
-        # recognized as the same logical course (issue #366).
-        existing_cid = (
-            str(existing_with_slug.content_id)
-            if existing_with_slug is not None
-            and existing_with_slug.content_id is not None
-            else None
-        )
-        if (
-            existing_with_slug is not None
-            and existing_cid != str(course_content_id)
+        if _course_slug_collision_blocked(
+            Course, slug, course_content_id, source.repo_name, rel_path, stats,
         ):
-            other_source = existing_with_slug.source_repo or 'studio'
-            logger.warning(
-                "Slug collision: '%s' already exists from source '%s' "
-                "(source_repo=%s). Skipped %s.",
-                slug, other_source, existing_with_slug.source_repo, rel_path,
-            )
-            stats['errors'].append({
-                'file': rel_path,
-                'error': (
-                    f"Slug collision: '{slug}' already exists from a "
-                    f"different source. Skipped."
-                ),
-            })
             failed_course_slugs.add(slug)
             return
 
         seen_course_slugs.add(slug)
 
-        # Course-level ignore globs (relative to course_dir). Applied to every
-        # module via _sync_course_modules.
-        raw_ignore = course_data.get('ignore', []) or []
-        course_ignore_patterns = [str(p) for p in raw_ignore]
-
-        # Description: explicit `description:` wins; otherwise fall back to
-        # README.md at the course root if present and not ignored.
-        description = course_data.get('description', '') or ''
-        if not description:
-            readme_path = os.path.join(course_dir, 'README.md')
-            if (
-                os.path.isfile(readme_path)
-                and not _matches_ignore_patterns(
-                    'README.md', course_ignore_patterns,
-                )
-            ):
-                try:
-                    _, readme_body = _parse_markdown_file(readme_path)
-                    if readme_body and readme_body.strip():
-                        description = readme_body
-                except Exception as e:
-                    logger.warning(
-                        'Failed to read course README at %s: %s',
-                        readme_path, e,
-                    )
-
-        # Issue #465: ``default_unit_access`` is the YAML-facing key
-        # (verb-aligned), ``default_unit_required_level`` is the DB column
-        # (noun-aligned with ``required_level``). Absent key = leave NULL,
-        # which preserves the legacy behavior where units inherit
-        # ``Course.required_level``.
-        default_unit_access_raw = course_data.get('default_unit_access')
-        if default_unit_access_raw is not None:
-            default_unit_required_level = _parse_access_value(
-                default_unit_access_raw,
-                field_name='default_unit_access',
-                rel_path=os.path.join(rel_path, 'course.yaml'),
-            )
-        else:
-            default_unit_required_level = None
-
-        course_defaults = {
-            'title': course_data.get('title', slug),
-            'description': description,
-            'cover_image_url': rewrite_cover_image_url(
-                course_data.get('cover_image', '') or course_data.get('cover_image_url', ''),
-                source, os.path.join(rel_path, 'course.yaml'),
-            ),
-            'required_level': course_data.get('required_level', 0),
-            'default_unit_required_level': default_unit_required_level,
-            'discussion_url': course_data.get('discussion_url', ''),
-            'tags': course_data.get('tags', []),
-            'testimonials': course_data.get('testimonials', []),
-            'status': 'published',
-            'source_repo': source.repo_name,
-            'source_path': rel_path,
-            'source_commit': commit_sha,
-            'content_id': course_content_id,
-        }
-
-        # Prefer the stable content_id over slug when locating an existing
-        # course row. Issue #366: scope by content_id ALONE (not
-        # ``content_id`` + ``source_repo``) so a course that moves between
-        # repos, or a draft row left behind by an earlier rename, is
-        # reused instead of duplicated. The matcher prefers a published
-        # row (this sync's repo first) and falls back to draft rows so
-        # we resurrect-on-rename rather than create a new orphan.
-        candidates = list(
-            Course.objects.filter(content_id=course_content_id),
+        course_ignore_patterns = _course_ignore_patterns(course_data)
+        course_defaults = _build_course_defaults(
+            course_data, slug, course_content_id, course_dir, rel_path,
+            source, commit_sha, course_ignore_patterns,
         )
-        course_by_content_id = None
-        if candidates:
-            # Stable preference order: same-repo published, other-repo
-            # published, same-repo draft, other-repo draft. This keeps the
-            # historical "match the row in this repo" behavior in the common
-            # case while still claiming a sibling row when the course moved.
-            def _priority(c):
-                same_repo = 0 if c.source_repo == source.repo_name else 1
-                is_draft = 0 if c.status == 'published' else 1
-                return (is_draft, same_repo, c.pk)
-            candidates.sort(key=_priority)
-            course_by_content_id = candidates[0]
-
-        # Backward-compat fallback: older synced rows may predate content_id
-        # backfills, so still support slug-based matching when the stable-ID
-        # lookup misses.
-        course = find_synced_object((
-            lambda: course_by_content_id,
-            lambda: Course.objects.filter(
-                slug=slug,
-                source_repo=source.repo_name,
-            ).first(),
-        ))
-
-        result = upsert_synced_object(
-            model=Course,
-            lookup=lambda: course,
-            defaults=course_defaults,
-            stats=stats,
-            create_kwargs={'slug': slug},
-            identity_changed=lambda obj: (
-                obj.slug != slug
-                or obj.source_path != rel_path
-                or obj.source_repo != source.repo_name
-                or obj.status != 'published'
-            ),
-            apply_identity=lambda obj: setattr(obj, 'slug', slug),
-            detail=lambda obj, action: {
-                'title': course_defaults.get('title', slug),
-                'slug': slug,
-                'action': action,
-                'content_type': 'course',
-                'course_id': obj.pk,
-                'course_slug': obj.slug,
-            },
+        candidates, course = _resolve_course_identity(
+            Course, course_content_id, slug, source.repo_name,
+        )
+        result = _upsert_course_record(
+            Course, course, course_defaults, slug, rel_path, source.repo_name,
+            stats,
         )
         course = result.instance
 
         if not result.created:
-            # Issue #366: any other Course row that shares this
-            # content_id is an orphan from an earlier rename / cross-repo
-            # move. Reattach its FKs to the live row and delete it so
-            # the dashboard stops building URLs against the old slug.
-            for sibling in candidates:
-                if sibling.pk == course.pk:
-                    continue
-                _reattach_course_fks(sibling, course)
-                sibling.delete()
+            _delete_duplicate_course_siblings(candidates, course)
 
-        # Resolve instructors: list and attach M2M (post-save).
-        resolved_instructors = _resolve_instructors_for_yaml(
-            course_data, rel_path, stats,
-        )
-        _attach_instructors_to_course(course, resolved_instructors, stats)
-
-        # Sync modules (immediate child directories of course_dir)
-        _sync_course_modules(
-            course, course_dir, repo_dir, source.repo_name,
-            commit_sha, stats, known_images=known_images,
-            course_ignore_patterns=course_ignore_patterns,
+        _sync_course_children(
+            course, course_data, course_dir, repo_dir, rel_path, source,
+            commit_sha, stats, known_images, course_ignore_patterns,
         )
 
     except Exception as e:
@@ -472,6 +324,177 @@ def _sync_single_course(
             'Error syncing course %s: %s',
             os.path.basename(course_dir.rstrip(os.sep)), e,
         )
+
+
+def _course_slug_collision_blocked(
+    Course, slug, course_content_id, repo_name, rel_path, stats,
+):
+    existing_with_slug = Course.objects.filter(slug=slug).exclude(
+        source_repo=repo_name,
+    ).first()
+    existing_cid = (
+        str(existing_with_slug.content_id)
+        if existing_with_slug is not None
+        and existing_with_slug.content_id is not None
+        else None
+    )
+    if existing_with_slug is None or existing_cid == str(course_content_id):
+        return False
+
+    other_source = existing_with_slug.source_repo or 'studio'
+    logger.warning(
+        "Slug collision: '%s' already exists from source '%s' "
+        "(source_repo=%s). Skipped %s.",
+        slug, other_source, existing_with_slug.source_repo, rel_path,
+    )
+    stats['errors'].append({
+        'file': rel_path,
+        'error': (
+            f"Slug collision: '{slug}' already exists from a "
+            f"different source. Skipped."
+        ),
+    })
+    return True
+
+
+def _course_ignore_patterns(course_data):
+    raw_ignore = course_data.get('ignore', []) or []
+    return [str(p) for p in raw_ignore]
+
+
+def _build_course_defaults(
+    course_data, slug, course_content_id, course_dir, rel_path, source,
+    commit_sha, course_ignore_patterns,
+):
+    description = _resolve_course_description(
+        course_data, course_dir, course_ignore_patterns,
+    )
+    default_unit_required_level = _resolve_default_unit_required_level(
+        course_data, rel_path,
+    )
+    return {
+        'title': course_data.get('title', slug),
+        'description': description,
+        'cover_image_url': rewrite_cover_image_url(
+            course_data.get('cover_image', '')
+            or course_data.get('cover_image_url', ''),
+            source,
+            os.path.join(rel_path, 'course.yaml'),
+        ),
+        'required_level': course_data.get('required_level', 0),
+        'default_unit_required_level': default_unit_required_level,
+        'discussion_url': course_data.get('discussion_url', ''),
+        'tags': course_data.get('tags', []),
+        'testimonials': course_data.get('testimonials', []),
+        'status': 'published',
+        'source_repo': source.repo_name,
+        'source_path': rel_path,
+        'source_commit': commit_sha,
+        'content_id': course_content_id,
+    }
+
+
+def _resolve_course_description(course_data, course_dir, course_ignore_patterns):
+    description = course_data.get('description', '') or ''
+    if description:
+        return description
+
+    readme_path = os.path.join(course_dir, 'README.md')
+    if (
+        not os.path.isfile(readme_path)
+        or _matches_ignore_patterns('README.md', course_ignore_patterns)
+    ):
+        return ''
+    try:
+        _, readme_body = _parse_markdown_file(readme_path)
+    except Exception as e:
+        logger.warning('Failed to read course README at %s: %s', readme_path, e)
+        return ''
+    if readme_body and readme_body.strip():
+        return readme_body
+    return ''
+
+
+def _resolve_default_unit_required_level(course_data, rel_path):
+    default_unit_access_raw = course_data.get('default_unit_access')
+    if default_unit_access_raw is None:
+        return None
+    return _parse_access_value(
+        default_unit_access_raw,
+        field_name='default_unit_access',
+        rel_path=os.path.join(rel_path, 'course.yaml'),
+    )
+
+
+def _resolve_course_identity(Course, course_content_id, slug, repo_name):
+    candidates = list(Course.objects.filter(content_id=course_content_id))
+    course_by_content_id = None
+    if candidates:
+        candidates.sort(key=lambda c: (
+            0 if c.status == 'published' else 1,
+            0 if c.source_repo == repo_name else 1,
+            c.pk,
+        ))
+        course_by_content_id = candidates[0]
+
+    course = find_synced_object((
+        lambda: course_by_content_id,
+        lambda: Course.objects.filter(
+            slug=slug,
+            source_repo=repo_name,
+        ).first(),
+    ))
+    return candidates, course
+
+
+def _upsert_course_record(
+    Course, course, course_defaults, slug, rel_path, repo_name, stats,
+):
+    return upsert_synced_object(
+        model=Course,
+        lookup=lambda: course,
+        defaults=course_defaults,
+        stats=stats,
+        create_kwargs={'slug': slug},
+        identity_changed=lambda obj: (
+            obj.slug != slug
+            or obj.source_path != rel_path
+            or obj.source_repo != repo_name
+            or obj.status != 'published'
+        ),
+        apply_identity=lambda obj: setattr(obj, 'slug', slug),
+        detail=lambda obj, action: {
+            'title': course_defaults.get('title', slug),
+            'slug': slug,
+            'action': action,
+            'content_type': 'course',
+            'course_id': obj.pk,
+            'course_slug': obj.slug,
+        },
+    )
+
+
+def _delete_duplicate_course_siblings(candidates, course):
+    for sibling in candidates:
+        if sibling.pk == course.pk:
+            continue
+        _reattach_course_fks(sibling, course)
+        sibling.delete()
+
+
+def _sync_course_children(
+    course, course_data, course_dir, repo_dir, rel_path, source, commit_sha,
+    stats, known_images, course_ignore_patterns,
+):
+    resolved_instructors = _resolve_instructors_for_yaml(
+        course_data, rel_path, stats,
+    )
+    _attach_instructors_to_course(course, resolved_instructors, stats)
+    _sync_course_modules(
+        course, course_dir, repo_dir, source.repo_name,
+        commit_sha, stats, known_images=known_images,
+        course_ignore_patterns=course_ignore_patterns,
+    )
 
 
 def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=None):
@@ -1371,4 +1394,3 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     deleted_count = stale_units.count()
     stale_units.delete()
     stats['deleted'] += deleted_count
-

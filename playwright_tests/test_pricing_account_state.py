@@ -1,85 +1,49 @@
-"""Focused Playwright coverage for signed-in pricing account states (#383)."""
+"""Production-mode Playwright smokes for pricing and account billing."""
 
-import datetime
-import os
+from urllib.parse import parse_qs, urlparse
 
 import pytest
-from django.utils import timezone
+from django.conf import settings
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
 from playwright_tests.conftest import (
     create_session_for_user as _create_session_for_user,
 )
 
-os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-
-def _seed_pricing_users():
-    from accounts.models import TierOverride, User
+def _seed_pricing_user(email, tier_slug="free", subscription_id=""):
+    from accounts.models import User
     from payments.models import Tier
     from playwright_tests.conftest import ensure_tiers
 
     ensure_tiers()
-    tiers = {tier.slug: tier for tier in Tier.objects.all()}
+    tier = Tier.objects.get(slug=tier_slug)
+    tier_updates = {
+        "description": f"{tier.name} membership",
+        "features": [f"{tier.name} feature"],
+    }
+    if tier_slug != "free":
+        tier_updates.update({
+            "price_eur_month": 10 + tier.level,
+            "price_eur_year": 100 + tier.level,
+        })
+    Tier.objects.filter(pk=tier.pk).update(**tier_updates)
+    tier.refresh_from_db()
 
-    def upsert_user(email, tier_slug, subscription_id="", pending_slug=None):
-        user, _ = User.objects.get_or_create(
-            email=email,
-            defaults={"email_verified": True},
-        )
-        user.set_password(DEFAULT_PASSWORD)
-        user.email_verified = True
-        user.tier = tiers[tier_slug] if tier_slug else None
-        user.subscription_id = subscription_id
-        user.pending_tier = tiers[pending_slug] if pending_slug else None
-        user.billing_period_end = timezone.make_aware(
-            datetime.datetime(2026, 5, 29, 12, 0, 0)
-        )
-        user.save()
-        return user
-
-    upsert_user("pricing-free@test.com", "free")
-    upsert_user("pricing-basic@test.com", "basic", "sub_basic_pricing")
-    upsert_user("pricing-main@test.com", "main", "sub_main_pricing")
-    upsert_user("pricing-premium@test.com", "premium", "sub_premium_pricing")
-    upsert_user(
-        "pricing-pending@test.com",
-        "main",
-        "sub_pending_pricing",
-        "basic",
+    user, _created = User.objects.get_or_create(
+        email=email,
+        defaults={"email_verified": True},
     )
-    upsert_user(
-        "pricing-canceling@test.com",
-        "basic",
-        "sub_canceling_pricing",
-        "free",
-    )
-    override_user = upsert_user(
-        "pricing-override@test.com",
-        "basic",
-        "sub_override_pricing",
-    )
-    TierOverride.objects.filter(user=override_user).delete()
-    TierOverride.objects.create(
-        user=override_user,
-        original_tier=tiers["basic"],
-        override_tier=tiers["premium"],
-        expires_at=timezone.now() + datetime.timedelta(days=14),
-    )
-    upsert_user("pricing-stale@test.com", None, "sub_stale_pricing")
+    user.set_password(DEFAULT_PASSWORD)
+    user.email_verified = True
+    user.tier = tier
+    user.subscription_id = subscription_id
+    user.save()
+    return user
 
 
-@pytest.fixture
-def pricing_users(django_server, django_db_blocker):
-    from django.db import connection
-
+def _auth_context(browser, email, django_db_blocker):
     with django_db_blocker.unblock():
-        _seed_pricing_users()
-        connection.close()
-
-
-def _auth_context(browser, email, db_blocker):
-    with db_blocker.unblock():
         session_key = _create_session_for_user(email)
 
     context = browser.new_context(viewport=VIEWPORT)
@@ -100,217 +64,91 @@ def _auth_context(browser, email, db_blocker):
     return context
 
 
-def _pricing_page(browser, django_server, django_db_blocker, email):
-    context = _auth_context(browser, email, django_db_blocker)
-    page = context.new_page()
-    page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
-    return context, page
+def _tier_card(page, slug):
+    return page.locator(f'[data-testid="pricing-tier-card"][data-tier-card="{slug}"]')
 
 
-def _account_page(browser, django_server, django_db_blocker, email, viewport=VIEWPORT):
+def _assert_prefilled_payment_link(href, expected_base, email):
+    assert href.startswith(expected_base)
+    assert "/api/checkout/create" not in href
+    parsed = urlparse(href)
+    assert parse_qs(parsed.query)["prefilled_email"] == [email]
+
+
+@pytest.fixture
+def pricing_payment_link_user(django_server, django_db_blocker):
     with django_db_blocker.unblock():
-        session_key = _create_session_for_user(email)
-
-    context = browser.new_context(viewport=viewport)
-    context.add_cookies([
-        {
-            "name": "sessionid",
-            "value": session_key,
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-        {
-            "name": "csrftoken",
-            "value": "e2e-test-csrf-token-value",
-            "domain": "127.0.0.1",
-            "path": "/",
-        },
-    ])
-    page = context.new_page()
-    page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
-    return context, page
+        _seed_pricing_user("pricing-free+links@test.com", "free")
 
 
-def _tier_card(page, tier_name):
-    cards = page.locator("div.grid.sm\\:grid-cols-2.lg\\:grid-cols-4 > div")
-    for index in range(cards.count()):
-        card = cards.nth(index)
-        if card.locator("h2").inner_text().strip() == tier_name:
-            return card
-    raise AssertionError(f"Tier card {tier_name!r} not found")
+@pytest.fixture
+def paid_account_user(django_server, django_db_blocker):
+    with django_db_blocker.unblock():
+        _seed_pricing_user(
+            "pricing-main@test.com",
+            "main",
+            subscription_id="sub_main_pricing",
+        )
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-def test_free_member_sees_current_free_and_paid_upgrades(
-    django_server, browser, django_db_blocker, pricing_users
-):
-    context, page = _pricing_page(
-        browser, django_server, django_db_blocker, "pricing-free@test.com"
-    )
-    try:
-        assert "Current free plan" in _tier_card(page, "Free").inner_text()
-        for tier_name in ("Basic", "Main", "Premium"):
-            card_text = _tier_card(page, tier_name).inner_text()
-            assert "Upgrade" in card_text
-            assert "Manage Subscription" not in card_text
-    finally:
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_main_member_sees_current_plan_and_customer_portal_actions(
-    django_server, browser, django_db_blocker, pricing_users
-):
-    context, page = _pricing_page(
-        browser, django_server, django_db_blocker, "pricing-main@test.com"
-    )
-    try:
-        assert "Included" in _tier_card(page, "Free").inner_text()
-        assert "Downgrade" in _tier_card(page, "Basic").inner_text()
-        main_text = _tier_card(page, "Main").inner_text()
-        assert "Current plan" in main_text
-        assert "Join" not in main_text
-        premium_text = _tier_card(page, "Premium").inner_text()
-        assert "Manage Subscription" in premium_text
-        assert "Upgrade" not in premium_text
-    finally:
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_premium_member_does_not_see_join_for_lower_paid_tiers(
-    django_server, browser, django_db_blocker, pricing_users
-):
-    context, page = _pricing_page(
-        browser, django_server, django_db_blocker, "pricing-premium@test.com"
-    )
-    try:
-        assert "Current plan" in _tier_card(page, "Premium").inner_text()
-        for tier_name in ("Basic", "Main"):
-            card_text = _tier_card(page, tier_name).inner_text()
-            assert "Downgrade" in card_text
-            assert "Join" not in card_text
-    finally:
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize(
-    ("email", "expected_plan", "upgrade_visible"),
-    [
-        ("pricing-free@test.com", "Free", True),
-        ("pricing-premium@test.com", "Premium", False),
-    ],
-)
-def test_account_primary_action_matches_current_plan_state(
+def test_signed_in_pricing_uses_payment_links_with_prefilled_email(
     django_server,
     browser,
     django_db_blocker,
-    pricing_users,
-    email,
-    expected_plan,
-    upgrade_visible,
+    pricing_payment_link_user,
 ):
-    context, page = _account_page(browser, django_server, django_db_blocker, email)
+    email = "pricing-free+links@test.com"
+    context = _auth_context(browser, email, django_db_blocker)
+    page = context.new_page()
     try:
-        assert page.locator("#tier-name").inner_text().strip() == expected_plan
-        assert page.locator("#upgrade-btn").count() == (1 if upgrade_visible else 0)
-        if expected_plan == "Premium":
-            # Issue #581: the steady-state ``Current plan`` frame is
-            # suppressed on /account/ (pricing page is unaffected). Billing
-            # changes are delegated to the Customer Portal.
-            assert page.locator("#account-plan-state").count() == 0
-            assert page.locator("#manage-subscription-btn").is_visible()
-            assert page.locator("#downgrade-btn").count() == 0
-            assert page.locator("#cancel-btn").count() == 0
+        page.goto(f"{django_server}/pricing", wait_until="domcontentloaded")
+
+        assert "/api/checkout/create" not in page.content()
+        assert page.locator("text=Current free plan").is_visible()
+
+        for tier_slug in ("basic", "main", "premium"):
+            cta = _tier_card(page, tier_slug).locator(".tier-cta-link")
+            assert cta.inner_text().strip() == "Upgrade"
+            _assert_prefilled_payment_link(
+                cta.get_attribute("href"),
+                settings.STRIPE_PAYMENT_LINKS[tier_slug]["annual"],
+                email,
+            )
+
+        page.locator("#billing-toggle").click()
+        for tier_slug in ("basic", "main", "premium"):
+            cta = _tier_card(page, tier_slug).locator(".tier-cta-link")
+            _assert_prefilled_payment_link(
+                cta.get_attribute("href"),
+                settings.STRIPE_PAYMENT_LINKS[tier_slug]["monthly"],
+                email,
+            )
     finally:
         context.close()
 
 
+@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-def test_pending_downgrade_and_cancellation_copy_is_visible(
-    django_server, browser, django_db_blocker, pricing_users
+def test_paid_account_uses_customer_portal_without_local_plan_controls(
+    django_server,
+    browser,
+    django_db_blocker,
+    paid_account_user,
 ):
-    pending_context, pending_page = _pricing_page(
-        browser, django_server, django_db_blocker, "pricing-pending@test.com"
-    )
+    context = _auth_context(browser, "pricing-main@test.com", django_db_blocker)
+    page = context.new_page()
     try:
-        assert "changes to Basic on May 29, 2026" in _tier_card(
-            pending_page, "Main"
-        ).inner_text()
-        assert "Scheduled change" in _tier_card(pending_page, "Basic").inner_text()
+        page.goto(f"{django_server}/account/", wait_until="domcontentloaded")
+
+        assert page.locator("#tier-name").inner_text().strip() == "Main"
+        portal = page.locator("#manage-subscription-btn")
+        assert portal.is_visible()
+        assert portal.get_attribute("href") == settings.STRIPE_CUSTOMER_PORTAL_URL
+        assert page.locator("#upgrade-btn").count() == 0
+        assert page.locator("#downgrade-btn").count() == 0
+        assert page.locator("#cancel-btn").count() == 0
+        assert "/api/subscription/" not in page.content()
     finally:
-        pending_context.close()
-
-    cancel_context, cancel_page = _pricing_page(
-        browser, django_server, django_db_blocker, "pricing-canceling@test.com"
-    )
-    try:
-        basic_text = _tier_card(cancel_page, "Basic").inner_text()
-        assert "Access ending" in basic_text
-        assert "Access ends on May 29, 2026" in basic_text
-        assert "Join" not in basic_text
-    finally:
-        cancel_context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_account_pending_and_temporary_states_do_not_show_normal_upgrade(
-    django_server, browser, django_db_blocker, pricing_users
-):
-    pending_context, pending_page = _account_page(
-        browser, django_server, django_db_blocker, "pricing-pending@test.com"
-    )
-    try:
-        # Issue #581: the duplicate plan-state frame on /account/ was
-        # suppressed for pending downgrade users; the dedicated amber
-        # pending-downgrade notice now carries the change message.
-        assert pending_page.locator("#account-plan-state").count() == 0
-        pending_notice_text = pending_page.locator(
-            "#pending-downgrade-notice"
-        ).inner_text()
-        assert "Basic" in pending_notice_text
-        assert "29/05/2026" in pending_notice_text
-        assert pending_page.locator("#upgrade-btn").count() == 0
-        assert pending_page.locator("#manage-subscription-btn").is_visible()
-    finally:
-        pending_context.close()
-
-    override_context, override_page = _account_page(
-        browser, django_server, django_db_blocker, "pricing-override@test.com"
-    )
-    try:
-        assert "Temporary Premium access" in override_page.locator(
-            "#tier-override-notice"
-        ).inner_text()
-        assert override_page.locator("#upgrade-btn").count() == 0
-        assert override_page.locator("#manage-subscription-btn").is_visible()
-    finally:
-        override_context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_override_and_stale_subscription_use_non_join_copy(
-    django_server, browser, django_db_blocker, pricing_users
-):
-    override_context, override_page = _pricing_page(
-        browser, django_server, django_db_blocker, "pricing-override@test.com"
-    )
-    try:
-        assert "Base subscription" in _tier_card(override_page, "Basic").inner_text()
-        premium_text = _tier_card(override_page, "Premium").inner_text()
-        assert "Temporary access" in premium_text
-        assert "Join" not in premium_text
-    finally:
-        override_context.close()
-
-    stale_context, stale_page = _pricing_page(
-        browser, django_server, django_db_blocker, "pricing-stale@test.com"
-    )
-    try:
-        for tier_name in ("Basic", "Main", "Premium"):
-            card_text = _tier_card(stale_page, tier_name).inner_text()
-            assert "Manage Subscription" in card_text
-            assert "Join" not in card_text
-    finally:
-        stale_context.close()
+        context.close()

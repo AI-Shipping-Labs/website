@@ -96,6 +96,46 @@ def _open_projects(browser, base_url, viewport, theme, path="/projects"):
 
 
 @pytest.mark.django_db(transaction=True)
+def test_project_listing_cards_default_ci_smoke(
+    django_server, browser,
+):
+    _seed_projects()
+
+    context, page = _open_projects(browser, django_server, DESKTOP, "light")
+    try:
+        official_card_tags = page.locator(
+            'article:has(a[href="/projects/official-agent-marketplace"]) '
+            '[data-testid="project-card-tags"]'
+        )
+        assert official_card_tags.inner_text().splitlines() == [
+            "agents",
+            "marketplace",
+            "rag",
+            "+3",
+        ]
+        assert page.locator('[data-testid="project-official-badge"]').count() == 2
+        assert page.locator('[data-lucide="arrow-right"]').first.is_visible()
+        assert page.locator("text=Basic or above").count() == 1
+        assert _doc_overflow(page) <= 1
+    finally:
+        context.close()
+
+    context, page = _open_projects(
+        browser,
+        django_server,
+        DESKTOP,
+        "light",
+        path="/projects?difficulty=intermediate",
+    )
+    try:
+        assert page.locator("text=Official Agent Marketplace").count() == 1
+        assert page.locator("text=Community Habit Builder").count() == 0
+    finally:
+        context.close()
+
+
+@pytest.mark.manual_visual
+@pytest.mark.django_db(transaction=True)
 def test_project_listing_cards_are_compact_and_differentiated(
     django_server, browser,
 ):

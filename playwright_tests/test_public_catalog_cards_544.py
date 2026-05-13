@@ -129,6 +129,32 @@ def _open_page(browser, base_url, path, viewport, theme):
 
 
 @pytest.mark.django_db(transaction=True)
+def test_public_catalog_cards_default_ci_smoke(
+    django_server, browser,
+):
+    _seed_catalog_content()
+
+    routes = [
+        ("/courses", "Production AI Agents Course"),
+        ("/workshops", "Agent Evaluation Workshop"),
+        ("/blog", "Designing Agent Feedback Loops"),
+        ("/downloads", "Agent Evaluation Checklist"),
+        ("/resources", "Agent Evaluation Resource"),
+        ("/events?filter=past", "Agent Evaluation Recording"),
+        ("/blog?tag=agents", "Designing Agent Feedback Loops"),
+    ]
+
+    for path, text in routes:
+        context, page = _open_page(browser, django_server, path, DESKTOP, "light")
+        try:
+            page.get_by_text(text).first.wait_for()
+            assert _doc_overflow(page) <= 1
+        finally:
+            context.close()
+
+
+@pytest.mark.manual_visual
+@pytest.mark.django_db(transaction=True)
 def test_public_catalog_cards_have_consistent_density_screenshots(
     django_server, browser,
 ):

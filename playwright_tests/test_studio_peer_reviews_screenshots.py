@@ -124,6 +124,7 @@ def _seed():
     return course
 
 
+@pytest.mark.manual_visual
 @pytest.mark.django_db(transaction=True)
 def test_capture_screenshots(django_server, browser):
     _ensure_tiers()

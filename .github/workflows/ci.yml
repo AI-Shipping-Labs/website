@@ -220,4 +220,4 @@ jobs:
         run: uv run playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        run: uv run pytest playwright_tests/ -v
+        run: uv run pytest -m "not manual_visual" playwright_tests/ -v

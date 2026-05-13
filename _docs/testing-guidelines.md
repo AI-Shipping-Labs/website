@@ -692,6 +692,7 @@ subset focused on deploy-critical user and operator journeys.
 ```bash
 make test-playwright-core    # ~100-150 tests, target <8 min local / <15 min CI
 make test-playwright         # full suite, runs on schedule (every 3h)
+make test-playwright-manual-visual
 ```
 
 `make test-playwright-core` runs `pytest -m core playwright_tests/ -v`. The
@@ -699,6 +700,10 @@ Deploy Dev workflow runs the same command in a parallel `playwright-core`
 job; a failure blocks the deploy. The full suite runs on the
 `scheduled-playwright.yml` workflow every 3 hours (skipped if no commits
 have landed since the last successful run) and via `workflow_dispatch`.
+Pull-request CI excludes screenshot-generator/manual-review tests with
+`pytest -m "not manual_visual" playwright_tests/ -v`; scheduled and manual
+full-suite runs still include them. Run `make test-playwright-manual-visual`
+when you specifically need the screenshot/manual-review suites.
 
 ### What belongs in `core`
 
@@ -742,6 +747,10 @@ Leave untagged (these run only on the scheduled job):
 - Niche admin actions used rarely (contacts import, peer reviews, token
   revoke/list ownership, UTM import/archive variants).
 - Theme toggle, env-mismatch banner, code copy widgets, foldable sidebar.
+- Screenshot generators and manual visual review suites. Mark these with
+  `@pytest.mark.manual_visual`, and keep at least one non-screenshot semantic
+  visibility/no-overflow smoke in default CI for the affected surface when the
+  manual suite was the only coverage.
 
 ### How to tag
 

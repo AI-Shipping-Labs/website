@@ -36,7 +36,6 @@ def _read_integration_values():
     return values
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioSettingsSections:
     def test_staff_jumps_directly_to_payment_settings(self, django_server, browser):

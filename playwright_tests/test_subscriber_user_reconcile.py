@@ -86,7 +86,6 @@ def _create_event(*, slug, title, required_level=0, status="upcoming",
     return event
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSubscribeAutoCreatesAccount:
     """Newsletter subscribe creates a free account and surfaces that to
@@ -162,7 +161,6 @@ class TestSubscribeAutoCreatesAccount:
         assert log_count >= 1
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousEventRegistrationE2E:
     """Anonymous email-only event registration creates a free unverified
@@ -327,7 +325,6 @@ class TestAnonymousEventRegistrationE2E:
         assert EventRegistration.objects.count() == 0
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousRegistrantSignsInLater:
     """An anonymous registrant who later sets a password and signs in
@@ -380,7 +377,6 @@ class TestAnonymousRegistrantSignsInLater:
         assert "Cancel registration" in cancel.inner_text()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSubscribePageDiscloseAccount:
     """The /subscribe page success copy mentions "account" and the rendered

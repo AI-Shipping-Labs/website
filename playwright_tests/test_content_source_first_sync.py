@@ -36,8 +36,8 @@ def _reset_state():
     connection.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.core
 def test_staff_adds_content_source_and_first_sync_is_queued(
         django_server, browser):
     staff_email = "content-source-first-sync@test.com"

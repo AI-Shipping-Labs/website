@@ -83,11 +83,11 @@ def _clear_curated_links():
 # Scenario 1: Visitor browses curated links organized by category
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1VisitorBrowsesByCategory:
     """Visitor browses curated links organized by category."""
 
+    @pytest.mark.core
     def test_links_grouped_under_category_headers(self, django_server, page):
         """Published curated links in the new categories appear under
         their respective section headers with descriptive subtitles
@@ -142,11 +142,11 @@ class TestScenario1VisitorBrowsesByCategory:
 # Scenario 2: Visitor clicks an open link and it opens in a new tab
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2VisitorClicksOpenLink:
     """Visitor clicks an open link and it opens in a new tab."""
 
+    @pytest.mark.core
     def test_open_link_has_target_blank_and_external_icon(
         self, django_server
     , page):
@@ -194,11 +194,11 @@ class TestScenario2VisitorClicksOpenLink:
 # Scenario 3: Free user encounters a gated link and sees upgrade CTA
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3FreeUserSeesGatedLink:
     """Free user encounters a gated link and sees upgrade CTA on click."""
 
+    @pytest.mark.core
     def test_gated_link_shows_lock_icon_and_hides_url(
         self, django_server
     , page):
@@ -258,7 +258,6 @@ class TestScenario3FreeUserSeesGatedLink:
 # Scenario 4: Basic member accesses a Basic-gated link successfully
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4BasicMemberAccessesBasicLink:
     """Basic member accesses a Basic-gated link successfully."""
@@ -318,7 +317,6 @@ class TestScenario4BasicMemberAccessesBasicLink:
 # Scenario 5: Basic member is still gated from Main-tier links
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5BasicMemberGatedFromMainLinks:
     """Basic member is still gated from Main-tier links."""
@@ -394,7 +392,6 @@ class TestScenario5BasicMemberGatedFromMainLinks:
 # Scenario 6: Visitor filters links by tag
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6VisitorFiltersByTag:
     """Visitor filters links by tag."""
@@ -468,7 +465,6 @@ class TestScenario6VisitorFiltersByTag:
 # Scenario 7: Visitor clears tag filter to see all links
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7VisitorClearsTagFilter:
     """Visitor clears tag filter to see all links."""
@@ -523,7 +519,6 @@ class TestScenario7VisitorClearsTagFilter:
 # Scenario 8: Empty state when tag filter matches nothing
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8EmptyStateNoMatchingTag:
     """Empty state when tag filter matches nothing."""
@@ -573,7 +568,6 @@ class TestScenario8EmptyStateNoMatchingTag:
 # Scenario 10: Visitor sees no content when no links are published
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10EmptyStateNoLinks:
     """Visitor sees no content when no links are published."""

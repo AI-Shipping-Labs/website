@@ -138,11 +138,11 @@ def _create_recording(title, slug, date=None):
 #              details
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1VisitorBrowsesEventsAndReadsDetails:
     """Visitor browses upcoming events and reads event details."""
 
+    @pytest.mark.core
     def test_visitor_sees_upcoming_and_past_events_then_clicks_detail(
         self, django_server
     , page):
@@ -228,7 +228,6 @@ class TestScenario1VisitorBrowsesEventsAndReadsDetails:
 #              but is directed to sign in
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2AnonymousDirectedToSignIn:
     """Anonymous visitor wants to register for an event but is directed
@@ -288,11 +287,11 @@ class TestScenario2AnonymousDirectedToSignIn:
 #              confirmation
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3EligibleMemberRegisters:
     """Eligible member registers for an event and sees confirmation."""
 
+    @pytest.mark.core
     def test_free_member_registers_for_open_event(
         self, django_server
     , browser):
@@ -354,11 +353,11 @@ class TestScenario3EligibleMemberRegisters:
 # Scenario 4: Registered member cancels their event registration
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4RegisteredMemberCancels:
     """Registered member cancels their event registration."""
 
+    @pytest.mark.core
     def test_registered_member_cancels_registration(
         self, django_server
     , browser):
@@ -419,7 +418,6 @@ class TestScenario4RegisteredMemberCancels:
 #              learns it is at capacity
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5FullEventCapacity:
     """Member tries to register for a full event and learns it is
@@ -468,7 +466,6 @@ class TestScenario5FullEventCapacity:
 # Scenario 6: Free member on a gated event sees the upgrade path
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6FreeMemberGatedEventUpgradePath:
     """Free member on a gated event sees the upgrade path."""
@@ -522,7 +519,6 @@ class TestScenario6FreeMemberGatedEventUpgradePath:
 #              start and sees the Zoom join link
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7ZoomLinkVisibleBeforeEvent:
     """Registered member returns shortly before event start and sees
@@ -576,7 +572,6 @@ class TestScenario7ZoomLinkVisibleBeforeEvent:
 #              far away and Zoom link is hidden
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8ZoomLinkHiddenFarFromEvent:
     """Registered member checks an event that is still far away and
@@ -626,7 +621,6 @@ class TestScenario8ZoomLinkHiddenFarFromEvent:
 #              recording
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9CompletedEventNoInlineRecording:
     """Issue #426: completed event detail page does not embed the recording.
@@ -678,7 +672,6 @@ class TestScenario9CompletedEventNoInlineRecording:
 #               recording yet
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10CompletedEventNoRecording:
     """Visitor views a completed event that has no recording yet."""
@@ -724,7 +717,6 @@ class TestScenario10CompletedEventNoRecording:
 # Scenario 11: Draft events are not visible to the public
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11DraftEventsNotVisible:
     """Draft events are not visible to the public."""
@@ -777,7 +769,6 @@ class TestScenario11DraftEventsNotVisible:
 #               section
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario12CancelledEventInPastSection:
     """Visitor spots a cancelled event in the past events section."""

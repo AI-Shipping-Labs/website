@@ -119,7 +119,6 @@ def _primary_nav_labels(page):
     )
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestActivitiesSprintFirstLayout:
     def test_anonymous_desktop_discovers_active_sprints_first(

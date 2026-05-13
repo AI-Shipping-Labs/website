@@ -149,7 +149,6 @@ def _create_unit(
 #              the course list
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1StaffCreatesNewCourse:
     """Staff member creates a new course and finds it in the course list."""
@@ -214,7 +213,6 @@ class TestScenario1StaffCreatesNewCourse:
 #              from draft to published
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2StaffEditsCourseStatusChange:
     """Staff member edits a course and changes its status from draft
@@ -293,7 +291,6 @@ class TestScenario2StaffEditsCourseStatusChange:
 #              modules and units
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3StaffBuildsModulesAndUnits:
     """Staff member builds a course structure by adding modules
@@ -386,7 +383,6 @@ class TestScenario3StaffBuildsModulesAndUnits:
 #              marks it as preview
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4StaffEditsUnitWithContent:
     """Staff member edits a unit with lesson content and marks it
@@ -471,7 +467,6 @@ class TestScenario4StaffEditsUnitWithContent:
 #              course curriculum
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5StaffReordersModules:
     """Staff member reorders modules to restructure the course
@@ -569,7 +564,6 @@ class TestScenario5StaffReordersModules:
 #              draft courses
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6StaffFiltersByStatus:
     """Staff member filters the course list to find only draft courses."""
@@ -634,7 +628,6 @@ class TestScenario6StaffFiltersByStatus:
 # Scenario 7: Staff member searches for a specific course by title
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7StaffSearchesByTitle:
     """Staff member searches for a specific course by title."""
@@ -707,7 +700,6 @@ class TestScenario7StaffSearchesByTitle:
 #              accessible to all members
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8StaffCreatesFreeCourse:
     """Staff member creates a free lead-magnet course accessible
@@ -755,7 +747,6 @@ class TestScenario8StaffCreatesFreeCourse:
 #              course management
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9NonStaffDeniedAccess:
     """Non-staff user is denied access to the Studio course management."""
@@ -806,7 +797,6 @@ class TestScenario9NonStaffDeniedAccess:
 #               exist yet
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10EmptyStateCourseList:
     """Staff member sees an empty state when no courses exist yet."""
@@ -843,7 +833,6 @@ class TestScenario10EmptyStateCourseList:
 #               browsable by a member on the public site
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11PublishedCourseBrowsableByMember:
     """Published course with modules and units is browsable by a

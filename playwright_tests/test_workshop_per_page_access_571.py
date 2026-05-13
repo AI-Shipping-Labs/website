@@ -132,7 +132,6 @@ def _create_workshop(
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousPreviewsPageOne:
     def test_anon_reads_page_one_then_hits_signin_wall_on_page_two(
@@ -185,9 +184,9 @@ class TestAnonymousPreviewsPageOne:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestFreeMemberCompletesWorkshop:
+    @pytest.mark.core
     def test_free_member_reads_all_pages_and_marks_complete(
         self, django_server, browser,
     ):
@@ -235,7 +234,6 @@ class TestFreeMemberCompletesWorkshop:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousOnPaidWorkshopUpgradeWall:
     def test_anon_sees_upgrade_to_basic_on_page_one(
@@ -272,7 +270,6 @@ class TestAnonymousOnPaidWorkshopUpgradeWall:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestFreeMemberOnPaidWorkshopWithOpenPreview:
     def test_free_member_reads_open_page_then_sees_upgrade(
@@ -321,7 +318,6 @@ class TestFreeMemberOnPaidWorkshopWithOpenPreview:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestLandingPageStaysOpen:
     def test_anon_sees_landing_even_with_registered_pages(
@@ -350,7 +346,6 @@ class TestLandingPageStaysOpen:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSignInRoundTrip:
     def test_signin_redirects_back_to_gated_page(
@@ -392,7 +387,6 @@ class TestSignInRoundTrip:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestVideoGateUnchanged:
     def test_free_member_sees_recording_upgrade_card(
@@ -441,7 +435,6 @@ class TestVideoGateUnchanged:
 # ---------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioOverrideBadge:
     def test_staff_sees_override_badge_for_open_page_only(

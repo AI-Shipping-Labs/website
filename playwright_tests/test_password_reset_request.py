@@ -40,7 +40,6 @@ def _email_log_count(db_blocker, email):
         return count
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPasswordResetRequest:
     def test_anonymous_member_requests_reset_link(

@@ -280,7 +280,6 @@ def _login_admin_via_browser(page, base_url, email, password="adminpass123"):
 # Scenario 1: Visitor watches a YouTube recording with timestamps
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1YouTubeRecordingTimestamps:
     """Visitor watches a YouTube recording and navigates via timestamps."""
@@ -354,7 +353,6 @@ class TestScenario1YouTubeRecordingTimestamps:
 # Scenario 2: Free member watches a Loom recording
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2LoomRecordingTimestamps:
     """Free member watches a Loom recording and jumps to a timestamp."""
@@ -427,7 +425,6 @@ class TestScenario2LoomRecordingTimestamps:
 # Scenario 3: Self-hosted video in course unit
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3SelfHostedCourseUnit:
     """Member progresses through a course unit with a self-hosted video."""
@@ -510,7 +507,6 @@ class TestScenario3SelfHostedCourseUnit:
 # Scenario 4: Auto-embedded YouTube video in article markdown
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4ArticleAutoEmbedYouTube:
     """Visitor reads an article with an auto-embedded YouTube video."""
@@ -563,7 +559,6 @@ class TestScenario4ArticleAutoEmbedYouTube:
 # Scenario 6: Recording without a video URL
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6RecordingWithoutVideoURL:
     """Recording without a video URL still displays its content."""
@@ -625,7 +620,6 @@ class TestScenario6RecordingWithoutVideoURL:
 # Scenario 7: Hour-long timestamps formatted correctly
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7HourLongTimestamps:
     """Timestamps format correctly for entries at or beyond one hour."""
@@ -687,7 +681,6 @@ class TestScenario7HourLongTimestamps:
 # Scenario 9: Inline YouTube URL NOT auto-embedded
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9InlineYouTubeNotEmbedded:
     """Inline YouTube URL in article text is NOT auto-embedded."""
@@ -737,7 +730,6 @@ class TestScenario9InlineYouTubeNotEmbedded:
 # Scenario 10: Staff manages timestamps through admin editor
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10AdminTimestampEditor:
     """Staff member manages timestamps through the admin editor."""
@@ -835,7 +827,6 @@ class TestScenario10AdminTimestampEditor:
 # ---------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestChaptersDisclosureExpandSeekCollapse:
     """Visitor on a workshop with chapters can see the outline and seek.
@@ -909,7 +900,6 @@ class TestChaptersDisclosureExpandSeekCollapse:
         assert errors == []
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNoChaptersWhenTimestampsEmpty:
     """Visitor on a workshop recording without chapters sees a clean page."""

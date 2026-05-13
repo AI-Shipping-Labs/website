@@ -159,11 +159,11 @@ def _mark_unit_completed(user, unit):
 #              course syllabus
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1VisitorBrowsesCatalogAndSyllabus:
     """Visitor browses the course catalog and reads a course syllabus."""
 
+    @pytest.mark.core
     def test_catalog_shows_published_courses_hides_drafts(
         self, django_server
     , page):
@@ -332,7 +332,6 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert href == "/courses"
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestIssue480MobileCourseCards:
     def test_mobile_catalog_cards_do_not_duplicate_metadata_or_overflow(
@@ -403,11 +402,11 @@ class TestIssue480MobileCourseCards:
 #              track progress
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3FreeUserFreeCourseProgress:
     """Free user on a free course can access units and track progress."""
 
+    @pytest.mark.core
     def test_free_user_accesses_free_course_and_tracks_progress(
         self, django_server
     , browser):
@@ -509,12 +508,12 @@ class TestScenario3FreeUserFreeCourseProgress:
 #              marks complete, sees progress bar update
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4MainMemberPaidCourseProgress:
     """Main member takes a paid course -- accesses units, marks
     complete, sees progress bar update."""
 
+    @pytest.mark.core
     def test_main_member_takes_paid_course_full_flow(
         self, django_server
     , browser):
@@ -634,7 +633,6 @@ class TestScenario4MainMemberPaidCourseProgress:
 # Scenario 6: Visitor filters courses by tag
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6VisitorFiltersByTag:
     """Visitor filters courses by tag."""
@@ -702,7 +700,6 @@ class TestScenario6VisitorFiltersByTag:
 # Scenario 7: Empty catalog shows helpful message with CTA
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7EmptyCatalog:
     """Empty catalog shows helpful message with CTA."""
@@ -745,7 +742,6 @@ class TestScenario7EmptyCatalog:
 #              visitor
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9FreeCourseAnonymousSignupCTA:
     """Free course shows 'Sign up free' CTA to anonymous visitor."""

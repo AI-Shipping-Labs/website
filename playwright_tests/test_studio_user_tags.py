@@ -46,11 +46,11 @@ def _clear_users_except_staff(staff_email):
     connection.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestOperatorTagsContactAndFiltersByTag:
     """Operator tags a contact and finds them via the tag filter."""
 
+    @pytest.mark.core
     def test_full_tag_lifecycle(self, django_server, browser):
         _ensure_tiers()
         staff_email = "tag-admin@test.com"

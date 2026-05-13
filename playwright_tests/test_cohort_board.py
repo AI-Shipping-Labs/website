@@ -106,7 +106,6 @@ def _set_user_name(email, first_name, last_name):
     connection.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMemberOptsInToCohortVisibility:
     """Member toggles their plan to cohort and sees the board reflect it."""
@@ -211,7 +210,6 @@ class TestMemberOptsInToCohortVisibility:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestOutsiderCannotReachBoard:
     """A member of a different sprint sees 404, regardless of visibility."""
@@ -263,7 +261,6 @@ class TestOutsiderCannotReachBoard:
             context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestReadOnlyPlanPage:
     """Visiting another member's plan from the board: focus + no toggle."""

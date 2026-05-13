@@ -57,7 +57,6 @@ def _delete_all_tokens():
     connection.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSuperuserIssuesToken:
     """Superuser mints a token in two clicks without picking a user.
@@ -67,6 +66,7 @@ class TestSuperuserIssuesToken:
       - "New token appears in the listing owned by the creating admin"
     """
 
+    @pytest.mark.core
     def test_superuser_creates_token_and_views_it_once(
         self, django_server, browser
     ):
@@ -148,7 +148,6 @@ class TestSuperuserIssuesToken:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNonSuperuserStaffCannotReachTokens:
     """Staff (not superuser) cannot see the link or reach the page."""
@@ -179,7 +178,6 @@ class TestNonSuperuserStaffCannotReachTokens:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSuperuserRevokesToken:
     """Superuser revokes a token via the list page."""
@@ -220,7 +218,6 @@ class TestSuperuserRevokesToken:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestListingSurfacesOwnership:
     """Listing shows each token's owner so a superuser can tell them apart.

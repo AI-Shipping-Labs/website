@@ -399,11 +399,11 @@ def _clear_all_content():
 # Scenario 449: Newly signed-up reader hits a free article
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario449UnverifiedSignupFreeArticle:
     """New email/password signups must verify before reading free details."""
 
+    @pytest.mark.core
     def test_new_signup_gets_verify_email_gate_for_free_article(
         self, django_server, page
     ):
@@ -490,12 +490,12 @@ class TestScenario449UnverifiedSignupFreeArticle:
 # Scenario 1: Anonymous visitor reads open content freely
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1AnonymousReadsOpenContent:
     """Anonymous visitor reads open content freely without encountering
     any paywall."""
 
+    @pytest.mark.core
     def test_anonymous_reads_open_article(self, django_server, page):
         """Anonymous visitor navigates to /blog and reads an open article
         in full without any upgrade prompts."""
@@ -554,6 +554,7 @@ class TestScenario1AnonymousReadsOpenContent:
         assert 'data-testid="workshop-player-pane"' in body
         assert 'data-source="youtube"' in body
         assert "Upgrade to" not in body
+    @pytest.mark.core
     def test_anonymous_reads_open_tutorial(self, django_server, page):
         """Anonymous visitor navigates to /tutorials and reads an open
         tutorial end to end without any paywall."""
@@ -583,6 +584,7 @@ class TestScenario1AnonymousReadsOpenContent:
         body = page.content()
         assert "Full tutorial content available to everyone" in body
         assert "Upgrade to" not in body
+    @pytest.mark.core
     def test_anonymous_reads_open_project(self, django_server, page):
         """Anonymous visitor navigates to /projects and reads an open project
         writeup without any gating messaging."""
@@ -617,12 +619,12 @@ class TestScenario1AnonymousReadsOpenContent:
 # Scenario 2: Free member hits a Basic-gated article
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2FreeMemberHitsBasicGatedArticle:
     """Free member hits a Basic-gated article and follows the upgrade
     path to pricing."""
 
+    @pytest.mark.core
     def test_free_user_sees_gated_article_with_upgrade_cta(
         self, django_server
     , browser):
@@ -690,12 +692,12 @@ class TestScenario2FreeMemberHitsBasicGatedArticle:
 # Scenario 3: Basic member reads Basic, blocked on Main
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3BasicMemberReadsBasicBlockedOnMain:
     """Basic member reads Basic content but cannot access a Main-gated
     article."""
 
+    @pytest.mark.core
     def test_basic_member_reads_basic_article_fully(self, django_server, browser):
         """Basic member reads a Basic-level article without any
         upgrade prompt."""
@@ -722,6 +724,7 @@ class TestScenario3BasicMemberReadsBasicBlockedOnMain:
         body = page.content()
         assert "Basic-tier exclusive content here" in body
         assert "Upgrade to" not in body
+    @pytest.mark.core
     def test_basic_member_blocked_on_main_article(self, django_server, browser):
         """Basic member sees gating on a Main-level article."""
         _clear_all_content()
@@ -767,12 +770,12 @@ class TestScenario3BasicMemberReadsBasicBlockedOnMain:
 # Scenario 4: Main member reads all up to their level, blocked on Premium
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4MainMemberReadsUpToLevelBlockedOnPremium:
     """Main member reads all content up to their level but gets blocked
     on Premium."""
 
+    @pytest.mark.core
     def test_main_member_reads_open_basic_and_main_articles(
         self, django_server
     , browser):
@@ -826,6 +829,7 @@ class TestScenario4MainMemberReadsUpToLevelBlockedOnPremium:
         body = page.content()
         assert "Main level 20 full body text" in body
         assert "Upgrade to" not in body
+    @pytest.mark.core
     def test_main_member_blocked_on_premium_article(self, django_server, browser):
         """Main member is blocked on a Premium (level 30) article."""
         _clear_all_content()
@@ -866,12 +870,12 @@ class TestScenario4MainMemberReadsUpToLevelBlockedOnPremium:
 # Scenario 5: Premium member has unrestricted access
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5PremiumMemberUnrestrictedAccess:
     """Premium member has unrestricted access across all content types
     and tiers."""
 
+    @pytest.mark.core
     def test_premium_reads_all_article_levels(self, django_server, browser):
         """Premium member reads articles at every level in full."""
         _clear_all_content()
@@ -906,6 +910,7 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
         body = page.content()
         assert "Basic article body visible to premium" in body
         assert "Upgrade to" not in body
+    @pytest.mark.core
     def test_premium_reads_main_recording(self, django_server, browser):
         """Premium member views a Main-level recording fully (issue #618:
         the /video URL 301-redirects to the player layout)."""
@@ -933,6 +938,7 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
         assert 'data-testid="workshop-player-pane"' in body
         assert 'data-testid="workshop-player-script"' in body
         assert "Upgrade to" not in body
+    @pytest.mark.core
     def test_premium_reads_premium_tutorial(self, django_server, browser):
         """Premium member reads a Premium-level tutorial fully."""
         _clear_all_content()
@@ -961,7 +967,6 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
 # Scenario 6: Anonymous visitor lands on gated article via shared link
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6AnonymousGatedArticleViaSharedLink:
     """Anonymous visitor lands on a gated article via shared link and
@@ -1017,7 +1022,6 @@ class TestScenario6AnonymousGatedArticleViaSharedLink:
 # video URL never leaked
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7BasicMemberBlockedFromMainRecording:
     """Basic member is blocked from a Main-gated recording and the video
@@ -1070,12 +1074,12 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
 # Scenario 8: Anonymous visitor evaluates gated course syllabus
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
     """Anonymous visitor evaluates a gated course syllabus and finds
     the upgrade path."""
 
+    @pytest.mark.core
     def test_anonymous_sees_syllabus_but_units_not_clickable(
         self, django_server
     , page):
@@ -1138,12 +1142,12 @@ class TestScenario8AnonymousEvaluatesGatedCourseSyllabus:
 # Scenario 9: Main member navigates a course, reads a unit, marks complete
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9MainMemberNavigatesCourseReadsUnit:
     """Main member navigates a course, reads a unit, and marks it
     complete."""
 
+    @pytest.mark.core
     def test_main_member_sees_clickable_units_and_progress(
         self, django_server
     , browser):
@@ -1201,12 +1205,12 @@ class TestScenario9MainMemberNavigatesCourseReadsUnit:
 # Scenario 10: Staff changes article visibility in Studio
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10StaffChangesVisibilityInStudio:
     """Staff member changes an article's visibility in Studio and the
     gate takes effect immediately for readers."""
 
+    @pytest.mark.core
     def test_staff_changes_level_and_gate_applies(self, django_server, browser):
         """Staff changes an open article to Basic-gated via Studio.
         Anonymous visitor then sees the gated teaser. Basic member sees
@@ -1282,12 +1286,12 @@ class TestScenario10StaffChangesVisibilityInStudio:
 # Scenario 11: Free member encounters gated downloads
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11FreeMemberGatedDownloads:
     """Free member encounters gated downloads and follows the upgrade
     path."""
 
+    @pytest.mark.core
     def test_free_member_sees_lead_magnet_and_gated_download(
         self, django_server
     , browser):
@@ -1342,12 +1346,12 @@ class TestScenario11FreeMemberGatedDownloads:
 # Scenario 12: Free member tries to register for Main-gated event
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario12FreeMemberGatedEvent:
     """Free member tries to register for a Main-gated event and sees
     the upgrade prompt instead."""
 
+    @pytest.mark.core
     def test_free_member_sees_event_details_but_no_registration(
         self, django_server
     , browser):

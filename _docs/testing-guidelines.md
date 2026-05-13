@@ -684,13 +684,13 @@ maintain -- the tag IS the registry.
 
 ## Core Playwright subset (`make test-playwright-core`)
 
-The full Playwright suite has 800+ tests across 130+ files and takes 25-40
-minutes on the CI runner. To get real Playwright coverage on every push to
-`main` (Deploy Dev) without blowing the deploy budget, we maintain a `core`
-subset that runs in well under 5 minutes.
+The full Playwright suite has 1000+ tests across 150+ files and takes too long
+to block every deploy. To get real Playwright coverage on every push to `main`
+(Deploy Dev) without blowing the deploy budget, we maintain a small `core`
+subset focused on deploy-critical user and operator journeys.
 
 ```bash
-make test-playwright-core    # ~450-560 tests in <5 min, runs on every push
+make test-playwright-core    # ~100-150 tests, target <8 min local / <15 min CI
 make test-playwright         # full suite, runs on schedule (every 3h)
 ```
 
@@ -702,32 +702,26 @@ have landed since the last successful run) and via `workflow_dispatch`.
 
 ### What belongs in `core`
 
-A test should be tagged `@pytest.mark.core` if it covers any of:
+A test should be tagged `@pytest.mark.core` only when it covers one of the
+deploy-blocking smoke paths:
 
-- Authentication flows (login success/failure, signup, email verification,
-  password reset, logout, OAuth happy paths).
-- Tier-based access control matrix (anonymous/free/basic/main/premium gating
-  on each major content type — articles, recordings, projects, tutorials,
-  courses, downloads, events).
-- Stripe checkout redirects, billing toggle, account state after checkout.
-- Course enrollment + unit completion happy path.
+- Login, registration/email verification, and password reset happy paths.
+- Stripe checkout/pricing redirect smoke, including the billing toggle.
+- Tier-based access-control smoke across anonymous/free/basic/main/premium
+  and one render path per major content type: articles, recordings/workshops,
+  curated links/downloads, courses, and events.
+- Course enrollment or unit-completion happy path.
 - Event registration happy path.
-- Member plan create / edit / delete.
-- Sprint join / leave.
-- Tier override admin lifecycle.
-- Studio CRUD happy paths for every content type (courses, events, plans,
-  content sources, sync, workshops).
-- Workshop reader access + per-page gating.
-- Notifications happy path.
-- Voting / polls submit.
-- Newsletter signup.
-- Navigation gating (sidebar, header account menu).
-- Public homepage / dashboard happy path.
-- Content render happy path for each major content type (one per file).
+- One sprint join/leave path and one member-plan/dashboard path.
+- One notifications path.
+- Minimal Studio staff safety coverage: access gating, one or two CRUD paths,
+  and one content-source/sync smoke path.
+- Public homepage/dashboard happy path.
 
-Aim for 50-65% of test functions tagged. The criterion is "is this a path
-the product depends on?", not "does it run fast?". Slow tests on critical
-paths still belong in `core`.
+Aim for roughly 100-150 tagged test functions. If a critical journey requires
+exceeding 150, document why in the issue handoff. The criterion is "would we
+block a deploy for this specific breakage?", not "does this feature matter
+somewhere in the product?".
 
 ### What does not belong in `core`
 
@@ -738,8 +732,15 @@ Leave untagged (these run only on the scheduled job):
 - Issue-specific cosmetic fixes (single-issue polish files like
   `test_clickable_cards_523.py`).
 - Edge cases: empty states, malformed input, niche error pages.
-- Studio polish / scanability files.
-- Niche admin actions used rarely (contacts import, peer reviews).
+- Broad Studio panel/sidebar/editor matrices, Studio polish/scanability files,
+  plan-editor drag/drop variants, and admin-only edge cases.
+- GitHub sync orchestration details beyond the minimal content-source/sync
+  smoke path.
+- Password-reset edge/error cases beyond the request/complete happy path.
+- Broad event calendar/timezone/capacity matrices and event series variants.
+- Broad account/billing-state modal matrices.
+- Niche admin actions used rarely (contacts import, peer reviews, token
+  revoke/list ownership, UTM import/archive variants).
 - Theme toggle, env-mismatch banner, code copy widgets, foldable sidebar.
 
 ### How to tag

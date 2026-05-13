@@ -113,7 +113,6 @@ def _active_override_for(email):
     return override
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestTierOverrideUserAutocomplete:
     """Global tier-overrides page routes staff to per-user override pages."""
@@ -172,7 +171,6 @@ def _row_emails(page):
     ]
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAdminSeesEveryActiveOverrideSortedByExpiry:
     """Active overrides surface every active row, sorted soonest-first."""
@@ -250,7 +248,6 @@ class TestAdminSeesEveryActiveOverrideSortedByExpiry:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAdminRevokesOverrideFromList:
     """Revoke action removes the row and flips ``is_active`` to False."""
@@ -307,7 +304,6 @@ class TestAdminRevokesOverrideFromList:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAdminFollowsUserLinkToDetailPage:
     """Clicking the email column lands on the Studio user detail page."""
@@ -349,7 +345,6 @@ class TestAdminFollowsUserLinkToDetailPage:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEmptyStateIsFriendly:
     """No active overrides -> a muted empty message, not a broken table."""
@@ -392,7 +387,6 @@ class TestEmptyStateIsFriendly:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCreationFlowStillWorks:
     """Granting a new override surfaces it in the list immediately."""
@@ -471,7 +465,6 @@ class TestCreationFlowStillWorks:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestExpiredButActiveRowsExcluded:
     """Rows past their expiry are filtered out even if ``is_active=True``."""

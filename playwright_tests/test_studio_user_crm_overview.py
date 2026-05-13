@@ -106,7 +106,6 @@ def _assert_no_horizontal_overflow(page):
     assert overflow <= 2, f"Page has horizontal overflow of {overflow}px"
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioUserCrmOverview:
     def test_user_list_identity_area_navigates_to_detail(

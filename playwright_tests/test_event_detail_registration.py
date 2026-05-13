@@ -70,7 +70,6 @@ def _create_event(
     return event
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousRegistrationCopy:
     """Issue #513: anonymous CTA on a free upcoming event is the inline
@@ -81,6 +80,7 @@ class TestAnonymousRegistrationCopy:
     preserves the return URL for returning users.
     """
 
+    @pytest.mark.core
     def test_anonymous_sees_email_only_form(self, django_server, page):
         _clear_events()
         _ensure_tiers()
@@ -114,11 +114,11 @@ class TestAnonymousRegistrationCopy:
         ).count() == 0
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPostRegistrationConfirmation:
     """Issue #484: post-registration surface shows email + ICS + next steps."""
 
+    @pytest.mark.core
     def test_registered_state_shows_full_confirmation(
         self, django_server, browser
     ):
@@ -189,7 +189,6 @@ class TestPostRegistrationConfirmation:
         assert "SUMMARY:ICS Event" in body
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEventDetailCoverImage:
     """Issue #484: cover image renders when set, falls back otherwise."""

@@ -338,6 +338,7 @@ class TestStudioWorkshopDetail:
 
 @pytest.mark.django_db(transaction=True)
 class TestStudioWorkshopEditHappyPath:
+    @pytest.mark.core
     def test_edit_status_and_save(self, django_server, browser):
         _ensure_tiers()
         _clear_workshops()

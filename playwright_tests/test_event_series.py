@@ -51,7 +51,6 @@ def _next_weekday(weekday=2):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1CreateSeries:
     def test_create_six_week_series(self, django_server, browser):
@@ -91,7 +90,6 @@ class TestScenario1CreateSeries:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2StudioEditable:
     def test_studio_event_full_edit(self, django_server, browser):
@@ -174,7 +172,6 @@ class TestScenario2StudioEditable:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3GitHubLocked:
     def test_github_event_is_readonly(self, django_server, browser):
@@ -234,7 +231,6 @@ class TestScenario3GitHubLocked:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4SyncIsolation:
     def test_studio_event_survives_sync_dashboard_visit(
@@ -276,7 +272,6 @@ class TestScenario4SyncIsolation:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5AddOccurrence:
     def test_add_one_more(self, django_server, browser):
@@ -331,7 +326,6 @@ class TestScenario5AddOccurrence:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6DeleteSeries:
     def test_delete_keeps_events(self, django_server, browser):
@@ -396,7 +390,6 @@ class TestScenario6DeleteSeries:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7ValidationGuard:
     def test_zero_occurrences_rejected(self, django_server, browser):
@@ -455,7 +448,6 @@ class TestScenario7ValidationGuard:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8PublicSeriesPage:
     def test_anonymous_views_series(self, django_server, browser):
@@ -506,7 +498,6 @@ class TestScenario8PublicSeriesPage:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9ListingShowsSeriesLink:
     def test_listing_shows_series_label(self, django_server, browser):

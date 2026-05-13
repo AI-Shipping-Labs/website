@@ -146,11 +146,11 @@ def _clear_downloads():
 #              subscribe page
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1SubscribeFromDedicatedPage:
     """Anonymous visitor subscribes from the dedicated subscribe page."""
 
+    @pytest.mark.core
     def test_anonymous_subscribes_from_subscribe_page(
         self, django_server
     , page):
@@ -217,7 +217,6 @@ class TestScenario1SubscribeFromDedicatedPage:
 #              footer newsletter placement
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2SubscribeFromHomepageNewsletter:
     """Anonymous visitor subscribes from the homepage footer newsletter."""
@@ -275,7 +274,6 @@ class TestScenario2SubscribeFromHomepageNewsletter:
 # Scenario 3: Anonymous visitor subscribes from the site footer
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3SubscribeFromFooter:
     """Anonymous visitor subscribes from the site footer."""
@@ -332,7 +330,6 @@ class TestScenario3SubscribeFromFooter:
 #              email and gets no information leak
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4NoInformationLeak:
     """Returning visitor submits an already-registered email and
@@ -394,11 +391,11 @@ class TestScenario4NoInformationLeak:
 #              verification flow
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5DoubleOptInVerification:
     """New subscriber completes the double opt-in verification flow."""
 
+    @pytest.mark.core
     def test_verification_link_verifies_email(
         self, django_server
     , page):
@@ -520,7 +517,6 @@ class TestScenario5DoubleOptInVerification:
 #              and understands what to do
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6ExpiredTokenError:
     """Subscriber tries to verify with an expired token and
@@ -601,7 +597,6 @@ class TestScenario6ExpiredTokenError:
 #              subscribing with their email
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7LeadMagnetSubscribeFlow:
     """Anonymous visitor downloads a lead magnet by subscribing
@@ -719,7 +714,6 @@ class TestScenario7LeadMagnetSubscribeFlow:
 #              directly
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8AuthenticatedLeadMagnetDownload:
     """Authenticated free member downloads a lead magnet directly."""
@@ -800,7 +794,6 @@ class TestScenario8AuthenticatedLeadMagnetDownload:
 # Scenario 9: Subscriber unsubscribes via the link in an email
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9UnsubscribeViaEmailLink:
     """Subscriber unsubscribes via the link in an email."""
@@ -860,7 +853,6 @@ class TestScenario9UnsubscribeViaEmailLink:
 #               the account page
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10ResubscribeFromAccountPage:
     """Previously unsubscribed member re-subscribes from the
@@ -946,7 +938,6 @@ class TestScenario10ResubscribeFromAccountPage:
 #               helpful error
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario11InvalidEmailError:
     """Visitor submits an invalid email and sees a helpful error."""
@@ -1016,7 +1007,6 @@ class TestScenario11InvalidEmailError:
 #               pricing page
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario12DiscoverSubscribeFromPricing:
     """Free member discovers the subscribe page from the pricing

@@ -66,8 +66,9 @@ test-playwright:
 	uv run pytest playwright_tests/ -v
 
 # Run only the core subset of Playwright tests (auth, access control, payments,
-# happy paths for events/courses/sprints/plans, Studio CRUD, navigation gating).
-# Targeted at <5 min wall time on CI; runs on every push to main via Deploy Dev.
+# one happy path each for events/courses/sprints/plans, notifications, and
+# minimal Studio operator coverage). Targeted at <8 min locally and <15 min on
+# CI; runs on every push to main via Deploy Dev.
 # See _docs/testing-guidelines.md ("Core Playwright subset") for the tagging policy.
 test-playwright-core:
 	uv run pytest -m core playwright_tests/ -v

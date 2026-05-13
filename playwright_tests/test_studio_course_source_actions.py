@@ -54,7 +54,6 @@ def _staff_page(browser):
     return context, page
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_source_managed_action_row_desktop_single_line(
     django_server, browser, tmp_path,
@@ -104,7 +103,6 @@ def test_source_managed_action_row_desktop_single_line(
     context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_source_managed_action_row_mobile_no_horizontal_overflow(
     django_server, browser, tmp_path,
@@ -148,7 +146,6 @@ def test_source_managed_action_row_mobile_no_horizontal_overflow(
     context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 def test_source_managed_stripe_metadata_renders_not_configured(
     django_server, browser, tmp_path,

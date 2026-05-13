@@ -48,9 +48,9 @@ def _ensure_tiers(db_blocker):
         ensure_tiers()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSharedAuthJourneys:
+    @pytest.mark.core
     def test_login_success_shows_immediate_feedback(
         self, django_server, page, django_db_blocker
     ):
@@ -83,6 +83,7 @@ class TestSharedAuthJourneys:
         assert page.locator("#login-form").get_attribute("aria-busy") == "true"
         page.wait_for_url(f"{django_server}/", timeout=10000)
 
+    @pytest.mark.core
     def test_login_invalid_password_can_retry(
         self, django_server, page, django_db_blocker
     ):
@@ -105,6 +106,7 @@ class TestSharedAuthJourneys:
 
         page.wait_for_url(f"{django_server}/", timeout=10000)
 
+    @pytest.mark.core
     def test_register_success_resets_form_and_creates_free_user(
         self, django_server, page, django_db_blocker
     ):

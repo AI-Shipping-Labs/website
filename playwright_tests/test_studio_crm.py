@@ -153,7 +153,6 @@ def _seed_users_and_data():
     return pks
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestStudioCRM:
     """All ten Playwright scenarios for issue #560."""
@@ -203,6 +202,7 @@ class TestStudioCRM:
         ).count() == 0
         context.close()
 
+    @pytest.mark.core
     def test_scenario_2_track_untracked_user_from_profile(
         self, django_server, browser,
     ):

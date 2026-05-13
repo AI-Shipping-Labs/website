@@ -82,7 +82,6 @@ def _read_settings():
     return integration_values, google_creds
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestSettingsDownloadAndUpload:
     """Operator copies Studio settings from one environment to another."""

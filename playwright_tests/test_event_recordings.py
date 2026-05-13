@@ -125,11 +125,11 @@ def _clear_recordings():
 # Scenario 1: Visitor browses recordings and watches an open one
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1VisitorBrowsesAndWatchesOpen:
     """Anonymous visitor browses recordings and watches an open one."""
 
+    @pytest.mark.core
     def test_visitor_browses_and_watches_open_recording(self, django_server, page):
         """Given two published open recordings, the visitor sees both on the
         listing, clicks into one, and sees the full video player with
@@ -224,7 +224,6 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
 # Scenario 2: Visitor filters recordings by tag to find a topic
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2VisitorFiltersRecordingsByTag:
     """Visitor filters recordings by tag to find a topic."""
@@ -319,11 +318,11 @@ class TestScenario2VisitorFiltersRecordingsByTag:
 # Scenario 3: Free user tries to watch a gated recording
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3FreeUserSeesUpgradePath:
     """Free user tries to watch a gated recording and sees upgrade path."""
 
+    @pytest.mark.core
     def test_free_user_sees_gated_recording_with_upgrade_cta(
         self, django_server
     , browser):
@@ -403,11 +402,11 @@ class TestScenario3FreeUserSeesUpgradePath:
 # Scenario 4: Basic member watches a Basic-gated recording
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4BasicMemberWatchesBasicRecording:
     """Basic member watches a Basic-gated recording successfully."""
 
+    @pytest.mark.core
     def test_basic_member_sees_full_recording(self, django_server, browser):
         """Given a Basic-gated recording with timestamps and materials,
         a Basic-tier user sees the full video player, timestamps, and
@@ -469,7 +468,6 @@ class TestScenario4BasicMemberWatchesBasicRecording:
 # Scenario 5: Reader navigates from detail back to filtered listing
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5NavigateFromDetailToFilteredListing:
     """Reader navigates from a recording detail back to filtered listing
@@ -556,7 +554,6 @@ class TestScenario5NavigateFromDetailToFilteredListing:
 # Scenario 6: Visitor paginates through a large collection
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6PaginateLargeCollection:
     """Visitor paginates through a large recording collection."""
@@ -621,7 +618,6 @@ class TestScenario6PaginateLargeCollection:
 # Scenario 7: Paginate a filtered listing without losing the tag
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7PaginateFilteredListing:
     """Visitor paginates a filtered listing without losing the tag filter."""
@@ -683,7 +679,6 @@ class TestScenario7PaginateFilteredListing:
 # Scenario 8: Empty state when no recordings exist
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8EmptyStateNoRecordings:
     """Empty state when no recordings exist at all."""
@@ -722,7 +717,6 @@ class TestScenario8EmptyStateNoRecordings:
 # Scenario 9: Empty state when no recordings match a tag filter
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9EmptyStateNoMatchingTag:
     """Empty state when no recordings match a tag filter."""
@@ -777,7 +771,6 @@ class TestScenario9EmptyStateNoMatchingTag:
 # Scenario 10: Insufficient-tier paid member sees correct CTA
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10InsufficientTierSeesCTAWithCorrectName:
     """Insufficient-tier paid member sees gated CTA with correct tier name."""

@@ -98,7 +98,6 @@ def _refresh_status(slug):
     return status
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestJustEndedEventMovesToPast:
     """Scenario 1: just-ended event moves from upcoming to past on /events."""
@@ -147,7 +146,6 @@ class TestJustEndedEventMovesToPast:
         assert "Upcoming" not in badges_row.inner_text()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestFutureEventStaysUpcoming:
     """Scenario 2: future event stays upcoming."""
@@ -176,7 +174,6 @@ class TestFutureEventStaysUpcoming:
         assert "Next Week" not in past_section.inner_text()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestImplicitEndTreatedAsEnded:
     """Scenario 3: event with no end_datetime is treated as ended after 1h."""
@@ -211,7 +208,6 @@ class TestImplicitEndTreatedAsEnded:
         assert "Flash QA" not in upcoming_section.inner_text()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestLiveEventStaysUpcoming:
     """Scenario 4: event that just started (no end_datetime) stays upcoming."""
@@ -247,7 +243,6 @@ class TestLiveEventStaysUpcoming:
             assert "Live Now" not in past_section.inner_text()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMemberDashboardHidesEndedEvents:
     """Scenario 5: member dashboard hides ended registered events."""
@@ -292,7 +287,6 @@ class TestMemberDashboardHidesEndedEvents:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestRegistrationRejectedForEndedEvent:
     """Scenario 6: registration POST is rejected for an event whose start has passed."""
@@ -356,7 +350,6 @@ class TestRegistrationRejectedForEndedEvent:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCancelledEventNotFlipped:
     """Scenario 7: cancelled event is not silently flipped to completed."""
@@ -391,7 +384,6 @@ class TestCancelledEventNotFlipped:
         assert _refresh_status("was-cancelled") == "cancelled"
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPublicEventsUpcomingCountDrops:
     """Scenario 8: the public /events upcoming list drops the ended event after the cron.

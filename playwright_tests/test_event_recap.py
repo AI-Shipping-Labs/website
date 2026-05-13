@@ -43,7 +43,6 @@ def _create_event_with_recap(slug='launch', status='completed'):
     return event
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestRecapPage:
     def test_visitor_finds_rendered_recap_content_inline(self, django_server, page):
@@ -79,7 +78,6 @@ class TestRecapPage:
         assert '/events/launch/recap' not in body
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestEventWithoutRenderedRecap:
     def test_no_recap_link_and_404(self, django_server, page):

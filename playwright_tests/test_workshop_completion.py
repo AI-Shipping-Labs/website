@@ -112,9 +112,9 @@ def _mark_page_completed(user_email, page):
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMarkCompletedPersistsAcrossReload:
+    @pytest.mark.core
     def test_button_state_persists_on_reload(
         self, browser, django_server,
     ):
@@ -170,9 +170,9 @@ class TestMarkCompletedPersistsAcrossReload:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestWorkshopShowsInContinueLearning:
+    @pytest.mark.core
     def test_workshop_card_appears_with_progress(
         self, browser, django_server,
     ):
@@ -207,7 +207,6 @@ class TestWorkshopShowsInContinueLearning:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestFinishingLastPageRemovesFromContinueLearning:
     def test_workshop_drops_off_after_final_page(
@@ -249,7 +248,6 @@ class TestFinishingLastPageRemovesFromContinueLearning:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestCourseOnlyBehaviourUnchanged:
     def test_course_only_user_sees_course_card_unchanged(
@@ -309,7 +307,6 @@ class TestCourseOnlyBehaviourUnchanged:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAnonymousCannotSeeButton:
     def test_anonymous_visitor_no_mark_completed_button(

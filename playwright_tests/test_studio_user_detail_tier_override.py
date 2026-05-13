@@ -109,11 +109,11 @@ def _csrf_cookie(context):
     return ''
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAdminUpgradesFreeMemberInline:
     """Admin upgrades a Free member's tier without leaving the user page."""
 
+    @pytest.mark.core
     def test_upgrade_main_one_month(self, django_server, browser):
         _ensure_tiers()
         staff_email = 'tier-admin@test.com'
@@ -212,7 +212,6 @@ class TestAdminUpgradesFreeMemberInline:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestAdminRevokesActiveOverride:
     """Admin revokes an active override from the user detail page."""
@@ -276,7 +275,6 @@ class TestAdminRevokesActiveOverride:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestPremiumMemberNoUpgradePath:
     """Premium member: inline block shows the highest-tier message."""
@@ -318,7 +316,6 @@ class TestPremiumMemberNoUpgradePath:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNoDowngradeOrHoldSteady:
     """Inline form must never offer same/lower tiers; POSTs are rejected."""
@@ -382,7 +379,6 @@ class TestNoDowngradeOrHoldSteady:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestReplaceExistingOverride:
     """Creating a new override replaces the existing active one.
@@ -476,7 +472,6 @@ class TestReplaceExistingOverride:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestTierSourceBadge:
     """Stripe-derived vs default badge for non-overridden users."""
@@ -519,7 +514,6 @@ class TestTierSourceBadge:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestNonStaffCannotReachEndpoint:
     """Non-staff users cannot POST to the inline override endpoint."""
@@ -558,7 +552,6 @@ class TestNonStaffCannotReachEndpoint:
         context.close()
 
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestLegacyStandaloneRedirects:
     """Old standalone bookmarks redirect to the per-user override page."""

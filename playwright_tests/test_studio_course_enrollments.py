@@ -79,9 +79,9 @@ def _enroll(user, course, source="manual"):
 # Scenario 1: Operator manages enrollments from within a course context
 # ---------------------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1OperatorManagesEnrollmentsInCourseContext:
+    @pytest.mark.core
     def test_course_edit_links_to_scoped_enrollments_page(
         self, django_server, browser,
     ):
@@ -143,7 +143,6 @@ class TestScenario1OperatorManagesEnrollmentsInCourseContext:
 # Scenario 2: Operator enrolls a user from the course-scoped page
 # ---------------------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2OperatorEnrollsUser:
     def test_enrolling_a_user_creates_admin_source_enrollment(
@@ -193,7 +192,6 @@ class TestScenario2OperatorEnrollsUser:
 # Scenario 3: Operator unenrolls a user and the row reflects it
 # ---------------------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3OperatorUnenrollsUser:
     def test_unenroll_hides_row_in_active_filter_and_shows_with_all(
@@ -250,7 +248,6 @@ class TestScenario3OperatorUnenrollsUser:
 # Scenario 6: Sidebar no longer advertises a top-level Enrollments tab
 # ---------------------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6SidebarNoTopLevelEnrollments:
     def test_sidebar_omits_enrollments_link(self, django_server, browser):
@@ -290,7 +287,6 @@ class TestScenario6SidebarNoTopLevelEnrollments:
 # Scenario 7: Cross-course safety on unenroll
 # ---------------------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7CrossCourseUnenrollSafety:
     def test_unenroll_under_wrong_course_returns_404(
@@ -348,7 +344,6 @@ class TestScenario7CrossCourseUnenrollSafety:
 # Scenario 8: Non-staff user cannot reach the course-scoped page
 # ---------------------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8NonStaffCannotReachPage:
     def test_non_staff_gets_403_anonymous_redirected_to_login(

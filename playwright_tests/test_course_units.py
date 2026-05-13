@@ -170,11 +170,11 @@ def _enroll_user(user_email, course):
 #              start to finish
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario1PremiumMemberWorksThrough:
     """Premium member works through a course unit from start to finish."""
 
+    @pytest.mark.core
     def test_premium_member_full_unit_workflow(self, django_server, browser):
         """Given a Premium member and a published course with required_level=30,
         navigate to the course, click into Unit 1, verify video/lesson/homework,
@@ -273,7 +273,6 @@ class TestScenario1PremiumMemberWorksThrough:
 # Scenario 2: Member navigates between units using the sidebar
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario2SidebarNavigation:
     """Member navigates between units using the sidebar."""
@@ -361,7 +360,6 @@ class TestScenario2SidebarNavigation:
 #              as preview
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario3FreePreviewUnit:
     """Free member previews a gated course unit marked as preview."""
@@ -450,11 +448,11 @@ class TestScenario3FreePreviewUnit:
 #              the upgrade path
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario4FreePaywall:
     """Free member hits paywall on a gated unit and finds the upgrade path."""
 
+    @pytest.mark.core
     def test_free_member_sees_gated_message_and_navigates_to_pricing(
         self, django_server
     , browser):
@@ -506,7 +504,6 @@ class TestScenario4FreePaywall:
 #              cannot access units
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario5AnonymousSyllabus:
     """Anonymous visitor explores the course syllabus but cannot access units."""
@@ -577,11 +574,11 @@ class TestScenario5AnonymousSyllabus:
 # Scenario 6: Member marks a unit completed and then undoes it
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario6ToggleCompletion:
     """Member marks a unit completed and then undoes it."""
 
+    @pytest.mark.core
     def test_mark_complete_and_undo(self, django_server, browser):
         """Given a Basic member and a Basic-level course, navigate to a unit,
         mark it completed, then undo -- the button toggles accordingly."""
@@ -632,11 +629,11 @@ class TestScenario6ToggleCompletion:
 #              on the course detail page
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario7ProgressBar:
     """Member completes units and sees progress reflected on the course detail page."""
 
+    @pytest.mark.core
     def test_progress_bar_updates_after_completing_units(
         self, django_server
     , browser):
@@ -710,7 +707,6 @@ class TestScenario7ProgressBar:
 # Scenario 8: Member reaches the last unit and sees no next button
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario8LastUnitNoNext:
     """Member reaches the last unit and sees no next button."""
@@ -770,7 +766,6 @@ class TestScenario8LastUnitNoNext:
 #              the course and catalog
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario9BreadcrumbNavigation:
     """Member navigates via breadcrumbs from unit back to the course and catalog."""
@@ -848,11 +843,11 @@ class TestScenario9BreadcrumbNavigation:
 #               for easy resumption
 # ---------------------------------------------------------------
 
-@pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestScenario10DashboardContinueLearning:
     """Course in progress appears on the member dashboard for easy resumption."""
 
+    @pytest.mark.core
     def test_in_progress_course_on_dashboard(self, django_server, browser):
         """Given a Premium member with 1 of 3 units completed, the
         dashboard shows the course in 'Continue Learning' with progress.

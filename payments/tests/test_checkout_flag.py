@@ -6,7 +6,9 @@ and legacy mutation APIs return 410.
 """
 
 import json
+from urllib.parse import parse_qs, urlparse
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
@@ -63,7 +65,21 @@ class DeprecatedCheckoutEndpointsTest(TierSetupMixin, TestCase):
                     content_type="application/json",
                 )
                 self.assertEqual(response.status_code, 410)
-                self.assertIn("deprecated", response.json()["error"])
+                data = response.json()
+                self.assertIn("deprecated", data["error"])
+                self.assertIn("portal_url", data)
+
+    def test_membership_checkout_endpoint_still_requires_authentication(self):
+        self.client.logout()
+
+        response = self.client.post(
+            "/api/checkout/create",
+            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response.url)
 
     @override_settings(STRIPE_CHECKOUT_ENABLED=True)
     def test_course_purchase_endpoint_returns_410_even_when_flag_enabled(self):
@@ -87,10 +103,26 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
     def test_anonymous_user_sees_payment_links_even_when_checkout_flag_enabled(self):
         response = self.client.get("/pricing")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "buy.stripe.com")
-        self.assertContains(response, "data-link-monthly")
-        self.assertContains(response, "data-link-annual")
         self.assertNotContains(response, "/api/checkout/create")
+
+        tiers_data = {
+            item["tier"].slug: item
+            for item in response.context["tiers_data"]
+        }
+        for tier_slug, links in settings.STRIPE_PAYMENT_LINKS.items():
+            with self.subTest(tier=tier_slug):
+                item = tiers_data[tier_slug]
+                self.assertEqual(item["payment_link_monthly"], links["monthly"])
+                self.assertEqual(item["payment_link_annual"], links["annual"])
+                self.assertContains(
+                    response,
+                    f'data-link-monthly="{links["monthly"]}"',
+                )
+                self.assertContains(
+                    response,
+                    f'data-link-annual="{links["annual"]}"',
+                )
+                self.assertContains(response, f'href="{links["annual"]}"')
 
     def test_logged_in_user_gets_url_encoded_prefilled_email(self):
         User.objects.create_user(
@@ -100,10 +132,24 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
         self.client.login(email="prefill+stripe@test.com", password="testpass123")
         response = self.client.get("/pricing")
 
-        self.assertContains(
-            response,
-            "prefilled_email=prefill%2Bstripe%40test.com",
-        )
+        tiers_data = {
+            item["tier"].slug: item
+            for item in response.context["tiers_data"]
+        }
+        for tier_slug in settings.STRIPE_PAYMENT_LINKS:
+            item = tiers_data[tier_slug]
+            for period in ("monthly", "annual"):
+                with self.subTest(tier=tier_slug, period=period):
+                    link = item[f"payment_link_{period}"]
+                    query = parse_qs(urlparse(link).query)
+                    self.assertEqual(
+                        query["prefilled_email"],
+                        ["prefill+stripe@test.com"],
+                    )
+                    self.assertIn(
+                        "prefilled_email=prefill%2Bstripe%40test.com",
+                        link,
+                    )
 
     def test_paid_user_upgrade_actions_use_customer_portal(self):
         user = User.objects.create_user(

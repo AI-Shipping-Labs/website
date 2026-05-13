@@ -170,15 +170,48 @@ class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
         user.refresh_from_db()
         self.assertEqual(user.tier, basic_tier)
         self.assertEqual(user.stripe_customer_id, "cus_payment_link")
         self.assertEqual(user.subscription_id, "sub_payment_link")
-        self.assertTrue(
+        self.assertEqual(
             WebhookEvent.objects.filter(
                 stripe_event_id="evt_payment_link_checkout_1",
                 event_type="checkout.session.completed",
-            ).exists()
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            ConversionAttribution.objects.filter(
+                stripe_session_id="cs_payment_link_1",
+                user=user,
+                tier=basic_tier,
+                stripe_subscription_id="sub_payment_link",
+            ).count(),
+            1,
+        )
+
+        duplicate_response = self.client.post(
+            WEBHOOK_URL,
+            data=payload,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=sig,
+        )
+
+        self.assertEqual(duplicate_response.status_code, 200)
+        self.assertEqual(duplicate_response.json()["status"], "already_processed")
+        self.assertEqual(
+            WebhookEvent.objects.filter(
+                stripe_event_id="evt_payment_link_checkout_1",
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            ConversionAttribution.objects.filter(
+                stripe_session_id="cs_payment_link_1",
+            ).count(),
+            1,
         )
 
     @override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)

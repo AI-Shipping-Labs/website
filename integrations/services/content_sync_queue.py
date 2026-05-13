@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from integrations.models import SyncLog
 from integrations.services.github import sync_content_source
+from jobs.tasks.names import build_task_name
 
 SYNC_TASK_PATH = 'integrations.services.github.sync_content_source'
 
@@ -42,13 +43,24 @@ def _clear_queued_state(source, previous_status, queued_log):
     source.save(update_fields=['last_sync_status', 'updated_at'])
 
 
+def _content_sync_task_name(source, task_source):
+    return build_task_name(
+        'Sync content source',
+        source.repo_name,
+        task_source,
+    )
+
+
 def _enqueue_async_task(source, batch_id=None, force=False, task_name=None):
     """Import django-q lazily so missing django-q can fall back inline."""
     from django_q.tasks import async_task
 
     kwargs = {
         'force': force,
-        'task_name': task_name or f'sync-{source.repo_name}',
+        'task_name': task_name or _content_sync_task_name(
+            source,
+            'content sync queue',
+        ),
     }
     if batch_id is not None:
         kwargs['batch_id'] = batch_id
@@ -61,6 +73,7 @@ def enqueue_content_sync(
     force=False,
     mark_queued=True,
     task_name=None,
+    task_source='content sync queue',
 ):
     """Queue one content source sync, falling back inline when django-q is absent."""
     queued_marker = None
@@ -72,7 +85,7 @@ def enqueue_content_sync(
             source,
             batch_id=batch_id,
             force=force,
-            task_name=task_name,
+            task_name=task_name or _content_sync_task_name(source, task_source),
         )
     except ImportError:
         if queued_marker is not None:
@@ -126,6 +139,7 @@ def enqueue_content_syncs(
     batch_id=None,
     force=False,
     mark_queued=True,
+    task_source='content sync queue',
 ):
     """Queue multiple content sources, returning one result per source."""
     return [
@@ -134,7 +148,7 @@ def enqueue_content_syncs(
             batch_id=batch_id,
             force=force,
             mark_queued=mark_queued,
-            task_name=f'sync-{source.repo_name}',
+            task_source=task_source,
         )
         for source in sources
     ]

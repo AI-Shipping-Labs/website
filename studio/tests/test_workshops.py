@@ -16,6 +16,7 @@ from django.utils import timezone
 from content.models import Workshop, WorkshopPage
 from events.models import Event
 from integrations.models import ContentSource, SyncLog
+from jobs.tasks import build_task_name
 
 User = get_user_model()
 
@@ -536,7 +537,11 @@ class StudioWorkshopResyncTest(TestCase):
         self.assertIn('batch_id', call_kwargs)
         self.assertEqual(
             call_kwargs['task_name'],
-            f'sync-{source.repo_name}',
+            build_task_name(
+                'Sync content source',
+                source.repo_name,
+                'Studio workshop sync',
+            ),
         )
 
         # _mark_source_queued created a SyncLog row for the source.

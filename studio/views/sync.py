@@ -929,6 +929,7 @@ def sync_repo_trigger(request, repo_name):
         sources,
         batch_id=batch_id,
         force=force,
+        task_source='Studio sync dashboard',
     )
     for result in results:
         if not result.ok:
@@ -977,6 +978,7 @@ def sync_all(request):
         sources,
         batch_id=batch_id,
         force=force,
+        task_source='Studio sync-all dashboard',
     )
     for result in results:
         if not result.ok:
@@ -1125,7 +1127,10 @@ def sync_object_trigger(request, model_name, object_id):
         )
         return redirect(_safe_redirect_target(request, fallback_url))
 
-    result = enqueue_content_sync(source)
+    result = enqueue_content_sync(
+        source,
+        task_source=f'Studio {key} object resync',
+    )
     if result.ok and result.queued:
         warning = _worker_warning_suffix()
         base_msg = format_html(

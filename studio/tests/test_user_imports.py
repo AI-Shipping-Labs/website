@@ -18,6 +18,7 @@ from accounts.models import (
 from accounts.services import import_users
 from accounts.services.import_users import ImportRow, register_import_adapter
 from accounts.tasks import run_import_batch_task, run_scheduled_import
+from jobs.tasks import build_task_name
 from payments.models import Tier
 
 User = get_user_model()
@@ -152,6 +153,11 @@ class StudioUserImportsViewTest(ImportRegistryMixin, TestCase):
         mock_async_task.assert_called_once_with(
             "accounts.tasks.run_import_batch_task",
             batch.pk,
+            task_name=build_task_name(
+                "Run user import",
+                f"{IMPORT_SOURCE_STRIPE} batch #{batch.pk} dry-run",
+                "Studio user imports",
+            ),
         )
 
     @patch("studio.views.user_imports.async_task")
@@ -271,6 +277,11 @@ class StudioUserImportsViewTest(ImportRegistryMixin, TestCase):
         mock_async_task.assert_called_once_with(
             "accounts.tasks.run_import_batch_task",
             rerun.pk,
+            task_name=build_task_name(
+                "Rerun user import",
+                f"{IMPORT_SOURCE_STRIPE} batch #{rerun.pk} live",
+                "Studio user imports",
+            ),
         )
 
     @patch("studio.views.user_imports.async_task")

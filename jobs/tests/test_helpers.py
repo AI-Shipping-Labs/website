@@ -8,6 +8,7 @@ from django.test import TestCase, tag
 from django_q.models import Schedule
 
 from jobs.tasks.helpers import async_task, schedule
+from jobs.tasks.names import TASK_NAME_MAX_LENGTH, build_task_name, sanitize_task_name_part
 
 
 @tag('core')
@@ -62,6 +63,57 @@ class AsyncTaskTest(TestCase):
         mock_q_async.return_value = 'unique-task-id'
         result = async_task('myapp.tasks.do_thing')
         self.assertEqual(result, 'unique-task-id')
+
+
+@tag('core')
+class TaskNameTest(TestCase):
+    """Tests for worker-history task name helpers."""
+
+    def test_build_task_name_uses_action_target_and_source(self):
+        name = build_task_name(
+            'Sync content source',
+            'AI-Shipping-Labs/content',
+            'Studio sync dashboard',
+        )
+
+        self.assertEqual(
+            name,
+            'Sync content source: AI-Shipping-Labs/content from Studio sync dashboard',
+        )
+
+    def test_build_task_name_sanitizes_control_characters(self):
+        name = build_task_name(
+            'Send\ncampaign',
+            'Campaign\t#42',
+            'Studio\r\ncampaign detail',
+        )
+
+        self.assertEqual(
+            name,
+            'Send campaign: Campaign #42 from Studio campaign detail',
+        )
+
+    def test_build_task_name_truncates_deterministically(self):
+        name = build_task_name(
+            'Sync content source',
+            'AI-Shipping-Labs/' + ('very-long-repo-name-' * 8),
+            'Studio sync dashboard',
+        )
+        repeat = build_task_name(
+            'Sync content source',
+            'AI-Shipping-Labs/' + ('very-long-repo-name-' * 8),
+            'Studio sync dashboard',
+        )
+
+        self.assertEqual(len(name), TASK_NAME_MAX_LENGTH)
+        self.assertEqual(name, repeat)
+        self.assertRegex(name, r'\.\.\.[0-9a-f]{8}$')
+
+    def test_sanitize_task_name_part_collapses_whitespace(self):
+        self.assertEqual(
+            sanitize_task_name_part('  a\n\tb  c  '),
+            'a b c',
+        )
 
 
 class ScheduleTest(TestCase):

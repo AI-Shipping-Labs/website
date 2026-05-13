@@ -44,6 +44,7 @@ from django.views.decorators.http import require_POST
 from django_q.models import OrmQ, Task
 from django_q.tasks import async_task
 
+from jobs.tasks.names import build_task_name, constrain_task_name
 from studio.decorators import staff_required
 from studio.worker_health import get_worker_status
 
@@ -348,12 +349,18 @@ def _resubmit_failed(task):
     job with the same func/args/kwargs, then deletes the failed Task row so
     it doesn't keep reappearing in the failed list.
     """
+    retry_name = task.name or build_task_name(
+        'Retry failed task',
+        task.func,
+        'Studio worker recovery',
+    )
     async_task(
         task.func,
         *(task.args or ()),
         hook=task.hook,
         group=task.group,
         cluster=task.cluster,
+        task_name=constrain_task_name(retry_name),
         **(task.kwargs or {}),
     )
     task.delete()

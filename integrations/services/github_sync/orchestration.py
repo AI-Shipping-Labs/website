@@ -378,10 +378,17 @@ def _release_lock_and_enqueue_follow_up(source):
     )
     try:
         from django_q.tasks import async_task
+
+        from jobs.tasks.names import build_task_name
+
         async_task(
             'integrations.services.github.sync_content_source',
             source,
-            task_name=f'sync-{source.repo_name}-followup',
+            task_name=build_task_name(
+                'Sync content source',
+                source.repo_name,
+                'GitHub sync follow-up',
+            ),
         )
     except ImportError:
         sync_content_source(source)

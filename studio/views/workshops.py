@@ -262,11 +262,17 @@ def workshop_resync(request):
         try:
             # Lazy import: django_q is optional in test environments.
             from django_q.tasks import async_task
+
+            from jobs.tasks.names import build_task_name
             async_task(
                 'integrations.services.github.sync_content_source',
                 source,
                 batch_id=batch_id,
-                task_name=f'sync-{source.repo_name}',
+                task_name=build_task_name(
+                    'Sync content source',
+                    source.repo_name,
+                    'Studio workshop sync',
+                ),
             )
             _mark_source_queued(source, batch_id=batch_id)
         except ImportError:

@@ -11,6 +11,7 @@ from integrations.services.content_sync_queue import (
     enqueue_content_sync,
     enqueue_content_syncs,
 )
+from jobs.tasks import build_task_name
 
 
 class ContentSyncQueueServiceTest(TestCase):
@@ -32,7 +33,24 @@ class ContentSyncQueueServiceTest(TestCase):
             SYNC_TASK_PATH,
             self.source,
             force=False,
-            task_name='sync-AI-Shipping-Labs/content',
+            task_name=build_task_name(
+                'Sync content source',
+                self.source.repo_name,
+                'content sync queue',
+            ),
+        )
+
+    @patch('django_q.tasks.async_task', return_value='task-id')
+    def test_async_enqueue_uses_call_site_source_in_task_name(self, mock_async):
+        enqueue_content_sync(self.source, task_source='Studio sync dashboard')
+
+        self.assertEqual(
+            mock_async.call_args.kwargs['task_name'],
+            build_task_name(
+                'Sync content source',
+                self.source.repo_name,
+                'Studio sync dashboard',
+            ),
         )
 
     @patch('django_q.tasks.async_task')

@@ -162,8 +162,16 @@ def _enqueue_visit(**kwargs):
         return
 
     try:
-        from jobs.tasks import async_task
-        async_task('analytics.tasks.record_visit', **kwargs)
+        from jobs.tasks import async_task, build_task_name
+        async_task(
+            'analytics.tasks.record_visit',
+            task_name=build_task_name(
+                'Record analytics visit',
+                'campaign attribution',
+                'analytics middleware',
+            ),
+            **kwargs,
+        )
     except Exception:  # pragma: no cover — defensive only
         logger.exception('Failed to enqueue record_visit; running inline')
         from analytics.tasks import record_visit

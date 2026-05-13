@@ -115,11 +115,17 @@ def github_webhook(request):
                 # re-checking via ``git ls-remote`` first.
                 try:
                     from django_q.tasks import async_task
+
+                    from jobs.tasks.names import build_task_name
                     async_task(
                         'integrations.services.github.sync_content_source',
                         source,
                         force=True,
-                        task_name=f'sync-{source.repo_name}',
+                        task_name=build_task_name(
+                            'Sync content source',
+                            source.repo_name,
+                            'GitHub webhook',
+                        ),
                     )
                     # Issue #274: webhook-driven sync goes through the same
                     # queued-then-running pattern as the Studio trigger so

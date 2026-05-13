@@ -22,6 +22,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from events.models import Event
+from jobs.tasks import build_task_name
 
 User = get_user_model()
 
@@ -65,6 +66,11 @@ class RecordingPublishYouTubeSuccessTest(TestCase):
             'jobs.tasks.youtube_upload.upload_recording_to_youtube',
             self.recording.id,
             max_retries=3,
+            task_name=build_task_name(
+                'Upload recording to YouTube',
+                f'event #{self.recording.id} {self.recording.title}',
+                'Studio recording publish',
+            ),
         )
 
     @patch('studio.views.recordings.async_task')

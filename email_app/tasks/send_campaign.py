@@ -127,13 +127,18 @@ def send_campaign(campaign_id, batch_size=None):
     chunks = list(_chunk(user_ids, batch_size))
     # Imported lazily: jobs.tasks pulls in django-q, which has heavy
     # side-effects at import time, and tests patch async_task by path.
-    from jobs.tasks import async_task
+    from jobs.tasks import async_task, build_task_name
 
-    for chunk_user_ids in chunks:
+    for index, chunk_user_ids in enumerate(chunks, start=1):
         async_task(
             'email_app.tasks.send_campaign.send_campaign_batch',
             campaign_id=campaign_id,
             user_ids=chunk_user_ids,
+            task_name=build_task_name(
+                'Send campaign batch',
+                f'#{campaign_id} {campaign.subject} batch {index}/{len(chunks)}',
+                'campaign fan-out',
+            ),
         )
 
     logger.info(

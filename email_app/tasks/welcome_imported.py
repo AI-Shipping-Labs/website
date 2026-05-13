@@ -15,11 +15,16 @@ JWT_ALGORITHM = "HS256"
 
 def enqueue_imported_welcome_email(user_id):
     """Django-Q scheduled entry point: enqueue the actual send task."""
-    from jobs.tasks import async_task
+    from jobs.tasks import async_task, build_task_name
 
     return async_task(
         "email_app.tasks.welcome_imported.send_imported_welcome_email",
         user_id,
+        task_name=build_task_name(
+            "Send imported welcome email",
+            f"user #{user_id}",
+            "import welcome fan-out",
+        ),
     )
 
 

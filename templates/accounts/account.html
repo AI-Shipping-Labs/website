@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 
 {% block title %}Account | {{ site_name }}{% endblock %}
 
@@ -31,7 +32,7 @@
               <button type="submit"
                       id="resend-verification-btn"
                       data-verification-resend-button
-                      class="inline-flex items-center gap-2 rounded-md border border-amber-500/40 bg-transparent px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/20">
+                      class="{% button_classes 'secondary' '!border-amber-500/40 !text-amber-200 hover:!bg-amber-500/20' %}">
                 <i data-lucide="mail" class="h-4 w-4"></i>
                 <span data-verification-resend-label>Resend verification email</span>
               </button>
@@ -90,7 +91,7 @@
           </div>
 
           <button type="submit" id="profile-save-btn"
-                  class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  class="{% button_classes 'primary' %}">
             Save
           </button>
         </form>
@@ -179,14 +180,14 @@
         <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-6">
           {% if show_upgrade_action %}
             {% if is_free or not stripe_checkout_enabled %}
-            <a href="/pricing" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" id="upgrade-btn">
+            <a href="/pricing" class="{% button_classes 'primary' %}" id="upgrade-btn">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>
             {% endif %}
             {% if stripe_checkout_enabled and not is_free %}
             <button type="button"
-                    class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                    class="{% button_classes 'primary' %}"
                     id="upgrade-btn"
                     onclick="showUpgradeModal()">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
@@ -197,7 +198,7 @@
 
           {% if show_manage_subscription %}
           <a href="{{ stripe_customer_portal_url }}"
-             class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+             class="{% button_classes 'primary' %}"
              id="manage-subscription-btn">
             <i data-lucide="settings" class="h-4 w-4"></i>
             Manage Subscription
@@ -206,7 +207,7 @@
 
           {% if show_downgrade_action %}
           <button type="button"
-                  class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                  class="{% button_classes 'secondary' %}"
                   id="downgrade-btn"
                   onclick="showDowngradeModal()">
             <i data-lucide="arrow-down-circle" class="h-4 w-4"></i>
@@ -216,7 +217,7 @@
 
           {% if show_cancel_action %}
           <button type="button"
-                  class="inline-flex items-center gap-2 rounded-md border border-red-500/30 bg-transparent px-4 py-2.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                  class="{% button_classes 'destructive' %}"
                   id="cancel-btn"
                   onclick="showCancelConfirm()">
             <i data-lucide="x-circle" class="h-4 w-4"></i>
@@ -282,7 +283,7 @@
                 type="button"
                 id="save-timezone-btn"
                 data-testid="save-timezone-btn"
-                class="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                class="{% button_classes 'primary' %}"
                 onclick="saveTimezonePreference()">
                 Save
               </button>
@@ -290,7 +291,7 @@
                 type="button"
                 id="clear-timezone-btn"
                 data-testid="clear-timezone-btn"
-                class="inline-flex items-center justify-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                class="{% button_classes 'secondary' %}"
                 onclick="clearTimezonePreference()">
                 Clear
               </button>
@@ -333,7 +334,7 @@
           <div id="password-error" class="text-sm text-red-400 hidden"></div>
           <div id="password-success" class="text-sm text-green-400 hidden"></div>
           <button type="submit"
-                  class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                  class="{% button_classes 'primary' %}">
             Update Password
           </button>
         </form>
@@ -456,14 +457,14 @@
       <!-- Action buttons -->
       <div class="flex flex-col-reverse sm:flex-row gap-3">
         <button type="button"
-                class="flex-1 rounded-md bg-red-500/50 px-4 py-2.5 text-sm font-medium text-white/50 cursor-not-allowed transition-colors"
+                class="{% button_classes 'primary' 'flex-1 bg-red-500/50 text-white/50 cursor-not-allowed hover:bg-red-500/50' %}"
                 id="confirm-cancel-btn"
                 disabled
                 onclick="doCancel()">
           Cancel my subscription
         </button>
         <button type="button"
-                class="flex-1 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+                class="{% button_classes 'secondary' 'flex-1' %}"
                 id="keep-plan-btn"
                 onclick="hideCancelConfirm()">
           Keep my plan

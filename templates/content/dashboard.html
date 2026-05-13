@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 
 {% block title %}Dashboard | AI Shipping Labs{% endblock %}
 
@@ -53,11 +54,11 @@
             </div>
           </div>
           <div class="flex gap-3 sm:flex-row sm:flex-wrap">
-            <a href="{% url 'account' %}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+            <a href="{% url 'account' %}" class="{% button_classes 'secondary' %}">
               <i data-lucide="settings" class="h-4 w-4"></i>
               Account
             </a>
-            <a href="/pricing" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+            <a href="/pricing" class="{% button_classes 'primary' %}">
               <i data-lucide="arrow-up-circle" class="h-4 w-4"></i>
               Upgrade
             </a>
@@ -88,14 +89,14 @@
         {% endif %}
         <div class="flex flex-col sm:flex-row flex-wrap gap-3 mt-5">
           <a href="{% url 'my_plan_detail' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"
-             class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+             class="{% button_classes 'primary' %}"
              data-testid="account-sprint-plan-open">
             <i data-lucide="arrow-right-circle" class="h-4 w-4"></i>
             Open my plan
           </a>
           {% if cohort_has_other_members %}
           <a href="{% url 'cohort_board' sprint_slug=plan.sprint.slug %}"
-             class="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+             class="{% button_classes 'secondary' %}"
              data-testid="account-sprint-plan-cohort">
             <i data-lucide="users" class="h-4 w-4"></i>
             View cohort
@@ -119,7 +120,7 @@
             <p class="mt-1 text-sm text-muted-foreground">Connect with other builders in our private Slack workspace.</p>
             <p class="mt-2 text-xs text-muted-foreground">Already joined? It may take up to an hour for your account to be linked automatically.</p>
           </div>
-          <a href="{{ slack_invite_url }}" target="_blank" rel="noopener" class="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-transparent px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+          <a href="{{ slack_invite_url }}" target="_blank" rel="noopener" class="{% button_classes 'secondary' 'shrink-0' %}">
             <i data-lucide="message-square" class="h-4 w-4"></i>
             Join Slack
           </a>
@@ -182,12 +183,12 @@
                   {% endif %}
                 </div>
                 {% if item.next_page %}
-                <a href="{{ item.next_page.get_absolute_url }}" aria-label="Continue with {{ item.workshop.title }} — {{ item.next_page.title }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="continue-learning-workshop-cta">
+                <a href="{{ item.next_page.get_absolute_url }}" aria-label="Continue with {{ item.workshop.title }} — {{ item.next_page.title }}" class="{% button_classes 'primary' 'shrink-0' %}" data-testid="continue-learning-workshop-cta">
                   Continue
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
                 {% else %}
-                <a href="{{ item.workshop.get_absolute_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="continue-learning-workshop-cta">
+                <a href="{{ item.workshop.get_absolute_url }}" class="{% button_classes 'primary' 'shrink-0' %}" data-testid="continue-learning-workshop-cta">
                   Continue
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
@@ -217,12 +218,12 @@
                   {% endif %}
                 </div>
                 {% if item.next_unit %}
-                <a href="{{ item.next_unit.get_absolute_url }}" aria-label="Continue with {{ item.next_unit.module.title }} — {{ item.next_unit.title }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                <a href="{{ item.next_unit.get_absolute_url }}" aria-label="Continue with {{ item.next_unit.module.title }} — {{ item.next_unit.title }}" class="{% button_classes 'primary' 'shrink-0' %}">
                   Continue
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
                 {% else %}
-                <a href="{{ item.course.get_absolute_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+                <a href="{{ item.course.get_absolute_url }}" class="{% button_classes 'primary' 'shrink-0' %}">
                   Continue
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
@@ -238,11 +239,11 @@
               {{ hidden_learning_count }} more started item{{ hidden_learning_count|pluralize }} hidden here.
             </p>
             <div class="flex flex-col gap-2 sm:flex-row">
-              <a href="/courses" class="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              <a href="/courses" class="{% button_classes 'secondary' %}">
                 Courses
                 <i data-lucide="arrow-right" class="h-4 w-4"></i>
               </a>
-              <a href="/workshops" class="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              <a href="/workshops" class="{% button_classes 'secondary' %}">
                 Workshops
                 <i data-lucide="arrow-right" class="h-4 w-4"></i>
               </a>
@@ -254,11 +255,11 @@
             <i data-lucide="book-open" class="mx-auto h-10 w-10 text-muted-foreground"></i>
             <p class="mt-3 text-muted-foreground">No courses or workshops in progress yet.</p>
             <div class="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
-              <a href="/courses" class="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90">
+              <a href="/courses" class="{% button_classes 'primary' %}">
                 Browse Courses
                 <i data-lucide="arrow-right" class="h-4 w-4"></i>
               </a>
-              <a href="/workshops" class="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+              <a href="/workshops" class="{% button_classes 'secondary' %}">
                 Browse Workshops
                 <i data-lucide="arrow-right" class="h-4 w-4"></i>
               </a>
@@ -290,7 +291,7 @@
                     </span>
                   </div>
                 </div>
-                <a href="{{ event.get_absolute_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+                <a href="{{ event.get_absolute_url }}" class="{% button_classes 'secondary' 'shrink-0' %}">
                   View Event
                   <i data-lucide="arrow-right" class="h-4 w-4"></i>
                 </a>
@@ -302,7 +303,7 @@
           <div class="rounded-lg border border-border bg-card p-8 text-center">
             <i data-lucide="calendar" class="mx-auto h-10 w-10 text-muted-foreground"></i>
             <p class="mt-3 text-muted-foreground">No upcoming events</p>
-            <a href="/events" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+            <a href="/events" class="{% button_classes 'secondary' 'mt-4' %}">
               Browse Events
               <i data-lucide="arrow-right" class="h-4 w-4"></i>
             </a>
@@ -338,7 +339,7 @@
           <div class="rounded-lg border border-border bg-card p-8 text-center">
             <i data-lucide="file-text" class="mx-auto h-10 w-10 text-muted-foreground"></i>
             <p class="mt-3 text-muted-foreground">No content available yet</p>
-            <a href="/blog" class="mt-4 inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
+            <a href="/blog" class="{% button_classes 'secondary' 'mt-4' %}">
               Browse Blog
               <i data-lucide="arrow-right" class="h-4 w-4"></i>
             </a>

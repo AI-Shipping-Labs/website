@@ -147,6 +147,35 @@ inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border bor
 
 Top-level CTAs commonly add `w-full sm:w-auto` on mobile-to-desktop transitions. Real `<button>` elements should include disabled styling such as `disabled:cursor-not-allowed disabled:opacity-50` when the state exists.
 
+Product surfaces (dashboard / plan / account):
+
+Use these denser button classes for authenticated product CTAs on `templates/content/dashboard.html`, `templates/plans/my_plan_detail.html`, and `templates/accounts/account.html`. Inline edit controls inside `templates/plans/_plan_body.html` stay compact and are not page-level CTAs.
+
+```django
+{% load accounts_extras %}
+<a href="..." class="{% button_classes 'primary' %}">Open</a>
+<a href="..." class="{% button_classes 'secondary' 'shrink-0' %}">View</a>
+<button type="button" class="{% button_classes 'destructive' %}">Cancel</button>
+```
+
+Product primary:
+
+```html
+inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+```
+
+Product secondary:
+
+```html
+inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+```
+
+Product destructive:
+
+```html
+inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-red-500/30 bg-transparent px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background
+```
+
 ## Pills, Badges, and Chips
 
 Canonical shape: `inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium`.

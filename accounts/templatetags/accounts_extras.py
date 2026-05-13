@@ -5,10 +5,12 @@ Provides the ``display_name`` filter used on cohort-facing pages, the
 same page after sign-out (issue #519), and the symmetric ``login_url``
 simple tag that captures the current path as ``?next=`` so a user who
 clicks Sign in from a deep page returns to that page after auth
-(issue #594).
+(issue #594). Also provides product-surface button class constants for
+dashboard, account, and sprint plan templates.
 """
 
 from django import template
+from django.template import TemplateSyntaxError
 from django.urls import reverse
 
 from accounts.return_context import (
@@ -18,6 +20,51 @@ from accounts.return_context import (
 from accounts.utils.display import display_name as _display_name
 
 register = template.Library()
+
+PRODUCT_BUTTON_CLASSES = {
+    'primary': (
+        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md '
+        'bg-accent px-4 py-2 text-sm font-medium text-accent-foreground '
+        'transition-colors hover:bg-accent/90 disabled:cursor-not-allowed '
+        'disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 '
+        'focus-visible:ring-accent focus-visible:ring-offset-2 '
+        'focus-visible:ring-offset-background'
+    ),
+    'secondary': (
+        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md '
+        'border border-border bg-transparent px-4 py-2 text-sm font-medium '
+        'text-foreground transition-colors hover:bg-secondary '
+        'disabled:cursor-not-allowed disabled:opacity-50 '
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent '
+        'focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+    ),
+    'destructive': (
+        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md '
+        'border border-red-500/30 bg-transparent px-4 py-2 text-sm font-medium '
+        'text-red-400 transition-colors hover:bg-red-500/10 '
+        'disabled:cursor-not-allowed disabled:opacity-50 '
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent '
+        'focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+    ),
+}
+
+
+@register.simple_tag
+def button_classes(variant, extra_classes=''):
+    """Return canonical product-surface button classes.
+
+    Used for dense authenticated surfaces where CTAs should share the same
+    44px tap target while retaining per-call-site layout classes.
+    """
+    try:
+        classes = PRODUCT_BUTTON_CLASSES[variant]
+    except KeyError as exc:
+        raise TemplateSyntaxError(
+            f"Unknown button_classes variant: {variant!r}",
+        ) from exc
+    if extra_classes:
+        return f'{classes} {extra_classes}'
+    return classes
 
 
 @register.filter(name='display_name')

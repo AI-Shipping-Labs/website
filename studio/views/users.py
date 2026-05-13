@@ -30,6 +30,7 @@ import secrets
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
+from django.db.models import Count, Max
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -47,6 +48,7 @@ from accounts.utils.tags import (
 from accounts.utils.tags import (
     remove_tag as _remove_tag_from_user,
 )
+from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
 from integrations.config import get_config
 from payments.models import Tier
@@ -714,6 +716,77 @@ def _tier_source(user, has_override):
     return 'default'
 
 
+COURSE_STATUS_COMPLETED = 'Completed'
+COURSE_STATUS_ENROLLED = 'Enrolled'
+COURSE_STATUS_DROPPED = 'Dropped'
+
+COURSE_STATUS_CLASSES = {
+    COURSE_STATUS_COMPLETED: (
+        'bg-green-500/10 text-green-500 border border-green-500/30'
+    ),
+    COURSE_STATUS_ENROLLED: 'bg-accent/10 text-accent border border-accent/30',
+    COURSE_STATUS_DROPPED: 'bg-muted text-muted-foreground border border-border',
+}
+
+
+def _build_course_enrollments(user):
+    """Return Studio user-detail course enrollment rows without N+1 queries."""
+    enrollments = list(
+        Enrollment.objects
+        .filter(user=user)
+        .select_related('course')
+        .annotate(total_units=Count('course__modules__units', distinct=True))
+    )
+    if not enrollments:
+        return []
+
+    course_ids = {enrollment.course_id for enrollment in enrollments}
+    progress_by_course_id = {
+        row['unit__module__course_id']: row
+        for row in (
+            UserCourseProgress.objects
+            .filter(
+                user=user,
+                completed_at__isnull=False,
+                unit__module__course_id__in=course_ids,
+            )
+            .values('unit__module__course_id')
+            .annotate(
+                completed_units=Count('unit_id', distinct=True),
+                last_activity_at=Max('completed_at'),
+            )
+        )
+    }
+
+    rows = []
+    for enrollment in enrollments:
+        course = enrollment.course
+        progress = progress_by_course_id.get(enrollment.course_id, {})
+        completed_units = progress.get('completed_units', 0)
+        last_activity_at = (
+            progress.get('last_activity_at') or enrollment.enrolled_at
+        )
+
+        if enrollment.unenrolled_at is not None:
+            status = COURSE_STATUS_DROPPED
+        elif enrollment.total_units > 0 and completed_units >= enrollment.total_units:
+            status = COURSE_STATUS_COMPLETED
+        else:
+            status = COURSE_STATUS_ENROLLED
+
+        rows.append({
+            'course_title': course.title,
+            'course_slug': course.slug,
+            'course_url': reverse('studio_course_edit', args=[course.pk]),
+            'status': status,
+            'status_class': COURSE_STATUS_CLASSES[status],
+            'enrolled_at': enrollment.enrolled_at,
+            'last_activity_at': last_activity_at,
+        })
+
+    return sorted(rows, key=lambda row: row['last_activity_at'], reverse=True)
+
+
 @staff_required
 def user_detail(request, user_id):
     """Staff-only user detail page focused on account-level data.
@@ -726,6 +799,7 @@ def user_detail(request, user_id):
     user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
     override = _active_override_for_user(user)
     crm_record = CRMRecord.objects.filter(user=user).first()
+    course_enrollments = _build_course_enrollments(user)
 
     # Inline tier-override block (issue #562). Reuses the same business
     # rules as the standalone /studio/users/tier-override/ page: only
@@ -769,6 +843,7 @@ def user_detail(request, user_id):
         'known_tags': _all_known_contact_tags(),
         'status': _user_status(user),
         'crm_record': crm_record,
+        'course_enrollments': course_enrollments,
         # /admin/accounts/user/<id>/change/ is the canonical destructive
         # surface for users (delete, password reset, full ORM edits).
         # Linking it from the Studio overview keeps Studio focused on

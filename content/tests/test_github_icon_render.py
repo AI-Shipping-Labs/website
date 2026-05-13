@@ -30,7 +30,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from content.models import Workshop, WorkshopPage
+from content.models import Course, Workshop, WorkshopPage
 from events.models import Event
 from tests.fixtures import TierSetupMixin
 
@@ -210,9 +210,9 @@ class StudioWorkshopDetailGitHubIconTest(TestCase):
         self.assertNotIn('data-lucide="github"', block)
 
 
-class StudioStickyActionBarGitHubIconTest(TestCase):
-    """The Studio sticky action bar's "Edit on GitHub" button must render
-    the icon as an inline SVG when ``github_edit_url`` is set."""
+class StudioHeaderSourceActionGitHubIconTest(TestCase):
+    """The Studio header source-action row's "Edit on GitHub" button must
+    render the icon as an inline SVG when ``github_edit_url`` is set."""
 
     @classmethod
     def setUpTestData(cls):
@@ -225,27 +225,18 @@ class StudioStickyActionBarGitHubIconTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    def test_sticky_bar_renders_inline_svg(self):
-        """Render the sticky action bar partial directly with a context
-        that populates ``github_edit_url`` so the Edit-on-GitHub button
-        is emitted."""
-        from django.template.loader import render_to_string
-
-        html = render_to_string(
-            'studio/includes/sticky_action_bar.html',
-            {
-                'title': 'Edit Article',
-                'subtitle': 'Sync source',
-                'can_save': False,
-                'github_edit_url': (
-                    'https://github.com/example/repo/edit/main/foo.md'
-                ),
-                'obj': None,
-                'form_id': 'form-id',
-                'cancel_url': '/studio/',
-                'primary_label': 'Save',
-            },
+    def test_header_source_action_renders_inline_svg(self):
+        course = Course.objects.create(
+            title='GitHub Course',
+            slug='github-course',
+            status='published',
+            source_repo='AI-Shipping-Labs/content',
+            source_path='courses/github-course/course.yaml',
         )
+
+        response = self.client.get(f'/studio/courses/{course.pk}/edit')
+        html = response.content.decode()
+
         # Isolate the GitHub anchor.
         start = html.find('data-testid="sticky-github-source-link"')
         self.assertGreater(start, -1)

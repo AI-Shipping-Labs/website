@@ -112,7 +112,8 @@ class StudioLongFormErgonomicsTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'data-testid="studio-meta-actions-panel"')
         self.assertContains(response, 'data-testid="article-state-panel"')
         self.assertContains(response, 'data-testid="notification-actions"')
-        self.assertContains(response, 'data-testid="panel-view-on-site"')
+        self.assertContains(response, 'data-testid="view-on-site"')
+        self.assertNotContains(response, 'data-testid="panel-view-on-site"')
 
     def test_synced_article_sticky_bar_uses_source_actions_only(self):
         article = Article.objects.create(
@@ -130,6 +131,7 @@ class StudioLongFormErgonomicsTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'data-testid="sticky-action-bar"')
         self.assertContains(response, 'Source-managed article')
         self.assertNotContains(response, 'data-testid="sticky-save-action"')
+        self.assertContains(response, 'data-testid="studio-header-actions"')
         self.assertContains(response, 'data-testid="sticky-github-source-link"')
         self.assertContains(response, 'data-testid="sticky-resync-source-button"')
         self.assertEqual(content.count('data-testid="resync-source-button"'), 1)

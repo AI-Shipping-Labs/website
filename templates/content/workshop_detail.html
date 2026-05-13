@@ -85,17 +85,17 @@
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Tutorial pages</h2>
         {% comment %}
           Issue #527: list rows use the shared `_list_row.html` partial so
-          this card matches the reader sidebar drawer rows in
-          font-size, weight, color, padding, and inter-row gap. The
-          numbered marker variant keeps the existing accent badge.
+          this card matches the reader sidebar drawer rows and course
+          lesson rows in font-size, weight, color, padding, marker style,
+          and inter-row gap.
         {% endcomment %}
         <ol class="space-y-0.5 rounded-lg border border-border bg-card p-1">
           {% for page in pages %}
           <li>
             {% if not can_access_pages %}
-              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="number" marker_number=forloop.counter trailing_icon="lock" trailing_icon_testid="workshop-page-lock-icon" testid="workshop-page-row" %}
+              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="circle" trailing_icon="lock" trailing_icon_testid="workshop-page-lock-icon" testid="workshop-page-row" %}
             {% else %}
-              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="number" marker_number=forloop.counter testid="workshop-page-row" %}
+              {% include "includes/_list_row.html" with href=page.get_absolute_url title=page.title marker_kind="circle" testid="workshop-page-row" %}
             {% endif %}
           </li>
           {% endfor %}

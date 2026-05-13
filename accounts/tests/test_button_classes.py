@@ -95,7 +95,7 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
             ),
         )
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
+    @override_settings(STRIPE_CUSTOMER_PORTAL_URL='https://billing.example.test/portal')
     def test_account_page_membership_and_form_ctas_use_canonical_classes(self):
         user = User.objects.create_user(
             email='account-buttons@test.com',
@@ -116,17 +116,12 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
             PRODUCT_BUTTON_CLASSES['primary'],
         )
         self.assertEqual(
-            _tag_class(html, 'id="upgrade-btn"'),
+            _tag_class(html, 'id="manage-subscription-btn"'),
             PRODUCT_BUTTON_CLASSES['primary'],
         )
-        self.assertEqual(
-            _tag_class(html, 'id="downgrade-btn"'),
-            PRODUCT_BUTTON_CLASSES['secondary'],
-        )
-        self.assertEqual(
-            _tag_class(html, 'id="cancel-btn"'),
-            PRODUCT_BUTTON_CLASSES['destructive'],
-        )
+        self.assertNotIn('id="upgrade-btn"', html)
+        self.assertNotIn('id="downgrade-btn"', html)
+        self.assertNotIn('id="cancel-btn"', html)
         self.assertEqual(
             _tag_class(html, 'id="save-timezone-btn"'),
             PRODUCT_BUTTON_CLASSES['primary'],

@@ -92,6 +92,7 @@ Orchestrator picks groomed issue
 
 - Stay in the orchestrator role. Do not personally perform active issue role work when a product-manager, software-engineer, tester, or on-call agent can own it. The orchestrator coordinates, unblocks, reviews handoffs, and launches the next role agent.
 - Launch role agents asynchronously/non-blocking by default. Do not wait on a subagent unless its result is the immediate blocker for the next orchestrator action; keep grooming, triaging, or advancing independent issues while agents work, so one stuck agent does not stall the pipeline.
+- Keep role agents running whenever eligible backlog exists. If there is a groomed, unblocked issue and agent capacity is available, launch the next appropriate role agent instead of leaving the pipeline idle. Only pause launches when main is not safe for new worktrees, dependencies are blocked, agent capacity is exhausted, or all remaining work is waiting on human verification.
 - Treat new user feedback, links, recordings, screenshots, or raw requests as intake. Create raw issues when needed, then launch a product-manager agent to groom them instead of grooming them inline, unless the user explicitly asks the orchestrator to edit the issue text directly.
 - For UI-heavy issues, the orchestrator or product manager may invoke the designer agent before grooming or acceptance review. The designer produces a report only; the product manager still owns acceptance criteria and the software engineer still owns implementation.
 - Groom any `needs grooming` issues first (launch product-manager in grooming mode)
@@ -151,6 +152,13 @@ Why no PRs: the team's review pipeline is the agent flow (PM groom → SWE → t
 ### Continuous Issue Pipeline
 
 Always keep the pipeline full. When starting a batch, immediately add a "Pick next two issues" task blocked by the current batch. This ensures work never stops.
+
+The orchestrator should not be idle while there is eligible backlog. Keep at
+least one role agent running, and usually two independent tracks, whenever there
+are groomed unblocked issues and available agent capacity. If all active issue
+tracks are waiting on test, PM, commit, CI, or human verification, use spare
+capacity for grooming, next-issue selection, or the next independent
+implementation worktree.
 
 ```
 Batch N: implement + test + accept → commit + push

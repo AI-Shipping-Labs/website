@@ -223,14 +223,13 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         # description_html is rendered (markdown -> HTML)
         self.assertContains(response, '<h1>Hello</h1>')
 
-    def test_landing_shows_cover_image_when_set(self):
+    def test_landing_does_not_render_duplicate_preview_card(self):
         response = self.client.get('/workshops/ws')
-        self.assertContains(response, 'https://cdn.example/cover.png')
-        self.assertContains(response, 'alt="Cover image for Production Agents"')
-        self.assertContains(response, 'data-testid="workshop-detail-preview-image"')
+        self.assertNotContains(response, 'data-testid="workshop-detail-preview"')
+        self.assertNotContains(response, 'data-testid="workshop-detail-preview-image"')
         self.assertNotContains(response, 'data-testid="workshop-detail-preview-fallback"')
 
-    def test_landing_missing_cover_uses_decorative_preview(self):
+    def test_landing_missing_cover_does_not_render_decorative_preview(self):
         ws = _make_workshop(
             slug='no-cover',
             title='No Cover Workshop',
@@ -238,14 +237,9 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             tags=['agents'],
         )
         response = self.client.get(f'/workshops/{ws.slug}')
-        self.assertContains(response, 'data-testid="workshop-detail-preview-fallback"')
-        self.assertNotContains(
-            response,
-            '<h3 class="line-clamp-2 break-words text-base font-semibold '
-            'leading-snug text-foreground sm:text-lg">No Cover Workshop</h3>',
-            html=True,
-        )
-        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
+        self.assertContains(response, 'No Cover Workshop')
+        self.assertNotContains(response, 'data-testid="workshop-detail-preview"')
+        self.assertNotContains(response, 'data-testid="workshop-detail-preview-fallback"')
 
     def test_landing_shows_instructor_and_date(self):
         response = self.client.get('/workshops/ws')

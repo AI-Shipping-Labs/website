@@ -4,10 +4,10 @@ Rendered inside `templates/includes/_accordion.html` via `body_template`.
 Expects `timestamps`, `source_type`, and `video_id` in the parent context
 (propagated by `{% include %}`).
 {% endcomment %}{% for ts in timestamps %}
-<div class="rounded-md px-1 py-1">
+<div class="rounded-md">
   <button
     type="button"
-    class="video-timestamp flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-secondary/50"
+    class="video-timestamp flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-left transition-colors hover:bg-secondary/50"
     data-time-seconds="{{ ts.time_seconds }}"
     data-source="{{ source_type }}"
     {% if source_type == "youtube" %}data-video-id="{{ video_id }}"{% endif %}
@@ -18,7 +18,7 @@ Expects `timestamps`, `source_type`, and `video_id` in the parent context
   </button>
   {% if ts.tutorial_page %}
   <a href="{{ ts.tutorial_page.get_absolute_url }}"
-     class="ml-9 mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
+     class="ml-9 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
      data-testid="timestamp-tutorial-link">
     <i data-lucide="arrow-right" class="h-3 w-3"></i>
     Tutorial: {{ ts.tutorial_page.title }}

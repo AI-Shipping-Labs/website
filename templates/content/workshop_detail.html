@@ -19,14 +19,6 @@
       </a>
 
       {% with workshop_primary_instructor=workshop.primary_instructor %}
-      <div class="mb-8 overflow-hidden rounded-lg">
-        {% if workshop.pages_required_level >= 10 %}
-          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label=workshop.pages_required_level|required_tier_label preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" preview_decorative_fallback=True %}
-        {% else %}
-          {% include "content/_content_preview.html" with preview_cover_url=workshop.cover_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-detail-preview" preview_access_label="Free" preview_instructor=workshop_primary_instructor.name preview_date=workshop.date|date:"M j, Y" preview_tags=workshop.tags preview_image_loading="eager" preview_decorative_fallback=True %}
-        {% endif %}
-      </div>
-
       <header class="mb-12">
         <div class="mb-4 flex flex-wrap items-center gap-2">
           <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">

@@ -86,6 +86,16 @@
     <h2 class="text-md font-semibold text-foreground mb-4">Summary</h2>
     <div class="grid gap-4">
       <div>
+        <label class="block text-sm font-medium text-foreground mb-1" for="plan-goal">Goal</label>
+        <input id="plan-goal"
+               type="text"
+               maxlength="280"
+               data-testid="plan-goal-input"
+               data-field="goal"
+               value="{{ plan.goal }}"
+               class="plan-editor-textarea w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground">
+      </div>
+      <div>
         <label class="block text-sm font-medium text-foreground mb-1" for="plan-summary-current_situation">Current situation</label>
         <textarea id="plan-summary-current_situation"
                   data-testid="summary-current_situation"

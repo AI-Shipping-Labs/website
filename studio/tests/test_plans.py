@@ -214,6 +214,7 @@ class PlanDetailRenderTest(TestCase):
     def test_plan_detail_renders_summary_fields(self):
         plan = Plan.objects.create(
             member=self.member, sprint=self.sprint,
+            goal='SHORT_GOAL_VAL_X',
             summary_current_situation='SITN_VAL_X',
             summary_goal='GOAL_VAL_X',
             summary_main_gap='GAP_VAL_X',
@@ -226,6 +227,12 @@ class PlanDetailRenderTest(TestCase):
         # Every summary field is rendered into a labelled <dd>. Asserting
         # on the data-field container ensures filtering or template
         # restructuring doesn't silently drop one of the bullets.
+        self.assertContains(response, 'data-field="goal"')
+        self.assertContains(
+            response,
+            '<dd class="text-foreground mt-1 whitespace-pre-line">SHORT_GOAL_VAL_X</dd>',
+            html=True,
+        )
         self.assertContains(
             response,
             '<dd class="text-foreground mt-1 whitespace-pre-line">SITN_VAL_X</dd>',
@@ -249,6 +256,18 @@ class PlanDetailRenderTest(TestCase):
         self.assertContains(
             response,
             '<dd class="text-foreground mt-1 whitespace-pre-line">WHY_VAL_X</dd>',
+            html=True,
+        )
+
+    def test_plan_detail_renders_empty_goal_dash(self):
+        plan = Plan.objects.create(member=self.member, sprint=self.sprint)
+        response = self.client.get(f'/studio/plans/{plan.pk}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-field="goal"')
+        self.assertContains(
+            response,
+            '<dd class="text-foreground mt-1 whitespace-pre-line">-</dd>',
             html=True,
         )
 

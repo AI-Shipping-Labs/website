@@ -67,6 +67,31 @@
     });
   }
 
+  function postJson(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(body),
+      credentials: 'same-origin',
+    }).then(function (response) {
+      return response.json().catch(function () {
+        return {};
+      }).then(function (data) {
+        if (!response.ok || data.ok === false) {
+          const error = new Error(data.error || 'Save failed. Try again.');
+          error.status = response.status;
+          throw error;
+        }
+        return data;
+      });
+    });
+  }
+
   function updateCompleteState(item, done) {
     const rendered = item.querySelector('[data-rendered-markdown]');
     item.classList.toggle('is-complete', done);
@@ -258,6 +283,74 @@
           toggle.disabled = false;
         });
     });
+  }
+
+  const goalEditor = root.querySelector('[data-plan-goal-editor]');
+  if (goalEditor) {
+    const rendered = goalEditor.querySelector('[data-plan-goal-text]');
+    const input = goalEditor.querySelector('[data-plan-goal-input]');
+    const edit = goalEditor.querySelector('[data-plan-goal-edit]');
+    const save = goalEditor.querySelector('[data-plan-goal-save]');
+    const cancel = goalEditor.querySelector('[data-plan-goal-cancel]');
+    const status = goalEditor.querySelector('[data-plan-goal-status]');
+    const updateUrl = goalEditor.dataset.updateUrl;
+    const placeholder = "Add a one-sentence goal so teammates know what you're shipping this sprint.";
+    let original = input ? input.value : '';
+
+    function setGoalStatus(text, state) {
+      if (!status) { return; }
+      status.textContent = text || '';
+      status.className = state === 'failed'
+        ? 'text-destructive'
+        : 'text-muted-foreground';
+    }
+
+    function setGoalEditing(isEditing) {
+      if (!rendered || !input || !edit || !save || !cancel) { return; }
+      input.classList.toggle('hidden', !isEditing);
+      save.classList.toggle('hidden', !isEditing);
+      cancel.classList.toggle('hidden', !isEditing);
+      edit.classList.toggle('hidden', isEditing);
+      rendered.classList.toggle('hidden', isEditing);
+      if (isEditing) {
+        input.focus();
+        input.select();
+      }
+    }
+
+    if (edit && save && cancel && input && rendered && updateUrl) {
+      edit.addEventListener('click', function () {
+        original = input.value;
+        setGoalStatus('', 'saved');
+        setGoalEditing(true);
+      });
+      cancel.addEventListener('click', function () {
+        input.value = original;
+        setGoalStatus('', 'saved');
+        setGoalEditing(false);
+      });
+      save.addEventListener('click', function () {
+        const value = input.value;
+        if (value.length > 280) {
+          setGoalStatus('Goal must be 280 characters or fewer.', 'failed');
+          return;
+        }
+        setGoalStatus('Saving...', 'saving');
+        postJson(updateUrl, {goal: value})
+          .then(function (data) {
+            original = data.goal || '';
+            input.value = original;
+            rendered.innerHTML = original ? renderMarkdown(original) : escapeHtml(placeholder);
+            rendered.classList.toggle('text-muted-foreground', !original);
+            rendered.classList.toggle('italic', !original);
+            setGoalEditing(false);
+            setGoalStatus('Saved', 'saved');
+          })
+          .catch(function (error) {
+            setGoalStatus(error.message || 'Save failed. Try again.', 'failed');
+          });
+      });
+    }
   }
 
   root.querySelectorAll('[data-plan-item]').forEach(function (item) {

@@ -100,11 +100,12 @@ class MemberPlanDetailTest(TestCase):
         self.assertContains(response, 'Ship the SME agent prototype')
 
     def test_member_plan_detail_renders_markdown_safely(self):
+        self.alice_plan_cohort.goal = 'Ship **bold** work'
         self.alice_plan_cohort.summary_goal = 'Ship **bold** work'
         self.alice_plan_cohort.focus_main = '[Docs](https://example.com)'
         self.alice_plan_cohort.accountability = '<script>alert(1)</script>\n\n- Weekly'
         self.alice_plan_cohort.save(
-            update_fields=['summary_goal', 'focus_main', 'accountability'],
+            update_fields=['goal', 'summary_goal', 'focus_main', 'accountability'],
         )
         week = Week.objects.create(plan=self.alice_plan_cohort, week_number=1)
         Checkpoint.objects.create(

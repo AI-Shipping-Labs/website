@@ -129,6 +129,7 @@ def serialize_plan_detail(plan):
         "sprint": plan.sprint.slug,
         "user_email": plan.member.email,
         "status": plan.status,
+        "goal": plan.goal,
         "summary": {
             "current_situation": plan.summary_current_situation,
             "goal": plan.summary_goal,

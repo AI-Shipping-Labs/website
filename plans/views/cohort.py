@@ -15,13 +15,14 @@ issue. The interview-note model is deliberately NOT imported here.
 """
 
 import datetime
+import json
 
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.http import (
     Http404,
     HttpResponseBadRequest,
+    HttpResponseForbidden,
     HttpResponsePermanentRedirect,
     JsonResponse,
 )
@@ -350,3 +351,40 @@ def update_plan_visibility(request, sprint_slug, plan_id):
             kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk},
         ),
     )
+
+
+@login_required
+@require_POST
+def update_plan_goal(request, sprint_slug, plan_id):
+    """Owner-only JSON endpoint for the short sprint goal."""
+    plan = get_object_or_404(
+        Plan.objects.filter(pk=plan_id, sprint__slug=sprint_slug),
+    )
+    if plan.member_id != request.user.id:
+        return HttpResponseForbidden('Only the plan owner can edit the goal.')
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {'ok': False, 'error': 'Invalid JSON body.'},
+            status=400,
+        )
+
+    goal = payload.get('goal', '')
+    if goal is None:
+        goal = ''
+    if not isinstance(goal, str):
+        return JsonResponse(
+            {'ok': False, 'error': 'Goal must be text.'},
+            status=400,
+        )
+    if len(goal) > 280:
+        return JsonResponse(
+            {'ok': False, 'error': 'Goal must be 280 characters or fewer.'},
+            status=400,
+        )
+
+    plan.goal = goal
+    plan.save(update_fields=['goal', 'updated_at'])
+    return JsonResponse({'ok': True, 'goal': plan.goal})

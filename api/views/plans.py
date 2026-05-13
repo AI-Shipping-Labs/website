@@ -173,10 +173,25 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             details=details,
         )
 
+    goal_value = plan_data.get("goal", "")
+    if goal_value is None:
+        goal_value = ""
+    if not isinstance(goal_value, str) or len(goal_value) > 280:
+        details = {"goal": "must be a string of 280 characters or fewer"}
+        if index is not None:
+            details["index"] = index
+        return None, error_response(
+            "Invalid goal",
+            "validation_error",
+            status=422,
+            details=details,
+        )
+
     plan = Plan(
         member=member,
         sprint=sprint,
         status=status_value,
+        goal=goal_value,
         accountability=plan_data.get("accountability", "") or "",
     )
 
@@ -517,6 +532,27 @@ def plan_detail(request, plan_id):
     if "accountability" in data:
         plan.accountability = data["accountability"] or ""
         update_fields.append("accountability")
+
+    if "goal" in data:
+        goal = data["goal"]
+        if goal is None:
+            goal = ""
+        if not isinstance(goal, str):
+            return error_response(
+                "Invalid goal",
+                "validation_error",
+                status=422,
+                details={"goal": "must be a string"},
+            )
+        if len(goal) > 280:
+            return error_response(
+                "Invalid goal",
+                "validation_error",
+                status=422,
+                details={"goal": "must be 280 characters or fewer"},
+            )
+        plan.goal = goal
+        update_fields.append("goal")
 
     summary = _build_summary_from_payload(data)
     if summary:

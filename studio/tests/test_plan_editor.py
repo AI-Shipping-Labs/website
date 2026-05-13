@@ -112,6 +112,7 @@ class PlanEditorBootstrapPayloadTest(TestCase):
         )
         cls.plan = Plan.objects.create(
             member=cls.member, sprint=cls.sprint, status='shared',
+            goal='Short sprint goal',
             summary_current_situation='SITN',
             summary_goal='GOAL',
             summary_main_gap='GAP',
@@ -180,6 +181,7 @@ class PlanEditorBootstrapPayloadTest(TestCase):
         self.assertEqual(self.payload['user_email'], 'carlos@example.com')
         self.assertEqual(self.payload['status'], 'shared')
         self.assertEqual(self.payload['duration_weeks'], 6)
+        self.assertEqual(self.payload['goal'], 'Short sprint goal')
 
     def test_payload_summary_block(self):
         summary = self.payload['summary']
@@ -352,6 +354,9 @@ class StudioPlanParticipantNavigationTest(TestCase):
 
     def test_summary_textareas_are_rendered_with_field_names(self):
         response = self.client.get(f'/studio/plans/{self.plan.pk}/edit/')
+        self.assertContains(response, 'data-field="goal"')
+        self.assertContains(response, 'maxlength="280"')
+        self.assertContains(response, 'type="text"')
         for field in [
             'summary_current_situation',
             'summary_goal',

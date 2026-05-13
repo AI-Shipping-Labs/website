@@ -12,6 +12,7 @@ from plans.views.cohort import (
     member_plan_detail,
     my_plan_detail,
     my_plan_edit_redirect,
+    update_plan_goal,
     update_plan_visibility,
 )
 from plans.views.notes import (
@@ -83,6 +84,11 @@ urlpatterns = [
         'sprints/<slug:sprint_slug>/plan/<int:plan_id>/visibility',
         update_plan_visibility,
         name='update_plan_visibility',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>/plan/<int:plan_id>/goal',
+        update_plan_goal,
+        name='update_plan_goal',
     ),
     # Participant week notes (issue #499), now scoped to the sprint
     # workspace URL so form submits keep members in sprint context.

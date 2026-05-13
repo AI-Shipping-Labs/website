@@ -29,6 +29,10 @@
 <section data-testid="plan-summary" class="bg-card border border-border rounded-lg p-6 mb-8">
   <h2 class="text-lg font-semibold text-foreground mb-4">Summary</h2>
   <dl class="space-y-3 text-sm">
+    <div data-field="goal">
+      <dt class="text-xs text-muted-foreground uppercase">Goal</dt>
+      <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.goal|default:"-" }}</dd>
+    </div>
     <div data-field="summary_current_situation">
       <dt class="text-xs text-muted-foreground uppercase">Current situation</dt>
       <dd class="text-foreground mt-1 whitespace-pre-line">{{ plan.summary_current_situation|default:"-" }}</dd>

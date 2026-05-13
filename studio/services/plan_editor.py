@@ -126,6 +126,7 @@ def serialize_plan_detail(plan):
         'user_email': plan.member.email,
         'user_id': plan.member_id,
         'status': plan.status,
+        'goal': plan.goal,
         'summary': {
             'current_situation': plan.summary_current_situation,
             'goal': plan.summary_goal,

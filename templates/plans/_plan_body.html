@@ -7,6 +7,41 @@ existing tests.
 {% endcomment %}
 {% load accounts_extras plan_markdown %}
 
+{% if plan.goal or plan_can_edit %}
+<section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6"
+         data-testid="plan-goal"
+         {% if plan_can_edit %}data-plan-goal-editor data-update-url="{% url 'update_plan_goal' sprint_slug=plan.sprint.slug plan_id=plan.pk %}"{% endif %}>
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div class="min-w-0 flex-1">
+      <h2 class="text-lg font-semibold text-foreground">Goal</h2>
+      <div class="plan-markdown mt-3 text-foreground {% if not plan.goal %}text-muted-foreground italic{% endif %}"
+           data-testid="plan-goal-text"
+           data-plan-goal-text>
+        {% if plan.goal %}
+          {{ plan.goal|plan_markdown }}
+        {% else %}
+          Add a one-sentence goal so teammates know what you're shipping this sprint.
+        {% endif %}
+      </div>
+      {% if plan_can_edit %}
+      <input type="text"
+             maxlength="280"
+             value="{{ plan.goal }}"
+             class="mt-3 hidden w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+             data-plan-goal-input
+             data-testid="plan-goal-input">
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <button type="button" class="text-accent hover:underline" data-plan-goal-edit data-testid="plan-goal-edit">Edit</button>
+        <button type="button" class="hidden rounded-md bg-accent px-3 py-1.5 font-medium text-accent-foreground" data-plan-goal-save data-testid="plan-goal-save">Save</button>
+        <button type="button" class="hidden text-muted-foreground hover:text-foreground" data-plan-goal-cancel data-testid="plan-goal-cancel">Cancel</button>
+        <span class="text-muted-foreground" data-plan-goal-status data-testid="plan-goal-status" aria-live="polite"></span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-weeks">
   <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
     <div>
@@ -280,8 +315,11 @@ existing tests.
 </section>
 {% endif %}
 
+{% if plan_can_edit %}
 <section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-summary">
-  <h2 class="text-lg font-semibold text-foreground">Plan context</h2>
+  <div data-testid="plan-details">
+  <h2 class="text-lg font-semibold text-foreground">Details</h2>
+  <p class="mt-1 text-sm text-muted-foreground">Only you can see this section. Use it for personal context that doesn't need to be shared.</p>
   <dl class="mt-4 grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
     {% if plan.summary_current_situation %}
     <div>
@@ -291,7 +329,7 @@ existing tests.
     {% endif %}
     {% if plan.summary_goal %}
     <div>
-      <dt class="text-muted-foreground">Goal</dt>
+      <dt class="text-muted-foreground">Goal (long-form)</dt>
       <dd class="plan-markdown text-foreground mt-1">{{ plan.summary_goal|plan_markdown }}</dd>
     </div>
     {% endif %}
@@ -314,7 +352,9 @@ existing tests.
     </div>
     {% endif %}
   </dl>
+  </div>
 </section>
+{% endif %}
 
 {% if plan.focus_main or plan.focus_supporting %}
 <section class="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6" data-testid="plan-focus">

@@ -325,7 +325,11 @@ class Plan(TimestampedModelMixin, models.Model):
         default='private',
     )
 
-    # Shareable Summary block (matches the bullets in ``_plan.md``)
+    # Short sprint headline. Visibility follows the plan; longer private
+    # context stays in the summary fields below.
+    goal = models.CharField(max_length=280, blank=True, default='')
+
+    # Owner-only Details block (matches the old bullets in ``_plan.md``)
     summary_current_situation = models.TextField(blank=True, default='')
     summary_goal = models.TextField(blank=True, default='')
     summary_main_gap = models.TextField(blank=True, default='')

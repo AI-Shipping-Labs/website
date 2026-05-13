@@ -66,7 +66,7 @@ class PlansCreateTest(PlansApiTestBase):
         # Nested keys present, even if empty.
         for key in (
             "weeks", "resources", "deliverables", "next_steps",
-            "summary", "focus", "accountability",
+            "summary", "focus", "accountability", "goal",
         ):
             self.assertIn(key, body)
 
@@ -227,6 +227,22 @@ class PlanPatchTest(PlansApiTestBase):
         self.assertEqual(body["summary"]["goal"], "new goal")
         # Other summary fields untouched.
         self.assertEqual(body["accountability"], "orig")
+
+    def test_patch_updates_short_goal(self):
+        response = self._patch({"goal": "Ship one project"})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["goal"], "Ship one project")
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.goal, "Ship one project")
+
+    def test_patch_rejects_overlong_short_goal(self):
+        response = self._patch({"goal": "x" * 281})
+
+        self.assertEqual(response.status_code, 422)
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.goal, "")
 
     def test_patch_ignores_immutable_fields(self):
         response = self._patch({

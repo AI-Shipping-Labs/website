@@ -171,9 +171,10 @@ class CancelTokenTamperedTest(TestCase):
 
     def test_tampered_token_raises_cancel_token_invalid(self):
         token = generate_cancel_token(self.registration)
-        last = token[-1]
-        replacement = 'A' if last != 'A' else 'B'
-        tampered = token[:-1] + replacement
+        header, payload, signature = token.split('.')
+        first = signature[0]
+        replacement = 'A' if first != 'A' else 'B'
+        tampered = f'{header}.{payload}.{replacement}{signature[1:]}'
 
         with self.assertRaises(CancelTokenInvalid):
             decode_cancel_token(tampered)

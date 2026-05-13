@@ -53,9 +53,10 @@ def _expired_token(registration):
 
 def _tampered_token(registration):
     token = generate_cancel_token(registration)
-    last = token[-1]
-    replacement = 'A' if last != 'A' else 'B'
-    return token[:-1] + replacement
+    header, payload, signature = token.split('.')
+    first = signature[0]
+    replacement = 'A' if first != 'A' else 'B'
+    return f'{header}.{payload}.{replacement}{signature[1:]}'
 
 
 class CancelRegistrationGetMissingTokenTest(TestCase):

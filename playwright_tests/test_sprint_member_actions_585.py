@@ -621,21 +621,19 @@ class TestAnonymousCannotPing:
         context = browser.new_context(
             viewport={'width': 1280, 'height': 720},
         )
+        csrf = 'a' * 32
+        context.add_cookies([{
+            'name': 'csrftoken',
+            'value': csrf,
+            'domain': '127.0.0.1',
+            'path': '/',
+        }])
         try:
-            # Get a fresh CSRF token by visiting the sprint page first.
-            # Without this, Django's CSRF middleware returns 403 before
-            # the login_required decorator can issue the 302 redirect.
             page = context.new_page()
             page.goto(
                 f'{django_server}/sprints/{sprint.slug}',
                 wait_until='domcontentloaded',
             )
-            csrf = None
-            for cookie in context.cookies():
-                if cookie['name'] == 'csrftoken':
-                    csrf = cookie['value']
-                    break
-            assert csrf is not None
 
             response = page.request.post(
                 f'{django_server}/sprints/{sprint.slug}/ask-team',

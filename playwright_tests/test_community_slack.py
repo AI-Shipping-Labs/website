@@ -272,12 +272,12 @@ class TestScenario3FreeMemberDiscoversCommunityOnActivities:
         assert "free" not in tiers_attr
         assert "basic" not in tiers_attr
 
-        # Step 3: Click the Membership link in the header
-        # (Issue #238: header Membership now points at /pricing instead of
-        # the marketing-only /#tiers anchor.)
+        # Step 3: Click the Membership link in the current Community
+        # dropdown.
+        page.locator('[data-testid="nav-community-trigger"]').hover()
         membership_link = page.locator(
-            'header a[href="/pricing"]'
-        ).first
+            '[data-testid="nav-community-link-membership"]'
+        )
         membership_link.click()
         page.wait_for_load_state("domcontentloaded")
 

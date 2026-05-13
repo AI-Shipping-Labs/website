@@ -375,26 +375,43 @@ class StudioMobileDensityRegressionTest(TestCase):
 
 
 class StudioEnvMismatchBannerHiddenOnMobileTest(TestCase):
-    """The env-mismatch debug banner must not eat ~80 px of mobile viewport.
+    """The env-mismatch banner stays compact on mobile.
 
-    The banner is dev/debug chrome — it never renders on production
-    (SITE_BASE_URL matches the live host). On staging / localhost it
-    fires and squeezes the Pixel 7 viewport so /studio/articles/ shows
-    only 5 rows instead of the 6 the spec requires. We hide it below
-    md (768 px) so the row-density target is met irrespective of the
-    env-mismatch state.
+    The warning remains visible below md, but the long configured/current
+    URL details are hidden below sm so the banner does not consume the
+    mobile viewport height that dense Studio lists need.
     """
 
     @classmethod
     def setUpTestData(cls):
         cls.markup = ENV_MISMATCH_TEMPLATE.read_text()
 
-    def test_banner_outer_wrapper_is_hidden_below_md(self):
-        # The Tailwind ``hidden md:block`` pair keeps the banner off the
-        # mobile viewport while still showing it on desktop where there
-        # is plenty of vertical space for debug chrome.
+    def test_banner_outer_wrapper_is_visible_below_md(self):
+        # The outer wrapper intentionally has no responsive hidden class;
+        # the compact warning text remains visible on mobile.
         self.assertIn(
-            'class="hidden md:block bg-amber-50',
+            'class="bg-amber-50 dark:bg-amber-500/10',
+            self.markup,
+        )
+        self.assertIn(
+            '<p class="font-semibold text-amber-950 '
+            'dark:text-amber-100 shrink-0">Environment mismatch</p>',
+            self.markup,
+        )
+
+    def test_banner_long_url_summary_is_hidden_below_sm(self):
+        # The verbose configured/current URL line is hidden on narrow
+        # screens, then restored at sm+.
+        self.assertIn(
+            '<p class="hidden min-w-0 leading-5 sm:block">',
+            self.markup,
+        )
+        self.assertIn(
+            'data-testid="env-mismatch-configured"',
+            self.markup,
+        )
+        self.assertIn(
+            'data-testid="env-mismatch-request"',
             self.markup,
         )
 

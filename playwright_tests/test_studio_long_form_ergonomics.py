@@ -144,7 +144,8 @@ def test_course_side_panel_and_synced_course_readonly(django_server, browser):
     assert panel.locator("text=Manage Access").is_visible()
     assert panel.locator("text=Manage Peer Reviews").is_visible()
     assert panel.locator("text=Manage Enrollments").is_visible()
-    assert panel.locator("text=Create Stripe Product").is_visible()
+    assert panel.locator('[data-testid="notification-actions"]').is_visible()
+    assert panel.locator('[data-testid="stripe-product-panel"]').count() == 0
 
     page.goto(f"{django_server}/studio/courses/{synced.pk}/edit", wait_until="domcontentloaded")
     assert page.locator('[data-testid="sticky-save-action"]').count() == 0

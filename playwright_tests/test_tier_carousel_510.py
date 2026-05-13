@@ -355,8 +355,8 @@ def test_pricing_logged_in_main_member_account_states(
         page.goto(f"{django_server}/pricing", wait_until="networkidle")
         page.wait_for_timeout(200)
 
-        # Account-aware state: Main shows "Current plan", peers show
-        # Upgrade/Downgrade.
+        # Account-aware state: Main shows "Current plan"; paid users with
+        # a live subscription manage tier changes through the portal.
         expect(page.locator('[data-tier-card="main"]')).to_contain_text(
             "Current plan"
         )
@@ -364,7 +364,7 @@ def test_pricing_logged_in_main_member_account_states(
             "Downgrade"
         )
         expect(page.locator('[data-tier-card="premium"]')).to_contain_text(
-            "Upgrade"
+            "Manage Subscription"
         )
 
         # Main is still dominant.

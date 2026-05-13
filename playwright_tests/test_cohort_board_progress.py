@@ -266,6 +266,8 @@ class TestCohortPlanLinkStillWorks:
         sprint = _create_sprint(
             'may-2026', 'May 2026', datetime.date(2026, 5, 1),
         )
+        _enroll('viewer@test.com', sprint.slug)
+        _enroll('eli@test.com', sprint.slug)
         _create_plan_with_checkpoints(
             member_email='viewer@test.com', sprint_slug=sprint.slug,
             visibility='cohort', total=1, done=0,
@@ -315,6 +317,8 @@ class TestNoPlanRowAtBottom:
         sprint = _create_sprint(
             'may-2026', 'May 2026', datetime.date(2026, 5, 1),
         )
+        _enroll('viewer@test.com', sprint.slug)
+        _enroll('teammate@test.com', sprint.slug)
         _create_plan_with_checkpoints(
             member_email='viewer@test.com', sprint_slug=sprint.slug,
             visibility='cohort', total=1, done=0,
@@ -429,6 +433,8 @@ class TestDeletedEnrollmentDisappears:
         sprint = _create_sprint(
             'may-2026', 'May 2026', datetime.date(2026, 5, 1),
         )
+        _enroll('viewer@test.com', sprint.slug)
+        _enroll('gabe@test.com', sprint.slug)
         _create_plan_with_checkpoints(
             member_email='viewer@test.com', sprint_slug=sprint.slug,
             visibility='cohort', total=1, done=0,
@@ -473,6 +479,8 @@ class TestDashboardCohortCtaForAnyOtherMember:
         sprint = _create_sprint(
             'may-2026', 'May 2026', datetime.date(2026, 5, 1),
         )
+        _enroll('viewer@test.com', sprint.slug)
+        _enroll('peer@test.com', sprint.slug)
         _create_plan_with_checkpoints(
             member_email='viewer@test.com', sprint_slug=sprint.slug,
             visibility='cohort', total=1, done=0,
@@ -493,7 +501,7 @@ class TestDashboardCohortCtaForAnyOtherMember:
         try:
             page = context.new_page()
             page.goto(
-                f'{django_server}/account/',
+                f'{django_server}/',
                 wait_until='domcontentloaded',
             )
             cta = page.locator('[data-testid="account-sprint-plan-cohort"]')

@@ -37,6 +37,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -485,6 +488,7 @@ class TestMobileDrawerToggle:
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
         page.locator("#studio-sidebar-toggle").click()
+        _expand_studio_sidebar_section(page, "content")
         # Tap a nav link — the click handler should close the drawer.
         page.locator(
             'aside#studio-sidebar a[href="/studio/articles/"]'
@@ -569,7 +573,7 @@ class TestMobileSidebarScrollAffordance:
 
 @pytest.mark.django_db(transaction=True)
 class TestSidebarNavOrder:
-    """The reorganised Studio nav (issue #570) renders its five
+    """The reorganised Studio nav (issue #570) renders its six
     collapsible section headers in the expected order. Per-link order
     inside each section is covered by ``studio/tests/test_sidebar.py``
     and by ``test_studio_sidebar_reorg.py``."""
@@ -600,9 +604,10 @@ class TestSidebarNavOrder:
             for text in label_locator.all_text_contents()
         ]
         assert labels == [
+            "Events",
             "Content",
             "People",
-            "Events",
+            "Planning",
             "Marketing",
             "Operations",
         ]

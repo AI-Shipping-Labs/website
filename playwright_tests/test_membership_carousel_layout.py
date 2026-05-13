@@ -172,7 +172,9 @@ def test_pricing_mobile_carousel_preserves_current_plan_state(
         _assert_main_centered(page, '[data-testid="pricing-tier-carousel"]')
         expect(page.locator('[data-tier-card="main"]')).to_contain_text("Current plan")
         expect(page.locator('[data-tier-card="basic"]')).to_contain_text("Downgrade")
-        expect(page.locator('[data-tier-card="premium"]')).to_contain_text("Upgrade")
+        expect(page.locator('[data-tier-card="premium"]')).to_contain_text(
+            "Manage Subscription"
+        )
         _screenshot(page, '[data-testid="pricing-tier-carousel"]', "pricing-mobile-member")
     finally:
         context.close()

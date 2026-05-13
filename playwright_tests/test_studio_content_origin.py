@@ -128,6 +128,7 @@ def _create_content_origin_pairs():
         slug='synced-origin-event',
         start_datetime=datetime.datetime(2026, 6, 1, 10, 0),
         status='upcoming',
+        origin='github',
         source_repo='AI-Shipping-Labs/content',
         source_path='events/synced-origin-event.md',
         source_commit='evt1234def5678901234567890123456789abcde',

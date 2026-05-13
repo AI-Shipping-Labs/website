@@ -23,6 +23,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     create_staff_user as _create_staff_user,
 )
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -287,8 +290,9 @@ class TestScenario9StaffConfiguresAndPublishes:
         staff_ctx = _auth_context(browser, "staff-publish@test.com")
         staff_page = staff_ctx.new_page()
 
-        # Sidebar shows Announcement entry under System.
+        # Sidebar shows Site banner entry under Marketing.
         staff_page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
+        _expand_studio_sidebar_section(staff_page, "marketing")
         ann_link = staff_page.locator('a[href="/studio/announcement/"]')
         assert ann_link.count() >= 1
 

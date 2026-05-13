@@ -94,8 +94,7 @@ def _wipe_plans():
 
 
 def _wipe_crm():
-    from crm.models import CRMExperiment, CRMRecord
-    CRMExperiment.objects.all().delete()
+    from crm.models import CRMRecord
     CRMRecord.objects.all().delete()
     connection.close()
 

@@ -108,7 +108,7 @@ class TestThemeRowSymmetricAcrossAuthStates:
             _open_drawer(page)
 
             # The dedicated top-of-drawer Theme row exists and sits
-            # above the About link (the first non-Theme row).
+            # above the About accordion trigger (the first non-Theme row).
             theme_row = page.locator(
                 '#mobile-menu [data-testid="mobile-theme-row"]'
             )
@@ -116,14 +116,12 @@ class TestThemeRowSymmetricAcrossAuthStates:
             assert theme_row.is_visible()
 
             theme_box = theme_row.bounding_box()
-            about_link = page.locator(
-                '#mobile-menu a[href="/about"]'
-            )
+            about_link = page.locator("#mobile-about-toggle")
             about_box = about_link.bounding_box()
             assert theme_box is not None
             assert about_box is not None
             assert theme_box["y"] < about_box["y"], (
-                "Theme row must sit above the About link, "
+                "Theme row must sit above the About accordion trigger, "
                 "matching the anonymous variant"
             )
 
@@ -522,17 +520,25 @@ class TestDesktopLayoutUntouched:
             # Hamburger is hidden at desktop width.
             assert not page.locator("#mobile-menu-btn").is_visible()
 
-            # Desktop primary nav is visible with all expected labels.
+            # Desktop primary nav is visible with the current dropdown
+            # triggers and their key child links.
             primary = page.locator('[data-testid="desktop-primary-nav"]')
             assert primary.is_visible()
-            for label in [
-                "About",
-                "Membership",
-                "Community",
-                "Resources",
-                "FAQ",
+            for testid in [
+                "nav-about-trigger",
+                "nav-community-trigger",
+                "nav-resources-trigger",
             ]:
-                assert primary.get_by_text(label, exact=True).is_visible()
+                assert primary.locator(f'[data-testid="{testid}"]').is_visible()
+
+            primary.locator('[data-testid="nav-about-trigger"]').hover()
+            assert primary.locator(
+                '[data-testid="nav-about-link-faq"]'
+            ).is_visible()
+            primary.locator('[data-testid="nav-community-trigger"]').hover()
+            assert primary.locator(
+                '[data-testid="nav-community-link-membership"]'
+            ).is_visible()
 
             # Mobile drawer is hidden.
             mobile_menu = page.locator("#mobile-menu")

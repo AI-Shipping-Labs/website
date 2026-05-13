@@ -13,7 +13,10 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-SUCCESS_MESSAGE = "If that email is on file, a reset link is on its way."
+SUCCESS_MESSAGE = (
+    "If an account exists for that email, we\u2019ll send password reset "
+    "instructions shortly."
+)
 
 
 def _email(prefix):

@@ -75,7 +75,7 @@ def _seed_polish_plan(owner_email="member@test.com", teammate_email="teammate@te
     week = plan.weeks.get(week_number=1)
     checkpoint = Checkpoint.objects.create(
         week=week,
-        description="Build prototype",
+        description="Build **prototype**",
         position=0,
     )
     deliverable = Deliverable.objects.create(
@@ -185,7 +185,7 @@ class TestMemberPlanPolish:
             wait_until="domcontentloaded",
         )
 
-        assert page.locator("strong", has_text="markdown").count() >= 1
+        assert page.locator("strong", has_text="prototype").count() >= 1
         assert page.locator('[data-testid="plan-row-done-toggle"]').count() == 0
         assert page.locator('[data-testid="plan-item-edit"]').count() == 0
         assert page.locator('[data-testid="plan-item-markdown-input"]').count() == 0

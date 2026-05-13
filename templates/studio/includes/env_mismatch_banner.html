@@ -8,7 +8,7 @@
   mismatch indicator remains visible.
 -->
 {% if env_mismatch %}
-<div class="hidden md:block bg-amber-50 dark:bg-amber-500/10 border-b border-amber-300 dark:border-amber-500/30 pl-14 pr-3 py-2 md:px-4"
+<div class="bg-amber-50 dark:bg-amber-500/10 border-b border-amber-300 dark:border-amber-500/30 pl-14 pr-3 py-2 md:px-4"
      data-testid="env-mismatch-banner"
      role="alert"
      aria-live="polite">
@@ -19,7 +19,7 @@
     <div class="flex-1 min-w-0 text-xs sm:text-sm text-amber-900 dark:text-amber-200">
       <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-x-3">
         <p class="font-semibold text-amber-950 dark:text-amber-100 shrink-0">Environment mismatch</p>
-        <p class="min-w-0 leading-5">
+        <p class="hidden min-w-0 leading-5 sm:block">
           <span class="text-amber-800 dark:text-amber-300">Configured</span>
           <code class="px-1 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20 break-all" data-testid="env-mismatch-configured">{{ env_mismatch.configured_base_url }}</code>
           <span class="text-amber-800 dark:text-amber-300">current</span>

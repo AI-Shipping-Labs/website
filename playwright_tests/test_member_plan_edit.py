@@ -2,7 +2,7 @@
 
 Members open their own sprint-scoped plan workspace. These scenarios cover:
 
-- Member opens their own plan workspace under ``/sprints/<slug>/plan/<id>/edit``.
+- Member opens their own unified plan workspace under ``/sprints/<slug>/plan/<id>``.
 - Member cannot view another member's plan (404, no email leak).
 - Anonymous user is redirected to login from the member URL.
 - Staff Studio editor still works (regression).
@@ -117,7 +117,7 @@ class TestMemberOpensOwnPlan:
         page = context.new_page()
 
         page.goto(
-            f"{django_server}/sprints/spring-cohort/plan/{plan_pk}/edit",
+            f"{django_server}/sprints/spring-cohort/plan/{plan_pk}",
             wait_until="domcontentloaded",
         )
         page.locator('[data-testid="member-plan"]').wait_for(state="visible")
@@ -164,7 +164,7 @@ class TestMemberCannotViewOtherMembersPlan:
 
         # Bob hits Alice's plan id -> 404.
         response = page.goto(
-            f"{django_server}/sprints/spring-cohort/plan/{alice_plan_pk}/edit",
+            f"{django_server}/sprints/spring-cohort/plan/{alice_plan_pk}",
             wait_until="domcontentloaded",
         )
         assert response is not None
@@ -174,7 +174,7 @@ class TestMemberCannotViewOtherMembersPlan:
 
         # Bob hits his OWN plan id -> 200 with editor.
         page.goto(
-            f"{django_server}/sprints/spring-cohort/plan/{bob_plan_pk}/edit",
+            f"{django_server}/sprints/spring-cohort/plan/{bob_plan_pk}",
             wait_until="domcontentloaded",
         )
         page.locator('[data-testid="member-plan"]').wait_for(state="visible")
@@ -213,12 +213,12 @@ class TestAnonymousRedirectedToLogin:
         page = context.new_page()
 
         page.goto(
-            f"{django_server}/sprints/s/plan/{plan_pk}/edit",
+            f"{django_server}/sprints/s/plan/{plan_pk}",
             wait_until="domcontentloaded",
         )
         # Final URL must be on the login page with next preserved.
         assert "/accounts/login/" in page.url
-        assert f"next=/sprints/s/plan/{plan_pk}/edit" in page.url
+        assert f"next=/sprints/s/plan/{plan_pk}" in page.url
 
         context.close()
 

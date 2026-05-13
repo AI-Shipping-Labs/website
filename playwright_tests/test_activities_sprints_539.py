@@ -106,11 +106,13 @@ def _bottom(primary_locator):
 def _primary_nav_labels(page):
     return page.evaluate(
         """() => {
-          const nav = document.querySelector('header nav');
+          const nav = document.querySelector(
+            '[data-testid="desktop-primary-nav"]'
+          );
           const labels = [];
-          for (const el of nav.querySelectorAll('a, button')) {
+          for (const el of nav.querySelectorAll(':scope > div > button')) {
             const text = el.textContent.trim();
-            if (['Learn', 'Community'].includes(text)) {
+            if (text) {
               labels.push(text);
             }
           }
@@ -130,7 +132,7 @@ class TestActivitiesSprintFirstLayout:
         page.set_viewport_size({"width": 1280, "height": 900})
         page.goto(f"{django_server}/activities", wait_until="domcontentloaded")
 
-        assert _primary_nav_labels(page)[:2] == ["Learn", "Community"]
+        assert _primary_nav_labels(page) == ["About", "Community", "Resources"]
         page.get_by_role("heading", name="Active community sprints").wait_for()
         intro = page.locator('[data-testid="activities-sprints-intro-row"]')
         card = page.locator('[data-testid="activities-sprint-card"]').first

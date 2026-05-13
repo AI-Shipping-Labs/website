@@ -11,6 +11,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -60,15 +63,11 @@ class TestStudioUserImports:
         page = context.new_page()
 
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
-        # Issue #570 nested Imports inside the People > Users sub-group
-        # (the old label was ``User imports``; the new label is just
-        # ``Imports``). #624 dropped the Users sub-toggle, so expanding
-        # People is enough to surface the Imports link.
+        # Imports lives inside the collapsed People section on the
+        # dashboard, so expand that section before using the nav link.
+        _expand_studio_sidebar_section(page, "people")
         page.locator(
-            'aside#studio-sidebar [aria-controls="studio-section-people"]'
-        ).click()
-        page.locator(
-            '#studio-users-children a[href="/studio/imports/"]'
+            '#studio-section-people a[href="/studio/imports/"]'
         ).click()
         page.wait_for_load_state("domcontentloaded")
         assert page.url.endswith("/studio/imports/")

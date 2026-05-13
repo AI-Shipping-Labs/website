@@ -156,6 +156,18 @@ VIEWPORT = {"width": 1280, "height": 720}
 DEFAULT_PASSWORD = "TestPass123!"
 
 
+def expand_studio_sidebar_section(page, slug):
+    """Expand a Studio sidebar section if it is currently collapsed."""
+    button = page.locator(
+        f'#studio-sidebar-nav [aria-controls="studio-section-{slug}"]'
+    )
+    if button.get_attribute("aria-expanded") != "true":
+        button.click()
+    page.locator(f"#studio-sidebar-nav #studio-section-{slug}").wait_for(
+        state="visible",
+    )
+
+
 def ensure_tiers():
     """Ensure membership tiers exist in the database.
 

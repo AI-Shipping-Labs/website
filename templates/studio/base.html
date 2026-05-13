@@ -343,36 +343,34 @@ select.studio-select {
           <ul id="studio-section-people" class="space-y-1 mt-1{% if not state.people_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_user_list' %}"
-                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.users_row_active %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if request.path == '/studio/users/' or request.path == '/studio/users/export' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
                 <i data-lucide="users" class="w-4 h-4"></i>
                 <span>Users</span>
               </a>
-              <ul id="studio-users-children" class="ml-6 mt-1 space-y-1">
-                <li>
-                  <a href="{% url 'studio_import_batch_list' %}"
-                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/imports/' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                    <i data-lucide="upload-cloud" class="w-4 h-4"></i>
-                    <span>Imports</span>
-                  </a>
-                </li>
-                <li>
-                  <a href="{% url 'studio_tier_overrides_list' %}"
-                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'tier_override' in request.path or 'tier_overrides' in request.path or 'tier-override' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                    <i data-lucide="shield" class="w-4 h-4"></i>
-                    <span>Tier overrides</span>
-                  </a>
-                </li>
-                {% if request.user.is_superuser %}
-                <li>
-                  <a href="{% url 'studio_user_create' %}"
-                     class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/new' in request.path or '/users/created' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                    <i data-lucide="user-plus" class="w-4 h-4"></i>
-                    <span>New user</span>
-                  </a>
-                </li>
-                {% endif %}
-              </ul>
             </li>
+            <li>
+              <a href="{% url 'studio_import_batch_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/imports/' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                <span>Imports</span>
+              </a>
+            </li>
+            <li>
+              <a href="{% url 'studio_tier_overrides_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if 'tier_override' in request.path or 'tier_overrides' in request.path or 'tier-override' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="shield" class="w-4 h-4"></i>
+                <span>Tier overrides</span>
+              </a>
+            </li>
+            {% if request.user.is_superuser %}
+            <li>
+              <a href="{% url 'studio_user_create' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/users/new' in request.path or '/users/created' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                <span>New user</span>
+              </a>
+            </li>
+            {% endif %}
             <li>
               <a href="{% url 'studio_crm_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/crm' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -380,6 +378,23 @@ select.studio-select {
                 <span>CRM</span>
               </a>
             </li>
+          </ul>
+        </div>
+
+        <!-- Planning Section -->
+        <div>
+          <button type="button"
+                  data-studio-section-toggle
+                  aria-expanded="{% if state.planning_active %}true{% else %}false{% endif %}"
+                  aria-controls="studio-section-planning"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
+            <span class="flex items-center space-x-3">
+              <i data-lucide="target" class="w-4 h-4"></i>
+              <span>Planning</span>
+            </span>
+            <i data-lucide="chevron-down" class="studio-section-chevron w-4 h-4 transition-transform"></i>
+          </button>
+          <ul id="studio-section-planning" class="space-y-1 mt-1{% if not state.planning_active %} hidden{% endif %}">
             <li>
               <a href="{% url 'studio_sprint_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/sprints' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -633,8 +648,7 @@ select.studio-select {
 // state when the user clicks a section header. Section-header <button>s
 // never navigate, and the mobile-drawer click handler above is scoped to
 // <a> elements, so toggling a section in the open mobile drawer does not
-// close the drawer. (#624 removed the Users sub-toggle — the Users
-// children are always visible while the People section is expanded.)
+// close the drawer. People links are flat; there is no per-Users sub-toggle.
 (function() {
   function rotateChevron(chevron, expanded) {
     if (!chevron) { return; }

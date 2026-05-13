@@ -6,7 +6,7 @@ server-rendered table-and-form surfaces belong there. These E2E
 scenarios are deliberately narrow:
 
 1. Staff member creates a sprint and a plan via the sidebar -- confirms
-   the new "Members" section wiring works in a real browser and that
+   the new "Planning" section wiring works in a real browser and that
    navigating between the two list pages plus a successful create cycle
    actually lands on the right detail page.
 2. Staff captures an internal member note and then an external one,
@@ -30,6 +30,9 @@ from playwright_tests.conftest import (
 )
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
+)
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
 )
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -67,7 +70,8 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         # Step 1: land on the dashboard.
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
-        # Step 2: click the Sprints link in the sidebar.
+        # Step 2: expand Planning, then click the Sprints link in the sidebar.
+        _expand_studio_sidebar_section(page, "planning")
         page.locator(
             '#studio-sidebar-nav a[href="/studio/sprints/"]'
         ).click()
@@ -93,6 +97,7 @@ class TestStaffCreatesSprintAndPlanFromSidebar:
         page.locator('h1:has-text("May 2026 sprint")').wait_for(state="visible")
 
         # Step 4: jump to Plans via the sidebar.
+        _expand_studio_sidebar_section(page, "planning")
         page.locator('#studio-sidebar-nav a[href="/studio/plans/"]').click()
         page.wait_for_url(f"{django_server}/studio/plans/")
 

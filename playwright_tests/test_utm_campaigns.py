@@ -33,6 +33,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from playwright_tests.conftest import (
+    expand_studio_sidebar_section as _expand_studio_sidebar_section,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -457,10 +460,11 @@ class TestScenario10SidebarEntry:
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
 
         # Sidebar contains both "Campaigns" (email) and "UTM Campaigns" entries
+        _expand_studio_sidebar_section(page, "marketing")
         utm_link = page.locator('aside a[href="/studio/utm-campaigns/"]').first
-        utm_link.wait_for(state="attached")
+        utm_link.wait_for(state="visible")
         email_link = page.locator('aside a[href="/studio/campaigns/"]').first
-        email_link.wait_for(state="attached")
+        email_link.wait_for(state="visible")
 
         utm_link.click()
         page.wait_for_load_state("domcontentloaded")

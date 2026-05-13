@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Tier Overrides{% endblock %}
 
@@ -70,9 +71,21 @@
           {% endwith %}
         </td>
         <td class="px-6 py-4 text-sm text-foreground"
-            data-testid="active-override-effective-tier">{{ override.override_tier.name }}</td>
+            data-testid="active-override-effective-tier">
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ override.override_tier.slug|studio_tier_pill_classes }}"
+                data-testid="active-override-effective-tier-pill"
+                data-tier="{{ override.override_tier.slug }}">{{ override.override_tier.name }}</span>
+        </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
-            data-testid="active-override-base-tier">{% if override.original_tier %}{{ override.original_tier.name }}{% else %}-{% endif %}</td>
+            data-testid="active-override-base-tier">
+          {% if override.original_tier %}
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ override.original_tier.slug|studio_tier_pill_classes }}"
+                data-testid="active-override-base-tier-pill"
+                data-tier="{{ override.original_tier.slug }}">{{ override.original_tier.name }}</span>
+          {% else %}
+          -
+          {% endif %}
+        </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
             data-testid="active-override-set-at">{{ override.created_at|date:"M d, Y H:i" }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground"

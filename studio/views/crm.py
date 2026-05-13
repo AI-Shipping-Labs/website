@@ -14,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.models import TierOverride
@@ -41,14 +42,19 @@ def _normalize_list_filter(raw):
 
 
 def _active_tier_name(user):
-    """Return the user's effective tier label, including any override.
+    """Return the user's effective tier label without provenance suffixes.
 
     Mirrors the helper in ``studio.views.users`` so the CRM list shows
     the same tier label as the user list (override-aware).
     """
-    from django.utils import timezone
+    return _active_tier_info(user)['name']
 
+
+def _active_tier_info(user):
+    """Return effective tier display fields for CRM list/detail templates."""
     base_name = user.tier.name if user.tier_id else 'Free'
+    base_slug = user.tier.slug if user.tier_id else 'free'
+    base_info = {'name': base_name, 'slug': base_slug, 'source': 'stripe' if user.stripe_customer_id else 'default'}
     override = (
         TierOverride.objects
         .filter(
@@ -61,11 +67,15 @@ def _active_tier_name(user):
         .first()
     )
     if override is None:
-        return base_name
+        return base_info
     base_level = user.tier.level if user.tier_id else 0
     if override.override_tier.level <= base_level:
-        return base_name
-    return f'{override.override_tier.name} (override)'
+        return base_info
+    return {
+        'name': override.override_tier.name,
+        'slug': override.override_tier.slug,
+        'source': 'override',
+    }
 
 
 @staff_required
@@ -131,12 +141,15 @@ def crm_list(request):
 
     rows = []
     for record in page.object_list:
+        tier_info = _active_tier_info(record.user)
         rows.append({
             'pk': record.pk,
             'user_pk': record.user.pk,
             'email': record.user.email,
             'full_name': f'{record.user.first_name} {record.user.last_name}'.strip(),
-            'tier_name': _active_tier_name(record.user),
+            'tier_name': tier_info['name'],
+            'tier_slug': tier_info['slug'],
+            'tier_source': tier_info['source'],
             'persona': record.persona,
             'status': record.status,
             'status_display': record.get_status_display(),
@@ -173,6 +186,7 @@ def _get_record(crm_id):
 
 def _record_detail_context(record):
     """Build the shared context for the CRM detail page."""
+    tier_info = _active_tier_info(record.user)
     note_queryset = (
         InterviewNote.objects
         .filter(member=record.user)
@@ -189,7 +203,9 @@ def _record_detail_context(record):
     return {
         'record': record,
         'detail_user': record.user,
-        'tier_name': _active_tier_name(record.user),
+        'tier_name': tier_info['name'],
+        'tier_slug': tier_info['slug'],
+        'tier_source': tier_info['source'],
         'member_plans': member_plans,
         'internal_notes': note_queryset.internal(),
         'external_notes': note_queryset.external(),

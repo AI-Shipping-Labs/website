@@ -208,13 +208,11 @@ class ActiveOverridesRenderTest(ActiveOverridesListTestBase):
         )
         response = self.client.get(self.url)
         # The base-tier column for this row is rendered as '-'.
-        self.assertContains(
-            response,
+        self.assertRegex(
+            response.content.decode(),
             (
-                '<td class="px-6 py-4 text-sm text-muted-foreground"\n'
-                '            data-testid="active-override-base-tier">-</td>'
+                r'data-testid="active-override-base-tier"[^>]*>\s*-\s*</td>'
             ),
-            html=False,
         )
 
     def test_granted_by_dash_when_unset(self):

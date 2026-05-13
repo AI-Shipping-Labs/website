@@ -50,6 +50,19 @@ STATUS_BADGE_CLASSES = {
     'cancelled': 'bg-red-500/20 text-red-400',
 }
 
+TIER_PILL_CLASSES = {
+    'free': 'bg-muted text-muted-foreground',
+    'basic': 'bg-blue-500/20 text-blue-300',
+    'main': 'bg-accent/20 text-accent',
+    'premium': 'bg-amber-500/20 text-amber-300',
+}
+
+USER_STATUS_PILL_CLASSES = {
+    'active': 'bg-green-500/15 text-green-300',
+    'staff': 'bg-blue-500/15 text-blue-300',
+    'inactive': 'bg-red-500/15 text-red-300',
+}
+
 STATUS_OPTIONS = {
     'publication': [
         ('draft', 'Draft'),
@@ -70,6 +83,21 @@ def dict_get(dictionary, key):
     if isinstance(dictionary, dict):
         return dictionary.get(key)
     return None
+
+
+@register.filter
+def studio_tier_pill_classes(slug):
+    """Return canonical Studio tier pill colours."""
+    return TIER_PILL_CLASSES.get(str(slug or 'free').lower(), TIER_PILL_CLASSES['free'])
+
+
+@register.filter
+def studio_user_status_pill_classes(status):
+    """Return canonical Studio user-status pill colours."""
+    return USER_STATUS_PILL_CLASSES.get(
+        str(status or 'inactive').lower(),
+        USER_STATUS_PILL_CLASSES['inactive'],
+    )
 
 
 @register.simple_tag

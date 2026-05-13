@@ -161,7 +161,9 @@ class StudioUserListTest(TestCase):
     def test_tier_column_shows_effective_override_tier(self):
         response = self.client.get('/studio/users/?filter=all')
         rows = {row['email']: row for row in response.context['user_rows']}
-        self.assertEqual(rows['override@test.com']['tier_name'], 'Premium (override)')
+        self.assertEqual(rows['override@test.com']['tier_name'], 'Premium')
+        self.assertEqual(rows['override@test.com']['tier_slug'], 'premium')
+        self.assertEqual(rows['override@test.com']['tier_source'], 'override')
 
     def test_tier_column_shows_paid_tier_name(self):
         response = self.client.get('/studio/users/?filter=all')

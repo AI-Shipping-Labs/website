@@ -157,7 +157,7 @@ select.studio-select {
 {% include "studio/includes/env_mismatch_banner.html" %}
 <div class="flex min-h-screen">
   <!-- Mobile sidebar toggle -->
-  <button id="studio-sidebar-toggle" class="md:hidden fixed top-3 left-3 z-50 h-11 w-11 flex items-center justify-center bg-gray-800 rounded-lg text-gray-300 hover:text-white hover:bg-gray-700 transition-colors" aria-label="Open Studio sidebar" aria-controls="studio-sidebar" aria-expanded="false">
+  <button id="studio-sidebar-toggle" class="md:hidden fixed top-3 left-3 z-50 h-11 w-11 flex items-center justify-center border border-border bg-card rounded-lg text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors" aria-label="Open Studio sidebar" aria-controls="studio-sidebar" aria-expanded="false">
     <svg id="sidebar-icon-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
 
@@ -168,7 +168,7 @@ select.studio-select {
        it acts as a fixed drawer; on md+ it sits in the flex flow as a sticky
        column so it pins to the viewport top once any preceding banner has
        scrolled past (no gap above the sidebar). See issue #351. -->
-  <aside id="studio-sidebar" class="hidden md:block w-64 bg-card border-r border-border flex-shrink-0 fixed inset-y-0 left-0 h-full md:sticky md:inset-auto md:top-0 md:h-screen md:self-start overflow-hidden md:overflow-y-auto z-40">
+  <aside id="studio-sidebar" class="hidden md:block w-[min(85vw,18rem)] md:w-64 bg-card border-r border-border flex-shrink-0 fixed inset-y-0 left-0 h-full md:sticky md:inset-auto md:top-0 md:h-screen md:self-start overflow-hidden md:overflow-y-auto z-40">
     <div class="flex h-full flex-col p-6 md:block md:h-auto">
       <div class="flex items-center justify-between gap-3 mb-5 md:mb-8">
         <a href="{% url 'studio_dashboard' %}" class="flex min-w-0 items-center space-x-2">
@@ -235,7 +235,7 @@ select.studio-select {
                   data-studio-section-toggle
                   aria-expanded="{% if state.events_expanded %}true{% else %}false{% endif %}"
                   aria-controls="studio-section-events"
-                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
             <span class="flex items-center space-x-3">
               <i data-lucide="calendar" class="w-4 h-4"></i>
               <span>Events</span>
@@ -274,7 +274,7 @@ select.studio-select {
                   data-studio-section-toggle
                   aria-expanded="{% if state.content_active %}true{% else %}false{% endif %}"
                   aria-controls="studio-section-content"
-                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
             <span class="flex items-center space-x-3">
               <i data-lucide="book-open" class="w-4 h-4"></i>
               <span>Content</span>
@@ -333,7 +333,7 @@ select.studio-select {
                   data-studio-section-toggle
                   aria-expanded="{% if state.people_active %}true{% else %}false{% endif %}"
                   aria-controls="studio-section-people"
-                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
             <span class="flex items-center space-x-3">
               <i data-lucide="users" class="w-4 h-4"></i>
               <span>People</span>
@@ -342,22 +342,12 @@ select.studio-select {
           </button>
           <ul id="studio-section-people" class="space-y-1 mt-1{% if not state.people_active %} hidden{% endif %}">
             <li>
-              <div class="flex items-stretch rounded-lg {% if state.users_row_active %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
-                <a href="{% url 'studio_user_list' %}"
-                   class="flex flex-1 items-center space-x-3 px-3 py-2 rounded-l-lg text-sm">
-                  <i data-lucide="users" class="w-4 h-4"></i>
-                  <span>Users</span>
-                </a>
-                <button type="button"
-                        data-studio-users-toggle
-                        aria-expanded="{% if state.users_expanded %}true{% else %}false{% endif %}"
-                        aria-controls="studio-users-children"
-                        aria-label="Toggle Users sub-menu"
-                        class="flex items-center justify-center px-2 rounded-r-lg hover:bg-secondary/80">
-                  <i data-lucide="chevron-down" class="studio-users-chevron w-4 h-4 transition-transform"></i>
-                </button>
-              </div>
-              <ul id="studio-users-children" class="ml-6 mt-1 space-y-1{% if not state.users_expanded %} hidden{% endif %}">
+              <a href="{% url 'studio_user_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.users_row_active %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
+                <i data-lucide="users" class="w-4 h-4"></i>
+                <span>Users</span>
+              </a>
+              <ul id="studio-users-children" class="ml-6 mt-1 space-y-1">
                 <li>
                   <a href="{% url 'studio_import_batch_list' %}"
                      class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if '/studio/imports/' in request.path %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors">
@@ -413,7 +403,7 @@ select.studio-select {
                   data-studio-section-toggle
                   aria-expanded="{% if state.marketing_active %}true{% else %}false{% endif %}"
                   aria-controls="studio-section-marketing"
-                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
             <span class="flex items-center space-x-3">
               <i data-lucide="megaphone" class="w-4 h-4"></i>
               <span>Marketing</span>
@@ -465,7 +455,7 @@ select.studio-select {
                   data-studio-section-toggle
                   aria-expanded="{% if state.operations_active %}true{% else %}false{% endif %}"
                   aria-controls="studio-section-operations"
-                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-foreground/70 hover:text-foreground hover:bg-secondary transition-colors min-h-[44px]">
             <span class="flex items-center space-x-3">
               <i data-lucide="settings" class="w-4 h-4"></i>
               <span>Operations</span>
@@ -640,10 +630,11 @@ select.studio-select {
 // Sidebar section collapse/expand (issue #570). The initial expanded /
 // collapsed state is rendered server-side via ``studio_sidebar_state`` so
 // the right sections are visible without any JS. This script only flips
-// state when the user clicks a section header or the Users sub-group
-// chevron. Section-header <button>s never navigate, and the mobile-drawer
-// click handler above is scoped to <a> elements, so toggling a section in
-// the open mobile drawer does not close the drawer.
+// state when the user clicks a section header. Section-header <button>s
+// never navigate, and the mobile-drawer click handler above is scoped to
+// <a> elements, so toggling a section in the open mobile drawer does not
+// close the drawer. (#624 removed the Users sub-toggle — the Users
+// children are always visible while the People section is expanded.)
 (function() {
   function rotateChevron(chevron, expanded) {
     if (!chevron) { return; }
@@ -676,18 +667,6 @@ select.studio-select {
     });
   });
 
-  document.querySelectorAll('[data-studio-users-toggle]').forEach(function(button) {
-    rotateChevron(
-      button.querySelector('.studio-users-chevron'),
-      button.getAttribute('aria-expanded') === 'true'
-    );
-    button.addEventListener('click', function(event) {
-      // Don't bubble to the parent flex wrapper / anchor sibling.
-      event.preventDefault();
-      event.stopPropagation();
-      toggleControlled(button, null, '.studio-users-chevron');
-    });
-  });
 })();
 </script>
 {% endblock %}

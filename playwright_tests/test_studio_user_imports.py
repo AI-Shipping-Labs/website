@@ -62,13 +62,10 @@ class TestStudioUserImports:
         page.goto(f"{django_server}/studio/", wait_until="domcontentloaded")
         # Issue #570 nested Imports inside the People > Users sub-group
         # (the old label was ``User imports``; the new label is just
-        # ``Imports``). People is collapsed by default, so expand it and
-        # then expand the Users sub-group chevron before clicking.
+        # ``Imports``). #624 dropped the Users sub-toggle, so expanding
+        # People is enough to surface the Imports link.
         page.locator(
             'aside#studio-sidebar [aria-controls="studio-section-people"]'
-        ).click()
-        page.locator(
-            'aside#studio-sidebar [data-studio-users-toggle]'
         ).click()
         page.locator(
             '#studio-users-children a[href="/studio/imports/"]'

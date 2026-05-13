@@ -120,7 +120,7 @@ class TestStaffLandsInStudio:
         )
 
         # Events is expanded — its three child links are visible.
-        for label in ["Events", "Event groups", "Notifications"]:
+        for label in ["Events", "Event series", "Notifications"]:
             link = page.locator(
                 f'#studio-section-events a:has(span:text-is("{label}"))'
             )
@@ -241,14 +241,18 @@ class TestPeopleAutoExpands:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 4: deep-link into Imports — both wrappers auto-expand
+# Scenario 4: deep-link into Imports — People section auto-expands and the
+# Users children list is always visible inside it (#624 removed the
+# Users sub-toggle so there is no longer a separate chevron to expand).
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestImportsAutoExpandsBothWrappers:
-    """Navigating to /studio/imports/ expands the People section AND
-    the Users sub-group, and shows superuser-only ``New user``."""
+class TestImportsAutoExpandsPeopleSection:
+    """Navigating to /studio/imports/ expands the People section, the
+    Users children list (Imports / Tier overrides / New user) is visible
+    without any per-Users sub-toggle, and superuser-only ``New user``
+    renders for superusers."""
 
     def test_imports_deep_link_expands_people_and_users(
         self, django_server, browser
@@ -266,10 +270,10 @@ class TestImportsAutoExpandsBothWrappers:
         assert _section_list(page, "people").is_visible()
         users_children = page.locator("#studio-users-children")
         assert users_children.is_visible()
-        users_chevron = page.locator(
+        # The Users sub-toggle was removed in #624; no chevron <button>.
+        assert page.locator(
             'aside#studio-sidebar [data-studio-users-toggle]'
-        )
-        assert users_chevron.get_attribute("aria-expanded") == "true"
+        ).count() == 0
 
         imports_link = page.locator(
             '#studio-users-children a[href="/studio/imports/"]'
@@ -347,16 +351,20 @@ class TestNonSuperuserGating:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 6: Users row — label navigates, chevron does not
+# Scenario 6: Users row — single anchor, no split-button (#624)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-class TestUsersRowSplitInteraction:
-    """The Users row label is a navigating <a>; the chevron is a
-    separate <button> that toggles the sub-group without navigating."""
+class TestUsersRowIsSingleAnchor:
+    """Issue #624 collapsed the Users split-button into a single <a>.
+    The Users children list (Imports, Tier overrides, New user) is
+    visible whenever the People section is expanded — there is no
+    per-Users sub-toggle."""
 
-    def test_users_row_label_and_chevron_split(self, django_server, browser):
+    def test_users_row_is_a_single_link_with_visible_children(
+        self, django_server, browser
+    ):
         _ensure_tiers()
         _create_staff_user("admin@test.com")
 
@@ -368,32 +376,28 @@ class TestUsersRowSplitInteraction:
         # Expand People so the Users row is visible.
         _section_button(page, "people").click()
 
-        chevron = page.locator(
+        # The chevron sub-button is gone (#624).
+        assert page.locator(
             'aside#studio-sidebar [data-studio-users-toggle]'
-        )
+        ).count() == 0
+
+        # Children list is always visible while People is expanded — no
+        # per-Users toggle needed.
         children = page.locator("#studio-users-children")
-
-        # Initial state on /studio/: chevron collapsed, children hidden.
-        assert chevron.get_attribute("aria-expanded") == "false"
-        assert not children.is_visible()
-
-        # Click the chevron — page URL must stay on /studio/.
-        url_before = page.url
-        chevron.click()
-        assert page.url == url_before
-        assert chevron.get_attribute("aria-expanded") == "true"
         assert children.is_visible()
+        for label in ["Imports", "Tier overrides"]:
+            assert page.locator(
+                f'#studio-users-children a:has(span:text-is("{label}"))'
+            ).is_visible()
 
-        # Click again to collapse.
-        chevron.click()
-        assert page.url == url_before
-        assert chevron.get_attribute("aria-expanded") == "false"
-        assert not children.is_visible()
+        # The Users row itself is exactly one <a> pointing at /studio/users/.
+        users_link = page.locator(
+            '#studio-section-people > li > a[href="/studio/users/"]'
+        )
+        assert users_link.count() == 1
 
-        # Now click the Users label (the <a>) — must navigate.
-        page.locator(
-            '#studio-section-people a[href="/studio/users/"]'
-        ).click()
+        # Clicking the Users link navigates to /studio/users/.
+        users_link.click()
         page.wait_for_load_state("domcontentloaded")
         assert "/studio/users/" in page.url
 

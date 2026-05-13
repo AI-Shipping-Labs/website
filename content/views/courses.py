@@ -1,18 +1,14 @@
-import datetime
 from collections import Counter
 from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
-from django.utils.html import strip_tags
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from content.access import (
     LEVEL_MAIN,
-    LEVEL_OPEN,
     build_gating_context,
     can_access,
     get_required_tier_name,
@@ -27,6 +23,7 @@ from content.models import (
     UserCourseProgress,
 )
 from content.services import completion as completion_service
+from content.services import course_units as course_unit_service
 from content.services.enrollment import (
     ensure_enrollment,
     is_enrolled,
@@ -34,14 +31,7 @@ from content.services.enrollment import (
 from content.services.enrollment import (
     unenroll as unenroll_user,
 )
-from content.templatetags.video_utils import get_video_thumbnail_url
-from content.utils.teaser import first_sentence, truncate_to_words
 from content.views.pages import _filter_by_tags, _get_selected_tags
-
-# Approximate word budget for the locked-lesson teaser body. Issue #248:
-# enough to give the visitor a sense of voice / depth, short enough that a
-# fade-out gradient still teases more below.
-TEASER_WORD_LIMIT = 150
 
 
 def courses_list(request):
@@ -426,40 +416,18 @@ def module_overview(request, course_slug, module_slug):
 
 
 def _get_all_units_ordered(course):
-    """Return all units in the course ordered by module sort_order, then unit sort_order."""
-    return list(
-        Unit.objects.filter(module__course=course)
-        .select_related('module')
-        .order_by('module__sort_order', 'sort_order')
-    )
+    """Return all units in course reading order."""
+    return course_unit_service.get_all_units_ordered(course)
 
 
 def _get_next_unit(course, current_unit):
-    """Find the next unit in sort order (across module boundaries)."""
-    all_units = _get_all_units_ordered(course)
-    for i, u in enumerate(all_units):
-        if u.pk == current_unit.pk and i + 1 < len(all_units):
-            return all_units[i + 1]
-    return None
+    """Find the next unit in course reading order."""
+    return course_unit_service.get_next_unit(course, current_unit)
 
 
 def _get_prev_unit(course, current_unit):
-    """Find the previous unit in sort order (across module boundaries)."""
-    all_units = _get_all_units_ordered(course)
-    for i, u in enumerate(all_units):
-        if u.pk == current_unit.pk and i > 0:
-            return all_units[i - 1]
-    return None
-
-
-def _current_access_state(user, required_level):
-    """Return signed-in user access copy for gated cards only."""
-    if not user.is_authenticated:
-        return ''
-    user_level = get_user_level(user)
-    if user_level >= required_level:
-        return ''
-    return f'Current access: {get_required_tier_name(user_level)} member'
+    """Find the previous unit in course reading order."""
+    return course_unit_service.get_prev_unit(course, current_unit)
 
 
 def course_unit_detail(request, course_slug, module_slug, unit_slug):
@@ -471,277 +439,28 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     course, module, unit = _get_unit_or_404(course_slug, module_slug, unit_slug)
     user = request.user
 
-    # Access check (issue #465): preview units are open to all; otherwise
-    # ``can_access`` resolves the unit's effective_required_level (unit
-    # override > course default > course required_level). Routing through
-    # the unit also lets ``can_access`` honour ``CourseAccess`` for paid
-    # individual purchases of the parent course.
-    #
-    # Backwards-compat: course units have always required sign-in for
-    # anonymous visitors even when ``Course.required_level == 0`` (the
-    # legacy nudge for completion tracking). We preserve that here by
-    # treating an anonymous visitor on a non-preview unit with no per-unit
-    # ``required_level`` override as denied — the registered-wall path
-    # still kicks in for units where the author explicitly chose
-    # ``access: open``.
-    effective_level = unit.effective_required_level
-    if unit.is_preview:
-        has_access = True
-    elif (
-        not user.is_authenticated
-        and effective_level == LEVEL_OPEN
-        and unit.required_level is None
-        and course.default_unit_required_level is None
-    ):
-        # Pre-#465 free-course-with-anonymous-visitor path: legacy
-        # sign-in nudge. The unit has no explicit ``access:`` override
-        # and the course has no ``default_unit_access`` set, so the
-        # historical "anonymous always signs in for course units" rule
-        # still applies.
-        has_access = False
-    else:
-        has_access = can_access(user, unit)
-
-    if not has_access:
-        # Gating context is built against the unit so the registered
-        # wall (LEVEL_REGISTERED) emits ``authentication_required`` for
-        # anonymous visitors instead of ``insufficient_tier``.
-        gating = build_gating_context(user, unit, 'unit')
-        is_unverified_gate = gating.get('gated_reason') == 'unverified_email'
-        is_auth_required_gate = (
-            gating.get('gated_reason') == 'authentication_required'
+    access_decision = course_unit_service.decide_course_unit_access(user, unit)
+    if not access_decision.has_access:
+        context = course_unit_service.build_gated_course_unit_context(
+            user, course, module, unit, access_decision,
         )
-        if is_auth_required_gate:
-            # Anonymous visitor on a registered-only unit. Send them to
-            # /accounts/login/?next=<unit URL> so they land back on the
-            # lesson once they sign in. The "Create a free account"
-            # secondary link below stays visible too.
-            unit_url = unit.get_absolute_url()
-            login_qs = urlencode({'next': unit_url})
-            tier_name = None
-            cta_message = 'Sign in to read this lesson'
-            pricing_url = f'/accounts/login/?{login_qs}'
-            cta_label = 'Sign In'
-            cta_description = (
-                'This lesson is free with a sign-in. Create a free '
-                'account in seconds to keep reading.'
-            )
-        elif not user.is_authenticated:
-            if course.required_level == 0:
-                cta_message = 'Sign in to access this lesson'
-                tier_name = None
-                pricing_url = (
-                    f'/accounts/signup/?'
-                    f'{urlencode({"next": unit.get_absolute_url()})}'
-                )
-                cta_label = 'Sign Up'
-                cta_description = 'Create a free account to access this course.'
-            else:
-                cta_message = 'Sign in to access this lesson'
-                tier_name = get_required_tier_name(course.required_level)
-                pricing_url = (
-                    f'/accounts/login/?'
-                    f'{urlencode({"next": unit.get_absolute_url()})}'
-                )
-                cta_label = 'View Pricing'
-                cta_description = 'Get full access to this course and more with a membership.'
-        else:
-            tier_name = get_required_tier_name(course.required_level)
-            if is_unverified_gate:
-                cta_message = ''
-                pricing_url = '/pricing'
-                cta_label = ''
-                cta_description = ''
-            else:
-                cta_message = f'Upgrade to {tier_name} to access this lesson'
-                pricing_url = '/pricing'
-                cta_label = 'View Pricing'
-                cta_description = 'Get full access to this course and more with a membership.'
+        return render(
+            request,
+            'content/course_unit_detail.html',
+            context,
+            status=access_decision.status_code,
+        )
 
-        # Build the teaser body / homework preview here (issue #248) so the
-        # template stays a flat layout and we don't run heavy HTML parsing
-        # in template tags. ``teaser_body_html`` is None when the unit body
-        # is empty — the template falls back to the original lock card so
-        # we don't render an awkward empty fade-out.
-        teaser_body_html = None
-        if unit.body_html:
-            teaser_body_html = truncate_to_words(unit.body_html, TEASER_WORD_LIMIT)
-
-        homework_teaser = ''
-        if unit.homework_html:
-            # Strip markdown / HTML formatting then take the first sentence
-            # so the visitor sees the assignment intro without the answer.
-            homework_text = strip_tags(unit.homework_html).strip()
-            homework_teaser = first_sentence(homework_text)
-
-        # Anonymous users on a paid course get a second CTA inviting them
-        # to sign in / sign up — the upgrade CTA still wins, but we don't
-        # want to send them back to /pricing without an account.
-        # Issue #465: anonymous users on a registered-walled lesson also
-        # get a "create a free account" link as a secondary CTA so the
-        # primary "Sign in" button has a sign-up companion.
-        signup_cta_url = ''
-        signup_cta_label = ''
-        if not user.is_authenticated and (
-            course.required_level > 0 or is_auth_required_gate
-        ):
-            unit_url = unit.get_absolute_url()
-            signup_qs = urlencode({'next': unit_url})
-            signup_cta_url = f'/accounts/signup/?{signup_qs}'
-            signup_cta_label = (
-                'Create a free account'
-                if is_auth_required_gate
-                else 'Sign in or create a free account'
-            )
-
-        context = {
-            'course': course,
-            'module': module,
-            'unit': unit,
-            'is_gated': True,
-            'required_tier_name': tier_name,
-            'cta_message': cta_message,
-            'pricing_url': pricing_url,
-            'cta_label': cta_label,
-            'cta_description': cta_description,
-            'teaser_body_html': teaser_body_html,
-            'homework_teaser': homework_teaser,
-            'video_thumbnail_url': get_video_thumbnail_url(unit.video_url),
-            'has_video': bool(unit.video_url),
-            'signup_cta_url': signup_cta_url,
-            'signup_cta_label': signup_cta_label,
-            'user_authenticated': user.is_authenticated,
-            'current_user_state': _current_access_state(user, course.required_level),
-            'gated_card_testid': 'teaser-cta',
-            'gated_icon': 'lock',
-            'gated_heading': cta_message,
-            'gated_description': cta_description,
-            'gated_cta_url': pricing_url,
-            'gated_cta_label': cta_label,
-            'gated_cta_testid': 'teaser-upgrade-cta',
-        }
-        if is_unverified_gate:
-            context.update(gating)
-        status = 200 if is_unverified_gate else 403
-        return render(request, 'content/course_unit_detail.html', context, status=status)
-
-    # Drip schedule check: if user is enrolled in a cohort and unit has
-    # available_after_days, check if the unit is available yet.
-    drip_locked = False
-    drip_available_date = None
-    if user.is_authenticated and unit.available_after_days is not None:
-        enrollment = CohortEnrollment.objects.filter(
-            user=user,
-            cohort__course=course,
-            cohort__is_active=True,
-        ).select_related('cohort').first()
-        if enrollment:
-            available_date = enrollment.cohort.start_date + datetime.timedelta(
-                days=unit.available_after_days,
-            )
-            if timezone.now().date() < available_date:
-                drip_locked = True
-                drip_available_date = available_date
-
-    if drip_locked:
-        context = {
-            'course': course,
-            'module': module,
-            'unit': unit,
-            'is_gated': True,
-            'is_drip_locked': True,
-            'drip_available_date': drip_available_date,
-            'cta_message': f'This lesson will be available on {drip_available_date.strftime("%B %d, %Y")}',
-            'pricing_url': f'/courses/{course.slug}',
-            'gated_card_testid': 'drip-locked-card',
-            'gated_icon': 'clock',
-            'gated_heading': f'This lesson will be available on {drip_available_date.strftime("%B %d, %Y")}',
-            'gated_description': 'Your membership already qualifies; the cohort schedule controls when this lesson opens.',
-            'required_tier_name': '',
-            'current_user_state': '',
-            'gated_cta_url': f'/courses/{course.slug}',
-            'gated_cta_label': 'Back to Course',
-            'gated_cta_testid': 'drip-back-cta',
-        }
+    drip_decision = course_unit_service.decide_course_unit_drip_lock(user, unit)
+    if drip_decision.is_locked:
+        context = course_unit_service.build_drip_locked_course_unit_context(
+            course, module, unit, drip_decision,
+        )
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
-    # Build sidebar navigation data
-    modules = course.get_syllabus()
-
-    # Completed unit IDs for sidebar checkmarks
-    completed_unit_ids = set()
-    is_completed = False
-    if user.is_authenticated:
-        completed_unit_ids = set(
-            UserCourseProgress.objects.filter(
-                user=user,
-                unit__module__course=course,
-                completed_at__isnull=False,
-            ).values_list('unit_id', flat=True)
-        )
-        is_completed = unit.pk in completed_unit_ids
-
-    # Next / previous unit
-    next_unit = _get_next_unit(course, unit)
-    prev_unit = _get_prev_unit(course, unit)
-
-    # Discussion link (same logic as course_detail)
-    show_discussion = (
-        bool(course.discussion_url)
-        and course.required_level >= LEVEL_MAIN
-        and get_user_level(user) >= LEVEL_MAIN
+    context = course_unit_service.build_course_unit_navigation_context(
+        user, course, module, unit,
     )
-
-    # Issue #517 — flatten the module-ordered unit list so the mobile
-    # progress bar can show "Lesson N of M" relative to the whole
-    # course. ``modules`` is the prefetched syllabus from
-    # ``Course.get_syllabus`` so iterating ``module.units.all()``
-    # reuses the cached units list (no extra query per module).
-    flat_units = []
-    for nav_module in modules:
-        for nav_unit in nav_module.units.all():
-            flat_units.append(nav_unit.pk)
-    reader_progress_total = len(flat_units)
-    try:
-        reader_progress_current = flat_units.index(unit.pk) + 1
-    except ValueError:
-        # Defensive: the unit is in the URL path but not in the
-        # syllabus prefetch (shouldn't happen). Fall back to 1 of N
-        # so the bar still renders sensibly.
-        reader_progress_current = 1
-
-    context = {
-        'course': course,
-        'module': module,
-        'unit': unit,
-        'modules': modules,
-        'is_gated': False,
-        'has_access': True,
-        'completed_unit_ids': completed_unit_ids,
-        'is_completed': is_completed,
-        'next_unit': next_unit,
-        'prev_unit': prev_unit,
-        'user_authenticated': user.is_authenticated,
-        'unit_content_id': str(unit.content_id) if unit.content_id else '',
-        'show_discussion': show_discussion,
-        'prev_item_url': prev_unit.get_absolute_url() if prev_unit else '',
-        'prev_item_title': prev_unit.title if prev_unit else '',
-        'next_item_url': next_unit.get_absolute_url() if next_unit else '',
-        'next_item_title': next_unit.title if next_unit else '',
-        'completion_kind': 'course',
-        'completion_button_id': 'mark-complete-btn',
-        'completion_url': f'/api/courses/{course.slug}/units/{unit.pk}/complete',
-        'bottom_prev_testid': 'bottom-prev-btn',
-        'bottom_next_testid': 'bottom-next-btn',
-        # Issue #517 — mobile progress bar context. Mirrors the
-        # workshop reader so the two surfaces feel structurally
-        # identical on mobile (Pixel 7 393x851).
-        'reader_mobile_label': 'Course Navigation',
-        'reader_progress_kind': 'lesson',
-        'reader_progress_current': reader_progress_current,
-        'reader_progress_total': reader_progress_total,
-        'reader_progress_completed': len(completed_unit_ids),
-    }
     return render(request, 'content/course_unit_detail.html', context)
 
 

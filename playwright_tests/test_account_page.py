@@ -4,12 +4,10 @@ Playwright E2E tests for the Account Page (Issue #70).
 Tests cover:
 - Anonymous redirect to login
 - Free member account page (upgrade options, no downgrade/cancel)
-- Basic member subscription details and upgrade modal
-- Main member downgrade flow
+- Paid member subscription details and Customer Portal management
 - Premium member at highest tier
 - Pending downgrade notice
 - Pending cancellation notice
-- Cancel subscription confirmation modal
 - Newsletter toggle on/off
 - Password change (success and error)
 - Email verification banner
@@ -357,8 +355,7 @@ class TestScenarioFreeMemberAccountPage:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenarioBasicMemberSubscription:
-    """Basic member views subscription details and explores upgrade
-    options."""
+    """Basic member views subscription details and billing management."""
 
     def test_basic_tier_name_and_billing_no_level_pill(
         self, django_server, test_users, django_db_blocker
@@ -378,65 +375,51 @@ class TestScenarioBasicMemberSubscription:
         assert billing.is_visible()
         assert "15/03/2026" in billing.inner_text()
         ctx.close()
-    def test_basic_has_upgrade_and_cancel_no_downgrade(
+    def test_basic_uses_customer_portal_no_local_mutation_actions(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Basic member has Upgrade and Cancel, but no Downgrade."""
+        """Basic member manages billing in Stripe Customer Portal."""
         ctx = _auth_context(
             browser, "basic@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        assert page.locator("#upgrade-btn").is_visible()
-        assert page.locator("#cancel-btn").is_visible()
+        portal = page.locator("#manage-subscription-btn")
+        assert portal.is_visible()
+        assert portal.get_attribute("href").startswith("https://billing.stripe.com/")
+        assert page.locator("#upgrade-btn").count() == 0
+        assert page.locator("#cancel-btn").count() == 0
         assert page.locator("#downgrade-btn").count() == 0
         ctx.close()
-    def test_upgrade_modal_shows_higher_tiers(
+    def test_no_upgrade_modal_when_customer_portal_is_used(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Click Upgrade -- modal lists Main and Premium."""
+        """Local upgrade modal is removed for paid members."""
         ctx = _auth_context(
             browser, "basic@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        page.click("#upgrade-btn")
-        modal = page.locator("#upgrade-modal")
-        modal.wait_for(state="visible", timeout=5000)
-
-        assert modal.is_visible()
-        assert "Upgrade Your Plan" in modal.locator("h3").inner_text()
-
-        buttons = modal.locator("#upgrade-tiers button")
-        all_text = " ".join(
-            buttons.nth(i).inner_text()
-            for i in range(buttons.count())
-        )
-        assert "Main" in all_text
-        assert "Premium" in all_text
+        assert page.locator("#upgrade-btn").count() == 0
+        assert page.locator("#upgrade-modal").count() == 0
+        assert page.locator("#manage-subscription-btn").is_visible()
         ctx.close()
-    def test_close_upgrade_modal(
+    def test_manage_subscription_link_keeps_user_on_portal_path(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Close upgrade modal with Cancel -- no changes."""
+        """Portal link is rendered as the only paid billing action."""
         ctx = _auth_context(
             browser, "basic@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        page.click("#upgrade-btn")
-        modal = page.locator("#upgrade-modal")
-        modal.wait_for(state="visible", timeout=5000)
-
-        assert modal.is_visible()
-
-        modal.locator("button", has_text="Cancel").click()
-        page.wait_for_load_state("domcontentloaded")
-        assert modal.is_hidden()
-        assert "/account" in page.url
+        portal = page.locator("#manage-subscription-btn")
+        assert portal.is_visible()
+        assert portal.inner_text().strip() == "Manage Subscription"
+        assert portal.get_attribute("href").startswith("https://billing.stripe.com/")
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Main member initiates a downgrade
@@ -444,7 +427,7 @@ class TestScenarioBasicMemberSubscription:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenarioMainMemberDowngrade:
-    """Main member initiates a downgrade to Basic."""
+    """Main member manages billing through the Customer Portal."""
 
     def test_main_tier_name_no_level_pill(
         self, django_server, test_users, django_db_blocker
@@ -459,43 +442,34 @@ class TestScenarioMainMemberDowngrade:
         assert page.locator("#tier-name").inner_text().strip() == "Main"
         assert page.locator("#tier-badge").count() == 0
         ctx.close()
-    def test_main_has_all_three_actions(
+    def test_main_has_customer_portal_no_local_mutation_actions(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Main member has Upgrade, Downgrade, and Cancel."""
+        """Main member has Customer Portal, not local plan mutation."""
         ctx = _auth_context(
             browser, "main@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        assert page.locator("#upgrade-btn").is_visible()
-        assert page.locator("#downgrade-btn").is_visible()
-        assert page.locator("#cancel-btn").is_visible()
+        assert page.locator("#manage-subscription-btn").is_visible()
+        assert page.locator("#upgrade-btn").count() == 0
+        assert page.locator("#downgrade-btn").count() == 0
+        assert page.locator("#cancel-btn").count() == 0
         ctx.close()
-    def test_downgrade_modal_shows_only_basic(
+    def test_no_downgrade_modal_when_customer_portal_is_used(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Downgrade modal lists only Basic."""
+        """Local downgrade modal is removed for paid members."""
         ctx = _auth_context(
             browser, "main@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        page.click("#downgrade-btn")
-        modal = page.locator("#downgrade-modal")
-        modal.wait_for(state="visible", timeout=5000)
-
-        assert modal.is_visible()
-        assert "Downgrade Your Plan" in modal.locator("h3").inner_text()
-
-        buttons = modal.locator("#downgrade-tiers button")
-        assert buttons.count() == 1
-        text = buttons.first.inner_text()
-        assert "Basic" in text
-        assert "Main" not in text
-        assert "Premium" not in text
+        assert page.locator("#downgrade-btn").count() == 0
+        assert page.locator("#downgrade-modal").count() == 0
+        assert page.locator("#manage-subscription-btn").is_visible()
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Premium member at highest tier
@@ -518,19 +492,20 @@ class TestScenarioPremiumMemberHighestTier:
         assert page.locator("#tier-name").inner_text().strip() == "Premium"
         assert page.locator("#tier-badge").count() == 0
         ctx.close()
-    def test_premium_no_upgrade_has_downgrade_and_cancel(
+    def test_premium_uses_customer_portal_no_local_mutation_actions(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """No Upgrade for Premium. Downgrade and Cancel available."""
+        """Premium member manages billing in Stripe Customer Portal."""
         ctx = _auth_context(
             browser, "premium@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
+        assert page.locator("#manage-subscription-btn").is_visible()
         assert page.locator("#upgrade-btn").count() == 0
-        assert page.locator("#downgrade-btn").is_visible()
-        assert page.locator("#cancel-btn").is_visible()
+        assert page.locator("#downgrade-btn").count() == 0
+        assert page.locator("#cancel-btn").count() == 0
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Pending downgrade notice
@@ -568,17 +543,19 @@ class TestScenarioPendingDowngradeNotice:
 
         assert page.locator("#downgrade-btn").count() == 0
         ctx.close()
-    def test_cancel_still_available_with_pending_downgrade(
+    def test_customer_portal_available_with_pending_downgrade(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Cancel still available despite pending downgrade."""
+        """Pending downgrade users manage changes in Stripe Customer Portal."""
         ctx = _auth_context(
             browser, "main-downgrade@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        assert page.locator("#cancel-btn").is_visible()
+        assert page.locator("#manage-subscription-btn").is_visible()
+        assert page.locator("#cancel-btn").count() == 0
+        assert page.locator("#downgrade-btn").count() == 0
         ctx.close()
 # ---------------------------------------------------------------
 # Scenario: Pending cancellation notice
@@ -605,16 +582,17 @@ class TestScenarioPendingCancellationNotice:
         assert "Main" in text
         assert "15/05/2026" in text
         ctx.close()
-    def test_no_actions_when_cancelled(
+    def test_customer_portal_available_when_cancellation_pending(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """No Upgrade, Downgrade, or Cancel actions when cancelled."""
+        """Pending cancellation users can still open Stripe Customer Portal."""
         ctx = _auth_context(
             browser, "main-cancel@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
+        assert page.locator("#manage-subscription-btn").is_visible()
         assert page.locator("#upgrade-btn").count() == 0
         assert page.locator("#downgrade-btn").count() == 0
         assert page.locator("#cancel-btn").count() == 0
@@ -625,53 +603,36 @@ class TestScenarioPendingCancellationNotice:
 
 @pytest.mark.django_db(transaction=True)
 class TestScenarioCancelSubscriptionConfirmation:
-    """Paid member cancels subscription after reading the
-    confirmation."""
+    """Local cancel flow is removed in favor of Stripe Customer Portal."""
 
-    def test_cancel_modal_shows_confirmation(
+    def test_cancel_modal_is_not_rendered(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Confirmation modal shows date and buttons."""
+        """Paid account page no longer renders local cancel controls."""
         ctx = _auth_context(
             browser, "main@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        page.click("#cancel-btn")
-        modal = page.locator("#cancel-modal")
-        modal.wait_for(state="visible", timeout=5000)
-
-        assert modal.is_visible()
-
-        text = modal.inner_text()
-        assert "You will keep access to your current tier until the end of your billing period" in text
-        assert "01/04/2026" in text
-        assert modal.locator("#confirm-cancel-btn").is_visible()
-        assert modal.locator(
-            "button", has_text="Keep my plan"
-        ).is_visible()
+        assert page.locator("#cancel-btn").count() == 0
+        assert page.locator("#cancel-modal").count() == 0
+        assert page.locator("#confirm-cancel-btn").count() == 0
+        assert page.locator("#manage-subscription-btn").is_visible()
         ctx.close()
-    def test_keep_plan_closes_modal(
+    def test_manage_subscription_replaces_keep_plan_flow(
         self, django_server, test_users, django_db_blocker
     , browser):
-        """Click Keep Plan -- modal closes, no changes."""
+        """Customer Portal link replaces the local keep-plan modal flow."""
         ctx = _auth_context(
             browser, "main@test.com", django_db_blocker
         )
         page = ctx.new_page()
         _go_to_account(page, django_server)
 
-        page.click("#cancel-btn")
-        modal = page.locator("#cancel-modal")
-        modal.wait_for(state="visible", timeout=5000)
-
-        assert modal.is_visible()
-
-        modal.locator("button", has_text="Keep my plan").click()
-        page.wait_for_load_state("domcontentloaded")
-        assert modal.is_hidden()
-
+        portal = page.locator("#manage-subscription-btn")
+        assert portal.is_visible()
+        assert portal.get_attribute("href").startswith("https://billing.stripe.com/")
         assert "/account" in page.url
         assert page.locator("#tier-name").inner_text().strip() == "Main"
         ctx.close()

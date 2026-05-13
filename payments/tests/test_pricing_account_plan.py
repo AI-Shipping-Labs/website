@@ -68,8 +68,10 @@ class PricingAccountPlanStateTest(TestCase):
         self.assertEqual(states["free"]["badge"], "Included")
         self.assertEqual(states["basic"]["badge"], "Current plan")
         self.assertEqual(states["basic"]["action_kind"], "disabled")
-        self.assertEqual(states["main"]["action_label"], "Upgrade")
-        self.assertEqual(states["premium"]["action_label"], "Upgrade")
+        self.assertEqual(states["main"]["action_label"], "Manage Subscription")
+        self.assertEqual(states["main"]["action_kind"], "portal")
+        self.assertEqual(states["premium"]["action_label"], "Manage Subscription")
+        self.assertEqual(states["premium"]["action_kind"], "portal")
 
     def test_main_member_sees_lower_tier_as_downgrade_not_join(self):
         user = self._user("main-pricing@test.com", self.main, "sub_main")
@@ -79,7 +81,8 @@ class PricingAccountPlanStateTest(TestCase):
         self.assertEqual(states["main"]["action_kind"], "disabled")
         self.assertEqual(states["basic"]["action_label"], "Downgrade")
         self.assertEqual(states["basic"]["action_kind"], "portal")
-        self.assertEqual(states["premium"]["action_label"], "Upgrade")
+        self.assertEqual(states["premium"]["action_label"], "Manage Subscription")
+        self.assertEqual(states["premium"]["action_kind"], "portal")
 
     def test_premium_member_sees_lower_paid_tiers_as_management(self):
         user = self._user("premium-pricing@test.com", self.premium, "sub_premium")

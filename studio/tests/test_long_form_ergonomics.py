@@ -33,7 +33,7 @@ class StudioLongFormErgonomicsTest(StaffUserMixin, TestCase):
         self.assertContains(response, 'Manage Peer Reviews')
         self.assertContains(response, 'Manage Enrollments')
         self.assertContains(response, 'data-testid="notification-actions"')
-        self.assertContains(response, 'data-testid="stripe-product-panel"')
+        self.assertNotContains(response, 'data-testid="stripe-product-panel"')
 
     def test_synced_course_sticky_bar_uses_source_actions_only(self):
         course = Course.objects.create(

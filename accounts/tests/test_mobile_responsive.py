@@ -3,7 +3,7 @@
 import re
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from payments.models import Tier
 
@@ -82,8 +82,8 @@ class AccountPageActionButtonsStackTest(TestCase):
         )
 
 
-class AccountPageModalMobileTest(TestCase):
-    """Modals on the account page are usable on 375px screens."""
+class AccountPageBillingActionMobileTest(TestCase):
+    """Billing management action remains usable on narrow screens."""
 
     @classmethod
     def setUpTestData(cls):
@@ -98,28 +98,35 @@ class AccountPageModalMobileTest(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_modals_have_responsive_padding(self):
-        """Modal content areas use p-5 sm:p-6 for member card consistency."""
+    def test_local_billing_modals_are_removed(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        # Check upgrade modal
-        upgrade_modal_pos = content.index('id="upgrade-modal"')
-        modal_section = content[upgrade_modal_pos:upgrade_modal_pos + 500]
-        self.assertIn("p-5 sm:p-6", modal_section)
+        self.assertNotIn('id="upgrade-modal"', content)
+        self.assertNotIn('id="downgrade-modal"', content)
+        self.assertNotIn('id="cancel-modal"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_cancel_modal_has_responsive_padding(self):
-        """Cancel modal content area uses p-5 sm:p-6."""
+    def test_manage_subscription_button_has_tap_target(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        cancel_modal_pos = content.index('id="cancel-modal"')
-        modal_section = content[cancel_modal_pos:cancel_modal_pos + 500]
-        self.assertIn("p-5 sm:p-6", modal_section)
+        button_match = re.search(
+            r'<a[^>]*class="([^"]*)"[^>]*id="manage-subscription-btn"',
+            content,
+            flags=re.S,
+        )
+        if not button_match:
+            button_match = re.search(
+                r'<a[^>]*id="manage-subscription-btn"[^>]*class="([^"]*)"',
+                content,
+                flags=re.S,
+            )
+        self.assertIsNotNone(button_match)
+        button_classes = button_match.group(1)
+        self.assertIn("min-h-[44px]", button_classes)
+        self.assertIn("py-2", button_classes)
 
 
 class CancelModalTapTargetsTest(TestCase):
-    """Cancel modal checkbox and input have adequate tap targets."""
+    """The removed cancel modal leaves no local cancel controls behind."""
 
     @classmethod
     def setUpTestData(cls):
@@ -134,55 +141,20 @@ class CancelModalTapTargetsTest(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_cancel_checkbox_has_larger_size(self):
-        """Cancel confirmation checkbox uses h-5 w-5 for better tappability."""
+    def test_cancel_checkbox_removed(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        checkbox_match = re.search(
-            r'id="cancel-confirm-checkbox"[^>]*class="[^"]*"', content
-        )
-        if not checkbox_match:
-            checkbox_match = re.search(
-                r'class="[^"]*"[^>]*id="cancel-confirm-checkbox"', content
-            )
-        self.assertIsNotNone(checkbox_match)
-        self.assertIn("h-5 w-5", checkbox_match.group(0))
+        self.assertNotIn('id="cancel-confirm-checkbox"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_cancel_checkbox_label_has_min_height(self):
-        """Cancel checkbox label has min-h-[44px] for adequate tap target."""
+    def test_cancel_confirm_input_removed(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        checkbox_pos = content.index('id="cancel-confirm-checkbox"')
-        # The label is the parent element before the checkbox
-        preceding = content[max(0, checkbox_pos - 300):checkbox_pos]
-        self.assertIn("min-h-[44px]", preceding)
+        self.assertNotIn('id="cancel-confirm-text"', content)
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_cancel_confirm_input_uses_text_base(self):
-        """Cancel confirm text input uses text-base (16px) to prevent iOS zoom."""
+    def test_cancel_modal_buttons_removed(self):
         response = self.client.get("/account/")
         content = response.content.decode()
-        input_match = re.search(
-            r'id="cancel-confirm-text"[^>]*class="[^"]*"', content
-        )
-        if not input_match:
-            input_match = re.search(
-                r'class="[^"]*"[^>]*id="cancel-confirm-text"', content
-            )
-        self.assertIsNotNone(input_match)
-        self.assertIn("text-base", input_match.group(0))
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_cancel_modal_buttons_stack_on_mobile(self):
-        """Cancel modal action buttons use flex-col-reverse sm:flex-row for mobile stacking."""
-        response = self.client.get("/account/")
-        content = response.content.decode()
-        self.assertIn(
-            'class="flex flex-col-reverse sm:flex-row gap-3"',
-            content,
-        )
+        self.assertNotIn('id="confirm-cancel-btn"', content)
 
 
 class FormInputTextBaseTest(TestCase):

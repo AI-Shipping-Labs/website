@@ -136,10 +136,6 @@ def course_detail(request, slug):
             except Tier.DoesNotExist:
                 cta_message = f'Unlock with {tier_name}'
             cta_url = '/pricing'
-            # Show individual purchase button if price is set
-            if course.individual_price_eur is not None:
-                buy_individual = True
-                buy_individual_price = course.individual_price_eur
     elif course.is_free and not user.is_authenticated:
         cta_message = 'Sign up free to start this course'
         cta_url = f'/accounts/signup/?{urlencode({"next": course_url})}'
@@ -618,67 +614,10 @@ def api_cohort_unenroll(request, slug, cohort_id):
 
 @require_POST
 def api_course_purchase(request, slug):
-    """POST /api/courses/{slug}/purchase - create a Stripe checkout for one-time course purchase."""
-    from integrations.config import get_config, is_enabled
-    if not is_enabled('STRIPE_CHECKOUT_ENABLED'):
-        return JsonResponse({
-            'error': 'Checkout is disabled. Use payment links.',
-            'portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
-        }, status=410)
+    """Deprecated: individual course checkout sessions are no longer created locally."""
+    from integrations.config import get_config
 
-    if not request.user.is_authenticated:
-        course = get_object_or_404(Course, slug=slug, status='published')
-        next_url = course.get_absolute_url()
-        return JsonResponse({
-            'error': 'Authentication required',
-            'login_url': f'/accounts/login/?{urlencode({"next": next_url})}',
-        }, status=401)
-
-    course = get_object_or_404(Course, slug=slug, status='published')
-
-    # Check if already has access
-    if can_access(request.user, course):
-        return JsonResponse({'error': 'You already have access to this course'}, status=400)
-
-    # Course must have individual pricing configured
-    if not course.individual_price_eur:
-        return JsonResponse({'error': 'This course is not available for individual purchase'}, status=400)
-
-    if not course.stripe_price_id:
-        return JsonResponse({'error': 'Stripe pricing not configured for this course'}, status=400)
-
-    from payments.services import _get_stripe_client
-
-    user = request.user
-    success_url = request.build_absolute_uri(f'/courses/{course.slug}?purchase=success')
-    cancel_url = request.build_absolute_uri(f'/courses/{course.slug}?purchase=cancelled')
-
-    try:
-        client = _get_stripe_client()
-
-        session_params = {
-            'mode': 'payment',
-            'line_items': [{'price': course.stripe_price_id, 'quantity': 1}],
-            'success_url': success_url,
-            'cancel_url': cancel_url,
-            'client_reference_id': str(user.pk),
-            'customer_email': user.email,
-            'metadata': {
-                'user_id': str(user.pk),
-                'course_id': str(course.pk),
-            },
-        }
-
-        # If user already has a Stripe customer ID, use it instead of email
-        if user.stripe_customer_id:
-            session_params.pop('customer_email')
-            session_params['customer'] = user.stripe_customer_id
-
-        session = client.checkout.sessions.create(params=session_params)
-        return JsonResponse({'checkout_url': session.url})
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            'Failed to create course purchase checkout for course %s', course.slug
-        )
-        return JsonResponse({'error': 'Failed to create checkout session'}, status=500)
+    return JsonResponse({
+        'error': 'Local course checkout is deprecated. Use membership payment links.',
+        'portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
+    }, status=410)

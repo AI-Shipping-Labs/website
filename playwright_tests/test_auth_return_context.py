@@ -127,6 +127,7 @@ class TestAuthReturnContext:
         )
         assert "The lesson body is visible after login." in page.content()
 
+    @pytest.mark.legacy_checkout
     def test_pricing_checkout_login_returns_to_selected_tier_context(
         self, django_server, page, django_db_blocker
     ):
@@ -148,6 +149,7 @@ class TestAuthReturnContext:
         )
         assert "Choose your level of engagement" in page.content()
 
+    @pytest.mark.legacy_checkout
     def test_individual_course_purchase_login_returns_to_course(
         self, django_server, page, django_db_blocker
     ):

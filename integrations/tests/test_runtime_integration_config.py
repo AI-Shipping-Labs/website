@@ -1,6 +1,5 @@
 """Runtime services honor Studio-backed IntegrationSetting values."""
 
-import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -79,13 +78,8 @@ class StripeRuntimeConfigTest(TierSetupMixin, RuntimeConfigTestCase):
             "whsec_db",
         )
 
-    @override_settings(
-        STRIPE_CHECKOUT_ENABLED=True,
-        STRIPE_CUSTOMER_PORTAL_URL="https://settings.example.test/portal",
-    )
-    @patch("payments.views.checkout.create_checkout_session")
-    def test_disabled_checkout_uses_db_flag_and_portal_url(self, mock_create):
-        set_integration("STRIPE_CHECKOUT_ENABLED", "false", "stripe")
+    @override_settings(STRIPE_CUSTOMER_PORTAL_URL="https://settings.example.test/portal")
+    def test_deprecated_checkout_uses_db_portal_url(self):
         set_integration(
             "STRIPE_CUSTOMER_PORTAL_URL",
             "https://billing.example.com",
@@ -94,32 +88,11 @@ class StripeRuntimeConfigTest(TierSetupMixin, RuntimeConfigTestCase):
 
         response = self.client.post(
             "/api/checkout/create",
-            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
             content_type="application/json",
         )
 
         self.assertEqual(response.status_code, 410)
         self.assertEqual(response.json()["portal_url"], "https://billing.example.com")
-        mock_create.assert_not_called()
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    @patch("payments.views.checkout.create_checkout_session")
-    def test_enabled_checkout_uses_db_flag_and_calls_service(self, mock_create):
-        set_integration("STRIPE_CHECKOUT_ENABLED", "yes", "stripe")
-        mock_create.return_value = SimpleNamespace(url="https://checkout.example.test")
-
-        response = self.client.post(
-            "/api/checkout/create",
-            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json()["checkout_url"],
-            "https://checkout.example.test",
-        )
-        mock_create.assert_called_once()
 
 
 class YouTubeRuntimeConfigTest(RuntimeConfigTestCase):

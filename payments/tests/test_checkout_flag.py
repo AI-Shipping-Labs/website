@@ -1,18 +1,11 @@
-"""Tests for the STRIPE_CHECKOUT_ENABLED feature flag (issue #154).
+"""Current Stripe product-model tests.
 
-Covers:
-- Checkout endpoints return 410 when flag is off
-- Checkout endpoints work normally when flag is on
-- Course purchase endpoint returns 410 when flag is off
-- Pricing page context includes stripe_checkout_enabled
-- Pricing page shows payment links when flag is off
-- Pricing page shows Manage Subscription for paid users
-- Prefilled email on payment links for logged-in users
-- Account page shows Manage Subscription link for paid users
+The checkout flag is intentionally ignored for local Checkout Session
+creation. Pricing uses Payment Links, paid members use Customer Portal,
+and legacy mutation APIs return 410.
 """
 
 import json
-from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -23,240 +16,117 @@ from tests.fixtures import TierSetupMixin
 User = get_user_model()
 
 
-# ============================================================
-# Checkout endpoints gated by flag (flag OFF = default)
-# ============================================================
-
-
-class CheckoutFlagOffTest(TierSetupMixin, TestCase):
-    """When STRIPE_CHECKOUT_ENABLED is False (default), checkout endpoints return 410.
-
-    Consolidated in #261: 4 separate endpoint tests collapsed into one
-    parameterized test (same assertion shape; only URL/payload differs).
-    """
-
+class DeprecatedCheckoutEndpointsTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
         cls.user = User.objects.create_user(
             email="flagoff@test.com", password="testpass123"
         )
-
-    def setUp(self):
-        self.client.login(email="flagoff@test.com", password="testpass123")
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_all_checkout_endpoints_return_410_when_flag_off(self):
-        endpoints = [
-            ("create",   "/api/checkout/create",
-             {"tier_slug": "basic", "billing_period": "monthly"}, True),
-            ("upgrade",  "/api/subscription/upgrade",
-             {"tier_slug": "main", "billing_period": "monthly"}, False),
-            ("downgrade", "/api/subscription/downgrade",
-             {"tier_slug": "basic", "billing_period": "monthly"}, False),
-            ("cancel",   "/api/subscription/cancel", None, False),
-        ]
-        for label, url, payload, check_portal_url in endpoints:
-            with self.subTest(endpoint=label):
-                kwargs = {"content_type": "application/json"}
-                if payload is not None:
-                    kwargs["data"] = json.dumps(payload)
-                response = self.client.post(url, **kwargs)
-                self.assertEqual(response.status_code, 410)
-                data = response.json()
-                self.assertIn("payment links", data["error"])
-                if check_portal_url:
-                    self.assertIn("portal_url", data)
-
-
-# ============================================================
-# Checkout endpoints work when flag is ON
-# ============================================================
-
-
-class CheckoutFlagOnTest(TierSetupMixin, TestCase):
-    """When STRIPE_CHECKOUT_ENABLED is True, checkout endpoints proceed normally."""
-
-    @classmethod
-    def setUpTestData(cls):
-        super().setUpTestData()
-        cls.user = User.objects.create_user(
-            email="flagon@test.com", password="testpass123"
-        )
-
-    def setUp(self):
-        self.client.login(email="flagon@test.com", password="testpass123")
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    @patch("payments.views.checkout.create_checkout_session")
-    def test_create_checkout_proceeds_when_flag_on(self, mock_create):
-        mock_session = MagicMock()
-        mock_session.url = "https://checkout.stripe.com/test"
-        mock_create.return_value = mock_session
-
-        response = self.client.post(
-            "/api/checkout/create",
-            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["checkout_url"], "https://checkout.stripe.com/test")
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    @patch("payments.views.checkout.upgrade_subscription")
-    def test_upgrade_proceeds_when_flag_on(self, mock_upgrade):
-        response = self.client.post(
-            "/api/subscription/upgrade",
-            data=json.dumps({"tier_slug": "main", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-        # Should not be 410; it proceeds to normal logic
-        self.assertNotEqual(response.status_code, 410)
-        mock_upgrade.assert_called_once()
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    @patch("payments.views.checkout.downgrade_subscription")
-    def test_downgrade_proceeds_when_flag_on(self, mock_downgrade):
-        response = self.client.post(
-            "/api/subscription/downgrade",
-            data=json.dumps({"tier_slug": "basic", "billing_period": "monthly"}),
-            content_type="application/json",
-        )
-        self.assertNotEqual(response.status_code, 410)
-        mock_downgrade.assert_called_once()
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    @patch("payments.views.checkout.cancel_subscription")
-    def test_cancel_proceeds_when_flag_on(self, mock_cancel):
-        response = self.client.post(
-            "/api/subscription/cancel",
-            content_type="application/json",
-        )
-        self.assertNotEqual(response.status_code, 410)
-        mock_cancel.assert_called_once()
-
-
-# ============================================================
-# Course purchase endpoint gated by flag
-# ============================================================
-
-
-class CoursePurchaseFlagTest(TierSetupMixin, TestCase):
-    """Course purchase endpoint respects STRIPE_CHECKOUT_ENABLED flag."""
-
-    @classmethod
-    def setUpTestData(cls):
-        super().setUpTestData()
-        cls.user = User.objects.create_user(
-            email="courseflag@test.com", password="testpass123"
-        )
         cls.course = Course.objects.create(
             title="Test Course",
             slug="test-course",
             status="published",
-            required_level=0,
+            required_level=10,
             individual_price_eur=29,
             stripe_price_id="price_test_course",
         )
 
     def setUp(self):
-        self.client.login(email="courseflag@test.com", password="testpass123")
+        self.client.login(email="flagoff@test.com", password="testpass123")
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_course_purchase_returns_410_when_flag_off(self):
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
+    def test_membership_checkout_endpoints_return_410_even_when_flag_enabled(self):
+        endpoints = [
+            (
+                "create",
+                "/api/checkout/create",
+                {"tier_slug": "basic", "billing_period": "monthly"},
+            ),
+            (
+                "upgrade",
+                "/api/subscription/upgrade",
+                {"tier_slug": "main", "billing_period": "monthly"},
+            ),
+            (
+                "downgrade",
+                "/api/subscription/downgrade",
+                {"tier_slug": "basic", "billing_period": "monthly"},
+            ),
+            ("cancel", "/api/subscription/cancel", {}),
+        ]
+        for label, url, payload in endpoints:
+            with self.subTest(endpoint=label):
+                response = self.client.post(
+                    url,
+                    data=json.dumps(payload),
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, 410)
+                self.assertIn("deprecated", response.json()["error"])
+
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
+    def test_course_purchase_endpoint_returns_410_even_when_flag_enabled(self):
         response = self.client.post(
             f"/api/courses/{self.course.slug}/purchase",
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 410)
-        data = response.json()
-        self.assertIn("payment links", data["error"])
-        self.assertIn("portal_url", data)
+        self.assertIn("deprecated", response.json()["error"])
 
 
-# ============================================================
-# Pricing page context and template
-# ============================================================
+class PricingPaymentLinksTest(TierSetupMixin, TestCase):
+    """Pricing page always renders Payment Links."""
 
-
-class PricingPageFlagOffTest(TierSetupMixin, TestCase):
-    """Pricing page when STRIPE_CHECKOUT_ENABLED is False."""
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_context_includes_stripe_checkout_enabled_false(self):
+    def test_context_reports_local_checkout_disabled(self):
         response = self.client.get("/pricing")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["stripe_checkout_enabled"])
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_anonymous_user_sees_payment_links(self):
+    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
+    def test_anonymous_user_sees_payment_links_even_when_checkout_flag_enabled(self):
         response = self.client.get("/pricing")
         self.assertEqual(response.status_code, 200)
-        # Payment links should be in the page (from settings.STRIPE_PAYMENT_LINKS)
         self.assertContains(response, "buy.stripe.com")
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_anonymous_user_no_prefilled_email(self):
-        response = self.client.get("/pricing")
-        self.assertNotContains(response, "prefilled_email")
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_logged_in_user_gets_prefilled_email(self):
-        User.objects.create_user(email="prefill@test.com", password="testpass123")
-        self.client.login(email="prefill@test.com", password="testpass123")
-        response = self.client.get("/pricing")
-        self.assertContains(response, "prefilled_email=prefill@test.com")
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_paid_user_sees_current_plan_state(self):
-        user = User.objects.create_user(email="paid@test.com", password="testpass123")
-        user.tier = self.main_tier
-        user.save(update_fields=["tier"])
-        self.client.login(email="paid@test.com", password="testpass123")
-        response = self.client.get("/pricing")
-        self.assertContains(response, "Current plan")
-        self.assertTrue(response.context["is_paid_member"])
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_free_user_does_not_see_manage_subscription(self):
-        User.objects.create_user(email="free@test.com", password="testpass123")
-        self.client.login(email="free@test.com", password="testpass123")
-        response = self.client.get("/pricing")
-        self.assertFalse(response.context["is_paid_member"])
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=False)
-    def test_payment_links_have_monthly_and_annual_data(self):
-        """Tier CTA links have data attributes for monthly/annual toggle."""
-        response = self.client.get("/pricing")
         self.assertContains(response, "data-link-monthly")
         self.assertContains(response, "data-link-annual")
+        self.assertNotContains(response, "/api/checkout/create")
 
-
-class PricingPageFlagOnTest(TierSetupMixin, TestCase):
-    """Pricing page when STRIPE_CHECKOUT_ENABLED is True."""
-
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_context_includes_stripe_checkout_enabled_true(self):
+    def test_logged_in_user_gets_url_encoded_prefilled_email(self):
+        User.objects.create_user(
+            email="prefill+stripe@test.com",
+            password="testpass123",
+        )
+        self.client.login(email="prefill+stripe@test.com", password="testpass123")
         response = self.client.get("/pricing")
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context["stripe_checkout_enabled"])
 
-    @override_settings(STRIPE_CHECKOUT_ENABLED=True)
-    def test_no_prefilled_email_when_checkout_enabled(self):
-        """When checkout is enabled, payment links are not used so no prefilled_email."""
-        User.objects.create_user(email="nopre@test.com", password="testpass123")
-        self.client.login(email="nopre@test.com", password="testpass123")
+        self.assertContains(
+            response,
+            "prefilled_email=prefill%2Bstripe%40test.com",
+        )
+
+    def test_paid_user_upgrade_actions_use_customer_portal(self):
+        user = User.objects.create_user(
+            email="paid-pricing@test.com",
+            password="testpass123",
+        )
+        user.tier = self.basic_tier
+        user.subscription_id = "sub_basic"
+        user.save(update_fields=["tier", "subscription_id"])
+        self.client.login(email="paid-pricing@test.com", password="testpass123")
+
         response = self.client.get("/pricing")
-        self.assertNotContains(response, "prefilled_email")
+        states = {
+            item["tier"].slug: item["state"]
+            for item in response.context["tiers_data"]
+        }
+
+        self.assertEqual(states["main"]["action_kind"], "portal")
+        self.assertEqual(states["premium"]["action_kind"], "portal")
 
 
-# ============================================================
-# Account page - Manage Subscription link
-# ============================================================
-
-
-class AccountPageManageSubscriptionTest(TierSetupMixin, TestCase):
-    """Account page shows Manage Subscription link for paid users."""
+class AccountPageCustomerPortalTest(TierSetupMixin, TestCase):
+    """Account page shows Customer Portal instead of local mutation controls."""
 
     @classmethod
     def setUpTestData(cls):
@@ -272,13 +142,16 @@ class AccountPageManageSubscriptionTest(TierSetupMixin, TestCase):
             email="freeacct@test.com", password="testpass123"
         )
 
-    def test_paid_user_sees_manage_subscription(self):
+    def test_paid_user_sees_manage_subscription_only(self):
         self.client.login(email="paidacct@test.com", password="testpass123")
         response = self.client.get("/account/")
         self.assertContains(response, "Manage Subscription")
         self.assertContains(response, "manage-subscription-btn")
+        self.assertNotContains(response, "downgrade-btn")
+        self.assertNotContains(response, "cancel-btn")
 
-    def test_free_user_does_not_see_manage_subscription(self):
+    def test_free_user_sees_pricing_upgrade_link(self):
         self.client.login(email="freeacct@test.com", password="testpass123")
         response = self.client.get("/account/")
+        self.assertContains(response, 'id="upgrade-btn"')
         self.assertNotContains(response, "manage-subscription-btn")

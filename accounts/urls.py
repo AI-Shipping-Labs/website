@@ -3,7 +3,6 @@ from django.urls import include, path
 from accounts.views.account import (
     account_profile_post_view,
     account_view,
-    cancel_subscription_view,
     email_preferences_view,
     resend_verification_view,
     theme_preference_view,
@@ -52,7 +51,6 @@ account_urlpatterns = [
     path('profile', account_profile_post_view, name='account_profile'),
     path('api/email-preferences', email_preferences_view, name='email_preferences'),
     path('api/timezone-preference', timezone_preference_view, name='timezone_preference'),
-    path('api/cancel', cancel_subscription_view, name='account_cancel_subscription'),
     path('api/change-password', change_password_api, name='account_change_password'),
     path(
         'api/resend-verification',

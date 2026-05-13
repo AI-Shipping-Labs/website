@@ -763,6 +763,8 @@ class AccountPageDisplayTest(TierOverrideTestBase):
             tier=self.basic_tier,
             password="testpass",
         )
+        user.subscription_id = "sub_override_base"
+        user.save(update_fields=["subscription_id"])
         admin = self._make_staff()
         self._make_override(user, self.premium_tier, granted_by=admin)
 
@@ -770,11 +772,9 @@ class AccountPageDisplayTest(TierOverrideTestBase):
         response = self.client.get("/account/")
         self.assertEqual(response.status_code, 200)
 
-        # Upgrade tiers should be based on Basic level (10), not Premium (30)
-        upgrade_tiers = response.context["upgrade_tiers"]
-        upgrade_names = [t.name for t in upgrade_tiers]
-        self.assertIn("Main", upgrade_names)
-        self.assertIn("Premium", upgrade_names)
+        self.assertContains(response, "Temporary Premium access")
+        self.assertNotContains(response, 'id="upgrade-btn"')
+        self.assertContains(response, 'id="manage-subscription-btn"')
 
     def test_38_no_override_no_override_section(self):
         """#38: User with no active override -> no override section shown."""

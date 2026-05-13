@@ -2,7 +2,6 @@
 
 import json
 import logging
-from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -33,7 +32,7 @@ from accounts.services.timezones import (
 )
 from content.access import get_active_override
 from email_app.models import EmailLog
-from integrations.config import get_config, is_enabled
+from integrations.config import get_config
 from payments.models import Tier
 from payments.tier_state import build_tier_state
 
@@ -125,22 +124,10 @@ def _render_account_page(
     # Check for active tier override
     active_override = get_active_override(user)
 
-    stripe_checkout_enabled = is_enabled("STRIPE_CHECKOUT_ENABLED")
     stripe_customer_portal_url = get_config("STRIPE_CUSTOMER_PORTAL_URL", "")
     has_stale_subscription = has_subscription and is_free
 
-    # Get available tiers for upgrade/downgrade options
-    all_tiers = list(Tier.objects.exclude(slug="free").order_by("level"))
     free_tier = Tier.objects.filter(slug="free").first()
-
-    # Determine upgrade tiers from the base subscription tier. Temporary
-    # overrides grant access, but they do not change subscription actions.
-    current_level = tier.level if tier else 0
-    upgrade_tiers = [t for t in all_tiers if t.level > current_level]
-    downgrade_tiers = [t for t in all_tiers if 0 < t.level < current_level]
-
-    # Get current tier's feature list for the cancel confirmation modal
-    tier_features = tier.features if tier and tier.features else []
     latest_verification_email = None
     if not user.email_verified:
         latest_verification_email = (
@@ -165,40 +152,13 @@ def _render_account_page(
     )
 
     portal_available = bool(stripe_customer_portal_url)
-    show_manage_subscription = has_subscription and portal_available and (
-        not stripe_checkout_enabled
-        or is_pending_cancellation
-        or is_pending_downgrade
-        or has_stale_subscription
-        or active_override is not None
-    )
+    show_manage_subscription = has_subscription and portal_available
     show_upgrade_action = (
-        not has_stale_subscription
+        is_free
+        and not has_stale_subscription
         and not is_pending_cancellation
         and not is_pending_downgrade
         and active_override is None
-        and (
-            is_free
-            or (
-                stripe_checkout_enabled
-                and bool(upgrade_tiers)
-            )
-        )
-    )
-    show_downgrade_action = (
-        stripe_checkout_enabled
-        and not is_basic
-        and not is_free
-        and not is_pending_downgrade
-        and not is_pending_cancellation
-        and bool(downgrade_tiers)
-    )
-    show_cancel_action = (
-        stripe_checkout_enabled
-        and has_subscription
-        and not has_stale_subscription
-        and not is_pending_cancellation
-        and not is_free
     )
 
     context = {
@@ -211,20 +171,14 @@ def _render_account_page(
         "is_pending_downgrade": is_pending_downgrade,
         "is_pending_cancellation": is_pending_cancellation,
         "billing_period_end": user.billing_period_end,
-        "upgrade_tiers": upgrade_tiers,
-        "downgrade_tiers": downgrade_tiers,
         "email_preferences": user.email_preferences,
         "newsletter_subscribed": not user.unsubscribed,
         "timezone_options": build_timezone_options(),
         "preferred_timezone_label": get_timezone_label(user.preferred_timezone),
-        "tier_features": tier_features,
         "active_override": active_override,
         "account_plan_state": account_plan_state,
         "show_manage_subscription": show_manage_subscription,
         "show_upgrade_action": show_upgrade_action,
-        "show_downgrade_action": show_downgrade_action,
-        "show_cancel_action": show_cancel_action,
-        "stripe_checkout_enabled": stripe_checkout_enabled,
         "stripe_customer_portal_url": stripe_customer_portal_url,
         "latest_verification_email": latest_verification_email,
         # Profile name form (consolidated onto /account/, issue #447). The
@@ -311,52 +265,6 @@ def timezone_preference_view(request):
         "timezone": user.preferred_timezone,
         "label": get_timezone_label(user.preferred_timezone),
     })
-
-
-@login_required
-@require_POST
-def cancel_subscription_view(request):
-    """Cancel subscription at period end and set pending_tier to free.
-
-    This wraps the payments service cancel_subscription and also sets
-    the pending_tier to free so the account page can show the cancellation
-    status without querying Stripe.
-    """
-    from payments.services import cancel_subscription
-
-    user = request.user
-
-    if not user.subscription_id:
-        return JsonResponse({"error": "No active subscription"}, status=400)
-
-    try:
-        updated_subscription = cancel_subscription(user)
-    except ValueError as e:
-        return JsonResponse({"error": str(e)}, status=400)
-    except Exception:
-        return JsonResponse(
-            {"error": "Failed to cancel subscription"}, status=500
-        )
-
-    # Set pending_tier to free to indicate cancellation at period end
-    free_tier = Tier.objects.filter(slug="free").first()
-    update_fields = []
-    if free_tier:
-        user.pending_tier = free_tier
-        update_fields.append("pending_tier")
-
-    # Update billing_period_end from the Stripe subscription response
-    current_period_end = getattr(updated_subscription, "current_period_end", None)
-    if current_period_end:
-        user.billing_period_end = datetime.fromtimestamp(
-            current_period_end, tz=timezone.utc
-        )
-        update_fields.append("billing_period_end")
-
-    if update_fields:
-        user.save(update_fields=update_fields)
-
-    return JsonResponse({"status": "ok"})
 
 
 @login_required

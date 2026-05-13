@@ -158,7 +158,7 @@ def test_free_member_sees_current_free_and_paid_upgrades(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_main_member_sees_current_plan_downgrade_and_upgrade(
+def test_main_member_sees_current_plan_and_customer_portal_actions(
     django_server, browser, django_db_blocker, pricing_users
 ):
     context, page = _pricing_page(
@@ -170,7 +170,9 @@ def test_main_member_sees_current_plan_downgrade_and_upgrade(
         main_text = _tier_card(page, "Main").inner_text()
         assert "Current plan" in main_text
         assert "Join" not in main_text
-        assert "Upgrade" in _tier_card(page, "Premium").inner_text()
+        premium_text = _tier_card(page, "Premium").inner_text()
+        assert "Manage Subscription" in premium_text
+        assert "Upgrade" not in premium_text
     finally:
         context.close()
 
@@ -215,10 +217,12 @@ def test_account_primary_action_matches_current_plan_state(
         assert page.locator("#upgrade-btn").count() == (1 if upgrade_visible else 0)
         if expected_plan == "Premium":
             # Issue #581: the steady-state ``Current plan`` frame is
-            # suppressed on /account/ (pricing page is unaffected). The
-            # tier name and Downgrade CTA together convey the state.
+            # suppressed on /account/ (pricing page is unaffected). Billing
+            # changes are delegated to the Customer Portal.
             assert page.locator("#account-plan-state").count() == 0
-            assert page.locator("#downgrade-btn").is_visible()
+            assert page.locator("#manage-subscription-btn").is_visible()
+            assert page.locator("#downgrade-btn").count() == 0
+            assert page.locator("#cancel-btn").count() == 0
     finally:
         context.close()
 
@@ -268,6 +272,7 @@ def test_account_pending_and_temporary_states_do_not_show_normal_upgrade(
         assert "Basic" in pending_notice_text
         assert "29/05/2026" in pending_notice_text
         assert pending_page.locator("#upgrade-btn").count() == 0
+        assert pending_page.locator("#manage-subscription-btn").is_visible()
     finally:
         pending_context.close()
 
@@ -279,6 +284,7 @@ def test_account_pending_and_temporary_states_do_not_show_normal_upgrade(
             "#tier-override-notice"
         ).inner_text()
         assert override_page.locator("#upgrade-btn").count() == 0
+        assert override_page.locator("#manage-subscription-btn").is_visible()
     finally:
         override_context.close()
 

@@ -95,68 +95,26 @@
 
   // ---------- API helper ----------
 
-  let inflight = 0;
-
-  function apiCall(method, path, body) {
-    inflight += 1;
-    setIndicator('saving');
-
-    const url = apiBase + path.replace(/^\//, '');
-    const init = {
-      method: method,
-      headers: {
-        'Authorization': 'Token ' + apiToken,
-        'Content-Type': 'application/json',
-      },
-    };
-    if (body !== undefined && body !== null) {
-      init.body = JSON.stringify(body);
-    }
-
-    return fetch(url, init).then(function (resp) {
-      // 204 No Content has no body per RFC 7230 -- browsers strip it
-      // even when the server set Content-Type: application/json. Calling
-      // resp.json() on a 204 rejects with a SyntaxError, which would
-      // bubble into our .catch as a phantom network_error and trigger a
-      // spurious retry of the (already successful) write.
-      const isJson = (resp.headers.get('content-type') || '').indexOf('application/json') !== -1;
-      const hasBody = resp.status !== 204 && resp.status !== 205;
-      const parse = (isJson && hasBody) ? resp.json() : Promise.resolve(null);
-      return parse.then(function (data) {
-        inflight -= 1;
-        if (resp.ok) {
-          if (inflight === 0) { setIndicator('saved'); }
-          return { ok: true, status: resp.status, data: data };
-        }
-        const code = (data && data.code) || ('http_' + resp.status);
-        const message = (data && data.error) || ('Request failed: ' + resp.status);
-        return { ok: false, status: resp.status, data: data, code: code, message: message };
-      });
-    }).catch(function (err) {
-      inflight -= 1;
-      return { ok: false, status: 0, code: 'network_error', message: String(err) };
-    });
+  if (!window.PlanEditorApi || !window.PlanEditorState) {
+    console.error('plan-editor: helper modules missing');
+    return;
   }
 
-  function apiCallWithRevert(method, path, body, revert) {
-    return apiCall(method, path, body).then(function (result) {
-      if (result.ok) { return result; }
-      // First failure: schedule one retry after 1 second.
-      return new Promise(function (resolve) {
-        setTimeout(function () {
-          apiCall(method, path, body).then(function (retry) {
-            if (retry.ok) {
-              resolve(retry);
-            } else {
-              if (revert) { revert(retry); }
-              setIndicator('failed', retry.message);
-              showToast("Couldn't save change — your edit was reverted (" + retry.code + ').');
-              resolve(retry);
-            }
-          });
-        }, 1000);
-      });
-    });
+  const apiClient = window.PlanEditorApi.createClient({
+    apiBase: apiBase,
+    apiToken: apiToken,
+    onSaving: function () { setIndicator('saving'); },
+    onSaved: function () { setIndicator('saved'); },
+    onFailed: function (message) { setIndicator('failed', message); },
+    onToast: showToast,
+  });
+
+  function apiCall(method, path, body) {
+    return apiClient.request(method, path, body);
+  }
+
+  function apiCallWithRevert(method, path, body, revert, failureMessage) {
+    return apiClient.writeWithRetry(method, path, body, revert, failureMessage);
   }
 
   // ---------- text-field debounce ----------
@@ -284,9 +242,11 @@
 
   // Move a checkpoint via the API. Used by both drag and keyboard paths.
   function moveCheckpoint(chip, destWeekId, destPosition, snapshot) {
-    return apiCall('POST', 'checkpoints/' + chip.dataset.checkpointId + '/move', {
+    return apiCallWithRevert('POST', 'checkpoints/' + chip.dataset.checkpointId + '/move', {
       week_id: destWeekId,
       position: destPosition,
+    }, function () {
+      if (snapshot) { restoreCheckpointSnapshot(snapshot); }
     }).then(function (result) {
       if (result.ok) {
         // Update DOM positions from the canonical envelope so optimistic
@@ -305,11 +265,6 @@
         }
         return result;
       }
-      // Failure: revert from snapshot, retry once via the wrapper would
-      // duplicate the failed write, so we trip the indicator directly.
-      if (snapshot) { restoreCheckpointSnapshot(snapshot); }
-      setIndicator('failed', result.message);
-      showToast("Couldn't save change — your edit was reverted (" + result.code + ').');
       return result;
     });
   }
@@ -471,7 +426,7 @@
     if (deleteBtn) {
       deleteBtn.addEventListener('click', function (e) {
         e.preventDefault();
-        showInlineConfirm(chip, function () {
+        showInlineConfirm(chip, function (restoreConfirm) {
           // The chip is removed from the DOM optimistically; on failure
           // we re-insert at the prior position.
           const parent = chip.parentNode;
@@ -479,6 +434,8 @@
           chip.remove();
           apiCallWithRevert('DELETE', 'checkpoints/' + id, null, function () {
             parent.insertBefore(chip, sibling);
+            restoreConfirm();
+            chip.focus();
           });
           // Move focus to the next sibling, prev sibling, or add button.
           const next = sibling && sibling.nodeType === 1 ? sibling : null;
@@ -542,28 +499,25 @@
     const siblings = Array.from(
       list.querySelectorAll('[data-testid="checkpoint-chip"]')
     );
-    const idx = siblings.indexOf(chip);
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= siblings.length) { return; }
-
-    const snapshot = [];
-    root.querySelectorAll('[data-testid="checkpoint-list"]').forEach(function (l) {
-      snapshot.push.apply(
-        snapshot,
-        snapshotCheckpointPositions(parseInt(l.dataset.weekId, 10)),
-      );
-    });
+    const snapshot = snapshotAllCheckpoints();
+    const target = window.PlanEditorState.keyboardMoveTarget(
+      snapshot,
+      chip.dataset.checkpointId,
+      direction,
+      false,
+    );
+    if (!target) { return; }
 
     if (direction === -1) {
-      list.insertBefore(chip, siblings[newIdx]);
+      list.insertBefore(chip, siblings[target.position]);
     } else {
-      const ref = siblings[newIdx].nextSibling;
+      const ref = siblings[target.position].nextSibling;
       list.insertBefore(chip, ref);
     }
     const weekId = parseInt(list.dataset.weekId, 10);
     renumberCheckpoints(weekId);
     chip.focus();
-    moveCheckpoint(chip, weekId, newIdx, snapshot);
+    moveCheckpoint(chip, target.weekId, target.position, snapshot);
   }
 
   function moveCheckpointAcrossWeeks(chip, direction) {
@@ -578,32 +532,29 @@
     const destList = allLists[newWeekIdx];
     const destWeekId = parseInt(destList.dataset.weekId, 10);
 
-    const snapshot = [];
-    allLists.forEach(function (l) {
-      snapshot.push.apply(
-        snapshot,
-        snapshotCheckpointPositions(parseInt(l.dataset.weekId, 10)),
-      );
-    });
+    const snapshot = snapshotAllCheckpoints();
+    const target = window.PlanEditorState.keyboardMoveTarget(
+      snapshot,
+      chip.dataset.checkpointId,
+      direction,
+      true,
+      allLists.map(function (list) { return parseInt(list.dataset.weekId, 10); }),
+    );
+    if (!target) { return; }
 
     // Wrap from bottom of week N to top of week N+1; wrap top of N to
     // bottom of N-1 when going up.
-    let destPosition;
     if (direction === 1) {
       // Bottom of source -> top of destination.
       destList.insertBefore(chip, destList.firstChild);
-      destPosition = 0;
     } else {
       destList.appendChild(chip);
-      destPosition = destList.querySelectorAll(
-        '[data-testid="checkpoint-chip"]'
-      ).length - 1;
     }
     chip.dataset.weekId = String(destWeekId);
     renumberCheckpoints(fromWeekId);
     renumberCheckpoints(destWeekId);
     chip.focus();
-    moveCheckpoint(chip, destWeekId, destPosition, snapshot);
+    moveCheckpoint(chip, target.weekId, target.position, snapshot);
   }
 
   function enterInlineEdit(chip, textEl, id) {
@@ -685,13 +636,17 @@
     chip.appendChild(yes);
     chip.appendChild(cancel);
 
-    yes.addEventListener('click', function () {
-      onConfirm();
-    });
-    cancel.addEventListener('click', function () {
+    function restoreConfirm() {
       chip.innerHTML = original;
       chip.dataset.confirming = 'false';
       bindCheckpointChip(chip);
+    }
+
+    yes.addEventListener('click', function () {
+      onConfirm(restoreConfirm);
+    });
+    cancel.addEventListener('click', function () {
+      restoreConfirm();
       chip.focus();
     });
   }
@@ -842,17 +797,16 @@
         return Promise.resolve({ ok: true });
       }
       const chip = incomplete[i];
-      return apiCall('POST', 'checkpoints/' + chip.dataset.checkpointId + '/move', {
+      return apiCallWithRevert('POST', 'checkpoints/' + chip.dataset.checkpointId + '/move', {
         week_id: destWeekId,
         position: position,
+      }, function () {
+        restoreCheckpointSnapshot(snapshot);
+        updateEmptyWeekHint(sourceWeekId);
+        updateEmptyWeekHint(destWeekId);
       }).then(function (result) {
         if (!result.ok) {
           aborted = true;
-          restoreCheckpointSnapshot(snapshot);
-          updateEmptyWeekHint(sourceWeekId);
-          updateEmptyWeekHint(destWeekId);
-          setIndicator('failed', result.message);
-          showToast("Couldn't save change — your edit was reverted (" + result.code + ').');
           return result;
         }
         // Reconcile from envelope so positions stay contiguous and

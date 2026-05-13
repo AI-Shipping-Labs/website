@@ -12,6 +12,7 @@ The drag and keyboard scenarios use Playwright's real drag primitives
 
 import datetime
 import os
+from pathlib import Path
 
 import pytest
 
@@ -30,6 +31,8 @@ from playwright_tests.conftest import (
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _clear_plans_data():
@@ -166,6 +169,67 @@ def _checkpoint_descriptions(page, week_number):
         )
         .all_text_contents()
     )
+
+
+def _focused_checkpoint_text(page):
+    return page.evaluate(
+        """
+        () => {
+          const active = document.activeElement;
+          if (!active || !active.matches('[data-testid="checkpoint-chip"]')) {
+            return null;
+          }
+          const text = active.querySelector('[data-testid="checkpoint-text"]');
+          return text ? text.textContent : null;
+        }
+        """
+    )
+
+
+class TestPlanEditorStateTransforms:
+    def test_keyboard_targets_and_moves_are_pure(self, browser):
+        context = browser.new_context()
+        page = context.new_page()
+        page.add_script_tag(path=str(REPO_ROOT / "static/js/studio/plan_editor_state.js"))
+
+        result = page.evaluate(
+            """
+            () => {
+              const initial = [
+                { id: 10, weekId: 1, position: 0 },
+                { id: 20, weekId: 1, position: 1 },
+                { id: 30, weekId: 2, position: 0 },
+              ];
+              return {
+                upTarget: window.PlanEditorState.keyboardMoveTarget(initial, 20, -1, false),
+                crossTarget: window.PlanEditorState.keyboardMoveTarget(initial, 20, 1, true),
+                emptyWeekTarget: window.PlanEditorState.keyboardMoveTarget(
+                  [{ id: 30, weekId: 2, position: 0 }],
+                  30,
+                  -1,
+                  true,
+                  [1, 2],
+                ),
+                moved: window.PlanEditorState.moveCheckpoint(initial, 20, 2, 0),
+                original: initial,
+              };
+            }
+            """
+        )
+
+        assert result["upTarget"] == {"weekId": 1, "position": 0}
+        assert result["crossTarget"] == {"weekId": 2, "position": 0}
+        assert result["emptyWeekTarget"] == {"weekId": 1, "position": 0}
+        assert result["moved"] == [
+            {"id": 10, "weekId": 1, "position": 0},
+            {"id": 20, "weekId": 2, "position": 0},
+            {"id": 30, "weekId": 2, "position": 1},
+        ]
+        assert result["original"] == [
+            {"id": 10, "weekId": 1, "position": 0},
+            {"id": 20, "weekId": 1, "position": 1},
+            {"id": 30, "weekId": 2, "position": 0},
+        ]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -459,6 +523,62 @@ class TestStaffMovesCheckpointAcrossWeeksByKeyboard:
 
 
 @pytest.mark.django_db(transaction=True)
+class TestStaffRetryPaths:
+    def test_keyboard_move_retries_after_transient_failure(self, django_server, browser):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user(
+            "member@test.com", tier_slug="free", email_verified=True,
+        )
+        plan = _seed_plan(
+            "staff@test.com", "member@test.com",
+            [["A", "B"]],
+        )
+
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        move_attempts = {"count": 0}
+
+        def _fail_once(route):
+            move_attempts["count"] += 1
+            if move_attempts["count"] == 1:
+                route.fulfill(
+                    status=503,
+                    content_type="application/json",
+                    body='{"error": "temporary", "code": "temporary"}',
+                )
+                return
+            route.continue_()
+
+        page.route("**/api/checkpoints/*/move", _fail_once)
+        page.goto(
+            f"{django_server}/studio/plans/{plan.pk}/edit/",
+            wait_until="networkidle",
+        )
+
+        b_chip = page.locator(
+            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
+        ).filter(has_text="B")
+        b_chip.focus()
+        with page.expect_response("**/api/checkpoints/*/move") as first_move:
+            page.keyboard.press("ArrowUp")
+        assert first_move.value.status == 503
+        with page.expect_response("**/api/checkpoints/*/move") as retry_move:
+            pass
+        assert retry_move.value.status == 200
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
+        assert move_attempts["count"] == 2
+        assert _checkpoint_descriptions(page, 1) == ["B", "A"]
+        assert _focused_checkpoint_text(page) == "B"
+
+        page.reload(wait_until="networkidle")
+        assert _checkpoint_descriptions(page, 1) == ["B", "A"]
+
+
+@pytest.mark.django_db(transaction=True)
 class TestStaffEditsSummaryInline:
     def test_summary_textarea_autosaves(self, django_server, browser):
         _ensure_tiers()
@@ -550,6 +670,56 @@ class TestStaffAddsAndDeletesCheckpoint:
 
 
 @pytest.mark.django_db(transaction=True)
+class TestStaffDeleteRollback:
+    def test_delete_reverts_chip_and_focus_when_retry_fails(self, django_server, browser):
+        _ensure_tiers()
+        _clear_plans_data()
+        _create_staff_user("staff@test.com")
+        _create_user(
+            "member@test.com", tier_slug="free", email_verified=True,
+        )
+        plan = _seed_plan(
+            "staff@test.com", "member@test.com",
+            [["A", "B"]],
+        )
+
+        context = _auth_context(browser, "staff@test.com")
+        page = context.new_page()
+        delete_attempts = {"count": 0}
+
+        def _fail_delete(route):
+            delete_attempts["count"] += 1
+            route.fulfill(
+                status=500,
+                content_type="application/json",
+                body='{"error": "boom", "code": "server_error"}',
+            )
+
+        page.route("**/api/checkpoints/*", _fail_delete)
+        page.goto(
+            f"{django_server}/studio/plans/{plan.pk}/edit/",
+            wait_until="networkidle",
+        )
+
+        a_chip = page.locator(
+            '[data-week-number="1"] [data-testid="checkpoint-chip"]'
+        ).filter(has_text="A")
+        a_chip.locator('[data-testid="checkpoint-delete"]').click(force=True)
+        page.locator('[data-testid="checkpoint-delete-confirm"]').click()
+
+        page.locator(
+            '[data-testid="save-indicator"][data-state="failed"]'
+        ).wait_for()
+        assert delete_attempts["count"] == 2
+        assert _checkpoint_descriptions(page, 1) == ["A", "B"]
+        assert page.locator('[data-testid="checkpoint-delete-confirm"]').count() == 0
+        assert _focused_checkpoint_text(page) == "A"
+
+        page.reload(wait_until="networkidle")
+        assert _checkpoint_descriptions(page, 1) == ["A", "B"]
+
+
+@pytest.mark.django_db(transaction=True)
 class TestStaffSeesRevertOnApiFailure:
     def test_drag_reverts_when_api_returns_422(self, django_server, browser):
         _ensure_tiers()
@@ -565,15 +735,22 @@ class TestStaffSeesRevertOnApiFailure:
 
         context = _auth_context(browser, "staff@test.com")
         page = context.new_page()
-        # Intercept the move endpoint and return 422 so the editor's
-        # ``moveCheckpoint`` revert path runs end-to-end.
-        page.route(
-            "**/api/checkpoints/*/move",
-            lambda route: route.fulfill(
+        # Intercept the move endpoint and return 422 for both the
+        # original write and retry so the editor's rollback path runs
+        # end-to-end.
+        move_attempts = {"count": 0}
+
+        def _fail_move(route):
+            move_attempts["count"] += 1
+            route.fulfill(
                 status=422,
                 content_type="application/json",
                 body='{"error": "invalid", "code": "invalid_position"}',
-            ),
+            )
+
+        page.route(
+            "**/api/checkpoints/*/move",
+            _fail_move,
         )
         page.goto(
             f"{django_server}/studio/plans/{plan.pk}/edit/",
@@ -597,6 +774,7 @@ class TestStaffSeesRevertOnApiFailure:
         page.locator(
             '[data-testid="save-indicator"][data-state="failed"]'
         ).wait_for()
+        assert move_attempts["count"] == 2
         toast = page.locator('[data-testid="plan-editor-toast"]')
         toast.wait_for(state="visible")
         assert "Couldn't save change" in toast.text_content()

@@ -1,9 +1,10 @@
 """Tests for the workshop sync pipeline (issue #295).
 
 Covers the parser and Event-linking behavior called out in the spec:
-- Happy path: one workshop.yaml + two pages -> 1 Workshop, 2 WorkshopPage,
-  1 linked Event with kind='workshop', status='completed'
+- Recording-backed happy path: one workshop.yaml + two pages -> 1 Workshop,
+  2 WorkshopPage, 1 linked Event with kind='workshop', status='completed'
   and recording fields populated.
+- Tutorial-only workshops create Workshop + WorkshopPage rows only.
 - Re-sync is idempotent: running sync twice does NOT create a second Event
   or a second Workshop.
 - Pre-existing Event with matching slug is reused (not re-created); content
@@ -249,6 +250,130 @@ class WorkshopSyncIdempotencyTest(_WorkshopSyncFixtureBase):
         self.assertEqual(WorkshopPage.objects.count(), 2)
         self.assertEqual(Event.objects.get(slug='demo').pk, event_pk_before)
         self.assertEqual(Workshop.objects.get().pk, workshop_pk_before)
+
+
+class WorkshopSyncTutorialOnlyNoEventTest(_WorkshopSyncFixtureBase):
+    """Tutorial-only workshops do not create or link Events."""
+
+    def test_tutorial_only_workshop_creates_pages_but_no_event(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIsNone(workshop.event_id)
+        self.assertEqual(WorkshopPage.objects.filter(workshop=workshop).count(), 1)
+        self.assertEqual(Event.objects.count(), 0)
+
+    def test_empty_recording_url_is_treated_as_tutorial_only(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(
+            folder=folder,
+            extra_yaml=(
+                'recording:\n'
+                '  url: ""\n'
+                '  required_level: 20\n'
+            ),
+        )
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIsNone(workshop.event_id)
+        self.assertEqual(Event.objects.count(), 0)
+
+    def test_second_sync_still_has_no_event(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        first = sync_repo(self.source, self.repo)
+        second = sync_repo(self.source, self.repo)
+
+        self.assertEqual(first.errors, [])
+        self.assertEqual(second.errors, [])
+        self.assertEqual(Workshop.objects.count(), 1)
+        self.assertEqual(WorkshopPage.objects.count(), 1)
+        self.assertEqual(Event.objects.count(), 0)
+        self.assertIsNone(Workshop.objects.get(slug='demo').event_id)
+
+    def test_resync_unlinks_legacy_generated_empty_event(self):
+        from integrations.services.github_sync.dispatchers.workshops import (
+            _derive_workshop_event_content_id,
+        )
+
+        folder = '2026/2026-04-21-demo'
+        yaml_rel_path = f'{folder}/workshop.yaml'
+        legacy_event = Event.objects.create(
+            slug='demo',
+            title='Demo Workshop',
+            start_datetime=datetime(2026, 4, 21, tzinfo=dt_timezone.utc),
+            status='completed',
+            published=True,
+            kind='workshop',
+            origin='github',
+            source_repo=self.source.repo_name,
+            source_path=yaml_rel_path,
+            source_commit='oldsha',
+            content_id=_derive_workshop_event_content_id(
+                self.source.repo_name, folder,
+            ),
+        )
+        Workshop.objects.create(
+            slug='demo',
+            title='Old Demo Workshop',
+            date='2026-04-21',
+            status='published',
+            landing_required_level=0,
+            pages_required_level=10,
+            recording_required_level=10,
+            source_repo=self.source.repo_name,
+            source_path=folder,
+            content_id=SAMPLE_WORKSHOP_UUID,
+            event=legacy_event,
+        )
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIsNone(workshop.event_id)
+        legacy_event.refresh_from_db()
+        self.assertEqual(legacy_event.status, 'draft')
+        self.assertFalse(legacy_event.published)
+
+        response = self.client.get('/events')
+        self.assertNotContains(response, 'Demo Workshop')
+
+    def test_tutorial_only_does_not_link_or_touch_studio_event_same_slug(self):
+        studio_event = Event.objects.create(
+            slug='demo',
+            title='Studio Demo',
+            start_datetime=datetime(2026, 4, 21, tzinfo=dt_timezone.utc),
+            status='upcoming',
+            published=True,
+            origin='studio',
+        )
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(folder, '01-overview.md', title='Overview')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(sync_log.errors, [])
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertIsNone(workshop.event_id)
+        studio_event.refresh_from_db()
+        self.assertEqual(studio_event.title, 'Studio Demo')
+        self.assertEqual(studio_event.status, 'upcoming')
+        self.assertTrue(studio_event.published)
 
 
 class WorkshopSyncReusesExistingEventTest(_WorkshopSyncFixtureBase):
@@ -640,15 +765,9 @@ class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
     def test_workshop_round_trip_remove_then_restore(self):
         """write -> sync -> remove -> sync -> re-write -> sync for workshops.
 
-        Workshops surface to users via their linked Event row at
-        ``/events`` (kind='workshop'). Asserts ``Workshop.status`` flips
-        through published -> draft -> published, and that the linked
-        Event's listing visibility tracks the workshop status. The
-        Event ``published`` flag is intentionally NOT toggled by the
-        workshop stale cleanup (the linked event stands on its own —
-        see the comment in ``_sync_workshops``), so the listing
-        assertion focuses on workshop-level surfaces (``/workshops`` is
-        gated by required level — we use Event listing instead).
+        Tutorial-only workshops no longer create linked Event rows. This
+        asserts ``Workshop.status`` still flips through published -> draft
+        -> published without needing an Event as a side effect.
         """
         folder = '2026/2026-04-21-demo'
         unique_title = 'Round Trip Workshop ZZQQ-RT-4'
@@ -662,10 +781,8 @@ class WorkshopSyncStaleCleanupTest(_WorkshopSyncFixtureBase):
         sync_repo(self.source, self.repo)
         workshop = Workshop.objects.get(slug='demo')
         self.assertEqual(workshop.status, 'published')
-        # Linked event must exist.
-        self.assertIsNotNone(workshop.event_id)
-        event = Event.objects.get(pk=workshop.event_id)
-        self.assertEqual(event.slug, 'demo')
+        self.assertIsNone(workshop.event_id)
+        self.assertFalse(Event.objects.filter(slug='demo').exists())
 
         # Step 2: remove the workshop folder -> sync -> draft
         shutil.rmtree(os.path.join(self.temp_dir, folder))

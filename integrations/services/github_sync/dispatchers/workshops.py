@@ -204,7 +204,7 @@ def _sync_single_workshop(
             raise ValueError(
                 f'recording must be a mapping/dict, got {type(recording).__name__}'
             )
-        recording_url = recording.get('url', '') or ''
+        recording_url = str(recording.get('url', '') or '').strip()
         if recording_url:
             recording_required_level = recording.get('required_level')
             if recording_required_level is None:
@@ -360,12 +360,20 @@ def _sync_single_workshop(
             workshop, resolved_instructors, stats,
         )
 
-        # Link or create the Event. Shared slug — ``/events/<slug>`` and
-        # ``/workshops/<slug>`` live under different prefixes.
-        _link_or_create_workshop_event(
-            workshop, data, recording, recording_required_level,
-            workshop_date, source, rel_path, yaml_rel_path, commit_sha, stats,
-        )
+        if recording_url:
+            # Link or create the Event only for recording-backed workshops.
+            # Shared slug — ``/events/<slug>`` and ``/workshops/<slug>`` live
+            # under different prefixes.
+            recording_for_event = dict(recording)
+            recording_for_event['url'] = recording_url
+            _link_or_create_workshop_event(
+                workshop, data, recording_for_event, recording_required_level,
+                workshop_date, source, rel_path, yaml_rel_path, commit_sha, stats,
+            )
+        else:
+            _cleanup_generated_empty_workshop_event(
+                workshop, source, stats,
+            )
 
         # Sync pages — every *.md file in the folder except README.md.
         # Pass the pre-built page_lookup so the rewriter sees the same
@@ -472,6 +480,76 @@ def _link_or_create_workshop_event(
     if workshop.event_id != event.pk:
         Workshop.objects.filter(pk=workshop.pk).update(event=event)
         workshop.event_id = event.pk
+
+
+def _cleanup_generated_empty_workshop_event(workshop, source, stats):
+    """Unlink old sync-generated workshop Events when a workshop has no recording.
+
+    Before issue #631, every workshop folder created a completed Event even
+    when ``recording.url`` was empty. Keep this cleanup deliberately narrow:
+    only GitHub-origin, workshop.yaml-derived, empty completed workshop events
+    are considered safe. Studio-origin rows, upcoming/live rows, and rows with
+    any recording URL stay untouched.
+    """
+    from content.models import Workshop
+    from events.models import Event
+
+    event = None
+    if workshop.event_id:
+        event = Event.objects.filter(pk=workshop.event_id).first()
+    if event is None:
+        event = Event.objects.filter(
+            slug=workshop.slug,
+            kind='workshop',
+            origin='github',
+            source_repo=source.repo_name,
+        ).first()
+    if event is None:
+        return
+
+    if not _is_safe_generated_empty_workshop_event(event, source):
+        return
+
+    if workshop.event_id == event.pk:
+        Workshop.objects.filter(pk=workshop.pk, event=event).update(event=None)
+        workshop.event_id = None
+
+    if event.status != 'draft' or event.published or event.published_at:
+        Event.objects.filter(pk=event.pk).update(
+            status='draft',
+            published=False,
+            published_at=None,
+        )
+        stats['items_detail'].append({
+            'title': event.title,
+            'slug': event.slug,
+            'action': 'deleted',
+            'content_type': 'event',
+        })
+        stats['deleted'] += 1
+
+
+def _is_safe_generated_empty_workshop_event(event, source):
+    if event.origin != 'github':
+        return False
+    if event.source_repo != source.repo_name:
+        return False
+    if event.kind != 'workshop':
+        return False
+    if event.status != 'completed':
+        return False
+    if event.recording_url or event.recording_s3_url or event.recording_embed_url:
+        return False
+    if event.zoom_meeting_id or event.zoom_join_url or event.location:
+        return False
+    if not event.source_path or os.path.basename(event.source_path) != 'workshop.yaml':
+        return False
+
+    event_source_dir = os.path.dirname(event.source_path)
+    expected_content_id = _derive_workshop_event_content_id(
+        source.repo_name, event_source_dir,
+    )
+    return str(event.content_id) == expected_content_id
 
 
 def _derive_workshop_event_content_id(repo_name, workshop_source_path):

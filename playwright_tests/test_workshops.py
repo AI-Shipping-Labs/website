@@ -182,20 +182,15 @@ class TestVisitorBrowsesCatalog:
         assert '/workshops/ws' in page.url
         body = page.content()
 
-        # Title is visible for SEO + a single paywall card.
+        # Issue #618: title still SEO-indexable, but the wholesale
+        # pages paywall card is gone — the locked tutorial card lives
+        # in the right pane. The cover-image hero is also retired.
         assert 'data-testid="workshop-title"' in body
-        assert 'data-testid="workshop-pages-paywall"' in body
-        assert 'Upgrade to Basic to access this workshop' in body
-        detail_fallback = page.locator(
-            '[data-testid="workshop-detail-preview-fallback"]',
-        )
-        assert detail_fallback.count() == 1
-        assert 'Production Agents' not in detail_fallback.inner_text()
-        assert 'Apr 21, 2026' not in detail_fallback.inner_text()
-
-        # Pricing CTA goes to /pricing
+        assert 'data-testid="workshop-tutorial-locked"' in body
+        assert 'Upgrade to Basic' in body
+        # Locked tutorial card has a "View Pricing" CTA pointing at /pricing.
         upgrade_cta = page.locator(
-            '[data-testid="workshop-pages-upgrade-cta"]',
+            '[data-testid="workshop-tutorial-locked-cta"]',
         )
         assert upgrade_cta.get_attribute('href') == '/pricing'
 
@@ -241,11 +236,8 @@ class TestVisitorBrowsesCatalog:
         page.wait_for_load_state('domcontentloaded')
         assert '/workshops/mobile-workshop' in page.url
 
-        detail_fallback = page.locator(
-            '[data-testid="workshop-detail-preview-fallback"]',
-        )
-        assert detail_fallback.count() == 1
-        assert title not in detail_fallback.inner_text()
+        # Issue #618: detail page no longer renders the cover-image hero.
+        # The page must still fit horizontally on a 320px viewport.
         assert page.evaluate(
             '() => document.documentElement.scrollWidth <= '
             'document.documentElement.clientWidth',
@@ -312,14 +304,17 @@ class TestBasicUserReadsPagesButNotRecording:
         )
         body = page.content()
 
-        # Pages paywall must NOT render.
+        # Issue #618: wholesale pages paywall is gone — Basic user
+        # passes pages and reads the body inline. The locked recording
+        # surfaces only via the discreet header link.
         assert 'data-testid="workshop-pages-paywall"' not in body
-        # Page rows should NOT have lock icons.
-        assert 'data-testid="workshop-page-lock-icon"' not in body
-        # Video card surfaces the recording-tier lock.
-        assert 'data-testid="workshop-video-locked"' in body
-        # Code repo link is visible.
-        assert 'data-testid="workshop-code-repo-link"' in body
+        assert 'data-testid="workshop-tutorial-locked"' not in body
+        # Outline tutorial-page rows have NO 🔒 (tutorials are unlocked).
+        assert 'data-testid="workshop-outline-page-lock"' not in body
+        # Locked recording header link surfaces the upgrade target.
+        assert 'data-testid="workshop-recording-locked-header-link"' in body
+        # Code repo lives in the outline Materials section now.
+        assert 'data-testid="workshop-outline-material-row"' in body
 
         # Click the first tutorial page row.
         page.locator(
@@ -400,21 +395,21 @@ class TestMainUserHasFullAccess:
 
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
+        # Issue #618: /workshops/<slug>/video 301-redirects to the new
+        # course-player layout. Navigate directly to the new URL.
         page.goto(
-            f'{django_server}/workshops/ws/video',
+            f'{django_server}/workshops/ws',
             wait_until='domcontentloaded',
         )
         body = page.content()
 
-        # Recording paywall does NOT render.
-        assert 'data-testid="video-paywall"' not in body
-        # Either the embedded YouTube iframe or the video_player tag rendered.
-        assert (
-            'data-testid="video-player"' in body
-            or 'iframe' in body.lower()
-        )
-        # Materials list rendered.
-        assert 'data-testid="video-materials"' in body
+        # Recording locked header link does NOT render (Main user has access).
+        assert 'data-testid="workshop-recording-locked-header-link"' not in body
+        # Player pane and JS module both render.
+        assert 'data-testid="workshop-player-pane"' in body
+        assert 'data-testid="workshop-player-script"' in body
+        # Materials list lives in the outline now.
+        assert 'data-testid="workshop-outline-materials"' in body
         assert 'Slides' in body
 
         ctx.close()
@@ -483,13 +478,12 @@ class TestWorkshopSitemap:
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-class TestWorkshopActionButtonsAboveDescription:
-    def test_action_buttons_render_above_description_and_pages_list(
+class TestPlayerShellLayout:
+    def test_player_shell_renders_outline_and_tutorial_pane(
         self, browser, django_server,
     ):
-        """Visitor with access sees video / tutorial / GitHub buttons
-        immediately under the title, before the description and the
-        tutorial pages list."""
+        """Issue #618: the player-shell layout renders the outline (left)
+        and the tutorial pane (right) for a Main user with access."""
         _clear_workshops()
         _create_workshop(
             slug='ws',
@@ -507,55 +501,47 @@ class TestWorkshopActionButtonsAboveDescription:
             wait_until='domcontentloaded',
         )
 
-        # Title is rendered.
+        # Title still renders.
         assert page.locator(
             '[data-testid="workshop-title"]',
         ).count() == 1
 
-        # All action buttons present.
-        video_link = page.locator('[data-testid="workshop-video-link"]')
-        tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
-        repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
-        description = page.locator('[data-testid="workshop-description"]')
-        pages_list = page.locator('[data-testid="workshop-pages-list"]')
+        # Two-pane shell renders.
+        assert page.locator(
+            '[data-testid="workshop-player-grid"]',
+        ).count() == 1
 
-        assert video_link.count() == 1
-        assert tutorial_link.count() == 1
-        assert repo_link.count() == 1
-        assert description.count() == 1
-        assert pages_list.count() == 1
+        # Outline contains the tutorial pages section and the materials
+        # section (which holds the Code repository row).
+        outline = page.locator('[data-testid="workshop-outline"]')
+        assert outline.count() == 1
+        assert outline.locator(
+            '[data-testid="workshop-outline-tutorial-pages"]',
+        ).count() == 1
+        assert outline.locator(
+            '[data-testid="workshop-outline-materials"]',
+        ).count() == 1
+        assert outline.locator(
+            '[data-testid="workshop-outline-material-row"]',
+        ).count() >= 1
 
-        # Compare DOM order via vertical position.
-        video_box = video_link.bounding_box()
-        tutorial_box = tutorial_link.bounding_box()
-        repo_box = repo_link.bounding_box()
-        description_box = description.bounding_box()
-        pages_box = pages_list.bounding_box()
-
-        assert video_box is not None
-        assert tutorial_box is not None
-        assert repo_box is not None
-        assert description_box is not None
-        assert pages_box is not None
-
-        # Action block sits ABOVE the description.
-        assert video_box['y'] < description_box['y']
-        assert tutorial_box['y'] < description_box['y']
-        assert repo_box['y'] < description_box['y']
-        # Description sits above the tutorial pages list.
-        assert description_box['y'] < pages_box['y']
+        # Tutorial pane renders the active page body.
+        tutorial_pane = page.locator(
+            '[data-testid="workshop-tutorial-pane"]',
+        )
+        assert tutorial_pane.count() == 1
 
         ctx.close()
 
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-class TestWorkshopWithoutCodeRepoNoEmptySlot:
-    def test_no_code_repo_no_empty_button_row(
+class TestWorkshopWithoutCodeRepoNoMaterialsRow:
+    def test_no_code_repo_no_repo_row_in_outline(
         self, browser, django_server,
     ):
-        """When the workshop has no code_repo_url, the GitHub button
-        is absent from the DOM (no empty container)."""
+        """When the workshop has no code_repo_url and no event materials,
+        the Materials section is omitted entirely (no empty container)."""
         _clear_workshops()
         _create_workshop(
             slug='ws-nogit',
@@ -563,6 +549,7 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
             pages=0,
             recording=0,
             code_repo_url='',
+            with_event=False,
         )
         _create_user('main@test.com', tier_slug='main')
 
@@ -573,37 +560,16 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
             wait_until='domcontentloaded',
         )
 
-        # GitHub button is not rendered at all.
-        repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
-        assert repo_link.count() == 0
-
-        # Video + tutorial cards still render above the description.
-        video_link = page.locator('[data-testid="workshop-video-link"]')
-        tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
-        description = page.locator('[data-testid="workshop-description"]')
-
-        assert video_link.count() == 1
-        assert tutorial_link.count() == 1
-        assert description.count() == 1
-
-        video_box = video_link.bounding_box()
-        tutorial_box = tutorial_link.bounding_box()
-        description_box = description.bounding_box()
-
-        assert video_box is not None
-        assert tutorial_box is not None
-        assert description_box is not None
-
-        assert video_box['y'] < description_box['y']
-        assert tutorial_box['y'] < description_box['y']
-
-        # No empty wrapper sits where the repo button used to be: the
-        # template gates the entire `<div class="mb-12">…</div>` wrapper
-        # behind `{% if workshop.code_repo_url %}`, so no element with
-        # the repo testid exists, and there's no anchor pointing at
-        # github.com from the action block.
-        github_anchors = page.locator('a[href*="github.com"]').count()
+        # No GitHub link anywhere in the outline.
+        github_anchors = page.locator(
+            '[data-testid="workshop-outline"] a[href*="github.com"]',
+        ).count()
         assert github_anchors == 0
+
+        # Materials section absent (no empty container).
+        assert page.locator(
+            '[data-testid="workshop-outline-materials"]',
+        ).count() == 0
 
         ctx.close()
 

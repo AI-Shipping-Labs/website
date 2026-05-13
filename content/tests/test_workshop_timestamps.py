@@ -285,8 +285,12 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/wb/tutorial/setup')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="watch-this-section"')
-        # Bar links to the video page with the same ?t= value.
-        self.assertContains(response, 'href="/workshops/wb/video?t=16:00"')
+        # Issue #618: bar now links into the new course-player layout
+        # with both ?page= and ?t= so the right pane lands on this
+        # tutorial AND the player seeks. Old `/video?t=` route is dead.
+        self.assertContains(
+            response, 'href="/workshops/wb?page=setup&amp;t=16:00"',
+        )
         # Visible label uses the original MM:SS string.
         self.assertContains(response, 'Watch this section (16:00)')
 
@@ -317,9 +321,13 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
         )
 
 
-# --- workshop_video ?t= and inverse-links tests -----------------------
+# --- player-layout chapter / ?t= tests (issue #618) -------------------
 
-class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
+class PlayerLayoutChapterOutlineTest(TierSetupMixin, TestCase):
+    """The new course-player layout renders the chapter outline for both
+    locked and unlocked users (informational syllabus). Unlocked users
+    get clickable chapter rows; locked users get inert <div> rows."""
+
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
@@ -349,74 +357,77 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
             email='basic@x.com', password='pw', tier=cls.basic_tier,
         )
 
-    def test_inverse_links_render_for_matching_timestamps(self):
+    def test_unlocked_chapter_rows_are_clickable_buttons(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/vl/video')
-        self.assertContains(response, 'data-testid="video-chapters"')
+        response = self.client.get('/workshops/vl')
+        self.assertContains(response, 'data-testid="workshop-outline-recording"')
+        # Three chapter rows render as clickable buttons.
         self.assertContains(
-            response,
-            'data-testid="timestamp-tutorial-link"',
-            count=2,
+            response, 'data-testid="workshop-chapter-row"', count=3,
         )
-        # Both linked pages are reachable from the timestamps panel.
-        self.assertContains(
-            response, 'href="/workshops/vl/tutorial/intro"',
+        # Locked-row variant is absent for unlocked users.
+        self.assertNotContains(
+            response, 'data-testid="workshop-chapter-row-locked"',
         )
-        self.assertContains(
-            response, 'href="/workshops/vl/tutorial/setup-page"',
-        )
-        self.assertContains(response, 'Tutorial: Intro Page')
-        self.assertContains(response, 'Tutorial: Setup Page')
 
-    def test_unmatched_timestamp_has_no_tutorial_link(self):
-        # The 8:30 (== 510s) timestamp has no corresponding page so the
-        # tutorial sub-link must be absent. We assert this by counting
-        # links above (== 2, not 3).
+    def test_unlocked_outline_carries_tutorial_slug_links(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/vl/video')
-        # Sanity check: the 8:30 row label still renders.
-        self.assertContains(response, 'No matching page')
+        response = self.client.get('/workshops/vl')
+        # Two chapters map to tutorial pages by exact-second; the
+        # outline button carries ``data-tutorial-slug`` so the JS can
+        # swap the right pane.
+        self.assertContains(response, 'data-tutorial-slug="intro"')
+        self.assertContains(response, 'data-tutorial-slug="setup-page"')
 
-    def test_query_t_propagates_to_youtube_player_vars(self):
-        # ?t=16:00 -> 960 seconds -> rendered into playerVars.start.
+    def test_query_t_param_seeks_player_on_initial_load(self):
+        # ?t=16:00 -> 960 seconds -> rendered into the player shell's
+        # data-start-seconds attribute (the JS module reads it).
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/vl/video?t=16:00')
+        response = self.client.get('/workshops/vl?t=16:00')
         self.assertEqual(response.status_code, 200)
-        # Look for the start: 960 line inside the playerVars object.
-        self.assertContains(response, 'start: 960')
+        self.assertContains(response, 'data-start-seconds="960"')
+
+    def test_query_t_integer_form_seeks_player(self):
+        # External-source deep links use plain integers ("?t=754") and
+        # must resolve too. This is the redirect target shape from the
+        # old /workshops/<slug>/video?t=NNN URLs.
+        self.client.force_login(self.user_main)
+        response = self.client.get('/workshops/vl?t=754')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-start-seconds="754"')
 
     def test_malformed_t_does_not_break_page(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/vl/video?t=not-a-time')
+        response = self.client.get('/workshops/vl?t=not-a-time')
         self.assertEqual(response.status_code, 200)
-        # No start parameter rendered when ?t= was unparseable.
-        self.assertNotContains(response, 'start:')
+        # No start-seconds attribute rendered for malformed input.
+        self.assertNotContains(response, 'data-start-seconds=')
 
-    def test_no_t_param_omits_start(self):
+    def test_no_t_param_omits_start_seconds_attr(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/vl/video')
-        self.assertNotContains(response, 'start:')
+        response = self.client.get('/workshops/vl')
+        self.assertNotContains(response, 'data-start-seconds=')
 
-    def test_paywalled_user_does_not_get_inverse_links(self):
-        # Below the recording gate the paywall renders and the inverse
-        # links section is absent (no timestamps panel either).
-        # Issue #515: gated workshop video page returns 403.
+    def test_locked_user_chapter_rows_are_inert_divs(self):
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/vl/video?t=16:00')
-        self.assertEqual(response.status_code, 403)
+        response = self.client.get('/workshops/vl')
+        # Inert chapter rows for locked users.
         self.assertContains(
-            response, 'data-testid="video-paywall"', status_code=403,
+            response, 'data-testid="workshop-chapter-row-locked"', count=3,
         )
+        # No clickable button-shaped rows.
         self.assertNotContains(
-            response, 'data-testid="video-chapters"', status_code=403,
+            response, 'data-testid="workshop-chapter-row"',
         )
-        self.assertNotContains(
-            response, 'start: 960', status_code=403,
-        )
+        # No iframe markup, no script tag.
+        self.assertNotContains(response, 'youtube.com/embed')
+        self.assertNotContains(response, 'workshop_player.js')
 
 
-class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
-    """When two pages claim the same video_start, the lowest sort_order wins."""
+class PlayerLayoutDuplicateVideoStartTest(TierSetupMixin, TestCase):
+    """When two pages claim the same video_start, the lowest sort_order
+    wins — the chapter row's data-tutorial-slug points to the first
+    page only."""
 
     @classmethod
     def setUpTestData(cls):
@@ -427,8 +438,6 @@ class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
             timestamps=[{'time': '0:00', 'title': 'Start'}],
         )
         cls.workshop = _make_workshop(slug='dup', event=cls.event)
-        # Both pages claim "0:00" — we expect the sort_order=1 page to
-        # be the one linked from the video page.
         cls.first = WorkshopPage.objects.create(
             workshop=cls.workshop, slug='first', title='First Page',
             sort_order=1, body='hi', video_start='0:00',
@@ -441,21 +450,17 @@ class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
             email='main@x.com', password='pw', tier=cls.main_tier,
         )
 
-    def test_lowest_sort_order_page_wins(self):
+    def test_lowest_sort_order_page_wins_in_outline(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/dup/video')
-        # First page link rendered, second page is silently ignored.
-        self.assertContains(response, 'href="/workshops/dup/tutorial/first"')
-        self.assertNotContains(
-            response, 'href="/workshops/dup/tutorial/second"',
-        )
-        self.assertContains(
-            response, 'data-testid="timestamp-tutorial-link"', count=1,
-        )
+        response = self.client.get('/workshops/dup')
+        # The chapter button references the first page only.
+        self.assertContains(response, 'data-tutorial-slug="first"')
+        self.assertNotContains(response, 'data-tutorial-slug="second"')
 
 
-class WorkshopVideoLegacyTimestampShapeTest(TierSetupMixin, TestCase):
-    """Legacy ``{time_seconds, label}`` events still render correctly."""
+class PlayerLayoutLegacyTimestampShapeTest(TierSetupMixin, TestCase):
+    """Legacy ``{time_seconds, label}`` events still drive the outline
+    correctly in the new player layout."""
 
     @classmethod
     def setUpTestData(cls):
@@ -463,7 +468,6 @@ class WorkshopVideoLegacyTimestampShapeTest(TierSetupMixin, TestCase):
         cls.event = _make_event(
             slug='leg-event',
             recording_url='https://www.youtube.com/watch?v=abc',
-            # Legacy shape used by classic event recordings.
             timestamps=[
                 {'time_seconds': 0, 'label': 'Welcome'},
                 {'time_seconds': 960, 'label': 'Setup'},
@@ -478,46 +482,8 @@ class WorkshopVideoLegacyTimestampShapeTest(TierSetupMixin, TestCase):
             email='main@x.com', password='pw', tier=cls.main_tier,
         )
 
-    def test_legacy_shape_links_to_tutorial(self):
+    def test_legacy_shape_drives_outline_chapter_link(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/leg/video')
+        response = self.client.get('/workshops/leg')
         # The 960s legacy timestamp matches video_start="16:00".
-        self.assertContains(
-            response, 'href="/workshops/leg/tutorial/setup"',
-        )
-        self.assertContains(response, 'Tutorial: Setup Page')
-
-
-class WorkshopVideoFallbackEmbedStartTest(TierSetupMixin, TestCase):
-    """Fallback iframe path also receives ``?start=`` from the ?t= param."""
-
-    @classmethod
-    def setUpTestData(cls):
-        super().setUpTestData()
-        cls.event = _make_event(
-            slug='fb-event',
-            # No recording_url — only an embed URL, exercising the
-            # fallback iframe path.
-            recording_url='',
-            recording_embed_url='https://drive.example.com/embed/xyz',
-        )
-        cls.workshop = _make_workshop(slug='fb', event=cls.event)
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
-
-    def test_fallback_iframe_url_carries_start(self):
-        self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/fb/video?t=16:00')
-        self.assertEqual(response.status_code, 200)
-        # The augmented URL is rendered into the iframe src.
-        self.assertContains(
-            response, 'https://drive.example.com/embed/xyz?start=960',
-        )
-
-    def test_fallback_iframe_unchanged_without_t(self):
-        self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/fb/video')
-        self.assertContains(
-            response, 'src="https://drive.example.com/embed/xyz"',
-        )
+        self.assertContains(response, 'data-tutorial-slug="setup"')

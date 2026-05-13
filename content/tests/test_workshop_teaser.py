@@ -495,13 +495,14 @@ class TutorialWithVideoStartShowsThumbnailTest(TierSetupMixin, TestCase):
 # ---------------------------------------------------------------------
 
 
-class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
-    """Anonymous visitor on a Basic-gated recording sees the teaser layout.
+class LegacyVideoRouteRedirectTest(TierSetupMixin, TestCase):
+    """Issue #618: the standalone /video route is retired.
 
-    ``recording_required_level`` keeps ``VISIBILITY_CHOICES`` per the
-    issue spec, so the registered-wall (``LEVEL_REGISTERED``) is not a
-    selectable value. The teaser layout still renders for anonymous
-    visitors on any paid-tier recording.
+    The legacy URL 301-redirects to the unified course-player layout at
+    ``/workshops/<slug>``. Any user (anon, free, paid) gets the same
+    redirect — locked-vs-unlocked behaviour lives entirely in the new
+    layout. The tests below assert the redirect contract and that the
+    new player layout serves locked / unlocked variants correctly.
     """
 
     @classmethod
@@ -519,69 +520,73 @@ class AnonymousPaidRecordingVideoTest(TierSetupMixin, TestCase):
             ],
         )
 
-    def test_returns_403(self):
+    def test_anonymous_video_route_redirects(self):
         response = self.client.get('/workshops/reg-vid/video')
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/workshops/reg-vid')
 
-    def test_renders_locked_thumbnail(self):
-        response = self.client.get('/workshops/reg-vid/video')
-        self.assertContains(
-            response, 'data-testid="teaser-video-thumbnail"',
-            status_code=403,
-        )
-        self.assertContains(
-            response,
-            'img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
-            status_code=403,
+    def test_video_route_preserves_t_param_on_redirect(self):
+        response = self.client.get('/workshops/reg-vid/video?t=120')
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/workshops/reg-vid?t=120')
+
+
+class LockedRecordingPlayerLayoutTest(TierSetupMixin, TestCase):
+    """Anon on a Basic-gated recording: outline renders as syllabus,
+    no iframe markup, single discreet header link, no per-section noise."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.workshop = _make_workshop(
+            'reg-vid',
+            pages=LEVEL_REGISTERED, recording=LEVEL_BASIC,
+            description=_LONG_DESCRIPTION,
+            timestamps=[
+                {'time_seconds': 0, 'label': 'Intro'},
+                {'time_seconds': 60, 'label': 'Setup'},
+                {'time_seconds': 120, 'label': 'Demo'},
+                {'time_seconds': 180, 'label': 'Q&A'},
+            ],
         )
 
-    def test_does_not_embed_video_player(self):
-        response = self.client.get('/workshops/reg-vid/video')
+    def test_no_iframe_markup_present(self):
+        response = self.client.get('/workshops/reg-vid')
+        self.assertNotContains(response, 'youtube.com/embed')
+        self.assertNotContains(response, 'loom.com/embed')
+        self.assertNotContains(response, 'player.vimeo.com')
+
+    def test_no_player_script_tag(self):
+        response = self.client.get('/workshops/reg-vid')
+        self.assertNotContains(response, 'workshop_player.js')
         self.assertNotContains(
-            response, 'data-testid="video-player"', status_code=403,
+            response, 'data-testid="workshop-player-script"',
         )
 
-    def test_anonymous_gets_signup_companion_link(self):
-        # Anonymous on a paid recording: primary "View Pricing" CTA with
-        # a "Create a free account" companion (next= preserved).
-        response = self.client.get('/workshops/reg-vid/video')
-        self.assertContains(response, 'View Pricing', status_code=403)
+    def test_recording_outline_renders_for_anon(self):
+        response = self.client.get('/workshops/reg-vid')
         self.assertContains(
-            response,
-            'href="/accounts/signup/?next=%2Fworkshops%2Freg-vid%2Fvideo"',
-            status_code=403,
+            response, 'data-testid="workshop-outline-recording"',
         )
+        self.assertContains(response, 'Intro')
+        self.assertContains(response, 'Setup')
+        # Locked chapter rows are inert (no <button>, just <div>).
         self.assertContains(
-            response, 'Create a free account', status_code=403,
+            response, 'data-testid="workshop-chapter-row-locked"',
         )
 
-    def test_renders_teaser_description_with_fade(self):
-        response = self.client.get('/workshops/reg-vid/video')
+    def test_locked_header_link_present(self):
+        response = self.client.get('/workshops/reg-vid')
         self.assertContains(
-            response, 'WORKSHOPVIDEOMARKER', status_code=403,
+            response, 'data-testid="workshop-recording-locked-header-link"',
         )
-        # Long description's late marker is past the 150-word cutoff.
-        self.assertNotContains(
-            response, 'WORKSHOPVIDEOHIDDEN', status_code=403,
-        )
-        self.assertContains(
-            response, 'data-testid="teaser-body-wrapper"', status_code=403,
-        )
-
-    def test_renders_first_three_timestamps(self):
-        response = self.client.get('/workshops/reg-vid/video')
-        self.assertContains(
-            response, 'data-testid="teaser-timestamps"', status_code=403,
-        )
-        self.assertContains(response, 'Intro', status_code=403)
-        self.assertContains(response, 'Setup', status_code=403)
-        self.assertContains(response, 'Demo', status_code=403)
-        # Fourth timestamp must NOT appear in the teaser list.
-        self.assertNotContains(response, 'Q&A', status_code=403)
+        self.assertContains(response, 'Recording')
+        self.assertContains(response, 'Get Basic')
 
 
-class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
-    """Free user on a Main-gated recording page."""
+class FreeUserOnPaidRecordingPlayerLayoutTest(TierSetupMixin, TestCase):
+    """Free user on a Main-gated recording: locked-variant header link,
+    no iframe markup."""
 
     @classmethod
     def setUpTestData(cls):
@@ -591,7 +596,6 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
             pages=LEVEL_BASIC, recording=LEVEL_MAIN,
             description=_LONG_DESCRIPTION,
         )
-        # Issue #532: read-only test user.
         cls.user = User.objects.create_user(
             email='free-vid@x.com', password='pw',
             tier=cls.free_tier, email_verified=True,
@@ -600,31 +604,23 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
     def setUp(self):
         self.client.login(email='free-vid@x.com', password='pw')
 
-    def test_returns_403(self):
-        response = self.client.get('/workshops/paid-vid/video')
-        self.assertEqual(response.status_code, 403)
-
-    def test_renders_view_pricing_with_main_tier_badge(self):
-        response = self.client.get('/workshops/paid-vid/video')
+    def test_player_layout_renders_with_locked_header_link(self):
+        response = self.client.get('/workshops/paid-vid')
+        self.assertEqual(response.status_code, 200)
         self.assertContains(
-            response, 'View Pricing', status_code=403,
+            response, 'data-testid="workshop-recording-locked-header-link"',
         )
-        self.assertContains(
-            response, 'data-testid="gated-required-tier"', status_code=403,
-        )
-        self.assertContains(
-            response, 'Main or above required', status_code=403,
-        )
+        self.assertContains(response, 'Get Main')
 
-    def test_does_not_render_signup_companion(self):
-        response = self.client.get('/workshops/paid-vid/video')
-        self.assertNotContains(
-            response, 'data-testid="teaser-signup-cta"', status_code=403,
-        )
+    def test_no_iframe_markup_present(self):
+        response = self.client.get('/workshops/paid-vid')
+        self.assertNotContains(response, 'youtube.com/embed')
+        self.assertNotContains(response, 'loom.com/embed')
 
 
-class EligibleVideoTest(TierSetupMixin, TestCase):
-    """Eligible user gets full embed and materials, no fade or thumbnail."""
+class EligiblePlayerLayoutTest(TierSetupMixin, TestCase):
+    """Premium user gets the player pane, the JS module, and no locked
+    header link."""
 
     @classmethod
     def setUpTestData(cls):
@@ -634,7 +630,6 @@ class EligibleVideoTest(TierSetupMixin, TestCase):
             pages=LEVEL_BASIC, recording=LEVEL_MAIN,
             description=_LONG_DESCRIPTION,
         )
-        # Issue #532: read-only test user.
         cls.user = User.objects.create_user(
             email='premium@x.com', password='pw',
             tier=cls.premium_tier, email_verified=True,
@@ -644,21 +639,29 @@ class EligibleVideoTest(TierSetupMixin, TestCase):
         self.client.login(email='premium@x.com', password='pw')
 
     def test_returns_200(self):
-        response = self.client.get('/workshops/elig-vid/video')
+        response = self.client.get('/workshops/elig-vid')
         self.assertEqual(response.status_code, 200)
 
-    def test_video_player_embeds(self):
-        response = self.client.get('/workshops/elig-vid/video')
-        self.assertContains(response, 'data-testid="video-player"')
+    def test_player_pane_renders(self):
+        response = self.client.get('/workshops/elig-vid')
+        self.assertContains(response, 'data-testid="workshop-player-pane"')
 
-    def test_no_teaser_artifacts(self):
-        response = self.client.get('/workshops/elig-vid/video')
-        self.assertNotContains(response, 'data-testid="video-paywall"')
-        self.assertNotContains(response, 'data-testid="teaser-body"')
+    def test_no_locked_header_link(self):
+        response = self.client.get('/workshops/elig-vid')
+        self.assertNotContains(
+            response, 'data-testid="workshop-recording-locked-header-link"',
+        )
+
+    def test_player_script_tag_present(self):
+        response = self.client.get('/workshops/elig-vid')
+        self.assertContains(
+            response, 'data-testid="workshop-player-script"',
+        )
 
 
-class VideoPageMissingRecordingFallbackTest(TierSetupMixin, TestCase):
-    """No recording → bare paywall card, not an empty fade."""
+class PlayerLayoutMissingRecordingTest(TierSetupMixin, TestCase):
+    """Workshop with no recording attached: no player pane, no recording
+    outline, no locked header link."""
 
     @classmethod
     def setUpTestData(cls):
@@ -668,15 +671,18 @@ class VideoPageMissingRecordingFallbackTest(TierSetupMixin, TestCase):
             with_event=False, description=_LONG_DESCRIPTION,
         )
 
-    def test_anon_sees_paywall_without_thumbnail(self):
-        response = self.client.get('/workshops/no-rec/video')
-        self.assertEqual(response.status_code, 403)
-        self.assertContains(
-            response, 'data-testid="video-paywall"', status_code=403,
+    def test_no_player_pane_when_workshop_lacks_recording(self):
+        response = self.client.get('/workshops/no-rec')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(
+            response, 'data-testid="workshop-player-pane"',
         )
         self.assertNotContains(
-            response, 'data-testid="teaser-video-thumbnail"',
-            status_code=403,
+            response, 'data-testid="workshop-outline-recording"',
+        )
+        # No locked header link either — there's no recording to gate.
+        self.assertNotContains(
+            response, 'data-testid="workshop-recording-locked-header-link"',
         )
 
 

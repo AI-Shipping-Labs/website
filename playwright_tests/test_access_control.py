@@ -548,8 +548,11 @@ class TestScenario1AnonymousReadsOpenContent:
 
         body = page.content()
         assert "A free recording about building AI tools" in body
-        # The video embed should be present (youtube_url rendered)
-        assert "youtube" in body.lower() or "iframe" in body.lower()
+        # Issue #618: the player layout exposes the embed via the
+        # player-pane data-source attribute. The actual iframe is
+        # lazy-mounted by the JS module on first interaction.
+        assert 'data-testid="workshop-player-pane"' in body
+        assert 'data-source="youtube"' in body
         assert "Upgrade to" not in body
     def test_anonymous_reads_open_tutorial(self, django_server, page):
         """Anonymous visitor navigates to /tutorials and reads an open
@@ -904,7 +907,8 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
         assert "Basic article body visible to premium" in body
         assert "Upgrade to" not in body
     def test_premium_reads_main_recording(self, django_server, browser):
-        """Premium member views a Main-level recording fully."""
+        """Premium member views a Main-level recording fully (issue #618:
+        the /video URL 301-redirects to the player layout)."""
         _clear_all_content()
         _create_user("premium@test.com", tier_slug="premium")
         _create_recording(
@@ -917,15 +921,17 @@ class TestScenario5PremiumMemberUnrestrictedAccess:
 
         context = _auth_context(browser, "premium@test.com")
         page = context.new_page()
-        # Recording lives on the workshop video page (issue #426).
         page.goto(
             f"{django_server}/workshops/main-recording-prem/video",
             wait_until="domcontentloaded",
         )
+        # /video 301s to /workshops/<slug>.
+        assert page.url == f"{django_server}/workshops/main-recording-prem"
         body = page.content()
         assert "Main Recording" in body
-        # Video should be present
-        assert "youtube" in body.lower() or "iframe" in body.lower()
+        # Player pane + JS module render for an unlocked Premium user.
+        assert 'data-testid="workshop-player-pane"' in body
+        assert 'data-testid="workshop-player-script"' in body
         assert "Upgrade to" not in body
     def test_premium_reads_premium_tutorial(self, django_server, browser):
         """Premium member reads a Premium-level tutorial fully."""
@@ -1020,8 +1026,10 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
     def test_basic_user_sees_gated_recording_no_video_url(
         self, django_server
     , browser):
-        """Basic member sees title and description but NO video player
-        or YouTube URL on the canonical workshop video page (issue #426).
+        """Basic member sees title but NO video player / iframe / YouTube
+        URL on the new course-player layout (issue #618). The /video URL
+        301-redirects to /workshops/<slug>; the locked variant emits zero
+        iframe markup.
         """
         _clear_all_content()
         _create_user("basic@test.com", tier_slug="basic")
@@ -1035,39 +1043,29 @@ class TestScenario7BasicMemberBlockedFromMainRecording:
 
         context = _auth_context(browser, "basic@test.com")
         page = context.new_page()
-        # Workshop video page enforces the recording paywall.
         page.goto(
             f"{django_server}/workshops/main-gated-recording/video",
             wait_until="domcontentloaded",
         )
+        # /video 301s to /workshops/<slug>.
+        assert page.url == f"{django_server}/workshops/main-gated-recording"
 
         body = page.content()
-
-        # Title visible
         assert "Main Gated Recording" in body
 
-        # No video player / iframe rendered in the main content.
+        # Defense-in-depth: no iframe markup at all.
         main_element = page.locator("main")
         main_html = main_element.inner_html()
         assert "<iframe" not in main_html.lower()
-
-        # The recording's video URL must not be embedded as a player.
-        # Issue #515 ports the course-unit teaser pattern: the locked
-        # thumbnail (img.youtube.com/vi/<id>/hqdefault.jpg) IS shown so
-        # the visitor sees what they'd unlock — that's a public preview
-        # image, not the recording. Assert the bare watch URL doesn't
-        # leak (would indicate the embed JSON / iframe path).
         assert "watch?v=secret123" not in main_html
-        assert 'data-testid="video-player"' not in main_html
+        assert "youtube.com/embed" not in main_html
 
-        # Recording paywall CTA present.
-        paywall = page.locator('[data-testid="video-paywall"]')
-        assert paywall.count() == 1
-        assert "Upgrade to Main to watch the recording" in body
-
-        # Pricing link
-        pricing_link = page.locator('[data-testid="video-upgrade-cta"]')
-        assert pricing_link.count() >= 1
+        # Discreet locked header link is the only upsell surface.
+        link = page.locator(
+            '[data-testid="workshop-recording-locked-header-link"]',
+        )
+        assert link.count() == 1
+        assert link.get_attribute('href') == '/pricing'
 # ---------------------------------------------------------------
 # Scenario 8: Anonymous visitor evaluates gated course syllabus
 # ---------------------------------------------------------------

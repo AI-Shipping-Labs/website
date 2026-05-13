@@ -10,7 +10,7 @@ Tests cover browser-valued BDD scenarios from the issue:
 - Main member sees the Community quick action that Free members do not
 - Free member discovers gated content in recent content and finds the upgrade path
 - Premium member sees active polls and navigates to vote
-- Member reads an unread notification from the dashboard and follows it
+- Dashboard omits the duplicate notifications card while the header bell remains
 - Free member uses the Upgrade link in the welcome banner to explore paid tiers
 
 Usage:
@@ -484,15 +484,15 @@ class TestScenario3EmptyStatesGuideNextSteps:
         self, django_server
     , browser):
         """Given: A user logged in as free@test.com (Free tier) who
-        has no course progress, no event registrations, and no
-        unread notifications.
+        has no course progress, no event registrations, and no unread
+        notifications.
         1. Navigate to /
         Then: The 'Continue Learning' section shows no courses or
               workshops in progress with Browse Courses and Browse
               Workshops links.
         Then: The 'Upcoming Events' section shows 'No upcoming events'
               with a 'Browse Events' link.
-        Then: The 'Notifications' section shows 'No new notifications'.
+        Then: The dashboard body does not show a notifications empty-state card.
         2. Click 'Browse Courses' in the empty continue learning
            section.
         Then: User navigates to /courses and sees the course catalog."""
@@ -511,7 +511,7 @@ class TestScenario3EmptyStatesGuideNextSteps:
         # Then: Empty state messages
         assert "No courses or workshops in progress yet" in body
         assert "No upcoming events" in body
-        assert "No new notifications" in body
+        assert "No new notifications" not in body
 
         # CTA links present
         browse_courses_link = page.locator(
@@ -982,27 +982,24 @@ class TestScenario8PremiumMemberSeesActivePolls:
         assert "MLOps Basics" in poll_body
         assert "Computer Vision" in poll_body
 # -------------------------------------------------------------------
-# Scenario 9: Member reads an unread notification from the dashboard
-#              and follows it
+# Scenario 9: Dashboard does not duplicate the notification surface
 # -------------------------------------------------------------------
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
-class TestScenario9MemberReadsNotificationFromDashboard:
-    """Member reads an unread notification from the dashboard and
-    follows it."""
+class TestScenario9DashboardNotificationsSurfaceConsolidated:
+    """Dashboard omits the duplicate notification card."""
 
-    def test_notifications_shown_and_view_all_link(
+    def test_notifications_card_removed_bell_kept(
         self, django_server
     , browser):
         """Given: A user logged in as basic@test.com (Basic tier) who
         has 3 unread notifications.
         1. Navigate to /
-        Then: The 'Notifications' section shows up to 5 unread
-              notifications with their titles.
-        2. Click 'View all' in the notifications section header.
-        Then: User navigates to /notifications showing the full
-              paginated list of all notifications."""
+        Then: The dashboard body does not contain a Notifications card or
+              duplicate notification titles.
+        Then: The header bell remains visible and links to the full archive
+              through its dropdown."""
         _clear_dashboard_data()
         user = _create_user(
             "basic@test.com", tier_slug="basic"
@@ -1035,24 +1032,30 @@ class TestScenario9MemberReadsNotificationFromDashboard:
             f"{django_server}/",
             wait_until="domcontentloaded",
         )
-        page.content()
+        body = page.locator("main").inner_text()
 
-        # Then: Notifications section shows the 3 notifications
-        notif_section = page.locator(
-            'section:has(h2:has-text("Notifications"))'
-        )
-        notif_text = notif_section.inner_text()
-        assert "New article: Advanced Deployment" in notif_text
-        assert "New recording: AI Workshop" in notif_text
-        assert "Event reminder: Hackathon" in notif_text
+        # Then: The dashboard body does not duplicate notification content.
+        assert "New article: Advanced Deployment" not in body
+        assert "New recording: AI Workshop" not in body
+        assert "Event reminder: Hackathon" not in body
+        assert "No new notifications" not in body
+        assert page.locator(
+            'main section:has(h2:has-text("Notifications"))'
+        ).count() == 0
+        assert page.locator(
+            'main section:has-text("Quick Actions")'
+        ).count() >= 1
 
-        # Step 2: Click "View all" in the notifications
-        # section header
-        view_all_link = notif_section.locator(
-            'a:has-text("View all")'
-        )
-        assert view_all_link.count() >= 1
-        view_all_link.first.click()
+        # Then: The header bell remains the canonical quick-peek entry point.
+        page.locator("#notification-bell-btn").click()
+        page.locator("#notification-dropdown").wait_for(state="visible")
+        dropdown = page.locator("#notification-dropdown")
+        dropdown.locator(
+            'a:has-text("New article: Advanced Deployment")'
+        ).wait_for(state="visible")
+        assert "New article: Advanced Deployment" in dropdown.inner_text()
+        view_all_link = dropdown.locator('a:has-text("View all")')
+        view_all_link.click()
         page.wait_for_load_state("domcontentloaded")
 
         # Then: Navigates to /notifications

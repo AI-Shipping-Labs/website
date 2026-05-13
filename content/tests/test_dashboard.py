@@ -9,7 +9,6 @@ Covers:
 - Recent content section with accessible articles/recordings
 - Active polls section
 - Quick actions section (community link for Main+ only)
-- Notifications section
 - Empty states for all sections
 """
 
@@ -885,61 +884,6 @@ class QuickActionsTest(TierSetupMixin, TestCase):
 
 
 # ============================================================
-# Notifications
-# ============================================================
-
-
-class NotificationsTest(TierSetupMixin, TestCase):
-    """Test the notifications section."""
-
-    def setUp(self):
-        self.user = User.objects.create_user(
-            email='notif@example.com', password='testpass',
-        )
-        self.client.login(email='notif@example.com', password='testpass')
-
-    def test_empty_state_when_no_notifications(self):
-        response = self.client.get('/')
-        content = response.content.decode()
-        self.assertIn('No new notifications', content)
-
-    def test_shows_unread_notifications(self):
-        Notification.objects.create(
-            user=self.user, title='New Article Published',
-            body='Check it out', url='/blog/new',
-            read=False,
-        )
-        response = self.client.get('/')
-        self.assertContains(response, 'New Article Published')
-
-    def test_does_not_show_read_notifications(self):
-        Notification.objects.create(
-            user=self.user, title='Already Read',
-            url='/blog/old', read=True,
-        )
-        response = self.client.get('/')
-        self.assertNotContains(response, 'Already Read')
-
-    def test_max_5_notifications(self):
-        for i in range(8):
-            Notification.objects.create(
-                user=self.user, title=f'Notification {i}',
-                url=f'/n/{i}', read=False,
-            )
-        response = self.client.get('/')
-        content = response.content.decode()
-        # Should show at most 5
-        notif_count = sum(
-            1 for i in range(8) if f'Notification {i}' in content
-        )
-        self.assertEqual(notif_count, 5)
-
-    def test_has_view_all_link(self):
-        response = self.client.get('/')
-        self.assertContains(response, '/notifications')
-
-
-# ============================================================
 # Dashboard Template Structure
 # ============================================================
 
@@ -970,7 +914,24 @@ class DashboardTemplateTest(TierSetupMixin, TestCase):
         self.assertIn('Recent Content', content)
         self.assertIn('Active Polls', content)
         self.assertIn('Quick Actions', content)
-        self.assertIn('Notifications', content)
+
+    def test_dashboard_body_has_no_duplicate_notifications_section(self):
+        Notification.objects.create(
+            user=self.user, title='Dashboard-only notification',
+            body='This should only appear in notification surfaces.',
+            url='/blog/new',
+            read=False,
+        )
+        response = self.client.get('/')
+        content = response.content.decode()
+
+        self.assertNotIn('No new notifications', content)
+        self.assertNotIn('Dashboard-only notification', content)
+        self.assertNotIn('This should only appear in notification surfaces.', content)
+        self.assertFalse(
+            any('notifications' in context for context in response.context),
+        )
+        self.assertContains(response, 'Quick Actions')
 
     def test_dashboard_extends_base(self):
         response = self.client.get('/')

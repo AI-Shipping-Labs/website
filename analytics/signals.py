@@ -42,7 +42,7 @@ import json
 import logging
 from datetime import datetime
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 
 from analytics.middleware import (
     ANON_ID_COOKIE,
@@ -86,7 +86,7 @@ def _read_last_touch(request):
         return None
     try:
         return request.session.get(SESSION_LAST_TOUCH)
-    except Exception:  # pragma: no cover — defensive (no session middleware)
+    except AttributeError:
         return None
 
 
@@ -160,7 +160,7 @@ def create_user_attribution(sender, instance, created, **kwargs):
                 signup_path=signup_path,
                 anonymous_id=_truncate(anon_id, max_len=64),
             )
-    except Exception:
+    except DatabaseError:
         # Never break user creation. Log and move on.
         logger.exception(
             'Failed to create UserAttribution for user_id=%s', instance.pk
@@ -175,7 +175,7 @@ def create_user_attribution(sender, instance, created, **kwargs):
                 anonymous_id=anon_id,
                 user_id__isnull=True,
             ).update(user_id=instance.pk)
-        except Exception:
+        except DatabaseError:
             logger.exception(
                 'Failed to backfill CampaignVisit for user_id=%s anon_id=%s',
                 instance.pk, anon_id,
@@ -223,7 +223,7 @@ def update_signup_path_for_social_signup(sender, request, user, **kwargs):
         UserAttribution.objects.filter(user_id=user.pk).update(
             signup_path=new_path,
         )
-    except Exception:
+    except DatabaseError:
         logger.exception(
             'Failed to update signup_path for social user_id=%s provider=%s',
             user.pk, provider,

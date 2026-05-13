@@ -9,12 +9,15 @@ URL first so the middleware writes the last-touch into the session.
 import json
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from allauth.account.signals import user_signed_up
 from django.contrib.auth import get_user_model
+from django.db import DatabaseError
 from django.test import Client, TestCase, override_settings
 
+from analytics import signals
 from analytics.middleware import (
     ANON_ID_COOKIE,
     FIRST_TOUCH_COOKIE,
@@ -488,6 +491,97 @@ class SignalRobustnessTest(TestCase):
         )
         attr = UserAttribution.objects.get(user=user)
         self.assertEqual(attr.signup_path, 'unknown')
+
+    def test_read_last_touch_returns_none_without_session_attribute(self):
+        request = SimpleNamespace()
+
+        self.assertIsNone(signals._read_last_touch(request))
+
+    def test_create_user_attribution_logs_database_error_and_returns_none(self):
+        user = User(email='db-fail@test.com')
+        user.pk = 101
+
+        with patch('analytics.signals.get_current_request', return_value=None), \
+             patch(
+                 'analytics.signals.UserAttribution.objects.create',
+                 side_effect=DatabaseError('create failed'),
+             ), \
+             self.assertLogs('analytics.signals', level='ERROR') as logs:
+            result = signals.create_user_attribution(User, user, created=True)
+
+        self.assertIsNone(result)
+        self.assertIn(
+            'Failed to create UserAttribution for user_id=101',
+            '\n'.join(logs.output),
+        )
+
+    def test_create_user_attribution_does_not_swallow_type_error(self):
+        user = User(email='type-fail@test.com')
+        user.pk = 102
+
+        with patch('analytics.signals.get_current_request', return_value=None), \
+             patch(
+                 'analytics.signals.UserAttribution.objects.create',
+                 side_effect=TypeError('bad argument'),
+             ):
+            with self.assertRaises(TypeError):
+                signals.create_user_attribution(User, user, created=True)
+
+    def test_campaign_visit_backfill_logs_database_error(self):
+        user = User(email='backfill-fail@test.com')
+        user.pk = 103
+        request = SimpleNamespace(
+            COOKIES={ANON_ID_COOKIE: 'anon-db-fail'},
+            path='/api/register',
+        )
+        attribution = SimpleNamespace(user=user)
+
+        with patch('analytics.signals.get_current_request', return_value=request), \
+             patch(
+                 'analytics.signals.UserAttribution.objects.create',
+                 return_value=attribution,
+             ), \
+             patch(
+                 'analytics.signals.CampaignVisit.objects.filter',
+             ) as filter_mock, \
+             self.assertLogs('analytics.signals', level='ERROR') as logs:
+            filter_mock.return_value.update.side_effect = DatabaseError(
+                'update failed'
+            )
+            result = signals.create_user_attribution(User, user, created=True)
+
+        self.assertIs(result, attribution)
+        self.assertIn(
+            'Failed to backfill CampaignVisit for user_id=103 anon_id=anon-db-fail',
+            '\n'.join(logs.output),
+        )
+
+    def test_social_signup_path_update_logs_database_error(self):
+        user = User(email='social-fail@test.com')
+        user.pk = 104
+        sociallogin = SimpleNamespace(
+            account=SimpleNamespace(provider='github'),
+        )
+
+        with patch(
+            'analytics.signals.UserAttribution.objects.filter',
+        ) as filter_mock, self.assertLogs(
+            'analytics.signals', level='ERROR'
+        ) as logs:
+            filter_mock.return_value.update.side_effect = DatabaseError(
+                'update failed'
+            )
+            signals.update_signup_path_for_social_signup(
+                User,
+                request=None,
+                user=user,
+                sociallogin=sociallogin,
+            )
+
+        self.assertIn(
+            'Failed to update signup_path for social user_id=104 provider=github',
+            '\n'.join(logs.output),
+        )
 
 
 # --- Edge: malformed cookie ---------------------------------------------

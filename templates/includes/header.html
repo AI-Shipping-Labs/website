@@ -168,10 +168,9 @@
     </button>
   </nav>
 
-  <div class="border-t border-border bg-background md:hidden hidden max-h-[calc(100vh-4rem)] overflow-y-auto" id="mobile-menu">
+  <div class="border-t border-border bg-background md:hidden hidden max-h-[calc(100vh-5rem)] overflow-y-auto" id="mobile-menu">
     <div class="space-y-1 px-6 py-4">
-      {% if not user.is_authenticated %}
-      <div class="flex items-center justify-between py-2 mb-2 border-b border-border pb-3">
+      <div class="flex items-center justify-between py-2 mb-2 border-b border-border pb-3" data-testid="mobile-theme-row">
         <span class="text-sm text-muted-foreground">Theme</span>
         <button type="button"
                 data-testid="theme-toggle"
@@ -184,43 +183,43 @@
       </div>
       {% endif %}
       <div class="py-2">
-        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
+        <button type="button" id="mobile-about-toggle" data-testid="mobile-nav-about-trigger" aria-expanded="false" aria-controls="mobile-about-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           About
           <svg class="h-4 w-4 transition-transform" id="mobile-about-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="pl-4 space-y-1 hidden" id="mobile-about-list" data-testid="mobile-nav-about-menu">
-          <a href="/about" data-testid="mobile-nav-about-link-about" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">About</a>
-          <a href="/about#team" data-testid="mobile-nav-about-link-team" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Team</a>
-          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+        <div class="ml-4 mt-1 space-y-0.5 border-l border-border pl-4 hidden" id="mobile-about-list" data-testid="mobile-nav-about-menu">
+          <a href="/about" data-testid="mobile-nav-about-link-about" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">About</a>
+          <a href="/about#team" data-testid="mobile-nav-about-link-team" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Team</a>
+          <a href="/faq" data-testid="mobile-nav-about-link-faq" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">FAQ</a>
         </div>
       </div>
-      <a href="/pricing" data-testid="mobile-nav-membership" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">Membership</a>
+      <a href="/pricing" data-testid="mobile-nav-membership" class="flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">Membership</a>
       <div class="py-2">
-        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
+        <button type="button" id="mobile-community-toggle" data-testid="mobile-nav-community-trigger" aria-expanded="false" aria-controls="mobile-community-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           Community
           <svg class="h-4 w-4 transition-transform" id="mobile-community-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="pl-4 space-y-1 hidden" id="mobile-community-list" data-testid="mobile-nav-community-menu">
-          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Membership</a>
-          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Community Sprints</a>
-          <a href="/events" data-testid="mobile-nav-community-link-events" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Events</a>
+        <div class="ml-4 mt-1 space-y-0.5 border-l border-border pl-4 hidden" id="mobile-community-list" data-testid="mobile-nav-community-menu">
+          <a href="/pricing" data-testid="mobile-nav-community-link-membership" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Membership</a>
+          <a href="/sprints" data-testid="mobile-nav-community-link-sprints" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Community Sprints</a>
+          <a href="/events" data-testid="mobile-nav-community-link-events" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Events</a>
         </div>
       </div>
       <a href="/sprints" data-testid="mobile-nav-sprints" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">Sprints</a>
       <a href="/events" data-testid="mobile-nav-events" class="block py-3 text-sm font-medium text-foreground transition-colors hover:text-foreground">Events</a>
       <div class="py-2">
-        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" class="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground">
+        <button type="button" id="mobile-resources-toggle" data-testid="mobile-nav-resources-trigger" aria-expanded="false" aria-controls="mobile-resources-list" class="flex w-full min-h-[44px] items-center justify-between rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors">
           Resources
           <svg class="h-4 w-4 transition-transform" id="mobile-resources-chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="pl-4 space-y-1 hidden" id="mobile-resources-list" data-testid="mobile-nav-resources-menu">
-          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Blog</a>
-          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Courses</a>
-          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Workshops</a>
-          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Learning Paths</a>
-          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Project Ideas</a>
-          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Interview Prep</a>
-          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="block py-3 text-sm text-muted-foreground transition-colors hover:text-foreground">Curated Links</a>
+        <div class="ml-4 mt-1 space-y-0.5 border-l border-border pl-4 hidden" id="mobile-resources-list" data-testid="mobile-nav-resources-menu">
+          <a href="/blog" data-testid="mobile-nav-resources-link-blog" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Blog</a>
+          <a href="/courses" data-testid="mobile-nav-resources-link-courses" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Courses</a>
+          <a href="/workshops" data-testid="mobile-nav-resources-link-workshops" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Workshops</a>
+          <a href="/learning-path/ai-engineer" data-testid="mobile-nav-resources-link-learning-paths" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Learning Paths</a>
+          <a href="/projects" data-testid="mobile-nav-resources-link-projects" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Project Ideas</a>
+          <a href="/interview" data-testid="mobile-nav-resources-link-interview" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Interview Prep</a>
+          <a href="/resources" data-testid="mobile-nav-resources-link-curated-links" class="flex min-h-[44px] items-center rounded-md px-3 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">Curated Links</a>
         </div>
       </div>
       {% if user.is_authenticated %}
@@ -241,8 +240,9 @@
           </span>
           {% endif %}
         </div>
-        <a href="/notifications" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
-          Notifications <span id="mobile-notification-badge" class="hidden ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
+        <a href="/notifications" class="relative block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-notifications-link">
+          <span data-testid="mobile-notifications-label">Notifications</span>
+          <span id="mobile-notification-badge" class="absolute -top-1 -right-1 hidden h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white"></span>
         </a>
         <a href="{% url 'account' %}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2">
           Account
@@ -260,17 +260,6 @@
           Studio
         </a>
         {% endif %}
-        <div class="mb-2 flex items-center justify-between rounded-md border border-border bg-transparent px-4 py-2">
-          <span class="text-sm font-medium text-foreground">Theme</span>
-          <button type="button"
-                  data-testid="theme-toggle"
-                  aria-label="Switch to light mode"
-                  onclick="window.themeToggle.toggle()"
-                  class="p-2 text-muted-foreground transition-colors hover:text-foreground">
-            <svg class="theme-icon-sun h-5 w-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-            <svg class="theme-icon-moon h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-          </button>
-        </div>
         <a href="{{ header_logout_url }}" class="block w-full rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">
           Log out
         </a>
@@ -302,6 +291,7 @@
       iconClose.classList.add('hidden');
       menuBtn.setAttribute('aria-label', 'Open menu');
       menuBtn.setAttribute('aria-expanded', 'false');
+      document.body.classList.remove('overflow-hidden');
     }
 
     function openMenu() {
@@ -310,6 +300,7 @@
       iconClose.classList.remove('hidden');
       menuBtn.setAttribute('aria-label', 'Close menu');
       menuBtn.setAttribute('aria-expanded', 'true');
+      document.body.classList.add('overflow-hidden');
     }
 
     menuBtn.addEventListener('click', function(e) {
@@ -348,6 +339,8 @@
         toggle.addEventListener('click', function() {
           list.classList.toggle('hidden');
           chevron.classList.toggle('rotate-180');
+          var expanded = !list.classList.contains('hidden');
+          toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         });
       }
       });
@@ -431,12 +424,14 @@
         if (mobileBadge) {
           mobileBadge.textContent = text;
           mobileBadge.classList.remove('hidden');
+          mobileBadge.classList.add('flex');
         }
       } else {
         badge.classList.add('hidden');
         badge.classList.remove('flex');
         if (mobileBadge) {
           mobileBadge.classList.add('hidden');
+          mobileBadge.classList.remove('flex');
         }
       }
     }

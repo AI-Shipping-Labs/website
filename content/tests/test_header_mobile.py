@@ -44,15 +44,21 @@ class HeaderMobileMenuTest(TestCase):
         self.assertIn('min-h-[44px]', content)
         self.assertIn('min-w-[44px]', content)
 
-    def test_mobile_nav_links_have_py3_padding(self):
-        """Mobile menu nav links should use py-3 for 44px tap target height."""
+    def test_mobile_nav_links_have_44px_tap_target(self):
+        """Mobile menu accordion sub-links must clear a 44px tap target.
+
+        Issue #623 swapped the legacy ``block py-3`` rhythm for the
+        canonical ``flex min-h-[44px] items-center`` row treatment
+        from the design system, so the accordion children carry an
+        explicit ``min-h-[44px]`` rather than relying on ``py-3``.
+        """
         response = self.client.get("/")
         content = response.content.decode()
         menu_start = content.index('id="mobile-menu"')
         menu_html = content[menu_start:]
         match = re.search(r'<a[^>]*href="/courses"[^>]*>', menu_html)
         self.assertIsNotNone(match, "Courses link not found in mobile menu")
-        self.assertIn("py-3", match.group(0))
+        self.assertIn("min-h-[44px]", match.group(0))
 
     def test_notification_dropdown_has_max_width_constraint(self):
         """The notification dropdown should be constrained to viewport width for authenticated users."""

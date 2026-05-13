@@ -121,10 +121,32 @@ class HeaderAccountMenuTest(TestCase):
         self.assertIn("mobile-notification-badge", html)
         self.assertIn("mobile-community-toggle", html)
         self.assertIn("mobile-resources-toggle", html)
+        # Theme row lives at the top of the mobile drawer (issue #623),
+        # not inside the per-user account section. The mobile account
+        # section must NOT carry its own duplicate Theme button.
         section_start = html.index('data-testid="mobile-account-section"')
         logout_start = html.index(reverse("account_logout"), section_start)
         mobile_account_html = html[section_start:logout_start]
-        self.assertIn('data-testid="theme-toggle"', mobile_account_html)
+        self.assertNotIn('data-testid="theme-toggle"', mobile_account_html)
+
+    def test_mobile_drawer_renders_single_theme_row_at_top_for_authenticated(self):
+        # Issue #623: the public mobile drawer must show a single Theme row
+        # at the top of the drawer regardless of auth state. Previously
+        # the row was anonymous-only and a second copy lived inside the
+        # logged-in account block.
+        user = User.objects.create_user(
+            email="theme-symmetry@example.com",
+            password="pw",
+        )
+
+        html = self._get_header(user)
+
+        # The dedicated top-of-drawer Theme row exists.
+        self.assertIn('data-testid="mobile-theme-row"', html)
+        # The top-of-drawer Theme row sits above the mobile account block.
+        theme_row_idx = html.index('data-testid="mobile-theme-row"')
+        account_section_idx = html.index('data-testid="mobile-account-section"')
+        self.assertLess(theme_row_idx, account_section_idx)
 
     def test_account_menu_interaction_hooks_are_rendered(self):
         user = User.objects.create_user(email="keys@example.com", password="pw")

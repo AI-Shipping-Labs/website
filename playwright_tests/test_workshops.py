@@ -186,12 +186,8 @@ class TestVisitorBrowsesCatalog:
         assert 'data-testid="workshop-title"' in body
         assert 'data-testid="workshop-pages-paywall"' in body
         assert 'Upgrade to Basic to access this workshop' in body
-        detail_fallback = page.locator(
-            '[data-testid="workshop-detail-preview-fallback"]',
-        )
-        assert detail_fallback.count() == 1
-        assert 'Production Agents' not in detail_fallback.inner_text()
-        assert 'Apr 21, 2026' not in detail_fallback.inner_text()
+        assert 'data-testid="workshop-detail-preview"' not in body
+        assert 'data-testid="workshop-detail-preview-fallback"' not in body
 
         # Pricing CTA goes to /pricing
         upgrade_cta = page.locator(
@@ -241,11 +237,9 @@ class TestVisitorBrowsesCatalog:
         page.wait_for_load_state('domcontentloaded')
         assert '/workshops/mobile-workshop' in page.url
 
-        detail_fallback = page.locator(
-            '[data-testid="workshop-detail-preview-fallback"]',
-        )
-        assert detail_fallback.count() == 1
-        assert title not in detail_fallback.inner_text()
+        body = page.content()
+        assert 'data-testid="workshop-detail-preview"' not in body
+        assert 'data-testid="workshop-detail-preview-fallback"' not in body
         assert page.evaluate(
             '() => document.documentElement.scrollWidth <= '
             'document.documentElement.clientWidth',

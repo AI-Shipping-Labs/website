@@ -29,6 +29,7 @@ from django.utils import timezone
 from accounts.models import User
 
 JWT_ALGORITHM = "HS256"
+FAST_PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
 def _make_verification_token(user_id, expired=False):
@@ -63,6 +64,7 @@ def _make_password_reset_token(user_id, expired=False):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class RegisterAPITest(TestCase):
     """Tests for POST /api/register."""
 
@@ -120,12 +122,18 @@ class RegisterAPITest(TestCase):
         self.assertIn("already exists", resp.json()["error"])
 
     def test_register_missing_email_returns_400(self):
+        before = User.objects.count()
         resp = self._post({"password": "secure1234"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Email is required"})
+        self.assertEqual(User.objects.count(), before)
 
     def test_register_missing_password_returns_400(self):
+        before = User.objects.count()
         resp = self._post({"email": "no-pwd@example.com"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Password is required"})
+        self.assertEqual(User.objects.count(), before)
 
     def test_register_short_password_returns_400(self):
         """Password must be at least 8 characters."""
@@ -134,16 +142,22 @@ class RegisterAPITest(TestCase):
         self.assertIn("8 characters", resp.json()["error"])
 
     def test_register_empty_email_returns_400(self):
+        before = User.objects.count()
         resp = self._post({"email": "", "password": "secure1234"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Email is required"})
+        self.assertEqual(User.objects.count(), before)
 
     def test_register_invalid_json_returns_400(self):
+        before = User.objects.count()
         resp = self.client.post(
             self.url,
             data="not json",
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid JSON"})
+        self.assertEqual(User.objects.count(), before)
 
     def test_register_get_not_allowed(self):
         """GET method is not allowed on register endpoint."""
@@ -189,6 +203,7 @@ class RegisterAPITest(TestCase):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class VerifyEmailAPITest(TestCase):
     """Tests for GET /api/verify-email?token={jwt}."""
 
@@ -337,6 +352,7 @@ class VerifyEmailAPITest(TestCase):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class LoginAPITest(TestCase):
     """Tests for POST /api/login."""
 
@@ -414,16 +430,22 @@ class LoginAPITest(TestCase):
     def test_login_missing_email_returns_400(self):
         resp = self._post({"password": "something"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Email and password are required"})
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_login_missing_password_returns_400(self):
         resp = self._post({"email": "login@example.com"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Email and password are required"})
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_login_invalid_json_returns_400(self):
         resp = self.client.post(
             self.url, data="not json", content_type="application/json"
         )
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid JSON"})
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_login_get_not_allowed(self):
         resp = self.client.get(self.url)
@@ -445,7 +467,7 @@ class LoginAPITest(TestCase):
         url = reverse("api_login")
         self.assertEqual(url, "/api/login")
 
-    @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+    @override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
     def test_login_query_guard_valid_wrong_password_and_unknown_email(self):
         """Guard avoidable DB work while keeping password verification intact.
 
@@ -472,7 +494,7 @@ class LoginAPITest(TestCase):
                     [query["sql"] for query in captured.captured_queries],
                 )
 
-    @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+    @override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
     def test_login_timing_helper_covers_valid_wrong_password_and_unknown_email(self):
         """Bound local overhead without making CI depend on production hash cost.
 
@@ -523,6 +545,7 @@ class LoginAPITest(TestCase):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class PasswordResetRequestAPITest(TestCase):
     """Tests for POST /api/password-reset-request."""
 
@@ -567,16 +590,19 @@ class PasswordResetRequestAPITest(TestCase):
     def test_reset_request_missing_email_returns_400(self):
         resp = self._post({})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Email is required"})
 
     def test_reset_request_empty_email_returns_400(self):
         resp = self._post({"email": ""})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Email is required"})
 
     def test_reset_request_invalid_json_returns_400(self):
         resp = self.client.post(
             self.url, data="not json", content_type="application/json"
         )
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid JSON"})
 
     def test_reset_request_get_not_allowed(self):
         resp = self.client.get(self.url)
@@ -591,6 +617,7 @@ class PasswordResetRequestAPITest(TestCase):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class PasswordResetAPITest(TestCase):
     """Tests for GET/POST /api/password-reset."""
 
@@ -671,24 +698,33 @@ class PasswordResetAPITest(TestCase):
         token = _make_password_reset_token(self.user.pk, expired=True)
         resp = self._post({"token": token, "new_password": "newpass1234"})
         self.assertEqual(resp.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
 
     def test_post_invalid_token_returns_400(self):
         resp = self._post({"token": "garbage", "new_password": "newpass1234"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid token"})
 
     def test_post_missing_token_returns_400(self):
         resp = self._post({"new_password": "newpass1234"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Token is required"})
 
     def test_post_missing_password_returns_400(self):
         token = _make_password_reset_token(self.user.pk)
         resp = self._post({"token": token})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "New password is required"})
 
     def test_post_short_password_returns_400(self):
         token = _make_password_reset_token(self.user.pk)
         resp = self._post({"token": token, "new_password": "short"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(
+            resp.json(),
+            {"error": "Password must be at least 8 characters"},
+        )
 
     def test_post_wrong_action_token_returns_400(self):
         """Token with verify_email action cannot be used for password reset."""
@@ -706,6 +742,7 @@ class PasswordResetAPITest(TestCase):
             self.url, data="not json", content_type="application/json"
         )
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid JSON"})
 
 
 
@@ -713,6 +750,7 @@ class PasswordResetAPITest(TestCase):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class ChangePasswordAPITest(TestCase):
     """Tests for POST /account/api/change-password."""
 
@@ -752,16 +790,28 @@ class ChangePasswordAPITest(TestCase):
     def test_missing_current_password_returns_400(self):
         resp = self._post({"new_password": "newpass5678"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Current password is required"})
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
 
     def test_missing_new_password_returns_400(self):
         resp = self._post({"current_password": "oldpass1234"})
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "New password is required"})
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
 
     def test_short_new_password_returns_400(self):
         resp = self._post(
             {"current_password": "oldpass1234", "new_password": "short"}
         )
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(
+            resp.json(),
+            {"error": "New password must be at least 8 characters"},
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpass1234"))
 
     def test_session_remains_valid_after_change(self):
         """User stays logged in after password change."""
@@ -789,6 +839,7 @@ class ChangePasswordAPITest(TestCase):
             self.url, data="not json", content_type="application/json"
         )
         self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid JSON"})
 
 # ── Registration Page ─────────────────────────────────────────────────
 
@@ -1015,6 +1066,7 @@ class AccountPageChangePasswordSectionTest(TestCase):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class OAuthCoexistenceTest(TestCase):
     """Tests that email+password auth works alongside existing OAuth."""
 
@@ -1056,6 +1108,7 @@ class OAuthCoexistenceTest(TestCase):
 
 
 @tag('core')
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class UnverifiedUserAccessTest(TestCase):
     """Tests that unverified users have same access as free tier."""
 
@@ -1086,6 +1139,7 @@ class UnverifiedUserAccessTest(TestCase):
 
 
 @override_settings(
+    PASSWORD_HASHERS=FAST_PASSWORD_HASHERS,
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {
@@ -1256,6 +1310,7 @@ class CsrfCookieOnAuthPagesTest(TestCase):
         self.assertEqual(register_resp.json()["status"], "ok")
 
 
+@override_settings(PASSWORD_HASHERS=FAST_PASSWORD_HASHERS)
 class ResendVerificationApiTest(TestCase):
     """Tests for POST /account/api/resend-verification."""
 

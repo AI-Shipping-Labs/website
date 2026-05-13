@@ -18,32 +18,51 @@ from content.models.peer_review import CourseCertificate, ProjectSubmission
 User = get_user_model()
 
 
+def make_user(email, **overrides):
+    fields = {"email": email, "password": None}
+    fields.update(overrides)
+    return User.objects.create_user(**fields)
+
+
+def make_course(title, slug):
+    return Course.objects.create(
+        title=title,
+        slug=slug,
+        status='published',
+    )
+
+
 class CourseCertificateApiTestBase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='pw', is_staff=True,
-        )
-        cls.member = User.objects.create_user(email='m@test.com', password='pw')
-        cls.alice = User.objects.create_user(
-            email='alice@test.com', password='pw',
-        )
+        cls.staff = make_user('staff@test.com', is_staff=True)
+        cls.member = make_user('m@test.com')
+        cls.alice = make_user('alice@test.com')
+        cls.former_staff = make_user('former-staff@test.com', is_staff=True)
         cls.staff_token = Token.objects.create(user=cls.staff, name='s')
-        cls.course = Course.objects.create(
-            title='AI Buildcamp',
-            slug='ai-buildcamp',
-            status='published',
+        cls.former_staff_token = Token.objects.create(
+            user=cls.former_staff,
+            name='former',
         )
-        cls.other_course = Course.objects.create(
-            title='Other Course',
-            slug='other-course',
-            status='published',
-        )
+        cls.former_staff.is_staff = False
+        cls.former_staff.save(update_fields=['is_staff'])
+        cls.course = make_course('AI Buildcamp', 'ai-buildcamp')
+        cls.other_course = make_course('Other Course', 'other-course')
 
     def _auth(self, token=None):
         if token is None:
             token = self.staff_token
         return {'HTTP_AUTHORIZATION': f'Token {token.key}'}
+
+    def assert_json_error(self, response, *, status, code=None, error=None):
+        self.assertEqual(response.status_code, status)
+        body = response.json()
+        self.assertIn('error', body)
+        if code is not None:
+            self.assertEqual(body['code'], code)
+        if error is not None:
+            self.assertEqual(body['error'], error)
+        return body
 
 
 class CourseCertificatesListTest(CourseCertificateApiTestBase):
@@ -75,14 +94,17 @@ class CourseCertificatesListTest(CourseCertificateApiTestBase):
 
     def test_no_token_returns_401(self):
         response = self.client.get('/api/courses/ai-buildcamp/certificates')
-        self.assertEqual(response.status_code, 401)
+        self.assert_json_error(
+            response,
+            status=401,
+            error='Authentication token required',
+        )
 
     def test_unknown_course_returns_404(self):
         response = self.client.get(
             '/api/courses/nope/certificates', **self._auth(),
         )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()['code'], 'unknown_course')
+        self.assert_json_error(response, status=404, code='unknown_course')
 
 
 class CourseCertificateCreateTest(CourseCertificateApiTestBase):
@@ -207,16 +229,24 @@ class CourseCertificateCreateTest(CourseCertificateApiTestBase):
             'user_email': 'alice@test.com',
             'pdf_url': 'file:///etc/passwd',
         })
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()['code'], 'invalid_url')
+        self.assert_json_error(response, status=422, code='invalid_url')
+        self.assertFalse(
+            CourseCertificate.objects.filter(
+                user=self.alice, course=self.course,
+            ).exists()
+        )
 
     def test_ftp_url_scheme_returns_422(self):
         response = self._post({
             'user_email': 'alice@test.com',
             'pdf_url': 'ftp://example.com/file.pdf',
         })
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()['code'], 'invalid_url')
+        self.assert_json_error(response, status=422, code='invalid_url')
+        self.assertFalse(
+            CourseCertificate.objects.filter(
+                user=self.alice, course=self.course,
+            ).exists()
+        )
 
     def test_http_url_is_accepted(self):
         # The operator's real URLs are http (not https).
@@ -225,6 +255,19 @@ class CourseCertificateCreateTest(CourseCertificateApiTestBase):
             'pdf_url': 'http://certificates.aishippinglabs.com/x/y.pdf',
         })
         self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body['created'])
+        self.assertEqual(
+            body['pdf_url'],
+            'http://certificates.aishippinglabs.com/x/y.pdf',
+        )
+        self.assertTrue(
+            CourseCertificate.objects.filter(
+                user=self.alice,
+                course=self.course,
+                pdf_url='http://certificates.aishippinglabs.com/x/y.pdf',
+            ).exists()
+        )
 
     def test_https_url_is_accepted(self):
         response = self._post({
@@ -232,6 +275,19 @@ class CourseCertificateCreateTest(CourseCertificateApiTestBase):
             'pdf_url': 'https://certificates.aishippinglabs.com/x/y.pdf',
         })
         self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body['created'])
+        self.assertEqual(
+            body['pdf_url'],
+            'https://certificates.aishippinglabs.com/x/y.pdf',
+        )
+        self.assertTrue(
+            CourseCertificate.objects.filter(
+                user=self.alice,
+                course=self.course,
+                pdf_url='https://certificates.aishippinglabs.com/x/y.pdf',
+            ).exists()
+        )
 
     def test_unknown_user_email_returns_422(self):
         response = self._post({
@@ -263,11 +319,13 @@ class CourseCertificateCreateTest(CourseCertificateApiTestBase):
         self.assertEqual(CourseCertificate.objects.count(), before)
 
     def test_unknown_course_returns_404(self):
+        before = CourseCertificate.objects.count()
         response = self._post(
             {'user_email': 'alice@test.com', 'pdf_url': ''},
             course_slug='nope',
         )
-        self.assertEqual(response.status_code, 404)
+        self.assert_json_error(response, status=404, code='unknown_course')
+        self.assertEqual(CourseCertificate.objects.count(), before)
 
 
 class CourseCertificateDeleteTest(CourseCertificateApiTestBase):
@@ -287,25 +345,76 @@ class CourseCertificateDeleteTest(CourseCertificateApiTestBase):
         )
 
     def test_delete_is_idempotent_when_no_row(self):
+        before = CourseCertificate.objects.count()
         response = self.client.delete(
             '/api/courses/ai-buildcamp/certificates/alice@test.com',
             **self._auth(),
         )
         self.assertEqual(response.status_code, 204)
+        self.assertEqual(CourseCertificate.objects.count(), before)
 
     def test_delete_unknown_email_returns_204(self):
+        before = CourseCertificate.objects.count()
         response = self.client.delete(
             '/api/courses/ai-buildcamp/certificates/nobody@x.com',
             **self._auth(),
         )
         self.assertEqual(response.status_code, 204)
+        self.assertEqual(CourseCertificate.objects.count(), before)
 
     def test_unknown_course_returns_404(self):
+        before = CourseCertificate.objects.count()
         response = self.client.delete(
             '/api/courses/nope/certificates/alice@test.com',
             **self._auth(),
         )
-        self.assertEqual(response.status_code, 404)
+        self.assert_json_error(response, status=404, code='unknown_course')
+        self.assertEqual(CourseCertificate.objects.count(), before)
+
+    def test_non_staff_token_cannot_delete_existing_row(self):
+        CourseCertificate.objects.create(
+            user=self.alice, course=self.course,
+        )
+        response = self.client.delete(
+            '/api/courses/ai-buildcamp/certificates/alice@test.com',
+            **self._auth(self.former_staff_token),
+        )
+        self.assert_json_error(response, status=401, error='Invalid token')
+        self.assertTrue(
+            CourseCertificate.objects.filter(
+                user=self.alice, course=self.course,
+            ).exists()
+        )
+
+
+class CourseCertificatePermissionTest(CourseCertificateApiTestBase):
+    def test_non_staff_token_cannot_list_certificates(self):
+        CourseCertificate.objects.create(
+            user=self.alice, course=self.course,
+        )
+        response = self.client.get(
+            '/api/courses/ai-buildcamp/certificates',
+            **self._auth(self.former_staff_token),
+        )
+        self.assert_json_error(response, status=401, error='Invalid token')
+
+    def test_non_staff_token_cannot_create_certificate(self):
+        response = self.client.post(
+            '/api/courses/ai-buildcamp/certificates',
+            data=json.dumps({
+                'user_email': 'alice@test.com',
+                'pdf_url': 'https://certs.example.com/alice.pdf',
+            }),
+            content_type='application/json',
+            **self._auth(self.former_staff_token),
+        )
+
+        self.assert_json_error(response, status=401, error='Invalid token')
+        self.assertFalse(
+            CourseCertificate.objects.filter(
+                user=self.alice, course=self.course,
+            ).exists()
+        )
 
 
 class CourseCertificatePublicPageTest(TestCase):
@@ -315,12 +424,8 @@ class CourseCertificatePublicPageTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create_user(
-            email='alice@test.com', password='pw', first_name='Alice',
-        )
-        cls.course = Course.objects.create(
-            title='AI Buildcamp', slug='ai-buildcamp', status='published',
-        )
+        cls.user = make_user('alice@test.com', first_name='Alice')
+        cls.course = make_course('AI Buildcamp', 'ai-buildcamp')
 
     def test_pdf_button_renders_when_pdf_url_set(self):
         cert = CourseCertificate.objects.create(
@@ -346,13 +451,3 @@ class CourseCertificatePublicPageTest(TestCase):
         # Page still shows essential cert content.
         self.assertContains(response, str(cert.id))
         self.assertContains(response, self.course.title)
-
-
-class CourseCertificatesPermissionDisciplineTest(TestCase):
-    """Ensure the view module never reads ``is_staff`` directly."""
-
-    def test_no_is_staff_literal_in_view_module(self):
-        from pathlib import Path
-        path = Path(__file__).resolve().parent.parent / 'views' / 'course_certificates.py'
-        source = path.read_text()
-        self.assertNotIn('is_staff', source)

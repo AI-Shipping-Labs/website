@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Course, Module, Unit, UserCourseProgress
+from content.tests.factories import make_course_with_units
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -30,40 +31,67 @@ class CourseUnitSetupMixin(TierSetupMixin):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.course = Course.objects.create(
-            title='Test Course', slug='test-course',
-            status='published', required_level=LEVEL_MAIN,
+        graph = make_course_with_units(
+            title='Test Course',
+            slug='test-course',
+            status='published',
+            required_level=LEVEL_MAIN,
             description='A paid course.',
-        )
-        cls.module1 = Module.objects.create(
-            course=cls.course, title='Module 1', slug='module-1', sort_order=1,
-        )
-        cls.module2 = Module.objects.create(
-            course=cls.course, title='Module 2', slug='module-2', sort_order=2,
-        )
-        cls.unit1 = Unit.objects.create(
-            module=cls.module1, title='Lesson 1', slug='lesson-1', sort_order=1,
-            body='# Introduction\nThis is the **first** lesson.',
-            homework='## Exercise 1\nDo **this**.',
-            video_url='https://www.youtube.com/watch?v=dQw4w9WgXcB',
-            timestamps=[
-                {'time_seconds': 0, 'label': 'Intro'},
-                {'time_seconds': 120, 'label': 'Setup'},
+            modules=[
+                {
+                    'title': 'Module 1',
+                    'slug': 'module-1',
+                    'sort_order': 1,
+                    'units': [
+                        {
+                            'title': 'Lesson 1',
+                            'slug': 'lesson-1',
+                            'sort_order': 1,
+                            'body': '# Introduction\nThis is the **first** lesson.',
+                            'homework': '## Exercise 1\nDo **this**.',
+                            'video_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcB',
+                            'timestamps': [
+                                {'time_seconds': 0, 'label': 'Intro'},
+                                {'time_seconds': 120, 'label': 'Setup'},
+                            ],
+                        },
+                        {
+                            'title': 'Lesson 2',
+                            'slug': 'lesson-2',
+                            'sort_order': 2,
+                            'body': '# Second lesson\nMore content.',
+                        },
+                        {
+                            'title': 'Preview Lesson',
+                            'slug': 'preview-lesson',
+                            'sort_order': 3,
+                            'body': '# Preview\nFree to all.',
+                            'is_preview': True,
+                        },
+                    ],
+                },
+                {
+                    'title': 'Module 2',
+                    'slug': 'module-2',
+                    'sort_order': 2,
+                    'units': [
+                        {
+                            'title': 'Advanced Lesson',
+                            'slug': 'advanced-lesson',
+                            'sort_order': 1,
+                            'body': '# Advanced\nDeep dive.',
+                        },
+                    ],
+                },
             ],
         )
-        cls.unit2 = Unit.objects.create(
-            module=cls.module1, title='Lesson 2', slug='lesson-2', sort_order=2,
-            body='# Second lesson\nMore content.',
-        )
-        cls.unit3 = Unit.objects.create(
-            module=cls.module2, title='Advanced Lesson', slug='advanced-lesson', sort_order=1,
-            body='# Advanced\nDeep dive.',
-        )
-        cls.preview_unit = Unit.objects.create(
-            module=cls.module1, title='Preview Lesson', slug='preview-lesson', sort_order=3,
-            body='# Preview\nFree to all.',
-            is_preview=True,
-        )
+        cls.course = graph.course
+        cls.module1 = graph.modules_by_slug['module-1']
+        cls.module2 = graph.modules_by_slug['module-2']
+        cls.unit1 = graph.units_by_slug['lesson-1']
+        cls.unit2 = graph.units_by_slug['lesson-2']
+        cls.unit3 = graph.units_by_slug['advanced-lesson']
+        cls.preview_unit = graph.units_by_slug['preview-lesson']
 
     def setUp(self):
         self.client = Client()
@@ -585,19 +613,36 @@ class NextUnitHelperTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.course = Course.objects.create(
+        graph = make_course_with_units(
             title='Nav Course', slug='nav-course', status='published',
+            modules=[
+                {
+                    'title': 'M1',
+                    'slug': 'm1',
+                    'sort_order': 1,
+                    'units': [
+                        {'title': 'U1', 'slug': 'u1', 'sort_order': 1},
+                        {'title': 'U2', 'slug': 'u2', 'sort_order': 2},
+                    ],
+                },
+                {
+                    'title': 'M2',
+                    'slug': 'm2',
+                    'sort_order': 2,
+                    'units': [
+                        {'title': 'U3', 'slug': 'u3', 'sort_order': 1},
+                        {'title': 'U4', 'slug': 'u4', 'sort_order': 2},
+                    ],
+                },
+            ],
         )
-        cls.m1 = Module.objects.create(
-            course=cls.course, title='M1', slug='m1', sort_order=1,
-        )
-        cls.m2 = Module.objects.create(
-            course=cls.course, title='M2', slug='m2', sort_order=2,
-        )
-        cls.u1 = Unit.objects.create(module=cls.m1, title='U1', slug='u1', sort_order=1)
-        cls.u2 = Unit.objects.create(module=cls.m1, title='U2', slug='u2', sort_order=2)
-        cls.u3 = Unit.objects.create(module=cls.m2, title='U3', slug='u3', sort_order=1)
-        cls.u4 = Unit.objects.create(module=cls.m2, title='U4', slug='u4', sort_order=2)
+        cls.course = graph.course
+        cls.m1 = graph.modules_by_slug['m1']
+        cls.m2 = graph.modules_by_slug['m2']
+        cls.u1 = graph.units_by_slug['u1']
+        cls.u2 = graph.units_by_slug['u2']
+        cls.u3 = graph.units_by_slug['u3']
+        cls.u4 = graph.units_by_slug['u4']
 
     def test_next_within_module(self):
         from content.views.courses import _get_next_unit
@@ -625,19 +670,36 @@ class PrevUnitHelperTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.course = Course.objects.create(
+        graph = make_course_with_units(
             title='Nav Course', slug='nav-prev-course', status='published',
+            modules=[
+                {
+                    'title': 'M1',
+                    'slug': 'm1',
+                    'sort_order': 0,
+                    'units': [
+                        {'title': 'U1', 'slug': 'u1', 'sort_order': 0},
+                        {'title': 'U2', 'slug': 'u2', 'sort_order': 1},
+                    ],
+                },
+                {
+                    'title': 'M2',
+                    'slug': 'm2',
+                    'sort_order': 1,
+                    'units': [
+                        {'title': 'U3', 'slug': 'u3', 'sort_order': 0},
+                        {'title': 'U4', 'slug': 'u4', 'sort_order': 1},
+                    ],
+                },
+            ],
         )
-        cls.m1 = Module.objects.create(
-            course=cls.course, title='M1', slug='m1', sort_order=0,
-        )
-        cls.m2 = Module.objects.create(
-            course=cls.course, title='M2', slug='m2', sort_order=1,
-        )
-        cls.u1 = Unit.objects.create(module=cls.m1, title='U1', slug='u1', sort_order=0)
-        cls.u2 = Unit.objects.create(module=cls.m1, title='U2', slug='u2', sort_order=1)
-        cls.u3 = Unit.objects.create(module=cls.m2, title='U3', slug='u3', sort_order=0)
-        cls.u4 = Unit.objects.create(module=cls.m2, title='U4', slug='u4', sort_order=1)
+        cls.course = graph.course
+        cls.m1 = graph.modules_by_slug['m1']
+        cls.m2 = graph.modules_by_slug['m2']
+        cls.u1 = graph.units_by_slug['u1']
+        cls.u2 = graph.units_by_slug['u2']
+        cls.u3 = graph.units_by_slug['u3']
+        cls.u4 = graph.units_by_slug['u4']
 
     def test_first_unit_returns_none(self):
         from content.views.courses import _get_prev_unit
@@ -775,13 +837,19 @@ class UnitBodyHtmlSyncTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        from content.models import Course, Module
-        cls.course = Course.objects.create(
+        graph = make_course_with_units(
             title='Sync Test Course', slug='sync-test-course', status='published',
+            modules=[
+                {
+                    'title': 'Module 1',
+                    'slug': 'module-1',
+                    'sort_order': 1,
+                    'units': [],
+                },
+            ],
         )
-        cls.module = Module.objects.create(
-            course=cls.course, title='Module 1', slug='module-1', sort_order=1,
-        )
+        cls.course = graph.course
+        cls.module = graph.modules_by_slug['module-1']
 
     def _unit_html_fields(self, unit):
         return Unit.objects.values_list('body_html', 'homework_html').get(pk=unit.pk)
@@ -888,17 +956,28 @@ class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.course = Course.objects.create(
+        graph = make_course_with_units(
             title='Disc Course', slug='disc-course',
             status='published', required_level=LEVEL_MAIN,
             discussion_url='https://slack.com/disc-channel',
+            modules=[
+                {
+                    'title': 'Mod One',
+                    'slug': 'mod-one',
+                    'sort_order': 1,
+                    'units': [
+                        {
+                            'title': 'Lesson One',
+                            'slug': 'lesson-one',
+                            'sort_order': 1,
+                        },
+                    ],
+                },
+            ],
         )
-        cls.module = Module.objects.create(
-            course=cls.course, title='Mod One', slug='mod-one', sort_order=1,
-        )
-        cls.unit = Unit.objects.create(
-            module=cls.module, title='Lesson One', slug='lesson-one', sort_order=1,
-        )
+        cls.course = graph.course
+        cls.module = graph.modules_by_slug['mod-one']
+        cls.unit = graph.units_by_slug['lesson-one']
         cls.unit_url = '/courses/disc-course/mod-one/lesson-one'
 
     def test_free_tier_user_does_not_see_discussion_on_unit(self):

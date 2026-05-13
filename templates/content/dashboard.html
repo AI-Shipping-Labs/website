@@ -456,39 +456,6 @@
           </div>
         </section>
 
-        <!-- Notifications -->
-        <section>
-          <div class="flex items-center justify-between gap-3 mb-4">
-            <h2 class="text-xl font-semibold tracking-tight flex items-center gap-2 min-w-0">
-              <i data-lucide="bell" class="h-5 w-5 shrink-0 text-accent"></i>
-              Notifications
-            </h2>
-            <a href="/notifications" class="shrink-0 text-sm text-accent hover:underline">View all</a>
-          </div>
-          {% if notifications %}
-          <div class="space-y-3">
-            {% for notif in notifications %}
-            <a href="{{ notif.url }}" class="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50">
-              <div class="flex items-start gap-3">
-                <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent"></span>
-                <div>
-                  <p class="text-sm font-medium text-foreground">{{ notif.title }}</p>
-                  {% if notif.body %}
-                  <p class="mt-0.5 text-xs text-muted-foreground line-clamp-2">{{ notif.body }}</p>
-                  {% endif %}
-                </div>
-              </div>
-            </a>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="rounded-lg border border-border bg-card p-6 text-center">
-            <i data-lucide="bell" class="mx-auto h-8 w-8 text-muted-foreground"></i>
-            <p class="mt-2 text-sm text-muted-foreground">No new notifications</p>
-          </div>
-          {% endif %}
-        </section>
-
       </div>
     </div>
 

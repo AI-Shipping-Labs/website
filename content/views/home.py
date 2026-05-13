@@ -250,9 +250,6 @@ def _dashboard(request):
     # --- Quick actions ---
     quick_actions = _get_quick_actions(user_level)
 
-    # --- Notifications ---
-    notifications = _get_notifications(user)
-
     # --- Slack community ---
     # Slack join link is based on user.tier.level (NOT overridden level)
     # because Slack access requires a paid subscription.
@@ -278,7 +275,6 @@ def _dashboard(request):
         'recent_content': recent_content,
         'active_polls': active_polls,
         'quick_actions': quick_actions,
-        'notifications': notifications,
         'show_slack_join': show_slack_join,
         'slack_connected': slack_connected,
         'slack_invite_url': slack_invite_url,
@@ -715,14 +711,3 @@ def _get_quick_actions(user_level):
         },
     ]
     return actions
-
-
-def _get_notifications(user):
-    """Return latest 5 unread notifications for the user."""
-    from notifications.models import Notification
-    return list(
-        Notification.objects.filter(
-            user=user,
-            read=False,
-        ).order_by('-created_at')[:5]
-    )

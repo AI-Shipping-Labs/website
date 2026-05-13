@@ -25,7 +25,6 @@ from content.models import (
     UserCourseProgress,
 )
 from events.models import Event, EventRegistration
-from notifications.models import Notification
 from tests.fixtures import TierSetupMixin
 from voting.models import Poll
 
@@ -341,10 +340,6 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         Poll.objects.create(
             title='Test Poll', poll_type='topic', status='open',
         )
-        Notification.objects.create(
-            user=cls.user, title='Test Notif', url='/test', read=False,
-        )
-
         # One in-progress course (enrolled, with 1 of 2 units complete)
         course = Course.objects.create(
             title='Perf Course', slug='perf-course', status='published',
@@ -375,7 +370,6 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         - Upcoming events (1 query)
         - Recent content: articles + recordings (2 queries)
         - Active polls (1 query)
-        - Notifications (1 query)
         - Template-level queries (poll vote/option counts, etc.)
 
         Total must stay under 25. Before #181 fix, N+1 on courses alone

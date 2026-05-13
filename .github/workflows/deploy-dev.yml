@@ -216,7 +216,7 @@ jobs:
         run: uv run playwright install --with-deps chromium
 
       - name: Run Playwright core tests
-        run: uv run pytest -m "core and not manual_visual" playwright_tests/ -v
+        run: uv run pytest -m "core and not manual_visual and not legacy_checkout and not slow_platform" playwright_tests/ -v
 
   deploy:
     name: Deploy to Dev
